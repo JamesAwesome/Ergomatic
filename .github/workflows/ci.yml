@@ -60,3 +60,32 @@ jobs:
         run: |
           bash -n scripts/deploy.sh
           bash scripts/deploy.test.sh
+
+  deploy:
+    needs: [root-hooks, app, docker, deploy-script]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    environment: production
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over SSH
+        env:
+          SHA: ${{ github.sha }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          umask 077
+          KEY="$(mktemp)"; KH="$(mktemp)"
+          trap 'rm -f "$KEY" "$KH"' EXIT
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$KEY"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$KH"
+          ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KH" \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$SHA"
