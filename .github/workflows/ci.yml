@@ -40,3 +40,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test:coverage
       - run: pnpm build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build app image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app
+          push: false
