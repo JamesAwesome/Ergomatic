@@ -32,5 +32,25 @@ export default defineConfig({
         },
       },
     ],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**/*.{ts,tsx}', 'server/**/*.ts', 'domain/**/*.ts'],
+      exclude: [
+        'src/main.tsx',
+        'src/vite-env.d.ts',
+        'src/test/**',
+        'server/index.ts',
+        '**/*.test.*',
+      ],
+      // Ratchet floor: near-total coverage is cheap on a skeleton. Raise, never
+      // lower, as the app grows (natalie convention).
+      thresholds: {
+        statements: 90,
+        branches: 90,
+        functions: 90,
+        lines: 90,
+      },
+    },
   },
 })
