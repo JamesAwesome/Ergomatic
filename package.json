@@ -1,0 +1,17 @@
+{
+  "name": "ergomatic-root",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "app/**/*.{ts,tsx}": "pnpm --dir app exec eslint --max-warnings 0 --no-warn-ignored"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.2.0"
+  }
+}
