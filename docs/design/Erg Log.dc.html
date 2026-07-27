@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ddd8cc; }
+  a { color: #1b1a17; text-decoration: none; }
+  a:hover { color: #b5341f; }
+  input, textarea, button { font: inherit; box-sizing: border-box; min-width: 0; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+</style>
+</helmet>
+
+<section style="display:flex;flex-direction:column;align-items:center;gap:22px;padding:56px 40px 96px;font-family:Archivo,sans-serif">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.2em;color:#8a8478">ERG LOG · FIELD NOTEBOOK</div>
+    <h1 style="margin:0;font-family:Newsreader,serif;font-size:34px;font-weight:500;letter-spacing:-0.01em;color:#1b1a17">Tap through it</h1>
+    <div onClick="{{ toggleLand }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#8a8478;border:1px solid #c9c3b2;padding:7px 12px;cursor:pointer;margin-top:4px" style-hover="color:#b5341f;border-color:#b5341f">{{ rotateLabel }}</div>
+  </div>
+  <div style="width:{{ frameW }};height:{{ frameH }};border-radius:44px;background:#f4f1e8;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 60px -20px rgba(0,0,0,0.45);border:1px solid #d8d3c4">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 26px 6px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478">
+          <span>6:12</span>
+          <span style="display:flex;gap:6px;align-items:center"><span style="width:16px;height:8px;border:1px solid #b8b2a3;border-radius:2px;display:block"></span></span>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:6px 20px 20px">
+
+          <sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:6px;border-bottom:2px solid #1b1a17;padding-bottom:10px">
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">SESSION {{ today.session }} OF {{ today.total }}</div>
+                  <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">Today</div>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;text-align:right;line-height:1.5">2k {{ base2k }}<br>6k {{ base6k }}</div>
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px">
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;background:{{ today.typeBg }};color:#fffdf7;padding:3px 7px">{{ today.typeCode }}</span>
+                    <span style="font-size:13px;color:#8a8478">{{ today.typeName }}</span>
+                  </div>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#1b1a17">{{ rec.badge }}</span>
+                </div>
+                <div onClick="{{ shuffleRec }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;padding:0 12px;border:1px solid #c9c3b2;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#b5341f;cursor:pointer;white-space:nowrap" style-hover="border-color:#b5341f">SHUFFLE ↻</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:0;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;overflow:hidden">
+                <div style="padding:16px 16px 12px;display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+                    <div style="display:flex;flex-direction:column;gap:3px">
+                      <div style="display:flex;align-items:center;gap:7px">
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;background:{{ rec.typeBg }};color:#fffdf7;padding:2px 6px">{{ rec.typeCode }}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">NO. {{ rec.num }}</span>
+                      </div>
+                      <div style="font-family:Newsreader,serif;font-size:26px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">{{ rec.title }}</div>
+                    </div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:20px;color:#b5341f;white-space:nowrap">{{ rec.minutes }}′</div>
+                  </div>
+                  <div style="display:flex;gap:8px;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">
+                    <span>{{ rec.difficulty }}</span><span>·</span><span>PAIN {{ rec.pain }}/10</span>
+                  </div>
+                  <sc-if value="{{ rec.hasWhy }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-size:13px;color:#57544c">{{ rec.why }}</div>
+                  </sc-if>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:1px;background:#ded8c9">
+                  <sc-for list="{{ rec.preview }}" as="s" hint-placeholder-count="4">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;background:#fffdf7;padding:10px 16px">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#3f3c35">{{ s.line }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#b5341f;white-space:nowrap">{{ s.pace }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <div onClick="{{ openRec }}" style="padding:11px 16px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#8a8478;cursor:pointer;border-top:1px solid #d8d3c4" style-hover="color:#b5341f">{{ rec.moreLabel }}</div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div onClick="{{ startRec }}" style="display:flex;align-items:center;justify-content:center;min-height:52px;background:#b5341f;color:#fffdf7;border-radius:2px;font-size:16px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">Start workout</div>
+                <div onClick="{{ quickLog }}" style="display:flex;align-items:center;justify-content:center;min-height:52px;background:#fffdf7;border:1px solid #c9c3b2;color:#1b1a17;border-radius:2px;font-size:16px;font-weight:500;cursor:pointer" style-hover="border-color:#b8b2a3">Quick log</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">SWAP FOR ANOTHER</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:{{ today.typeBg }};color:#fffdf7;padding:2px 6px">{{ today.typeCode }}</span>
+                </div>
+                <sc-for list="{{ alts }}" as="a" hint-placeholder-count="3">
+                  <div onClick="{{ a.onPick }}" style="display:flex;align-items:center;gap:10px;min-height:48px;padding:0 12px;cursor:pointer;background:{{ a.bg }};border:1px solid {{ a.border }}">
+                    <span style="width:10px;height:10px;border:1px solid #1b1a17;background:{{ a.dot }};display:block;flex:none"></span>
+                    <span style="flex:1;font-size:15px;color:#1b1a17">{{ a.title }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;white-space:nowrap">{{ a.meta }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">LAST THREE</div>
+                <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #ded8c9">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:{{ r.typeBg }};color:#fffdf7;padding:2px 5px;min-width:26px;text-align:center">{{ r.typeCode }}</span>
+                    <span style="flex:1;font-size:14px;color:#3f3c35">{{ r.title }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;white-space:nowrap">{{ r.meta }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isLib }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-end;padding-top:6px">
+                <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">Library</div>
+                <div onClick="{{ goBuild }}" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#b5341f;cursor:pointer">+ NEW</div>
+              </div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ libCount }} OF 375 ENTERED</div>
+
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{ chips }}" as="c" hint-placeholder-count="6">
+                  <div onClick="{{ c.onClick }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;min-height:44px;display:flex;align-items:center;padding:0 12px;cursor:pointer;border:1px solid #c9c3b2;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ list }}" as="w" hint-placeholder-count="6">
+                  <div onClick="{{ w.onOpen }}" style="display:flex;flex-direction:column;gap:7px;padding:14px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;cursor:pointer" style-hover="border-color:#b8b2a3">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+                      <span style="font-size:16px;font-weight:500;color:#1b1a17">{{ w.num }}. {{ w.title }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#b5341f">{{ w.minutes }}′</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                      <span style="display:flex;align-items:center;gap:7px">
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;background:{{ w.typeBg }};color:#fffdf7;padding:2px 5px">{{ w.typeCode }}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ w.meta }}</span>
+                      </span>
+                      <span style="display:flex;gap:2px;align-items:flex-end">
+                        <sc-for list="{{ w.painBars }}" as="p" hint-placeholder-count="10">
+                          <span style="width:3px;height:11px;border-radius:1px;background:{{ p.bg }};display:block"></span>
+                        </sc-for>
+                      </span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div onClick="{{ back }}" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;cursor:pointer;padding-top:6px">← BACK</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;background:{{ det.typeBg }};color:#fffdf7;padding:2px 6px">{{ det.typeCode }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">NO. {{ det.num }} · {{ det.difficulty }}</span>
+                </div>
+                <div style="font-family:Newsreader,serif;font-size:33px;font-weight:500;color:#1b1a17;letter-spacing:-0.02em;line-height:1.1">{{ det.title }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478">{{ det.minutes }} MIN · PAIN {{ det.pain }}/10 · LAST DONE {{ det.lastDone }}</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px;background:#efeade;border:1px solid #ded8c9;border-radius:2px;padding:13px 14px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#8a8478">PREVIEW — NUDGE ANY TARGET</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:1px;background:#ded8c9;border-radius:2px;overflow:hidden">
+                <sc-for list="{{ det.steps }}" as="s" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;gap:10px;background:#fffdf7;padding:12px 14px">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#1b1a17">{{ s.line }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ s.sub }}</span>
+                    </div>
+                    <sc-if value="{{ s.tunable }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#b5341f;white-space:nowrap">{{ s.pace }}</span>
+                        <div style="display:flex;flex-direction:column;gap:3px">
+                          <div onClick="{{ s.onFaster }}" style="width:26px;height:20px;display:flex;align-items:center;justify-content:center;background:#ded8c9;border-radius:2px;color:#3f3c35;font-size:12px;cursor:pointer" style-hover="background:#c9c3b2">▲</div>
+                          <div onClick="{{ s.onSlower }}" style="width:26px;height:20px;display:flex;align-items:center;justify-content:center;background:#ded8c9;border-radius:2px;color:#3f3c35;font-size:12px;cursor:pointer" style-hover="background:#c9c3b2">▼</div>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div onClick="{{ startDet }}" style="display:flex;align-items:center;justify-content:center;min-height:52px;background:#b5341f;color:#fffdf7;border-radius:2px;font-size:16px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">Start</div>
+                <div onClick="{{ quickLog }}" style="display:flex;align-items:center;justify-content:center;min-height:52px;background:#fffdf7;border:1px solid #c9c3b2;color:#1b1a17;border-radius:2px;font-size:16px;font-weight:500;cursor:pointer" style-hover="border-color:#b8b2a3">Log it after</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isConfirm }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div onClick="{{ back }}" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;cursor:pointer;padding-top:6px">← BACK</div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">Confirm targets</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ det.num }}. {{ det.title }} · {{ sessMinutes }} MIN</div>
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:center;background:#efeade;border:1px solid #d8d3c4;padding:12px 14px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#8a8478">BASELINES</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">2k {{ base2k }} · 6k {{ base6k }}</span>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:0;border-top:1px solid #1b1a17">
+                <sc-for list="{{ confirmRows }}" as="s" hint-placeholder-count="5">
+                  <div style="display:flex;flex-direction:column;gap:6px;border-bottom:1px solid #ded8c9;padding:10px 0">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="flex:1;display:flex;flex-direction:column;gap:1px">
+                        <span style="font-size:15px;color:{{ s.fg }}">{{ s.line }}</span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ s.sub }}</span>
+                      </div>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#b5341f;white-space:nowrap">{{ s.pace }}</span>
+                      <sc-if value="{{ s.tunable }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;gap:4px">
+                          <div onClick="{{ s.onFaster }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;font-size:12px;cursor:pointer" style-hover="background:#eae5d8">▲</div>
+                          <div onClick="{{ s.onSlower }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;font-size:12px;cursor:pointer" style-hover="background:#eae5d8">▼</div>
+                        </div>
+                      </sc-if>
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <sc-if value="{{ s.isReps }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:2px">
+                          <div onClick="{{ s.onRepsDown }}" style="width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">−</div>
+                          <span style="width:48px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17">{{ s.repsLabel }}</span>
+                          <div onClick="{{ s.onRepsUp }}" style="width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">+</div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ s.showDur }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;align-items:center;gap:2px">
+                          <div onClick="{{ s.onDurMinus }}" style="width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">−</div>
+                          <span style="width:48px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:14px;color:#1b1a17">{{ s.durLabel }}</span>
+                          <div onClick="{{ s.onDurPlus }}" style="width:44px;height:38px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">+</div>
+                        </div>
+                      </sc-if>
+                      <div style="flex:1"></div>
+                      <sc-if value="{{ s.isStep }}" hint-placeholder-val="{{ false }}">
+                        <div onClick="{{ s.onToggle }}" style="width:44px;height:38px;display:flex;align-items:center;justify-content:center;color:#b8b2a3;font-size:16px;cursor:pointer" style-hover="color:#b5341f">{{ s.toggleGlyph }}</div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div onClick="{{ startCount }}" style="display:flex;align-items:center;justify-content:center;min-height:56px;background:#b5341f;color:#fffdf7;font-size:17px;font-weight:600;cursor:pointer;margin-bottom:8px" style-hover="background:#9c2c19">Looks right — start</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isCount }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;height:100%">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.2em;color:#8a8478">GET ON THE HANDLE</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:140px;font-weight:500;color:#b5341f;line-height:1;letter-spacing:-0.05em">{{ countLabel }}</div>
+              <div style="font-family:Newsreader,serif;font-style:italic;font-size:20px;color:#57544c">{{ countNext }}</div>
+              <div style="display:flex;gap:8px;margin-top:10px">
+                <div onClick="{{ back }}" style="display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#57544c;cursor:pointer;border:1px solid #d8d3c4" style-hover="border-color:#8a8478">CANCEL</div>
+                <div onClick="{{ skipCount }}" style="display:flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;background:#b5341f;color:#fffdf7;cursor:pointer" style-hover="background:#9c2c19">SKIP ›</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isLivePortrait }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px;min-height:690px">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:4px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478">{{ timer.name }}</span>
+                <span onClick="{{ timer.onEnd }}" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;cursor:pointer;padding:6px 0">END →</span>
+              </div>
+
+              <div style="display:flex;gap:3px">
+                <sc-for list="{{ timer.dots }}" as="d" hint-placeholder-count="10">
+                  <span style="flex:1;height:4px;background:{{ d.bg }};display:block"></span>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:2px;padding-top:10px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">{{ timer.phaseLabel }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#b5341f">{{ timer.stateLabel }}</span>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:96px;font-weight:500;color:#1b1a17;line-height:1;letter-spacing:-0.05em">{{ timer.timeLeft }}</div>
+                <div style="height:5px;background:#ded8c9;display:block"><span style="height:5px;background:#b5341f;width:{{ timer.pct }};display:block"></span></div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div style="display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;padding:14px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">TARGET SPLIT</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;color:#b5341f;line-height:1.1">{{ timer.target }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ timer.range }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;padding:14px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">RATE</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;color:#1b1a17;line-height:1.1">{{ timer.spm }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">spm</span>
+                </div>
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;background:#efeade;border:1px solid #ded8c9;padding:13px 14px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">UP NEXT</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#3f3c35;text-align:right">{{ timer.next }}</span>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid #1b1a17;padding-top:10px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">TOTAL LEFT</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:#1b1a17">{{ timer.totalLeft }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  <div style="height:6px;background:#ded8c9;display:block"><span style="height:6px;background:#b5341f;width:{{ timer.totalPct }};display:block"></span></div>
+                  <div style="display:flex">
+                    <sc-for list="{{ timer.ruler }}" as="t" hint-placeholder-count="4">
+                      <div style="flex:1;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+                        <span style="width:1px;height:5px;background:#c9c3b2;display:block"></span>
+                        <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a09a8c;transform:translateX(50%)">{{ t.l }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+
+              <div style="flex:1"></div>
+              <div style="display:grid;grid-template-columns:56px 1fr 56px;gap:8px;padding-bottom:8px">
+                <div onClick="{{ timer.onPrev }}" style="display:flex;align-items:center;justify-content:center;min-height:56px;background:#fffdf7;border:1px solid #c9c3b2;color:#3f3c35;cursor:pointer" style-hover="border-color:#8a8478">◀</div>
+                <div onClick="{{ timer.onPause }}" style="display:flex;align-items:center;justify-content:center;min-height:56px;background:#b5341f;color:#fffdf7;font-size:17px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">{{ timer.pauseLabel }}</div>
+                <div onClick="{{ timer.onNext }}" style="display:flex;align-items:center;justify-content:center;min-height:56px;background:#fffdf7;border:1px solid #c9c3b2;color:#3f3c35;cursor:pointer" style-hover="border-color:#8a8478">▶</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isLiveLandscape }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:22px;height:310px;align-items:stretch">
+              <div style="flex:1.15;display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">{{ timer.phaseLabel }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#b5341f">{{ timer.stateLabel }}</span>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:128px;font-weight:500;color:#1b1a17;line-height:0.92;letter-spacing:-0.05em">{{ timer.timeLeft }}</div>
+                <div style="height:5px;background:#ded8c9;display:block"><span style="height:5px;background:#b5341f;width:{{ timer.pct }};display:block"></span></div>
+                <div style="display:flex;flex-direction:column;gap:7px;border-top:1px solid #1b1a17;margin-top:8px;padding-top:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">TOTAL LEFT</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:#1b1a17">{{ timer.totalLeft }}</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:3px">
+                    <div style="height:6px;background:#ded8c9;display:block"><span style="height:6px;background:#b5341f;width:{{ timer.totalPct }};display:block"></span></div>
+                    <div style="display:flex">
+                      <sc-for list="{{ timer.ruler }}" as="t" hint-placeholder-count="4">
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+                          <span style="width:1px;height:5px;background:#c9c3b2;display:block"></span>
+                          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a09a8c;transform:translateX(50%)">{{ t.l }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:1"></div>
+                <div style="display:grid;grid-template-columns:56px 1fr 56px;gap:8px">
+                  <div onClick="{{ timer.onPrev }}" style="display:flex;align-items:center;justify-content:center;min-height:48px;background:#fffdf7;border:1px solid #c9c3b2;color:#3f3c35;cursor:pointer" style-hover="border-color:#8a8478">◀</div>
+                  <div onClick="{{ timer.onPause }}" style="display:flex;align-items:center;justify-content:center;min-height:48px;background:#b5341f;color:#fffdf7;font-size:16px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">{{ timer.pauseLabel }}</div>
+                  <div onClick="{{ timer.onNext }}" style="display:flex;align-items:center;justify-content:center;min-height:48px;background:#fffdf7;border:1px solid #c9c3b2;color:#3f3c35;cursor:pointer" style-hover="border-color:#8a8478">▶</div>
+                </div>
+              </div>
+
+              <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ timer.name }}</span>
+                  <span onClick="{{ timer.onEnd }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;cursor:pointer">END →</span>
+                </div>
+                <div style="display:flex;gap:3px">
+                  <sc-for list="{{ timer.dots }}" as="d" hint-placeholder-count="10">
+                    <span style="flex:1;height:4px;background:{{ d.bg }};display:block"></span>
+                  </sc-for>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <div style="display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;padding:12px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">TARGET SPLIT</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:32px;color:#b5341f;line-height:1.1">{{ timer.target }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ timer.range }}</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;padding:12px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">RATE</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:32px;color:#1b1a17;line-height:1.1">{{ timer.spm }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">spm</span>
+                  </div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px;background:#efeade;border:1px solid #ded8c9;padding:12px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#8a8478">UP NEXT</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#3f3c35">{{ timer.next }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ timer.thenAfter }}</span>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isLog }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div onClick="{{ back }}" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;cursor:pointer;padding-top:6px">← BACK</div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">Log {{ det.title }}</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;background:{{ det.typeBg }};color:#fffdf7;padding:2px 6px">{{ det.typeCode }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">JUL 27 · {{ det.minutes }} MIN</span>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:9px;background:#efeade;border:1px dashed #c9c3b2;border-radius:2px;padding:14px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#b5341f">PACES LOCKED AT 2K {{ base2k }} · 6K {{ base6k }}</div>
+                <sc-for list="{{ det.lockRows }}" as="s" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478">
+                    <span>{{ s.line }}</span><span style="color:#3f3c35">{{ s.locked }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">DID YOU HOLD THE TARGETS?</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+                  <sc-for list="{{ hitOpts }}" as="h" hint-placeholder-count="3">
+                    <div onClick="{{ h.onClick }}" style="display:flex;align-items:center;justify-content:center;min-height:46px;border-radius:2px;font-size:14px;cursor:pointer;border:1px solid #c9c3b2;background:{{ h.bg }};color:{{ h.fg }}">{{ h.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">PAIN RATING</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#b5341f">{{ painLabel }}</span>
+                </div>
+                <div style="display:flex;gap:4px">
+                  <sc-for list="{{ painPicker }}" as="p" hint-placeholder-count="10">
+                    <div onClick="{{ p.onClick }}" style="flex:1;min-height:44px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;background:{{ p.bg }};color:{{ p.fg }}">{{ p.n }}</div>
+                  </sc-for>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">EXPECTED {{ det.pain }}/10</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">NOTES</div>
+                <textarea value="{{ notes }}" onChange="{{ onNotes }}" placeholder="Legs went at interval 4. Fan on 6." style="min-height:88px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px;color:#1b1a17;font-size:14px;resize:none;outline:none"></textarea>
+              </div>
+
+              <div onClick="{{ onSave }}" style="display:flex;align-items:center;justify-content:center;min-height:54px;background:#b5341f;color:#fffdf7;border-radius:2px;font-size:16px;font-weight:600;cursor:pointer;margin-bottom:6px" style-hover="background:#9c2c19">Save session</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px;border-bottom:2px solid #1b1a17;padding-bottom:8px">
+                <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">{{ plan.name }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ plan.doneLabel }}</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#1b1a17">{{ cal.label }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ cal.count }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
+                  <sc-for list="{{ cal.dow }}" as="d" hint-placeholder-count="7">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.08em;color:#a09a8c;text-align:center">{{ d.l }}</span>
+                  </sc-for>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
+                  <sc-for list="{{ cal.cells }}" as="c" hint-placeholder-count="35">
+                    <div style="height:40px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:1px solid {{ c.border }};background:{{ c.bg }}">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ c.fg }}">{{ c.n }}</span>
+                      <span style="width:14px;height:3px;background:{{ c.dot }};display:block"></span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{ planChips }}" as="c" hint-placeholder-count="3">
+                  <div onClick="{{ c.onClick }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;min-height:44px;display:flex;align-items:center;padding:0 12px;cursor:pointer;border:1px solid #c9c3b2;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-wrap:wrap;gap:10px">
+                <sc-for list="{{ planLegend }}" as="l" hint-placeholder-count="4">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <span style="width:12px;height:12px;background:{{ l.bg }};border:1px solid #1b1a17;display:block"></span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3f3c35">{{ l.code }} {{ l.label }}</span>
+                  </span>
+                </sc-for>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:1px;background:#ded8c9;border-radius:2px;overflow:hidden">
+                <sc-for list="{{ plan.rows }}" as="p" hint-placeholder-count="10">
+                  <div onClick="{{ p.onOpen }}" style="display:flex;align-items:center;gap:12px;padding:13px 14px 13px 11px;cursor:pointer;background:{{ p.bg }};border-left:3px solid {{ p.rule }}">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;width:26px">{{ p.n }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:3px 7px;border-radius:2px;background:{{ p.badgeBg }};color:{{ p.badgeFg }};min-width:38px;text-align:center">{{ p.code }}</span>
+                    <span style="flex:1;font-size:14px;color:{{ p.fg }}">{{ p.label }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ p.right }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isTrend }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:20px">
+              <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em;padding-top:6px">Progress</div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#8a8478">2K TEST SPLIT</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#b5341f">{{ trend.k2Delta }}</span>
+                </div>
+                <sc-for list="{{ trend.k2 }}" as="t" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:44px">{{ t.label }}</span>
+                    <span style="height:8px;border-radius:2px;background:{{ t.bg }};width:{{ t.w }};display:block"></span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">{{ t.val }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#8a8478">6K TEST SPLIT</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#b5341f">{{ trend.k6Delta }}</span>
+                </div>
+                <sc-for list="{{ trend.k6 }}" as="t" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:44px">{{ t.label }}</span>
+                    <span style="height:8px;border-radius:2px;background:{{ t.bg }};width:{{ t.w }};display:block"></span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">{{ t.val }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:14px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#8a8478">MINUTES PER WEEK · BY TYPE</span>
+                <div style="display:flex;align-items:flex-end;gap:8px;height:120px">
+                  <sc-for list="{{ trend.vol }}" as="v" hint-placeholder-count="6">
+                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:flex-end">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8478">{{ v.val }}</span>
+                      <span style="width:100%;display:flex;flex-direction:column-reverse;gap:1px">
+                        <sc-for list="{{ v.segs }}" as="g" hint-placeholder-count="3">
+                          <span style="width:100%;background:{{ g.bg }};height:{{ g.h }};display:block"></span>
+                        </sc-for>
+                      </span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8478">{{ v.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#8a8478">TYPE MIX · LAST 30 DAYS</span>
+                <sc-for list="{{ trend.mix }}" as="m" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3f3c35;width:30px">{{ m.code }}</span>
+                    <span style="height:8px;border-radius:2px;background:{{ m.bg }};width:{{ m.w }};display:block"></span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478">{{ m.n }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isYou }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;align-items:center;gap:12px;padding-top:6px;border-bottom:2px solid #1b1a17;padding-bottom:12px">
+                <span style="width:46px;height:46px;flex:none;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:15px;display:flex;align-items:center;justify-content:center">{{ acct.initials }}</span>
+                <div style="flex:1;display:flex;flex-direction:column;gap:1px">
+                  <span style="font-family:Newsreader,serif;font-size:24px;font-weight:500;color:#1b1a17;line-height:1.1">{{ acct.name }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">{{ acct.meta }}</span>
+                </div>
+                <div onClick="{{ acct.onToggle }}" style="display:flex;align-items:center;min-height:44px;padding:0 11px;border:1px solid #c9c3b2;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#57544c;cursor:pointer;white-space:nowrap" style-hover="border-color:#1b1a17;color:#1b1a17">{{ acct.toggleLabel }}</div>
+              </div>
+
+              <sc-if value="{{ acct.open }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:1px;background:#ded8c9;border:1px solid #1b1a17">
+                  <sc-for list="{{ acct.list }}" as="a" hint-placeholder-count="2">
+                    <div onClick="{{ a.onPick }}" style="display:flex;align-items:center;gap:10px;min-height:52px;padding:0 12px;background:{{ a.bg }};cursor:pointer">
+                      <span style="width:28px;height:28px;flex:none;background:{{ a.avatarBg }};color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:11px;display:flex;align-items:center;justify-content:center">{{ a.initials }}</span>
+                      <span style="flex:1;font-size:15px;color:#1b1a17">{{ a.name }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#57544c">{{ a.right }}</span>
+                    </div>
+                  </sc-for>
+                  <div style="display:flex;align-items:center;gap:10px;min-height:52px;padding:0 12px;background:#efeade;cursor:pointer" style-hover="background:#eae5d8">
+                    <span style="width:28px;height:28px;flex:none;border:1px dashed #b8b2a3;color:#8a8478;font-family:'IBM Plex Mono',monospace;font-size:13px;display:flex;align-items:center;justify-content:center">+</span>
+                    <span style="flex:1;font-size:15px;color:#57544c">Add another rower</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">Baselines</div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:16px">
+                <sc-for list="{{ baseRows }}" as="b" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#8a8478">{{ b.label }}</span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:32px;color:#b5341f;letter-spacing:-0.02em">{{ b.val }}</span>
+                    </div>
+                    <div style="display:flex;gap:6px">
+                      <div onClick="{{ b.onFaster }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:#ded8c9;border-radius:2px;color:#3f3c35;cursor:pointer" style-hover="background:#c9c3b2">−</div>
+                      <div onClick="{{ b.onSlower }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:#ded8c9;border-radius:2px;color:#3f3c35;cursor:pointer" style-hover="background:#c9c3b2">+</div>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="font-size:12px;color:#8a8478">Stored workouts re-pace off these. Old logs keep their numbers.</div>
+                <sc-if value="{{ baseDirty }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:9px;background:#efeade;border:1px solid #1b1a17;padding:12px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1b1a17">{{ baseNote }}</span>
+                    <span style="font-size:12px;color:#57544c">{{ baseImpact }}</span>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                      <div onClick="{{ cancelBase }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;font-size:14px;cursor:pointer" style-hover="border-color:#8a8478">Discard</div>
+                      <div onClick="{{ applyBase }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;background:#b5341f;color:#fffdf7;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">Apply baselines</div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;background:#fffdf7;border:1px solid #d8d3c4;padding:16px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#8a8478">SUGGEST WORKOUTS AT</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                  <sc-for list="{{ prefs.diffs }}" as="d" hint-placeholder-count="3">
+                    <div onClick="{{ d.onClick }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;min-height:44px;display:flex;align-items:center;padding:0 12px;cursor:pointer;border:1px solid #c9c3b2;background:{{ d.bg }};color:{{ d.fg }}">{{ d.label }}</div>
+                  </sc-for>
+                </div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#8a8478">TIME I USUALLY HAVE</span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                  <sc-for list="{{ prefs.caps }}" as="c" hint-placeholder-count="4">
+                    <div onClick="{{ c.onClick }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;min-height:44px;display:flex;align-items:center;padding:0 12px;cursor:pointer;border:1px solid #c9c3b2;background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</div>
+                  </sc-for>
+                </div>
+                <div style="font-size:12px;color:#8a8478">{{ prefs.matchLabel }}</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;background:#fffdf7;border:1px solid #d8d3c4;padding:16px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#8a8478">DEFAULT WARM-UP</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#1b1a17">{{ prefs.wuLabel }}</span>
+                  </div>
+                  <div style="display:flex;gap:2px">
+                    <div onClick="{{ prefs.wuDown }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">−</div>
+                    <div onClick="{{ prefs.wuUp }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">+</div>
+                  </div>
+                </div>
+                <div onClick="{{ prefs.toggleWu }}" style="display:flex;align-items:center;gap:10px;cursor:pointer;min-height:44px">
+                  <span style="width:22px;height:22px;border:1px solid #1b1a17;background:{{ prefs.wuOnBg }};color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:13px;display:flex;align-items:center;justify-content:center">{{ prefs.wuOnGlyph }}</span>
+                  <span style="font-size:14px;color:#3f3c35">Override library warm-ups</span>
+                </div>
+                <sc-if value="{{ prefs.wuDirty }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:9px;background:#efeade;border:1px solid #1b1a17;padding:12px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1b1a17">{{ prefs.wuNote }}</span>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                      <div onClick="{{ prefs.cancelWu }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;font-size:14px;cursor:pointer" style-hover="border-color:#8a8478">Discard</div>
+                      <div onClick="{{ prefs.applyWu }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;background:#b5341f;color:#fffdf7;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">Save</div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:12px;background:#fffdf7;border:1px solid #d8d3c4;padding:16px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#8a8478">PRE-WORKOUT COUNTDOWN</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:24px;color:#1b1a17">{{ prefs.cdLabel }}</span>
+                  </div>
+                  <div style="display:flex;gap:2px">
+                    <div onClick="{{ prefs.cdDown }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">−</div>
+                    <div onClick="{{ prefs.cdUp }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">+</div>
+                  </div>
+                </div>
+                <sc-if value="{{ prefs.cdDirty }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:9px;background:#efeade;border:1px solid #1b1a17;padding:12px">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1b1a17">{{ prefs.cdNote }}</span>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                      <div onClick="{{ prefs.cancelCd }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;font-size:14px;cursor:pointer" style-hover="border-color:#8a8478">Discard</div>
+                      <div onClick="{{ prefs.applyCd }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;background:#b5341f;color:#fffdf7;font-size:14px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">Save</div>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;background:#fffdf7;border:1px solid #d8d3c4;padding:16px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#8a8478">TRAINING PLAN</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ prefs.progressLabel }}</span>
+                </div>
+                <sc-for list="{{ prefs.plans }}" as="p" hint-placeholder-count="2">
+                  <div onClick="{{ p.onPick }}" style="display:flex;align-items:center;gap:10px;min-height:46px;padding:0 12px;cursor:pointer;border:1px solid {{ p.border }};background:{{ p.bg }}">
+                    <span style="width:12px;height:12px;border:1px solid #1b1a17;background:{{ p.dot }};display:block"></span>
+                    <span style="flex:1;font-size:15px;color:#1b1a17">{{ p.label }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ p.meta }}</span>
+                  </div>
+                </sc-for>
+                <div onClick="{{ prefs.resetPlan }}" style="display:flex;align-items:center;justify-content:center;min-height:46px;border:1px solid #b5341f;color:#b5341f;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;cursor:pointer" style-hover="background:#b5341f;color:#fffdf7">RESET PROGRESS TO SESSION 1</div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">TEST HISTORY</div>
+                <sc-for list="{{ testHist }}" as="t" hint-placeholder-count="5">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:12px 0;border-bottom:1px solid #ded8c9">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478">{{ t.date }}</span>
+                    <span style="font-size:14px;color:#3f3c35;flex:1">{{ t.dist }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#1b1a17">{{ t.split }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#b5341f;width:44px;text-align:right">{{ t.delta }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div onClick="{{ goBuild }}" style="display:flex;align-items:center;justify-content:center;min-height:50px;background:#fffdf7;border:1px solid #c9c3b2;color:#1b1a17;border-radius:2px;font-size:15px;cursor:pointer" style-hover="border-color:#b8b2a3">Add workouts / bulk import</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isBuild }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div onClick="{{ back }}" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;cursor:pointer;padding-top:6px">← BACK</div>
+              <div style="font-family:Newsreader,serif;font-size:31px;font-weight:500;color:#1b1a17;letter-spacing:-0.01em">New workout</div>
+
+              <div style="display:grid;grid-template-columns:88px 1fr;gap:8px">
+                <input value="{{ nw.num }}" onChange="{{ nw.setNum }}" placeholder="No." style="height:46px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:0 12px;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:14px;outline:none"></input>
+                <input value="{{ nw.title }}" onChange="{{ nw.setTitle }}" placeholder="Title" style="height:46px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:0 12px;color:#1b1a17;font-size:14px;outline:none"></input>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TYPE</span>
+                <div style="display:flex;gap:6px">
+                  <sc-for list="{{ nw.types }}" as="t" hint-placeholder-count="4">
+                    <div onClick="{{ t.onClick }}" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">{{ t.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DIFFICULTY</span>
+                <div style="display:flex;gap:6px">
+                  <sc-for list="{{ nw.diffs }}" as="d" hint-placeholder-count="3">
+                    <div onClick="{{ d.onClick }}" style="flex:1;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid #c9c3b2;background:{{ d.bg }};color:{{ d.fg }};font-family:'IBM Plex Mono',monospace;font-size:11px">{{ d.label }}</div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">EXPECTED PAIN</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">{{ nw.painLabel }}</span>
+                </div>
+                <div style="display:flex;gap:4px">
+                  <sc-for list="{{ nw.pains }}" as="p" hint-placeholder-count="10">
+                    <div onClick="{{ p.onClick }}" style="flex:1;min-height:44px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;cursor:pointer;background:{{ p.bg }};color:{{ p.fg }};font-family:'IBM Plex Mono',monospace;font-size:11px">{{ p.n }}</div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#8a8478;padding-bottom:2px">
+                  <span style="width:44px">SET</span><span style="width:46px">DUR</span><span style="width:66px">PACE REF</span><span style="width:40px">SPM</span><span style="width:44px">REST</span><span style="flex:1;text-align:right">SPLIT</span><span style="width:20px"></span>
+                </div>
+                <sc-for list="{{ nw.rows }}" as="r" hint-placeholder-count="3">
+                  <div style="display:flex;flex-direction:column;gap:2px;border-left:3px solid {{ r.setMark }};padding-left:5px;margin-left:-8px">
+                    <div style="display:flex;align-items:center;gap:5px">
+                      <div onClick="{{ r.toggleSet }}" title="include in the repeat" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #d8d3c4;background:{{ r.setBg }};color:{{ r.setFg }};font-family:'IBM Plex Mono',monospace;font-size:15px;cursor:pointer;flex:none" style-hover="border-color:#8a8478">↻</div>
+                      <input value="{{ r.dur }}" onChange="{{ r.setDur }}" placeholder="1'" style="width:48px;height:44px;flex:none;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:0 6px;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none"></input>
+                      <input value="{{ r.ref }}" onChange="{{ r.setRef }}" placeholder="6k-2" style="width:64px;height:44px;flex:none;background:#fffdf7;border:1px solid #c9c3b2;border-radius:2px;padding:0 6px;color:#b5341f;font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none"></input>
+                      <input value="{{ r.spm }}" onChange="{{ r.setSpm }}" placeholder="24" style="width:40px;height:44px;flex:none;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:0 5px;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none"></input>
+                      <input value="{{ r.rest }}" onChange="{{ r.setRest }}" placeholder="2'" style="width:44px;height:44px;flex:none;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:0 5px;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:13px;outline:none"></input>
+                      <div onClick="{{ r.remove }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#b8b2a3;font-size:16px;cursor:pointer;flex:none" style-hover="color:#b5341f">×</div>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;padding-right:46px">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;white-space:nowrap">{{ r.pace }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+                <div onClick="{{ nw.addRow }}" style="display:flex;align-items:center;justify-content:center;min-height:44px;border:1px dashed #c9c3b2;border-radius:2px;color:#8a8478;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer;margin-top:4px" style-hover="color:#b5341f;border-color:#b8b2a3">+ ADD ROW</div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:12px;background:#efeade;border:1px solid #d8d3c4;padding:12px 14px">
+                <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#8a8478">REPEAT (OPTIONAL)</span>
+                  <span style="font-size:13px;color:#3f3c35">{{ nw.setLabel }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:2px">
+                  <div onClick="{{ nw.repsDown }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">−</div>
+                  <span style="width:46px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#1b1a17">{{ nw.repsLabel }}</span>
+                  <div onClick="{{ nw.repsUp }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;cursor:pointer" style-hover="background:#eae5d8">+</div>
+                </div>
+              </div>
+
+              <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid #ded8c9;border-bottom:1px solid #ded8c9;padding:10px 0">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#8a8478">TOTAL</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:#1b1a17">{{ nw.total }}</span>
+              </div>
+
+              <div onClick="{{ nw.toggleBulk }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#8a8478;cursor:pointer" style-hover="color:#b5341f">{{ nw.bulkLabel }}</div>
+              <sc-if value="{{ nw.bulkOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <textarea value="{{ nw.bulk }}" onChange="{{ nw.setBulk }}" placeholder="159 | Lucky Penny | AT | Moderate | 5 | 45
+10' easy
+4x | 1' | 6k-2 | 20 | 5'" style="min-height:92px;background:#efeade;border:1px dashed #c9c3b2;border-radius:2px;padding:12px;color:#3f3c35;font-family:'IBM Plex Mono',monospace;font-size:12px;resize:none;outline:none"></textarea>
+                  <div style="font-size:12px;color:#8a8478">One workout per block, blank line between.</div>
+                </div>
+              </sc-if>
+
+              <div onClick="{{ back }}" style="display:flex;align-items:center;justify-content:center;min-height:54px;background:#b5341f;color:#fffdf7;border-radius:2px;font-size:16px;font-weight:600;cursor:pointer;margin-bottom:6px" style-hover="background:#9c2c19">Save to library</div>
+            </div>
+          </sc-if>
+
+        </div>
+
+        <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;border-top:1px solid #ded8c9;background:#f4f1e8;padding:10px 12px 22px">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+            <div onClick="{{ t.onClick }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 0;cursor:pointer">
+              <span style="width:16px;height:3px;border-radius:2px;background:{{ t.mark }};display:block"></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:{{ t.fg }}">{{ t.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        </sc-if>
+      </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;paceTolerance&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:3,&quot;step&quot;:0.5,&quot;unit&quot;:&quot;s&quot;,&quot;section&quot;:&quot;Pace math&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#b5341f&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#b5341f&quot;,&quot;#4ad0f2&quot;,&quot;#f2a94a&quot;,&quot;#1b1a17&quot;],&quot;section&quot;:&quot;Theme&quot;}}">
+const ACC = '#b5341f';
+const TYPES = { AN: 'Anaerobic — speed work', O2: 'Aerobic — steady state', AT: 'Anaerobic threshold', TR: 'Transport — sprints', TEST: '2k test' };
+
+function W(num, title, type, difficulty, pain, minutes, lastDone, steps) {
+  return { id: num, num, title, type, difficulty, pain, minutes, lastDone, steps };
+}
+const LIB = [
+  W('159', 'Lucky Penny', 'AT', 'Moderate', 5, 45, 33, [
+    { k: 'wu', dur: 10 }, { k: 'reps', reps: 4 },
+    { k: 'w', dur: 1, base: '6k', off: 0, spm: 16 },
+    { k: 'w', dur: 1, base: '6k', off: -1, spm: 18 },
+    { k: 'w', dur: 1, base: '6k', off: -2, spm: 20 },
+    { k: 'w', dur: 1, base: '6k', off: -3, spm: 22 },
+    { k: 'w', dur: 1, base: '6k', off: -4, spm: 24 },
+    { k: 'r', dur: 5 }]),
+  W('161', 'A Team', 'TR', 'Advanced', 8, 55, 34, [
+    { k: 'wu', dur: 10 }, { k: 'reps', reps: 5 },
+    { k: 'w', dur: 0.5, base: '2k', off: 0, spm: 24, rest: 0.5 },
+    { k: 'w', dur: 1, base: '2k', off: 0, spm: 26, rest: 1 },
+    { k: 'w', dur: 1.5, base: '2k', off: 0, spm: 28, rest: 1.5 },
+    { k: 'w', dur: 1, base: '2k', off: 0, spm: 26, rest: 1 },
+    { k: 'w', dur: 0.5, base: '2k', off: 0, spm: 24, rest: 0.5 }]),
+  W('88', 'Broken 5k', 'AT', 'Moderate', 6, 40, 9, [
+    { k: 'wu', dur: 10 }, { k: 'reps', reps: 4 },
+    { k: 'w', dur: 5, base: '6k', off: -2, spm: 24, rest: 2 }]),
+  W('121', 'Threshold Twenty', 'AT', 'Moderate', 5, 50, 18, [
+    { k: 'wu', dur: 10 },
+    { k: 'w', dur: 20, base: '6k', off: -3, spm: 24 }, { k: 'r', dur: 5 },
+    { k: 'w', dur: 10, base: '6k', off: -2, spm: 26 }]),
+  W('42', 'Steady Ninety', 'O2', 'Introductory', 2, 90, 2, [
+    { k: 'wu', dur: 10 }, { k: 'w', dur: 80, base: '6k', off: 8, spm: 20 }]),
+  W('17', 'Easy Sixty', 'O2', 'Introductory', 2, 60, 5, [
+    { k: 'wu', dur: 10 }, { k: 'w', dur: 50, base: '6k', off: 10, spm: 18 }]),
+  W('310', 'Long Pyramid', 'O2', 'Moderate', 4, 70, 27, [
+    { k: 'wu', dur: 10 }, { k: 'reps', reps: 2 },
+    { k: 'w', dur: 5, base: '6k', off: 6, spm: 20 },
+    { k: 'w', dur: 5, base: '6k', off: 4, spm: 22 },
+    { k: 'w', dur: 5, base: '6k', off: 2, spm: 24 },
+    { k: 'w', dur: 5, base: '6k', off: 4, spm: 22 },
+    { k: 'w', dur: 5, base: '6k', off: 6, spm: 20 }, { k: 'r', dur: 3 }]),
+  W('204', 'Sprint Ladder', 'AN', 'Advanced', 9, 35, 12, [
+    { k: 'wu', dur: 12 }, { k: 'reps', reps: 6 },
+    { k: 'w', dur: 0.5, base: '2k', off: -2, spm: 30, rest: 2.5 }]),
+  W('275', 'Fives and Dimes', 'AN', 'Moderate', 7, 38, 48, [
+    { k: 'wu', dur: 10 }, { k: 'reps', reps: 5 },
+    { k: 'w', dur: 0.75, base: '2k', off: -1, spm: 32, rest: 3 }]),
+  W('233', 'Quarter Horse', 'TR', 'Moderate', 7, 42, 4, [
+    { k: 'wu', dur: 10 }, { k: 'reps', reps: 4 },
+    { k: 'w', dur: 4, base: '2k', off: 2, spm: 28, rest: 4 }]),
+  W('12', '2k Test', 'TR', 'Advanced', 10, 30, 56, [
+    { k: 'wu', dur: 15 }, { k: 'test', label: '2 000 m all out — record the split' }])
+];
+
+const PLANS = {
+  sprint: { label: '2 000 m sprint', test: '2k', pat: ['O2', 'AT', 'O2', 'TR', 'O2', 'AT', 'O2', 'AN'] },
+  head: { label: '5–6 k head race', test: '6k', pat: ['O2', 'O2', 'AT', 'O2', 'TR', 'O2', 'AT'] }
+};
+const seqFor = key => Array.from({ length: 84 }, (_, i) => (i === 7 || i === 31 || i === 55 ? 'TEST' : i === 11 ? 'AT' : PLANS[key].pat[i % PLANS[key].pat.length]));
+/* all four ≥4.8:1 against #fffdf7 badge text and ≥3:1 against the #f4f1e8 page */
+const TYPEC = { O2: '#2a6275', AT: '#8a5f18', TR: '#b5341f', AN: '#5c4382', '2k': '#1b1a17', '6k': '#1b1a17' };
+const LOGGED_DAYS = [1, 2, 4, 6, 7, 9, 11, 13, 14, 16, 18, 20, 22, 23, 25];
+const TODAY_DAY = 27;
+
+class Component extends DCLogic {
+  state = {
+    screen: 'today', wid: '159', hist: ['today'], step: 0,
+    k2: 112, k6: 122, k2d: 112, k6d: 122, nudge: {}, planKey: 'sprint', doneN: 11, cd: 10, cdD: 10, wuMin: 10, wuMinD: 10, wuOn: false, wuOnD: false, planFilter: 'all', acctIdx: 0, acctOpen: false, todayPick: null, diffs: { Introductory: true, Moderate: true, Advanced: true }, cap: 60, sess: { dur: {}, off: {}, reps: null }, remain: 0, running: true, count: 10, land: false,
+    fType: null, fDur: {}, fPain: null, fFresh: false, fRecent: false,
+    pain: 5, hit: 'held', notes: '',
+    nwNum: '', nwTitle: '', nwType: 'AT', nwDiff: 'Moderate', nwPain: 5, nwBulk: '', nwBulkOpen: false, nwReps: 4,
+    nwRows: [{ dur: "10'", ref: 'easy', spm: '20', rest: '', inSet: false }, { dur: "5'", ref: '6k-2', spm: '24', rest: "2'", inSet: true }]
+  };
+
+  componentDidMount() { this._iv = setInterval(this.tick, 1000); }
+  componentWillUnmount() { clearInterval(this._iv); }
+
+  clock(s) { const m = Math.floor(s / 60); const r = Math.max(0, Math.round(s - m * 60)); return m + ':' + (r < 10 ? '0' : '') + r; }
+
+  phases(w) {
+    const out = [];
+    this.liveSteps(w).forEach(e => {
+      const s = w.steps[e.i];
+      const v = s.base === undefined ? null : this.resolve(w, e.i);
+      const setTag = e.reps > 1 ? ' · set ' + (e.rep + 1) + '/' + e.reps : '';
+      out.push({
+        kind: s.k,
+        label: s.k === 'wu' ? 'Warm up' : s.k === 'test' ? 'All out' : s.k === 'r' ? 'Rest' : 'Work' + setTag,
+        desc: (s.dur ? this.dur(s.dur) : '') + (v === null ? ' easy' : ' @ ' + this.refLabel(s)),
+        target: v === null ? (s.k === 'test' ? 'All out' : 'Easy') : this.fmt(v),
+        range: v === null ? 'rate free' : this.range(v),
+        spm: s.spm ? String(s.spm) : '—',
+        secs: Math.round((s.dur || 0) * 60)
+      });
+      if (s.rest) out.push({ kind: 'r', label: 'Rest', desc: this.dur(s.rest) + ' rest', target: 'Rest', range: 'off the handle', spm: '—', secs: Math.round(s.rest * 60) });
+    });
+    return out;
+  }
+
+  tick = () => {
+    const st = this.state;
+    if (st.screen === 'count') {
+      if (st.count <= 0) {
+        const ph = this.phases(this.sessW());
+        this.setState({ screen: 'live', step: 0, remain: ph.length ? ph[0].secs : 60, running: true });
+      } else this.setState({ count: st.count - 1 });
+      return;
+    }
+    if (st.screen === 'live' && st.running) {
+      if (st.remain > 1) this.setState({ remain: st.remain - 1 });
+      else this.jump(1);
+    }
+  };
+
+  jump = (d) => {
+    const ph = this.phases(this.sessW());
+    const n = this.state.step + d;
+    if (n < 0) return;
+    if (n >= ph.length) { this.setState({ screen: 'log', hist: ['today'] }); return; }
+    this.setState({ step: n, remain: ph[n].secs });
+  };
+
+  go = (s, wid) => this.setState(st => ({
+    screen: s, wid: wid || st.wid, hist: st.hist.concat([st.screen]), step: 0,
+    sess: (wid && wid !== st.wid) || s === 'detail' ? { dur: {}, off: {}, reps: null } : st.sess
+  }));
+  back = () => this.setState(st => ({ screen: st.hist[st.hist.length - 1] || 'today', hist: st.hist.slice(0, -1) }));
+
+  tol() { const t = this.props.paceTolerance; return t === undefined || t === null ? 1 : t; }
+  fmt(s, d) { const m = Math.floor(s / 60); const r = s - m * 60; const rs = r.toFixed(d || 0); return m + ':' + (r < 9.95 ? '0' : '') + rs; }
+  base(b) { return b === '2k' ? this.state.k2 : this.state.k6; }
+  resolve(w, i) { const s = w.steps[i]; return this.base(s.base) + s.off + (this.state.nudge[w.id + ':' + i] || 0); }
+  range(v) { const t = this.tol(); return t <= 0 ? this.fmt(v) : this.fmt(v - t) + '–' + this.fmt(v + t); }
+  dur(d) { return (d === Math.floor(d) ? d : d) + "'"; }
+  refLabel(s) {
+    const n = s.off + (0);
+    if (s.off === 0) return s.base;
+    return s.base + (s.off > 0 ? ' +' : ' −') + Math.abs(s.off);
+  }
+
+  wk(id) { return LIB.filter(w => w.id === id)[0] || LIB[0]; }
+
+  stepViews(w) {
+    return w.steps.map((s, i) => {
+      const key = w.id + ':' + i;
+      const nd = this.state.nudge[key] || 0;
+      if (s.k === 'wu') return { line: this.dur(s.dur) + ' easy warm up', sub: 'no target', pace: '—', tunable: false };
+      if (s.k === 'r') return { line: this.dur(s.dur) + ' rest', sub: 'off the handle', pace: '—', tunable: false };
+      if (s.k === 'reps') return { line: s.reps + '× the block below', sub: 'repeat as a set', pace: '—', tunable: false };
+      if (s.k === 'test') return { line: s.label, sub: 'updates your baseline', pace: '—', tunable: false };
+      const v = this.resolve(w, i);
+      return {
+        line: this.dur(s.dur) + ' @ ' + this.refLabel(s),
+        sub: s.spm + ' spm' + (s.rest ? ' · ' + this.dur(s.rest) + ' rest' : '') + (nd ? ' · nudged ' + (nd > 0 ? '+' : '') + nd + 's' : ''),
+        pace: this.range(v), locked: this.fmt(v), spm: s.spm, tunable: true,
+        onFaster: () => this.setState(st => ({ nudge: Object.assign({}, st.nudge, { [key]: (st.nudge[key] || 0) - 1 }) })),
+        onSlower: () => this.setState(st => ({ nudge: Object.assign({}, st.nudge, { [key]: (st.nudge[key] || 0) + 1 }) }))
+      };
+    });
+  }
+
+  liveSteps(w) {
+    const pre = [], block = [];
+    let reps = 1, seen = false;
+    w.steps.forEach((s, i) => {
+      if (s._off) return;
+      if (s.k === 'reps') { reps = s.reps || 1; seen = true; return; }
+      (seen ? block : pre).push(i);
+    });
+    const seq = pre.map(i => ({ i, rep: 0, reps: 1 }));
+    for (let r = 0; r < reps; r++) block.forEach(i => seq.push({ i, rep: r, reps }));
+    return seq;
+  }
+
+  sessW() {
+    const w = this.wk(this.state.wid), sess = this.state.sess || { dur: {}, off: {}, reps: null };
+    return Object.assign({}, w, {
+      steps: w.steps.map((s, i) => Object.assign({}, s, {
+        dur: sess.dur[i] !== undefined ? sess.dur[i] : (this.state.wuOn && s.k === 'wu' ? this.state.wuMin : s.dur),
+        reps: s.k === 'reps' ? (sess.reps || s.reps) : s.reps,
+        _off: !!sess.off[i]
+      }))
+    });
+  }
+
+  editDur(i, d) {
+    this.setState(st => {
+      const w = this.wk(st.wid), cur = st.sess.dur[i] === undefined ? w.steps[i].dur : st.sess.dur[i];
+      const next = Math.max(0.5, Math.round((cur + d) * 2) / 2);
+      return { sess: Object.assign({}, st.sess, { dur: Object.assign({}, st.sess.dur, { [i]: next }) }) };
+    });
+  }
+  toggleOff(i) {
+    this.setState(st => ({ sess: Object.assign({}, st.sess, { off: Object.assign({}, st.sess.off, { [i]: !st.sess.off[i] }) }) }));
+  }
+  editReps(d) {
+    this.setState(st => {
+      const w = this.wk(st.wid), base = (w.steps.filter(s => s.k === 'reps')[0] || {}).reps || 1;
+      const cur = st.sess.reps || base;
+      return { sess: Object.assign({}, st.sess, { reps: Math.min(12, Math.max(1, cur + d)) }) };
+    });
+  }
+
+  confirmRows(w, acc) {
+    const views = this.stepViews(w);
+    return w.steps.map((s, i) => {
+      const v = views[i], off = !!s._off;
+      const isReps = s.k === 'reps';
+      return {
+        isReps, isStep: !isReps,
+        line: isReps ? 'Repeat the block below' : v.line,
+        sub: off ? 'removed' : (v.tunable ? v.sub : ''),
+        pace: off || !v.tunable ? '' : v.pace,
+        tunable: !off && v.tunable,
+        showDur: !isReps && !off && s.dur !== undefined,
+        durLabel: s.dur === undefined ? '' : this.dur(s.dur),
+        onDurMinus: () => this.editDur(i, -1), onDurPlus: () => this.editDur(i, 1),
+        onFaster: v.onFaster, onSlower: v.onSlower,
+        onToggle: () => this.toggleOff(i),
+        toggleGlyph: off ? '+' : '×',
+        fg: off ? '#b8b2a3' : '#1b1a17',
+        repsLabel: '×' + (s.reps || 1),
+        onRepsDown: () => this.editReps(-1), onRepsUp: () => this.editReps(1)
+      };
+    });
+  }
+
+  durBucket(w) { const m = this.wMinutes(w); return m < 30 ? 'u30' : m <= 45 ? 'd45' : m <= 60 ? 'd60' : 'over'; }
+  toggleDur(k) { this.setState(s => ({ fDur: Object.assign({}, s.fDur, { [k]: !s.fDur[k] }) })); }
+
+  wMinutes(w) { return Math.round(this.phases(w).reduce((t, p) => t + p.secs, 0) / 60); }
+
+  render_(k) { return this.state.screen === k; }
+
+  renderVals() {
+    const st = this.state, acc = this.props.accentColor || ACC;
+    const b2 = this.fmt(st.k2, 1), b6 = this.fmt(st.k6, 1);
+    const planSeq = seqFor(st.planKey);
+    const todayCode = planSeq[st.doneN] === 'TEST' ? 'TR' : planSeq[st.doneN];
+    const fits = w => st.diffs[w.difficulty] && this.wMinutes(w) <= st.cap;
+    const ofType = LIB.filter(w => w.type === todayCode).sort((a, b) => b.lastDone - a.lastDone);
+    const matching = ofType.filter(fits);
+    const pool = matching.length ? matching : ofType;
+    const rec = (st.todayPick ? LIB.filter(w => w.id === st.todayPick)[0] : null) || pool[0] || LIB[0];
+    const recSteps = this.stepViews(rec);
+    const det = this.sessW(), detSteps = this.stepViews(det).filter((v, i) => !det.steps[i]._off);
+
+    const tabDefs = [['today', 'TODAY'], ['lib', 'LIBRARY'], ['plan', 'PLAN'], ['trend', 'TREND'], ['you', 'YOU']];
+    const activeTab = ['detail', 'live', 'log'].indexOf(st.screen) > -1 ? 'today' : (st.screen === 'build' ? 'lib' : st.screen);
+
+    const chipDefs = [
+      ['ALL', () => this.setState({ fType: null, fDur: {}, fPain: null, fFresh: false, fRecent: false }), !st.fType && !Object.keys(st.fDur).length && !st.fPain && !st.fFresh && !st.fRecent],
+      ['AN', () => this.setState(s => ({ fType: s.fType === 'AN' ? null : 'AN' })), st.fType === 'AN'],
+      ['O2', () => this.setState(s => ({ fType: s.fType === 'O2' ? null : 'O2' })), st.fType === 'O2'],
+      ['AT', () => this.setState(s => ({ fType: s.fType === 'AT' ? null : 'AT' })), st.fType === 'AT'],
+      ['TR', () => this.setState(s => ({ fType: s.fType === 'TR' ? null : 'TR' })), st.fType === 'TR'],
+      ['<30′', () => this.toggleDur('u30'), !!st.fDur.u30],
+      ['30–45′', () => this.toggleDur('d45'), !!st.fDur.d45],
+      ['45–60′', () => this.toggleDur('d60'), !!st.fDur.d60],
+      ['60′+', () => this.toggleDur('over'), !!st.fDur.over],
+      ['PAIN ≤5', () => this.setState(s => ({ fPain: s.fPain ? null : 5 })), st.fPain === 5],
+      ['RECENT', () => this.setState(s => ({ fRecent: !s.fRecent, fFresh: false })), st.fRecent],
+      ['NOT RECENT', () => this.setState(s => ({ fFresh: !s.fFresh, fRecent: false })), st.fFresh]
+    ];
+
+    let list = LIB.slice();
+    if (st.fType) list = list.filter(w => w.type === st.fType);
+    const durKeys = Object.keys(st.fDur).filter(k => st.fDur[k]);
+    if (durKeys.length) list = list.filter(w => durKeys.indexOf(this.durBucket(w)) > -1);
+    if (st.fPain) list = list.filter(w => w.pain <= st.fPain);
+    if (st.fFresh) list = list.filter(w => w.lastDone >= 21);
+    if (st.fRecent) list = list.filter(w => w.lastDone < 21);
+
+    const ph = this.phases(det);
+    const cph = ph[Math.min(st.step, Math.max(0, ph.length - 1))] || { label: '', desc: '', target: '—', range: '', spm: '—', secs: 60 };
+    const nph = ph[st.step + 1], nph2 = ph[st.step + 2];
+    const totalLeft = ph.slice(st.step + 1).reduce((t, p) => t + p.secs, 0) + st.remain;
+    const totalSecs = ph.reduce((t, p) => t + p.secs, 0);
+    const seq = this.liveSteps(det);
+    const cur = seq[Math.min(st.step, seq.length - 1)] || { i: 0, rep: 0, reps: 1 };
+    const curStep = det.steps[cur.i];
+    const curView = detSteps[cur.i];
+    const nxt = seq[st.step + 1];
+
+    const k2h = [['MAR', 116.4], ['APR', 114.8], ['JUN', st.k2]];
+    const k6h = [['MAR', 126.5], ['APR', 124.1], ['JUN', st.k6]];
+    const barW = (v, lo, hi) => Math.round(35 + 55 * (v - lo) / (hi - lo + 0.001)) + '%';
+
+    return {
+      isToday: this.render_('today'), isLib: this.render_('lib'), isDetail: this.render_('detail'),
+      isLog: this.render_('log'), isPlan: this.render_('plan'),
+      isConfirm: this.render_('confirm'), isCount: this.render_('count'),
+      isLivePortrait: this.render_('live') && !st.land, isLiveLandscape: this.render_('live') && !!st.land,
+      showNav: ['live', 'count'].indexOf(st.screen) === -1,
+      frameW: st.land ? '844px' : '390px', frameH: st.land ? '420px' : '844px',
+      rotateLabel: st.land ? '↻ PORTRAIT' : '↻ LANDSCAPE',
+      toggleLand: () => this.setState(s => ({ land: !s.land })),
+      isTrend: this.render_('trend'), isYou: this.render_('you'), isBuild: this.render_('build'),
+      base2k: b2, base6k: b6, libCount: LIB.length,
+      back: this.back, goBuild: () => this.go('build'), goLog: () => this.go('log'),
+      openRec: () => this.go('detail', rec.id), startRec: () => this.go('confirm', rec.id),
+      quickLog: () => this.go('log', rec.id), startDet: () => this.go('confirm', det.id),
+
+      today: { session: st.doneN + 1, total: planSeq.length, typeCode: todayCode, typeName: TYPES[todayCode], typeBg: TYPEC[todayCode] || '#1b1a17' },
+      rec: {
+        num: rec.num, title: rec.title, minutes: this.wMinutes(rec), difficulty: rec.difficulty, pain: rec.pain,
+        typeCode: rec.type, typeBg: TYPEC[rec.type] || '#1b1a17',
+        preview: recSteps.slice(0, 4), moreLabel: 'SEE ALL ' + recSteps.length + ' STEPS →',
+        badge: st.todayPick ? 'YOUR PICK' : 'SUGGESTED FOR TODAY',
+        hasWhy: !st.todayPick,
+        why: st.todayPick
+          ? ''
+          : (matching.length
+            ? 'Least recently done ' + todayCode + ' that fits ' + st.cap + '′ — ' + rec.lastDone + ' days ago.'
+            : 'Nothing ' + todayCode + ' fits your filters, so this is the closest match.')
+      },
+      alts: pool.slice(0, 4).map(w => ({
+        title: w.num + '. ' + w.title,
+        meta: this.wMinutes(w) + "′ · pain " + w.pain + ' · ' + w.lastDone + 'd',
+        bg: w.id === rec.id ? '#f8ece3' : '#efeade',
+        border: w.id === rec.id ? acc : '#ded8c9',
+        dot: w.id === rec.id ? '#1b1a17' : 'transparent',
+        onPick: () => this.setState({ todayPick: w.id })
+      })),
+      shuffleRec: () => this.setState(s => {
+        const others = pool.filter(w => w.id !== rec.id);
+        return { todayPick: others.length ? others[Math.floor(Math.random() * others.length)].id : null };
+      }),
+      recent: [
+        { title: '42. Steady Ninety', typeCode: 'O2', meta: 'JUL 25 · HELD · 2/10' },
+        { title: '233. Quarter Horse', typeCode: 'TR', meta: 'JUL 23 · UNDER · 8/10' },
+        { title: '17. Easy Sixty', typeCode: 'O2', meta: 'JUL 22 · HELD · 3/10' }
+      ].map(r => Object.assign({}, r, { typeBg: TYPEC[r.typeCode] })),
+
+      chips: chipDefs.map(c => ({ label: c[0], onClick: c[1], bg: c[2] ? acc : 'transparent', fg: c[2] ? '#fffdf7' : '#57544c' })),
+      list: list.map(w => ({
+        num: w.num, title: w.title, minutes: this.wMinutes(w),
+        typeCode: w.type, typeBg: TYPEC[w.type] || '#1b1a17',
+        meta: w.difficulty.toUpperCase() + ' · ' + w.lastDone + 'D AGO',
+        painBars: Array.from({ length: 10 }, (_, i) => ({ bg: i < w.pain ? (TYPEC[w.type] || '#1b1a17') : '#e0dacb' })),
+        onOpen: () => this.go('detail', w.id)
+      })),
+
+      det: {
+        num: det.num, title: det.title, typeCode: det.type, typeBg: TYPEC[det.type] || '#1b1a17', difficulty: det.difficulty, pain: det.pain,
+        minutes: this.wMinutes(det), lastDone: det.lastDone + ' DAYS AGO', steps: detSteps,
+        lockRows: detSteps.filter(s => s.tunable).map(s => ({ line: s.line, locked: s.locked }))
+      },
+
+      confirmRows: this.confirmRows(det, acc),
+      sessMinutes: Math.round(ph.reduce((t, p) => t + p.secs, 0) / 60),
+      countLabel: st.count,
+      skipCount: () => this.setState({ screen: 'live', step: 0, remain: ph.length ? ph[0].secs : 60, running: true }),
+      countNext: ph.length ? ph[0].label + ' — ' + ph[0].desc : '',
+      startCount: () => (st.cd > 0
+        ? this.setState({ screen: 'count', count: st.cd, hist: ['today'] })
+        : this.setState({ screen: 'live', step: 0, remain: ph.length ? ph[0].secs : 60, running: true, hist: ['today'] })),
+      timer: {
+        name: det.num + '. ' + det.title,
+        phaseLabel: 'STEP ' + (st.step + 1) + ' OF ' + ph.length + ' · ' + (cph.label || '').toUpperCase(),
+        stateLabel: st.running ? 'RUNNING' : 'PAUSED',
+        timeLeft: this.clock(st.remain),
+        pct: Math.round(100 * (1 - st.remain / Math.max(1, cph.secs))) + '%',
+        target: cph.target, range: cph.range, spm: cph.spm,
+        next: nph ? nph.label + ' · ' + nph.desc + (nph.kind === 'w' ? ' · ' + nph.target : '') : 'Finish and log',
+        thenAfter: nph2 ? 'then ' + nph2.label + ' · ' + nph2.desc : 'last piece',
+        totalLeft: this.clock(totalLeft),
+        totalPct: Math.round(100 * (1 - totalLeft / Math.max(1, totalSecs))) + '%',
+        ruler: [{ l: '¼' }, { l: '½' }, { l: '¾' }, { l: Math.round(totalSecs / 60) + '′' }],
+        dots: ph.map((p, i) => ({ bg: i < st.step ? acc : i === st.step ? '#1b1a17' : '#d8d3c4' })),
+        pauseLabel: st.running ? 'Pause' : 'Resume',
+        onPause: () => this.setState(s => ({ running: !s.running })),
+        onNext: () => this.jump(1),
+        onPrev: () => this.jump(-1),
+        onEnd: () => this.setState({ screen: 'log', hist: ['today'] })
+      },
+
+      hitOpts: [['held', 'Held'], ['under', 'Under'], ['over', 'Over']].map(h => ({
+        label: h[1], onClick: () => this.setState({ hit: h[0] }),
+        bg: st.hit === h[0] ? acc : '#fffdf7', fg: st.hit === h[0] ? '#fffdf7' : '#3f3c35'
+      })),
+      painLabel: st.pain + '/10',
+      painPicker: Array.from({ length: 10 }, (_, i) => ({
+        n: i + 1, onClick: () => this.setState({ pain: i + 1 }),
+        bg: i < st.pain ? acc : '#fffdf7', fg: i < st.pain ? '#fffdf7' : '#8a8478'
+      })),
+      notes: st.notes, onNotes: e => this.setState({ notes: e.target.value }),
+      onSave: () => this.setState(s => ({ screen: 'today', hist: [], doneN: Math.min(planSeq.length - 1, s.doneN + 1) })),
+
+      planLegend: [['O2', 'aerobic'], ['AT', 'threshold'], ['TR', 'transport'], ['AN', 'anaerobic']].map(l => ({
+        code: l[0], label: l[1], bg: TYPEC[l[0]]
+      })),
+      planChips: [['ALL', 'all'], ['TO DO', 'todo'], ['DONE', 'done']].map(c => ({
+        label: c[0], onClick: () => this.setState({ planFilter: c[1] }),
+        bg: st.planFilter === c[1] ? acc : 'transparent', fg: st.planFilter === c[1] ? '#fffdf7' : '#57544c'
+      })),
+      cal: {
+        label: 'JULY 2026',
+        count: LOGGED_DAYS.length + ' SESSIONS THIS MONTH',
+        dow: ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(l => ({ l })),
+        cells: Array.from({ length: 3 + 31 }, (_, idx) => {
+          if (idx < 3) return { n: '', bg: 'transparent', border: 'transparent', fg: '#a09a8c', dot: 'transparent' };
+          const d = idx - 2;
+          const li = LOGGED_DAYS.indexOf(d), logged = li > -1, today = d === TODAY_DAY, future = d > TODAY_DAY;
+          const code = logged ? planSeq[li] : todayCode;
+          const c = code === 'TEST' ? PLANS[st.planKey].test : code;
+          return {
+            n: d,
+            bg: logged ? '#efeade' : '#f4f1e8',
+            border: today ? (TYPEC[c] || '#1b1a17') : logged ? '#d8d3c4' : '#e6e1d4',
+            fg: future ? '#b8b2a3' : '#1b1a17',
+            dot: logged || today ? (TYPEC[c] || '#1b1a17') : 'transparent'
+          };
+        })
+      },
+      plan: {
+        name: PLANS[st.planKey].label,
+        doneLabel: st.doneN + ' LOGGED · ' + (planSeq.length - st.doneN) + ' TO GO',
+        rows: planSeq.map((code, i) => ({ code, i }))
+          .filter(r => (st.planFilter === 'todo' ? r.i >= st.doneN : st.planFilter === 'done' ? r.i < st.doneN : true))
+          .sort((a, b) => (a.i < st.doneN ? 1 : 0) - (b.i < st.doneN ? 1 : 0))
+          .slice(0, 20)
+          .map(r => {
+            const i = r.i, code = r.code, done = i < st.doneN, isToday = i === st.doneN;
+            const c = code === 'TEST' ? PLANS[st.planKey].test : code;
+            return {
+              n: i + 1, code: c,
+              label: code === 'TEST' ? c + ' test — resets baseline' : TYPES[code],
+              right: done ? 'LOGGED' : isToday ? 'TODAY' : '',
+              bg: isToday ? '#f8ece3' : '#fffdf7',
+              badgeBg: done ? '#ded8c9' : (TYPEC[c] || '#1b1a17'),
+              badgeFg: done ? '#8a8478' : '#fffdf7',
+              rule: done ? '#ded8c9' : (TYPEC[c] || '#1b1a17'),
+              fg: done ? '#a09a8c' : '#1b1a17',
+              onOpen: () => this.go('detail', code === 'TEST' ? '12' : (LIB.filter(w => w.type === c)[0] || LIB[0]).id)
+            };
+          })
+      },
+      acct: (() => {
+        const list = [
+          { name: 'James', initials: 'JB' },
+          { name: 'Coach account', initials: 'CO' }
+        ];
+        const cur = list[st.acctIdx] || list[0];
+        return {
+          name: cur.name, initials: cur.initials,
+          meta: 'SESSION ' + (st.doneN + 1) + ' · ' + PLANS[st.planKey].label.toUpperCase(),
+          open: st.acctOpen,
+          toggleLabel: st.acctOpen ? 'CLOSE' : 'SWITCH',
+          onToggle: () => this.setState(s => ({ acctOpen: !s.acctOpen })),
+          list: list.map((a, i) => ({
+            name: a.name, initials: a.initials, right: i === st.acctIdx ? 'SIGNED IN' : '',
+            bg: i === st.acctIdx ? '#f8ece3' : '#fffdf7',
+            avatarBg: i === st.acctIdx ? acc : '#1b1a17',
+            onPick: () => this.setState({ acctIdx: i, acctOpen: false })
+          }))
+        };
+      })(),
+      prefs: {
+        diffs: ['Introductory', 'Moderate', 'Advanced'].map(d => ({
+          label: d.toUpperCase(), onClick: () => this.setState(s => ({ diffs: Object.assign({}, s.diffs, { [d]: !s.diffs[d] }), todayPick: null })),
+          bg: st.diffs[d] ? acc : 'transparent', fg: st.diffs[d] ? '#fffdf7' : '#57544c'
+        })),
+        caps: [30, 45, 60, 90].map(c => ({
+          label: c + '′', onClick: () => this.setState({ cap: c, todayPick: null }),
+          bg: st.cap === c ? acc : 'transparent', fg: st.cap === c ? '#fffdf7' : '#57544c'
+        })),
+        matchLabel: LIB.filter(fits).length + ' of ' + LIB.length + ' workouts match',
+        wuLabel: this.dur(st.wuMinD),
+        wuDown: () => this.setState(s => ({ wuMinD: Math.max(0.5, s.wuMinD - 1) })),
+        wuUp: () => this.setState(s => ({ wuMinD: Math.min(30, s.wuMinD + 1) })),
+        toggleWu: () => this.setState(s => ({ wuOnD: !s.wuOnD })),
+        wuOnBg: st.wuOnD ? '#1b1a17' : 'transparent', wuOnGlyph: st.wuOnD ? '✓' : '',
+        wuDirty: st.wuMinD !== st.wuMin || st.wuOnD !== st.wuOn,
+        wuNote: [
+          st.wuMinD !== st.wuMin ? this.dur(st.wuMin) + ' → ' + this.dur(st.wuMinD) : '',
+          st.wuOnD !== st.wuOn ? (st.wuOnD ? 'override on' : 'override off') : '',
+          !st.wuOnD ? '(applies once override is on)' : ''
+        ].filter(Boolean).join(' · '),
+        applyWu: () => this.setState(s => ({ wuMin: s.wuMinD, wuOn: s.wuOnD })),
+        cancelWu: () => this.setState(s => ({ wuMinD: s.wuMin, wuOnD: s.wuOn })),
+        cdLabel: st.cdD === 0 ? 'off' : st.cdD + ' s',
+        cdDown: () => this.setState(s => ({ cdD: Math.max(0, s.cdD - 5) })),
+        cdUp: () => this.setState(s => ({ cdD: Math.min(60, s.cdD + 5) })),
+        cdDirty: st.cdD !== st.cd,
+        cdNote: (st.cd === 0 ? 'off' : st.cd + ' s') + ' → ' + (st.cdD === 0 ? 'off' : st.cdD + ' s'),
+        applyCd: () => this.setState(s => ({ cd: s.cdD })),
+        cancelCd: () => this.setState(s => ({ cdD: s.cd })),
+        progressLabel: 'SESSION ' + (st.doneN + 1) + ' OF ' + planSeq.length,
+        plans: Object.keys(PLANS).map(k => ({
+          label: PLANS[k].label, meta: PLANS[k].test.toUpperCase() + ' TESTS · 84 SESSIONS',
+          bg: st.planKey === k ? '#f8ece3' : '#fffdf7', border: st.planKey === k ? acc : '#d8d3c4',
+          dot: st.planKey === k ? '#1b1a17' : 'transparent',
+          onPick: () => this.setState({ planKey: k, doneN: 0 })
+        })),
+        resetPlan: () => this.setState({ doneN: 0, planFilter: 'all' })
+      },
+
+      trend: {
+        k2Delta: '−4.4s since Mar', k6Delta: '−4.5s since Mar',
+        k2: k2h.map(r => ({ label: r[0], val: this.fmt(r[1], 1), w: barW(r[1], 110, 118), bg: acc })),
+        k6: k6h.map(r => ({ label: r[0], val: this.fmt(r[1], 1), w: barW(r[1], 120, 128), bg: acc })),
+        vol: [
+          ['W-5', { O2: 100, AT: 45, TR: 35, AN: 0 }],
+          ['W-4', { O2: 130, AT: 60, TR: 30, AN: 25 }],
+          ['W-3', { O2: 120, AT: 50, TR: 0, AN: 40 }],
+          ['W-2', { O2: 150, AT: 70, TR: 45, AN: 25 }],
+          ['W-1', { O2: 140, AT: 60, TR: 40, AN: 25 }],
+          ['NOW', { O2: 80, AT: 55, TR: 0, AN: 0 }]
+        ].map(v => {
+          const total = v[1].O2 + v[1].AT + v[1].TR + v[1].AN;
+          return {
+            label: v[0], val: total,
+            segs: ['O2', 'AT', 'TR', 'AN'].filter(k => v[1][k] > 0).map(k => ({
+              bg: TYPEC[k], h: Math.round(v[1][k] / 290 * 96) + 'px'
+            }))
+          };
+        }),
+        mix: [['O2', 9], ['AT', 5], ['TR', 3], ['AN', 2]].map(m => ({
+          code: m[0], n: m[1], w: Math.round(m[1] / 9 * 70) + '%', bg: TYPEC[m[0]]
+        }))
+      },
+
+      baseRows: [
+        { label: '2K BASELINE SPLIT', val: this.fmt(st.k2d, 1), onFaster: () => this.setState(s => ({ k2d: s.k2d - 0.5 })), onSlower: () => this.setState(s => ({ k2d: s.k2d + 0.5 })) },
+        { label: '6K BASELINE SPLIT', val: this.fmt(st.k6d, 1), onFaster: () => this.setState(s => ({ k6d: s.k6d - 0.5 })), onSlower: () => this.setState(s => ({ k6d: s.k6d + 0.5 })) }
+      ],
+      baseDirty: st.k2d !== st.k2 || st.k6d !== st.k6,
+      baseNote: (st.k2d !== st.k2 ? '2k ' + b2 + ' → ' + this.fmt(st.k2d, 1) + '  ' : '') + (st.k6d !== st.k6 ? '6k ' + b6 + ' → ' + this.fmt(st.k6d, 1) : ''),
+      baseImpact: 'Every target in the library shifts. Logged sessions keep the splits they were done at.',
+      applyBase: () => this.setState(s => ({ k2: s.k2d, k6: s.k6d })),
+      cancelBase: () => this.setState(s => ({ k2d: s.k2, k6d: s.k6 })),
+      testHist: [
+        { date: 'JUN 14', dist: '2 000 m', split: b2, delta: '−2.8' },
+        { date: 'JUN 02', dist: '6 000 m', split: b6, delta: '−2.1' },
+        { date: 'APR 19', dist: '2 000 m', split: '1:54.8', delta: '−1.6' },
+        { date: 'APR 05', dist: '6 000 m', split: '2:04.1', delta: '−2.4' },
+        { date: 'MAR 08', dist: '2 000 m', split: '1:56.4', delta: '—' }
+      ],
+
+      nw: (() => {
+        const acc2 = acc;
+        const mins = v => parseFloat(String(v || '').replace(/[^0-9.]/g, '')) || 0;
+        const marked = st.nwRows.filter(r => r.inSet);
+        const setMin = marked.reduce((t, r) => t + mins(r.dur) + mins(r.rest), 0);
+        const loose = st.nwRows.filter(r => !r.inSet).reduce((t, r) => t + mins(r.dur) + mins(r.rest), 0);
+        const reps = st.nwReps || 1;
+        const total = loose + setMin * (marked.length ? reps : 1);
+        return {
+          num: st.nwNum, title: st.nwTitle, bulk: st.nwBulk, bulkOpen: !!st.nwBulkOpen,
+          types: ['AN', 'O2', 'AT', 'TR'].map(t => ({
+            label: t, onClick: () => this.setState({ nwType: t }),
+            bg: st.nwType === t ? TYPEC[t] : '#fffdf7',
+            border: st.nwType === t ? TYPEC[t] : '#c9c3b2',
+            fg: st.nwType === t ? '#fffdf7' : '#57544c'
+          })),
+
+          diffs: [['Introductory', 'INTRO'], ['Moderate', 'MODERATE'], ['Advanced', 'ADVANCED']].map(x => ({
+            label: x[1], onClick: () => this.setState({ nwDiff: x[0] }),
+            bg: st.nwDiff === x[0] ? acc2 : '#fffdf7', fg: st.nwDiff === x[0] ? '#fffdf7' : '#57544c'
+          })),
+          painLabel: st.nwPain + '/10',
+          pains: Array.from({ length: 10 }, (_, i) => ({
+            n: i + 1, onClick: () => this.setState({ nwPain: i + 1 }),
+            bg: i < st.nwPain ? TYPEC[st.nwType] : '#fffdf7', fg: i < st.nwPain ? '#fffdf7' : '#8a8478'
+          })),
+          bulkLabel: st.nwBulkOpen ? '− HIDE BULK IMPORT' : '+ PASTE TO BULK IMPORT',
+          toggleBulk: () => this.setState(s => ({ nwBulkOpen: !s.nwBulkOpen })),
+          setNum: e => this.setState({ nwNum: e.target.value }),
+          setTitle: e => this.setState({ nwTitle: e.target.value }),
+          setBulk: e => this.setState({ nwBulk: e.target.value }),
+          addRow: () => this.setState(s => ({ nwRows: s.nwRows.concat([{ dur: '', ref: '', spm: '', rest: '', inSet: false }]) })),
+          repsLabel: marked.length ? '×' + reps : '—',
+          repsUp: () => this.setState(s => ({ nwReps: Math.min(10, (s.nwReps || 1) + 1) })),
+          repsDown: () => this.setState(s => ({ nwReps: Math.max(1, (s.nwReps || 1) - 1) })),
+          setLabel: marked.length
+            ? marked.length + ' row' + (marked.length > 1 ? 's' : '') + ' marked · ' + this.fmt(setMin * 60) + ' per set'
+            : 'Mark rows with the left cell to repeat them as a set',
+          total: total ? total + ' min' : '—',
+          rows: st.nwRows.map((r, i) => {
+            const set = (f) => (e) => this.setState(s => ({ nwRows: s.nwRows.map((x, j) => (j === i ? Object.assign({}, x, { [f]: e.target.value }) : x)) }));
+            const m = /^(2k|6k)\s*([+-]?\d+(\.\d+)?)?$/i.exec((r.ref || '').trim());
+            let pace = '—';
+            if (m) pace = this.range(this.base(m[1].toLowerCase()) + (parseFloat(m[2]) || 0));
+            return {
+              dur: r.dur, ref: r.ref, spm: r.spm, rest: r.rest, pace,
+              setBg: r.inSet ? acc2 : '#fffdf7', setFg: r.inSet ? '#fffdf7' : '#cfc8b8',
+              setMark: r.inSet ? acc2 : 'transparent',
+              toggleSet: () => this.setState(s => ({ nwRows: s.nwRows.map((x, j) => (j === i ? Object.assign({}, x, { inSet: !x.inSet }) : x)) })),
+              remove: () => this.setState(s => ({ nwRows: s.nwRows.length > 1 ? s.nwRows.filter((x, j) => j !== i) : s.nwRows })),
+              setDur: set('dur'), setRef: set('ref'), setSpm: set('spm'), setRest: set('rest')
+            };
+          })
+        };
+      })(),
+
+      tabs: tabDefs.map(t => ({
+        label: t[1], onClick: () => this.setState({ screen: t[0], hist: [], step: 0 }),
+        mark: activeTab === t[0] ? acc : 'transparent',
+        fg: activeTab === t[0] ? '#1b1a17' : '#a09a8c'
+      }))
+    };
+  }
+}
+
+</script>
+</body>
+</html>
