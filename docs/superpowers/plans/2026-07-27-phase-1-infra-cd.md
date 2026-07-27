@@ -646,7 +646,7 @@ if [ "$fails" = 0 ]; then echo "ALL PASS"; exit 0; else echo "$fails FAILED"; ex
 chmod +x scripts/deploy.sh scripts/deploy.test.sh
 bash -n scripts/deploy.sh && bash scripts/deploy.test.sh
 ```
-Expected: `ALL PASS` (7 checks).
+Expected: `ALL PASS` (8 checks).
 
 - [ ] **Step 4: Add the `deploy-script` job to `.github/workflows/ci.yml`**
 
