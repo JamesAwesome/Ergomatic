@@ -1,0 +1,69 @@
+name: ergomatic
+
+services:
+  postgres:
+    image: postgres:18.4
+    container_name: ergomatic-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ergomatic}
+      POSTGRES_USER: ${POSTGRES_USER:-ergomatic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # postgres:18 images keep PGDATA under /var/lib/postgresql (not .../data)
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ergomatic} -d ${POSTGRES_DB:-ergomatic}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  app:
+    build:
+      context: ./app
+    container_name: ergomatic-app
+    restart: unless-stopped
+    # Defense-in-depth: drop privileges, read-only root FS (natalie convention)
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      # Container always listens on 8080; host port defaults to 8081 because
+      # natalie owns 8080 on this box. Localhost-bound unless APP_BIND is set.
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8081}:8080"
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ergomatic}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ergomatic}
+      SITE_URL: ${SITE_URL:-https://ergomatic.waffle.haus}
+      TZ: ${TIMEZONE:-America/New_York}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # /api/health does a real SELECT 1, so `compose up -d --wait` means
+    # "serving + DB-connected" — the signal the deploy health gate relies on.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.7.3
+    container_name: ergomatic-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+
+volumes:
+  pgdata:

@@ -19,6 +19,9 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
 - `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm test:coverage` (90% gate) · `pnpm build`
 - Single Vitest project: `pnpm test --project unit|client|integration`
+- Local dev DB: `docker run --rm -d --name erg-dev-pg -p 5433:5432 -e POSTGRES_PASSWORD=dev postgres:18.4`
+  then `DATABASE_URL=postgres://postgres:dev@localhost:5433/postgres pnpm dev:server`.
+  The server refuses to start without `DATABASE_URL` (no dotenv — real env only).
 
 ## Rules
 
