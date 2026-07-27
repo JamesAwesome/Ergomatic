@@ -1,3 +1,14 @@
-// Placeholder so tsconfig.node.json has at least one input file to
-// typecheck on the empty tree. A later task adds the real Vite config here.
-export {};
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8080',
+    },
+  },
+  build: {
+    outDir: 'dist/client',
+  },
+})
