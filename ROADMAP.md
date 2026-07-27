@@ -36,6 +36,19 @@ The authoritative UI/UX reference is the design handoff in `docs/design/`
 Reference codebases for conventions: `nataliesawacritter.info` (primary template),
 `pool_monitor` (design-token CSS approach).
 
+### Standing rule: verify current versions
+
+At the start of every phase that adds or upgrades a language, runtime, or library,
+**verify the latest stable version from the authoritative source** (npm registry,
+endoflife.date, the project's release page) before pinning anything. Never trust
+version numbers from model training data, old blog posts, or the reference repos —
+they go stale (this has burned us before). Concretely:
+
+- `npm view <pkg> version` / release notes for every dependency being added
+- Current LTS/stable for Node, pnpm, Postgres, and Docker base images
+- Version numbers in this file (e.g. "React 19", "Postgres 18") are what was
+  current at writing — re-verify at install time, do not copy them blindly
+
 ---
 
 ## Phase 0 — Scaffold & tooling
@@ -43,6 +56,7 @@ Reference codebases for conventions: `nataliesawacritter.info` (primary template
 **Status:** Not started
 **Goal:** A cloned repo where `pnpm install && pnpm test` works and bad code cannot be committed.
 
+- [ ] Verify current stable versions of everything (Node, pnpm, TypeScript, React, Vite, Express, Vitest, ESLint, husky/lint-staged) against the registries per the standing rule above
 - [ ] Repo layout: `app/` containing `client/` (Vite React) and `server/` (Express), shared `domain/` module space
 - [ ] pnpm + `only-allow pnpm`, `.npmrc`, Node version pin
 - [ ] TypeScript strict config, ESLint flat config (js + typescript-eslint + react-hooks + react-refresh)
