@@ -7,6 +7,11 @@ updates:
     groups:
       npm-all:
         patterns: ['*']
+    ignore:
+      # typescript-eslint's peer range excludes TS 7 (>=4.8.4 <6.1.0).
+      # Re-check `npm view typescript-eslint peerDependencies` before removing.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /
     schedule:
