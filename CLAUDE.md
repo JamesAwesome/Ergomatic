@@ -10,9 +10,9 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   `domain/` (pure Erg Book logic — no framework imports allowed)
 - Root `package.json` exists only to host husky hooks. Run `pnpm install` at root
   AND in `app/`.
-- `app/pnpm-workspace.yaml` is auto-generated pnpm build-approval config (`allowBuilds`
-  for esbuild) and makes `app/` its own pnpm workspace root, so the repo-root `.npmrc`
-  does not apply inside `app/`.
+- `app/pnpm-workspace.yaml` is auto-generated pnpm config (`allowBuilds` for esbuild,
+  plus other keys pnpm adds during installs) and makes `app/` its own pnpm workspace
+  root, so the repo-root `.npmrc` does not apply inside `app/`.
 
 ## Commands (run in `app/`)
 
