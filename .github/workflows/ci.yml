@@ -51,3 +51,12 @@ jobs:
         with:
           context: ./app
           push: false
+
+  deploy-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint + test the deploy script
+        run: |
+          bash -n scripts/deploy.sh
+          bash scripts/deploy.test.sh
