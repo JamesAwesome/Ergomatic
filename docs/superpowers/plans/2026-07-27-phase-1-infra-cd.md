@@ -810,7 +810,7 @@ This task interleaves with James: steps marked **[HOST]** run on the deploy host
 - [ ] **Step 2: Merge PR** → the merge push runs the `deploy` job. Watch it:
 
 ```bash
-gh pr merge <PR#> --merge --delete-branch
+gh pr merge <PR#> --rebase --delete-branch
 gh run watch --exit-status
 ```
 Expected: `deploy` job green; deploy.sh output shows "deploying <sha>" then "<sha> is healthy".
@@ -830,7 +830,7 @@ git checkout -b rollback-demo
 # Break the health contract: make the app healthcheck impossible
 sed -i '' 's|/api/health|/api/definitely-not-health|' compose.yml
 git commit -am "test: deliberately unhealthy deploy (rollback demo)" && git push -u origin rollback-demo
-gh pr create --fill && gh pr merge --merge --delete-branch
+gh pr create --fill && gh pr merge --squash --delete-branch
 gh run watch --exit-status || echo "deploy failed as intended"
 curl -s https://ergomatic.waffle.haus/api/health   # still healthy = rollback worked
 git checkout main && git pull && git revert --no-edit HEAD && git push
