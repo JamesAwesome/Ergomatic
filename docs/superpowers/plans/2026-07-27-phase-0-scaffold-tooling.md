@@ -30,7 +30,7 @@
 **Interfaces:**
 - Produces: the `app/` package every later task installs into; `pnpm typecheck` / `pnpm lint` / `pnpm test` script names all later tasks and CI rely on.
 
-- [ ] **Step 1: Re-verify current versions (standing rule)**
+- [x] **Step 1: Re-verify current versions (standing rule)**
 
 Run:
 ```bash
@@ -40,7 +40,7 @@ node --version
 ```
 Expected: values matching the table above (or newer patch/minor — use what the registry says today). Confirm local Node is 26.x; if not, install via your version manager before continuing. Confirm `npm view typescript-eslint peerDependencies` still excludes TS 7 — if it now allows it, note that in the commit message but still install `~6.0.3` (upgrading TS majors is its own task, not a drive-by).
 
-- [ ] **Step 2: Write root `.gitignore` and `.npmrc`**
+- [x] **Step 2: Write root `.gitignore` and `.npmrc`**
 
 `.gitignore`:
 ```
@@ -59,7 +59,7 @@ strict-peer-dependencies=false
 auto-install-peers=true
 ```
 
-- [ ] **Step 3: Write `app/package.json`**
+- [x] **Step 3: Write `app/package.json`**
 
 ```json
 {
@@ -84,7 +84,7 @@ auto-install-peers=true
 }
 ```
 
-- [ ] **Step 4: Install all Phase 0 dependencies at verified-latest**
+- [x] **Step 4: Install all Phase 0 dependencies at verified-latest**
 
 ```bash
 cd app
@@ -96,7 +96,7 @@ pnpm add -D typescript@~6.0.3 @types/node @types/express @types/react @types/rea
 ```
 Expected: lockfile created; `pnpm exec tsc --version` prints `Version 6.0.3`.
 
-- [ ] **Step 5: Write the four-part tsconfig set**
+- [x] **Step 5: Write the four-part tsconfig set**
 
 `app/tsconfig.json`:
 ```json
@@ -192,7 +192,7 @@ Expected: lockfile created; `pnpm exec tsc --version` prints `Version 6.0.3`.
 }
 ```
 
-- [ ] **Step 6: Verify typecheck runs clean on the empty tree**
+- [x] **Step 6: Verify typecheck runs clean on the empty tree**
 
 ```bash
 mkdir -p src server domain
@@ -200,7 +200,7 @@ cd app && pnpm typecheck
 ```
 Expected: exits 0 (no inputs is acceptable for `tsc -b`; if `tsc -p tsconfig.server.json` errors with "No inputs were found", add a placeholder `server/index.ts` containing `export {}` — Task 3 replaces it).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -217,7 +217,7 @@ git commit -m "chore: scaffold app package, pnpm, and strict TS baseline"
 **Interfaces:**
 - Produces: `pnpm lint` passing/failing correctly — the command lint-staged (Task 7) and CI (Task 8) run.
 
-- [ ] **Step 1: Write `app/eslint.config.js`** (natalie's config verbatim, minus the drizzle ignore)
+- [x] **Step 1: Write `app/eslint.config.js`** (natalie's config verbatim, minus the drizzle ignore)
 
 ```js
 import js from '@eslint/js'
@@ -254,7 +254,7 @@ export default tseslint.config(
 )
 ```
 
-- [ ] **Step 2: Verify lint passes, then verify it actually catches errors**
+- [x] **Step 2: Verify lint passes, then verify it actually catches errors**
 
 ```bash
 cd app && pnpm lint
@@ -262,7 +262,7 @@ echo "const unused = 1" > src/bad.ts && pnpm lint; rm src/bad.ts
 ```
 Expected: first run exits 0; second run FAILS with `@typescript-eslint/no-unused-vars` on `src/bad.ts`. (A linter that has never been seen failing is not verified.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add app/eslint.config.js
@@ -280,7 +280,7 @@ git commit -m "chore: add ESLint 10 flat config"
 **Interfaces:**
 - Produces: `createApp(): express.Express` from `server/app.ts` — every future route/middleware task builds on it. `GET /api/health` → `200 {"ok":true}` (Phase 1 extends with a DB check). Vitest projects named `unit` and `integration` (Task 4 adds `client`).
 
-- [ ] **Step 1: Write `app/vitest.config.ts` with unit + integration projects**
+- [x] **Step 1: Write `app/vitest.config.ts` with unit + integration projects**
 
 ```ts
 import { defineConfig } from 'vitest/config'
@@ -311,7 +311,7 @@ export default defineConfig({
 ```
 (Timeouts sized for the Testcontainers work arriving in Phase 3; harmless now.)
 
-- [ ] **Step 2: Write the failing unit test `app/server/app.test.ts`**
+- [x] **Step 2: Write the failing unit test `app/server/app.test.ts`**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -327,14 +327,14 @@ describe('createApp', () => {
 })
 ```
 
-- [ ] **Step 3: Run it to verify it fails**
+- [x] **Step 3: Run it to verify it fails**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: FAIL — cannot resolve `./app.js`.
 
-- [ ] **Step 4: Write `app/server/app.ts`**
+- [x] **Step 4: Write `app/server/app.ts`**
 
 ```ts
 import express from 'express'
@@ -351,14 +351,14 @@ export function createApp() {
 }
 ```
 
-- [ ] **Step 5: Run the unit project to verify it passes**
+- [x] **Step 5: Run the unit project to verify it passes**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: PASS (1 test).
 
-- [ ] **Step 6: Write the failing integration test `app/server/health.integration.test.ts`** (real HTTP over a real socket — the slot Testcontainers plugs into in Phase 3)
+- [x] **Step 6: Write the failing integration test `app/server/health.integration.test.ts`** (real HTTP over a real socket — the slot Testcontainers plugs into in Phase 3)
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -380,14 +380,14 @@ describe('health over real HTTP', () => {
 })
 ```
 
-- [ ] **Step 7: Run the integration project**
+- [x] **Step 7: Run the integration project**
 
 ```bash
-cd app && pnpm test -- --project integration
+cd app && pnpm test --project integration
 ```
 Expected: PASS (1 test). (It goes green immediately because `createApp` already exists — the test still earns its keep as the integration project's proof of life.)
 
-- [ ] **Step 8: Write the entrypoint `app/server/index.ts`** (replacing any Task 1 placeholder) **and fix the start script**
+- [x] **Step 8: Write the entrypoint `app/server/index.ts`** (replacing any Task 1 placeholder) **and fix the start script**
 
 ```ts
 import { createApp } from './app.js'
@@ -400,7 +400,7 @@ createApp().listen(port, () => {
 
 In `app/package.json`, set `"start": "node dist/server/server/index.js"` (rootDir `.` nests output — see Task 1 Step 5).
 
-- [ ] **Step 9: Verify dev server, typecheck, and full test run**
+- [x] **Step 9: Verify dev server, typecheck, and full test run**
 
 ```bash
 cd app && pnpm typecheck && pnpm test
@@ -408,7 +408,7 @@ cd app && pnpm typecheck && pnpm test
 ```
 Expected: typecheck 0; both projects pass; curl prints `{"ok":true}`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add -A
@@ -427,7 +427,7 @@ git commit -m "feat: Express skeleton with /api/health, unit + integration test 
 - Consumes: vitest project structure from Task 3.
 - Produces: `<App />` root component; jsdom `client` Vitest project; `pnpm build` producing `dist/client`.
 
-- [ ] **Step 1: Add the `client` project to `app/vitest.config.ts`** (insert between `unit` and `integration`; also add the react import at top)
+- [x] **Step 1: Add the `client` project to `app/vitest.config.ts`** (insert between `unit` and `integration`; also add the react import at top)
 
 ```ts
 import react from '@vitejs/plugin-react'
@@ -445,13 +445,13 @@ import react from '@vitejs/plugin-react'
       },
 ```
 
-- [ ] **Step 2: Write `app/src/test/setup.ts`**
+- [x] **Step 2: Write `app/src/test/setup.ts`**
 
 ```ts
 import '@testing-library/jest-dom'
 ```
 
-- [ ] **Step 3: Write the failing test `app/src/App.test.tsx`**
+- [x] **Step 3: Write the failing test `app/src/App.test.tsx`**
 
 ```tsx
 import { render, screen } from '@testing-library/react'
@@ -465,14 +465,14 @@ describe('App', () => {
 })
 ```
 
-- [ ] **Step 4: Run it to verify it fails**
+- [x] **Step 4: Run it to verify it fails**
 
 ```bash
-cd app && pnpm test -- --project client
+cd app && pnpm test --project client
 ```
 Expected: FAIL — cannot resolve `./App`.
 
-- [ ] **Step 5: Write `app/src/App.tsx`**
+- [x] **Step 5: Write `app/src/App.tsx`**
 
 ```tsx
 export default function App() {
@@ -485,14 +485,14 @@ export default function App() {
 }
 ```
 
-- [ ] **Step 6: Run it to verify it passes**
+- [x] **Step 6: Run it to verify it passes**
 
 ```bash
-cd app && pnpm test -- --project client
+cd app && pnpm test --project client
 ```
 Expected: PASS (1 test).
 
-- [ ] **Step 7: Write the Vite entry files**
+- [x] **Step 7: Write the Vite entry files**
 
 `app/src/vite-env.d.ts`:
 ```ts
@@ -546,7 +546,7 @@ export default defineConfig({
 })
 ```
 
-- [ ] **Step 8: Verify everything: lint, typecheck, all three test projects, build**
+- [x] **Step 8: Verify everything: lint, typecheck, all three test projects, build**
 
 ```bash
 cd app && pnpm lint && pnpm typecheck && pnpm test && pnpm build
@@ -554,7 +554,7 @@ ls dist/client/index.html dist/server/server/index.js
 ```
 Expected: all exit 0; both built files listed.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add -A
@@ -571,7 +571,7 @@ git commit -m "feat: React client skeleton with jsdom test project and Vite buil
 **Interfaces:**
 - Produces: `fmtSplit(totalSeconds: number): string` — formats a per-500 m split as `m:ss.t` (e.g. `112` → `"1:52.0"`). Phase 3's pace engine and every screen showing a split will import this. Establishes `domain/` as pure, framework-free, unit-project-tested code.
 
-- [ ] **Step 1: Write the failing test `app/domain/format.test.ts`** (values from the design handoff: 2k baseline 112.0 s = "1:52.0", 6k 122.0 s = "2:02.0")
+- [x] **Step 1: Write the failing test `app/domain/format.test.ts`** (values from the design handoff: 2k baseline 112.0 s = "1:52.0", 6k 122.0 s = "2:02.0")
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -594,14 +594,14 @@ describe('fmtSplit', () => {
 })
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: FAIL — cannot resolve `./format.js`.
 
-- [ ] **Step 3: Write `app/domain/format.ts`**
+- [x] **Step 3: Write `app/domain/format.ts`**
 
 ```ts
 /** Format a per-500m split in seconds as m:ss.t (e.g. 112 -> "1:52.0"). */
@@ -615,14 +615,14 @@ export function fmtSplit(totalSeconds: number): string {
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: PASS (all unit tests, including Task 3's).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/domain
@@ -639,7 +639,7 @@ git commit -m "feat: domain module seed — fmtSplit per-500m formatting"
 **Interfaces:**
 - Produces: `pnpm test:coverage` — the gate CI (Task 8) runs on every PR.
 
-- [ ] **Step 1: Add the coverage block to `app/vitest.config.ts`** (sibling of `projects`)
+- [x] **Step 1: Add the coverage block to `app/vitest.config.ts`** (sibling of `projects`)
 
 ```ts
     coverage: {
@@ -664,14 +664,14 @@ git commit -m "feat: domain module seed — fmtSplit per-500m formatting"
     },
 ```
 
-- [ ] **Step 2: Verify coverage passes and the gate works**
+- [x] **Step 2: Verify coverage passes and the gate works**
 
 ```bash
 cd app && pnpm test:coverage
 ```
 Expected: PASS with a coverage table ≥90 on every metric (`App.tsx`, `server/app.ts`, `domain/format.ts` are all fully exercised). If any metric is below 90, the tests are missing something — fix the tests, don't lower the floor.
 
-- [ ] **Step 3: Verify the gate fails when coverage drops**
+- [x] **Step 3: Verify the gate fails when coverage drops**
 
 ```bash
 cd app && cat >> domain/format.ts <<'EOF'
@@ -684,7 +684,7 @@ pnpm test:coverage; git checkout domain/format.ts
 ```
 Expected: the run FAILS with a threshold error before the checkout restores the file.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/vitest.config.ts
@@ -702,7 +702,7 @@ git commit -m "chore: enforce 90% coverage thresholds"
 - Consumes: `pnpm lint` / `typecheck` / `test` scripts from Tasks 1–4.
 - Produces: repo-level hooks; the root `pnpm install` step every contributor (and CLAUDE.md) must mention.
 
-- [ ] **Step 1: Write root `package.json`** (hooks host only — the app keeps its own package)
+- [x] **Step 1: Write root `package.json`** (hooks host only — the app keeps its own package)
 
 ```json
 {
@@ -720,27 +720,27 @@ git commit -m "chore: enforce 90% coverage thresholds"
 }
 ```
 
-- [ ] **Step 2: Install husky + lint-staged at root and initialize**
+- [x] **Step 2: Install husky + lint-staged at root and initialize**
 
 ```bash
 pnpm add -D husky lint-staged
 ```
 Expected: `prepare` runs `husky`, creating `.husky/` and setting `core.hooksPath`. Verify: `git config core.hooksPath` prints `.husky/_`... (husky 9 layout) or `.husky`; either is fine as long as Step 5 blocks.
 
-- [ ] **Step 3: Write `.husky/pre-commit`**
+- [x] **Step 3: Write `.husky/pre-commit`**
 
 ```sh
 npx lint-staged
 pnpm --dir app typecheck
 ```
 
-- [ ] **Step 4: Write `.husky/pre-push`**
+- [x] **Step 4: Write `.husky/pre-push`**
 
 ```sh
 pnpm --dir app test
 ```
 
-- [ ] **Step 5: Verify the pre-commit hook blocks a lint failure**
+- [x] **Step 5: Verify the pre-commit hook blocks a lint failure**
 
 ```bash
 echo "const unused = 1" > app/src/bad.ts
@@ -750,7 +750,7 @@ git reset && rm app/src/bad.ts
 ```
 Expected: commit FAILS (non-zero exit) with the no-unused-vars error from lint-staged.
 
-- [ ] **Step 6: Verify the pre-push hook blocks a test failure**
+- [x] **Step 6: Verify the pre-push hook blocks a test failure**
 
 ```bash
 cat > app/domain/fail.test.ts <<'EOF'
@@ -762,7 +762,7 @@ rm app/domain/fail.test.ts
 ```
 Expected: non-zero exit with the failing test. (Direct hook invocation — no remote exists to push to yet.)
 
-- [ ] **Step 7: Commit** (this commit itself now runs the hooks — proof of life)
+- [x] **Step 7: Commit** (this commit itself now runs the hooks — proof of life)
 
 ```bash
 git add package.json pnpm-lock.yaml .husky
@@ -780,7 +780,7 @@ git commit -m "chore: husky hooks — pre-commit lint+typecheck, pre-push tests"
 - Consumes: `pnpm lint` / `typecheck` / `test:coverage` / `build` from earlier tasks.
 - Produces: the CI gate Phase 1 extends with `docker` and `deploy` jobs.
 
-- [ ] **Step 1: Write `.github/workflows/ci.yml`**
+- [x] **Step 1: Write `.github/workflows/ci.yml`**
 
 ```yaml
 name: CI
@@ -814,7 +814,7 @@ jobs:
 ```
 (Action versions checkout@v7 / pnpm@v6 / setup-node@v6 verified current in natalie's passing CI as of 2026-07; Dependabot below keeps them fresh.)
 
-- [ ] **Step 2: Write `.github/dependabot.yml`**
+- [x] **Step 2: Write `.github/dependabot.yml`**
 
 ```yaml
 version: 2
@@ -839,7 +839,7 @@ updates:
       interval: weekly
 ```
 
-- [ ] **Step 3: Commit and push; verify CI goes green**
+- [x] **Step 3: Commit and push; verify CI goes green**
 
 ```bash
 git add .github
@@ -860,7 +860,7 @@ Expected: push triggers the pre-push hook (full tests) locally, then the `app` j
 **Interfaces:**
 - Consumes: everything above — this documents it.
 
-- [ ] **Step 1: Write `CLAUDE.md`**
+- [x] **Step 1: Write `CLAUDE.md`**
 
 ```markdown
 # Ergomatic
@@ -880,7 +880,7 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
 - `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm test:coverage` (90% gate) · `pnpm build`
-- Single Vitest project: `pnpm test -- --project unit|client|integration`
+- Single Vitest project: `pnpm test --project unit|client|integration`
 
 ## Rules
 
@@ -893,7 +893,7 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 - pnpm only. ESM only. Server imports use `.js` extensions.
 ```
 
-- [ ] **Step 2: Update `README.md`** (replace the stub body)
+- [x] **Step 2: Update `README.md`** (replace the stub body)
 
 ```markdown
 # Ergomatic
@@ -910,7 +910,7 @@ and `CLAUDE.md` for dev workflow.
     pnpm dev              # client on :5173
 ```
 
-- [ ] **Step 3: Verify the documented workflow from scratch** (what a fresh clone experiences)
+- [x] **Step 3: Verify the documented workflow from scratch** (what a fresh clone experiences)
 
 ```bash
 git status --porcelain   # expect: only CLAUDE.md / README.md changes from this task
@@ -918,7 +918,7 @@ cd app && pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm 
 ```
 Expected: all green using only documented commands.
 
-- [ ] **Step 4: Commit and push**
+- [x] **Step 4: Commit and push**
 
 ```bash
 git add CLAUDE.md README.md
@@ -930,8 +930,8 @@ git push
 
 ## Phase 0 exit criteria (from ROADMAP.md)
 
-- [ ] CI green on a trivial client/server "hello" with one passing test in each Vitest project (Tasks 3, 4, 8)
-- [ ] Hooks demonstrably block a lint failure and a test failure (Task 7, Steps 5–6)
-- [ ] Version-verification standing rule followed and recorded (Task 1, Step 1; header table)
+- [x] CI green on a trivial client/server "hello" with one passing test in each Vitest project (Tasks 3, 4, 8)
+- [x] Hooks demonstrably block a lint failure and a test failure (Task 7, Steps 5–6)
+- [x] Version-verification standing rule followed and recorded (Task 1, Step 1; header table)
 
 When all boxes are checked: update `ROADMAP.md` Phase 0 status to **Done**, check its boxes, and commit.
