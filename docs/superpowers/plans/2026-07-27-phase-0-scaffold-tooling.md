@@ -330,7 +330,7 @@ describe('createApp', () => {
 - [ ] **Step 3: Run it to verify it fails**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: FAIL — cannot resolve `./app.js`.
 
@@ -354,7 +354,7 @@ export function createApp() {
 - [ ] **Step 5: Run the unit project to verify it passes**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: PASS (1 test).
 
@@ -383,7 +383,7 @@ describe('health over real HTTP', () => {
 - [ ] **Step 7: Run the integration project**
 
 ```bash
-cd app && pnpm test -- --project integration
+cd app && pnpm test --project integration
 ```
 Expected: PASS (1 test). (It goes green immediately because `createApp` already exists — the test still earns its keep as the integration project's proof of life.)
 
@@ -468,7 +468,7 @@ describe('App', () => {
 - [ ] **Step 4: Run it to verify it fails**
 
 ```bash
-cd app && pnpm test -- --project client
+cd app && pnpm test --project client
 ```
 Expected: FAIL — cannot resolve `./App`.
 
@@ -488,7 +488,7 @@ export default function App() {
 - [ ] **Step 6: Run it to verify it passes**
 
 ```bash
-cd app && pnpm test -- --project client
+cd app && pnpm test --project client
 ```
 Expected: PASS (1 test).
 
@@ -597,7 +597,7 @@ describe('fmtSplit', () => {
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: FAIL — cannot resolve `./format.js`.
 
@@ -618,7 +618,7 @@ export function fmtSplit(totalSeconds: number): string {
 - [ ] **Step 4: Run it to verify it passes**
 
 ```bash
-cd app && pnpm test -- --project unit
+cd app && pnpm test --project unit
 ```
 Expected: PASS (all unit tests, including Task 3's).
 
@@ -880,7 +880,7 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
 - `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm test:coverage` (90% gate) · `pnpm build`
-- Single Vitest project: `pnpm test -- --project unit|client|integration`
+- Single Vitest project: `pnpm test --project unit|client|integration`
 
 ## Rules
 
