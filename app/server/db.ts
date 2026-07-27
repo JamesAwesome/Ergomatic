@@ -1,7 +1,11 @@
 import pg from 'pg'
 
 export function createPool(connectionString: string): pg.Pool {
-  return new pg.Pool({ connectionString, connectionTimeoutMillis: 3000 })
+  const pool = new pg.Pool({ connectionString, connectionTimeoutMillis: 3000 })
+  pool.on('error', (err) => {
+    console.error('pg pool idle client error:', err.message)
+  })
+  return pool
 }
 
 export async function checkDb(pool: pg.Pool): Promise<boolean> {
