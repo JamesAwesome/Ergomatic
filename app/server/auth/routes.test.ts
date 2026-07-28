@@ -106,6 +106,14 @@ describe('GET /api/auth/callback', () => {
     const noCookie = await request(createApp(deps())).get('/api/auth/callback?code=c&state=s')
     expect(noCookie.headers.location).toBe('/?error=signin_failed')
   })
+  it('maps DB failures after claims to signin_failed with the oauth cookie cleared', async () => {
+    const d = deps()
+    ;(d.users.findByGoogleSub as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('db down'))
+    const res = await cb(d)
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('/?error=signin_failed')
+    expect((res.headers['set-cookie'] as unknown as string[]).join(';')).toContain(`${OAUTH_COOKIE}=;`)
+  })
 })
 
 describe('POST /api/auth/signout and GET /api/me', () => {

@@ -35,7 +35,8 @@ if (clientId && clientSecret) {
     'WARNING: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not fully set — sign-in is DISABLED (auth routes will 503)',
   )
 }
-if (!process.env.ALLOWED_EMAILS) {
+const allowlist = parseAllowlist(process.env.ALLOWED_EMAILS)
+if (allowlist.size === 0) {
   console.warn('WARNING: ALLOWED_EMAILS is empty — nobody can create an account')
 }
 
@@ -45,7 +46,7 @@ createApp({
   sessions: createSessionStore(db),
   users: createUserStore(db),
   oauth,
-  allowlist: parseAllowlist(process.env.ALLOWED_EMAILS),
+  allowlist,
   siteUrl,
   clientDir: path.resolve(process.cwd(), 'dist/client'),
 }).listen(port, () => {
