@@ -69,15 +69,15 @@ they go stale (this has burned us before). Concretely:
 
 ## Phase 1 — Infra & continuous deployment
 
-**Status:** Not started
+**Status:** Done
 **Goal:** Every push to main lands on a real URL with zero manual steps.
 
-- [ ] Hardened multi-stage Dockerfiles (non-root, read-only, tmpfs, cap_drop ALL)
-- [ ] `compose.yml`: Postgres 18 (healthchecked volume), app, cloudflared under a `tunnel` profile
-- [ ] `/api/health` endpoint incl. DB connectivity check
-- [ ] `scripts/deploy.sh` (checkout CI-validated SHA → `compose up --build --wait` → auto-rollback on failed health gate) + tests for the script
-- [ ] CI `deploy` job on self-hosted runner, `production` environment
-- [ ] `.env.example` + secrets conventions (tunnel token, DB creds)
+- [x] Hardened multi-stage Dockerfiles (non-root, read-only, tmpfs, cap_drop ALL)
+- [x] `compose.yml`: Postgres 18 (healthchecked volume), app, cloudflared under a `tunnel` profile
+- [x] `/api/health` endpoint incl. DB connectivity check
+- [x] `scripts/deploy.sh` (checkout CI-validated SHA → `compose up --build --wait` → auto-rollback on failed health gate) + tests for the script
+- [x] CI `deploy` job on self-hosted runner, `production` environment
+- [x] `.env.example` + secrets conventions (tunnel token, DB creds)
 
 **Exit:** Hello-world Ergomatic reachable through the Cloudflare tunnel; a deliberately broken deploy rolls back automatically.
 
