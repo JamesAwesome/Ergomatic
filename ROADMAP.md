@@ -118,7 +118,8 @@ they go stale (this has burned us before). Concretely:
 - [ ] Pure domain module (no framework imports): pace resolution (`baseline + off + nudge`), tolerance ranges, `m:ss` formatting, phase expansion (`liveSteps()`/`phases()` incl. reps and rest insertion), pace-ref parser (`^(2k|6k)\s*([+-]?\d+(\.\d+)?)?$`), plan preset sequences (sprint / head race, 84 sessions, test placements), suggestion engine (`plan[doneN]` → filtered/sorted pool)
 - [ ] **Distance-based work steps as a first-class axis**: a work step is `{kind:'time', minutes}` OR `{kind:'distance', meters}` (e.g. `2500m at 2k-4`); displayed workout duration estimates distance steps from the resolved target pace (labeled estimate); schema's log steps carry per-step actuals from day one: `{targetSplit, actualSplit?, actualSource: 'assumed'|'stopwatch'|'pm5'}` (expand-only discipline: model now, never migrate later)
 - [ ] Heaviest unit-test coverage in the app; canonical fixtures (e.g. Lucky Penny → 25 phases / 50 min)
-- [ ] Dev seed: the prototype's 11 sample workouts
+- [ ] Scales per the differentiation spec: `pain: 1..5`, `difficulty: 'easy'|'medium'|'hard'` (see docs/design/DEVIATIONS.md)
+- [ ] **Original starter library** (~35 workouts, original names, all types × difficulties × time bands, time AND distance steps) authored as reviewable data, James-approved, seeded per-user at account creation; replaces the book-derived dev samples entirely
 
 **Exit:** Every formula and behavior in the handoff's "Domain model" section has a passing test; integration tests prove per-user round-trips through Postgres.
 
@@ -128,7 +129,7 @@ they go stale (this has burned us before). Concretely:
 **Goal:** Enter real baselines and start transcribing The Erg Book.
 
 - [ ] Design-token CSS foundation (paper palette, Newsreader/Archivo/IBM Plex Mono, 2 px radii, spacing scale) + bottom tab shell
-- [ ] Library screen: rows with pain bars, filter chips (type single-select toggle, duration multi-select union, RECENT/NOT RECENT exclusivity, ALL clears)
+- [ ] Library screen: rows with **5-segment** pain bars, filter chips (type single-select toggle, duration multi-select union, `PAIN ≤3`, RECENT/NOT RECENT exclusivity, ALL clears); chips read EASY/MEDIUM/HARD; library counter is a plain count (no /375)
 - [ ] Workout detail: resolved ranges, ▲▼ per-step nudges, derived duration
 - [ ] Builder: type/difficulty/pain pickers, step rows with live resolved splits, repeat block, totals, bulk-import paste; DUR field takes minutes OR meters (`10'` vs `2500m`, explicit unit) in rows and bulk import
 - [ ] **You** — staged baseline editor (drafts, − = faster, 0.5 s steps, Discard/Apply confirm block)
@@ -209,3 +210,5 @@ they go stale (this has burned us before). Concretely:
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
+- **Parametric workout generator**: "generate me a 45' AT workout" from the starter library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end.
+- **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
