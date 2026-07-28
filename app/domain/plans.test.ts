@@ -26,6 +26,16 @@ describe.each(['sprint', 'head'] as const)('PLANS.%s', (key) => {
   })
 })
 
+it('pins the O2-forward type mixes exactly (O2 > AT > TR > AN pyramid)', () => {
+  const tally = (arr: string[]) => {
+    const t: Record<string, number> = { O2: 0, AT: 0, TR: 0, AN: 0, TEST: 0 }
+    for (const c of arr) t[c] += 1
+    return t
+  }
+  expect(tally(PLANS.sprint.sessions)).toEqual({ O2: 34, AT: 23, TR: 14, AN: 10, TEST: 3 })
+  expect(tally(PLANS.head.sessions)).toEqual({ O2: 41, AT: 21, TR: 11, AN: 8, TEST: 3 })
+})
+
 it('sprint back half is speed-biased; head is endurance-biased overall', () => {
   const sp = PLANS.sprint.sessions
   const count = (arr: string[], codes: string[]) => arr.filter((c) => codes.includes(c)).length
