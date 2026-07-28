@@ -22,6 +22,9 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 - Local dev DB: `docker run --rm -d --name erg-dev-pg -p 5433:5432 -e POSTGRES_PASSWORD=dev postgres:18.4`
   then `DATABASE_URL=postgres://postgres:dev@localhost:5433/postgres pnpm dev:server`.
   The server refuses to start without `DATABASE_URL` (no dotenv — real env only).
+- Local OAuth: set `SITE_URL=http://localhost:5173` when running `dev:server`
+  (redirect URI derives from it; without it Google errors redirect_uri_mismatch):
+  `DATABASE_URL=... SITE_URL=http://localhost:5173 GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... ALLOWED_EMAILS=you@gmail.com pnpm dev:server`
 
 ## Rules
 

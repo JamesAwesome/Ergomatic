@@ -42,6 +42,9 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-ergomatic}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ergomatic}
       SITE_URL: ${SITE_URL:-https://ergomatic.waffle.haus}
       TZ: ${TIMEZONE:-America/New_York}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
     depends_on:
       postgres:
         condition: service_healthy
