@@ -8,7 +8,8 @@ No auth SaaS.
 
 | Question | Decision |
 |---|---|
-| Signup policy | **Email allowlist**: `ALLOWED_EMAILS` env var, comma-separated, case-insensitive; checked only at first sign-in (existing users unaffected by list changes); missing/empty var = nobody can sign up (deny by default) |
+| Signup policy | **Email allowlist**: `ALLOWED_EMAILS` env var, comma-separated, case-insensitive; parse = `split(',') → trim → filter(Boolean) → toLowerCase` (whitespace/trailing commas must not lock anyone out — unit-tested); requires `email_verified === true`; checked only at first sign-in (existing users unaffected by list changes); missing/empty var = nobody can sign up (deny by default) |
+| Revocation | The allowlist is an **admission gate, not a revocation control**: removing an email does NOT sign out an existing user. Off-boarding = delete the `users` row (sessions cascade). `ALLOWED_EMAILS` changes need a container recreate (env is read at boot). Both documented in docs/deploy.md |
 | OAuth library | `openid-client` (certified OIDC lib) for the Google code flow with PKCE + `state`; sessions self-built |
 | ORM timing | **Drizzle pulled forward from Phase 3**: users/sessions tables + migration infrastructure land now; Phase 3 adds domain tables to an established setup (note this against ROADMAP Phase 3's first checkbox) |
 | Identity key | `google_sub` claim, unique per user. Email is display data, not identity |
@@ -23,16 +24,30 @@ No auth SaaS.
   → users.id on delete cascade, `created_at`, `expires_at` timestamptz not null.
 - Migrations are applied on server boot via drizzle-orm's migrator
   (natalie pattern) so deploys stay zero-touch. `db:generate` script added.
+- **Standing constraint (all future phases): migrations must be
+  expand-only** — never destructive (drop/rename) in the same deploy as the
+  code depending on them. The CD rollback reverts CODE but not SCHEMA; a
+  destructive migration + failed health gate would wedge the rolled-back
+  build against a schema it can't use. Concurrent migrators are impossible
+  in this deploy model (single-replica compose recreate, serial deploy.sh).
 
 ## Sessions
 
 - Opaque 256-bit random token (`crypto.randomBytes(32)`), sent as the
   `erg_session` cookie: `httpOnly`, `Secure` in production, `SameSite=Lax`,
-  `Path=/`.
+  `Path=/`, **`Max-Age` = remaining session lifetime** (without it the cookie
+  dies on browser close and the 60-day lifetime exists only server-side).
+- `Secure` is gated on `NODE_ENV === 'production'`, NOT on `req.secure` —
+  cloudflared→app is plain HTTP inside the box, so `req.secure` is always
+  false; do not set `trust proxy` for this.
 - 60-day expiry; **rolling refresh**: any authenticated request past the
-  halfway point extends `expires_at` (and re-sets the cookie).
-- Sign-out deletes the row and clears the cookie. Expired-row sweep
-  piggybacks on sign-in (delete where expires_at < now) — no cron.
+  halfway point extends `expires_at` and re-sets the cookie (new Max-Age).
+  Refresh extends the SAME token — never rotate on refresh (rotation would
+  create a concurrent-request race; the idempotent extend is race-free).
+- Sign-out deletes the row and clears the cookie **with identical attributes**
+  (Path/Secure/SameSite/httpOnly — mismatched attributes silently fail to
+  clear). Expired-row sweep piggybacks on sign-in — no cron.
+- `sessions.user_id` gets an index (cascade/user-scoped queries).
 
 ## CSRF posture
 
@@ -56,17 +71,47 @@ No auth SaaS.
 - `GET /api/auth/signin` — build Google authorization URL (PKCE + state),
   redirect.
 - `GET /api/auth/callback` — verify state/PKCE, exchange code, read verified
-  claims (`sub`, `email`, `name`).
-  - Existing `google_sub` → new session, redirect `/`.
+  claims (`sub`, `email`, `email_verified`, `name`).
+  - **`email_verified !== true` → treated as denied** (redirect `/?denied=<email>`,
+    no user created). The allowlist authorizes on the email claim, so the
+    claim must be verified — this check precedes the allowlist comparison.
+  - Existing `google_sub` → **upsert `email`/`name`** (keeps display data
+    fresh), new session, redirect `/`.
   - New + allowlisted → create user + session, redirect `/`.
   - New + not allowlisted → redirect `/?denied=<email>` (no user created).
+  - **Error paths are normal flow, not exceptions**: Google `?error=access_denied`
+    (user cancelled) → silent redirect `/`; any other `error` param, missing
+    `code`, state mismatch, or missing/expired `erg_oauth` cookie → redirect
+    `/?error=signin_failed` (sign-in screen shows a retry notice). No raw 500s.
+  - The `erg_oauth` cookie is deleted on every callback outcome, success or
+    failure; it is scoped `Path=/api/auth`. Two concurrent sign-in attempts
+    (two tabs) intentionally last-write-wins on that cookie — the older tab's
+    callback lands on `/?error=signin_failed`; retry works.
 - `POST /api/auth/signout` — delete session, clear cookie (behind Origin check).
 - `GET /api/me` — `{user:{id,email,name}}` or 401. Client boots from this.
 
 Config: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` env; redirect URI derived
 from `SITE_URL` (hostname rename stays a one-line env change). Missing Google
 env → auth routes return 503 with a clear message; health unaffected; server
-still boots (so infra deploys don't hard-depend on Google config).
+still boots (so infra deploys don't hard-depend on Google config) — but the
+server logs a **loud boot-time warning** when auth env is absent/partial,
+since a typo'd secret otherwise deploys "green" with sign-in 100% broken and
+only the manual sign-in test would notice.
+
+Response hygiene: `Cache-Control: no-store` on `/api/me`, `/api/auth/*`, and
+as the default for all authenticated API responses (guards against bfcache
+resurfacing another rower's identity on a shared phone, and against any
+future CDN cache rule).
+
+Route ordering in `createApp`: `/api/health` → auth routes → guarded data
+routes → static + SPA fallback. The fallback regex is tightened to
+`/^\/(?!api(\/|$)).*/` so bare `/api` 404s instead of serving the shell
+(closes the known Phase 1 minor).
+
+Dev note: local OAuth requires `SITE_URL=http://localhost:5173` in the dev
+environment so the derived redirect URI matches the registered dev URI
+(documented in CLAUDE.md; without it the first local attempt fails with
+`redirect_uri_mismatch`).
 
 ## Frontend
 
@@ -104,6 +149,12 @@ still boots (so infra deploys don't hard-depend on Google config).
    isolated sessions (each sees their own `/api/me`).
 2. A non-allowlisted account is politely refused; no user row created.
 3. Deployed through the existing CD (merge = deploy).
+
+Note: ROADMAP says "fully isolated **data**"; no data routes exist until
+Phase 3, so Phase 2 establishes isolation *structurally* (guard + user_id
+scoping convention) and proves it at the session level. **Phase 3 MUST add a
+behavioral two-user isolation test when the first data route lands** — this
+is a recorded obligation, not an assumption.
 
 ## Out of scope
 
