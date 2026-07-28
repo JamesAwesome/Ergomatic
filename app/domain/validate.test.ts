@@ -40,14 +40,30 @@ describe('validateSteps', () => {
       [work({ duration: { kind: 'distance', meters: 50 } })],
       [work({ spm: 200 })],
       [work({ ref: { base: '5k', off: 0 } })],
+      [work({ restMinutes: 0.3 })],
+      [work({ restMinutes: 90 })],
       [{ k: 'wu', minutes: 10 }], // no work/test step
       [work(), { k: 'reps', count: 4 }], // marker last
       [{ k: 'reps', count: 2 }, work(), { k: 'reps', count: 2 }, work()], // two markers
+      [{ k: 'test', label: 'x'.repeat(41) }], // test label too long
     ]) {
       const r = validateSteps(bad)
       expect(r.ok).toBe(false)
       if (!r.ok) expect(r.errors.length).toBeGreaterThan(0)
     }
+  })
+  it('accepts valid restMinutes', () => {
+    const r = validateSteps([work({ restMinutes: 5 })])
+    expect(r.ok).toBe(true)
+  })
+  it('accepts valid test-step with label', () => {
+    const r = validateSteps([{ k: 'test', label: '2k test' }])
+    expect(r.ok).toBe(true)
+  })
+  it('rejects steps array exceeding 100 items', () => {
+    const steps = Array.from({ length: 101 }, () => work())
+    const r = validateSteps(steps)
+    expect(r.ok).toBe(false)
   })
 })
 
