@@ -3,7 +3,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import request from 'supertest'
 import type pg from 'pg'
 import { createApp } from './app.js'
-import { checkDb, createPool } from './db.js'
+import { checkDb, createPool } from './db/pool.js'
 
 describe('health against real Postgres', () => {
   let container: StartedPostgreSqlContainer
