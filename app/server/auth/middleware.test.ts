@@ -47,6 +47,7 @@ describe('originCheck', () => {
     expect((await request(app).post('/m').set('Origin', 'https://ergomatic.example')).status).toBe(200)
     expect((await request(app).post('/m').set('Origin', 'http://localhost:5173')).status).toBe(200)
     expect((await request(app).post('/m')).status).toBe(200)
+    expect((await request(app).post('/m').set('Origin', 'capacitor://localhost')).status).toBe(200)
   })
   it('never blocks GET', async () => {
     expect((await request(app).get('/g').set('Origin', 'https://evil.example')).status).toBe(200)

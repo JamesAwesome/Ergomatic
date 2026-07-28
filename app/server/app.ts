@@ -4,6 +4,7 @@ import path from 'node:path'
 import { noStore, originCheck } from './auth/middleware.js'
 import { createAuthRouter } from './auth/routes.js'
 import type { OAuthProvider } from './auth/google.js'
+import type { NativeTokenVerifier } from './auth/nativeVerify.js'
 import type { SessionStore } from './auth/sessions.js'
 import type { UserStore } from './auth/users.js'
 
@@ -12,6 +13,7 @@ export interface AppDeps {
   sessions: SessionStore
   users: UserStore
   oauth: OAuthProvider | null
+  nativeVerifier: NativeTokenVerifier | null
   allowlist: Set<string>
   siteUrl: string
   clientDir?: string

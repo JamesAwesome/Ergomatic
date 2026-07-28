@@ -15,7 +15,7 @@ export const noStore: RequestHandler = (_req, res, next) => {
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-function bearerToken(req: Request): string | undefined {
+export function bearerToken(req: Request): string | undefined {
   const h = req.headers.authorization
   return h?.startsWith('Bearer ') ? h.slice(7) : undefined
 }
@@ -25,6 +25,7 @@ export function originCheck(siteUrl: string): RequestHandler {
     new URL(siteUrl).origin,
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'capacitor://localhost',
   ])
   return (req: Request, res: Response, next: NextFunction) => {
     if (MUTATING.has(req.method)) {
