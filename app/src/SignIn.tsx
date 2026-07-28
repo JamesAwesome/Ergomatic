@@ -1,7 +1,23 @@
-export default function SignIn() {
+import { useState } from 'react'
+import { isNative } from './platform'
+
+export default function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
   const params = new URLSearchParams(window.location.search)
   const denied = params.get('denied')
   const failed = params.get('error') === 'signin_failed'
+  const [nativeError, setNativeError] = useState<string | null>(null)
+
+  async function signInNative() {
+    setNativeError(null)
+    try {
+      const { initNativeAuth, nativeSignIn } = await import('./native/signin')
+      await initNativeAuth()
+      await nativeSignIn()
+      onSignedIn?.()
+    } catch (err) {
+      setNativeError(err instanceof Error ? err.message : "That sign-in didn't work. Give it another try.")
+    }
+  }
 
   return (
     <main className="signin">
@@ -17,9 +33,20 @@ export default function SignIn() {
           That sign-in didn&apos;t work. Give it another try.
         </p>
       )}
-      <a className="button-primary" href="/api/auth/signin">
-        Continue with Google
-      </a>
+      {nativeError && (
+        <p className="notice" role="alert">
+          {nativeError}
+        </p>
+      )}
+      {isNative() ? (
+        <button className="button-primary" onClick={signInNative}>
+          Continue with Google
+        </button>
+      ) : (
+        <a className="button-primary" href="/api/auth/signin">
+          Continue with Google
+        </a>
+      )}
     </main>
   )
 }

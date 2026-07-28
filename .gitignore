@@ -4,3 +4,6 @@ coverage/
 *.tsbuildinfo
 .env
 .DS_Store
+app/ios/App/Pods/
+app/ios/App/output/
+app/ios/DerivedData/

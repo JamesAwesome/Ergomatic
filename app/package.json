@@ -18,9 +18,15 @@
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:coverage": "NODE_OPTIONS=--no-experimental-webstorage vitest run --coverage",
     "db:generate": "drizzle-kit generate",
-    "start": "node dist/server/server/index.js"
+    "start": "node dist/server/server/index.js",
+    "ios:build": "eval $(bash ../scripts/version.sh) && VITE_API_BASE=${ERGOMATIC_API_BASE:-https://ergomatic.waffle.haus} VITE_GOOGLE_IOS_CLIENT_ID=${GOOGLE_IOS_CLIENT_ID:-} vite build && npx cap sync ios && bash scripts/ios-version.sh",
+    "ios:open": "npx cap open ios"
   },
   "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.0",
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/core": "^8.4.2",
+    "@capgo/capacitor-social-login": "^8.3.39",
     "cookie": "^2.0.1",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
@@ -31,6 +37,8 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.2",
+    "@capacitor/ios": "^8.4.2",
     "@eslint/js": "^10.0.1",
     "@testcontainers/postgresql": "^12.0.4",
     "@testing-library/jest-dom": "^7.0.0",

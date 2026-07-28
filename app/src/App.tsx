@@ -3,10 +3,10 @@ import You from './You'
 import { useMe } from './useMe'
 
 export default function App() {
-  const [me, signedOut] = useMe()
+  const [me, signedOut, refetch] = useMe()
 
   if (me.state === 'loading') return null
-  if (me.state === 'out') return <SignIn />
+  if (me.state === 'out') return <SignIn onSignedIn={refetch} />
 
   return (
     <main>
