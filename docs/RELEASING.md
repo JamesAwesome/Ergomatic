@@ -25,7 +25,8 @@ needed: <reason>" — based on the PR contents.
 - Annotated tags `vX.Y.Z` are the ONLY version authority.
 - `scripts/version.sh` derives VERSION (latest tag), BUILD (commit count,
   monotonic — Apple requires this), DESCRIBE (`git describe`).
-- `/api/health` reports the server's DESCRIBE; the app's About shows its own.
+- `/api/health` reports the server's DESCRIBE; the app's About will show its
+  own once that surface lands (Phase 9).
 - API changes must be **additive-only between tags**: old TestFlight builds
   talk to the newest server. A breaking change forces a coordinated tag.
 

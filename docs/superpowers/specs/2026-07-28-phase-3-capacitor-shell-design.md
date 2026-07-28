@@ -12,7 +12,7 @@ Approved 2026-07-28. Implements ROADMAP Phase 3 per the roadmap amendment
 | iOS distribution | Internal TestFlight, released **periodically and deliberately** (not per-merge). James enrolled in the Apple Developer Program 2026-07-28 (approval pending) |
 | Bundle ID | `haus.waffle.ergomatic` (permanent) |
 | Native auth | **A1: ID-token verification** — system browser (ASWebAuthenticationSession) → Google ID token (new iOS OAuth client, no secret) → `POST /api/auth/native` verifies signature+audience via Google JWKS → Phase 2's email_verified/allowlist/upsert path → opaque bearer (same hashed `sessions` row) → iOS Keychain. serverAuthCode exchange rejected (more parts, no needed benefit) |
-| Versioning | **B1: git-tag-derived (hatch-vcs style)** — annotated `vX.Y.Z` tags are the only authority; build number = `git rev-list --count HEAD`; full `git describe` shown in-app and in `/api/health.version`. semantic-release rejected (auto-versions every merge; contradicts periodic cadence) |
+| Versioning | **B1: git-tag-derived (hatch-vcs style)** — annotated `vX.Y.Z` tags are the only authority; build number = `git rev-list --count HEAD`; full `git describe` in `/api/health.version`, shown in-app once an About/You-version surface exists (deferred to Phase 9 preferences work; explicitly not in Phase 3). semantic-release rejected (auto-versions every merge; contradicts periodic cadence) |
 | Release discipline | `docs/RELEASING.md` guide rule + standing per-merge release recommendations from Claude (see below) |
 | Android | Not now; door open (`npx cap add android` later) |
 
