@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PLANS } from './plans.js'
+import { PLANS, SPRINT_WEEKS, HEAD_WEEKS } from './plans.js'
 
 const CODES = ['AN', 'O2', 'AT', 'TR', 'TEST']
 
@@ -32,4 +32,15 @@ it('sprint back half is speed-biased; head is endurance-biased overall', () => {
   expect(count(sp.slice(42), ['AN', 'TR'])).toBeGreaterThan(count(sp.slice(0, 42), ['AN', 'TR']))
   const hd = PLANS.head.sessions
   expect(count(hd, ['O2', 'AT'])).toBeGreaterThan(count(hd, ['AN', 'TR']))
+})
+
+// Extra test beyond the brief: guards against the weekly templates
+// degenerating into one micro-cycle copy-pasted across a preset. Checked
+// on the raw week templates (pre-TEST-splice) since post-export the TEST
+// overwrite makes a couple of weeks look artificially distinct.
+describe.each(['sprint', 'head'] as const)('%s week templates', (key) => {
+  const weeks = key === 'sprint' ? SPRINT_WEEKS : HEAD_WEEKS
+  it('has no two byte-identical week templates', () => {
+    expect(new Set(weeks.map((w) => w.join())).size).toBe(weeks.length)
+  })
 })
