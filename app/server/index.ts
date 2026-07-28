@@ -8,6 +8,13 @@ import { createSessionStore } from './auth/sessions.js'
 import { createUserStore } from './auth/users.js'
 import { createDb } from './db/index.js'
 import { checkDb } from './db/pool.js'
+import { createBaselinesStore } from './stores/baselines.js'
+import { createLogsStore } from './stores/logs.js'
+import { createPlanStateStore } from './stores/planState.js'
+import { createPreferencesStore } from './stores/preferences.js'
+import { createTestHistoryStore } from './stores/testHistory.js'
+import { createWorkoutsStore } from './stores/workouts.js'
+import type { Stores } from './routes/data.js'
 
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {
@@ -47,6 +54,15 @@ if (allowlist.size === 0) {
   console.warn('WARNING: ALLOWED_EMAILS is empty — nobody can create an account')
 }
 
+const stores: Stores = {
+  baselines: createBaselinesStore(db),
+  workouts: createWorkoutsStore(db),
+  logs: createLogsStore(db),
+  planState: createPlanStateStore(db),
+  preferences: createPreferencesStore(db),
+  testHistory: createTestHistoryStore(db),
+}
+
 const port = Number(process.env.PORT ?? 8080)
 createApp({
   checkDb: () => checkDb(pool),
@@ -57,6 +73,7 @@ createApp({
   allowlist,
   siteUrl,
   clientDir: path.resolve(process.cwd(), 'dist/client'),
+  stores,
 }).listen(port, () => {
   console.log(`ergomatic api listening on :${port}`)
 })

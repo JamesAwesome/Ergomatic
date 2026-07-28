@@ -12,6 +12,7 @@ export function baseDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     nativeVerifier: null,
     allowlist: new Set(),
     siteUrl: 'https://ergomatic.example',
+    stores: null,
     ...overrides,
   }
 }

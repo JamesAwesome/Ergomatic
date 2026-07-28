@@ -1,12 +1,13 @@
 import express from 'express'
 import fs from 'node:fs'
 import path from 'node:path'
-import { noStore, originCheck } from './auth/middleware.js'
+import { noStore, originCheck, requireUser } from './auth/middleware.js'
 import { createAuthRouter } from './auth/routes.js'
 import type { OAuthProvider } from './auth/google.js'
 import type { NativeTokenVerifier } from './auth/nativeVerify.js'
 import type { SessionStore } from './auth/sessions.js'
 import type { UserStore } from './auth/users.js'
+import { createDataRouter, type Stores } from './routes/data.js'
 
 export interface AppDeps {
   checkDb: () => Promise<boolean>
@@ -17,6 +18,9 @@ export interface AppDeps {
   allowlist: Set<string>
   siteUrl: string
   clientDir?: string
+  // Backing stores for the per-user data API. Null in auth-only tests: the
+  // data router is mounted only when present, so those tests stay untouched.
+  stores: Stores | null
 }
 
 export function createApp(deps: AppDeps) {
@@ -41,6 +45,10 @@ export function createApp(deps: AppDeps) {
   })
 
   app.use(createAuthRouter(deps))
+
+  if (deps.stores) {
+    app.use(createDataRouter({ stores: deps.stores, requireUser: requireUser(deps.sessions) }))
+  }
 
   if (deps.clientDir) {
     const index = path.join(deps.clientDir, 'index.html')

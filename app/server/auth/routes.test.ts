@@ -33,6 +33,7 @@ function deps(overrides: Partial<AppDeps> = {}): AppDeps {
     nativeVerifier: null,
     allowlist: new Set(['a@x.com']),
     siteUrl: 'https://ergomatic.example',
+    stores: null,
     ...overrides,
   }
 }
