@@ -142,7 +142,7 @@ they go stale (this has burned us before). Concretely:
 **Goal:** The app replaces paper for an entire workout — the core loop.
 
 - [ ] Today screen: suggestion engine + reason line, SHUFFLE, swap pool (`todayPick`), last three
-- [ ] Confirm targets: per-run session overlay (duration steppers, rep stepper, step removal/restore, live minute recount) — timer reads the session copy, never the library workout
+- [ ] Confirm targets: per-run session overlay (duration steppers, rep stepper, step removal/restore, live minute recount) — timer reads the session copy, never the library workout; per-step SPM adjustment at workout start (18-32 range), alongside the split nudge
 - [ ] Countdown (configurable, skippable, 0 = off)
 - [ ] Live timer: portrait + landscape, phase dots, target split/rate cards, UP NEXT, total-left ruler, ◀ ▶ pause; warm-up/rest/test phases show "Easy"/"Rest"/"All out" (never a bare dash); tabs hidden
 - [ ] Distance phases (manual mode, works on every device forever): target meters + resolved range, count-UP stopwatch, full-width "NEXT →" (≥44px); elapsed time yields the actual average split with zero hardware (2500m in 9:52 → 1:58.4/500m, logged as `actualSource:'stopwatch'`)
@@ -210,5 +210,5 @@ they go stale (this has burned us before). Concretely:
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
-- **Parametric workout generator**: "generate me a 45' AT workout" from the starter library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end.
+- **Parametric workout generator**: "generate me a 45' AT workout" from the starter library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. Generation will load richer structural references from the owner's source material (patterns and parameters only — never entries/titles/prose, per the content policy).
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
