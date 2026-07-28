@@ -54,3 +54,25 @@ automatic rollback to the previous commit.
 
 Automatic on failed health gate. Manual: `ssh` to the host,
 `cd ~/Ergomatic && git checkout <good-sha> && docker compose up -d --build --wait`.
+
+## Google sign-in (one-time)
+
+1. Google Cloud Console → APIs & Services → Credentials → Create credentials
+   → OAuth client ID → type **Web application**, name `ergomatic`.
+2. Authorized redirect URIs — add BOTH:
+   - `https://ergomatic.waffle.haus/api/auth/callback`
+   - `http://localhost:5173/api/auth/callback` (local dev)
+3. Configure the consent screen if prompted (External, app name Ergomatic;
+   publish it or add your rowers as test users).
+4. Put `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in the host `.env`, plus
+   `ALLOWED_EMAILS=you@example.com,other@example.com`.
+5. `docker compose up -d` to recreate the app with the new env.
+
+Notes:
+- The allowlist is an **admission gate, not revocation**: removing an email
+  does not sign out an existing account. To off-board someone, delete their
+  row in `users` (sessions cascade):
+  `docker exec -it ergomatic-postgres psql -U ergomatic -c "delete from users where email='x@y.com'"`.
+- `ALLOWED_EMAILS` changes take effect on container recreate, not live.
+- If sign-in breaks after a deploy, check the app logs for the boot warning
+  about missing Google env before debugging anything else.
