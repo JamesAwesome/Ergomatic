@@ -8,6 +8,13 @@
       "when": 1785198620662,
       "tag": "0000_skinny_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785273217999,
+      "tag": "0001_bouncy_tana_nile",
+      "breakpoints": true
     }
   ]
 }
