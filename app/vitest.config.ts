@@ -20,6 +20,7 @@ export default defineConfig({
           globals: true,
           setupFiles: './src/test/setup.ts',
           include: ['src/**/*.test.{ts,tsx}'],
+          env: { VITE_API_BASE: 'https://api.test' },
         },
       },
       {
@@ -40,6 +41,8 @@ export default defineConfig({
         'src/main.tsx',
         'src/vite-env.d.ts',
         'src/test/**',
+        'src/native/**',
+        'src/platform.ts',
         'server/index.ts',
         'server/testDeps.ts',
         '**/*.test.*',

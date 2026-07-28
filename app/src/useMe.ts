@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { api } from './api'
 
 export interface Me {
   id: string
@@ -8,13 +9,15 @@ export interface Me {
 
 export type MeState = { state: 'loading' } | { state: 'out' } | { state: 'in'; user: Me }
 
-export function useMe(): [MeState, () => void] {
+export function useMe(): [MeState, () => void, () => void] {
   const [me, setMe] = useState<MeState>({ state: 'loading' })
+  const [generation, setGeneration] = useState(0)
   const signedOut = () => setMe({ state: 'out' })
+  const refetch = () => setGeneration((g) => g + 1)
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/me')
+    api('/api/me')
       .then(async (res) => {
         if (cancelled) return
         if (res.ok) {
@@ -30,7 +33,7 @@ export function useMe(): [MeState, () => void] {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [generation])
 
-  return [me, signedOut]
+  return [me, signedOut, refetch]
 }
