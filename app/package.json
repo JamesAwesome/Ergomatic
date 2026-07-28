@@ -21,6 +21,7 @@
     "start": "node dist/server/server/index.js"
   },
   "dependencies": {
+    "cookie": "^2.0.1",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "pg": "^8.22.0",
