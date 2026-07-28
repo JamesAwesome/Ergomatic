@@ -33,7 +33,7 @@
 **Interfaces:**
 - Produces: `scripts/version.sh` printing `VERSION=x.y.z`, `BUILD=<n>`, `DESCRIBE=<git describe>` (eval-able); `/api/health` → `{ok, db, version}` where version = `process.env.APP_VERSION ?? 'dev'`; Docker build arg `APP_VERSION` → env. Task 4's `ios:build` consumes version.sh.
 
-- [ ] **Step 1: Write `scripts/version.sh`**
+- [x] **Step 1: Write `scripts/version.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -50,7 +50,7 @@ echo "DESCRIBE=$(git describe --tags --always --dirty)"
 
 `chmod +x scripts/version.sh`. Verify: `bash scripts/version.sh` prints three lines with `VERSION=0.0.0` (no tags exist yet) and a numeric BUILD.
 
-- [ ] **Step 2: Failing test — health carries version.** In `app/server/app.test.ts`, extend the first health test's expectation and add one:
+- [x] **Step 2: Failing test — health carries version.** In `app/server/app.test.ts`, extend the first health test's expectation and add one:
 
 Replace the passing-check test body assertions:
 
@@ -75,9 +75,9 @@ Add after it:
 
 (Also update the 503 test's body expectation to `{ ok: false, db: false, version: 'dev' }`, and the same in `health.integration.test.ts` — grep for `toEqual({ ok:` across tests to catch every site, including db.integration.test.ts.)
 
-- [ ] **Step 3: RED** — `cd app && pnpm test --project unit` fails on the missing field.
+- [x] **Step 3: RED** — `cd app && pnpm test --project unit` fails on the missing field.
 
-- [ ] **Step 4: Implement.** In `app/server/app.ts` health handler, both response branches:
+- [x] **Step 4: Implement.** In `app/server/app.ts` health handler, both response branches:
 
 ```ts
     const version = process.env.APP_VERSION ?? 'dev'
@@ -90,7 +90,7 @@ Add after it:
 
 (Additive: existing consumers — compose healthcheck checks `r.ok` only — unaffected.)
 
-- [ ] **Step 5: Plumb the build arg.** `app/Dockerfile`, in the FINAL stage after `ENV PORT=8080`:
+- [x] **Step 5: Plumb the build arg.** `app/Dockerfile`, in the FINAL stage after `ENV PORT=8080`:
 
 ```dockerfile
 ARG APP_VERSION=dev
@@ -119,7 +119,7 @@ export APP_VERSION="$(git describe --tags --always)"
             APP_VERSION=ci
 ```
 
-- [ ] **Step 6: Verify + commit**
+- [x] **Step 6: Verify + commit**
 
 ```bash
 cd app && pnpm lint && pnpm typecheck && pnpm test
@@ -139,7 +139,7 @@ Expected: all green; deploy harness still ALL PASS (8 checks — the new export 
 - Consumes: `SessionStore`, cookie helpers (unchanged).
 - Produces: `requireUser` accepting `Authorization: Bearer <token>` OR the cookie. Bearer refresh → response header `X-Session-Expires-At` (ISO string) instead of Set-Cookie. `originCheck` skips enforcement when the request carries a Bearer authorization header (custom headers can't ride cross-site without a CORS preflight we never answer — no ambient-credential CSRF surface). Task 3/4 rely on both.
 
-- [ ] **Step 1: Failing tests.** Append to `app/server/auth/middleware.test.ts`:
+- [x] **Step 1: Failing tests.** Append to `app/server/auth/middleware.test.ts`:
 
 ```ts
 describe('requireUser bearer mode', () => {
@@ -208,9 +208,9 @@ describe('originCheck bearer exemption', () => {
 
 Add `vi` to the vitest import in that file.
 
-- [ ] **Step 2: RED** — `cd app && pnpm test --project unit`.
+- [x] **Step 2: RED** — `cd app && pnpm test --project unit`.
 
-- [ ] **Step 3: Implement in `app/server/auth/middleware.ts`.** Add a helper and modify both middlewares:
+- [x] **Step 3: Implement in `app/server/auth/middleware.ts`.** Add a helper and modify both middlewares:
 
 ```ts
 function bearerToken(req: Request): string | undefined {
@@ -253,7 +253,7 @@ function bearerToken(req: Request): string | undefined {
     next()
 ```
 
-- [ ] **Step 4: GREEN + full suite + commit**
+- [x] **Step 4: GREEN + full suite + commit**
 
 ```bash
 cd app && pnpm lint && pnpm typecheck && pnpm test
@@ -276,9 +276,9 @@ git add -A && git commit -m "feat: bearer sessions — dual-mode requireUser, or
   - New `AppDeps.nativeVerifier: NativeTokenVerifier | null`; route `POST /api/auth/native {idToken}` → 200 `{token, expiresAt, user}` | 401 `{error:'invalid_token'}` | 403 `{error:'denied', email}` | 503 when unconfigured | 400 when idToken missing/not a string.
   - Env `GOOGLE_IOS_CLIENT_ID`; boot warning when absent.
 
-- [ ] **Step 1: Install jose** (`npm view jose version` first): `cd app && pnpm add jose`
+- [x] **Step 1: Install jose** (`npm view jose version` first): `cd app && pnpm add jose`
 
-- [ ] **Step 2: Failing tests `app/server/auth/native.test.ts`** (stubbed verifier — the JWKS wrapper itself is coverage-excluded and proven by the live TestFlight sign-in):
+- [x] **Step 2: Failing tests `app/server/auth/native.test.ts`** (stubbed verifier — the JWKS wrapper itself is coverage-excluded and proven by the live TestFlight sign-in):
 
 ```ts
 import { describe, it, expect, vi } from 'vitest'
@@ -386,7 +386,7 @@ Note the last test: `capacitor://localhost` is a foreign origin and this request
     expect((await request(app).post('/m').set('Origin', 'capacitor://localhost')).status).toBe(200)
 ```
 
-- [ ] **Step 3: RED**, then implement.
+- [x] **Step 3: RED**, then implement.
 
 `app/server/auth/signin.ts` (extraction — the logic moves verbatim from routes.ts's callback):
 
@@ -517,7 +517,7 @@ if (!nativeVerifier) {
 ```
 and pass `nativeVerifier` into createApp.
 
-- [ ] **Step 4: Integration test `app/server/auth/native.integration.test.ts`** — real Postgres, stubbed verifier: POST native (new allowlisted user) → use the returned bearer on `/api/me` → `POST /api/auth/signout` with the bearer → me 401s:
+- [x] **Step 4: Integration test `app/server/auth/native.integration.test.ts`** — real Postgres, stubbed verifier: POST native (new allowlisted user) → use the returned bearer on `/api/me` → `POST /api/auth/signout` with the bearer → me 401s:
 
 ```ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
@@ -580,9 +580,9 @@ describe('native sign-in lifecycle against real Postgres', () => {
 
 NOTE this requires `signout` to also read the bearer: in `routes.ts` signout, replace the token line with the same `bearerToken(req) ?? getCookie(...)` pattern (export `bearerToken` from middleware.ts or inline two lines).
 
-- [ ] **Step 5: Env plumbing.** compose.yml app env: `GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}`. `.env.example` after the Google block: `# iOS native sign-in (Phase 3+): the iOS OAuth client's ID (no secret exists for iOS clients)` + `GOOGLE_IOS_CLIENT_ID=`. docs/deploy.md Google section: add step — create a second OAuth client, type **iOS**, bundle ID `haus.waffle.ergomatic`; put its client ID in `.env`.
+- [x] **Step 5: Env plumbing.** compose.yml app env: `GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}`. `.env.example` after the Google block: `# iOS native sign-in (Phase 3+): the iOS OAuth client's ID (no secret exists for iOS clients)` + `GOOGLE_IOS_CLIENT_ID=`. docs/deploy.md Google section: add step — create a second OAuth client, type **iOS**, bundle ID `haus.waffle.ergomatic`; put its client ID in `.env`.
 
-- [ ] **Step 6: GREEN everything + coverage + commit**
+- [x] **Step 6: GREEN everything + coverage + commit**
 
 ```bash
 cd app && pnpm lint && pnpm typecheck && pnpm test && pnpm test:coverage
@@ -601,14 +601,14 @@ git add -A && git commit -m "feat: /api/auth/native — ID-token sign-in minting
 - Consumes: `/api/auth/native` contract (Task 3), bearer semantics (Task 2).
 - Produces: `isNative(): boolean` (platform.ts — the ONLY Capacitor import reachable from shared web code); `api(path, init?): Promise<Response>` (api.ts — prefixes `VITE_API_BASE`, attaches stored bearer when native); `nativeSignIn(): Promise<void>` and `nativeSignOut(): Promise<void>`; `ios:build` script.
 
-- [ ] **Step 1: Install (verify versions first via npm view):**
+- [x] **Step 1: Install (verify versions first via npm view):**
 
 ```bash
 cd app && pnpm add @capacitor/core @capgo/capacitor-social-login @capacitor-community/keep-awake @aparajita/capacitor-secure-storage
 pnpm add -D @capacitor/cli @capacitor/ios
 ```
 
-- [ ] **Step 2: `app/capacitor.config.ts`:**
+- [x] **Step 2: `app/capacitor.config.ts`:**
 
 ```ts
 import type { CapacitorConfig } from '@capacitor/cli'
@@ -624,7 +624,7 @@ export default config
 
 Add `capacitor.config.ts` to tsconfig.node.json's include array.
 
-- [ ] **Step 3: Generate the iOS project:**
+- [x] **Step 3: Generate the iOS project:**
 
 ```bash
 cd app && pnpm build && npx cap add ios
@@ -640,7 +640,7 @@ app/ios/App/output/
 app/ios/DerivedData/
 ```
 
-- [ ] **Step 4: Platform + API modules (TDD for api.ts).** `app/src/platform.ts`:
+- [x] **Step 4: Platform + API modules (TDD for api.ts).** `app/src/platform.ts`:
 
 ```ts
 import { Capacitor } from '@capacitor/core'
@@ -781,9 +781,9 @@ export async function nativeSignOut(): Promise<void> {
 /* v8 ignore stop */
 ```
 
-- [ ] **Step 5: Wire the UI.** `useMe.ts`: replace `fetch('/api/me')` with `api('/api/me')` (import from './api'). `You.tsx`: sign-out handler becomes `isNative() ? await nativeSignOut() : await fetch('/api/auth/signout', {method:'POST'})` — import lazily: `const { nativeSignOut } = await import('./native/signin')` inside the handler so the web bundle only loads it natively. `SignIn.tsx`: when `isNative()`, the button becomes a `<button>` calling a handler that lazy-imports `{ initNativeAuth, nativeSignIn }`, runs them, and on success calls a new `onSignedIn` prop (App re-fetches me by remounting — give App a `key` bump or a refetch callback added to `useMe`: add `refetch()` as a third element of the returned tuple, implemented by re-running the effect via a counter state). On thrown errors, show the message in the existing notice area. Update `SignIn.test.tsx`/`App.test.tsx` minimally: web-mode tests unchanged (isNative false by default in jsdom); add one test mocking `./platform` to native=true asserting the button renders as a button (not a link).
+- [x] **Step 5: Wire the UI.** `useMe.ts`: replace `fetch('/api/me')` with `api('/api/me')` (import from './api'). `You.tsx`: sign-out handler becomes `isNative() ? await nativeSignOut() : await fetch('/api/auth/signout', {method:'POST'})` — import lazily: `const { nativeSignOut } = await import('./native/signin')` inside the handler so the web bundle only loads it natively. `SignIn.tsx`: when `isNative()`, the button becomes a `<button>` calling a handler that lazy-imports `{ initNativeAuth, nativeSignIn }`, runs them, and on success calls a new `onSignedIn` prop (App re-fetches me by remounting — give App a `key` bump or a refetch callback added to `useMe`: add `refetch()` as a third element of the returned tuple, implemented by re-running the effect via a counter state). On thrown errors, show the message in the existing notice area. Update `SignIn.test.tsx`/`App.test.tsx` minimally: web-mode tests unchanged (isNative false by default in jsdom); add one test mocking `./platform` to native=true asserting the button renders as a button (not a link).
 
-- [ ] **Step 6: Build scripts.** `app/package.json` scripts:
+- [x] **Step 6: Build scripts.** `app/package.json` scripts:
 
 ```json
     "ios:build": "eval $(bash ../scripts/version.sh) && VITE_API_BASE=${ERGOMATIC_API_BASE:-https://ergomatic.waffle.haus} VITE_GOOGLE_IOS_CLIENT_ID=${GOOGLE_IOS_CLIENT_ID:-} vite build && npx cap sync ios && bash scripts/ios-version.sh",
@@ -811,7 +811,7 @@ echo "ios-version: stamped $VERSION ($BUILD)"
 
 `chmod +x`. Coverage excludes in vitest.config.ts: add `'src/native/**'`, `'src/platform.ts'`.
 
-- [ ] **Step 7: Full verify + commit**
+- [x] **Step 7: Full verify + commit**
 
 ```bash
 cd app && pnpm lint && pnpm typecheck && pnpm test && pnpm test:coverage && pnpm build
@@ -827,7 +827,7 @@ Expected: everything green; the WEB build output must not contain the social-log
 - Create: `docs/RELEASING.md`
 - Modify: `CLAUDE.md`, `docs/deploy.md` (cross-link)
 
-- [ ] **Step 1: Write `docs/RELEASING.md`:**
+- [x] **Step 1: Write `docs/RELEASING.md`:**
 
 ```markdown
 # Releasing Ergomatic (TestFlight)
@@ -876,7 +876,7 @@ BUILD increments with any new commit). First-time setup lives in
 docs/deploy.md ("iOS build machine" section, Task-7 activation).
 ```
 
-- [ ] **Step 2: CLAUDE.md** — add under Rules:
+- [x] **Step 2: CLAUDE.md** — add under Rules:
 
 ```markdown
 - After every merge to main, post a TestFlight release recommendation
@@ -887,7 +887,7 @@ docs/deploy.md ("iOS build machine" section, Task-7 activation).
 
 and under Commands: `- iOS: pnpm ios:build (tag-derived version; needs GOOGLE_IOS_CLIENT_ID env), pnpm ios:open (Xcode)`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/RELEASING.md CLAUDE.md docs/deploy.md
@@ -898,7 +898,7 @@ git commit -m "docs: release discipline — tag-driven TestFlight, per-merge rec
 
 ### Task 6: PR + web-unchanged proof
 
-- [ ] **Step 1: Local stack proof** (web behavior unchanged; version visible):
+- [x] **Step 1: Local stack proof** (web behavior unchanged; version visible):
 
 ```bash
 cd app && pnpm build && cd ..
@@ -909,7 +909,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8081/          # 200
 POSTGRES_PASSWORD=devpass docker compose down -v
 ```
 
-- [ ] **Step 2: Push + PR**
+- [x] **Step 2: Push + PR**
 
 ```bash
 git push -u origin phase-3-capacitor
@@ -937,21 +937,21 @@ Expected: four jobs green, deploy skipped.
 
 Steps marked **[JAMES]** need his accounts/hands. Prereq: Apple Developer approval email (enrolled + paid 2026-07-28).
 
-- [ ] **Step 1 [JAMES]:** Install Xcode (App Store; large download). Then `sudo xcode-select -s /Applications/Xcode.app && xcodebuild -runFirstLaunch`.
-- [ ] **Step 2:** If Task 4 deferred it: `cd app && npx cap add ios`, commit `ios/` (via a small PR).
-- [ ] **Step 3 [JAMES]:** Xcode → Settings → Accounts → add Apple ID (approved team). Open `pnpm ios:open`; select the App target → Signing & Capabilities → team; bundle ID `haus.waffle.ergomatic`; automatic signing.
-- [ ] **Step 4 [JAMES]:** Google Cloud Console → Credentials → Create OAuth client → type **iOS**, bundle ID `haus.waffle.ergomatic`; add the client ID to the host `.env` as `GOOGLE_IOS_CLIENT_ID` + `docker compose up -d` (recreate); keep the ID handy for local `pnpm ios:build`.
-- [ ] **Step 5 [JAMES]:** App Store Connect → My Apps → New App (iOS, Ergomatic, `haus.waffle.ergomatic`, English, private). TestFlight → Internal Testing group with household Apple IDs.
-- [ ] **Step 6:** Merge the PR (rebase) → deploy green → `curl https://ergomatic.waffle.haus/api/health` shows the new `version` field. Simulator smoke first: `pnpm ios:build && pnpm ios:open`, run on an iPhone simulator — the shell boots, sign-in reaches Google (simulator sign-in may be flaky; device is authoritative).
+- [x] **Step 1 [JAMES]:** Install Xcode (App Store; large download). Then `sudo xcode-select -s /Applications/Xcode.app && xcodebuild -runFirstLaunch`.
+- [x] **Step 2:** If Task 4 deferred it: `cd app && npx cap add ios`, commit `ios/` (via a small PR).
+- [x] **Step 3 [JAMES]:** Xcode → Settings → Accounts → add Apple ID (approved team). Open `pnpm ios:open`; select the App target → Signing & Capabilities → team; bundle ID `haus.waffle.ergomatic`; automatic signing.
+- [x] **Step 4 [JAMES]:** Google Cloud Console → Credentials → Create OAuth client → type **iOS**, bundle ID `haus.waffle.ergomatic`; add the client ID to the host `.env` as `GOOGLE_IOS_CLIENT_ID` + `docker compose up -d` (recreate); keep the ID handy for local `pnpm ios:build`.
+- [x] **Step 5 [JAMES]:** App Store Connect → My Apps → New App (iOS, Ergomatic, `haus.waffle.ergomatic`, English, private). TestFlight → Internal Testing group with household Apple IDs.
+- [x] **Step 6:** Merge the PR (rebase) → deploy green → `curl https://ergomatic.waffle.haus/api/health` shows the new `version` field. Simulator smoke first: `pnpm ios:build && pnpm ios:open`, run on an iPhone simulator — the shell boots, sign-in reaches Google (simulator sign-in may be flaky; device is authoritative).
   - Verify native fetch path: CapacitorHttp is enabled (capacitor.config.ts) so api() calls bypass WKWebView CORS; if any request still fails preflight in the simulator, fall back to adding a capacitor://localhost CORS middleware server-side.
-- [ ] **Step 7:** Tag + first release per docs/RELEASING.md: `git tag -a v0.1.0 -m "First TestFlight: Capacitor shell with native sign-in" && git push origin v0.1.0`, then `pnpm ios:build`, Archive, upload, internal TestFlight.
-- [ ] **Step 8 [JAMES]:** On the iPhone: install from TestFlight, sign in with an allowlisted Google account, confirm the You card; sign out/in; confirm a NON-allowlisted account gets the invite-refused message.
-- [ ] **Step 9:** Close out: ROADMAP Phase 3 → Done + boxes; plan checkboxes; ledger; close-out PR. Post the first per-merge release recommendation retroactively confirmed (this phase IS the release).
+- [x] **Step 7:** Tag + first release per docs/RELEASING.md: `git tag -a v0.1.0 -m "First TestFlight: Capacitor shell with native sign-in" && git push origin v0.1.0`, then `pnpm ios:build`, Archive, upload, internal TestFlight.
+- [x] **Step 8 [JAMES]:** On the iPhone: install from TestFlight, sign in with an allowlisted Google account, confirm the You card; sign out/in; confirm a NON-allowlisted account gets the invite-refused message.
+- [x] **Step 9:** Close out: ROADMAP Phase 3 → Done + boxes; plan checkboxes; ledger; close-out PR. Post the first per-merge release recommendation retroactively confirmed (this phase IS the release).
 
 ---
 
 ## Exit criteria (spec)
 
-- [ ] James signs in and sees his account in the TestFlight build on an iPhone
-- [ ] Web app provably unchanged (suite green; prototype deploys; cookie auth untouched)
-- [ ] `docs/RELEASING.md` exists; `v0.1.0` cut through the runbook; `/api/health` reports a tag-derived version
+- [x] James signs in and sees his account in the TestFlight build on an iPhone
+- [x] Web app provably unchanged (suite green; prototype deploys; cookie auth untouched)
+- [x] `docs/RELEASING.md` exists; `v0.1.0` cut through the runbook; `/api/health` reports a tag-derived version
