@@ -83,14 +83,14 @@ they go stale (this has burned us before). Concretely:
 
 ## Phase 2 — Auth
 
-**Status:** Not started
+**Status:** Done
 **Goal:** Multiple people can each sign in and get their own empty Ergomatic.
 
-- [ ] Google OAuth authorization-code flow (self-implemented or minimal library, no SaaS)
-- [ ] `users` table + Postgres-backed cookie sessions; session middleware; CSRF posture
-- [ ] Sign-in screen (design language: paper theme, serif titles)
-- [ ] Minimal **You** screen: signed-in identity + sign out
-- [ ] API auth guard: all data routes require a session, all data scoped to the user
+- [x] Google OAuth authorization-code flow (self-implemented or minimal library, no SaaS)
+- [x] `users` table + Postgres-backed cookie sessions; session middleware; CSRF posture
+- [x] Sign-in screen (design language: paper theme, serif titles)
+- [x] Minimal **You** screen: signed-in identity + sign out
+- [x] API auth guard: all data routes require a session, all data scoped to the user
 
 **Exit:** Two different Google accounts see fully isolated data; deployed.
 
