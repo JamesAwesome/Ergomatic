@@ -1,0 +1,111 @@
+:root {
+  --page: #f4f1e8;
+  --surface: #fffdf7;
+  --ink: #1b1a17;
+  --ink-3: #57544c;
+  --rule: #d8d3c4;
+  --accent: #b5341f;
+  --accent-hover: #9c2c19;
+  --on-color: #fffdf7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: Archivo, system-ui, sans-serif;
+}
+
+h1 {
+  font-family: Newsreader, Georgia, serif;
+  font-weight: 500;
+  font-size: 31px;
+}
+
+main {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 6px 20px 20px;
+}
+
+.signin {
+  display: flex;
+  min-height: 90vh;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+
+.tagline {
+  color: var(--ink-3);
+}
+
+.notice {
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  padding: 12px;
+}
+
+.button-primary {
+  display: block;
+  min-height: 52px;
+  line-height: 52px;
+  text-align: center;
+  background: var(--accent);
+  color: var(--on-color);
+  text-decoration: none;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.button-primary:hover {
+  background: var(--accent-hover);
+}
+
+.button-outline {
+  min-height: 44px;
+  padding: 0 16px;
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.you {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 16px;
+  margin-top: 22px;
+}
+
+.you-name {
+  font-family: Newsreader, Georgia, serif;
+  font-size: 24px;
+  margin: 0;
+}
+
+.you-email {
+  color: var(--ink-3);
+  margin: 0;
+  font-size: 13px;
+}
+
+.avatar {
+  width: 46px;
+  height: 46px;
+  background: var(--ink);
+  color: var(--on-color);
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+}
