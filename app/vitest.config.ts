@@ -41,6 +41,7 @@ export default defineConfig({
         'src/vite-env.d.ts',
         'src/test/**',
         'server/index.ts',
+        'server/testDeps.ts',
         '**/*.test.*',
       ],
       // Ratchet floor: near-total coverage is cheap on a skeleton. Raise, never
