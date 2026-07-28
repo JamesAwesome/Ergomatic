@@ -3,6 +3,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import { createApp } from './app.js'
 import { parseAllowlist } from './auth/allowlist.js'
 import { createGoogleProvider, type OAuthProvider } from './auth/google.js'
+import { createNativeVerifier } from './auth/nativeVerify.js'
 import { createSessionStore } from './auth/sessions.js'
 import { createUserStore } from './auth/users.js'
 import { createDb } from './db/index.js'
@@ -35,6 +36,12 @@ if (clientId && clientSecret) {
     'WARNING: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not fully set — sign-in is DISABLED (auth routes will 503)',
   )
 }
+const iosClientId = process.env.GOOGLE_IOS_CLIENT_ID ?? ''
+const nativeVerifier = iosClientId ? createNativeVerifier(iosClientId) : null
+if (!nativeVerifier) {
+  console.warn('WARNING: GOOGLE_IOS_CLIENT_ID not set — native (iOS) sign-in is DISABLED')
+}
+
 const allowlist = parseAllowlist(process.env.ALLOWED_EMAILS)
 if (allowlist.size === 0) {
   console.warn('WARNING: ALLOWED_EMAILS is empty — nobody can create an account')
@@ -46,6 +53,7 @@ createApp({
   sessions: createSessionStore(db),
   users: createUserStore(db),
   oauth,
+  nativeVerifier,
   allowlist,
   siteUrl,
   clientDir: path.resolve(process.cwd(), 'dist/client'),

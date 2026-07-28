@@ -9,6 +9,7 @@ export function baseDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     sessions: { resolveSession: async () => null } as unknown as SessionStore,
     users: {} as UserStore,
     oauth: null,
+    nativeVerifier: null,
     allowlist: new Set(),
     siteUrl: 'https://ergomatic.example',
     ...overrides,

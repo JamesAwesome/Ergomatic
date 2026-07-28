@@ -66,7 +66,11 @@ Automatic on failed health gate. Manual: `ssh` to the host,
    publish it or add your rowers as test users).
 4. Put `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in the host `.env`, plus
    `ALLOWED_EMAILS=you@example.com,other@example.com`.
-5. `docker compose up -d` to recreate the app with the new env.
+5. **iOS native sign-in (Phase 3+)**: Google Cloud Console → Credentials →
+   Create credentials → OAuth client ID → type **iOS**, bundle ID
+   `haus.waffle.ergomatic`. iOS clients have no secret. Put its client ID in
+   `.env` as `GOOGLE_IOS_CLIENT_ID`.
+6. `docker compose up -d` to recreate the app with the new env.
 
 Notes:
 - The allowlist is an **admission gate, not revocation**: removing an email

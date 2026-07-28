@@ -8,9 +8,10 @@ import {
   oauthCookie,
   sessionCookie,
 } from './cookies.js'
-import { isAllowed } from './allowlist.js'
 import type { OAuthProvider } from './google.js'
-import { requireUser } from './middleware.js'
+import { bearerToken, requireUser } from './middleware.js'
+import type { NativeTokenVerifier } from './nativeVerify.js'
+import { signInWithClaims } from './signin.js'
 import type { SessionStore } from './sessions.js'
 import type { UserStore } from './users.js'
 
@@ -18,11 +19,19 @@ export interface AuthDeps {
   sessions: SessionStore
   users: UserStore
   oauth: OAuthProvider | null
+  nativeVerifier: NativeTokenVerifier | null
   allowlist: Set<string>
   siteUrl: string
 }
 
-export function createAuthRouter({ sessions, users, oauth, allowlist, siteUrl }: AuthDeps): Router {
+export function createAuthRouter({
+  sessions,
+  users,
+  oauth,
+  nativeVerifier,
+  allowlist,
+  siteUrl,
+}: AuthDeps): Router {
   const router = Router()
 
   router.get('/api/auth/signin', async (_req, res) => {
@@ -64,36 +73,14 @@ export function createAuthRouter({ sessions, users, oauth, allowlist, siteUrl }:
       return
     }
 
-    const denied = () => {
-      res.setHeader('Set-Cookie', clear)
-      res.redirect(`/?denied=${encodeURIComponent(claims.email)}`)
-    }
-
     try {
-      // email_verified gates the allowlist decision (spec blocker B1).
-      if (claims.emailVerified !== true) {
-        denied()
+      const result = await signInWithClaims({ sessions, users, allowlist }, claims)
+      if (result.outcome === 'denied') {
+        res.setHeader('Set-Cookie', clear)
+        res.redirect(`/?denied=${encodeURIComponent(result.email)}`)
         return
       }
-
-      let user = await users.findByGoogleSub(claims.sub)
-      if (user) {
-        await users.updateProfile(user.id, claims.email, claims.name)
-      } else {
-        if (!isAllowed(allowlist, claims.email)) {
-          denied()
-          return
-        }
-        user = await users.createUser({
-          googleSub: claims.sub,
-          email: claims.email,
-          name: claims.name,
-        })
-      }
-
-      await sessions.sweepExpired()
-      const { token, expiresAt } = await sessions.createSession(user.id)
-      res.setHeader('Set-Cookie', [clear, sessionCookie(token, expiresAt)])
+      res.setHeader('Set-Cookie', [clear, sessionCookie(result.token, result.expiresAt)])
       res.redirect('/')
     } catch {
       res.setHeader('Set-Cookie', clear)
@@ -101,8 +88,41 @@ export function createAuthRouter({ sessions, users, oauth, allowlist, siteUrl }:
     }
   })
 
+  router.post('/api/auth/native', async (req, res) => {
+    if (!nativeVerifier) {
+      res.status(503).json({ error: 'native sign-in unavailable: GOOGLE_IOS_CLIENT_ID not configured' })
+      return
+    }
+    const idToken = (req.body as { idToken?: unknown })?.idToken
+    if (typeof idToken !== 'string' || idToken === '') {
+      res.status(400).json({ error: 'idToken required' })
+      return
+    }
+    let claims
+    try {
+      claims = await nativeVerifier(idToken)
+    } catch {
+      res.status(401).json({ error: 'invalid_token' })
+      return
+    }
+    try {
+      const result = await signInWithClaims({ sessions, users, allowlist }, claims)
+      if (result.outcome === 'denied') {
+        res.status(403).json({ error: 'denied', email: result.email })
+        return
+      }
+      res.json({
+        token: result.token,
+        expiresAt: result.expiresAt.toISOString(),
+        user: result.user,
+      })
+    } catch {
+      res.status(500).json({ error: 'signin_failed' })
+    }
+  })
+
   router.post('/api/auth/signout', async (req, res) => {
-    const token = getCookie(req.headers.cookie, SESSION_COOKIE)
+    const token = bearerToken(req) ?? getCookie(req.headers.cookie, SESSION_COOKIE)
     if (token) await sessions.deleteSession(token)
     res.setHeader('Set-Cookie', clearSessionCookie())
     res.status(204).end()

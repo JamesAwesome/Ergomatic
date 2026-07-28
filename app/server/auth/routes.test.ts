@@ -30,6 +30,7 @@ function deps(overrides: Partial<AppDeps> = {}): AppDeps {
     sessions,
     users,
     oauth,
+    nativeVerifier: null,
     allowlist: new Set(['a@x.com']),
     siteUrl: 'https://ergomatic.example',
     ...overrides,
