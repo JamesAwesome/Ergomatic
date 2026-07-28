@@ -80,3 +80,9 @@ Notes:
 - `ALLOWED_EMAILS` changes take effect on container recreate, not live.
 - If sign-in breaks after a deploy, check the app logs for the boot warning
   about missing Google env before debugging anything else.
+
+## TestFlight releases
+
+See `docs/RELEASING.md` for the complete process: when to release, versioning
+discipline (tag-driven, never hand-edit), and step-by-step cutting a release.
+First-time iOS build machine setup lives there as well (Task-7 activation).
