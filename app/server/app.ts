@@ -30,10 +30,11 @@ export function createApp(deps: AppDeps) {
     } catch {
       db = false
     }
+    const version = process.env.APP_VERSION ?? 'dev'
     if (db) {
-      res.json({ ok: true, db: true })
+      res.json({ ok: true, db: true, version })
     } else {
-      res.status(503).json({ ok: false, db: false })
+      res.status(503).json({ ok: false, db: false, version })
     }
   })
 
