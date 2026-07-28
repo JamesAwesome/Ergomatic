@@ -94,19 +94,35 @@ they go stale (this has burned us before). Concretely:
 
 **Exit:** Two different Google accounts see fully isolated data; deployed.
 
-## Phase 3 — Domain engine & schema
+## Phase 3 — iOS app shell (Capacitor)
+
+**Status:** Not started
+**Goal:** Ergomatic on household iPhones via internal TestFlight — same web code, native shell. (iOS-only for now by design; Capacitor keeps an Android target one `npx cap add android` away if ever wanted.)
+**Research:** `docs/superpowers/research/2026-07-27-capacitor-vs-react-native.md` (Capacitor chosen 91:63 over React Native — full UI reuse, BLE plugin mirrors Web Bluetooth, solo-dev economics).
+
+- [ ] Capacitor project in `app/` (iOS target; bundled local assets, NOT remote-URL mode)
+- [ ] Native auth path: system-browser Google sign-in → `serverAuthCode` → new Express exchange endpoint → bearer session token stored in iOS Keychain (cookie flow untouched for web)
+- [ ] `requireUser` accepts cookie OR `Authorization: Bearer` (bearer requests skip the Origin check — no ambient credential, no CSRF)
+- [ ] Keep-awake during live timer (WKWebView suspends JS when locked/backgrounded)
+- [ ] Build/upload runbook: Xcode archive → internal TestFlight (no App Review; 90-day re-upload cadence documented)
+- [ ] Apple Developer account prerequisites documented
+
+**Exit:** James signs in and logs a workout in the TestFlight build on an iPhone; web app behavior unchanged.
+
+## Phase 4 — Domain engine & schema
 
 **Status:** Not started
 **Goal:** The Erg Book math, encoded once, pure, and heavily tested.
 
 - [ ] Drizzle schema + migrations: baselines, workouts + steps, session logs (with frozen paces), plan progress, preferences, test history — all per-user *(migration infrastructure + users/sessions landed in Phase 2; this item adds the domain tables)*
 - [ ] Pure domain module (no framework imports): pace resolution (`baseline + off + nudge`), tolerance ranges, `m:ss` formatting, phase expansion (`liveSteps()`/`phases()` incl. reps and rest insertion), pace-ref parser (`^(2k|6k)\s*([+-]?\d+(\.\d+)?)?$`), plan preset sequences (sprint / head race, 84 sessions, test placements), suggestion engine (`plan[doneN]` → filtered/sorted pool)
+- [ ] **Distance-based work steps as a first-class axis**: a work step is `{kind:'time', minutes}` OR `{kind:'distance', meters}` (e.g. `2500m at 2k-4`); displayed workout duration estimates distance steps from the resolved target pace (labeled estimate); schema's log steps carry per-step actuals from day one: `{targetSplit, actualSplit?, actualSource: 'assumed'|'stopwatch'|'pm5'}` (expand-only discipline: model now, never migrate later)
 - [ ] Heaviest unit-test coverage in the app; canonical fixtures (e.g. Lucky Penny → 25 phases / 50 min)
 - [ ] Dev seed: the prototype's 11 sample workouts
 
 **Exit:** Every formula and behavior in the handoff's "Domain model" section has a passing test; integration tests prove per-user round-trips through Postgres.
 
-## Phase 4 — Library & baselines
+## Phase 5 — Library & baselines
 
 **Status:** Not started
 **Goal:** Enter real baselines and start transcribing The Erg Book.
@@ -114,12 +130,12 @@ they go stale (this has burned us before). Concretely:
 - [ ] Design-token CSS foundation (paper palette, Newsreader/Archivo/IBM Plex Mono, 2 px radii, spacing scale) + bottom tab shell
 - [ ] Library screen: rows with pain bars, filter chips (type single-select toggle, duration multi-select union, RECENT/NOT RECENT exclusivity, ALL clears)
 - [ ] Workout detail: resolved ranges, ▲▼ per-step nudges, derived duration
-- [ ] Builder: type/difficulty/pain pickers, step rows with live resolved splits, repeat block, totals, bulk-import paste
+- [ ] Builder: type/difficulty/pain pickers, step rows with live resolved splits, repeat block, totals, bulk-import paste; DUR field takes minutes OR meters (`10'` vs `2500m`, explicit unit) in rows and bulk import
 - [ ] **You** — staged baseline editor (drafts, − = faster, 0.5 s steps, Discard/Apply confirm block)
 
 **Exit:** A workout entered as `6k -2 @ 22 SPM` displays the correct range from your real baselines; deployed and usable for cataloguing.
 
-## Phase 5 — Session flow
+## Phase 6 — Session flow
 
 **Status:** Not started
 **Goal:** The app replaces paper for an entire workout — the core loop.
@@ -128,12 +144,28 @@ they go stale (this has burned us before). Concretely:
 - [ ] Confirm targets: per-run session overlay (duration steppers, rep stepper, step removal/restore, live minute recount) — timer reads the session copy, never the library workout
 - [ ] Countdown (configurable, skippable, 0 = off)
 - [ ] Live timer: portrait + landscape, phase dots, target split/rate cards, UP NEXT, total-left ruler, ◀ ▶ pause; warm-up/rest/test phases show "Easy"/"Rest"/"All out" (never a bare dash); tabs hidden
+- [ ] Distance phases (manual mode, works on every device forever): target meters + resolved range, count-UP stopwatch, full-width "NEXT →" (≥44px); elapsed time yields the actual average split with zero hardware (2500m in 9:52 → 1:58.4/500m, logged as `actualSource:'stopwatch'`)
 - [ ] Timer resilience: 1 s tick correct under screen lock; state in localStorage; interrupted session restores on reload
 - [ ] Log session: paces frozen at save ("PACES LOCKED AT …"), Held/Under/Over, pain 1–10, notes; save advances `doneN`
 
 **Exit:** Full flow Today → Confirm → Countdown → Timer → Log → Today survives a mid-workout page reload; frozen log paces stay unchanged after later baseline edits.
 
-## Phase 6 — Plan & Progress
+## Phase 7 — PM5 over Bluetooth
+
+**Status:** Not started
+**Goal:** A connected erg makes workouts richer; an unconnected one loses nothing.
+**Research:** `docs/superpowers/research/2026-07-27-pm5-ble-research.md` (C2 Rowing Service: no pairing, subscribe-only; Web Bluetooth = Chromium-only).
+
+- [ ] `pm5/` client behind a **transport interface**: Capacitor BLE transport (iOS native shell — the PRIMARY path; `@capacitor-community/bluetooth-le` mirrors the Web Bluetooth API) + Web Bluetooth transport (desktop Chromium for dev/laptop use; also covers Android browsers if that door ever opens) + mock transport for tests — one client, three transports
+- [ ] Vendored/adapted from `ergarcade/pm5-base` (MIT, dependency-free, active); plain Rowing Service characteristics, no CSAFE
+- [ ] "Connect PM5" on Confirm targets, shown only where a transport is available; manual NEXT always remains; disconnect mid-workout degrades silently to manual
+- [ ] Live actual pace vs target range + live stroke rate vs prescribed SPM in the timer; distance steps auto-advance
+- [ ] Per-step actual splits logged with `actualSource:'pm5'`
+- [ ] Full behavior tested against the mock transport in CI; one live-hardware verification on the real erg is the exit gate
+
+**Exit:** On the real PM5: distance steps auto-advance, live pace shows against target, the log holds monitor-measured splits — and pulling the batteries mid-interval leaves the workout finishable by hand.
+
+## Phase 8 — Plan & Progress
 
 **Status:** Not started
 **Goal:** See where you are in the 84-session plan and whether you're getting faster.
@@ -145,7 +177,7 @@ they go stale (this has burned us before). Concretely:
 
 **Exit:** Logged sessions appear on the calendar and in every chart; a logged 2k test can update the 2k baseline through the staged-confirm flow.
 
-## Phase 7 — Preferences & You completion
+## Phase 9 — Preferences & You completion
 
 **Status:** Not started
 **Goal:** The suggestion engine and session flow honor per-user preferences.
@@ -158,7 +190,7 @@ they go stale (this has burned us before). Concretely:
 
 **Exit:** Two users with different preferences get different Today suggestions and timer behavior.
 
-## Phase 8 — Multi-rower & polish
+## Phase 10 — Multi-rower & polish
 
 **Status:** Not started
 **Goal:** Household-ready and installable.
@@ -170,3 +202,10 @@ they go stale (this has burned us before). Concretely:
 - [ ] Backlog sweep of deferred niceties
 
 **Exit:** Two rowers share a phone by the erg without re-typing credentials; app installs to a home screen; audit findings closed.
+
+## Triggered follow-ons (not scheduled — each has an explicit trigger)
+
+- **Apple sign-in**: required the moment a build goes to EXTERNAL TestFlight or the App Store (guideline 4.8; internal TestFlight is exempt). Works with the existing openid-client stack (ES256 client secret, form_post callback, name/email on first auth only); design the allowlist story for private-relay emails first.
+- **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
+- **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
+- **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
