@@ -14,7 +14,9 @@ export function createNativeVerifier(iosClientId: string): NativeTokenVerifier {
     const { payload } = await jwtVerify(idToken, jwks, {
       issuer: GOOGLE_ISSUERS,
       audience: iosClientId,
+      algorithms: ['RS256'],
     })
+    if (!payload.sub) throw new Error('no sub claim')
     return {
       sub: String(payload.sub),
       email: String(payload.email ?? ''),

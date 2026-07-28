@@ -17,8 +17,7 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 3
 fi
 
-export APP_VERSION="$(git describe --tags --always)"
-up() { docker compose up -d --build --wait --wait-timeout 120 --remove-orphans; }
+up() { APP_VERSION="$(git describe --tags --always)" docker compose up -d --build --wait --wait-timeout 120 --remove-orphans; }
 
 PREV="$(git rev-parse HEAD)"
 rollback() {
