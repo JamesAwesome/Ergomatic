@@ -4,6 +4,7 @@ import request from 'supertest'
 import type pg from 'pg'
 import { createApp } from './app.js'
 import { checkDb, createPool } from './db/pool.js'
+import { baseDeps } from './testDeps.js'
 
 describe('health against real Postgres', () => {
   let container: StartedPostgreSqlContainer
@@ -20,7 +21,7 @@ describe('health against real Postgres', () => {
   })
 
   it('reports db:true with the database up', async () => {
-    const app = createApp({ checkDb: () => checkDb(pool) })
+    const app = createApp(baseDeps({ checkDb: () => checkDb(pool) }))
     const res = await request(app).get('/api/health')
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ ok: true, db: true })
@@ -28,7 +29,7 @@ describe('health against real Postgres', () => {
 
   it('reports db:false once the database is gone', async () => {
     await container.stop()
-    const app = createApp({ checkDb: () => checkDb(pool) })
+    const app = createApp(baseDeps({ checkDb: () => checkDb(pool) }))
     const res = await request(app).get('/api/health')
     expect(res.status).toBe(503)
     expect(res.body).toEqual({ ok: false, db: false })
