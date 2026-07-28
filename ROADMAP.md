@@ -97,7 +97,7 @@ they go stale (this has burned us before). Concretely:
 ## Phase 3 — iOS app shell (Capacitor)
 
 **Status:** Not started
-**Goal:** Ergomatic on household iPhones via internal TestFlight — same web code, native shell.
+**Goal:** Ergomatic on household iPhones via internal TestFlight — same web code, native shell. (iOS-only for now by design; Capacitor keeps an Android target one `npx cap add android` away if ever wanted.)
 **Research:** `docs/superpowers/research/2026-07-27-capacitor-vs-react-native.md` (Capacitor chosen 91:63 over React Native — full UI reuse, BLE plugin mirrors Web Bluetooth, solo-dev economics).
 
 - [ ] Capacitor project in `app/` (iOS target; bundled local assets, NOT remote-URL mode)
@@ -156,7 +156,7 @@ they go stale (this has burned us before). Concretely:
 **Goal:** A connected erg makes workouts richer; an unconnected one loses nothing.
 **Research:** `docs/superpowers/research/2026-07-27-pm5-ble-research.md` (C2 Rowing Service: no pairing, subscribe-only; Web Bluetooth = Chromium-only).
 
-- [ ] `pm5/` client behind a **transport interface**: Web Bluetooth transport (Android/desktop Chromium) + Capacitor BLE transport (iOS native shell, `@capacitor-community/bluetooth-le` mirrors the Web Bluetooth API) + mock transport for tests — one client, three transports
+- [ ] `pm5/` client behind a **transport interface**: Capacitor BLE transport (iOS native shell — the PRIMARY path; `@capacitor-community/bluetooth-le` mirrors the Web Bluetooth API) + Web Bluetooth transport (desktop Chromium for dev/laptop use; also covers Android browsers if that door ever opens) + mock transport for tests — one client, three transports
 - [ ] Vendored/adapted from `ergarcade/pm5-base` (MIT, dependency-free, active); plain Rowing Service characteristics, no CSAFE
 - [ ] "Connect PM5" on Confirm targets, shown only where a transport is available; manual NEXT always remains; disconnect mid-workout degrades silently to manual
 - [ ] Live actual pace vs target range + live stroke rate vs prescribed SPM in the timer; distance steps auto-advance
