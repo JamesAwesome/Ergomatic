@@ -32,6 +32,10 @@ const ACTUAL_SOURCES: ActualSource[] = ['assumed', 'stopwatch', 'pm5']
 const HELD_RESULTS: HeldResult[] = ['held', 'under', 'over']
 const PLAN_KEYS: PlanKey[] = ['sprint', 'head']
 const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/
+// Postgres uuid columns 500 on a malformed literal (22P02) rather than just
+// finding no row; guard the shape here so a bad id is an ordinary 404/400
+// instead of leaking a DB error as a 500.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Bounds for a real erg split: 60s/500m is world-class-plus fast, 240s/500m
 // is a slow walk pace. Anything outside is almost certainly a data-entry
@@ -49,6 +53,47 @@ function notFound(res: Parameters<RequestHandler>[1]) {
 
 function isRec(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
+}
+
+// Bounds for a logged step: 30-600s/500m spans "sprinting" to "recovery
+// paddle"; spm 10..60 covers rest to a max-rate finish sprint; meters
+// mirrors validateSteps' distance-step bound; seconds caps at 4 hours.
+function validateLogStepEntry(raw: unknown, index: number): { ok: true; step: LogStep } | { ok: false; message: string } {
+  const at = (msg: string) => `steps[${index}]: ${msg}`
+  if (!isRec(raw)) return { ok: false, message: at('must be an object') }
+
+  const { label, targetSplit, actualSplit, actualSource, spm, meters, seconds } = raw
+
+  if (typeof label !== 'string' || label.length < 1 || label.length > 80) {
+    return { ok: false, message: at('label must be a string, 1..80 chars') }
+  }
+  if (typeof targetSplit !== 'number' || targetSplit < 30 || targetSplit > 600) {
+    return { ok: false, message: at('targetSplit must be a number, 30..600') }
+  }
+  if (!ACTUAL_SOURCES.includes(actualSource as ActualSource)) {
+    return { ok: false, message: at('actualSource must be one of assumed|stopwatch|pm5') }
+  }
+  if (actualSplit !== undefined && (typeof actualSplit !== 'number' || actualSplit < 30 || actualSplit > 600)) {
+    return { ok: false, message: at('actualSplit must be a number, 30..600') }
+  }
+  if (spm !== undefined && (typeof spm !== 'number' || !Number.isInteger(spm) || spm < 10 || spm > 60)) {
+    return { ok: false, message: at('spm must be an integer, 10..60') }
+  }
+  if (meters !== undefined && (typeof meters !== 'number' || !Number.isInteger(meters) || meters < 100 || meters > 42195)) {
+    return { ok: false, message: at('meters must be an integer, 100..42195') }
+  }
+  if (seconds !== undefined && (typeof seconds !== 'number' || seconds < 1 || seconds > 14400)) {
+    return { ok: false, message: at('seconds must be a number, 1..14400') }
+  }
+
+  // Built from an explicit field list (never spread/cast the raw input) so
+  // any extra keys the client sent are silently dropped, not persisted.
+  const step: LogStep = { label, targetSplit, actualSource: actualSource as ActualSource }
+  if (actualSplit !== undefined) step.actualSplit = actualSplit
+  if (spm !== undefined) step.spm = spm
+  if (meters !== undefined) step.meters = meters
+  if (seconds !== undefined) step.seconds = seconds
+  return { ok: true, step }
 }
 
 export function createDataRouter({ stores, requireUser }: DataRouterDeps): Router {
@@ -116,6 +161,10 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
   })
 
   router.get('/api/workouts/:id', async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      notFound(res)
+      return
+    }
     const row = await stores.workouts.get(req.user!.id, req.params.id)
     if (!row) {
       notFound(res)
@@ -125,6 +174,10 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
   })
 
   router.put('/api/workouts/:id', async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      notFound(res)
+      return
+    }
     const existing = await stores.workouts.get(req.user!.id, req.params.id)
     if (!existing) {
       notFound(res)
@@ -150,6 +203,10 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
   })
 
   router.delete('/api/workouts/:id', async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      notFound(res)
+      return
+    }
     const existing = await stores.workouts.get(req.user!.id, req.params.id)
     if (!existing) {
       notFound(res)
@@ -213,9 +270,21 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
       badRequest(res, 'workoutType is required', 'workoutType')
       return
     }
-    if (body.workoutId !== null && body.workoutId !== undefined && typeof body.workoutId !== 'string') {
-      badRequest(res, 'workoutId must be a string or null', 'workoutId')
-      return
+    let workoutId: string | null = null
+    if (body.workoutId !== null && body.workoutId !== undefined) {
+      if (typeof body.workoutId !== 'string' || !UUID_RE.test(body.workoutId)) {
+        badRequest(res, 'workoutId must be a valid id or null', 'workoutId')
+        return
+      }
+      // Ownership check up front: an absent/foreign workoutId would otherwise
+      // either 500 (FK violation, 23503) or silently attribute the log to a
+      // workout the user doesn't own.
+      const owned = await stores.workouts.get(req.user!.id, body.workoutId)
+      if (!owned) {
+        badRequest(res, 'workoutId does not exist', 'workoutId')
+        return
+      }
+      workoutId = body.workoutId
     }
     if (!HELD_RESULTS.includes(body.held as HeldResult)) {
       badRequest(res, 'held must be one of held|under|over', 'held')
@@ -234,23 +303,18 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
       return
     }
     const steps: LogStep[] = []
-    for (const s of body.steps) {
-      if (
-        !isRec(s) ||
-        typeof s.label !== 'string' ||
-        s.label.length === 0 ||
-        typeof s.targetSplit !== 'number' ||
-        !ACTUAL_SOURCES.includes(s.actualSource as ActualSource)
-      ) {
-        badRequest(res, 'each step needs label, targetSplit, and a valid actualSource', 'steps')
+    for (let i = 0; i < body.steps.length; i++) {
+      const result = validateLogStepEntry(body.steps[i], i)
+      if (!result.ok) {
+        badRequest(res, result.message, 'steps')
         return
       }
-      steps.push(s as unknown as LogStep)
+      steps.push(result.step)
     }
 
     const baselines = await stores.baselines.get(req.user!.id)
     const { id } = await stores.logs.create(req.user!.id, {
-      workoutId: (body.workoutId as string | null | undefined) ?? null,
+      workoutId,
       workoutTitle: body.workoutTitle,
       workoutType: body.workoutType,
       baselineK2: baselines?.k2Seconds ?? null,
@@ -399,10 +463,12 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
 
     const planRow = await stores.planState.get(userId)
     // No plan chosen yet: default to the sprint preset at day 0 rather than
-    // erroring — /today should always have something to say.
-    const planKey: PlanKey = planRow?.planKey ?? 'sprint'
+    // erroring — /today should always have something to say. The response's
+    // own `planKey` still reports null in that case (see below) so callers
+    // can tell "no plan selected" apart from "sprint is selected".
+    const effectivePlanKey: PlanKey = planRow?.planKey ?? 'sprint'
     const doneN = planRow?.doneN ?? 0
-    const sequence = PLANS[planKey].sessions
+    const sequence = PLANS[effectivePlanKey].sessions
     const todayCode: PlanCode = sequence[Math.min(doneN, sequence.length - 1)]
 
     const [prefs, workouts, lastDone] = await Promise.all([
@@ -432,6 +498,7 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
       pool: suggestion.poolIds,
       todayCode,
       doneN,
+      planKey: planRow?.planKey ?? null,
     })
   })
 

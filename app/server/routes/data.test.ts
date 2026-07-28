@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import express from 'express'
 import request from 'supertest'
-import { requireUser } from '../auth/middleware.js'
+import { noStore, requireUser } from '../auth/middleware.js'
 import type { SessionStore, SessionUser } from '../auth/sessions.js'
 import { StoreConflictError } from '../stores/errors.js'
 import type { BaselinesRow, BaselinesStore } from '../stores/baselines.js'
@@ -221,12 +221,19 @@ function fakeSessionStore(): SessionStore {
 function appFor(stores: Stores) {
   const app = express()
   app.use(express.json())
+  // Mounted here too (not just in the real app.ts) so this file also
+  // documents/proves the data router inherits no-store when composed the
+  // same way createApp composes it.
+  app.use(noStore)
   app.use(createDataRouter({ stores, requireUser: requireUser(fakeSessionStore()) }))
   return app
 }
 
 const asA = (req: request.Test) => req.set('Authorization', 'Bearer token-a')
 const asB = (req: request.Test) => req.set('Authorization', 'Bearer token-b')
+
+// Well-formed but guaranteed-absent from any fake store's map.
+const NON_EXISTENT_UUID = '00000000-0000-0000-0000-000000000000'
 
 function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
   return {
@@ -270,6 +277,13 @@ describe('data router: auth guard', () => {
     const agent = request(app) as unknown as Record<string, (p: string) => request.Test>
     const res = await agent[method](path)
     expect(res.status).toBe(401)
+  })
+})
+
+describe('data router: no-store', () => {
+  it('inherits Cache-Control: no-store when composed the way app.ts composes it', async () => {
+    const res = await asA(request(appFor(makeStores())).get('/api/baselines'))
+    expect(res.headers['cache-control']).toBe('no-store')
   })
 })
 
@@ -368,8 +382,13 @@ describe('workouts CRUD', () => {
     expect(res.body.id).toBe(created.body.id)
   })
 
-  it('GET /:id 404s on an absent id', async () => {
+  it('GET /:id 404s on a malformed (non-uuid) id, without ever hitting the store', async () => {
     const res = await asA(request(appFor(makeStores())).get('/api/workouts/does-not-exist'))
+    expect(res.status).toBe(404)
+  })
+
+  it('GET /:id 404s on a well-formed but absent id', async () => {
+    const res = await asA(request(appFor(makeStores())).get(`/api/workouts/${NON_EXISTENT_UUID}`))
     expect(res.status).toBe(404)
   })
 
@@ -390,9 +409,16 @@ describe('workouts CRUD', () => {
     expect(res.body.title).toBe('Renamed')
   })
 
-  it('PUT /:id 404s on an absent id (does not silently no-op)', async () => {
+  it('PUT /:id 404s on a malformed (non-uuid) id', async () => {
     const res = await asA(
       request(appFor(makeStores())).put('/api/workouts/does-not-exist'),
+    ).send(validWorkoutBody())
+    expect(res.status).toBe(404)
+  })
+
+  it('PUT /:id 404s on a well-formed but absent id (does not silently no-op)', async () => {
+    const res = await asA(
+      request(appFor(makeStores())).put(`/api/workouts/${NON_EXISTENT_UUID}`),
     ).send(validWorkoutBody())
     expect(res.status).toBe(404)
   })
@@ -432,8 +458,13 @@ describe('workouts CRUD', () => {
     expect(after.status).toBe(404)
   })
 
-  it('DELETE /:id 404s on an absent id', async () => {
+  it('DELETE /:id 404s on a malformed (non-uuid) id', async () => {
     const res = await asA(request(appFor(makeStores())).delete('/api/workouts/does-not-exist'))
+    expect(res.status).toBe(404)
+  })
+
+  it('DELETE /:id 404s on a well-formed but absent id', async () => {
+    const res = await asA(request(appFor(makeStores())).delete(`/api/workouts/${NON_EXISTENT_UUID}`))
     expect(res.status).toBe(404)
   })
 
@@ -538,6 +569,82 @@ describe('GET/POST /api/logs', () => {
     })
     expect(res.status).toBe(400)
     expect(res.body.field).toBe('held')
+  })
+
+  it('rejects a malformed (non-uuid) workoutId with 400 + field, without touching the store', async () => {
+    const res = await asA(request(appFor(makeStores())).post('/api/logs')).send({
+      ...validLogBody(),
+      workoutId: 'not-a-uuid',
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.field).toBe('workoutId')
+  })
+
+  it('rejects a well-formed but absent workoutId with 400 + field (would otherwise FK-violate)', async () => {
+    const res = await asA(request(appFor(makeStores())).post('/api/logs')).send({
+      ...validLogBody(),
+      workoutId: NON_EXISTENT_UUID,
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.field).toBe('workoutId')
+  })
+
+  it('rejects a foreign (cross-user) workoutId with 400 + field, not a 500', async () => {
+    const app = appFor(makeStores())
+    const workout = await asB(request(app).post('/api/workouts')).send(validWorkoutBody())
+    const res = await asA(request(app).post('/api/logs')).send({
+      ...validLogBody(),
+      workoutId: workout.body.id,
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.field).toBe('workoutId')
+  })
+
+  it('accepts a workoutId the caller actually owns', async () => {
+    const app = appFor(makeStores())
+    const workout = await asA(request(app).post('/api/workouts')).send(validWorkoutBody())
+    const res = await asA(request(app).post('/api/logs')).send({
+      ...validLogBody(),
+      workoutId: workout.body.id,
+    })
+    expect(res.status).toBe(201)
+  })
+
+  it.each([
+    ['label missing', { targetSplit: 120, actualSource: 'assumed' }],
+    ['label too long', { label: 'x'.repeat(81), targetSplit: 120, actualSource: 'assumed' }],
+    ['targetSplit out of range (too low)', { label: 'W', targetSplit: 10, actualSource: 'assumed' }],
+    ['targetSplit out of range (too high)', { label: 'W', targetSplit: 900, actualSource: 'assumed' }],
+    ['actualSplit out of range', { label: 'W', targetSplit: 120, actualSplit: 900, actualSource: 'assumed' }],
+    ['spm not an integer', { label: 'W', targetSplit: 120, actualSource: 'assumed', spm: 20.5 }],
+    ['spm out of range', { label: 'W', targetSplit: 120, actualSource: 'assumed', spm: 5 }],
+    ['meters out of range', { label: 'W', targetSplit: 120, actualSource: 'assumed', meters: 50 }],
+    ['seconds out of range', { label: 'W', targetSplit: 120, actualSource: 'assumed', seconds: 99999 }],
+  ])('rejects a step with %s: 400 + field steps, index in the message', async (_label, step) => {
+    const res = await asA(request(appFor(makeStores())).post('/api/logs')).send({
+      ...validLogBody(),
+      steps: [step],
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.field).toBe('steps')
+    expect(res.body.error).toContain('steps[0]')
+  })
+
+  it('strips unknown keys from a step rather than persisting them', async () => {
+    const app = appFor(makeStores())
+    await asA(request(app).post('/api/logs')).send({
+      ...validLogBody(),
+      steps: [
+        {
+          label: 'Work',
+          targetSplit: 120,
+          actualSource: 'assumed',
+          notAStepField: 'should be dropped',
+        },
+      ],
+    })
+    const list = await asA(request(app).get('/api/logs'))
+    expect(list.body[0].steps[0]).toEqual({ label: 'Work', targetSplit: 120, actualSource: 'assumed' })
   })
 })
 
@@ -739,12 +846,12 @@ describe('GET /api/today', () => {
     expect(res.status).toBe(422)
   })
 
-  it('with no active plan, falls back to the sprint plan at doneN 0', async () => {
+  it('with no active plan, falls back to the sprint plan at doneN 0 but reports planKey: null', async () => {
     const app = appFor(makeStores())
     await asA(request(app).put('/api/baselines')).send({ k2Seconds: 120, k6Seconds: 130 })
     const res = await asA(request(app).get('/api/today'))
     expect(res.status).toBe(200)
-    expect(res.body).toMatchObject({ todayCode: PLANS.sprint.sessions[0], doneN: 0 })
+    expect(res.body).toMatchObject({ todayCode: PLANS.sprint.sessions[0], doneN: 0, planKey: null })
   })
 
   it('recommends a matching-type workout from the library', async () => {
@@ -767,11 +874,12 @@ describe('GET /api/today', () => {
     expect(res.body.pool).toEqual([])
   })
 
-  it('uses the selected plan and doneN, not the fallback', async () => {
+  it('uses the selected plan and doneN, not the fallback, and reports the real planKey', async () => {
     const app = appFor(makeStores())
     await asA(request(app).put('/api/baselines')).send({ k2Seconds: 120, k6Seconds: 130 })
     await asA(request(app).put('/api/plan')).send({ planKey: 'head' })
     const res = await asA(request(app).get('/api/today'))
     expect(res.body.todayCode).toBe(PLANS.head.sessions[0])
+    expect(res.body.planKey).toBe('head')
   })
 })
