@@ -1,4 +1,4 @@
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/index.js'
 import { planState, sessionLogs } from '../db/schema.js'
 
@@ -69,6 +69,30 @@ export function createLogsStore(db: Db) {
 
         return row
       })
+    },
+
+    // Most-recent log per workout, as whole days since that log — feeds the
+    // suggestion pool's "least recently done" ordering. Logs with no
+    // workoutId (workout since deleted, or ad-hoc) are excluded: there's
+    // nothing to attribute recency to.
+    async lastDonePerWorkout(userId: string): Promise<Record<string, number>> {
+      const rows = await db
+        .select({ workoutId: sessionLogs.workoutId, lastLoggedAt: sql<Date>`max(${sessionLogs.loggedAt})` })
+        .from(sessionLogs)
+        .where(and(eq(sessionLogs.userId, userId), isNotNull(sessionLogs.workoutId)))
+        .groupBy(sessionLogs.workoutId)
+
+      const now = Date.now()
+      const result: Record<string, number> = {}
+      for (const row of rows) {
+        // The `isNotNull` filter above guarantees workoutId is set; the cast
+        // just works around Drizzle's grouped-select typing still marking
+        // the column nullable.
+        const workoutId = row.workoutId as string
+        const days = Math.floor((now - new Date(row.lastLoggedAt).getTime()) / 86_400_000)
+        result[workoutId] = days
+      }
+      return result
     },
   }
 }

@@ -320,6 +320,30 @@ describe('domain stores against real Postgres', () => {
       const other = await users.createUser({ googleSub: 'log-cross', email: 'logcross@x.com', name: 'LC' })
       expect(await logs.list(other.id, 10)).toHaveLength(0)
     })
+
+    it('lastDonePerWorkout maps each logged workout to days-ago, ignores workout-less logs, and is scoped per user', async () => {
+      const logs = createLogsStore(db)
+      const wk = createWorkoutsStore(db)
+      const users = createUserStore(db)
+      const fresh = await users.createUser({ googleSub: 'log-lastdone', email: 'lastdone@x.com', name: 'LD' })
+
+      const workoutA = await wk.create(fresh.id, workoutInput({ num: 901, title: 'A' }))
+      const workoutB = await wk.create(fresh.id, workoutInput({ num: 902, title: 'B' }))
+
+      // A workout-less log (e.g. an ad-hoc session) must not appear in the map.
+      await logs.create(fresh.id, logInput({ workoutId: null }))
+      await logs.create(fresh.id, logInput({ workoutId: workoutA.id }))
+      await logs.create(fresh.id, logInput({ workoutId: workoutB.id }))
+
+      const map = await logs.lastDonePerWorkout(fresh.id)
+      expect(Object.keys(map).sort()).toEqual([workoutA.id, workoutB.id].sort())
+      // logged moments ago: days-ago is 0 for both
+      expect(map[workoutA.id]).toBe(0)
+      expect(map[workoutB.id]).toBe(0)
+
+      const other = await users.createUser({ googleSub: 'log-lastdone-cross', email: 'lastdonecross@x.com', name: 'LDC' })
+      expect(await logs.lastDonePerWorkout(other.id)).toEqual({})
+    })
   })
 
   describe('test history store', () => {
