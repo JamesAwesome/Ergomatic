@@ -14,8 +14,7 @@
     "declaration": false,
     "sourceMap": false,
     "verbatimModuleSyntax": true,
-    "types": ["node"],
-    "typeRoots": ["./node_modules/@types"]
+    "types": ["node"]
   },
   "include": ["server", "domain"]
 }
