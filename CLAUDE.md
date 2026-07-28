@@ -35,3 +35,11 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 - Hooks: pre-commit = lint-staged + typecheck; pre-push = full tests. Don't bypass with
   `--no-verify`; fix the failure.
 - pnpm only. ESM only. Server imports use `.js` extensions.
+- After every merge to main, post a TestFlight release recommendation
+  (docs/RELEASING.md): "recommended: <reasons>" or "not needed". Versions
+  come ONLY from annotated vX.Y.Z tags; API changes additive-only between
+  tags.
+
+## Commands
+
+- iOS: `pnpm ios:build` (tag-derived version; needs `GOOGLE_IOS_CLIENT_ID` env), `pnpm ios:open` (Xcode).
