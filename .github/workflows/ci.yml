@@ -51,6 +51,8 @@ jobs:
         with:
           context: ./app
           push: false
+          build-args: |
+            APP_VERSION=ci
 
   deploy-script:
     runs-on: ubuntu-latest

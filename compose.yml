@@ -24,6 +24,8 @@ services:
   app:
     build:
       context: ./app
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     container_name: ergomatic-app
     restart: unless-stopped
     # Defense-in-depth: drop privileges, read-only root FS (natalie convention)

@@ -25,6 +25,8 @@ COPY --from=build /app/drizzle ./drizzle
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 EXPOSE 8080
 
 USER node
