@@ -66,6 +66,37 @@ describe('domain schema against real Postgres', () => {
     ).rejects.toThrow()
   })
 
+  it('rejects a plan_state row with an out-of-set plan_key', async () => {
+    const [u] = await db
+      .insert(users)
+      .values({ googleSub: 'plan-key-check', email: 'planbad@x.com', name: 'PlanBad' })
+      .returning()
+    await expect(
+      db
+        .insert(planState)
+        .values({ userId: u.id, planKey: 'marathon' as unknown as 'sprint' | 'head' }),
+    ).rejects.toThrow()
+  })
+
+  it('accepts a plan_state row with a valid plan_key or a null plan_key', async () => {
+    const [u1] = await db
+      .insert(users)
+      .values({ googleSub: 'plan-key-ok', email: 'planok@x.com', name: 'PlanOk' })
+      .returning()
+    const [row1] = await db
+      .insert(planState)
+      .values({ userId: u1.id, planKey: 'sprint' })
+      .returning()
+    expect(row1.planKey).toBe('sprint')
+
+    const [u2] = await db
+      .insert(users)
+      .values({ googleSub: 'plan-key-null', email: 'planull@x.com', name: 'PlanNull' })
+      .returning()
+    const [row2] = await db.insert(planState).values({ userId: u2.id }).returning()
+    expect(row2.planKey).toBeNull()
+  })
+
   it('rejects a session log with pain outside 1..5', async () => {
     const [u] = await db
       .insert(users)

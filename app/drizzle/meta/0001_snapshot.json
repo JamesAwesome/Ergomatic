@@ -1,5 +1,5 @@
 {
-  "id": "e0eccde0-0984-4145-b954-9eb489e0b784",
+  "id": "ef75c99d-4139-4eb2-8a6f-1839cb3b6e3d",
   "prevId": "f3881123-d770-46ed-896e-b3d32efead64",
   "version": "7",
   "dialect": "postgresql",
@@ -99,7 +99,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "plan_state_plan_key_check": {
+          "name": "plan_state_plan_key_check",
+          "value": "\"plan_state\".\"plan_key\" is null or \"plan_state\".\"plan_key\" in ('sprint', 'head')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.preferences": {
