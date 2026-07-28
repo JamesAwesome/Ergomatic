@@ -69,31 +69,36 @@ export function createAuthRouter({ sessions, users, oauth, allowlist, siteUrl }:
       res.redirect(`/?denied=${encodeURIComponent(claims.email)}`)
     }
 
-    // email_verified gates the allowlist decision (spec blocker B1).
-    if (claims.emailVerified !== true) {
-      denied()
-      return
-    }
-
-    let user = await users.findByGoogleSub(claims.sub)
-    if (user) {
-      await users.updateProfile(user.id, claims.email, claims.name)
-    } else {
-      if (!isAllowed(allowlist, claims.email)) {
+    try {
+      // email_verified gates the allowlist decision (spec blocker B1).
+      if (claims.emailVerified !== true) {
         denied()
         return
       }
-      user = await users.createUser({
-        googleSub: claims.sub,
-        email: claims.email,
-        name: claims.name,
-      })
-    }
 
-    await sessions.sweepExpired()
-    const { token, expiresAt } = await sessions.createSession(user.id)
-    res.setHeader('Set-Cookie', [clear, sessionCookie(token, expiresAt)])
-    res.redirect('/')
+      let user = await users.findByGoogleSub(claims.sub)
+      if (user) {
+        await users.updateProfile(user.id, claims.email, claims.name)
+      } else {
+        if (!isAllowed(allowlist, claims.email)) {
+          denied()
+          return
+        }
+        user = await users.createUser({
+          googleSub: claims.sub,
+          email: claims.email,
+          name: claims.name,
+        })
+      }
+
+      await sessions.sweepExpired()
+      const { token, expiresAt } = await sessions.createSession(user.id)
+      res.setHeader('Set-Cookie', [clear, sessionCookie(token, expiresAt)])
+      res.redirect('/')
+    } catch {
+      res.setHeader('Set-Cookie', clear)
+      res.redirect('/?error=signin_failed')
+    }
   })
 
   router.post('/api/auth/signout', async (req, res) => {
