@@ -17,9 +17,11 @@
     "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:coverage": "NODE_OPTIONS=--no-experimental-webstorage vitest run --coverage",
+    "db:generate": "drizzle-kit generate",
     "start": "node dist/server/server/index.js"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "pg": "^8.22.0",
     "react": "^19.2.8",
@@ -39,6 +41,7 @@
     "@types/supertest": "^7.2.1",
     "@vitejs/plugin-react": "^6.0.4",
     "@vitest/coverage-v8": "^4.1.10",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
