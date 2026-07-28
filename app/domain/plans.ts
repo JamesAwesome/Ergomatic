@@ -24,65 +24,70 @@ function buildSessions(weeks: WorkoutType[][]): PlanCode[] {
 }
 
 // --- Sprint (2k / short-course) preset --------------------------------
-// Base (weeks 1-4): aerobic foundation. O2/AT carry the volume, TR is
-// technique/stroke-rate work, AN is minimal — raw speed isn't the
-// limiter yet at this stage. Week 4 is a deload: AN+TR volume drops back
-// to near week-1 levels and O2 volume rises, before the jump into build.
-// Build (weeks 5-8): AN/TR ramp up as the primary stimulus while O2/AT
-// steps down to maintenance. Week 8 is a second deload — AN+TR volume
-// drops noticeably (more O2 fills the gap) before the final ramp into
-// peak, mirroring the week-4 pattern one third up.
-// Peak (weeks 9-12): race-specific sharpening. AN/TR dominate every
-// week; O2/AT sessions are just enough easy volume to stay fresh for
-// the short, fast racing this preset targets. Per-week AN+TR volume:
-// 1,2,3,1(deload), 3,4,5,2(deload), 6,6,6,6 — a ramp with two visible
-// step-backs, not a monotonic 0-to-max climb.
+// O2-forward philosophy: the aerobic base carries even sprint prep. A 2k
+// is still ~80% aerobic, so steady-state volume stays the single biggest
+// line item in every third — speed work is sharpened on top of it, never
+// swapped in for it. Type mix across the 81 non-TEST sessions is pinned:
+// O2 34, AT 23, TR 14, AN 10 (a strict O2 > AT > TR > AN pyramid).
+// Base (weeks 1-4): almost all O2/AT — the engine gets built here. One
+// AN touch and a weekly TR rate session keep the fast-twitch honest.
+// Week 4 deloads to pure O2/AT (AN+TR drops to zero).
+// Build (weeks 5-8): speed enters for real — AN+TR climbs 2→3→3 per
+// week while O2 keeps its plurality. Week 8 is the second deload: back
+// to O2/AT only before the peak ramp.
+// Peak (weeks 9-12): a steady 3 AN+TR sessions every week for race
+// sharpening, but O2 still outnumbers everything else — fresh and fast
+// beats flat and fried. Per-week AN+TR: 1,1,2,0(deload),
+// 2,3,3,0(deload), 3,3,3,3.
 export const SPRINT_WEEKS: WorkoutType[][] = [
   // -- base --
-  ['O2', 'AT', 'O2', 'AT', 'O2', 'AT', 'TR'],
-  ['O2', 'AT', 'O2', 'AT', 'TR', 'AT', 'AN'],
-  ['O2', 'AT', 'AN', 'O2', 'AT', 'TR', 'AN'],
-  ['AT', 'O2', 'AT', 'O2', 'AT', 'O2', 'TR'], // deload: AN+TR=1, O2 up
+  ['O2', 'AT', 'O2', 'TR', 'AT', 'O2', 'O2'],
+  ['O2', 'AT', 'O2', 'TR', 'O2', 'AT', 'O2'],
+  ['O2', 'AT', 'AN', 'O2', 'AT', 'TR', 'O2'],
+  ['O2', 'AT', 'O2', 'AT', 'O2', 'AT', 'O2'], // deload: AN+TR=0, O2/AT only
   // -- build --
-  ['O2', 'AT', 'TR', 'AN', 'O2', 'AT', 'TR'],
-  ['AT', 'AN', 'O2', 'TR', 'AT', 'AN', 'TR'],
-  ['TR', 'AN', 'AT', 'TR', 'AN', 'TR', 'O2'],
-  ['O2', 'AT', 'O2', 'TR', 'AT', 'O2', 'AN'], // deload: AN+TR=2, O2 up
+  ['O2', 'AT', 'TR', 'AN', 'AT', 'O2', 'O2'],
+  ['AT', 'TR', 'O2', 'AN', 'AT', 'TR', 'O2'],
+  ['O2', 'TR', 'AT', 'AN', 'O2', 'TR', 'O2'],
+  ['AT', 'O2', 'AT', 'O2', 'AT', 'O2', 'O2'], // deload: AN+TR=0, O2/AT only
   // -- peak --
-  ['TR', 'AN', 'TR', 'AN', 'O2', 'TR', 'AN'],
-  ['AN', 'TR', 'AN', 'TR', 'AT', 'AN', 'TR'],
-  ['TR', 'AN', 'O2', 'TR', 'AN', 'TR', 'AN'],
-  ['AN', 'TR', 'AT', 'TR', 'AN', 'TR', 'AN'],
+  ['TR', 'AT', 'AN', 'O2', 'TR', 'O2', 'O2'],
+  ['AN', 'O2', 'TR', 'AT', 'AN', 'AT', 'O2'],
+  ['TR', 'O2', 'AN', 'AT', 'O2', 'TR', 'O2'],
+  ['AN', 'AT', 'TR', 'O2', 'AN', 'O2', 'AT'],
 ]
 
 // --- Head race (long-course, e.g. 5k/6k head-race format) preset ------
-// Endurance is the throughline across all three thirds, not just the
-// early ones — but each third has its own character rather than
-// repeating one micro-cycle:
-// Base (weeks 1-4): O2-dominant. O2 outnumbers AT most weeks; this is
-// pure aerobic-capacity building before any race-pace specificity.
-// Build (weeks 5-8): AT density rises past O2 — sessions get closer to
-// anaerobic-threshold race pace as the block progresses.
-// Peak (weeks 9-12): sharper — TR volume doubles versus base/build for
-// race-pace rehearsal — but still endurance-biased: O2+AT stays above
-// AN+TR in every peak week, since a head race is decided by sustained
-// pace, not a finishing kick.
+// O2-forward philosophy, turned up: a head race is decided by the size
+// of the aerobic engine, so O2 alone is nearly half the plan. Type mix
+// across the 81 non-TEST sessions is pinned: O2 41, AT 21, TR 11, AN 8
+// (a strict O2 > AT > TR > AN pyramid). Each third keeps its own
+// character rather than repeating one micro-cycle:
+// Base (weeks 1-4): O2-dominant capacity building — steady state nearly
+// three sessions for every threshold one, with only occasional TR/AN
+// touches to keep turnover honest.
+// Build (weeks 5-8): threshold density peaks here (week 5 carries three
+// AT sessions) — the block that converts base fitness into sustainable
+// race pace — while O2 still holds the plurality.
+// Peak (weeks 9-12): TR/AN reach their high-water mark for race-pace
+// rehearsal, but the endurance bias never flips: O2+AT stays well above
+// AN+TR in every single week.
 export const HEAD_WEEKS: WorkoutType[][] = [
   // -- base: O2-dominant --
-  ['O2', 'O2', 'AT', 'O2', 'AT', 'O2', 'TR'],
-  ['O2', 'AT', 'O2', 'AT', 'O2', 'TR', 'AN'],
-  ['AT', 'O2', 'O2', 'AT', 'O2', 'AN', 'TR'],
-  ['O2', 'O2', 'AT', 'O2', 'AN', 'AT', 'TR'],
-  // -- build: AT density rises --
-  ['AT', 'O2', 'AT', 'O2', 'AT', 'AN', 'TR'],
-  ['AT', 'AT', 'O2', 'AT', 'O2', 'TR', 'AN'],
-  ['O2', 'AT', 'AT', 'O2', 'AT', 'TR', 'AN'],
-  ['AT', 'O2', 'AT', 'AT', 'O2', 'AN', 'TR'],
+  ['O2', 'AT', 'O2', 'O2', 'AT', 'O2', 'O2'],
+  ['O2', 'O2', 'AT', 'O2', 'TR', 'O2', 'O2'],
+  ['O2', 'AT', 'O2', 'AN', 'O2', 'AT', 'O2'],
+  ['O2', 'AT', 'O2', 'TR', 'AN', 'O2', 'O2'],
+  // -- build: AT density peaks --
+  ['AT', 'O2', 'AT', 'TR', 'AT', 'O2', 'O2'],
+  ['AT', 'O2', 'AN', 'O2', 'TR', 'AT', 'O2'],
+  ['O2', 'AT', 'O2', 'TR', 'O2', 'AT', 'O2'],
+  ['AT', 'O2', 'TR', 'O2', 'AN', 'AT', 'O2'],
   // -- peak: sharper, still endurance-biased --
-  ['O2', 'AT', 'TR', 'AT', 'O2', 'TR', 'AN'],
-  ['AT', 'O2', 'TR', 'AT', 'TR', 'O2', 'AN'],
-  ['O2', 'TR', 'AT', 'O2', 'TR', 'AT', 'AN'],
-  ['AT', 'TR', 'O2', 'AT', 'TR', 'O2', 'AN'],
+  ['O2', 'TR', 'AT', 'O2', 'AN', 'O2', 'O2'],
+  ['O2', 'AT', 'TR', 'O2', 'AN', 'AT', 'O2'],
+  ['O2', 'TR', 'AT', 'O2', 'TR', 'AN', 'O2'],
+  ['AT', 'O2', 'TR', 'O2', 'AN', 'O2', 'AT'],
 ]
 
 export const PLANS: Record<'sprint' | 'head', PlanPreset> = {
