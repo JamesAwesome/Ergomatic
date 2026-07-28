@@ -13,7 +13,8 @@ CREATE TABLE "baselines" (
 CREATE TABLE "plan_state" (
 	"user_id" uuid PRIMARY KEY NOT NULL,
 	"plan_key" text,
-	"done_n" integer DEFAULT 0 NOT NULL
+	"done_n" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "plan_state_plan_key_check" CHECK ("plan_state"."plan_key" is null or "plan_state"."plan_key" in ('sprint', 'head'))
 );
 --> statement-breakpoint
 CREATE TABLE "preferences" (

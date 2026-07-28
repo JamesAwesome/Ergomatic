@@ -101,13 +101,22 @@ export const sessionLogs = pgTable(
   ],
 )
 
-export const planState = pgTable('plan_state', {
-  userId: uuid('user_id')
-    .primaryKey()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  planKey: text('plan_key', { enum: ['sprint', 'head'] }),
-  doneN: integer('done_n').notNull().default(0),
-})
+export const planState = pgTable(
+  'plan_state',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    planKey: text('plan_key', { enum: ['sprint', 'head'] }),
+    doneN: integer('done_n').notNull().default(0),
+  },
+  (t) => [
+    check(
+      'plan_state_plan_key_check',
+      sql`${t.planKey} is null or ${t.planKey} in ('sprint', 'head')`,
+    ),
+  ],
+)
 
 export const preferences = pgTable('preferences', {
   userId: uuid('user_id')
