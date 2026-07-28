@@ -7,3 +7,4 @@ coverage/
 app/ios/App/Pods/
 app/ios/App/output/
 app/ios/DerivedData/
+app/ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
