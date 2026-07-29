@@ -310,3 +310,123 @@ main {
   letter-spacing: 0.04em;
   color: var(--ink-4);
 }
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.workout-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.workout-detail-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 33px;
+  margin: 8px 0 6px;
+}
+
+.workout-detail-note {
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  padding: 10px 12px;
+  margin: 16px 0;
+}
+
+.step-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rule);
+  margin-bottom: 20px;
+}
+
+.step-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.step-row-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.step-row-label {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.step-row-duration {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.step-row-range {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.step-row-no-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-4);
+}
+
+.step-row-no-target em {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 18px;
+}
+
+.step-row-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+  margin: 4px 0 0;
+}
+
+.step-row-nudges {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.nudge-btn {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.workout-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
