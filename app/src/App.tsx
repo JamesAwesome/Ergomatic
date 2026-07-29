@@ -1,5 +1,6 @@
+import { BrowserRouter } from "react-router-dom";
 import SignIn from "./SignIn";
-import You from "./You";
+import AppRoutes from "./shell/AppRoutes";
 import { useMe } from "./useMe";
 
 export default function App() {
@@ -9,10 +10,8 @@ export default function App() {
   if (me.state === "out") return <SignIn onSignedIn={refetch} />;
 
   return (
-    <main>
-      <h1>Ergomatic</h1>
-      <p>Rowing workout tracker &amp; planner.</p>
-      <You user={me.user} onSignedOut={signedOut} />
-    </main>
+    <BrowserRouter>
+      <AppRoutes user={me.user} onSignedOut={signedOut} />
+    </BrowserRouter>
   );
 }

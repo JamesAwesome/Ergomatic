@@ -24,12 +24,14 @@ describe("App", () => {
   });
 
   it("shows the shell + You when signed in", async () => {
+    window.history.replaceState(null, "", "/you");
     mockMe(200, { user: { id: "u1", email: "a@x.com", name: "Ada Rower" } });
     render(<App />);
-    expect(
-      await screen.findByRole("heading", { name: /ergomatic/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Ada Rower")).toBeInTheDocument();
+    expect(await screen.findByText("Ada Rower")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "YOU" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("surfaces the denied notice from ?denied=", async () => {
