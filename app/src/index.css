@@ -239,6 +239,7 @@ main {
 
 .chip {
   min-height: var(--tap);
+  min-width: var(--tap);
   padding: 0 12px;
   border-radius: var(--radius);
   background: transparent;
@@ -397,6 +398,12 @@ main {
   font-family: var(--font-serif);
   font-style: italic;
   font-size: 18px;
+}
+
+.step-row-no-target a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
 }
 
 .step-row-sub {
