@@ -6,8 +6,7 @@ import SignIn from "./SignIn";
 afterEach(() => {
   window.history.replaceState(null, "", "/");
   vi.resetModules();
-  vi.doUnmock("./platform");
-  vi.doUnmock("./native/signin");
+  vi.doUnmock("./adapters/auth");
 });
 
 describe("SignIn", () => {
@@ -36,64 +35,42 @@ describe("SignIn", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/didn't work/i);
   });
 
-  it("renders a native sign-in button (not a link) when isNative()", async () => {
-    vi.doMock("./platform", () => ({ isNative: () => true }));
-    const { default: NativeSignIn } = await import("./SignIn");
-    render(<NativeSignIn />);
-    expect(
-      screen.getByRole("button", { name: /continue with google/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /continue with google/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("native sign-in success: initializes, signs in, and calls onSignedIn", async () => {
+  // Platform branching (web link vs. native button, native sign-in success/
+  // failure paths) is the adapter's own contract and is covered by
+  // src/adapters/auth.test.tsx. These tests only check that SignIn wires
+  // the adapter's callbacks through correctly — composition, not platform
+  // behavior — so they don't duplicate the adapter suite.
+  it("passes onSignedIn through to the adapter's SignInButton", async () => {
     const onSignedIn = vi.fn();
-    const initNativeAuth = vi.fn(async () => {});
-    const nativeSignIn = vi.fn(async () => true);
-    vi.doMock("./platform", () => ({ isNative: () => true }));
-    vi.doMock("./native/signin", () => ({ initNativeAuth, nativeSignIn }));
-    const { default: NativeSignIn } = await import("./SignIn");
-    render(<NativeSignIn onSignedIn={onSignedIn} />);
+    vi.doMock("./adapters/auth", () => ({
+      SignInButton: ({ onSignedIn }: { onSignedIn?: () => void }) => (
+        <button onClick={onSignedIn}>Continue with Google</button>
+      ),
+    }));
+    const { default: MockedSignIn } = await import("./SignIn");
+    render(<MockedSignIn onSignedIn={onSignedIn} />);
     await userEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
-    expect(initNativeAuth).toHaveBeenCalled();
-    expect(nativeSignIn).toHaveBeenCalled();
-    expect(onSignedIn).toHaveBeenCalled();
+    expect(onSignedIn).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces the adapter's onError message in the role=alert notice", async () => {
+    vi.doMock("./adapters/auth", () => ({
+      SignInButton: ({ onError }: { onError: (message: string) => void }) => (
+        <button onClick={() => onError("b@y.com isn't invited")}>
+          Continue with Google
+        </button>
+      ),
+    }));
+    const { default: MockedSignIn } = await import("./SignIn");
+    render(<MockedSignIn />);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("native sign-in failure: shows the thrown Error message in the notice area", async () => {
-    const onSignedIn = vi.fn();
-    const initNativeAuth = vi.fn(async () => {});
-    const nativeSignIn = vi.fn(async () => {
-      throw new Error("b@y.com isn't invited to this Ergomatic.");
-    });
-    vi.doMock("./platform", () => ({ isNative: () => true }));
-    vi.doMock("./native/signin", () => ({ initNativeAuth, nativeSignIn }));
-    const { default: NativeSignIn } = await import("./SignIn");
-    render(<NativeSignIn onSignedIn={onSignedIn} />);
     await userEvent.click(
       screen.getByRole("button", { name: /continue with google/i }),
     );
-    expect(screen.getByRole("alert")).toHaveTextContent(/isn't invited/i);
-    expect(onSignedIn).not.toHaveBeenCalled();
-  });
-
-  it("native sign-in failure: falls back to a generic message for non-Error throws", async () => {
-    const initNativeAuth = vi.fn(async () => {});
-    const nativeSignIn = vi.fn(async () => {
-      throw "nope";
-    });
-    vi.doMock("./platform", () => ({ isNative: () => true }));
-    vi.doMock("./native/signin", () => ({ initNativeAuth, nativeSignIn }));
-    const { default: NativeSignIn } = await import("./SignIn");
-    render(<NativeSignIn />);
-    await userEvent.click(
-      screen.getByRole("button", { name: /continue with google/i }),
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "b@y.com isn't invited",
     );
-    expect(screen.getByRole("alert")).toHaveTextContent(/didn't work/i);
   });
 });
