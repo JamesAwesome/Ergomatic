@@ -16,14 +16,14 @@ two-user isolation obligation is discharged here).
 | Steps storage | `jsonb` document per workout (ordered, atomic, builder-owned; never queried relationally), validated by the domain module's validators on every write |
 | Plan sequences storage | Code (`domain/plans.ts`), not DB — versioned data beats migratable content; `plan_state` stores only `{plan_key, done_n}` |
 | Logs outlive workouts | `session_logs.workout_id` nulls on workout delete; logs carry frozen title/type copies |
-| Starter seeding | Seed-if-library-empty at sign-in (covers new users AND backfills existing accounts naturally); starter rows tagged `source:'starter'`; user edits/deletes affect only their copies |
+| Starter library model | **AMENDED 2026-07-28 (James)**: GLOBAL shared library, not per-user copies. Starter workouts live once with `user_id NULL` + `source:'starter'`; every user sees globals ∪ their personal workouts. Globals are READ-ONLY in v1 (mutations → 403); the builder always creates personal rows; suggestion pool spans both. Seeding is a boot-time idempotent global seed (no per-user seeding). Copy-on-write editing + per-user hiding are Phase 5 follow-ons (recorded there) |
 | Baselines | Null until first set; endpoints that need resolution return an explicit `baselines_required` error rather than guessing |
 
 ## Schema (per-user, expand-only, added to `app/server/db/schema.ts`)
 
 - `baselines`: `user_id` pk/fk cascade, `k2_seconds` real null, `k6_seconds`
   real null, `updated_at`. Sanity bounds enforced at the API (60–240 s/500m).
-- `workouts`: `id` uuid pk, `user_id` fk + index, `num` int (unique per user),
+- `workouts`: `id` uuid pk, `user_id` fk + index **NULLABLE (NULL = global starter row)**, `num` int (unique per user via partial index; separate partial unique on `num` where `user_id IS NULL`),
   `title` text, `type` enum('AN','O2','AT','TR'), `difficulty`
   enum('easy','medium','hard'), `pain` int CHECK 1..5, `source`
   enum('starter','user'), `steps` jsonb, `created_at`/`updated_at`.

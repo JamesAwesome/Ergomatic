@@ -702,18 +702,25 @@ export class StoreConflictError extends Error {}
 
 ---
 
-### Task 9: Seeding + isolation & freezing integration suite
+### Task 9: Global library retrofit + boot seeding + isolation & freezing suite  (AMENDED — global model per James)
 
 **Files:**
+- Modify: `app/server/db/schema.ts` (workouts.user_id nullable; partial unique indexes), regenerate `app/drizzle/0001_*` (unmerged branch — regenerate in place per Task 5 precedent), `app/server/stores/workouts.ts` (+ its integration tests), `app/server/routes/data.ts` + `data.test.ts` (403 on global mutations; list/get span globals), `app/server/index.ts` (boot seed after migrate)
 - Create: `app/server/seed/seed.ts`, `app/server/seed/seed.integration.test.ts`, `app/server/routes/isolation.integration.test.ts`
-- Modify: `app/server/auth/signin.ts` (seed hook), `app/server/auth/routes.test.ts` (only if deps change), `app/server/testDeps.ts`
+- REMOVE the planned signInWithClaims seed hook (no per-user seeding exists anymore)
 
 **Interfaces:**
-- Produces `seedStarterLibraryIfEmpty(db, userId)`: inserts STARTER_WORKOUTS (source 'starter') ONLY when user's workouts count = 0 AND session_logs count = 0, in one transaction. `signInWithClaims` calls it after user resolution (both new and existing users — the rule makes it idempotent); `SignInDeps` gains `seed: (userId) => Promise<void>` injected so unit tests stub it.
+- Schema: `workouts.user_id` nullable; uniqueness = two partial indexes: `unique (user_id, num) where user_id is not null` and `unique (num) where user_id is null`.
+- Stores: `workouts.list(userId)` returns globals (user_id NULL) ∪ user's rows, each row carrying `isGlobal: boolean`; `get(userId, id)` resolves globals too; `update/remove(userId, id)` NEVER touch global rows (scoped `user_id = $userId` exactly as today — structural safety); new `listGlobals()`/`countGlobals()` for seeding; `create` unchanged (always personal).
+- Routes: PUT/DELETE `/api/workouts/:id` on a global id → 403 `{error:'starter_readonly'}` (get() the row; if isGlobal → 403 before any store write). GET list/get include globals. `/api/today` pool spans both.
+- Seeding: `seedGlobalLibrary(db)` — idempotent (skip when `countGlobals() > 0`), transactional, inserts STARTER_WORKOUTS with `userId: null`; called in `index.ts` after `migrate()`.
 
-- [ ] **Step 1:** seed.integration.test.ts: fresh user → 35 rows source starter; second call → still 35; user deletes all workouts but HAS a log → stays 0; user deletes all and has NO logs → re-seeds (the crisp rule).
-- [ ] **Step 2:** isolation.integration.test.ts — **the Phase 2 obligation**: two real users (created via the native endpoint path with stubbed verifiers), full API via supertest with each one's bearer: A creates workouts/baselines/logs/prefs/plan; EVERY list/get endpoint as B shows none of it; B's mutations don't touch A (assert counts and 404s on A's ids). Plus log-freezing: A logs a session, then changes baselines; the stored log's baselineK2/targets unchanged.
-- [ ] **Step 3:** GREEN everything + coverage. Commit `feat(seed): starter seeding at sign-in; prove two-user isolation and log freezing`
+- [ ] **Step 1:** Schema change + regenerate migration (verify SQL: nullable user_id, both partial uniques). Update the Task 5 integration test expectations if they assert NOT NULL.
+- [ ] **Step 2:** TDD stores: extend stores.integration.test.ts — list returns 35 globals for a fresh user + their creations; update/remove against a global id no-ops (row unchanged); num uniqueness independent between global and personal namespaces.
+- [ ] **Step 3:** TDD routes: data.test.ts — GET list includes `isGlobal:true` rows; PUT/DELETE global → 403 starter_readonly; POST create personal num colliding with a GLOBAL num → allowed (namespaces separate).
+- [ ] **Step 4:** seed.ts + seed.integration.test.ts: fresh DB seeds 35 globals; second call inserts none; wired in index.ts post-migrate (boot order documented).
+- [ ] **Step 5:** isolation.integration.test.ts — THE PHASE 2 OBLIGATION: two real users via stubbed-verifier native sign-ins → bearers → full API sweep: globals visible to BOTH (by design, assert identical 35); A's personal workout/log/baselines/prefs/plan invisible to B on EVERY endpoint; B's mutations on A's ids → 404; A logs → changes baselines → frozen log values unchanged.
+- [ ] **Step 6:** Full suite + coverage ≥90; commit `feat(library): global starter library, boot seeding, two-user isolation proven`
 
 ---
 
