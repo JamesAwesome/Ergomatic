@@ -2,8 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { baseDeps } from "../testDeps.js";
-import type { SessionStore } from "./sessions.js";
-import type { UserStore } from "./users.js";
+import { makeFakeSessions, makeFakeUsers } from "../testing/fakes.js";
 
 const claims = { sub: "s1", email: "a@x.com", emailVerified: true, name: "A" };
 const dbUser = {
@@ -16,20 +15,15 @@ const dbUser = {
 
 function nativeDeps(overrides: Record<string, unknown> = {}) {
   return baseDeps({
-    sessions: {
+    sessions: makeFakeSessions({
       createSession: vi.fn(async () => ({
         token: "btok",
         expiresAt: new Date("2026-09-01"),
       })),
-      resolveSession: vi.fn(async () => null),
-      deleteSession: vi.fn(async () => {}),
-      sweepExpired: vi.fn(async () => {}),
-    } as unknown as SessionStore,
-    users: {
-      findByGoogleSub: vi.fn(async () => null),
+    }),
+    users: makeFakeUsers({
       createUser: vi.fn(async () => dbUser),
-      updateProfile: vi.fn(async () => {}),
-    } as unknown as UserStore,
+    }),
     allowlist: new Set(["a@x.com"]),
     nativeVerifier: async () => claims,
     ...overrides,

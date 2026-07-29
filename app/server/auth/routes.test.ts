@@ -3,8 +3,7 @@ import request from "supertest";
 import { createApp, type AppDeps } from "../app.js";
 import { OAUTH_COOKIE, SESSION_COOKIE } from "./cookies.js";
 import type { OAuthProvider } from "./google.js";
-import type { SessionStore } from "./sessions.js";
-import type { UserStore } from "./users.js";
+import { makeFakeSessions, makeFakeUsers } from "../testing/fakes.js";
 
 const claims = { sub: "s1", email: "a@x.com", emailVerified: true, name: "A" };
 const baseUser = {
@@ -16,20 +15,15 @@ const baseUser = {
 };
 
 function deps(overrides: Partial<AppDeps> = {}): AppDeps {
-  const sessions = {
+  const sessions = makeFakeSessions({
     createSession: vi.fn(async () => ({
       token: "tok",
       expiresAt: new Date(Date.now() + 1000_000),
     })),
-    resolveSession: vi.fn(async () => null),
-    deleteSession: vi.fn(async () => {}),
-    sweepExpired: vi.fn(async () => {}),
-  } as unknown as SessionStore;
-  const users = {
-    findByGoogleSub: vi.fn(async () => null),
+  });
+  const users = makeFakeUsers({
     createUser: vi.fn(async () => baseUser),
-    updateProfile: vi.fn(async () => {}),
-  } as unknown as UserStore;
+  });
   const oauth: OAuthProvider = {
     authorizationUrl: async () => ({
       url: "https://accounts.google.com/x",

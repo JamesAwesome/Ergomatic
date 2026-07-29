@@ -1,0 +1,317 @@
+import { vi } from "vitest";
+import type { SessionStore } from "../auth/sessions.js";
+import type { UserStore } from "../auth/users.js";
+import type { WorkoutInput } from "../../domain/types.js";
+import { type Stores } from "../routes/data.js";
+import type { BaselinesRow, BaselinesStore } from "../stores/baselines.js";
+import { StoreConflictError } from "../stores/errors.js";
+import type { LogInput, LogsStore } from "../stores/logs.js";
+import type {
+  PlanKey,
+  PlanStateRow,
+  PlanStateStore,
+} from "../stores/planState.js";
+import {
+  PREFERENCES_DEFAULTS,
+  type PreferencesPatch,
+  type PreferencesRow,
+  type PreferencesStore,
+} from "../stores/preferences.js";
+import type { TestHistoryStore } from "../stores/testHistory.js";
+import type { NewWorkoutInput, WorkoutsStore } from "../stores/workouts.js";
+
+// ---------------------------------------------------------------------------
+// In-memory fakes, keyed by userId, mirroring the real stores' signatures
+// exactly (per app/server/stores/*.ts). This is the API contract shared by
+// every server test that exercises the data router or its stores directly.
+// ---------------------------------------------------------------------------
+
+interface WorkoutRow extends WorkoutInput {
+  id: string;
+  userId: string | null;
+  source: "starter" | "user";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Fakes are cast with `as unknown as <RealStoreType>` (the same pattern the
+// existing auth tests use for fake stores) rather than relying on
+// contextual typing from the real store types: the real stores' `get`/
+// `update` methods are inferred (via a Drizzle `rows[0] ?? null` idiom,
+// with `noUncheckedIndexedAccess` off) as NEVER returning null at the type
+// level even though they do at runtime — matching that exactly would make
+// the fakes lie about the very null case the routes need to handle.
+
+function makeFakeBaselinesStore(): BaselinesStore {
+  const rows = new Map<string, BaselinesRow>();
+  return {
+    async get(userId: string) {
+      return rows.get(userId) ?? null;
+    },
+    async put(
+      userId: string,
+      patch: { k2Seconds?: number | null; k6Seconds?: number | null },
+    ) {
+      const current = rows.get(userId) ?? { k2Seconds: null, k6Seconds: null };
+      rows.set(userId, { ...current, ...patch });
+    },
+  } as unknown as BaselinesStore;
+}
+
+// Mirrors the real store's global-library semantics (app/server/stores/
+// workouts.ts): globals live in their own bucket, keyed by nothing but id
+// (no owning user), and every personal bucket's list/get is unioned with
+// them. update/remove only ever touch a caller's own personal bucket — they
+// structurally cannot reach `globals`, exactly like the real store's
+// `user_id = $userId` predicate can never match a NULL user_id row.
+function makeFakeWorkoutsStore(): WorkoutsStore & {
+  _seedGlobal: (input: NewWorkoutInput) => WorkoutRow;
+} {
+  const byUser = new Map<string, Map<string, WorkoutRow>>();
+  const globals = new Map<string, WorkoutRow>();
+  const forUser = (userId: string) => {
+    let m = byUser.get(userId);
+    if (!m) {
+      m = new Map();
+      byUser.set(userId, m);
+    }
+    return m;
+  };
+  const withIsGlobal = (row: WorkoutRow) => ({
+    ...row,
+    isGlobal: row.userId === null,
+  });
+  const create = async (
+    userId: string,
+    input: NewWorkoutInput,
+  ): Promise<WorkoutRow> => {
+    const m = forUser(userId);
+    if ([...m.values()].some((w) => w.num === input.num)) {
+      throw new StoreConflictError(`workout num ${input.num} already exists`);
+    }
+    const row: WorkoutRow = {
+      ...input,
+      id: crypto.randomUUID(),
+      userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    m.set(row.id, row);
+    return withIsGlobal(row) as unknown as WorkoutRow;
+  };
+  return {
+    async list(userId: string) {
+      const all = [...globals.values(), ...forUser(userId).values()];
+      return all.map(withIsGlobal).sort((a, b) => a.num - b.num);
+    },
+    async get(userId: string, id: string) {
+      const g = globals.get(id);
+      if (g) return withIsGlobal(g);
+      const row = forUser(userId).get(id);
+      return row ? withIsGlobal(row) : null;
+    },
+    create,
+    async createMany(userId: string, inputs: NewWorkoutInput[]) {
+      const out: WorkoutRow[] = [];
+      for (const input of inputs) {
+        out.push(await create(userId, input));
+      }
+      return out;
+    },
+    async update(userId: string, id: string, input: WorkoutInput) {
+      const m = forUser(userId);
+      const existing = m.get(id);
+      if (!existing) return null;
+      if ([...m.values()].some((w) => w.id !== id && w.num === input.num)) {
+        throw new StoreConflictError(`workout num ${input.num} already exists`);
+      }
+      const row: WorkoutRow = { ...existing, ...input, updatedAt: new Date() };
+      m.set(id, row);
+      return withIsGlobal(row);
+    },
+    async remove(userId: string, id: string) {
+      forUser(userId).delete(id);
+    },
+    async count(userId: string) {
+      return forUser(userId).size;
+    },
+    async listGlobals() {
+      return [...globals.values()]
+        .map(withIsGlobal)
+        .sort((a, b) => a.num - b.num);
+    },
+    async countGlobals() {
+      return globals.size;
+    },
+    // Test-only seam: the real store's globals come from seedGlobalLibrary
+    // at boot, never through this router. Injects a global row directly.
+    _seedGlobal(input: NewWorkoutInput) {
+      const row: WorkoutRow = {
+        ...input,
+        id: crypto.randomUUID(),
+        userId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      globals.set(row.id, row);
+      return withIsGlobal(row) as unknown as WorkoutRow;
+    },
+  } as unknown as WorkoutsStore & {
+    _seedGlobal: (input: NewWorkoutInput) => WorkoutRow;
+  };
+}
+
+type FakePlanStateStore = PlanStateStore & {
+  _advance: (userId: string, by?: number) => void;
+};
+
+// set/reset are plain (not vi.fn-wrapped) here: consumers that need to
+// assert on calls do so per-test via `vi.spyOn(stores.planState, "set")`
+// (vitest spies call through to the original implementation by default, so
+// behavior is unaffected), rather than every fake baking in call-tracking
+// that most tests never use.
+function makeFakePlanStateStore(): FakePlanStateStore {
+  const rows = new Map<string, PlanStateRow>();
+  return {
+    async get(userId: string) {
+      return rows.get(userId) ?? null;
+    },
+    async set(userId: string, planKey: PlanKey | null) {
+      rows.set(userId, { planKey, doneN: 0 });
+    },
+    async reset(userId: string) {
+      const current = rows.get(userId) ?? { planKey: null, doneN: 0 };
+      rows.set(userId, { ...current, doneN: 0 });
+    },
+    // test-only helper mimicking the real store's transactional done_n bump
+    // from inside logs.create — not part of the real store's interface.
+    _advance(userId: string, by = 1) {
+      const current = rows.get(userId) ?? { planKey: null, doneN: 0 };
+      rows.set(userId, { ...current, doneN: current.doneN + by });
+    },
+  } as unknown as FakePlanStateStore;
+}
+
+function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
+  const byUser = new Map<
+    string,
+    Array<LogInput & { id: string; loggedAt: Date }>
+  >();
+  return {
+    async list(userId: string, limit: number) {
+      return (byUser.get(userId) ?? []).slice(0, limit);
+    },
+    async create(userId: string, input: LogInput) {
+      const rows = byUser.get(userId) ?? [];
+      const row = { ...input, id: crypto.randomUUID(), loggedAt: new Date() };
+      rows.unshift(row);
+      byUser.set(userId, rows);
+      planState._advance(userId);
+      return { id: row.id };
+    },
+    async lastDonePerWorkout(userId: string) {
+      const result: Record<string, number> = {};
+      for (const row of byUser.get(userId) ?? []) {
+        if (row.workoutId) result[row.workoutId] = 0;
+      }
+      return result;
+    },
+  } as unknown as LogsStore;
+}
+
+// put() is plain (not vi.fn-wrapped) for the same reason as planState above:
+// tests that need to prove the empty-patch guard short-circuits BEFORE the
+// store is touched spy on it per-test via `vi.spyOn(stores.preferences,
+// "put")`.
+function makeFakePreferencesStore(): PreferencesStore {
+  const rows = new Map<string, PreferencesRow>();
+  return {
+    async get(userId: string) {
+      return rows.get(userId) ?? { ...PREFERENCES_DEFAULTS };
+    },
+    async put(userId: string, patch: PreferencesPatch) {
+      const current = rows.get(userId) ?? { ...PREFERENCES_DEFAULTS };
+      rows.set(userId, { ...current, ...patch });
+    },
+  } as unknown as PreferencesStore;
+}
+
+function makeFakeTestHistoryStore(): TestHistoryStore {
+  const byUser = new Map<
+    string,
+    Array<{
+      id: string;
+      distance: "2k" | "6k";
+      splitSeconds: number;
+      deltaSeconds: number | null;
+    }>
+  >();
+  return {
+    async list(userId: string) {
+      return byUser.get(userId) ?? [];
+    },
+    async append(
+      userId: string,
+      input: { distance: "2k" | "6k"; splitSeconds: number },
+    ) {
+      const rows = byUser.get(userId) ?? [];
+      const previous = [...rows]
+        .reverse()
+        .find((r) => r.distance === input.distance);
+      const row = {
+        id: crypto.randomUUID(),
+        distance: input.distance,
+        splitSeconds: input.splitSeconds,
+        deltaSeconds: previous
+          ? input.splitSeconds - previous.splitSeconds
+          : null,
+      };
+      rows.push(row);
+      byUser.set(userId, rows);
+      return row;
+    },
+  } as unknown as TestHistoryStore;
+}
+
+/** Complete per-user in-memory implementation of all six data-router stores. */
+export function makeFakeStores(): Stores {
+  const planState = makeFakePlanStateStore();
+  return {
+    baselines: makeFakeBaselinesStore(),
+    workouts: makeFakeWorkoutsStore(),
+    logs: makeFakeLogsStore(planState),
+    planState,
+    preferences: makeFakePreferencesStore(),
+    testHistory: makeFakeTestHistoryStore(),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Auth-test fakes: unlike the data-router stores above, auth tests assert on
+// call counts/args in nearly every test, so these stay fully vi.fn-wrapped
+// by default. Pass overrides for the specific returns a test needs.
+// ---------------------------------------------------------------------------
+
+export function makeFakeSessions(
+  overrides: Partial<SessionStore> = {},
+): SessionStore {
+  return {
+    createSession: vi.fn(async () => ({
+      token: "tok",
+      expiresAt: new Date(Date.now() + 1_000_000),
+    })),
+    resolveSession: vi.fn(async () => null),
+    deleteSession: vi.fn(async () => {}),
+    sweepExpired: vi.fn(async () => {}),
+    ...overrides,
+  } as unknown as SessionStore;
+}
+
+export function makeFakeUsers(overrides: Partial<UserStore> = {}): UserStore {
+  return {
+    findByGoogleSub: vi.fn(async () => null),
+    createUser: vi.fn(async () => null),
+    updateProfile: vi.fn(async () => {}),
+    ...overrides,
+  } as unknown as UserStore;
+}
