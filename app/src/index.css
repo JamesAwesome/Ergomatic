@@ -1,29 +1,27 @@
-:root {
-  --page: #f4f1e8;
-  --surface: #fffdf7;
-  --ink: #1b1a17;
-  --ink-3: #57544c;
-  --rule: #d8d3c4;
-  --accent: #b5341f;
-  --accent-hover: #9c2c19;
-  --on-color: #fffdf7;
-}
-
 * {
   box-sizing: border-box;
 }
 
 body {
-  margin: 0;
   background: var(--page);
   color: var(--ink);
-  font-family: Archivo, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  margin: 0;
 }
 
 h1 {
-  font-family: Newsreader, Georgia, serif;
+  font-family: var(--font-serif);
   font-weight: 500;
   font-size: 31px;
+}
+
+button,
+input,
+.notice,
+.button-primary,
+.button-outline,
+.you {
+  border-radius: var(--radius);
 }
 
 main {
@@ -47,7 +45,6 @@ main {
 .notice {
   background: var(--surface);
   border: 1px solid var(--ink);
-  border-radius: 2px;
   padding: 12px;
 }
 
@@ -59,7 +56,6 @@ main {
   background: var(--accent);
   color: var(--on-color);
   text-decoration: none;
-  border-radius: 2px;
   font-weight: 600;
 }
 
@@ -72,7 +68,6 @@ main {
   padding: 0 16px;
   background: transparent;
   border: 1px solid var(--ink);
-  border-radius: 2px;
   font: inherit;
   cursor: pointer;
 }
@@ -83,13 +78,12 @@ main {
   gap: 12px;
   background: var(--surface);
   border: 1px solid var(--rule);
-  border-radius: 2px;
   padding: 16px;
   margin-top: 22px;
 }
 
 .you-name {
-  font-family: Newsreader, Georgia, serif;
+  font-family: var(--font-serif);
   font-size: 24px;
   margin: 0;
 }
