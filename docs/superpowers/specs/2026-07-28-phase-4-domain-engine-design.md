@@ -74,7 +74,7 @@ two-user isolation obligation is discharged here).
 
 - `GET/PUT /api/baselines` — PUT `{k2Seconds?, k6Seconds?, isTestResult?}`;
   bounds-checked; `isTestResult` appends `test_history` with delta vs prior.
-- `GET /api/workouts` (list, domain-validated on the way out),
+- `GET /api/workouts` (list; rows returned as stored — write-path validation is the guarantee; outbound re-validation deliberately omitted, see final review),
   `POST /api/workouts`, `GET/PUT/DELETE /api/workouts/:id` — all writes run
   `validateSteps`; `num` uniqueness per user enforced (409 on clash).
 - `POST /api/workouts/bulk` — builder paste format; returns
@@ -117,11 +117,9 @@ two-user isolation obligation is discharged here).
 - Integration (Testcontainers): **two-user isolation across every endpoint**
   (Phase 2 obligation discharged — behavioral test, not structural);
   log-freezing (edit baselines after logging → logged paces unchanged);
-  seed-if-empty rule: seed ONLY when the user's `workouts` count = 0 AND
-  `session_logs` count = 0 — a rower who deliberately deleted their whole
-  library but has logged history is not re-seeded; a truly fresh account is.
-  Tests: new user gets 35; second sign-in doesn't duplicate; deleted-library-
-  with-logs stays empty.
+  (AMENDED) global-seed rule: `seedGlobalLibrary` is boot-time and idempotent;
+  tests cover fresh-DB seeds 35 globals, second call inserts none, and the
+  concurrent-boot race resolves via the partial unique index.
 - Coverage ≥90 global; domain files ~100.
 - Exit: all of the above green; James approved starter content; deployed; no
   TestFlight release (server/domain only — recommendation will say so).
