@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import Builder from "../builder/Builder";
 import Library from "../library/Library";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
@@ -33,10 +34,11 @@ export default function AppRoutes({
           element={<Placeholder title="Today" phase="Phase 6" />}
         />
         <Route path="/library" element={<Library />} />
-        <Route
-          path="/library/new"
-          element={<Placeholder title="New Workout" phase="Phase 5B" />}
-        />
+        <Route path="/library/new" element={<Builder />} />
+        {/* React Router ranks a static segment ("new") over a dynamic one
+            (":id") regardless of declaration order, so this doesn't need to
+            precede /library/:id below — but WorkoutDetail's :id route DOES
+            need to keep matching /library/w1 etc. unaffected by this change. */}
         <Route path="/library/:id" element={<WorkoutDetail />} />
         <Route
           path="/plan"
