@@ -81,3 +81,21 @@ describe('static client serving', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe("regression: data router must not shadow non-API paths", () => {
+  it("serves the SPA at / when stores are mounted (2026-07-28 root-401 hotfix)", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const clientDir = mkdtempSync(join(tmpdir(), "erg-hotfix-"));
+    writeFileSync(join(clientDir, "index.html"), "<!doctype html><h1>shell</h1>");
+    // The stub never receives a call: the bug was the router 401ing "/" before
+    // any handler; a mounted-but-untouched stores object reproduces it.
+    const stores = {} as unknown as import("./routes/data.js").Stores;
+    const res = await request(
+      createApp(baseDeps({ checkDb: async () => true, clientDir, stores })),
+    ).get("/");
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("shell");
+  });
+});
