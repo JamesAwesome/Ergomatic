@@ -220,7 +220,16 @@ export function createDataRouter({
   // -- workouts ---------------------------------------------------------
 
   router.get("/api/workouts", async (req, res) => {
-    res.json(await stores.workouts.list(req.user!.id));
+    const userId = req.user!.id;
+    // Two queries total, never per-row: lastDonePerWorkout is one grouped
+    // query (see stores/logs.ts) — the library needs recency for every row.
+    const [rows, lastDone] = await Promise.all([
+      stores.workouts.list(userId),
+      stores.logs.lastDonePerWorkout(userId),
+    ]);
+    res.json(
+      rows.map((w) => ({ ...w, lastDoneDaysAgo: lastDone[w.id] ?? null })),
+    );
   });
 
   router.post("/api/workouts", async (req, res) => {

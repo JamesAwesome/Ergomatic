@@ -390,6 +390,44 @@ describe("workouts CRUD", () => {
   });
 });
 
+describe("GET /api/workouts: lastDoneDaysAgo", () => {
+  it("includes lastDoneDaysAgo on each workout so the library can filter by recency", async () => {
+    const stores = makeStores();
+    const workout = await stores.workouts.create(userA.id, {
+      num: 1,
+      title: "Zephyr",
+      type: "O2",
+      difficulty: "easy",
+      pain: 2,
+      steps: [{ k: "wu", minutes: 10 }],
+      source: "user",
+    });
+    stores.logs.lastDonePerWorkout = async () => ({ [workout.id]: 33 });
+
+    const res = await asA(request(appFor(stores)).get("/api/workouts"));
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({ id: workout.id, lastDoneDaysAgo: 33 });
+  });
+
+  it("reports lastDoneDaysAgo as null for a workout that has never been logged", async () => {
+    const stores = makeStores();
+    await stores.workouts.create(userA.id, {
+      num: 2,
+      title: "Squall",
+      type: "AT",
+      difficulty: "hard",
+      pain: 4,
+      steps: [{ k: "wu", minutes: 10 }],
+      source: "user",
+    });
+
+    const res = await asA(request(appFor(stores)).get("/api/workouts"));
+
+    expect(res.body[0].lastDoneDaysAgo).toBeNull();
+  });
+});
+
 describe("global starter library", () => {
   it("GET list includes global rows tagged isGlobal:true alongside the caller's own isGlobal:false rows", async () => {
     const stores = makeStores();
