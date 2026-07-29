@@ -853,3 +853,51 @@ button:disabled {
 .builder-save {
   margin-top: 16px;
 }
+
+.bulk-import {
+  margin-top: 12px;
+}
+
+.bulk-import-panel {
+  margin-top: 8px;
+}
+
+.bulk-import-textarea {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px dashed var(--rule-3);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.bulk-import-help {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.bulk-import-submit {
+  margin-top: 8px;
+}
+
+.bulk-import-result {
+  margin-top: 12px;
+}
+
+.bulk-import-errors {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
