@@ -13,6 +13,7 @@ here. These are intentional product decisions (spec:
 | Difficulty `Introductory / Moderate / Advanced` (chips `INTRO/MODERATE/ADVANCED`) | `Easy / Medium / Hard` (chips `EASY/MEDIUM/HARD`) | Differentiation |
 | Sample data: 11 book-derived workouts ("Lucky Penny", …) | Original ~35-workout starter library (original names), seeded per new account | Content policy |
 | "11 OF 375 ENTERED" library counter | Plain count of the user's library (no fixed denominator) | 375 is the book's scale, not ours |
+| `ink-4` `#8a8478` for mono labels (e.g. "33D AGO", step sub-lines) | `ink-4` **`#6f6a5f`** | `#8a8478` measures 3.29:1 on `--page` and 3.65:1 on `--surface` — below the handoff's own WCAG AA (≥4.5:1) requirement for this text size. `#6f6a5f` measures 4.76:1 on `--page` and 5.29:1 on `--surface`, passing AA while preserving the four-tier ink hierarchy (ink → ink-2 → ink-3 → ink-4) rather than collapsing small labels into ink-3. AA is the hard requirement; the literal hex was not. |
 
 Everything else in the handoff (palette, type, spacing, 44px targets, AA,
 2px radii, screen structures, pace math, timer behavior) remains binding.
