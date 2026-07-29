@@ -66,18 +66,26 @@ describe('two-user isolation, global-library sharing, and log-freezing across th
       baseDeps({
         sessions: createSessionStore(db),
         users: createUserStore(db),
-        allowlist: new Set(['a@iso.test', 'b@iso.test']),
-        // Two distinct "Google accounts" distinguished by idToken value —
-        // this is the same stub-the-verifier pattern as native.integration.test.ts,
-        // just with two identities instead of one, so both users go through
-        // the real POST /api/auth/native -> signInWithClaims path (which no
-        // longer does any seeding at all).
+        allowlist: new Set(['a@iso.test', 'b@iso.test', 'c@iso.test', 'd@iso.test']),
+        // Distinct "Google accounts" distinguished by idToken value — this
+        // is the same stub-the-verifier pattern as native.integration.test.ts,
+        // just with multiple identities, so every user goes through the
+        // real POST /api/auth/native -> signInWithClaims path (which no
+        // longer does any seeding at all). C/D are a second, independent
+        // pair used only by the log-a-global test below, kept separate from
+        // A/B so that test doesn't depend on A/B's accumulated plan state.
         nativeVerifier: async (idToken: string) => {
           if (idToken === 'token-a') {
             return { sub: 'iso-sub-a', email: 'a@iso.test', emailVerified: true, name: 'Rower A' }
           }
           if (idToken === 'token-b') {
             return { sub: 'iso-sub-b', email: 'b@iso.test', emailVerified: true, name: 'Rower B' }
+          }
+          if (idToken === 'token-c') {
+            return { sub: 'iso-sub-c', email: 'c@iso.test', emailVerified: true, name: 'Rower C' }
+          }
+          if (idToken === 'token-d') {
+            return { sub: 'iso-sub-d', email: 'd@iso.test', emailVerified: true, name: 'Rower D' }
           }
           throw new Error('unknown stub token')
         },
@@ -306,5 +314,101 @@ describe('two-user isolation, global-library sharing, and log-freezing across th
 
     const listB = await asB().get('/api/workouts')
     expect(listB.body).toHaveLength(STARTER_COUNT + 1)
+  })
+
+  it('logging a GLOBAL workout end to end: the FK holds, and "done" status is isolated per user through /api/today', async () => {
+    // A fresh, independent pair (C/D) rather than reusing A/B: this test's
+    // assertions depend on knowing each account's plan/doneN state exactly,
+    // which is easiest to reason about starting from a brand-new account
+    // rather than threading through A/B's state built up by every test
+    // above. This is the most common production flow under the global
+    // model: logging a session against a shared starter-library workout,
+    // not one you created yourself.
+    const mintedC = await request(app).post('/api/auth/native').send({ idToken: 'token-c' })
+    expect(mintedC.status).toBe(200)
+    const bearerC = `Bearer ${mintedC.body.token}`
+    const mintedD = await request(app).post('/api/auth/native').send({ idToken: 'token-d' })
+    expect(mintedD.status).toBe(200)
+    const bearerD = `Bearer ${mintedD.body.token}`
+    const asC = () => bearerAgent(() => bearerC)
+    const asD = () => bearerAgent(() => bearerD)
+
+    // /api/today 422s without baselines regardless of library state.
+    expect((await asC().put('/api/baselines').send({ k2Seconds: 120, k6Seconds: 130 })).status).toBe(200)
+    expect((await asD().put('/api/baselines').send({ k2Seconds: 120, k6Seconds: 130 })).status).toBe(200)
+
+    // Both explicitly on the sprint plan at day 0 — whose very first
+    // session is 'O2' (domain/plans.ts, SPRINT_WEEKS[0][0]) — deterministic
+    // and independent of anything A/B did above.
+    expect((await asC().put('/api/plan').send({ planKey: 'sprint' })).status).toBe(200)
+    expect((await asD().put('/api/plan').send({ planKey: 'sprint' })).status).toBe(200)
+
+    const preC = await asC().get('/api/today')
+    expect(preC.status).toBe(200)
+    expect(preC.body.todayCode).toBe('O2')
+    // globalWorkoutId (captured in the very first test above) is num 1,
+    // "Zephyr", type O2, difficulty easy, ~25 estimated minutes — already
+    // known to sit inside C/D's default prefs filters (all difficulties,
+    // 60 min cap), so it's in the O2 pool for a totally fresh account too.
+    expect(preC.body.pool).toContain(globalWorkoutId)
+
+    // C logs a REAL session against the global workout's id. This is the
+    // FK-holds assertion: session_logs.workout_id -> workouts.id succeeds
+    // against a row whose user_id is NULL exactly like any other row —
+    // logging against shared library content is not a special case at the
+    // schema level.
+    const logRes = await asC()
+      .post('/api/logs')
+      .send({
+        workoutId: globalWorkoutId,
+        workoutTitle: 'Zephyr',
+        workoutType: 'O2',
+        held: 'held',
+        pain: 1,
+        notes: null,
+        steps: [{ label: 'Steady', targetSplit: 150, actualSource: 'assumed' }],
+      })
+    expect(logRes.status).toBe(201)
+
+    // Any log bumps plan_state.done_n (see stores/logs.ts's transactional
+    // bump), which would otherwise advance C's plan to day 1 ('AT') and
+    // make the before/after O2 pools incomparable. Reset zeroes doneN
+    // back to day 0 WITHOUT touching planKey or, crucially, the log just
+    // created — session_logs is a separate table, untouched by this —
+    // so the two /today snapshots below stay on the same 'O2' day and the
+    // only difference between them is C's new log history.
+    expect((await asC().put('/api/plan').send({ reset: true })).status).toBe(200)
+
+    const afterC = await asC().get('/api/today')
+    const afterD = await asD().get('/api/today')
+    expect(afterC.status).toBe(200)
+    expect(afterD.status).toBe(200)
+    expect(afterC.body.todayCode).toBe('O2')
+    expect(afterD.body.todayCode).toBe('O2')
+
+    // domain/suggest.ts's byLeastRecentlyDone sorts never-done (null
+    // lastDoneDaysAgo) entries ahead of ANY done entry, regardless of how
+    // recently the done one happened. /api/today doesn't return
+    // lastDoneDaysAgo directly, but this ranking rule is the only
+    // user-visible signal it exposes for "have I done this" — so C's
+    // just-logged global must drop to the very end of C's O2 pool (it's
+    // now the only non-null entry among otherwise all-never-done O2
+    // siblings), while D — who has logged nothing — sees it in its
+    // original, untouched, first position. That contrast IS the proof that
+    // "done" status is per-user, not global: the global workout row itself
+    // is shared and identical for both, but each user's own log history
+    // determines its ranking independently.
+    const poolC = afterC.body.pool as string[]
+    const poolD = afterD.body.pool as string[]
+    expect(poolC).toContain(globalWorkoutId)
+    expect(poolD).toContain(globalWorkoutId)
+    expect(poolC.indexOf(globalWorkoutId)).toBe(poolC.length - 1)
+    expect(poolD.indexOf(globalWorkoutId)).toBe(0)
+
+    // The recommendation flips for the identical reason: D's top pick is
+    // the (still never-done, for D) global; C's is not, because it is no
+    // longer never-done FOR C SPECIFICALLY.
+    expect(afterD.body.recommendation).toBe(globalWorkoutId)
+    expect(afterC.body.recommendation).not.toBe(globalWorkoutId)
   })
 })
