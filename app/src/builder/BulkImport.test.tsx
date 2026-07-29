@@ -152,6 +152,72 @@ describe("BulkImport", () => {
     expect(onImported).toHaveBeenCalledTimes(1);
   });
 
+  it("announces the result summary to assistive tech via role=alert", async () => {
+    mockApi(
+      () =>
+        new Response(JSON.stringify({ created: [{}], errors: [] }), {
+          status: 200,
+        }),
+    );
+    await renderBulkImport();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
+    );
+    await userEvent.type(
+      screen.getByPlaceholderText("One workout per block, blank line between"),
+      "irrelevant, server owns parsing",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("1 created");
+  });
+
+  it("shows an error and claims no success when the server responds non-ok (e.g. 413 on an oversized paste)", async () => {
+    const onImported = vi.fn();
+    mockApi(() => new Response(null, { status: 413 }));
+    await renderBulkImport(onImported);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
+    );
+    await userEvent.type(
+      screen.getByPlaceholderText("One workout per block, blank line between"),
+      "a paste too large for the server to accept",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(
+      await screen.findByText("Couldn't import. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/created/)).not.toBeInTheDocument();
+    expect(onImported).not.toHaveBeenCalled();
+  });
+
+  it("shows an error and claims no success when the request throws (dropped connection)", async () => {
+    const onImported = vi.fn();
+    const fn = vi.fn<typeof api>(async () => {
+      throw new Error("network down");
+    });
+    vi.doMock("../api", () => ({ api: fn }));
+    await renderBulkImport(onImported);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
+    );
+    await userEvent.type(
+      screen.getByPlaceholderText("One workout per block, blank line between"),
+      "irrelevant, connection drops before a response arrives",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(
+      await screen.findByText("Couldn't import. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/created/)).not.toBeInTheDocument();
+    expect(onImported).not.toHaveBeenCalled();
+  });
+
   it("renders a null-line error's message with no 'line null' artifact", async () => {
     mockApi(
       () =>

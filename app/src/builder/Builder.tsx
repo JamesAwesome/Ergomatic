@@ -209,10 +209,16 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             id="builder-num"
             className="builder-num-input"
             aria-label="Workout number"
+            aria-invalid={Boolean(errors.num)}
+            aria-describedby={errors.num ? "builder-num-error" : undefined}
             value={form.num}
             onChange={(e) => setForm((f) => ({ ...f, num: e.target.value }))}
           />
-          {errors.num && <p className="field-error">{errors.num}</p>}
+          {errors.num && (
+            <p id="builder-num-error" className="field-error">
+              {errors.num}
+            </p>
+          )}
         </div>
         <div className="field field-title-wrap">
           <label htmlFor="builder-title">Title</label>
@@ -367,7 +373,9 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       <BulkImport onImported={() => navigate("/library")} />
 
       {submitError && (
-        <p className="field-error builder-submit-error">{submitError}</p>
+        <p className="field-error builder-submit-error" role="alert">
+          {submitError}
+        </p>
       )}
 
       <button

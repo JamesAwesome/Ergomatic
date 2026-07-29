@@ -75,6 +75,13 @@ export default function StepRowEditor({
 }) {
   const isWork = row.kind === "w";
 
+  // Stable per-row ids (keyed off row.id, not `index`, which shifts as rows
+  // are added/removed) so each field's aria-describedby points at exactly
+  // its own error message rather than colliding with another row's.
+  function errorId(field: RowField): string {
+    return `row-${row.id}-${field}-error`;
+  }
+
   return (
     <div
       className={
@@ -96,6 +103,8 @@ export default function StepRowEditor({
         <input
           className="field-dur"
           aria-label={`Row ${index + 1} duration`}
+          aria-invalid={Boolean(fieldError("dur"))}
+          aria-describedby={fieldError("dur") ? errorId("dur") : undefined}
           placeholder={isWork ? "5' or 2500m" : "10'"}
           value={row.dur}
           onChange={(e) => onChange({ dur: e.target.value })}
@@ -105,6 +114,8 @@ export default function StepRowEditor({
             <input
               className="field-ref"
               aria-label={`Row ${index + 1} pace reference`}
+              aria-invalid={Boolean(fieldError("ref"))}
+              aria-describedby={fieldError("ref") ? errorId("ref") : undefined}
               placeholder="2k / 6k-2"
               value={row.ref}
               onChange={(e) => onChange({ ref: e.target.value })}
@@ -112,6 +123,8 @@ export default function StepRowEditor({
             <input
               className="field-spm"
               aria-label={`Row ${index + 1} stroke rate`}
+              aria-invalid={Boolean(fieldError("spm"))}
+              aria-describedby={fieldError("spm") ? errorId("spm") : undefined}
               placeholder="spm"
               value={row.spm}
               onChange={(e) => onChange({ spm: e.target.value })}
@@ -119,6 +132,10 @@ export default function StepRowEditor({
             <input
               className="field-rest"
               aria-label={`Row ${index + 1} rest`}
+              aria-invalid={Boolean(fieldError("rest"))}
+              aria-describedby={
+                fieldError("rest") ? errorId("rest") : undefined
+              }
               placeholder="rest"
               value={row.rest}
               onChange={(e) => onChange({ rest: e.target.value })}
@@ -134,15 +151,25 @@ export default function StepRowEditor({
           ×
         </button>
       </div>
-      {fieldError("dur") && <p className="field-error">{fieldError("dur")}</p>}
+      {fieldError("dur") && (
+        <p id={errorId("dur")} className="field-error">
+          {fieldError("dur")}
+        </p>
+      )}
       {isWork && fieldError("ref") && (
-        <p className="field-error">{fieldError("ref")}</p>
+        <p id={errorId("ref")} className="field-error">
+          {fieldError("ref")}
+        </p>
       )}
       {isWork && fieldError("spm") && (
-        <p className="field-error">{fieldError("spm")}</p>
+        <p id={errorId("spm")} className="field-error">
+          {fieldError("spm")}
+        </p>
       )}
       {isWork && fieldError("rest") && (
-        <p className="field-error">{fieldError("rest")}</p>
+        <p id={errorId("rest")} className="field-error">
+          {fieldError("rest")}
+        </p>
       )}
       {isWork && (
         <p className="step-row-editor-split">
