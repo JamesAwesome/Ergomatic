@@ -974,6 +974,23 @@ describe('GET /api/today', () => {
     expect(res.body.pool).toEqual([])
   })
 
+  it('the pool spans globals: a global workout of the matching type appears in poolIds', async () => {
+    const stores = makeStores()
+    const app = appFor(stores)
+    await asA(request(app).put('/api/baselines')).send({ k2Seconds: 120, k6Seconds: 130 })
+    const todayCode = PLANS.sprint.sessions[0]
+    // Seeded via the same test-only seam data.test.ts's "global starter
+    // library" block uses — no personal workout created at all here, so if
+    // the global didn't show up in the pool, it could only be because
+    // stores.workouts.list()/today's library-building step failed to span
+    // globals.
+    const g = seedGlobalWorkout(stores, { num: 900, title: 'Global Pool Entry', type: todayCode as 'AN' | 'O2' | 'AT' | 'TR' })
+    const res = await asA(request(app).get('/api/today'))
+    expect(res.status).toBe(200)
+    expect(res.body.pool).toContain(g.id)
+    expect(res.body.recommendation).toBe(g.id)
+  })
+
   it('uses the selected plan and doneN, not the fallback, and reports the real planKey', async () => {
     const app = appFor(makeStores())
     await asA(request(app).put('/api/baselines')).send({ k2Seconds: 120, k6Seconds: 130 })

@@ -3,7 +3,9 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { migrate } from 'drizzle-orm/node-postgres/migrator'
 import type pg from 'pg'
 import { createDb, type Db } from '../db/index.js'
+import { workouts } from '../db/schema.js'
 import { createUserStore, type UserStore } from '../auth/users.js'
+import { StoreConflictError } from '../stores/errors.js'
 import { createWorkoutsStore, type WorkoutsStore } from '../stores/workouts.js'
 import { seedGlobalLibrary } from './seed.js'
 import { STARTER_WORKOUTS } from './starter.js'
@@ -73,5 +75,36 @@ describe('seedGlobalLibrary against real Postgres', () => {
     ])
     await seedGlobalLibrary(db)
     expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length + 1)
+  })
+
+  // index.ts wraps seedGlobalLibrary() in a try/catch that specifically
+  // tolerates StoreConflictError, because the check-then-insert inside
+  // seedGlobalLibrary is not atomic across processes: two booters can both
+  // observe zero globals and both attempt the insert, and only one of the
+  // two partial unique indexes' writes can land. This test drives that
+  // exact race against real Postgres — wiping to a genuinely unseeded
+  // state first so both calls race the gap for real, not short-circuiting
+  // on the idempotency guard the earlier tests in this file already
+  // exercised.
+  it('tolerates a genuine two-booter race: never duplicates, and any loser fails with exactly StoreConflictError', async () => {
+    await db.delete(workouts)
+    expect(await wk.countGlobals()).toBe(0)
+
+    const results = await Promise.allSettled([seedGlobalLibrary(db), seedGlobalLibrary(db)])
+
+    // Whichever call(s) "won", the two partial unique indexes guarantee the
+    // starter set landed exactly once — never doubled.
+    expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length)
+
+    // Not every run of this test is guaranteed to actually interleave the
+    // two calls' check-then-insert windows (timing-dependent), so a clean
+    // pair of resolves is an acceptable outcome. But whenever a loser DOES
+    // reject, it must reject with precisely the error type index.ts's
+    // boot-time catch pattern-matches on — anything else would mean that
+    // catch is silently swallowing something it shouldn't.
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    for (const r of rejected) {
+      expect(r.reason).toBeInstanceOf(StoreConflictError)
+    }
   })
 })

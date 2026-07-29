@@ -10,6 +10,7 @@ import { createDb } from './db/index.js'
 import { checkDb } from './db/pool.js'
 import { seedGlobalLibrary } from './seed/seed.js'
 import { createBaselinesStore } from './stores/baselines.js'
+import { StoreConflictError } from './stores/errors.js'
 import { createLogsStore } from './stores/logs.js'
 import { createPlanStateStore } from './stores/planState.js'
 import { createPreferencesStore } from './stores/preferences.js'
@@ -32,8 +33,26 @@ console.log('migrations up to date')
 // depends on); seedGlobalLibrary() must run before the app starts accepting
 // traffic so the very first request ever served already sees the full
 // global library. Idempotent — safe to run on every boot.
-await seedGlobalLibrary(db)
-console.log('global starter library seeded (idempotent)')
+//
+// seedGlobalLibrary's own check-then-insert isn't atomic across processes:
+// if two replicas boot at once, both can see zero globals and both attempt
+// the insert. The two partial unique indexes on workouts (see schema.ts)
+// guarantee only one write actually lands; the loser's insert fails with a
+// unique violation, which the store surfaces as StoreConflictError. That's
+// not a real failure here — it just means another booter already won the
+// race — so it's caught and logged rather than crashing this process. Any
+// OTHER error (a real DB outage, a schema mismatch, etc.) still propagates
+// and fails boot as before.
+try {
+  await seedGlobalLibrary(db)
+  console.log('global starter library seeded (idempotent)')
+} catch (err) {
+  if (err instanceof StoreConflictError) {
+    console.log('global starter library already seeded by another booter (lost the boot race, continuing)')
+  } else {
+    throw err
+  }
+}
 
 const siteUrl = process.env.SITE_URL ?? 'http://localhost:5173'
 const clientId = process.env.GOOGLE_CLIENT_ID ?? ''
