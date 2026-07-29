@@ -158,6 +158,13 @@ export function createDataRouter({
   requireUser,
 }: DataRouterDeps): Router {
   const router = Router();
+  // Scoped to /api: this router is mounted at the app root (see app.ts), and
+  // an unscoped `router.use(requireUser)` would gate every request that
+  // reaches it — including "/" and the SPA fallback — not just this
+  // router's own /api/* routes. Caught by e2e testing against the real
+  // compose stack (unit tests only ever exercise this router in isolation,
+  // or via createApp() with stores: null, so it was never mounted alongside
+  // the SPA fallback in a way that could expose this).
   router.use("/api", requireUser);
 
   // -- baselines ------------------------------------------------------

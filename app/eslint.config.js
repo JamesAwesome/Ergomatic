@@ -7,7 +7,15 @@ import prettierConfig from "eslint-config-prettier";
 import vitest from "@vitest/eslint-plugin";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "drizzle"] },
+  {
+    ignores: [
+      "dist",
+      "coverage",
+      "drizzle",
+      "playwright-report",
+      "test-results",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

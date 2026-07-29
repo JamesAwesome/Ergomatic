@@ -55,6 +55,39 @@ jobs:
           build-args: |
             APP_VERSION=ci
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.17.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: app
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright + Chromium (with OS deps)
+        working-directory: app
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Boot the compose stack
+        run: |
+          POSTGRES_PASSWORD=devpass TEST_AUTH_SECRET=e2e-secret APP_VERSION=e2e \
+            docker compose up -d --build --wait --wait-timeout 120
+      - name: Run Playwright (flows + design)
+        working-directory: app
+        run: pnpm exec playwright test --project=chromium
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: app/playwright-report/
+          retention-days: 14
+
   deploy-script:
     runs-on: ubuntu-latest
     steps:
@@ -65,7 +98,7 @@ jobs:
           bash scripts/deploy.test.sh
 
   deploy:
-    needs: [root-hooks, app, docker, deploy-script]
+    needs: [root-hooks, app, docker, e2e, deploy-script]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: self-hosted
     environment: production
