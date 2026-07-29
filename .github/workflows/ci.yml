@@ -47,13 +47,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      - name: Build app image
+      - name: Build api image
         uses: docker/build-push-action@v7
         with:
           context: ./app
+          target: api
           push: false
           build-args: |
             APP_VERSION=ci
+      - name: Build web image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app
+          target: web
+          push: false
 
   e2e:
     runs-on: ubuntu-latest
