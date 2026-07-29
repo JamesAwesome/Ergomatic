@@ -3,6 +3,8 @@ import {
   EMPTY_FORM,
   addRow,
   fromWorkout,
+  hasUnsupportedSteps,
+  newForm,
   parseDurationInput,
   removeRow,
   setReps,
@@ -10,7 +12,11 @@ import {
   toggleMarked,
   totals,
   type BuilderForm,
+  type BuilderRow,
 } from "./builderState";
+import { validateSteps } from "../../domain/validate.js";
+import { estimateMinutes } from "../../domain/expand.js";
+import type { Step } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -352,5 +358,264 @@ describe("fromWorkout", () => {
       spm: "22",
     });
     expect(f.rows[0].marked).toBe(false);
+  });
+
+  it("round-trips restMinutes so an edited workout with rest can be saved (H1/H2)", () => {
+    const workout = {
+      num: 9,
+      title: "Rest Test",
+      type: "AT" as const,
+      difficulty: "medium" as const,
+      pain: 3,
+      steps: [
+        {
+          k: "w" as const,
+          duration: { kind: "time" as const, minutes: 4 },
+          ref: { base: "2k" as const, off: 0 },
+          restMinutes: 2,
+        },
+      ],
+    };
+
+    const form = fromWorkout(workout);
+    expect(form.rows[0].rest).toBe("2");
+
+    const out = toSteps(form);
+    expect(out.ok).toBe(true);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps).toStrictEqual(workout.steps);
+
+    // Pins client/server agreement directly: whatever the builder round
+    // trips must also satisfy the domain's own bounds.
+    expect(validateSteps(out.steps)).toStrictEqual({
+      ok: true,
+      steps: out.steps,
+    });
+  });
+});
+
+describe("totals vs. estimateMinutes agreement", () => {
+  it("counts a work step's restMinutes, matching the domain's phases()/estimateMinutes()", () => {
+    const workout = {
+      num: 9,
+      title: "Rest Test",
+      type: "AT" as const,
+      difficulty: "medium" as const,
+      pain: 3,
+      steps: [
+        {
+          k: "w" as const,
+          duration: { kind: "time" as const, minutes: 4 },
+          ref: { base: "2k" as const, off: 0 },
+          restMinutes: 2,
+        },
+      ],
+    };
+
+    const form = fromWorkout(workout);
+    const out = toSteps(form);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+
+    const t = totals(form, baselines);
+    expect(t).not.toBeNull();
+    const estimate = estimateMinutes(out.steps, baselines);
+    expect(Math.round(t!.total)).toBe(estimate.minutes);
+  });
+});
+
+describe("toSteps additional coverage", () => {
+  it("builds a distance work step", () => {
+    const f = formWith({
+      rows: [
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: "2500m",
+          ref: "2k",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+    const out = toSteps(f);
+    expect(out.ok).toBe(true);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps).toStrictEqual([
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 2500 },
+        ref: { base: "2k", off: 0 },
+      },
+    ]);
+  });
+
+  it("rejects a pace-ref offset beyond the domain's ±60 bound (M1)", () => {
+    const f = formWith({
+      rows: [
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: "5'",
+          ref: "2k+99",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:ref"]).toMatch(/pace/i);
+  });
+
+  it("bounds the emitted step count, not just the row count (M2)", () => {
+    const rows: BuilderRow[] = Array.from({ length: 100 }, (_, i) => ({
+      id: `r${i}`,
+      kind: "w",
+      marked: i === 0,
+      dur: "1'",
+      ref: "2k",
+      spm: "",
+      rest: "",
+    }));
+    // 100 rows + 1 reps marker = 101 emitted steps, over the domain's cap.
+    const out = toSteps(formWith({ rows, reps: 2 }));
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors.steps).toMatch(/100/);
+  });
+
+  it("allows exactly 100 emitted steps (rows plus the reps marker)", () => {
+    const rows: BuilderRow[] = Array.from({ length: 99 }, (_, i) => ({
+      id: `r${i}`,
+      kind: "w",
+      marked: i === 0,
+      dur: "1'",
+      ref: "2k",
+      spm: "",
+      rest: "",
+    }));
+    // 99 rows + 1 reps marker = 100 emitted steps, exactly at the cap.
+    const out = toSteps(formWith({ rows, reps: 2 }));
+    expect(out.ok).toBe(true);
+  });
+
+  it("tolerates surrounding whitespace in a duration field, like every other field (L1)", () => {
+    const f = formWith({
+      rows: [
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: " 5' ",
+          ref: "2k",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+    const out = toSteps(f);
+    expect(out.ok).toBe(true);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps).toStrictEqual([
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "2k", off: 0 },
+      },
+    ]);
+  });
+
+  it("rejects exponent notation in num, requiring plain digits (L3)", () => {
+    const out = toSteps(formWith({ num: "1e3" }));
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors.num).toBeTruthy();
+  });
+});
+
+describe("duration input whitespace (L1)", () => {
+  it("trims surrounding whitespace, matching typed vs. pasted input", () => {
+    expect(parseDurationInput("5' ")).toStrictEqual({
+      kind: "time",
+      minutes: 5,
+    });
+    expect(parseDurationInput(" 2500m")).toStrictEqual({
+      kind: "distance",
+      meters: 2500,
+    });
+  });
+});
+
+describe("hasUnsupportedSteps (L2)", () => {
+  it("flags a workout containing a test step, which the builder cannot represent", () => {
+    const steps: Step[] = [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "2k", off: 0 },
+      },
+      { k: "test", label: "2k test" },
+    ];
+    expect(hasUnsupportedSteps(steps)).toBe(true);
+  });
+
+  it("is false for a workout made entirely of representable step kinds", () => {
+    const steps: Step[] = [
+      { k: "wu", minutes: 10 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "2k", off: 0 },
+      },
+    ];
+    expect(hasUnsupportedSteps(steps)).toBe(false);
+  });
+
+  it("lets a caller detect the loss before fromWorkout silently drops the test step", () => {
+    const workout = {
+      num: 1,
+      title: "Has a test piece",
+      type: "AT" as const,
+      difficulty: "medium" as const,
+      pain: 3,
+      steps: [
+        {
+          k: "w" as const,
+          duration: { kind: "time" as const, minutes: 5 },
+          ref: { base: "2k" as const, off: 0 },
+        },
+        { k: "test" as const, label: "2k test" },
+      ],
+    };
+
+    expect(hasUnsupportedSteps(workout.steps)).toBe(true);
+    const form = fromWorkout(workout);
+    expect(form.rows).toHaveLength(1); // the test step did not survive
+  });
+});
+
+describe("EMPTY_FORM safety (L4)", () => {
+  it("is frozen, so an in-place edit throws instead of corrupting shared state", () => {
+    expect(() => {
+      (EMPTY_FORM as { num: string }).num = "5";
+    }).toThrow();
+    expect(() => {
+      (EMPTY_FORM.rows[0] as { dur: string }).dur = "5'";
+    }).toThrow();
+  });
+
+  it("newForm() returns a form with its own row, never shared with EMPTY_FORM or other calls", () => {
+    const a = newForm();
+    const b = newForm();
+    expect(a.rows[0]).not.toBe(b.rows[0]);
+    expect(a.rows[0]).not.toBe(EMPTY_FORM.rows[0]);
+    expect(a).not.toBe(EMPTY_FORM);
   });
 });
