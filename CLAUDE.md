@@ -32,7 +32,9 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   Never trust versions from memory or other repos. TypeScript stays `~6.0.x` until
   typescript-eslint's peer range admits 7 (check `npm view typescript-eslint peerDependencies`).
 - TDD: failing test first. Domain code gets the heaviest coverage.
-- Hooks: pre-commit = lint-staged + typecheck; pre-push = full tests. Don't bypass with
+- Hooks: pre-commit = lint-staged + typecheck; pre-push = unit + client tests only
+  (fast, Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
+  loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
   `--no-verify`; fix the failure.
 - pnpm only. ESM only. Server imports use `.js` extensions.
 - After every merge to main, post a TestFlight release recommendation
