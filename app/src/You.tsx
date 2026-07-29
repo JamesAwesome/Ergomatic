@@ -1,5 +1,5 @@
-import type { Me } from './useMe'
-import { isNative } from './platform'
+import type { Me } from "./useMe";
+import { isNative } from "./platform";
 
 function initials(name: string): string {
   return name
@@ -7,18 +7,24 @@ function initials(name: string): string {
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
-    .join('')
+    .join("");
 }
 
-export default function You({ user, onSignedOut }: { user: Me; onSignedOut: () => void }) {
+export default function You({
+  user,
+  onSignedOut,
+}: {
+  user: Me;
+  onSignedOut: () => void;
+}) {
   async function signOut() {
     if (isNative()) {
-      const { nativeSignOut } = await import('./native/signin')
-      await nativeSignOut()
+      const { nativeSignOut } = await import("./native/signin");
+      await nativeSignOut();
     } else {
-      await fetch('/api/auth/signout', { method: 'POST' })
+      await fetch("/api/auth/signout", { method: "POST" });
     }
-    onSignedOut()
+    onSignedOut();
   }
 
   return (
@@ -34,5 +40,5 @@ export default function You({ user, onSignedOut }: { user: Me; onSignedOut: () =
         Sign out
       </button>
     </section>
-  )
+  );
 }

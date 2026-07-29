@@ -1,6 +1,6 @@
-import type { Db } from '../db/index.js'
-import { createWorkoutsStore } from '../stores/workouts.js'
-import { STARTER_WORKOUTS } from './starter.js'
+import type { Db } from "../db/index.js";
+import { createWorkoutsStore } from "../stores/workouts.js";
+import { STARTER_WORKOUTS } from "./starter.js";
 
 /**
  * Seeds the ORIGINAL starter library as a shared, read-only global set —
@@ -16,13 +16,16 @@ import { STARTER_WORKOUTS } from './starter.js'
  * user's rows entirely.
  */
 export async function seedGlobalLibrary(db: Db): Promise<void> {
-  const workouts = createWorkoutsStore(db)
+  const workouts = createWorkoutsStore(db);
 
-  const existing = await workouts.countGlobals()
-  if (existing > 0) return
+  const existing = await workouts.countGlobals();
+  if (existing > 0) return;
 
   await workouts.createMany(
     null,
-    STARTER_WORKOUTS.map((workout) => ({ ...workout, source: 'starter' as const })),
-  )
+    STARTER_WORKOUTS.map((workout) => ({
+      ...workout,
+      source: "starter" as const,
+    })),
+  );
 }

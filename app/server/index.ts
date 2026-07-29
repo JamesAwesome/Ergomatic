@@ -1,33 +1,33 @@
-import path from 'node:path'
-import { migrate } from 'drizzle-orm/node-postgres/migrator'
-import { createApp } from './app.js'
-import { parseAllowlist } from './auth/allowlist.js'
-import { createGoogleProvider, type OAuthProvider } from './auth/google.js'
-import { createNativeVerifier } from './auth/nativeVerify.js'
-import { createSessionStore } from './auth/sessions.js'
-import { createUserStore } from './auth/users.js'
-import { createDb } from './db/index.js'
-import { checkDb } from './db/pool.js'
-import { seedGlobalLibrary } from './seed/seed.js'
-import { createBaselinesStore } from './stores/baselines.js'
-import { StoreConflictError } from './stores/errors.js'
-import { createLogsStore } from './stores/logs.js'
-import { createPlanStateStore } from './stores/planState.js'
-import { createPreferencesStore } from './stores/preferences.js'
-import { createTestHistoryStore } from './stores/testHistory.js'
-import { createWorkoutsStore } from './stores/workouts.js'
-import type { Stores } from './routes/data.js'
+import path from "node:path";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { createApp } from "./app.js";
+import { parseAllowlist } from "./auth/allowlist.js";
+import { createGoogleProvider, type OAuthProvider } from "./auth/google.js";
+import { createNativeVerifier } from "./auth/nativeVerify.js";
+import { createSessionStore } from "./auth/sessions.js";
+import { createUserStore } from "./auth/users.js";
+import { createDb } from "./db/index.js";
+import { checkDb } from "./db/pool.js";
+import { seedGlobalLibrary } from "./seed/seed.js";
+import { createBaselinesStore } from "./stores/baselines.js";
+import { StoreConflictError } from "./stores/errors.js";
+import { createLogsStore } from "./stores/logs.js";
+import { createPlanStateStore } from "./stores/planState.js";
+import { createPreferencesStore } from "./stores/preferences.js";
+import { createTestHistoryStore } from "./stores/testHistory.js";
+import { createWorkoutsStore } from "./stores/workouts.js";
+import type { Stores } from "./routes/data.js";
 
-const connectionString = process.env.DATABASE_URL
+const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-  console.error('DATABASE_URL is required')
-  process.exit(1)
+  console.error("DATABASE_URL is required");
+  process.exit(1);
 }
 
-const { pool, db } = createDb(connectionString)
+const { pool, db } = createDb(connectionString);
 // cwd-relative: app/ in dev, /app in the container
-await migrate(db, { migrationsFolder: 'drizzle' })
-console.log('migrations up to date')
+await migrate(db, { migrationsFolder: "drizzle" });
+console.log("migrations up to date");
 
 // Boot order: migrate() must run first (creates the workouts table this
 // depends on); seedGlobalLibrary() must run before the app starts accepting
@@ -44,41 +44,47 @@ console.log('migrations up to date')
 // OTHER error (a real DB outage, a schema mismatch, etc.) still propagates
 // and fails boot as before.
 try {
-  await seedGlobalLibrary(db)
-  console.log('global starter library seeded (idempotent)')
+  await seedGlobalLibrary(db);
+  console.log("global starter library seeded (idempotent)");
 } catch (err) {
   if (err instanceof StoreConflictError) {
-    console.log('global starter library already seeded by another booter (lost the boot race, continuing)')
+    console.log(
+      "global starter library already seeded by another booter (lost the boot race, continuing)",
+    );
   } else {
-    throw err
+    throw err;
   }
 }
 
-const siteUrl = process.env.SITE_URL ?? 'http://localhost:5173'
-const clientId = process.env.GOOGLE_CLIENT_ID ?? ''
-const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? ''
+const siteUrl = process.env.SITE_URL ?? "http://localhost:5173";
+const clientId = process.env.GOOGLE_CLIENT_ID ?? "";
+const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
 
-let oauth: OAuthProvider | null = null
+let oauth: OAuthProvider | null = null;
 if (clientId && clientSecret) {
   oauth = await createGoogleProvider({
     clientId,
     clientSecret,
-    redirectUri: new URL('/api/auth/callback', siteUrl).href,
-  })
+    redirectUri: new URL("/api/auth/callback", siteUrl).href,
+  });
 } else {
   console.warn(
-    'WARNING: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not fully set — sign-in is DISABLED (auth routes will 503)',
-  )
+    "WARNING: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not fully set — sign-in is DISABLED (auth routes will 503)",
+  );
 }
-const iosClientId = process.env.GOOGLE_IOS_CLIENT_ID ?? ''
-const nativeVerifier = iosClientId ? createNativeVerifier(iosClientId) : null
+const iosClientId = process.env.GOOGLE_IOS_CLIENT_ID ?? "";
+const nativeVerifier = iosClientId ? createNativeVerifier(iosClientId) : null;
 if (!nativeVerifier) {
-  console.warn('WARNING: GOOGLE_IOS_CLIENT_ID not set — native (iOS) sign-in is DISABLED')
+  console.warn(
+    "WARNING: GOOGLE_IOS_CLIENT_ID not set — native (iOS) sign-in is DISABLED",
+  );
 }
 
-const allowlist = parseAllowlist(process.env.ALLOWED_EMAILS)
+const allowlist = parseAllowlist(process.env.ALLOWED_EMAILS);
 if (allowlist.size === 0) {
-  console.warn('WARNING: ALLOWED_EMAILS is empty — nobody can create an account')
+  console.warn(
+    "WARNING: ALLOWED_EMAILS is empty — nobody can create an account",
+  );
 }
 
 const stores: Stores = {
@@ -88,9 +94,9 @@ const stores: Stores = {
   planState: createPlanStateStore(db),
   preferences: createPreferencesStore(db),
   testHistory: createTestHistoryStore(db),
-}
+};
 
-const port = Number(process.env.PORT ?? 8080)
+const port = Number(process.env.PORT ?? 8080);
 createApp({
   checkDb: () => checkDb(pool),
   sessions: createSessionStore(db),
@@ -99,8 +105,8 @@ createApp({
   nativeVerifier,
   allowlist,
   siteUrl,
-  clientDir: path.resolve(process.cwd(), 'dist/client'),
+  clientDir: path.resolve(process.cwd(), "dist/client"),
   stores,
 }).listen(port, () => {
-  console.log(`ergomatic api listening on :${port}`)
-})
+  console.log(`ergomatic api listening on :${port}`);
+});

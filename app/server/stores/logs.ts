@@ -1,30 +1,30 @@
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm'
-import type { Db } from '../db/index.js'
-import { planState, sessionLogs } from '../db/schema.js'
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import type { Db } from "../db/index.js";
+import { planState, sessionLogs } from "../db/schema.js";
 
-export type ActualSource = 'assumed' | 'stopwatch' | 'pm5'
-export type HeldResult = 'held' | 'under' | 'over'
+export type ActualSource = "assumed" | "stopwatch" | "pm5";
+export type HeldResult = "held" | "under" | "over";
 
 export interface LogStep {
-  label: string
-  targetSplit: number
-  actualSplit?: number
-  actualSource: ActualSource
-  spm?: number
-  meters?: number
-  seconds?: number
+  label: string;
+  targetSplit: number;
+  actualSplit?: number;
+  actualSource: ActualSource;
+  spm?: number;
+  meters?: number;
+  seconds?: number;
 }
 
 export interface LogInput {
-  workoutId: string | null
-  workoutTitle: string
-  workoutType: string
-  baselineK2: number | null
-  baselineK6: number | null
-  held: HeldResult
-  pain: number
-  notes: string | null
-  steps: LogStep[]
+  workoutId: string | null;
+  workoutTitle: string;
+  workoutType: string;
+  baselineK2: number | null;
+  baselineK6: number | null;
+  held: HeldResult;
+  pain: number;
+  notes: string | null;
+  steps: LogStep[];
 }
 
 export function createLogsStore(db: Db) {
@@ -35,12 +35,15 @@ export function createLogsStore(db: Db) {
         .from(sessionLogs)
         .where(eq(sessionLogs.userId, userId))
         .orderBy(desc(sessionLogs.loggedAt))
-        .limit(limit)
+        .limit(limit);
     },
 
     async count(userId: string): Promise<number> {
-      const rows = await db.select({ id: sessionLogs.id }).from(sessionLogs).where(eq(sessionLogs.userId, userId))
-      return rows.length
+      const rows = await db
+        .select({ id: sessionLogs.id })
+        .from(sessionLogs)
+        .where(eq(sessionLogs.userId, userId));
+      return rows.length;
     },
 
     // Inserts the log and bumps plan_state.done_n in one transaction so the
@@ -62,7 +65,7 @@ export function createLogsStore(db: Db) {
             notes: input.notes,
             steps: input.steps,
           })
-          .returning({ id: sessionLogs.id })
+          .returning({ id: sessionLogs.id });
 
         await tx
           .insert(planState)
@@ -70,10 +73,10 @@ export function createLogsStore(db: Db) {
           .onConflictDoUpdate({
             target: planState.userId,
             set: { doneN: sql`${planState.doneN} + 1` },
-          })
+          });
 
-        return row
-      })
+        return row;
+      });
     },
 
     // Most-recent log per workout, as whole days since that log — feeds the
@@ -82,24 +85,31 @@ export function createLogsStore(db: Db) {
     // nothing to attribute recency to.
     async lastDonePerWorkout(userId: string): Promise<Record<string, number>> {
       const rows = await db
-        .select({ workoutId: sessionLogs.workoutId, lastLoggedAt: sql<Date>`max(${sessionLogs.loggedAt})` })
+        .select({
+          workoutId: sessionLogs.workoutId,
+          lastLoggedAt: sql<Date>`max(${sessionLogs.loggedAt})`,
+        })
         .from(sessionLogs)
-        .where(and(eq(sessionLogs.userId, userId), isNotNull(sessionLogs.workoutId)))
-        .groupBy(sessionLogs.workoutId)
+        .where(
+          and(eq(sessionLogs.userId, userId), isNotNull(sessionLogs.workoutId)),
+        )
+        .groupBy(sessionLogs.workoutId);
 
-      const now = Date.now()
-      const result: Record<string, number> = {}
+      const now = Date.now();
+      const result: Record<string, number> = {};
       for (const row of rows) {
         // The `isNotNull` filter above guarantees workoutId is set; the cast
         // just works around Drizzle's grouped-select typing still marking
         // the column nullable.
-        const workoutId = row.workoutId as string
-        const days = Math.floor((now - new Date(row.lastLoggedAt).getTime()) / 86_400_000)
-        result[workoutId] = days
+        const workoutId = row.workoutId as string;
+        const days = Math.floor(
+          (now - new Date(row.lastLoggedAt).getTime()) / 86_400_000,
+        );
+        result[workoutId] = days;
       }
-      return result
+      return result;
     },
-  }
+  };
 }
 
-export type LogsStore = ReturnType<typeof createLogsStore>
+export type LogsStore = ReturnType<typeof createLogsStore>;
