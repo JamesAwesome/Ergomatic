@@ -9,7 +9,7 @@ import {
   real,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
@@ -57,9 +57,10 @@ export const workouts = pgTable(
   'workouts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    // Nullable: NULL marks a global starter-library row, seeded once at
+    // boot and shared read-only across every user (Task 9's global-library
+    // amendment). A non-null value is an ordinary personal row.
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     num: integer('num').notNull(),
     title: text('title').notNull(),
     type: workoutTypeEnum('type').notNull(),
@@ -72,7 +73,12 @@ export const workouts = pgTable(
   },
   (t) => [
     index('workouts_user_id_idx').on(t.userId),
-    unique('workouts_user_id_num_unique').on(t.userId, t.num),
+    // Two disjoint uniqueness namespaces instead of one plain UNIQUE(user_id,
+    // num): a personal `num` must be unique per owning user, and a global
+    // `num` must be unique among globals — but a personal num MAY collide
+    // with a global num (namespaces are independent by design).
+    uniqueIndex('workouts_user_num_unique').on(t.userId, t.num).where(sql`${t.userId} is not null`),
+    uniqueIndex('workouts_global_num_unique').on(t.num).where(sql`${t.userId} is null`),
     check('workouts_pain_check', sql`${t.pain} between 1 and 5`),
   ],
 )

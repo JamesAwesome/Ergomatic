@@ -8,7 +8,7 @@ import { createSessionStore } from './auth/sessions.js'
 import { createUserStore } from './auth/users.js'
 import { createDb } from './db/index.js'
 import { checkDb } from './db/pool.js'
-import { seedStarterLibraryIfEmpty } from './seed/seed.js'
+import { seedGlobalLibrary } from './seed/seed.js'
 import { createBaselinesStore } from './stores/baselines.js'
 import { createLogsStore } from './stores/logs.js'
 import { createPlanStateStore } from './stores/planState.js'
@@ -27,6 +27,13 @@ const { pool, db } = createDb(connectionString)
 // cwd-relative: app/ in dev, /app in the container
 await migrate(db, { migrationsFolder: 'drizzle' })
 console.log('migrations up to date')
+
+// Boot order: migrate() must run first (creates the workouts table this
+// depends on); seedGlobalLibrary() must run before the app starts accepting
+// traffic so the very first request ever served already sees the full
+// global library. Idempotent — safe to run on every boot.
+await seedGlobalLibrary(db)
+console.log('global starter library seeded (idempotent)')
 
 const siteUrl = process.env.SITE_URL ?? 'http://localhost:5173'
 const clientId = process.env.GOOGLE_CLIENT_ID ?? ''
@@ -75,7 +82,6 @@ createApp({
   siteUrl,
   clientDir: path.resolve(process.cwd(), 'dist/client'),
   stores,
-  seed: (userId) => seedStarterLibraryIfEmpty(db, userId),
 }).listen(port, () => {
   console.log(`ergomatic api listening on :${port}`)
 })

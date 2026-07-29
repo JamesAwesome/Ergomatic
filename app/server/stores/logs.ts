@@ -38,9 +38,6 @@ export function createLogsStore(db: Db) {
         .limit(limit)
     },
 
-    // Backs the seed-if-empty rule (app/server/seed/seed.ts): a user who has
-    // logged sessions keeps an empty library empty rather than getting
-    // re-seeded out from under them.
     async count(userId: string): Promise<number> {
       const rows = await db.select({ id: sessionLogs.id }).from(sessionLogs).where(eq(sessionLogs.userId, userId))
       return rows.length

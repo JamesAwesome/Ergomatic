@@ -51,6 +51,13 @@ function notFound(res: Parameters<RequestHandler>[1]) {
   res.status(404).json({ error: 'not found' })
 }
 
+// Global (starter-library) workouts are visible to every user but never
+// mutable by any of them — a 403 before any store write, distinct from the
+// 404 a caller gets for an id they can't see at all.
+function starterReadonly(res: Parameters<RequestHandler>[1]) {
+  res.status(403).json({ error: 'starter_readonly' })
+}
+
 function isRec(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
 }
@@ -183,6 +190,10 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
       notFound(res)
       return
     }
+    if (existing.isGlobal) {
+      starterReadonly(res)
+      return
+    }
     const validated = validateWorkoutInput(req.body)
     if (!validated.ok) {
       badRequest(res, validated.errors.join('; '))
@@ -210,6 +221,10 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
     const existing = await stores.workouts.get(req.user!.id, req.params.id)
     if (!existing) {
       notFound(res)
+      return
+    }
+    if (existing.isGlobal) {
+      starterReadonly(res)
       return
     }
     await stores.workouts.remove(req.user!.id, req.params.id)

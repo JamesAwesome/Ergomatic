@@ -153,6 +153,92 @@ describe('domain stores against real Postgres', () => {
       const listForB = await s.list(userB)
       expect(listForB.some((w) => w.id === created.id)).toBe(false)
     })
+
+    describe('global library (Task 9: nullable user_id + partial unique indexes)', () => {
+      it('createMany(null, ...) inserts global rows visible to every user via list/get, tagged isGlobal', async () => {
+        const s = store()
+        const users = createUserStore(db)
+        const fresh = await users.createUser({ googleSub: 'global-fresh', email: 'globalfresh@x.com', name: 'GF' })
+
+        const globals = await s.createMany(null, [
+          workoutInput({ num: 800, title: 'Global Alpha' }),
+          workoutInput({ num: 801, title: 'Global Beta' }),
+        ])
+        expect(globals).toHaveLength(2)
+        expect(globals.every((w) => w.userId === null)).toBe(true)
+        expect(globals.every((w) => w.isGlobal === true)).toBe(true)
+
+        const list = await s.list(fresh.id)
+        const seen = list.filter((w) => w.num === 800 || w.num === 801)
+        expect(seen).toHaveLength(2)
+        expect(seen.every((w) => w.isGlobal === true)).toBe(true)
+
+        const got = await s.get(fresh.id, globals[0].id)
+        expect(got).toMatchObject({ id: globals[0].id, title: 'Global Alpha', isGlobal: true })
+
+        expect(await s.countGlobals()).toBeGreaterThanOrEqual(2)
+        const globalList = await s.listGlobals()
+        expect(globalList.some((w) => w.id === globals[0].id)).toBe(true)
+      })
+
+      it('list for a fresh user returns globals plus their own creations, each correctly tagged', async () => {
+        const s = store()
+        const users = createUserStore(db)
+        const fresh = await users.createUser({ googleSub: 'global-mix', email: 'globalmix@x.com', name: 'GM' })
+
+        const [g] = await s.createMany(null, [workoutInput({ num: 810, title: 'Global Mix' })])
+        const personal = await s.create(fresh.id, workoutInput({ num: 811, title: 'Personal Mix' }))
+
+        const list = await s.list(fresh.id)
+        const gRow = list.find((w) => w.id === g.id)
+        const pRow = list.find((w) => w.id === personal.id)
+        expect(gRow).toMatchObject({ isGlobal: true })
+        expect(pRow).toMatchObject({ isGlobal: false })
+      })
+
+      it('update against a global id no-ops: returns null, row unchanged', async () => {
+        const s = store()
+        const [g] = await s.createMany(null, [workoutInput({ num: 820, title: 'Global Immutable' })])
+
+        const result = await s.update(userA, g.id, workoutInput({ num: 820, title: 'Hijacked' }))
+        expect(result).toBeNull()
+
+        const stillThere = await s.get(userA, g.id)
+        expect(stillThere).toMatchObject({ title: 'Global Immutable', isGlobal: true })
+      })
+
+      it('remove against a global id no-ops: row still present afterward', async () => {
+        const s = store()
+        const [g] = await s.createMany(null, [workoutInput({ num: 821, title: 'Global Survivor' })])
+
+        await s.remove(userA, g.id)
+
+        const stillThere = await s.get(userB, g.id)
+        expect(stillThere).toMatchObject({ title: 'Global Survivor', isGlobal: true })
+      })
+
+      it('num uniqueness is independent between the global and personal namespaces', async () => {
+        const s = store()
+        const users = createUserStore(db)
+        const fresh = await users.createUser({ googleSub: 'global-num', email: 'globalnum@x.com', name: 'GN' })
+
+        await s.createMany(null, [workoutInput({ num: 830, title: 'Global 830' })])
+        // A personal workout at the SAME num, for a user who owns nothing
+        // else at that num, must succeed — the namespaces don't clash.
+        const personal = await s.create(fresh.id, workoutInput({ num: 830, title: 'My 830' }))
+        expect(personal).toMatchObject({ num: 830, userId: fresh.id, isGlobal: false })
+
+        // But two globals at the same num DO clash with each other.
+        await expect(s.createMany(null, [workoutInput({ num: 830, title: 'Global Clash' })])).rejects.toThrow(
+          StoreConflictError,
+        )
+
+        // And two personal rows for the SAME user at the same num still clash.
+        await expect(s.create(fresh.id, workoutInput({ num: 830, title: 'Clash mine' }))).rejects.toThrow(
+          StoreConflictError,
+        )
+      })
+    })
   })
 
   describe('plan state store', () => {
@@ -321,7 +407,7 @@ describe('domain stores against real Postgres', () => {
       expect(await logs.list(other.id, 10)).toHaveLength(0)
     })
 
-    it('count reflects inserted logs and is scoped per user (backs the seed-if-empty rule)', async () => {
+    it('count reflects inserted logs and is scoped per user', async () => {
       const logs = createLogsStore(db)
       const users = createUserStore(db)
       const fresh = await users.createUser({ googleSub: 'log-count', email: 'logcount@x.com', name: 'LC' })

@@ -22,7 +22,6 @@ export interface AuthDeps {
   nativeVerifier: NativeTokenVerifier | null
   allowlist: Set<string>
   siteUrl: string
-  seed: (userId: string) => Promise<void>
 }
 
 export function createAuthRouter({
@@ -32,7 +31,6 @@ export function createAuthRouter({
   nativeVerifier,
   allowlist,
   siteUrl,
-  seed,
 }: AuthDeps): Router {
   const router = Router()
 
@@ -76,7 +74,7 @@ export function createAuthRouter({
     }
 
     try {
-      const result = await signInWithClaims({ sessions, users, allowlist, seed }, claims)
+      const result = await signInWithClaims({ sessions, users, allowlist }, claims)
       if (result.outcome === 'denied') {
         res.setHeader('Set-Cookie', clear)
         res.redirect(`/?denied=${encodeURIComponent(result.email)}`)
@@ -108,7 +106,7 @@ export function createAuthRouter({
       return
     }
     try {
-      const result = await signInWithClaims({ sessions, users, allowlist, seed }, claims)
+      const result = await signInWithClaims({ sessions, users, allowlist }, claims)
       if (result.outcome === 'denied') {
         res.status(403).json({ error: 'denied', email: result.email })
         return

@@ -22,7 +22,7 @@ import { createDataRouter, type Stores } from './data.js'
 
 interface WorkoutRow extends WorkoutInput {
   id: string
-  userId: string
+  userId: string | null
   source: 'starter' | 'user'
   createdAt: Date
   updatedAt: Date
@@ -49,8 +49,15 @@ function makeFakeBaselinesStore(): BaselinesStore {
   } as unknown as BaselinesStore
 }
 
-function makeFakeWorkoutsStore(): WorkoutsStore {
+// Mirrors the real store's global-library semantics (app/server/stores/
+// workouts.ts): globals live in their own bucket, keyed by nothing but id
+// (no owning user), and every personal bucket's list/get is unioned with
+// them. update/remove only ever touch a caller's own personal bucket — they
+// structurally cannot reach `globals`, exactly like the real store's
+// `user_id = $userId` predicate can never match a NULL user_id row.
+function makeFakeWorkoutsStore(): WorkoutsStore & { _seedGlobal: (input: NewWorkoutInput) => WorkoutRow } {
   const byUser = new Map<string, Map<string, WorkoutRow>>()
+  const globals = new Map<string, WorkoutRow>()
   const forUser = (userId: string) => {
     let m = byUser.get(userId)
     if (!m) {
@@ -59,6 +66,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore {
     }
     return m
   }
+  const withIsGlobal = (row: WorkoutRow) => ({ ...row, isGlobal: row.userId === null })
   const create = async (userId: string, input: NewWorkoutInput): Promise<WorkoutRow> => {
     const m = forUser(userId)
     if ([...m.values()].some((w) => w.num === input.num)) {
@@ -72,14 +80,18 @@ function makeFakeWorkoutsStore(): WorkoutsStore {
       updatedAt: new Date(),
     }
     m.set(row.id, row)
-    return row
+    return withIsGlobal(row) as unknown as WorkoutRow
   }
   return {
     async list(userId: string) {
-      return [...forUser(userId).values()].sort((a, b) => a.num - b.num)
+      const all = [...globals.values(), ...forUser(userId).values()]
+      return all.map(withIsGlobal).sort((a, b) => a.num - b.num)
     },
     async get(userId: string, id: string) {
-      return forUser(userId).get(id) ?? null
+      const g = globals.get(id)
+      if (g) return withIsGlobal(g)
+      const row = forUser(userId).get(id)
+      return row ? withIsGlobal(row) : null
     },
     create,
     async createMany(userId: string, inputs: NewWorkoutInput[]) {
@@ -98,7 +110,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore {
       }
       const row: WorkoutRow = { ...existing, ...input, updatedAt: new Date() }
       m.set(id, row)
-      return row
+      return withIsGlobal(row)
     },
     async remove(userId: string, id: string) {
       forUser(userId).delete(id)
@@ -106,7 +118,26 @@ function makeFakeWorkoutsStore(): WorkoutsStore {
     async count(userId: string) {
       return forUser(userId).size
     },
-  } as unknown as WorkoutsStore
+    async listGlobals() {
+      return [...globals.values()].map(withIsGlobal).sort((a, b) => a.num - b.num)
+    },
+    async countGlobals() {
+      return globals.size
+    },
+    // Test-only seam: the real store's globals come from seedGlobalLibrary
+    // at boot, never through this router. Injects a global row directly.
+    _seedGlobal(input: NewWorkoutInput) {
+      const row: WorkoutRow = {
+        ...input,
+        id: crypto.randomUUID(),
+        userId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      globals.set(row.id, row)
+      return withIsGlobal(row) as unknown as WorkoutRow
+    },
+  } as unknown as WorkoutsStore & { _seedGlobal: (input: NewWorkoutInput) => WorkoutRow }
 }
 
 type FakePlanStateStore = PlanStateStore & { _advance: (userId: string, by?: number) => void }
@@ -248,6 +279,14 @@ function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
     ],
     ...overrides,
   }
+}
+
+// Injects a global (starter-library) row via the fake store's test-only
+// seam, mirroring what seedGlobalLibrary does for real against Postgres.
+function seedGlobalWorkout(stores: Stores, overrides: Partial<WorkoutInput> = {}) {
+  return (
+    stores.workouts as unknown as { _seedGlobal: (input: NewWorkoutInput) => { id: string; num: number; title: string } }
+  )._seedGlobal({ ...validWorkoutBody(overrides), source: 'starter' })
 }
 
 // ---------------------------------------------------------------------------
@@ -475,6 +514,67 @@ describe('workouts CRUD', () => {
     expect(res.status).toBe(404)
     const stillThere = await asA(request(app).get(`/api/workouts/${created.body.id}`))
     expect(stillThere.status).toBe(200)
+  })
+})
+
+describe('global starter library', () => {
+  it('GET list includes global rows tagged isGlobal:true alongside the caller\'s own isGlobal:false rows', async () => {
+    const stores = makeStores()
+    seedGlobalWorkout(stores, { num: 500, title: 'Global One' })
+    seedGlobalWorkout(stores, { num: 501, title: 'Global Two' })
+    await asA(request(appFor(stores)).post('/api/workouts')).send(validWorkoutBody({ num: 1 }))
+
+    const res = await asA(request(appFor(stores)).get('/api/workouts'))
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveLength(3)
+    const globalRows = res.body.filter((w: { isGlobal: boolean }) => w.isGlobal)
+    const personalRows = res.body.filter((w: { isGlobal: boolean }) => !w.isGlobal)
+    expect(globalRows).toHaveLength(2)
+    expect(personalRows).toHaveLength(1)
+    expect(globalRows.every((w: { userId: string | null }) => w.userId === null)).toBe(true)
+  })
+
+  it('GET /:id resolves a global id for any caller, tagged isGlobal:true', async () => {
+    const stores = makeStores()
+    const g = seedGlobalWorkout(stores, { num: 502, title: 'Global Gettable' })
+    const res = await asB(request(appFor(stores)).get(`/api/workouts/${g.id}`))
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ id: g.id, title: 'Global Gettable', isGlobal: true })
+  })
+
+  it('PUT /:id on a global workout 403s starter_readonly instead of writing', async () => {
+    const stores = makeStores()
+    const g = seedGlobalWorkout(stores, { num: 503, title: 'Global Untouchable' })
+    const res = await asA(request(appFor(stores)).put(`/api/workouts/${g.id}`)).send(
+      validWorkoutBody({ num: 503, title: 'Hijacked' }),
+    )
+    expect(res.status).toBe(403)
+    expect(res.body).toEqual({ error: 'starter_readonly' })
+
+    // untouched
+    const after = await asB(request(appFor(stores)).get(`/api/workouts/${g.id}`))
+    expect(after.body.title).toBe('Global Untouchable')
+  })
+
+  it('DELETE /:id on a global workout 403s starter_readonly instead of deleting', async () => {
+    const stores = makeStores()
+    const g = seedGlobalWorkout(stores, { num: 504, title: 'Global Survivor' })
+    const res = await asA(request(appFor(stores)).delete(`/api/workouts/${g.id}`))
+    expect(res.status).toBe(403)
+    expect(res.body).toEqual({ error: 'starter_readonly' })
+
+    const after = await asB(request(appFor(stores)).get(`/api/workouts/${g.id}`))
+    expect(after.status).toBe(200)
+  })
+
+  it('POST creates a personal workout whose num collides with a GLOBAL num (separate namespaces)', async () => {
+    const stores = makeStores()
+    seedGlobalWorkout(stores, { num: 505, title: 'Global Five-Oh-Five' })
+    const res = await asA(request(appFor(stores)).post('/api/workouts')).send(
+      validWorkoutBody({ num: 505, title: 'My Own 505' }),
+    )
+    expect(res.status).toBe(201)
+    expect(res.body).toMatchObject({ num: 505, title: 'My Own 505', isGlobal: false })
   })
 })
 
