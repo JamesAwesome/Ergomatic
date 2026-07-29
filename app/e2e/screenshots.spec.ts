@@ -102,3 +102,27 @@ test("you", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "you.png"),
   });
 });
+
+test("you-staged", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-staged@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  // Press the 2k "slower" stepper a few times (0.5 s/step) to dirty the
+  // draft without touching `committed` — this is the whole point of the
+  // staged editor: nothing re-paces until Apply. Three presses from the
+  // 112.0 s seed land the confirm block at "2k 1:52.0 → 1:53.5", which
+  // "you.png" never shows because it captures the empty/seeded state
+  // before any draft edits.
+  const slower = page.getByRole("button", { name: "2k slower" });
+  await slower.click();
+  await slower.click();
+  await slower.click();
+  await page.getByRole("button", { name: "Apply baselines" }).waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-staged.png"),
+  });
+});

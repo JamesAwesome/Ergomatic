@@ -212,6 +212,11 @@ describe("WorkoutDetail", () => {
     expect(
       within(restRow as HTMLElement).queryByRole("button"),
     ).not.toBeInTheDocument();
+    // No target range (EN DASH, U+2013) renders in a rest row — resting has
+    // no pace target to nudge.
+    expect(
+      within(restRow as HTMLElement).queryByText(/–/),
+    ).not.toBeInTheDocument();
   });
 
   it("renders a test step's label with no target range or nudge controls", async () => {
@@ -222,6 +227,11 @@ describe("WorkoutDetail", () => {
     expect(testRow).not.toBeNull();
     expect(
       within(testRow as HTMLElement).queryByRole("button"),
+    ).not.toBeInTheDocument();
+    // No target range (EN DASH, U+2013) renders in a test row — a test
+    // step is all-out effort, not paced to a target.
+    expect(
+      within(testRow as HTMLElement).queryByText(/–/),
     ).not.toBeInTheDocument();
   });
 
@@ -241,6 +251,19 @@ describe("WorkoutDetail", () => {
     expect(
       screen.getAllByRole("button", { name: "Nudge slower" }),
     ).toHaveLength(1);
+
+    // The header expands via estimateMinutes (phases()/liveSteps(), which
+    // DOES expand repeats), while the step list below renders the raw
+    // authored steps (which does NOT) — a 4x block of a 1-minute work step
+    // is 4 minutes of rowing even though it's a single row on screen.
+    expect(screen.getByText("4 MIN", { exact: false })).toBeInTheDocument();
+
+    // One nudge covers the whole block: clicking the single ▲ moves the
+    // single displayed range, proving it's wired to the marker's raw
+    // step, not silently a no-op or scoped to one repetition.
+    await userEvent.click(screen.getByRole("button", { name: "Nudge faster" }));
+    expect(screen.queryByText("1:51.0–1:53.0")).not.toBeInTheDocument();
+    expect(screen.getByText("1:50.0–1:52.0")).toBeInTheDocument();
   });
 
   it("does not carry nudges from one workout to another when the route id changes without a component remount", async () => {
@@ -259,5 +282,22 @@ describe("WorkoutDetail", () => {
     // index.
     expect(screen.queryByText(/nudged/)).not.toBeInTheDocument();
     expect(screen.getByText("1:51.0–1:53.0")).toBeInTheDocument();
+  });
+
+  it("clamps a long run of same-direction nudges at MIN_SPLIT instead of drifting into a nonsense split", async () => {
+    mockHooks(BASELINES, [WORKOUT, WORKOUT_WITH_REPS]);
+    await renderDetail("/library/w2");
+
+    // 2k baseline is 112s; unclamped, 80 "faster" nudges would drive the
+    // resolved split to 112 - 80 = 32s (and further presses toward
+    // negative, where fmtSplit renders garbage like "-1:-1.0"). Clamped to
+    // MIN_SPLIT (60s), it should stop dead at "0:59.0–1:01.0" (tolerance 1)
+    // well before that.
+    const faster = screen.getByRole("button", { name: "Nudge faster" });
+    for (let i = 0; i < 80; i++) {
+      await userEvent.click(faster);
+    }
+
+    expect(screen.getByText("0:59.0–1:01.0")).toBeInTheDocument();
   });
 });
