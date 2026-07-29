@@ -35,7 +35,7 @@ export function togglePain(f: Filters): Filters {
 }
 
 export function setRecency(f: Filters, r: "recent" | "not-recent"): Filters {
-  return { ...f, recency: r };
+  return { ...f, recency: f.recency === r ? null : r };
 }
 
 export function clearFilters(): Filters {
