@@ -671,6 +671,7 @@ button:disabled {
 
 .builder-columns {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-top: 22px;
   padding-bottom: 6px;
@@ -679,6 +680,42 @@ button:disabled {
   font-size: 10px;
   letter-spacing: 0.12em;
   color: var(--ink-4);
+}
+
+/* Widths match the row fields directly below (.set-toggle / .field-dur /
+   .field-ref / .field-spm / .field-rest / .row-delete) so each label sits
+   over its column — see the comment on ColumnHeader in Builder.tsx. */
+.builder-columns span {
+  text-align: center;
+}
+
+.col-set {
+  width: var(--tap);
+}
+
+.col-dur {
+  width: 48px;
+}
+
+.col-ref {
+  width: 64px;
+}
+
+.col-spm {
+  width: 40px;
+}
+
+.col-rest {
+  width: 44px;
+}
+
+.col-split {
+  flex: 1;
+  text-align: right;
+}
+
+.col-delete {
+  width: var(--tap);
 }
 
 .builder-rows {
@@ -764,11 +801,16 @@ button:disabled {
   margin: 6px 0 0;
 }
 
+.builder-add-row-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .builder-add-row {
   display: block;
-  width: 100%;
+  flex: 1;
   min-height: var(--tap);
-  margin-top: 12px;
   background: transparent;
   border: 1px dashed var(--rule-3);
   color: var(--ink-3);
