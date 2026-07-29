@@ -1,12 +1,12 @@
-import SignIn from './SignIn'
-import You from './You'
-import { useMe } from './useMe'
+import SignIn from "./SignIn";
+import You from "./You";
+import { useMe } from "./useMe";
 
 export default function App() {
-  const [me, signedOut, refetch] = useMe()
+  const [me, signedOut, refetch] = useMe();
 
-  if (me.state === 'loading') return null
-  if (me.state === 'out') return <SignIn onSignedIn={refetch} />
+  if (me.state === "loading") return null;
+  if (me.state === "out") return <SignIn onSignedIn={refetch} />;
 
   return (
     <main>
@@ -14,5 +14,5 @@ export default function App() {
       <p>Rowing workout tracker &amp; planner.</p>
       <You user={me.user} onSignedOut={signedOut} />
     </main>
-  )
+  );
 }

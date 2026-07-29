@@ -1,21 +1,25 @@
-import { useState } from 'react'
-import { isNative } from './platform'
+import { useState } from "react";
+import { isNative } from "./platform";
 
 export default function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
-  const params = new URLSearchParams(window.location.search)
-  const denied = params.get('denied')
-  const failed = params.get('error') === 'signin_failed'
-  const [nativeError, setNativeError] = useState<string | null>(null)
+  const params = new URLSearchParams(window.location.search);
+  const denied = params.get("denied");
+  const failed = params.get("error") === "signin_failed";
+  const [nativeError, setNativeError] = useState<string | null>(null);
 
   async function signInNative() {
-    setNativeError(null)
+    setNativeError(null);
     try {
-      const { initNativeAuth, nativeSignIn } = await import('./native/signin')
-      await initNativeAuth()
-      await nativeSignIn()
-      onSignedIn?.()
+      const { initNativeAuth, nativeSignIn } = await import("./native/signin");
+      await initNativeAuth();
+      await nativeSignIn();
+      onSignedIn?.();
     } catch (err) {
-      setNativeError(err instanceof Error ? err.message : "That sign-in didn't work. Give it another try.")
+      setNativeError(
+        err instanceof Error
+          ? err.message
+          : "That sign-in didn't work. Give it another try.",
+      );
     }
   }
 
@@ -48,5 +52,5 @@ export default function SignIn({ onSignedIn }: { onSignedIn?: () => void }) {
         </a>
       )}
     </main>
-  )
+  );
 }

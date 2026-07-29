@@ -1,8 +1,8 @@
-import { and, desc, eq } from 'drizzle-orm'
-import type { Db } from '../db/index.js'
-import { testHistory } from '../db/schema.js'
+import { and, desc, eq } from "drizzle-orm";
+import type { Db } from "../db/index.js";
+import { testHistory } from "../db/schema.js";
 
-export type TestDistance = '2k' | '6k'
+export type TestDistance = "2k" | "6k";
 
 export function createTestHistoryStore(db: Db) {
   return {
@@ -11,18 +11,28 @@ export function createTestHistoryStore(db: Db) {
         .select()
         .from(testHistory)
         .where(eq(testHistory.userId, userId))
-        .orderBy(desc(testHistory.loggedAt))
+        .orderBy(desc(testHistory.loggedAt));
     },
 
-    async append(userId: string, input: { distance: TestDistance; splitSeconds: number }) {
+    async append(
+      userId: string,
+      input: { distance: TestDistance; splitSeconds: number },
+    ) {
       const [previous] = await db
         .select()
         .from(testHistory)
-        .where(and(eq(testHistory.userId, userId), eq(testHistory.distance, input.distance)))
+        .where(
+          and(
+            eq(testHistory.userId, userId),
+            eq(testHistory.distance, input.distance),
+          ),
+        )
         .orderBy(desc(testHistory.loggedAt))
-        .limit(1)
+        .limit(1);
 
-      const deltaSeconds = previous ? input.splitSeconds - previous.splitSeconds : null
+      const deltaSeconds = previous
+        ? input.splitSeconds - previous.splitSeconds
+        : null;
 
       const [row] = await db
         .insert(testHistory)
@@ -32,10 +42,10 @@ export function createTestHistoryStore(db: Db) {
           splitSeconds: input.splitSeconds,
           deltaSeconds,
         })
-        .returning()
-      return row
+        .returning();
+      return row;
     },
-  }
+  };
 }
 
-export type TestHistoryStore = ReturnType<typeof createTestHistoryStore>
+export type TestHistoryStore = ReturnType<typeof createTestHistoryStore>;

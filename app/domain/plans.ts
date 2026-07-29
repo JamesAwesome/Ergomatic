@@ -1,11 +1,11 @@
-import type { WorkoutType } from './types.js'
+import type { WorkoutType } from "./types.js";
 
-export type PlanCode = WorkoutType | 'TEST'
+export type PlanCode = WorkoutType | "TEST";
 
 export interface PlanPreset {
-  key: 'sprint' | 'head'
-  title: string
-  sessions: PlanCode[] // length 84
+  key: "sprint" | "head";
+  title: string;
+  sessions: PlanCode[]; // length 84
 }
 
 // Start-of-block checkpoints: one per training third, at the close of that
@@ -13,14 +13,14 @@ export interface PlanPreset {
 // offset is the same in every third: index 6 of 0..27). Deliberately NOT
 // the intake handoff's 7/31/55 cadence — these plans use a 28-session
 // third, not a 24-session one.
-const TEST_INDICES = [6, 34, 62] as const
+const TEST_INDICES = [6, 34, 62] as const;
 
 /** Flattens 12 week-arrays (7 codes each = 84) and overwrites the
  *  checkpoint slots with 'TEST', keeping the total length at 84. */
 function buildSessions(weeks: WorkoutType[][]): PlanCode[] {
-  const flat: PlanCode[] = weeks.flat()
-  for (const i of TEST_INDICES) flat.splice(i, 1, 'TEST')
-  return flat
+  const flat: PlanCode[] = weeks.flat();
+  for (const i of TEST_INDICES) flat.splice(i, 1, "TEST");
+  return flat;
 }
 
 // --- Sprint (2k / short-course) preset --------------------------------
@@ -41,21 +41,21 @@ function buildSessions(weeks: WorkoutType[][]): PlanCode[] {
 // 2,3,3,0(deload), 3,3,3,3.
 export const SPRINT_WEEKS: WorkoutType[][] = [
   // -- base --
-  ['O2', 'AT', 'O2', 'TR', 'AT', 'O2', 'O2'],
-  ['O2', 'AT', 'O2', 'TR', 'O2', 'AT', 'O2'],
-  ['O2', 'AT', 'AN', 'O2', 'AT', 'TR', 'O2'],
-  ['O2', 'AT', 'O2', 'AT', 'O2', 'AT', 'O2'], // deload: AN+TR=0, O2/AT only
+  ["O2", "AT", "O2", "TR", "AT", "O2", "O2"],
+  ["O2", "AT", "O2", "TR", "O2", "AT", "O2"],
+  ["O2", "AT", "AN", "O2", "AT", "TR", "O2"],
+  ["O2", "AT", "O2", "AT", "O2", "AT", "O2"], // deload: AN+TR=0, O2/AT only
   // -- build --
-  ['O2', 'AT', 'TR', 'AN', 'AT', 'O2', 'O2'],
-  ['AT', 'TR', 'O2', 'AN', 'AT', 'TR', 'O2'],
-  ['O2', 'TR', 'AT', 'AN', 'O2', 'TR', 'O2'],
-  ['AT', 'O2', 'AT', 'O2', 'AT', 'O2', 'O2'], // deload: AN+TR=0, O2/AT only
+  ["O2", "AT", "TR", "AN", "AT", "O2", "O2"],
+  ["AT", "TR", "O2", "AN", "AT", "TR", "O2"],
+  ["O2", "TR", "AT", "AN", "O2", "TR", "O2"],
+  ["AT", "O2", "AT", "O2", "AT", "O2", "O2"], // deload: AN+TR=0, O2/AT only
   // -- peak --
-  ['TR', 'AT', 'AN', 'O2', 'TR', 'O2', 'O2'],
-  ['AN', 'O2', 'TR', 'AT', 'AN', 'AT', 'O2'],
-  ['TR', 'O2', 'AN', 'AT', 'O2', 'TR', 'O2'],
-  ['AN', 'AT', 'TR', 'O2', 'AN', 'O2', 'AT'],
-]
+  ["TR", "AT", "AN", "O2", "TR", "O2", "O2"],
+  ["AN", "O2", "TR", "AT", "AN", "AT", "O2"],
+  ["TR", "O2", "AN", "AT", "O2", "TR", "O2"],
+  ["AN", "AT", "TR", "O2", "AN", "O2", "AT"],
+];
 
 // --- Head race (long-course, e.g. 5k/6k head-race format) preset ------
 // O2-forward philosophy, turned up: a head race is decided by the size
@@ -74,31 +74,31 @@ export const SPRINT_WEEKS: WorkoutType[][] = [
 // AN+TR in every single week.
 export const HEAD_WEEKS: WorkoutType[][] = [
   // -- base: O2-dominant --
-  ['O2', 'AT', 'O2', 'O2', 'AT', 'O2', 'O2'],
-  ['O2', 'O2', 'AT', 'O2', 'TR', 'O2', 'O2'],
-  ['O2', 'AT', 'O2', 'AN', 'O2', 'AT', 'O2'],
-  ['O2', 'AT', 'O2', 'TR', 'AN', 'O2', 'O2'],
+  ["O2", "AT", "O2", "O2", "AT", "O2", "O2"],
+  ["O2", "O2", "AT", "O2", "TR", "O2", "O2"],
+  ["O2", "AT", "O2", "AN", "O2", "AT", "O2"],
+  ["O2", "AT", "O2", "TR", "AN", "O2", "O2"],
   // -- build: AT density peaks --
-  ['AT', 'O2', 'AT', 'TR', 'AT', 'O2', 'O2'],
-  ['AT', 'O2', 'AN', 'O2', 'TR', 'AT', 'O2'],
-  ['O2', 'AT', 'O2', 'TR', 'O2', 'AT', 'O2'],
-  ['AT', 'O2', 'TR', 'O2', 'AN', 'AT', 'O2'],
+  ["AT", "O2", "AT", "TR", "AT", "O2", "O2"],
+  ["AT", "O2", "AN", "O2", "TR", "AT", "O2"],
+  ["O2", "AT", "O2", "TR", "O2", "AT", "O2"],
+  ["AT", "O2", "TR", "O2", "AN", "AT", "O2"],
   // -- peak: sharper, still endurance-biased --
-  ['O2', 'TR', 'AT', 'O2', 'AN', 'O2', 'O2'],
-  ['O2', 'AT', 'TR', 'O2', 'AN', 'AT', 'O2'],
-  ['O2', 'TR', 'AT', 'O2', 'TR', 'AN', 'O2'],
-  ['AT', 'O2', 'TR', 'O2', 'AN', 'O2', 'AT'],
-]
+  ["O2", "TR", "AT", "O2", "AN", "O2", "O2"],
+  ["O2", "AT", "TR", "O2", "AN", "AT", "O2"],
+  ["O2", "TR", "AT", "O2", "TR", "AN", "O2"],
+  ["AT", "O2", "TR", "O2", "AN", "O2", "AT"],
+];
 
-export const PLANS: Record<'sprint' | 'head', PlanPreset> = {
+export const PLANS: Record<"sprint" | "head", PlanPreset> = {
   sprint: {
-    key: 'sprint',
-    title: 'Sprint (2k) Prep',
+    key: "sprint",
+    title: "Sprint (2k) Prep",
     sessions: buildSessions(SPRINT_WEEKS),
   },
   head: {
-    key: 'head',
-    title: 'Head Race Prep',
+    key: "head",
+    title: "Head Race Prep",
     sessions: buildSessions(HEAD_WEEKS),
   },
-}
+};
