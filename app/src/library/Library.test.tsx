@@ -160,6 +160,34 @@ describe("Library", () => {
     ]);
   });
 
+  it("narrows to NOT RECENT rows when the chip is clicked, counting never-done as not recent", async () => {
+    mockReady();
+    await renderLibrary();
+
+    await userEvent.click(screen.getByRole("button", { name: "NOT RECENT" }));
+
+    expect(visibleHrefs()).toStrictEqual(["/library/w-o2", "/library/w-an"]);
+    expect(screen.getByText("2 ENTERED")).toBeInTheDocument();
+  });
+
+  it("renders a — duration fallback instead of a bogus number when baselines are unset", async () => {
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({ state: "ready", workouts: WORKOUTS }),
+    }));
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({
+        state: "ready",
+        baselines: { k2Seconds: null, k6Seconds: null },
+      }),
+    }));
+
+    await renderLibrary();
+
+    expect(screen.getAllByText("—")).toHaveLength(WORKOUTS.length);
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(screen.queryByText("30′")).not.toBeInTheDocument();
+  });
+
   it("renders the loading state before data arrives", async () => {
     vi.doMock("../api/useWorkouts", () => ({
       useWorkouts: () => ({ state: "loading" }),
