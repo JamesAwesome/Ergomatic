@@ -8,9 +8,9 @@ import {
   addRow,
   newForm,
   removeRow,
+  setBlockStart,
   setReps,
   setRowIds,
-  toggleMarked,
   toSteps,
   totals,
   type BuilderForm,
@@ -279,11 +279,12 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             row={row}
             index={index}
             inSet={markedIds.includes(row.id)}
+            isBlockStart={markedIds[0] === row.id}
             baselines={baselines}
             tolerance={tolerance}
             fieldError={(field) => errors[`row:${row.id}:${field}`]}
             onChange={(patch) => updateRow(row.id, patch)}
-            onToggleMarked={() => setForm((f) => toggleMarked(f, row.id))}
+            onSetBlockStart={() => setForm((f) => setBlockStart(f, row.id))}
             onRemove={() => setForm((f) => removeRow(f, row.id))}
           />
         ))}

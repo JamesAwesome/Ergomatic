@@ -43,11 +43,12 @@ export default function StepRowEditor({
   row,
   index,
   inSet,
+  isBlockStart,
   baselines,
   tolerance,
   fieldError,
   onChange,
-  onToggleMarked,
+  onSetBlockStart,
   onRemove,
 }: {
   row: BuilderRow;
@@ -56,15 +57,20 @@ export default function StepRowEditor({
   // parent from `setRowIds(form)`, NOT from `row.marked`. The domain
   // repeats everything positioned after the first marked row, so every row
   // from there on is "in the set" even if its own `marked` flag is false;
-  // both the left-rule highlight and the SET toggle's filled state must
+  // both the left-rule highlight and the SET cell's filled state must
   // agree with that, or the row would visually contradict the totals the
   // same module computes.
   inSet: boolean;
+  // Whether this row is specifically the block's current start (the first
+  // marked row), not merely inside it — determines what clicking the SET
+  // cell does (move/start the block vs. clear it) and what its accessible
+  // name says, so it has to be more precise than `inSet`.
+  isBlockStart: boolean;
   baselines: Baselines | null;
   tolerance: number;
   fieldError: (field: RowField) => string | undefined;
   onChange: (patch: Partial<BuilderRow>) => void;
-  onToggleMarked: () => void;
+  onSetBlockStart: () => void;
   onRemove: () => void;
 }) {
   const isWork = row.kind === "w";
@@ -80,8 +86,10 @@ export default function StepRowEditor({
           type="button"
           className="set-toggle"
           aria-pressed={inSet}
-          aria-label="Mark row for the repeat set"
-          onClick={onToggleMarked}
+          aria-label={
+            isBlockStart ? "Clear the repeat set" : "Start the repeat set here"
+          }
+          onClick={onSetBlockStart}
         >
           ↻
         </button>
