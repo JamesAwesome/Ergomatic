@@ -90,6 +90,15 @@ export function removeRow(f: BuilderForm, id: string): BuilderForm {
   return { ...f, rows: f.rows.filter((r) => r.id !== id) };
 }
 
+// Positional semantics, not per-row: the domain has no way to express a
+// non-contiguous repeat. `toSteps` emits the single reps marker immediately
+// before the FIRST marked row, and the domain's `liveSteps` then repeats
+// EVERYTHING positioned after that marker — including rows the user never
+// marked, if they happen to sit after a marked one. So marking row N puts
+// every row from N onward into the repeated set, regardless of those rows'
+// own `marked` flags. `totals` and `setRowIds` both bucket by the position
+// of the first marked row for exactly this reason — don't reintroduce
+// per-row bucketing here or in any consumer of `marked`.
 export function toggleMarked(f: BuilderForm, id: string): BuilderForm {
   return {
     ...f,
@@ -287,21 +296,41 @@ function rowMinutes(
   return minutes;
 }
 
+/** Positional, to match `toSteps`/`liveSteps` (see the comment on
+ *  `toggleMarked`): every row from the FIRST marked row onward is bucketed
+ *  into `perSet`, even if that particular row's own `marked` flag is false.
+ *  Bucketing per-row instead — as this used to do — would let `totals`
+ *  disagree with `estimateMinutes(toSteps(f).steps, baselines)` for any form
+ *  with a non-contiguous marked set, since the domain always repeats the
+ *  full tail after the marker regardless of which rows in it were clicked. */
 export function totals(
   f: BuilderForm,
   baselines: Baselines | null,
 ): { loose: number; perSet: number; total: number } | null {
+  const firstMarkedIndex = f.rows.findIndex((r) => r.marked);
   let loose = 0;
   let perSet = 0;
 
-  for (const row of f.rows) {
-    const minutes = rowMinutes(row, baselines);
+  for (let i = 0; i < f.rows.length; i++) {
+    const minutes = rowMinutes(f.rows[i], baselines);
     if (minutes === null) return null;
-    if (row.marked) perSet += minutes;
+    if (firstMarkedIndex !== -1 && i >= firstMarkedIndex) perSet += minutes;
     else loose += minutes;
   }
 
   return { loose, perSet, total: loose + perSet * f.reps };
+}
+
+/** Ids of every row inside the repeated set, in form order: the first
+ *  marked row and every row after it (positionally — see `toggleMarked`),
+ *  or `[]` when nothing is marked. Lets a rendering screen show the whole
+ *  repeated block as "in the set" — including rows the user didn't
+ *  personally click — rather than only the ones with `marked: true`, which
+ *  would misrepresent what `toSteps`/`liveSteps` actually repeat. */
+export function setRowIds(f: BuilderForm): string[] {
+  const firstMarkedIndex = f.rows.findIndex((r) => r.marked);
+  if (firstMarkedIndex === -1) return [];
+  return f.rows.slice(firstMarkedIndex).map((r) => r.id);
 }
 
 function formatDuration(d: WorkDuration): string {
@@ -335,6 +364,25 @@ function stepToRow(
   return row;
 }
 
+// Step kinds the BuilderRow model has no representation for at all (as
+// opposed to "reps", which IS representable — it's hoisted into `f.reps`
+// rather than becoming a row). Single source of truth for
+// `hasUnsupportedSteps` (what to warn a caller about before it opens the
+// builder) and `fromWorkout` (what to actually drop when building rows), so
+// a future unrepresentable `Step` kind can't be added to one list and
+// forgotten in the other.
+const UNREPRESENTABLE_STEP_KINDS = new Set<Step["k"]>(["test"]);
+
+// A type guard on the whole Step (rather than a bare `.has()` call on its
+// `k`) so TypeScript can narrow: `fromWorkout` relies on
+// `s.k === "reps" || isUnrepresentable(s)` to discriminate `s` down to the
+// kinds `stepToRow` actually accepts, the same way the old hand-written
+// `s.k === "test"` check did — a `.has(s.k)` check alone doesn't narrow the
+// containing union.
+function isUnrepresentable(s: Step): s is Extract<Step, { k: "test" }> {
+  return UNREPRESENTABLE_STEP_KINDS.has(s.k);
+}
+
 /** The BuilderRow model has no representation for a `test` step, so
  *  `fromWorkout` must drop it — but doing that silently would destroy the
  *  step the moment the workout is re-saved from the builder, with no
@@ -345,7 +393,7 @@ function stepToRow(
  *  change `fromWorkout`'s signature or behavior (still a pure form builder),
  *  it just gives callers a way to detect the loss ahead of time. */
 export function hasUnsupportedSteps(steps: Step[]): boolean {
-  return steps.some((s) => s.k === "test");
+  return steps.some((s) => isUnrepresentable(s));
 }
 
 export function fromWorkout(w: {
@@ -364,7 +412,7 @@ export function fromWorkout(w: {
 
   const rows: BuilderRow[] = [];
   w.steps.forEach((s, i) => {
-    if (s.k === "reps" || s.k === "test") return;
+    if (s.k === "reps" || isUnrepresentable(s)) return;
     rows.push(stepToRow(s, marker !== null && i > markerIndex));
   });
 

@@ -8,6 +8,7 @@ import {
   parseDurationInput,
   removeRow,
   setReps,
+  setRowIds,
   toSteps,
   toggleMarked,
   totals,
@@ -423,6 +424,148 @@ describe("totals vs. estimateMinutes agreement", () => {
     const estimate = estimateMinutes(out.steps, baselines);
     expect(Math.round(t!.total)).toBe(estimate.minutes);
   });
+
+  it("counts a DISTANCE work step's restMinutes too (H2 distance case)", () => {
+    // 2500m at 2k+0 = 112s/500m -> 5 * 112s = 560s = 9.3333 min, plus a
+    // 2-minute rest = 11.3333 min, rounding to 11 — matching the reviewer's
+    // probe. Only the time-duration case had a regression test before this.
+    const workout = {
+      num: 9,
+      title: "Distance Rest Test",
+      type: "AT" as const,
+      difficulty: "medium" as const,
+      pain: 3,
+      steps: [
+        {
+          k: "w" as const,
+          duration: { kind: "distance" as const, meters: 2500 },
+          ref: { base: "2k" as const, off: 0 },
+          restMinutes: 2,
+        },
+      ],
+    };
+
+    const form = fromWorkout(workout);
+    const out = toSteps(form);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+
+    const t = totals(form, baselines);
+    expect(t).not.toBeNull();
+    expect(t!.total).toBeCloseTo(11.3333, 3);
+    const estimate = estimateMinutes(out.steps, baselines);
+    expect(estimate.minutes).toBe(11);
+    expect(Math.round(t!.total)).toBe(estimate.minutes);
+  });
+
+  it("H3: agrees with estimateMinutes for a non-contiguous marked set, by treating everything from the first marked row onward as repeated", () => {
+    // Reviewer's exact probe: [wu 10' unmarked, w 5' marked, r 2' unmarked],
+    // reps 3. toSteps emits [wu, reps, w, r] because the marker goes before
+    // the FIRST marked row and liveSteps repeats everything after it — so
+    // the "r" row repeats even though the user never marked it. Before this
+    // fix, `totals` bucketed rows by their own `marked` flag: loose = 10
+    // (wu) + 2 (r) = 12, perSet = 5 (w), total = 12 + 5*3 = 27 — contradicting
+    // estimateMinutes's 31 for this exact same form.
+    const f = formWith({
+      reps: 3,
+      rows: [
+        {
+          id: "wu",
+          kind: "wu",
+          marked: false,
+          dur: "10'",
+          ref: "",
+          spm: "",
+          rest: "",
+        },
+        {
+          id: "w",
+          kind: "w",
+          marked: true,
+          dur: "5'",
+          ref: "2k",
+          spm: "",
+          rest: "",
+        },
+        {
+          id: "r",
+          kind: "r",
+          marked: false,
+          dur: "2'",
+          ref: "",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+
+    const out = toSteps(f);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps.map((s) => s.k)).toStrictEqual(["wu", "reps", "w", "r"]);
+
+    const t = totals(f, baselines);
+    expect(t).not.toBeNull();
+    const estimate = estimateMinutes(out.steps, baselines);
+    expect(estimate.minutes).toBe(31);
+    expect(Math.round(t!.total)).toBe(estimate.minutes);
+  });
+});
+
+describe("setRowIds", () => {
+  it("returns every row id from the first marked row onward, including rows the user never clicked", () => {
+    const f = formWith({
+      rows: [
+        {
+          id: "wu",
+          kind: "wu",
+          marked: false,
+          dur: "10'",
+          ref: "",
+          spm: "",
+          rest: "",
+        },
+        {
+          id: "w",
+          kind: "w",
+          marked: true,
+          dur: "5'",
+          ref: "2k",
+          spm: "",
+          rest: "",
+        },
+        {
+          id: "r",
+          kind: "r",
+          marked: false,
+          dur: "2'",
+          ref: "",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+
+    expect(setRowIds(f)).toStrictEqual(["w", "r"]);
+  });
+
+  it("returns an empty list when nothing is marked", () => {
+    const f = formWith({
+      rows: [
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: "5'",
+          ref: "2k",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+
+    expect(setRowIds(f)).toStrictEqual([]);
+  });
 });
 
 describe("toSteps additional coverage", () => {
@@ -473,6 +616,57 @@ describe("toSteps additional coverage", () => {
     expect(out.errors["row:a:ref"]).toMatch(/pace/i);
   });
 
+  it("agrees with the domain on the ±60 pace-ref boundary (M1): +60 is accepted by both, +61 by neither", () => {
+    const inside = formWith({
+      rows: [
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: "5'",
+          ref: "2k+60",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+    const insideOut = toSteps(inside);
+    if (!insideOut.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(insideOut.errors)}`);
+    // Route the client's accepted output through the domain's own validator
+    // rather than only trusting the client's copy of the ±60 bound.
+    expect(validateSteps(insideOut.steps)).toStrictEqual({
+      ok: true,
+      steps: insideOut.steps,
+    });
+
+    const outside = formWith({
+      rows: [
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: "5'",
+          ref: "2k+61",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+    expect(toSteps(outside).ok).toBe(false);
+    // Confirm the domain rejects the same offset too — the client didn't
+    // just invent a tighter bound than the server actually enforces.
+    expect(
+      validateSteps([
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "2k", off: 61 },
+        },
+      ]).ok,
+    ).toBe(false);
+  });
+
   it("bounds the emitted step count, not just the row count (M2)", () => {
     const rows: BuilderRow[] = Array.from({ length: 100 }, (_, i) => ({
       id: `r${i}`,
@@ -490,7 +684,7 @@ describe("toSteps additional coverage", () => {
     expect(out.errors.steps).toMatch(/100/);
   });
 
-  it("allows exactly 100 emitted steps (rows plus the reps marker)", () => {
+  it("allows exactly 100 emitted steps (rows plus the reps marker), and the domain agrees (M2)", () => {
     const rows: BuilderRow[] = Array.from({ length: 99 }, (_, i) => ({
       id: `r${i}`,
       kind: "w",
@@ -503,6 +697,14 @@ describe("toSteps additional coverage", () => {
     // 99 rows + 1 reps marker = 100 emitted steps, exactly at the cap.
     const out = toSteps(formWith({ rows, reps: 2 }));
     expect(out.ok).toBe(true);
+    if (!out.ok) throw new Error("expected ok");
+    // Assert the actual count, not just ok — a regression to 99 emitted
+    // steps would still pass an ok-only assertion.
+    expect(out.steps.length).toBe(100);
+    expect(validateSteps(out.steps)).toStrictEqual({
+      ok: true,
+      steps: out.steps,
+    });
   });
 
   it("tolerates surrounding whitespace in a duration field, like every other field (L1)", () => {
