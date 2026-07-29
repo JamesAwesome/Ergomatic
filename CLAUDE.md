@@ -40,6 +40,12 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   a clean final review are necessary but not sufficient; present the review
   verdict and stop. Subagents never merge, close, or approve PRs and never
   remove worktrees; main is PR-only, no merge commits.
+- **Native-first:** the iOS app is the primary surface; design decisions
+  favor it. The web build is the same code serving as test harness
+  (Playwright/design/screenshots), dev loop, and fallback — never dropped,
+  never polished at the app's expense. Platform conditionals live ONLY in
+  the adapter layer (`src/platform.ts`, `src/api.ts`, `src/native/`,
+  `src/adapters/` — lint-enforced via no-restricted-imports).
 - **Verify current versions before adding/pinning any dependency** (`npm view <pkg> version`).
   Never trust versions from memory or other repos. TypeScript stays `~6.0.x` until
   typescript-eslint's peer range admits 7 (check `npm view typescript-eslint peerDependencies`).
