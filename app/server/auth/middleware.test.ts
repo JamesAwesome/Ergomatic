@@ -72,7 +72,7 @@ describe("requireUser", () => {
   it("401s with no cookie", async () => {
     const res = await request(guardedApp(fakeStore(null))).get("/whoami");
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: "unauthenticated" });
+    expect(res.body).toStrictEqual({ error: "unauthenticated" });
   });
   it("401s when the store rejects the token", async () => {
     const res = await request(guardedApp(fakeStore(null)))
@@ -90,7 +90,7 @@ describe("requireUser", () => {
       .get("/whoami")
       .set("Cookie", `${SESSION_COOKIE}=tok`);
     expect(res.status).toBe(200);
-    expect(res.body.user).toEqual(user);
+    expect(res.body.user).toStrictEqual(user);
     expect(res.headers["set-cookie"]?.[0]).toContain(`${SESSION_COOKIE}=tok`);
   });
   it("does not re-set the cookie when not refreshed", async () => {
@@ -118,7 +118,7 @@ describe("requireUser bearer mode", () => {
       .get("/whoami")
       .set("Authorization", "Bearer tok");
     expect(res.status).toBe(200);
-    expect(res.body.user).toEqual(user);
+    expect(res.body.user).toStrictEqual(user);
   });
 
   it("401s on a bad bearer token", async () => {

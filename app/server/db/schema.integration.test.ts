@@ -34,6 +34,13 @@ describe("migrations", () => {
   });
 
   it("is idempotent (second migrate is a no-op)", async () => {
+    const before = await db.execute(
+      sql`select count(*)::int as count from information_schema.tables where table_schema = 'public'`,
+    );
     await migrate(db, { migrationsFolder: "drizzle" });
+    const after = await db.execute(
+      sql`select count(*)::int as count from information_schema.tables where table_schema = 'public'`,
+    );
+    expect(after.rows[0]?.count).toStrictEqual(before.rows[0]?.count);
   });
 });

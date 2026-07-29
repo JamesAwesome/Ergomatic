@@ -198,7 +198,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     // SAME rows for both users, not per-user copies.
     const idsA = listA.body.map((w: { id: string }) => w.id).sort();
     const idsB = listB.body.map((w: { id: string }) => w.id).sort();
-    expect(idsA).toEqual(idsB);
+    expect(idsA).toStrictEqual(idsB);
     globalWorkoutId = listA.body[0].id;
   });
 
@@ -265,7 +265,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       (l: { id: string }) => l.id === aLogId,
     );
     expect(before).toMatchObject({ baselineK2: 100, baselineK6: 110 });
-    expect(before.steps).toEqual([
+    expect(before.steps).toStrictEqual([
       {
         label: "Work",
         targetSplit: 130,
@@ -285,7 +285,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       (l: { id: string }) => l.id === aLogId,
     );
     expect(after).toMatchObject({ baselineK2: 100, baselineK6: 110 });
-    expect(after.steps).toEqual(before.steps);
+    expect(after.steps).toStrictEqual(before.steps);
   });
 
   it("every list/get endpoint shows B none of A's data, but B still sees every global", async () => {
@@ -309,25 +309,27 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       200,
     );
 
-    expect((await asB().get("/api/baselines")).body).toEqual({
+    expect((await asB().get("/api/baselines")).body).toStrictEqual({
       k2Seconds: null,
       k6Seconds: null,
     });
 
-    expect((await asB().get("/api/logs")).body).toEqual([]);
+    expect((await asB().get("/api/logs")).body).toStrictEqual([]);
 
-    expect((await asB().get("/api/prefs")).body).toEqual(PREFERENCES_DEFAULTS);
+    expect((await asB().get("/api/prefs")).body).toStrictEqual(
+      PREFERENCES_DEFAULTS,
+    );
 
     expect((await asB().get("/api/plan")).body).toMatchObject({
       planKey: null,
       doneN: 0,
     });
 
-    expect((await asB().get("/api/test-history")).body).toEqual([]);
+    expect((await asB().get("/api/test-history")).body).toStrictEqual([]);
 
     // B has no baselines yet: /api/today 422s rather than leaking A's plan/library state.
     expect((await asB().get("/api/today")).status).toBe(422);
-    expect((await asB().get("/api/today")).body).toEqual({
+    expect((await asB().get("/api/today")).body).toStrictEqual({
       error: "baselines_required",
     });
   });
@@ -373,7 +375,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     expect(stillA.body).toMatchObject({ title: "Only A Custom", num: 9001 });
 
     // B's failed log attempt did not land for B either.
-    expect((await asB().get("/api/logs")).body).toEqual([]);
+    expect((await asB().get("/api/logs")).body).toStrictEqual([]);
   });
 
   it("neither A nor B can mutate a GLOBAL workout: 403 starter_readonly, not 404, not a silent no-op", async () => {
@@ -381,11 +383,11 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       .put(`/api/workouts/${globalWorkoutId}`)
       .send(workoutBody(1, "Hijacked Global"));
     expect(putA.status).toBe(403);
-    expect(putA.body).toEqual({ error: "starter_readonly" });
+    expect(putA.body).toStrictEqual({ error: "starter_readonly" });
 
     const deleteB = await asB().delete(`/api/workouts/${globalWorkoutId}`);
     expect(deleteB.status).toBe(403);
-    expect(deleteB.body).toEqual({ error: "starter_readonly" });
+    expect(deleteB.body).toStrictEqual({ error: "starter_readonly" });
 
     // Untouched for both, regardless of which of them attempted the write.
     const stillGlobalForA = await asA().get(`/api/workouts/${globalWorkoutId}`);

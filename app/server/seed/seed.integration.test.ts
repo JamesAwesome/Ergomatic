@@ -41,7 +41,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
     expect(globals.every((w) => w.userId === null)).toBe(true);
     expect(globals.every((w) => w.isGlobal === true)).toBe(true);
     expect(globals.every((w) => w.source === "starter")).toBe(true);
-    expect(globals.map((w) => w.num).sort((a, b) => a - b)).toEqual(
+    expect(globals.map((w) => w.num).sort((a, b) => a - b)).toStrictEqual(
       STARTER_WORKOUTS.map((w) => w.num).sort((a, b) => a - b),
     );
   });

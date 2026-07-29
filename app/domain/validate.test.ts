@@ -35,6 +35,19 @@ describe("validateSteps", () => {
     expect(validateSteps([{ k: "zap" }]).ok).toBe(false);
     expect(validateSteps([]).ok).toBe(false);
   });
+  it("rejects a step item that isn't an object", () => {
+    const r = validateSteps([42, work()]);
+    expect(r.ok).toBe(false);
+    const errors = r.ok ? [] : r.errors;
+    expect(errors).toStrictEqual(
+      expect.arrayContaining([expect.stringContaining("not an object")]),
+    );
+  });
+  it("rejects a wu/r step with out-of-range or non-half-step minutes", () => {
+    expect(validateSteps([{ k: "wu", minutes: 0 }, work()]).ok).toBe(false);
+    expect(validateSteps([{ k: "wu", minutes: 10.3 }, work()]).ok).toBe(false);
+    expect(validateSteps([work(), { k: "r", minutes: 200 }]).ok).toBe(false);
+  });
   it("rejects out-of-bounds values with messages", () => {
     for (const bad of [
       [work({ duration: { kind: "time", minutes: 0 } })],
@@ -47,11 +60,13 @@ describe("validateSteps", () => {
       [{ k: "wu", minutes: 10 }], // no work/test step
       [work(), { k: "reps", count: 4 }], // marker last
       [{ k: "reps", count: 2 }, work(), { k: "reps", count: 2 }, work()], // two markers
+      [{ k: "reps", count: 0 }, work()], // reps count out of 1..12
       [{ k: "test", label: "x".repeat(41) }], // test label too long
     ]) {
       const r = validateSteps(bad);
       expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.errors.length).toBeGreaterThan(0);
+      const errorCount = r.ok ? 0 : r.errors.length;
+      expect(errorCount).toBeGreaterThan(0);
     }
   });
   it("accepts valid restMinutes", () => {
@@ -80,6 +95,12 @@ describe("validateWorkoutInput", () => {
   };
   it("accepts a valid workout", () => {
     expect(validateWorkoutInput(base).ok).toBe(true);
+  });
+  it("rejects a non-object workout", () => {
+    const r = validateWorkoutInput("nope");
+    expect(r.ok).toBe(false);
+    const errors = r.ok ? [] : r.errors;
+    expect(errors).toStrictEqual(["not an object"]);
   });
   it("rejects pain outside 1..5 and book-era difficulty labels", () => {
     expect(validateWorkoutInput({ ...base, pain: 7 }).ok).toBe(false);

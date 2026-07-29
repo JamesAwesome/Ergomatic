@@ -27,7 +27,7 @@ describe("health against real Postgres", () => {
     const app = createApp(baseDeps({ checkDb: () => checkDb(pool) }));
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ ok: true, db: true, version: "dev" });
+    expect(res.body).toStrictEqual({ ok: true, db: true, version: "dev" });
   });
 
   it("reports db:false once the database is gone", async () => {
@@ -35,6 +35,6 @@ describe("health against real Postgres", () => {
     const app = createApp(baseDeps({ checkDb: () => checkDb(pool) }));
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(503);
-    expect(res.body).toEqual({ ok: false, db: false, version: "dev" });
+    expect(res.body).toStrictEqual({ ok: false, db: false, version: "dev" });
   });
 });

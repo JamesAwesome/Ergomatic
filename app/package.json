@@ -55,6 +55,7 @@
     "@types/supertest": "^7.2.1",
     "@vitejs/plugin-react": "^6.0.4",
     "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/eslint-plugin": "^1.6.24",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",

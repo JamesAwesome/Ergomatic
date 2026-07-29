@@ -404,7 +404,7 @@ describe("GET/PUT /api/baselines", () => {
   it("GET returns null baselines when unset", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/baselines"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ k2Seconds: null, k6Seconds: null });
+    expect(res.body).toStrictEqual({ k2Seconds: null, k6Seconds: null });
   });
 
   it("PUT updates a field and GET reflects it", async () => {
@@ -414,10 +414,10 @@ describe("GET/PUT /api/baselines", () => {
       k2Seconds: 120,
     });
     expect(put.status).toBe(200);
-    expect(put.body).toEqual({ k2Seconds: 120, k6Seconds: null });
+    expect(put.body).toStrictEqual({ k2Seconds: 120, k6Seconds: null });
 
     const get = await asA(request(app).get("/api/baselines"));
-    expect(get.body).toEqual({ k2Seconds: 120, k6Seconds: null });
+    expect(get.body).toStrictEqual({ k2Seconds: 120, k6Seconds: null });
   });
 
   it("rejects out-of-bounds k2Seconds with 400 + field", async () => {
@@ -425,7 +425,10 @@ describe("GET/PUT /api/baselines", () => {
       request(appFor(makeStores())).put("/api/baselines"),
     ).send({ k2Seconds: 30 });
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: expect.any(String), field: "k2Seconds" });
+    expect(res.body).toStrictEqual({
+      error: expect.any(String),
+      field: "k2Seconds",
+    });
   });
 
   it("rejects out-of-bounds k6Seconds with 400 + field", async () => {
@@ -461,7 +464,7 @@ describe("GET/PUT /api/baselines", () => {
       isTestResult: true,
     });
     const history = await stores.testHistory.list(userA.id);
-    expect(history.map((h) => h.distance).sort()).toEqual(["2k", "6k"]);
+    expect(history.map((h) => h.distance).sort()).toStrictEqual(["2k", "6k"]);
   });
 });
 
@@ -469,7 +472,7 @@ describe("workouts CRUD", () => {
   it("GET list starts empty", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/workouts"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(res.body).toStrictEqual([]);
   });
 
   it("POST creates a workout and it appears in the list", async () => {
@@ -703,7 +706,7 @@ describe("global starter library", () => {
       request(appFor(stores)).put(`/api/workouts/${g.id}`),
     ).send(validWorkoutBody({ num: 503, title: "Hijacked" }));
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: "starter_readonly" });
+    expect(res.body).toStrictEqual({ error: "starter_readonly" });
 
     // untouched
     const after = await asB(
@@ -719,7 +722,7 @@ describe("global starter library", () => {
       request(appFor(stores)).delete(`/api/workouts/${g.id}`),
     );
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: "starter_readonly" });
+    expect(res.body).toStrictEqual({ error: "starter_readonly" });
 
     const after = await asB(
       request(appFor(stores)).get(`/api/workouts/${g.id}`),
@@ -757,7 +760,7 @@ describe("POST /api/workouts/bulk", () => {
     ).send({ text });
     expect(res.status).toBe(200);
     expect(res.body.created).toHaveLength(2);
-    expect(res.body.errors).toEqual([]);
+    expect(res.body.errors).toStrictEqual([]);
   });
 
   it("reports parse errors per line while still creating the valid blocks", async () => {
@@ -814,7 +817,7 @@ describe("GET/POST /api/logs", () => {
   it("GET starts empty", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/logs"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(res.body).toStrictEqual([]);
   });
 
   it("POST creates a log, freezing current baselines, and it is listed after", async () => {
@@ -982,7 +985,7 @@ describe("GET/POST /api/logs", () => {
       ],
     });
     const list = await asA(request(app).get("/api/logs"));
-    expect(list.body[0].steps[0]).toEqual({
+    expect(list.body[0].steps[0]).toStrictEqual({
       label: "Work",
       targetSplit: 120,
       actualSource: "assumed",
@@ -1010,7 +1013,7 @@ describe("GET/PUT /api/plan", () => {
   it("GET with no plan selected returns an empty sequence", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/plan"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ planKey: null, doneN: 0, sequence: [] });
+    expect(res.body).toStrictEqual({ planKey: null, doneN: 0, sequence: [] });
   });
 
   it("PUT selects a plan and returns its 84-entry sequence", async () => {
@@ -1021,7 +1024,7 @@ describe("GET/PUT /api/plan", () => {
     expect(res.body.planKey).toBe("sprint");
     expect(res.body.doneN).toBe(0);
     expect(res.body.sequence).toHaveLength(84);
-    expect(res.body.sequence[0]).toEqual({
+    expect(res.body.sequence[0]).toStrictEqual({
       index: 0,
       code: PLANS.sprint.sessions[0],
       status: "today",
@@ -1110,7 +1113,7 @@ describe("GET/PUT /api/prefs", () => {
   it("GET returns the spec defaults", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/prefs"));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(PREFERENCES_DEFAULTS);
+    expect(res.body).toStrictEqual(PREFERENCES_DEFAULTS);
   });
 
   it("PUT updates a field and GET reflects the merge", async () => {
@@ -1128,7 +1131,7 @@ describe("GET/PUT /api/prefs", () => {
     const stores = makeStores();
     const res = await asA(request(appFor(stores)).put("/api/prefs")).send({});
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(PREFERENCES_DEFAULTS);
+    expect(res.body).toStrictEqual(PREFERENCES_DEFAULTS);
     expect(stores.preferences.put).not.toHaveBeenCalled();
   });
 
@@ -1138,7 +1141,7 @@ describe("GET/PUT /api/prefs", () => {
       notARealField: 123,
     });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(PREFERENCES_DEFAULTS);
+    expect(res.body).toStrictEqual(PREFERENCES_DEFAULTS);
     expect(stores.preferences.put).not.toHaveBeenCalled();
   });
 
@@ -1173,7 +1176,7 @@ describe("GET/PUT /api/prefs", () => {
       },
     );
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
+    expect(res.body).toStrictEqual({
       difficulties: ["easy"],
       timeCapMinutes: 45,
       warmupMinutes: 12,
@@ -1231,7 +1234,7 @@ describe("GET /api/test-history", () => {
       request(appFor(makeStores())).get("/api/test-history"),
     );
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(res.body).toStrictEqual([]);
   });
 
   it("reflects entries appended via baselines isTestResult", async () => {
@@ -1249,7 +1252,7 @@ describe("GET /api/today", () => {
   it("422s with baselines_required when baselines are unset", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/today"));
     expect(res.status).toBe(422);
-    expect(res.body).toEqual({ error: "baselines_required" });
+    expect(res.body).toStrictEqual({ error: "baselines_required" });
   });
 
   it("422s when only one baseline is set", async () => {
@@ -1300,7 +1303,7 @@ describe("GET /api/today", () => {
     });
     const res = await asA(request(app).get("/api/today"));
     expect(res.body.recommendation).toBeNull();
-    expect(res.body.pool).toEqual([]);
+    expect(res.body.pool).toStrictEqual([]);
   });
 
   it("the pool spans globals: a global workout of the matching type appears in poolIds", async () => {

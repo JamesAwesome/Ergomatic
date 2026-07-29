@@ -17,10 +17,10 @@ w 2500m 2k-4 @24 r5
 test 2k
 `;
     const result = parseBulk(text);
-    expect(result.errors).toEqual([]);
+    expect(result.errors).toStrictEqual([]);
     expect(result.workouts).toHaveLength(2);
 
-    expect(result.workouts[0]).toEqual({
+    expect(result.workouts[0]).toStrictEqual({
       num: 12,
       title: "Ladder Day",
       type: "AT",
@@ -40,7 +40,7 @@ test 2k
       ],
     });
 
-    expect(result.workouts[1]).toEqual({
+    expect(result.workouts[1]).toStrictEqual({
       num: 13,
       title: "Long Repeats",
       type: "O2",
@@ -78,8 +78,8 @@ w 1' 2k @20
 
 `;
     const result = parseBulk(text);
-    expect(result.errors).toEqual([]);
-    expect(result.workouts.map((w) => w.num)).toEqual([12, 13]);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts.map((w) => w.num)).toStrictEqual([12, 13]);
   });
 
   it("reports a bad header field (invalid type) and skips the block", () => {
@@ -87,8 +87,8 @@ w 1' 2k @20
 wu 10
 w 1' 6k @20`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       { block: 0, line: 1, message: expect.stringContaining("type") },
     ]);
   });
@@ -97,8 +97,8 @@ w 1' 6k @20`;
     const text = `12 | Ladder Day | AT | medium
 wu 10`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       { block: 0, line: 1, message: expect.stringContaining("5 fields") },
     ]);
   });
@@ -108,8 +108,8 @@ wu 10`;
 wu 10
 zzz 5`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       {
         block: 0,
         line: 3,
@@ -123,8 +123,8 @@ zzz 5`;
 wu 10
 w 10x 6k @20`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       { block: 0, line: 3, message: expect.stringContaining("duration") },
     ]);
   });
@@ -134,9 +134,94 @@ w 10x 6k @20`;
 wu 10
 w 1' 9k-2 @20`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       { block: 0, line: 3, message: expect.stringContaining("pace ref") },
+    ]);
+  });
+
+  it("reports a non-integer num in the header", () => {
+    const text = `abc | Ladder Day | AT | medium | 3
+wu 10`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      { block: 0, line: 1, message: expect.stringContaining("invalid num") },
+    ]);
+  });
+
+  it("reports an empty title in the header", () => {
+    const text = `12 |  | AT | medium | 3
+wu 10`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      { block: 0, line: 1, message: "title is required" },
+    ]);
+  });
+
+  it("reports a bad difficulty value in the header", () => {
+    const text = `12 | Ladder Day | AT | zzz | 3
+wu 10`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      {
+        block: 0,
+        line: 1,
+        message: expect.stringContaining("invalid difficulty"),
+      },
+    ]);
+  });
+
+  it("reports a non-integer pain value in the header", () => {
+    const text = `12 | Ladder Day | AT | medium | 3.5
+wu 10`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      { block: 0, line: 1, message: expect.stringContaining("invalid pain") },
+    ]);
+  });
+
+  it("reports a work step missing its duration/pace-ref tokens", () => {
+    const text = `12 | Ladder Day | AT | medium | 3
+wu 10
+w 1'`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      {
+        block: 0,
+        line: 3,
+        message: expect.stringContaining("needs a duration and a pace ref"),
+      },
+    ]);
+  });
+
+  it("reports a bad spm token on a work step", () => {
+    const text = `12 | Ladder Day | AT | medium | 3
+wu 10
+w 1' 6k @zz`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      { block: 0, line: 3, message: expect.stringContaining("bad spm") },
+    ]);
+  });
+
+  it("reports an unexpected token on a work step", () => {
+    const text = `12 | Ladder Day | AT | medium | 3
+wu 10
+w 1' 6k huh`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      {
+        block: 0,
+        line: 3,
+        message: expect.stringContaining("unexpected token"),
+      },
     ]);
   });
 
@@ -144,8 +229,8 @@ w 1' 9k-2 @20`;
     const text = `12 | Ladder Day | AT | medium | 3
 w 2000m 2k`;
     const result = parseBulk(text);
-    expect(result.errors).toEqual([]);
-    expect(result.workouts[0].steps[0]).toEqual({
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts[0].steps[0]).toStrictEqual({
       k: "w",
       duration: { kind: "distance", meters: 2000 },
       ref: { base: "2k", off: 0 },
@@ -159,14 +244,14 @@ wu 10
 2 | Bad Step | AT | medium | 3
 zzz 5`;
     const result = parseBulk(text);
-    expect(result.errors.map((e) => e.block)).toEqual([0, 1]);
+    expect(result.errors.map((e) => e.block)).toStrictEqual([0, 1]);
   });
 
   it("errors when a block has no step lines at all", () => {
     const text = `1 | Header Only | AT | medium | 3`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       {
         block: 0,
         line: 1,
@@ -178,8 +263,8 @@ zzz 5`;
   it("reports a wu step missing its minutes", () => {
     const text = `1 | Ladder | AT | medium | 3\nwu\nw 1' 6k @20`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       {
         block: 0,
         line: 2,
@@ -191,8 +276,8 @@ zzz 5`;
   it("reports an r step with non-numeric minutes", () => {
     const text = `1 | Ladder | AT | medium | 3\nwu 10\nr abc`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       {
         block: 0,
         line: 3,
@@ -204,8 +289,8 @@ zzz 5`;
   it("reports a test step with no label", () => {
     const text = `1 | Ladder | AT | medium | 3\nwu 10\ntest`;
     const result = parseBulk(text);
-    expect(result.workouts).toEqual([]);
-    expect(result.errors).toEqual([
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
       {
         block: 0,
         line: 3,
@@ -215,7 +300,7 @@ zzz 5`;
   });
 
   it("returns empty result for blank input", () => {
-    expect(parseBulk("")).toEqual({ workouts: [], errors: [] });
-    expect(parseBulk("   \n\n  ")).toEqual({ workouts: [], errors: [] });
+    expect(parseBulk("")).toStrictEqual({ workouts: [], errors: [] });
+    expect(parseBulk("   \n\n  ")).toStrictEqual({ workouts: [], errors: [] });
   });
 });

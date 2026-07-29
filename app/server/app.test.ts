@@ -12,7 +12,7 @@ describe("GET /api/health", () => {
       createApp(baseDeps({ checkDb: async () => true })),
     ).get("/api/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ ok: true, db: true, version: "dev" });
+    expect(res.body).toStrictEqual({ ok: true, db: true, version: "dev" });
   });
 
   it("reports APP_VERSION when set", async () => {
@@ -32,7 +32,7 @@ describe("GET /api/health", () => {
       createApp(baseDeps({ checkDb: async () => false })),
     ).get("/api/health");
     expect(res.status).toBe(503);
-    expect(res.body).toEqual({ ok: false, db: false, version: "dev" });
+    expect(res.body).toStrictEqual({ ok: false, db: false, version: "dev" });
   });
 
   it("returns 503 when the DB check throws", async () => {
@@ -45,7 +45,7 @@ describe("GET /api/health", () => {
     );
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(503);
-    expect(res.body).toEqual({ ok: false, db: false, version: "dev" });
+    expect(res.body).toStrictEqual({ ok: false, db: false, version: "dev" });
   });
 });
 

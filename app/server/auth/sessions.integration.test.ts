@@ -37,7 +37,11 @@ describe("session lifecycle against real Postgres", () => {
   it("creates and resolves a session; token is stored only as a hash", async () => {
     const { token } = await store.createSession(userId);
     const resolved = await store.resolveSession(token);
-    expect(resolved?.user).toEqual({ id: userId, email: "a@x.com", name: "A" });
+    expect(resolved?.user).toStrictEqual({
+      id: userId,
+      email: "a@x.com",
+      name: "A",
+    });
     const rows = await db.select().from(sessions);
     expect(rows.some((r) => r.tokenHash === token)).toBe(false);
   });

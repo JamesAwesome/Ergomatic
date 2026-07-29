@@ -4,7 +4,7 @@ import { isAllowed, parseAllowlist } from "./allowlist.js";
 describe("parseAllowlist", () => {
   it("trims whitespace and drops empties (the trailing-comma footgun)", () => {
     const set = parseAllowlist(" a@x.com, B@Y.com ,, ");
-    expect(set).toEqual(new Set(["a@x.com", "b@y.com"]));
+    expect(set).toStrictEqual(new Set(["a@x.com", "b@y.com"]));
   });
   it("empty or missing means nobody", () => {
     expect(parseAllowlist(undefined).size).toBe(0);

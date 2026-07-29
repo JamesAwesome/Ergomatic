@@ -44,7 +44,7 @@ describe("POST /api/auth/native", () => {
     const d = nativeDeps();
     const res = await post(d);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
+    expect(res.body).toStrictEqual({
       token: "btok",
       expiresAt: "2026-09-01T00:00:00.000Z",
       user: { id: "u1", email: "a@x.com", name: "A" },
@@ -66,7 +66,7 @@ describe("POST /api/auth/native", () => {
     const d = nativeDeps({ allowlist: new Set(["other@x.com"]) });
     const res = await post(d);
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: "denied", email: "a@x.com" });
+    expect(res.body).toStrictEqual({ error: "denied", email: "a@x.com" });
     expect(d.users.createUser).not.toHaveBeenCalled();
   });
 
@@ -87,7 +87,7 @@ describe("POST /api/auth/native", () => {
     });
     const res = await post(d);
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ error: "invalid_token" });
+    expect(res.body).toStrictEqual({ error: "invalid_token" });
   });
 
   it("400s a missing idToken", async () => {
@@ -107,7 +107,7 @@ describe("POST /api/auth/native", () => {
     );
     const res = await post(d);
     expect(res.status).toBe(500);
-    expect(res.body).toEqual({ error: "signin_failed" });
+    expect(res.body).toStrictEqual({ error: "signin_failed" });
   });
 
   it("is reachable without an Origin match (bearer-style client)", async () => {
