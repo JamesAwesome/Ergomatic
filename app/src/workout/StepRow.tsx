@@ -18,14 +18,16 @@ function nudgeLabel(nudge: number): string | null {
 
 export default function StepRow({
   step,
-  index,
   baselines,
   tolerance,
   nudge,
   onNudge,
 }: {
-  step: Step;
-  index: number;
+  // WorkoutDetail renders the "reps" marker itself (a row above the block
+  // it governs) and never hands one to StepRow, so the prop type excludes
+  // it — that also lets TS narrow straight to the "w" fields below without
+  // a dead branch.
+  step: Exclude<Step, { k: "reps" }>;
   baselines: Baselines | null;
   tolerance: number;
   nudge: number;
@@ -33,7 +35,7 @@ export default function StepRow({
 }) {
   if (step.k === "wu") {
     return (
-      <div className="step-row" data-step-index={index}>
+      <div className="step-row">
         <div className="step-row-main">
           <span className="step-row-label">Warm-up</span>
           <span className="step-row-duration">{step.minutes}′</span>
@@ -44,7 +46,7 @@ export default function StepRow({
 
   if (step.k === "r") {
     return (
-      <div className="step-row" data-step-index={index}>
+      <div className="step-row">
         <div className="step-row-main">
           <span className="step-row-label">Rest</span>
           <span className="step-row-duration">{step.minutes}′</span>
@@ -55,21 +57,12 @@ export default function StepRow({
 
   if (step.k === "test") {
     return (
-      <div className="step-row" data-step-index={index}>
+      <div className="step-row">
         <div className="step-row-main">
           <span className="step-row-label">{step.label}</span>
         </div>
       </div>
     );
-  }
-
-  if (step.k === "reps") {
-    // liveSteps() strips the sole "reps" marker before this list is built
-    // (domain/expand.ts); validate.ts rejects more than one per workout, so
-    // this branch is unreachable at runtime — kept only to satisfy the
-    // exhaustive union without a false-positive TS2339 on the "w" fields
-    // below.
-    return null;
   }
 
   // step.k === "w"
@@ -87,7 +80,7 @@ export default function StepRow({
   if (nudgeText) subParts.push(nudgeText);
 
   return (
-    <div className="step-row" data-step-index={index}>
+    <div className="step-row">
       <div className="step-row-main">
         <span className="step-row-label">{left}</span>
         {baselines ? (
