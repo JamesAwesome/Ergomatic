@@ -90,7 +90,7 @@ export default function BulkImport({ onImported }: { onImported: () => void }) {
           </button>
           {submitError && <p className="field-error">{submitError}</p>}
           {result && (
-            <div className="bulk-import-result">
+            <div className="bulk-import-result" role="alert">
               <p className="mono-status">{result.created.length} created</p>
               {result.errors.length > 0 && (
                 <ul className="bulk-import-errors">

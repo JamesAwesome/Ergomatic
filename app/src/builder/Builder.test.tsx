@@ -302,6 +302,79 @@ describe("Builder", () => {
     });
   });
 
+  it("wires aria-invalid/aria-describedby on the No. field to its visible error message", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    // Blank submit triggers errors.num (default form.num is "").
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    const numInput = screen.getByLabelText("Workout number");
+    expect(numInput).toHaveAttribute("aria-invalid", "true");
+    const describedBy = numInput.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    // The id it points at must be the actually-visible error message, not
+    // just any truthy string — a screen reader announces whatever text
+    // lives at that id.
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      "num must be a whole number 1..9999",
+    );
+  });
+
+  it("wires aria-invalid/aria-describedby on each of a row's dur/ref/spm/rest fields to its own error message", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    await userEvent.type(screen.getByLabelText("Workout number"), "12");
+    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
+    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
+    // dur and ref are left blank (triggers "required"); spm and rest get
+    // out-of-range values so all four row fields have a live error at once.
+    await userEvent.type(screen.getByPlaceholderText("spm"), "99");
+    await userEvent.type(screen.getByPlaceholderText("rest"), "0.3");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    const expectations: [string, string][] = [
+      ["Row 1 duration", "duration is required, e.g. 5' or 2500m"],
+      ["Row 1 pace reference", "invalid pace reference"],
+      ["Row 1 stroke rate", "spm must be 10..60"],
+      ["Row 1 rest", "rest must be 0.5..60 in 0.5 steps"],
+    ];
+    for (const [label, message] of expectations) {
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      const describedBy = input.getAttribute("aria-describedby");
+      expect(describedBy).toBeTruthy();
+      expect(document.getElementById(describedBy!)).toHaveTextContent(message);
+    }
+  });
+
+  it("announces the submit error region to assistive tech via role=alert", async () => {
+    const api = mockApi(
+      () =>
+        new Response(JSON.stringify({ error: "num taken" }), { status: 409 }),
+    );
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await fillValidForm();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "that number's taken",
+    );
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
   it("treats a successful save as success even when the response body isn't valid JSON (L3)", async () => {
     const api = mockApi(() => new Response(null, { status: 201 }));
     mockBaselines(BASELINES);
