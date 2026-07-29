@@ -105,7 +105,7 @@ function validateLogStepEntry(raw: unknown, index: number): { ok: true; step: Lo
 
 export function createDataRouter({ stores, requireUser }: DataRouterDeps): Router {
   const router = Router()
-  router.use(requireUser)
+  router.use("/api", requireUser)
 
   // -- baselines ------------------------------------------------------
 
