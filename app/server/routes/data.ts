@@ -317,6 +317,13 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
       badRequest(res, 'steps must be a non-empty array', 'steps')
       return
     }
+    // Mirrors validateSteps' 100-step cap on workouts; a logged session can
+    // run a bit longer in practice (warm-up + reps + rest entries all count
+    // separately here), so the ceiling is doubled rather than reused as-is.
+    if (body.steps.length > 200) {
+      badRequest(res, 'steps must have at most 200 entries', 'steps')
+      return
+    }
     const steps: LogStep[] = []
     for (let i = 0; i < body.steps.length; i++) {
       const result = validateLogStepEntry(body.steps[i], i)
@@ -453,6 +460,15 @@ export function createDataRouter({ stores, requireUser }: DataRouterDeps): Route
         return
       }
       patch.accentColor = body.accentColor
+    }
+
+    // An empty patch (body `{}`, or all-unknown keys) must be a no-op read,
+    // not a write: the real store's put() builds its upsert's `SET` clause
+    // directly from `patch`, and Postgres rejects `ON CONFLICT DO UPDATE
+    // SET` with nothing to set — a 500, not a 400, if we let it through.
+    if (Object.keys(patch).length === 0) {
+      res.json(await stores.preferences.get(req.user!.id))
+      return
     }
 
     await stores.preferences.put(req.user!.id, patch)

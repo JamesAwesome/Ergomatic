@@ -347,6 +347,25 @@ describe('domain stores against real Postgres', () => {
       const fresh = await users.createUser({ googleSub: 'prefs-cross', email: 'prefcross@x.com', name: 'PC' })
       expect(await s.get(fresh.id)).toMatchObject({ accentColor: '#b5341f' })
     })
+
+    // Real regression: an empty patch reaches onConflictDoUpdate's `set`
+    // clause with nothing in it, which Postgres rejects outright — a plain
+    // JS fake (`{...current, ...patch}`) can't reproduce this, since
+    // merging in an empty object is silently harmless there. This is
+    // exactly why app/server/routes/data.ts's PUT /api/prefs short-circuits
+    // before calling put() when the patch is empty.
+    it('put with an empty patch throws (fresh row), which is why the route must guard against {}', async () => {
+      const s = store()
+      const users = createUserStore(db)
+      const fresh = await users.createUser({ googleSub: 'prefs-empty-fresh', email: 'prefemptyfresh@x.com', name: 'PEF' })
+      await expect(s.put(fresh.id, {})).rejects.toThrow()
+    })
+
+    it('put with an empty patch throws (existing row, real conflict path)', async () => {
+      const s = store()
+      await s.put(userA, { accentColor: '#654321' })
+      await expect(s.put(userA, {})).rejects.toThrow()
+    })
   })
 
   describe('logs store + plan_state transaction', () => {
