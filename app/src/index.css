@@ -439,3 +439,109 @@ main {
   gap: 10px;
   margin-top: 20px;
 }
+
+.section-heading {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: 22px 0 0;
+}
+
+.baselines-card {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.baseline-prompt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin: 0 0 12px;
+}
+
+.baseline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.baseline-row:last-of-type {
+  border-bottom: none;
+}
+
+.baseline-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+
+.baseline-value {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  color: var(--accent);
+  flex: 1;
+  text-align: center;
+}
+
+.baseline-steppers {
+  display: flex;
+  gap: 8px;
+}
+
+.baseline-stepper {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.baseline-confirm {
+  background: var(--surface-sunken);
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.baseline-confirm-line {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0 0 4px;
+}
+
+.baseline-error {
+  color: var(--accent);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.baseline-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.baseline-actions .button-outline {
+  flex: 1;
+  text-align: center;
+}
+
+.baseline-apply {
+  flex: 2;
+  border: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

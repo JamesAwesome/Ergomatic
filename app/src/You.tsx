@@ -1,5 +1,6 @@
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
+import BaselineEditor from "./you/BaselineEditor";
 
 function initials(name: string): string {
   return name
@@ -18,23 +19,27 @@ export default function You({
   onSignedOut: () => void;
 }) {
   return (
-    <section className="you">
-      <div className="avatar" aria-hidden="true">
-        {initials(user.name)}
-      </div>
-      <div>
-        <p className="you-name">{user.name}</p>
-        <p className="you-email">{user.email}</p>
-      </div>
-      <button
-        className="button-outline"
-        onClick={async () => {
-          await authSignOut();
-          onSignedOut();
-        }}
-      >
-        Sign out
-      </button>
-    </section>
+    <main className="screen">
+      <section className="you">
+        <div className="avatar" aria-hidden="true">
+          {initials(user.name)}
+        </div>
+        <div>
+          <p className="you-name">{user.name}</p>
+          <p className="you-email">{user.email}</p>
+        </div>
+        <button
+          className="button-outline"
+          onClick={async () => {
+            await authSignOut();
+            onSignedOut();
+          }}
+        >
+          Sign out
+        </button>
+      </section>
+      <h2 className="section-heading">BASELINES</h2>
+      <BaselineEditor />
+    </main>
   );
 }

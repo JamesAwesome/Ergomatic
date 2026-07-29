@@ -15,8 +15,8 @@ function Placeholder({ title, phase }: { title: string; phase: string }) {
 }
 
 // `user`/`onSignedOut` are optional so tests can render <AppRoutes /> without
-// a signed-in user (Task 5 adds /library/:id; Task 7 adds a baseline editor
-// beneath /you). App.tsx supplies both once useMe() resolves to "in".
+// a signed-in user. /you composes the account block with the staged baseline
+// editor (You.tsx). App.tsx supplies both once useMe() resolves to "in".
 export default function AppRoutes({
   user,
   onSignedOut,
