@@ -173,13 +173,15 @@ main {
 }
 
 .pain-bar {
-  display: inline-flex;
+  display: flex;
   gap: 2px;
+  align-items: flex-end;
 }
 
 .pain-bar-segment {
-  display: inline-block;
-  width: 11px;
-  height: 3px;
+  display: block;
+  width: 3px;
+  height: 11px;
+  border-radius: 1px;
   background: var(--pain-empty);
 }
