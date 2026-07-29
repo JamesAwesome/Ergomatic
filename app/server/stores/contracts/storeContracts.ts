@@ -227,6 +227,60 @@ export function describeStoreContracts(
         const listB = await stores.workouts.list(userB);
         expect(listB.some((w) => w.id === created.id)).toBe(false);
       });
+
+      // count() is `where(eq(workouts.userId, userId))` in the real store —
+      // a NULL user_id (a global) can never satisfy `= $userId`, so globals
+      // are structurally excluded, not filtered out by an extra check.
+      it("count reflects personal workouts only, excluding globals", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        expect(await stores.workouts.count(userId)).toBe(0);
+        await stores.workouts.create(userId, workoutInput({ num: 61 }));
+        expect(await stores.workouts.count(userId)).toBe(1);
+        await stores.seedGlobalWorkout(
+          workoutInput({ num: 62, title: "Global for count" }),
+        );
+        expect(await stores.workouts.count(userId)).toBe(1);
+      });
+
+      it("listGlobals returns seeded globals and excludes personal rows", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const g = await stores.seedGlobalWorkout(
+          workoutInput({ num: 71, title: "Global Listed" }),
+        );
+        await stores.workouts.create(
+          userId,
+          workoutInput({ num: 72, title: "Personal Not Listed" }),
+        );
+        const globals = await stores.workouts.listGlobals();
+        expect(globals.some((w) => w.id === g.id)).toBe(true);
+        expect(globals.some((w) => w.num === 72)).toBe(false);
+      });
+
+      it("countGlobals matches listGlobals().length", async () => {
+        const stores = await makeStores();
+        const before = await stores.workouts.countGlobals();
+        await stores.seedGlobalWorkout(
+          workoutInput({ num: 81, title: "Global Counted" }),
+        );
+        const after = await stores.workouts.countGlobals();
+        expect(after).toBe(before + 1);
+        expect(after).toBe((await stores.workouts.listGlobals()).length);
+      });
+
+      it("createMany rolls back the whole batch on an internal num clash", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await expect(
+          stores.workouts.createMany(userId, [
+            workoutInput({ num: 91, title: "Batch one" }),
+            workoutInput({ num: 91, title: "Batch clash" }),
+          ]),
+        ).rejects.toThrow(StoreConflictError);
+        const list = await stores.workouts.list(userId);
+        expect(list.some((w) => w.num === 91)).toBe(false);
+      });
     });
 
     describe("logs", () => {
@@ -254,6 +308,18 @@ export function describeStoreContracts(
         await stores.logs.create(userA, logInput());
         expect(await stores.logs.list(userA, 10)).toHaveLength(2);
         expect(await stores.logs.list(userB, 10)).toHaveLength(0);
+      });
+
+      it("count reflects created logs and is scoped per user", async () => {
+        const stores = await makeStores();
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        expect(await stores.logs.count(userA)).toBe(0);
+        await stores.logs.create(userA, logInput());
+        expect(await stores.logs.count(userA)).toBe(1);
+        await stores.logs.create(userA, logInput());
+        expect(await stores.logs.count(userA)).toBe(2);
+        expect(await stores.logs.count(userB)).toBe(0);
       });
 
       it("lastDonePerWorkout groups by workout, excludes workout-less logs, and is scoped per user", async () => {
