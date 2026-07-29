@@ -1,0 +1,35 @@
+/* Design tokens — docs/design/README.md §Design tokens. Values are the
+   handoff's, verbatim. accent and pace-tolerance are settings (the handoff
+   calls both configurable), so consume them as variables, never literals. */
+:root {
+  --page: #f4f1e8;
+  --surface: #fffdf7;
+  --surface-sunken: #efeade;
+  --ink: #1b1a17;
+  --ink-2: #3f3c35;
+  --ink-3: #57544c;
+  --ink-4: #8a8478;
+  --ink-5: #a09a8c;
+  --rule: #d8d3c4;
+  --rule-2: #ded8c9;
+  --rule-3: #c9c3b2;
+  --accent: #b5341f;
+  --accent-hover: #9c2c19;
+  --type-o2: #2a6275;
+  --type-at: #8a5f18;
+  --type-an: #5c4382;
+  --type-tr: #b5341f;
+  --type-test: #1b1a17;
+  --on-color: #fffdf7;
+  --pain-empty: #e0dacb;
+
+  --radius: 2px;
+  --tap: 44px;
+
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-sans: "Archivo", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* seconds of tolerance either side of a resolved target (settings, 0–3) */
+  --pace-tolerance: 1;
+}
