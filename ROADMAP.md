@@ -133,7 +133,7 @@ they go stale (this has burned us before). Concretely:
 
 **Exit:** Every formula and behavior in the handoff's "Domain model" section has a passing test; integration tests prove per-user round-trips through Postgres.
 
-## Phase 5 — Library & baselines
+## Phase 5A — Library & baselines
 
 **Status:** Not started
 **Goal:** Enter real baselines and start transcribing The Erg Book.
@@ -141,10 +141,18 @@ they go stale (this has burned us before). Concretely:
 - [ ] Design-token CSS foundation (paper palette, Newsreader/Archivo/IBM Plex Mono, 2 px radii, spacing scale) + bottom tab shell
 - [ ] Library screen: rows with **5-segment** pain bars, filter chips (type single-select toggle, duration multi-select union, `PAIN ≤3`, RECENT/NOT RECENT exclusivity, ALL clears); chips read EASY/MEDIUM/HARD; library counter is a plain count (no /375)
 - [ ] Workout detail: resolved ranges, ▲▼ per-step nudges, derived duration
-- [ ] Builder: type/difficulty/pain pickers, step rows with live resolved splits, repeat block, totals, bulk-import paste; DUR field takes minutes OR meters (`10'` vs `2500m`, explicit unit) in rows and bulk import
 - [ ] **You** — staged baseline editor (drafts, − = faster, 0.5 s steps, Discard/Apply confirm block)
 
 **Exit:** A workout entered as `6k -2 @ 22 SPM` displays the correct range from your real baselines; deployed and usable for cataloguing.
+
+## Phase 5B — Builder & bulk import
+
+**Status:** Not started
+**Goal:** Add new workouts to the library from the app instead of hand-editing seed data.
+
+- [ ] Builder: type/difficulty/pain pickers, step rows with live resolved splits, repeat block, totals, bulk-import paste; DUR field takes minutes OR meters (`10'` vs `2500m`, explicit unit) in rows and bulk import
+
+**Exit:** A workout transcribed from The Erg Book via Builder (rows or bulk paste) saves, appears in the Library, and resolves targets identically to the seeded workouts.
 
 ## Phase 6 — Session flow
 
@@ -216,6 +224,15 @@ they go stale (this has burned us before). Concretely:
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **App icon redraw**: replace the current AI-generated icon with a clean
+  SVG — the arc reads "ERGOMATIO" instead of "Ergomatic," the monitor
+  label is unreadable, and the machine carries a third-party brand
+  wordmark that needs to come off; also drop the baked-in rounded corners
+  and drop shadow, which double up with iOS's own icon mask. **Gated
+  before any EXTERNAL TestFlight distribution or App Store submission**
+  (App Review would reject the current artwork); internal-tester
+  TestFlight is exempt and can keep shipping with the placeholder in the
+  meantime.
 - **Apple sign-in**: required the moment a build goes to EXTERNAL TestFlight or the App Store (guideline 4.8; internal TestFlight is exempt). Works with the existing openid-client stack (ES256 client secret, form_post callback, name/email on first auth only); design the allowlist story for private-relay emails first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).

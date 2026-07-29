@@ -4,7 +4,9 @@ import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
+import { resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
+import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 
@@ -123,8 +125,23 @@ function WorkoutDetailView({
       ? "NEVER DONE"
       : `LAST DONE ${workout.lastDoneDaysAgo} DAYS AGO`;
 
+  // Clamps the RESOLVED split (baseline + off + nudge), not the raw nudge
+  // number, to the same 60-240 s/500m range the baseline editor
+  // (you/baselineDraft.ts) and the API enforce. Unclamped, extreme nudges
+  // would push the resolved split past what a real split can be — and
+  // eventually negative, where fmtSplit emits garbage like "-1:-1.0".
   const handleNudge = (index: number, delta: number) => {
-    setNudges((prev) => ({ ...prev, [index]: (prev[index] ?? 0) + delta }));
+    setNudges((prev) => {
+      const current = prev[index] ?? 0;
+      const step = workout.steps[index];
+      if (!baselines || step.k !== "w") {
+        return { ...prev, [index]: current + delta };
+      }
+      const base = resolveSplit(baselines, step.ref, 0);
+      const resolved = base + current + delta;
+      const clamped = Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, resolved));
+      return { ...prev, [index]: clamped - base };
+    });
   };
 
   return (
