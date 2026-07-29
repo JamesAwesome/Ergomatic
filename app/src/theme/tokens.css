@@ -23,6 +23,18 @@
   --on-color: #fffdf7;
   --pain-empty: #e0dacb;
 
+  /* Pain ramp (1 calm → 5 max) — a deliberate palette extension, see
+     docs/design/DEVIATIONS.md. Measured against --surface/--page: 5.84/5.26,
+     4.48/4.04, 4.31/3.88, 5.22/4.70, 5.94/5.35 — all clear the 3:1 floor
+     WCAG 1.4.11 sets for meaningful graphics. Adjacent steps differ in hue
+     rather than luminance, so the numeral and the mouth curve each carry the
+     meaning independently (WCAG 1.4.1). */
+  --pain-1: #4f6b4a;
+  --pain-2: #6d7c3f;
+  --pain-3: #94742a;
+  --pain-4: #a85423;
+  --pain-5: #b5341f;
+
   --radius: 2px;
   --tap: 44px;
 
