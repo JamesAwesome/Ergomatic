@@ -59,6 +59,17 @@ TypeScript domain layer. Decision: split serving into its own container
   `http://127.0.0.1:8081` and now lands on nginx.
 - `APP_VERSION` build arg: api target only (unchanged semantics;
   `/api/health.version` remains the single version surface).
+- **Shared-host port rule (binding): every host-facing port is an env var
+  with a documented default — no hardcoded host ports anywhere in compose
+  files.** After the split the full host-port surface is exactly two vars:
+  `APP_PORT` (web, default 8081; prod host `.env` = 8082 because natalie
+  owns 8080/8081) + `APP_BIND` (default 127.0.0.1), and `POSTGRES_PORT`
+  (default 5433). The api service maps NO host port by design (reachable
+  only through nginx); container-internal ports (8080, 5432) are
+  network-namespaced per compose project and cannot conflict with other
+  apps on the host. `.env.example` documents all three vars with the
+  shared-host context. Exit criterion: `grep -n '"[0-9]' compose*.yml`
+  shows no host-side port literal outside a `${VAR:-default}` expansion.
 
 ## Tunnel cutover (deploy-time, one-time)
 
