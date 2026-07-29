@@ -194,10 +194,16 @@ function makeFakePreferencesStore(): PreferencesStore {
     async get(userId: string) {
       return rows.get(userId) ?? { ...PREFERENCES_DEFAULTS }
     },
-    async put(userId: string, patch: PreferencesPatch) {
+    // vi.fn-wrapped so a test can assert the empty-patch guard short-circuits
+    // BEFORE the store is touched — the fake itself would happily accept an
+    // empty patch (a plain object spread is a no-op), unlike the real
+    // store's upsert, which needs a non-empty `SET` clause. Spying is the
+    // only way this file can prove the guard fires, since the fake can't
+    // reproduce the real 500.
+    put: vi.fn(async (userId: string, patch: PreferencesPatch) => {
       const current = rows.get(userId) ?? { ...PREFERENCES_DEFAULTS }
       rows.set(userId, { ...current, ...patch })
-    },
+    }),
   } as unknown as PreferencesStore
 }
 
@@ -746,6 +752,16 @@ describe('GET/POST /api/logs', () => {
     const list = await asA(request(app).get('/api/logs'))
     expect(list.body[0].steps[0]).toEqual({ label: 'Work', targetSplit: 120, actualSource: 'assumed' })
   })
+
+  it('rejects more than 200 steps with 400 + field steps', async () => {
+    const step = { label: 'Work', targetSplit: 120, actualSource: 'assumed' as const }
+    const res = await asA(request(appFor(makeStores())).post('/api/logs')).send({
+      ...validLogBody(),
+      steps: Array.from({ length: 201 }, () => step),
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.field).toBe('steps')
+  })
 })
 
 describe('GET/PUT /api/plan', () => {
@@ -848,6 +864,22 @@ describe('GET/PUT /api/prefs', () => {
     expect(put.body.accentColor).toBe('#00ff00')
     const get = await asA(request(app).get('/api/prefs'))
     expect(get.body.accentColor).toBe('#00ff00')
+  })
+
+  it('PUT {} is a no-op read, not a write (real store 500s on an empty SET clause)', async () => {
+    const stores = makeStores()
+    const res = await asA(request(appFor(stores)).put('/api/prefs')).send({})
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual(PREFERENCES_DEFAULTS)
+    expect(stores.preferences.put).not.toHaveBeenCalled()
+  })
+
+  it('PUT with only unknown keys is also a no-op read', async () => {
+    const stores = makeStores()
+    const res = await asA(request(appFor(stores)).put('/api/prefs')).send({ notARealField: 123 })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual(PREFERENCES_DEFAULTS)
+    expect(stores.preferences.put).not.toHaveBeenCalled()
   })
 
   it('rejects an invalid difficulties entry with 400 + field', async () => {
