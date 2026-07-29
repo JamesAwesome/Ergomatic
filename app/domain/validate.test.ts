@@ -73,6 +73,14 @@ describe("validateSteps", () => {
     const r = validateSteps([work({ restMinutes: 5 })]);
     expect(r.ok).toBe(true);
   });
+  it("treats the wu/restMinutes upper bounds as inclusive, not exclusive", () => {
+    // minutes tops out at 180 and restMinutes at 60 — both boundary values
+    // themselves must be accepted, only values strictly above are invalid.
+    expect(validateSteps([{ k: "wu", minutes: 180 }, work()]).ok).toBe(true);
+    expect(validateSteps([{ k: "wu", minutes: 180.5 }, work()]).ok).toBe(false);
+    expect(validateSteps([work({ restMinutes: 60 })]).ok).toBe(true);
+    expect(validateSteps([work({ restMinutes: 60.5 })]).ok).toBe(false);
+  });
   it("accepts valid test-step with label", () => {
     const r = validateSteps([{ k: "test", label: "2k test" }]);
     expect(r.ok).toBe(true);
@@ -113,5 +121,21 @@ describe("validateWorkoutInput", () => {
     expect(validateWorkoutInput({ ...base, num: 0 }).ok).toBe(false);
     expect(validateWorkoutInput({ ...base, title: "" }).ok).toBe(false);
     expect(validateWorkoutInput({ ...base, type: "XX" }).ok).toBe(false);
+  });
+  it("rejects a non-integer num/pain even when the value is in range", () => {
+    // 12.5 and 2.5 fall inside 1..9999 / 1..5, so this only fails if
+    // integer-ness is actually enforced rather than just the numeric range.
+    expect(validateWorkoutInput({ ...base, num: 12.5 }).ok).toBe(false);
+    expect(validateWorkoutInput({ ...base, pain: 2.5 }).ok).toBe(false);
+  });
+  it("rejects num given as a numeric string, not just an out-of-range number", () => {
+    // "12" would satisfy 1 <= n <= 9999 under JS's loose >=/<= coercion, so
+    // this only fails if num is actually checked to be a number.
+    const r = validateWorkoutInput({ ...base, num: "12" });
+    expect(r.ok).toBe(false);
+    const errors = r.ok ? [] : r.errors;
+    expect(errors).toStrictEqual(
+      expect.arrayContaining([expect.stringContaining("num must be")]),
+    );
   });
 });

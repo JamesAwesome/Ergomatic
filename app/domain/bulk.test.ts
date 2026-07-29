@@ -273,6 +273,21 @@ zzz 5`;
     ]);
   });
 
+  it("reports a wu step with trailing garbage after the minutes", () => {
+    // "wu 10 extra" must be rejected outright, not silently parsed as
+    // minutes: 10 with the extra token ignored.
+    const text = `1 | Ladder | AT | medium | 3\nwu 10 extra\nw 1' 6k @20`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      {
+        block: 0,
+        line: 2,
+        message: expect.stringContaining("wu needs minutes"),
+      },
+    ]);
+  });
+
   it("reports an r step with non-numeric minutes", () => {
     const text = `1 | Ladder | AT | medium | 3\nwu 10\nr abc`;
     const result = parseBulk(text);

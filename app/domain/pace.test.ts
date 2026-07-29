@@ -17,6 +17,11 @@ describe("parsePaceRef", () => {
   it.each(["5k", "2k*3", "", "k2", "2k--1", "2k-"])("rejects %s", (input) => {
     expect(parsePaceRef(input)).toBeNull();
   });
+  it("rejects a ref with junk before it instead of stripping the prefix", () => {
+    // A pasted line like "xx2k+5" must not be parsed as "2k+5" by matching
+    // the ref anywhere in the string — the whole input has to be the ref.
+    expect(parsePaceRef("xx2k+5")).toBeNull();
+  });
   it("rejects an offset so large it overflows to a non-finite number", () => {
     expect(parsePaceRef(`2k+${"9".repeat(400)}`)).toBeNull();
   });
