@@ -789,7 +789,10 @@ button:disabled {
 }
 
 .field-spm {
-  width: 40px;
+  /* >= --tap (44px): this is a real <input>, in scope for the 44x44 tap-
+     target sweep (app/e2e/design.spec.ts) unlike .col-spm, its purely
+     decorative column-header label above, which can stay narrower. */
+  width: var(--tap);
 }
 
 .field-rest {

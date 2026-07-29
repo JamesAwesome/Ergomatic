@@ -156,6 +156,42 @@ test.describe("workout detail screen", () => {
   });
 });
 
+test.describe("builder screen", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-builder@e2e.test",
+      name: "Design Builder Tester",
+    });
+    await page.goto("/library/new");
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("body background and the active TYPE chip match the token palette", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+
+    // A brand-new form defaults to O2 (Builder.tsx's newForm) — the O2 chip
+    // is the active (aria-pressed) one.
+    const o2ChipBg = await page
+      .getByRole("button", { name: "O2", exact: true })
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(o2ChipBg).toBe("rgb(42, 98, 117)"); // --type-o2
+  });
+});
+
 test.describe("you screen", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {

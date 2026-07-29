@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { Page } from "@playwright/test";
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { signInViaBackdoor } from "./helpers";
 
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
@@ -86,6 +86,76 @@ test("workout-detail", async ({ page }) => {
   await page.locator(".workout-detail-title").waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "workout-detail.png"),
+  });
+});
+
+/** Fills the top-level fields plus a two-row, repeat-marked body so the
+ *  builder screenshot shows a realistic in-progress workout rather than the
+ *  blank/default form: a steady row outside the block, a faster interval row
+ *  inside it, both resolving to real target ranges once baselines are set
+ *  (SCREENSHOT_BASELINES), and a non-trivial reps count so the "N rows
+ *  marked · M per set" readout has something to say. */
+async function fillSampleWorkout(page: Page): Promise<void> {
+  await page.getByLabel("Workout number").fill("50");
+  await page.getByLabel("Title").fill("Screenshot Intervals");
+  await page.getByRole("radio", { name: "Pain 3" }).click();
+
+  await page.getByLabel("Row 1 duration").fill("20'");
+  await page.getByLabel("Row 1 pace reference").fill("6k+10");
+  await page.getByLabel("Row 1 stroke rate").fill("20");
+
+  await page.getByRole("button", { name: "+ ADD ROW" }).click();
+  await page.getByLabel("Row 2 duration").fill("2000m");
+  await page.getByLabel("Row 2 pace reference").fill("2k");
+  await page.getByLabel("Row 2 stroke rate").fill("26");
+  await page.getByLabel("Row 2 rest").fill("3");
+
+  const row2 = page.locator(".step-row-editor").nth(1);
+  await row2.getByRole("button", { name: "Start the repeat set here" }).click();
+  const moreReps = page.getByRole("button", { name: "More reps" });
+  await moreReps.click();
+  await moreReps.click();
+  await moreReps.click();
+}
+
+test("builder", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-builder@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await page.goto("/library/new");
+  await fillSampleWorkout(page);
+
+  // Two resolved splits (real ranges, not the "no target" fallback — see
+  // StepRowEditor.tsx's resolvedSplit) and the reps readout, all live before
+  // any save.
+  await expect(page.locator(".step-row-range")).toHaveCount(2);
+  await expect(page.locator(".builder-repeat-readout")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "builder.png"),
+  });
+});
+
+test("builder-bulk", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-builder-bulk@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await page.goto("/library/new");
+  await fillSampleWorkout(page);
+
+  await page.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }).click();
+  const grammarHelp = page.locator(".bulk-import-help");
+  await grammarHelp.waitFor();
+  // The filled-in rows above push the panel below the fold on a 390x844
+  // viewport screenshot (not fullPage, matching every other capture in this
+  // file) — scroll the grammar help itself into view so it's what's on
+  // screen, not just present in the DOM.
+  await grammarHelp.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "builder-bulk.png"),
   });
 });
 
