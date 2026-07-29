@@ -162,3 +162,24 @@ main {
 .tab-mark[data-active="true"] {
   background: var(--accent);
 }
+
+.type-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-color);
+  padding: 3px 7px;
+}
+
+.pain-bar {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.pain-bar-segment {
+  display: inline-block;
+  width: 11px;
+  height: 3px;
+  background: var(--pain-empty);
+}
