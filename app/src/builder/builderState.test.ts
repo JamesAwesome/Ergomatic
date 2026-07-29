@@ -7,10 +7,10 @@ import {
   newForm,
   parseDurationInput,
   removeRow,
+  setBlockStart,
   setReps,
   setRowIds,
   toSteps,
-  toggleMarked,
   totals,
   type BuilderForm,
   type BuilderRow,
@@ -65,14 +65,6 @@ describe("rows", () => {
     expect(f.rows.map((r) => r.id)).toStrictEqual([two.rows[1].id]);
   });
 
-  it("toggles a row's SET marking without touching its neighbours", () => {
-    const two = addRow(EMPTY_FORM, "w");
-    const f = toggleMarked(two, two.rows[0].id);
-    expect(f.rows[0].marked).toBe(true);
-    expect(f.rows[1].marked).toBe(false);
-    expect(toggleMarked(f, two.rows[0].id).rows[0].marked).toBe(false);
-  });
-
   it("clamps the repeat count to the domain's 1..12", () => {
     expect(setReps(EMPTY_FORM, 0).reps).toBe(1);
     expect(setReps(EMPTY_FORM, 13).reps).toBe(12);
@@ -84,6 +76,109 @@ describe("rows", () => {
     addRow(EMPTY_FORM, "w");
     setReps(EMPTY_FORM, 5);
     expect(JSON.stringify(EMPTY_FORM)).toBe(before);
+  });
+});
+
+describe("setBlockStart", () => {
+  function fourRowForm(): BuilderForm {
+    return formWith({
+      reps: 3,
+      rows: [
+        {
+          id: "wu",
+          kind: "wu",
+          marked: false,
+          dur: "10'",
+          ref: "",
+          spm: "",
+          rest: "",
+        },
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: "1'",
+          ref: "2k",
+          spm: "",
+          rest: "",
+        },
+        {
+          id: "b",
+          kind: "w",
+          marked: false,
+          dur: "2'",
+          ref: "2k",
+          spm: "",
+          rest: "",
+        },
+        {
+          id: "c",
+          kind: "r",
+          marked: false,
+          dur: "3'",
+          ref: "",
+          spm: "",
+          rest: "",
+        },
+      ],
+    });
+  }
+
+  it("starts a block mid-list, marking that row and every row after it", () => {
+    const f = setBlockStart(fourRowForm(), "a");
+    expect(f.rows.map((r) => r.marked)).toStrictEqual([
+      false,
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it("clicking the current block start clears the whole block", () => {
+    const started = setBlockStart(fourRowForm(), "a");
+    const cleared = setBlockStart(started, "a");
+    expect(cleared.rows.map((r) => r.marked)).toStrictEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it("clicking a later row inside the block moves the start and unmarks the rows before it", () => {
+    const started = setBlockStart(fourRowForm(), "a");
+    const moved = setBlockStart(started, "b");
+    expect(moved.rows.map((r) => r.marked)).toStrictEqual([
+      false,
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it("round-trips through toSteps into a valid single-marker step list after a block move", () => {
+    const started = setBlockStart(fourRowForm(), "a");
+    const moved = setBlockStart(started, "b");
+    const out = toSteps(moved);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps.filter((s) => s.k === "reps")).toHaveLength(1);
+    expect(validateSteps(out.steps)).toStrictEqual({
+      ok: true,
+      steps: out.steps,
+    });
+  });
+
+  it("keeps totals agreeing with estimateMinutes after a block move", () => {
+    const started = setBlockStart(fourRowForm(), "a");
+    const moved = setBlockStart(started, "b");
+    const out = toSteps(moved);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    const t = totals(moved, baselines);
+    expect(t).not.toBeNull();
+    const estimate = estimateMinutes(out.steps, baselines);
+    expect(Math.round(t!.total)).toBe(estimate.minutes);
   });
 });
 

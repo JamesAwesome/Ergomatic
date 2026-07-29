@@ -90,18 +90,25 @@ describe("Builder", () => {
     );
   });
 
-  it("reveals the repeat readout once a row is marked with the SET toggle", async () => {
+  it("starting the block on a row puts that row AND every row after it into the set", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    expect(screen.queryByText(/row marked/)).not.toBeInTheDocument();
+    // Two rows so there's a "following row" to prove comes along with the
+    // clicked one — a single-row form can't distinguish "this row" from
+    // "this row and everything after it".
+    await userEvent.click(screen.getByRole("button", { name: "+ ADD ROW" }));
+    expect(screen.queryByText(/rows? marked/)).not.toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Mark row for the repeat set" }),
-    );
+    const startButtons = screen.getAllByRole("button", {
+      name: "Start the repeat set here",
+    });
+    expect(startButtons).toHaveLength(2);
 
-    expect(screen.getByText(/1 row marked/)).toBeInTheDocument();
+    await userEvent.click(startButtons[0]!);
+
+    expect(screen.getByText(/2 rows marked/)).toBeInTheDocument();
   });
 
   it("POSTs a valid form to /api/workouts with the resolved steps and picked pain", async () => {

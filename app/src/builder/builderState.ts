@@ -94,15 +94,29 @@ export function removeRow(f: BuilderForm, id: string): BuilderForm {
 // non-contiguous repeat. `toSteps` emits the single reps marker immediately
 // before the FIRST marked row, and the domain's `liveSteps` then repeats
 // EVERYTHING positioned after that marker — including rows the user never
-// marked, if they happen to sit after a marked one. So marking row N puts
-// every row from N onward into the repeated set, regardless of those rows'
-// own `marked` flags. `totals` and `setRowIds` both bucket by the position
-// of the first marked row for exactly this reason — don't reintroduce
-// per-row bucketing here or in any consumer of `marked`.
-export function toggleMarked(f: BuilderForm, id: string): BuilderForm {
+// marked, if they happen to sit after a marked one. `setBlockStart` embraces
+// that by keeping `marked` always a contiguous suffix of `f.rows`: clicking
+// a row makes IT and every row after it `marked: true` and every row before
+// it `marked: false`, so "the block's current start" is always exactly
+// `f.rows.findIndex((r) => r.marked)` — there's no separate stored start
+// index that could drift out of sync with the flags. Clicking the row that
+// is already the start clears the whole block (all `marked: false`) rather
+// than leaving a one-row block, or repeatedly clicking the same SET cell
+// would walk the start forward one row at a time instead of toggling it
+// off. `totals` and `setRowIds` both bucket by the position of the first
+// marked row for exactly this reason — don't reintroduce per-row bucketing
+// here or in any consumer of `marked`.
+export function setBlockStart(f: BuilderForm, id: string): BuilderForm {
+  const currentStartIndex = f.rows.findIndex((r) => r.marked);
+  const clickedIndex = f.rows.findIndex((r) => r.id === id);
+  const clearing = clickedIndex === currentStartIndex;
+
   return {
     ...f,
-    rows: f.rows.map((r) => (r.id === id ? { ...r, marked: !r.marked } : r)),
+    rows: f.rows.map((r, i) => ({
+      ...r,
+      marked: !clearing && i >= clickedIndex,
+    })),
   };
 }
 
@@ -297,7 +311,7 @@ function rowMinutes(
 }
 
 /** Positional, to match `toSteps`/`liveSteps` (see the comment on
- *  `toggleMarked`): every row from the FIRST marked row onward is bucketed
+ *  `setBlockStart`): every row from the FIRST marked row onward is bucketed
  *  into `perSet`, even if that particular row's own `marked` flag is false.
  *  Bucketing per-row instead — as this used to do — would let `totals`
  *  disagree with `estimateMinutes(toSteps(f).steps, baselines)` for any form
@@ -322,7 +336,7 @@ export function totals(
 }
 
 /** Ids of every row inside the repeated set, in form order: the first
- *  marked row and every row after it (positionally — see `toggleMarked`),
+ *  marked row and every row after it (positionally — see `setBlockStart`),
  *  or `[]` when nothing is marked. Lets a rendering screen show the whole
  *  repeated block as "in the set" — including rows the user didn't
  *  personally click — rather than only the ones with `marked: true`, which
