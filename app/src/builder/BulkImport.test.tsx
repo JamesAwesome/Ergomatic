@@ -67,7 +67,8 @@ describe("BulkImport", () => {
     });
   });
 
-  it("renders both halves of a partial result — the created count and the failing line's number and message", async () => {
+  it("renders both halves of a partial result and stays on the panel instead of navigating away", async () => {
+    const onImported = vi.fn();
     mockApi(
       () =>
         new Response(
@@ -78,7 +79,7 @@ describe("BulkImport", () => {
           { status: 200 },
         ),
     );
-    await renderBulkImport();
+    await renderBulkImport(onImported);
 
     await userEvent.click(
       screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
@@ -89,9 +90,14 @@ describe("BulkImport", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Import" }));
 
+    // Both halves render: what was created, and every error with its line
+    // number, so the rower can fix the bad blocks and paste again.
     expect(await screen.findByText(/2 created/)).toBeInTheDocument();
     expect(screen.getByText(/unknown step word: zz/)).toBeInTheDocument();
     expect(screen.getByText(/line 7/)).toBeInTheDocument();
+    // A partial result must not navigate away — that would bury the error
+    // the rower needs to read before pasting again.
+    expect(onImported).not.toHaveBeenCalled();
   });
 
   it("does not claim success when every block errored", async () => {
