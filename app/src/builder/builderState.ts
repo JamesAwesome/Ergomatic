@@ -51,15 +51,36 @@ export function newRow(kind: RowKind): BuilderRow {
   };
 }
 
-export const EMPTY_FORM: BuilderForm = {
-  num: "",
-  title: "",
-  type: "O2",
-  difficulty: "easy",
-  pain: null,
-  rows: [newRow("w")],
-  reps: 1,
-};
+/** Builds a fresh, independent blank form. Prefer this over `EMPTY_FORM`
+ *  whenever a caller needs a form it may go on to edit in place (e.g. a
+ *  future field-editor screen) — `newForm()` never shares row objects with
+ *  any other form, including previous calls to `newForm()` itself. */
+export function newForm(): BuilderForm {
+  return {
+    num: "",
+    title: "",
+    type: "O2",
+    difficulty: "easy",
+    pain: null,
+    rows: [newRow("w")],
+    reps: 1,
+  };
+}
+
+// EMPTY_FORM is a shared module-level constant, so it's deep-frozen: without
+// this, `addRow`/`removeRow`'s shallow copies leave every form derived from
+// EMPTY_FORM pointing at the very same row object, and a future in-place
+// edit (`row.dur = …`) would silently corrupt that shared row for every
+// other form in the session. Freezing turns that into a loud TypeError
+// instead of silent corruption. Callers that need a form they intend to
+// mutate should use `newForm()` instead.
+function deepFreezeForm(f: BuilderForm): BuilderForm {
+  f.rows.forEach((r) => Object.freeze(r));
+  Object.freeze(f.rows);
+  return Object.freeze(f);
+}
+
+export const EMPTY_FORM: BuilderForm = deepFreezeForm(newForm());
 
 export function addRow(f: BuilderForm, kind: RowKind): BuilderForm {
   return { ...f, rows: [...f.rows, newRow(kind)] };
@@ -84,9 +105,10 @@ export function setReps(f: BuilderForm, reps: number): BuilderForm {
  *  minutes (decimals allowed), `2500m` is meters (integers only), a bare
  *  number is invalid. Kept in lockstep by hand since it isn't exported. */
 export function parseDurationInput(text: string): WorkDuration | null {
-  const time = /^(\d+(?:\.\d+)?)'$/.exec(text);
+  const trimmed = text.trim();
+  const time = /^(\d+(?:\.\d+)?)'$/.exec(trimmed);
   if (time) return { kind: "time", minutes: Number(time[1]) };
-  const distance = /^(\d+)m$/.exec(text);
+  const distance = /^(\d+)m$/.exec(trimmed);
   if (distance) return { kind: "distance", meters: Number(distance[1]) };
   return null;
 }
@@ -104,7 +126,11 @@ export function toSteps(
 ): { ok: true; steps: Step[] } | { ok: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
-  const num = Number(f.num.trim());
+  // Plain digits only — Number()'s coercion would otherwise accept exponent
+  // notation ("1e3") as workout #1000, which isn't what a user typing that
+  // string means, even though it's domain-valid.
+  const numText = f.num.trim();
+  const num = /^\d+$/.test(numText) ? Number(numText) : NaN;
   if (!isInt(num, 1, 9999)) errors.num = "num must be a whole number 1..9999";
 
   if (f.title.length < 1 || f.title.length > 80) {
@@ -115,14 +141,20 @@ export function toSteps(
     errors.pain = "pain rating 1..5 is required";
   }
 
-  if (f.rows.length === 0 || f.rows.length > 100) {
+  // A reps marker is only emitted when a row is marked, so the emitted step
+  // count (what the server actually bounds) can be one more than the row
+  // count — mirror that here rather than checking rows.length directly, or
+  // 100 marked rows would emit 101 steps and pass the client check only to
+  // be rejected by the server.
+  const hasMarker = f.rows.some((r) => r.marked);
+  const emittedStepCount = f.rows.length + (hasMarker ? 1 : 0);
+  if (f.rows.length === 0 || emittedStepCount > 100) {
     errors.steps = "steps must be a non-empty list (max 100)";
   }
 
-  // A reps marker is only emitted when a row is marked, so the domain's
-  // reps.count bound only applies then — mirroring validateSteps, which
-  // only checks a "reps" step's count when one actually exists.
-  if (f.rows.some((r) => r.marked) && !isInt(f.reps, 1, 12)) {
+  // mirroring validateSteps, which only checks a "reps" step's count when
+  // one actually exists.
+  if (hasMarker && !isInt(f.reps, 1, 12)) {
     errors.reps = "reps must be a whole number 1..12";
   }
 
@@ -177,7 +209,7 @@ export function toSteps(
     }
 
     const ref = parsePaceRef(row.ref);
-    if (!ref) {
+    if (!ref || Math.abs(ref.off) > 60) {
       errors[`row:${row.id}:ref`] = "invalid pace reference";
       rowOk = false;
     }
@@ -234,11 +266,25 @@ function rowMinutes(
 ): number | null {
   const duration = parseDurationInput(row.dur);
   if (!duration) return 0;
-  if (duration.kind === "time") return duration.minutes;
 
-  const ref = parsePaceRef(row.ref);
-  if (!ref || !baselines) return null;
-  return (resolveSplit(baselines, ref) * duration.meters) / 500 / 60;
+  let minutes: number;
+  if (duration.kind === "time") {
+    minutes = duration.minutes;
+  } else {
+    const ref = parsePaceRef(row.ref);
+    if (!ref || !baselines) return null;
+    minutes = (resolveSplit(baselines, ref) * duration.meters) / 500 / 60;
+  }
+
+  // The domain's phases()/estimateMinutes() emit restMinutes as its own
+  // phase after a work step, so the builder's total must add it here too or
+  // the two disagree on the same workout's length.
+  if (row.kind === "w" && row.rest.trim() !== "") {
+    const rest = Number(row.rest.trim());
+    if (Number.isFinite(rest)) minutes += rest;
+  }
+
+  return minutes;
 }
 
 export function totals(
@@ -279,9 +325,27 @@ function stepToRow(
     row.dur = formatDuration(s.duration);
     row.ref = formatPaceRef(s.ref);
     row.spm = s.spm !== undefined ? String(s.spm) : "";
-    row.rest = s.restMinutes !== undefined ? `${s.restMinutes}'` : "";
+    // Unlike `dur` (which uses the `10'`/`2500m` duration grammar), `rest`
+    // is parsed in toSteps as a bare number of minutes — no apostrophe.
+    // This must produce exactly what toSteps' `Number(row.rest.trim())`
+    // expects, or round-tripping a stored workout with restMinutes set
+    // produces an unparseable field and the edit can't be saved.
+    row.rest = s.restMinutes !== undefined ? String(s.restMinutes) : "";
   }
   return row;
+}
+
+/** The BuilderRow model has no representation for a `test` step, so
+ *  `fromWorkout` must drop it — but doing that silently would destroy the
+ *  step the moment the workout is re-saved from the builder, with no
+ *  indication to the user that anything was lost. Callers (e.g. the edit
+ *  screen) should check this BEFORE calling `fromWorkout` and refuse to open
+ *  the builder for a workout that contains any unrepresentable step, rather
+ *  than let the edit silently drop it. This is the smallest fix: it doesn't
+ *  change `fromWorkout`'s signature or behavior (still a pure form builder),
+ *  it just gives callers a way to detect the loss ahead of time. */
+export function hasUnsupportedSteps(steps: Step[]): boolean {
+  return steps.some((s) => s.k === "test");
 }
 
 export function fromWorkout(w: {
