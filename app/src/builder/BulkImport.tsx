@@ -47,10 +47,11 @@ export default function BulkImport({ onImported }: { onImported: () => void }) {
       }
       const body = (await res.json()) as BulkResponse;
       setResult(body);
-      // "Successful import" means at least one workout landed — a partial
-      // result (some created, some failed) still needs the caller to
-      // refresh so the created rows show up in the library.
-      if (body.created.length > 0) onImported();
+      // Only a clean sweep navigates away. A partial result (some created,
+      // some failed) must keep the rower on this panel so they can read
+      // which line failed and why, fix it, and paste again — navigating
+      // away would bury that feedback.
+      if (body.errors.length === 0) onImported();
     } catch {
       setSubmitError("Couldn't import. Try again.");
       setResult(null);

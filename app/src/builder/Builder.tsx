@@ -364,6 +364,8 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         TOTAL {totalsResult ? `${Math.round(totalsResult.total)} MIN` : "— MIN"}
       </p>
 
+      <BulkImport onImported={() => navigate("/library")} />
+
       {submitError && (
         <p className="field-error builder-submit-error">{submitError}</p>
       )}
@@ -376,8 +378,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       >
         Save to library
       </button>
-
-      <BulkImport onImported={() => navigate("/library")} />
     </main>
   );
 }
