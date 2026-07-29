@@ -129,8 +129,10 @@ describe("validateWorkoutInput", () => {
     expect(validateWorkoutInput({ ...base, pain: 2.5 }).ok).toBe(false);
   });
   it("rejects num given as a numeric string, not just an out-of-range number", () => {
-    // "12" would satisfy 1 <= n <= 9999 under JS's loose >=/<= coercion, so
-    // this only fails if num is actually checked to be a number.
+    // Number.isInteger("12") is already false regardless of the typeof
+    // guard, so this doesn't kill any mutant on its own — it's cheap
+    // documentation that a numeric-string num is rejected, pinning the
+    // contract in case int()'s implementation changes later.
     const r = validateWorkoutInput({ ...base, num: "12" });
     expect(r.ok).toBe(false);
     const errors = r.ok ? [] : r.errors;
