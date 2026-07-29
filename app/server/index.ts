@@ -1,4 +1,3 @@
-import path from "node:path";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createApp } from "./app.js";
 import { parseAllowlist } from "./auth/allowlist.js";
@@ -112,7 +111,6 @@ createApp({
   nativeVerifier,
   allowlist,
   siteUrl,
-  clientDir: path.resolve(process.cwd(), "dist/client"),
   stores,
   testAuthSecret,
 }).listen(port, () => {
