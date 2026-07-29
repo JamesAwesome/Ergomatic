@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import type { api } from "../api";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -14,8 +15,12 @@ function mockBaselines(baselines: {
   }));
 }
 
+// Typed against the real `api` signature (rather than left to infer from
+// the zero-arg handler below) so `.mock.calls[0]` carries the actual
+// `[path, RequestInit]` shape callers below destructure to inspect the
+// posted body.
 function mockApi(handler: () => Response) {
-  const fn = vi.fn(async () => handler());
+  const fn = vi.fn<typeof api>(async () => handler());
   vi.doMock("../api", () => ({ api: fn }));
   return fn;
 }
@@ -185,5 +190,131 @@ describe("Builder", () => {
     expect(
       screen.getByRole("link", { name: /set baselines/i }),
     ).toHaveAttribute("href", "/you");
+  });
+
+  it("agrees end to end on the totals chain: readout, TOTAL, and both rows' aria-pressed match which row starts the block (M2)", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    // Row 1 (the form's initial row): 5 loose minutes, outside the block.
+    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
+    await userEvent.type(screen.getByPlaceholderText("2k / 6k-2"), "6k-2");
+
+    // Row 2: 10 minutes, marked as the block start.
+    await userEvent.click(screen.getByRole("button", { name: "+ ADD ROW" }));
+    const durInputs = screen.getAllByPlaceholderText("5' or 2500m");
+    const refInputs = screen.getAllByPlaceholderText("2k / 6k-2");
+    await userEvent.type(durInputs[1]!, "10'");
+    await userEvent.type(refInputs[1]!, "2k");
+
+    const toggles = screen.getAllByRole("button", { name: /repeat set/i });
+    expect(toggles).toHaveLength(2);
+    await userEvent.click(toggles[1]!);
+
+    // reps: 1 -> 3.
+    const moreReps = screen.getByRole("button", { name: "More reps" });
+    await userEvent.click(moreReps);
+    await userEvent.click(moreReps);
+
+    // total = loose(5) + perSet(10) * reps(3) = 35.
+    expect(
+      screen.getByText(/^1 row marked · 10:00 per set$/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^TOTAL 35 MIN$/)).toBeInTheDocument();
+
+    const toggledAfter = screen.getAllByRole("button", {
+      name: /repeat set/i,
+    });
+    expect(toggledAfter[0]).toHaveAttribute("aria-pressed", "false");
+    expect(toggledAfter[1]).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("adds a warm-up row via + WARM-UP and includes it as a wu step in the saved payload (M3)", async () => {
+    const api = mockApi(
+      () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
+    );
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await userEvent.click(screen.getByRole("button", { name: "+ WARM-UP" }));
+    // The warm-up row uses StepRowEditor's minutes-only branch (placeholder
+    // "10'") — otherwise unreachable in create mode before this fix.
+    await userEvent.type(screen.getByPlaceholderText("10'"), "10'");
+
+    await fillValidForm();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    expect(api).toHaveBeenCalledTimes(1);
+    const [, options] = api.mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.steps).toContainEqual({ k: "wu", minutes: 10 });
+  });
+
+  it("saves a non-default TYPE and DIFFICULTY, and renders the active TYPE chip in its own type color (L1)", async () => {
+    const api = mockApi(
+      () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
+    );
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await userEvent.click(screen.getByRole("button", { name: "AN" }));
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+
+    const anChip = screen.getByRole("button", { name: "AN" });
+    expect(anChip.getAttribute("style")).toContain("var(--type-an)");
+
+    await fillValidForm();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    const [, options] = api.mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.type).toBe("AN");
+    expect(body.difficulty).toBe("hard");
+  });
+
+  it("types SPM and REST and both reach the saved step (L2)", async () => {
+    const api = mockApi(
+      () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
+    );
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await fillValidForm();
+    await userEvent.type(screen.getByPlaceholderText("spm"), "24");
+    await userEvent.type(screen.getByPlaceholderText("rest"), "2");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    const [, options] = api.mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body.steps[0]).toStrictEqual({
+      k: "w",
+      duration: { kind: "time", minutes: 5 },
+      ref: { base: "6k", off: -2 },
+      spm: 24,
+      restMinutes: 2,
+    });
+  });
+
+  it("treats a successful save as success even when the response body isn't valid JSON (L3)", async () => {
+    const api = mockApi(() => new Response(null, { status: 201 }));
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await fillValidForm();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByText("Couldn't save this workout. Try again."),
+    ).not.toBeInTheDocument();
   });
 });

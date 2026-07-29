@@ -70,20 +70,21 @@ function fmtMinutes(minutes: number): string {
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
+// Widths mirror the actual row fields below (StepRowEditor's .set-toggle /
+// .field-dur / .field-ref / .field-spm / .field-rest, plus a spacer the
+// width of .row-delete) so each label sits over its column — see
+// docs/design/Erg Log.dc.html:765 for the handoff's equivalent fixed
+// widths. Purely decorative (aria-hidden), but it'll show in screenshots.
 function ColumnHeader() {
   return (
     <div className="builder-columns" aria-hidden="true">
-      <span>SET</span>
-      <span>·</span>
-      <span>DUR</span>
-      <span>·</span>
-      <span>PACE REF</span>
-      <span>·</span>
-      <span>SPM</span>
-      <span>·</span>
-      <span>REST</span>
-      <span>·</span>
-      <span>SPLIT</span>
+      <span className="col-set">SET</span>
+      <span className="col-dur">DUR</span>
+      <span className="col-ref">PACE REF</span>
+      <span className="col-spm">SPM</span>
+      <span className="col-rest">REST</span>
+      <span className="col-split">SPLIT</span>
+      <span className="col-delete" />
     </div>
   );
 }
@@ -175,8 +176,17 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         setSubmitError("Couldn't save this workout. Try again.");
         return;
       }
-      const saved = (await res.json()) as { id: string };
-      navigate(`/library/${saved.id}`);
+      // The workout is already created server-side once we're past `!res.ok`
+      // — a 2xx with a body that fails to parse as JSON (e.g. empty) must
+      // still be treated as success, not fall into the catch below and show
+      // "Couldn't save" for a save that actually succeeded.
+      let savedId: string | undefined;
+      try {
+        savedId = ((await res.json()) as { id: string }).id;
+      } catch {
+        savedId = undefined;
+      }
+      navigate(savedId ? `/library/${savedId}` : "/library");
     } catch {
       setSubmitError("Couldn't save this workout. Try again.");
     } finally {
@@ -291,13 +301,35 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       </div>
       {errors.steps && <p className="field-error">{errors.steps}</p>}
 
-      <button
-        type="button"
-        className="builder-add-row"
-        onClick={() => setForm((f) => addRow(f, "w"))}
-      >
-        + ADD ROW
-      </button>
+      {/* Three kind-specific controls rather than one generic "+ ADD ROW"
+          (the handoff's shape): the domain distinguishes wu/w/r steps, and
+          without a way to pick a row's kind, StepRowEditor's minutes-only
+          branch is unreachable in create mode — every starter workout opens
+          with a warm-up, so a builder that can't author one is incomplete.
+          See docs/design/DEVIATIONS.md. */}
+      <div className="builder-add-row-group">
+        <button
+          type="button"
+          className="builder-add-row"
+          onClick={() => setForm((f) => addRow(f, "wu"))}
+        >
+          + WARM-UP
+        </button>
+        <button
+          type="button"
+          className="builder-add-row"
+          onClick={() => setForm((f) => addRow(f, "w"))}
+        >
+          + ADD ROW
+        </button>
+        <button
+          type="button"
+          className="builder-add-row"
+          onClick={() => setForm((f) => addRow(f, "r"))}
+        >
+          + REST
+        </button>
+      </div>
 
       <p className="section-heading">REPEAT (OPTIONAL)</p>
       <div className="builder-repeat">

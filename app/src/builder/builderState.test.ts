@@ -77,6 +77,34 @@ describe("rows", () => {
     setReps(EMPTY_FORM, 5);
     expect(JSON.stringify(EMPTY_FORM)).toBe(before);
   });
+
+  it("keeps an open repeat block contiguous when a row is appended, so removing the block's original start still leaves the rest of the block marked (M1)", () => {
+    // Reviewer's exact probe: rows a,b -> SET on b -> [F,T] -> +ADD ROW.
+    // Before the fix, addRow always appended `marked: false`, producing
+    // [F,T,F] — the block looked intact (b and c both highlighted, "2 rows
+    // marked") until b was removed, at which point the whole block
+    // vanished instead of shrinking to just c.
+    const twoRows = addRow(EMPTY_FORM, "w");
+    const [, b] = twoRows.rows;
+    const started = setBlockStart(twoRows, b!.id);
+    expect(started.rows.map((r) => r.marked)).toStrictEqual([false, true]);
+
+    const withThird = addRow(started, "w");
+    const c = withThird.rows[2]!;
+    expect(withThird.rows.map((r) => r.marked)).toStrictEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(setRowIds(withThird)).toStrictEqual([b!.id, c.id]);
+
+    const afterRemovingStart = removeRow(withThird, b!.id);
+    expect(afterRemovingStart.rows.map((r) => r.marked)).toStrictEqual([
+      false,
+      true,
+    ]);
+    expect(setRowIds(afterRemovingStart)).toStrictEqual([c.id]);
+  });
 });
 
 describe("setBlockStart", () => {

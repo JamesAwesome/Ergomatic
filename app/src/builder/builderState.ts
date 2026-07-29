@@ -82,8 +82,17 @@ function deepFreezeForm(f: BuilderForm): BuilderForm {
 
 export const EMPTY_FORM: BuilderForm = deepFreezeForm(newForm());
 
+// A row appended while a repeat block is open must join that block, not
+// land after it as `marked: false` — otherwise `[F,T]` (block open on the
+// last row) becomes `[F,T,F]`, breaking the contiguous-suffix invariant
+// `setBlockStart`/`totals`/`setRowIds` all rely on (see the comment above
+// `setBlockStart`). The screen looks identical to a well-formed block right
+// up until the *original* start row is removed, at which point the
+// highlight, the readout, and the ×reps multiplier in TOTAL all silently
+// vanish rather than shrinking by one row.
 export function addRow(f: BuilderForm, kind: RowKind): BuilderForm {
-  return { ...f, rows: [...f.rows, newRow(kind)] };
+  const blockOpen = f.rows.some((r) => r.marked);
+  return { ...f, rows: [...f.rows, { ...newRow(kind), marked: blockOpen }] };
 }
 
 export function removeRow(f: BuilderForm, id: string): BuilderForm {
