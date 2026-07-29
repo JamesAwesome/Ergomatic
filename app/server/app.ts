@@ -21,6 +21,9 @@ export interface AppDeps {
   // Backing stores for the per-user data API. Null in auth-only tests: the
   // data router is mounted only when present, so those tests stay untouched.
   stores: Stores | null
+  // Seeds the starter library at sign-in when the account is empty (see
+  // app/server/seed/seed.ts). Injected so auth-only tests can stub it.
+  seed: (userId: string) => Promise<void>
 }
 
 export function createApp(deps: AppDeps) {

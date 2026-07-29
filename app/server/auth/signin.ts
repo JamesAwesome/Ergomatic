@@ -7,6 +7,11 @@ export interface SignInDeps {
   sessions: SessionStore
   users: UserStore
   allowlist: Set<string>
+  // Seeds the starter library when the account is genuinely empty (see
+  // app/server/seed/seed.ts). Invoked for BOTH new and existing users below —
+  // the seed rule itself is idempotent, so this is what makes seeding land
+  // for accounts created before seeding existed, on their very next sign-in.
+  seed: (userId: string) => Promise<void>
 }
 
 export type SignInResult =
@@ -32,6 +37,7 @@ export async function signInWithClaims(deps: SignInDeps, claims: Claims): Promis
       name: claims.name,
     })
   }
+  await deps.seed(user.id)
   await deps.sessions.sweepExpired()
   const { token, expiresAt } = await deps.sessions.createSession(user.id)
   return {

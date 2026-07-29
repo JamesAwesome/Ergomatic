@@ -8,6 +8,7 @@ import { createSessionStore } from './auth/sessions.js'
 import { createUserStore } from './auth/users.js'
 import { createDb } from './db/index.js'
 import { checkDb } from './db/pool.js'
+import { seedStarterLibraryIfEmpty } from './seed/seed.js'
 import { createBaselinesStore } from './stores/baselines.js'
 import { createLogsStore } from './stores/logs.js'
 import { createPlanStateStore } from './stores/planState.js'
@@ -74,6 +75,7 @@ createApp({
   siteUrl,
   clientDir: path.resolve(process.cwd(), 'dist/client'),
   stores,
+  seed: (userId) => seedStarterLibraryIfEmpty(db, userId),
 }).listen(port, () => {
   console.log(`ergomatic api listening on :${port}`)
 })

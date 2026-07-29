@@ -321,6 +321,21 @@ describe('domain stores against real Postgres', () => {
       expect(await logs.list(other.id, 10)).toHaveLength(0)
     })
 
+    it('count reflects inserted logs and is scoped per user (backs the seed-if-empty rule)', async () => {
+      const logs = createLogsStore(db)
+      const users = createUserStore(db)
+      const fresh = await users.createUser({ googleSub: 'log-count', email: 'logcount@x.com', name: 'LC' })
+      expect(await logs.count(fresh.id)).toBe(0)
+
+      await logs.create(fresh.id, logInput())
+      expect(await logs.count(fresh.id)).toBe(1)
+      await logs.create(fresh.id, logInput())
+      expect(await logs.count(fresh.id)).toBe(2)
+
+      const other = await users.createUser({ googleSub: 'log-count-cross', email: 'logcountcross@x.com', name: 'LCX' })
+      expect(await logs.count(other.id)).toBe(0)
+    })
+
     it('lastDonePerWorkout maps each logged workout to days-ago, ignores workout-less logs, and is scoped per user', async () => {
       const logs = createLogsStore(db)
       const wk = createWorkoutsStore(db)
