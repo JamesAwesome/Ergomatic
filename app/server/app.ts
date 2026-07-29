@@ -1,6 +1,4 @@
 import express from "express";
-import fs from "node:fs";
-import path from "node:path";
 import { noStore, originCheck, requireUser } from "./auth/middleware.js";
 import { createAuthRouter } from "./auth/routes.js";
 import { createTestSigninRouter } from "./auth/testSignin.js";
@@ -18,7 +16,6 @@ export interface AppDeps {
   nativeVerifier: NativeTokenVerifier | null;
   allowlist: Set<string>;
   siteUrl: string;
-  clientDir?: string;
   // Backing stores for the per-user data API. Null in auth-only tests: the
   // data router is mounted only when present, so those tests stay untouched.
   stores: Stores | null;
@@ -68,19 +65,6 @@ export function createApp(deps: AppDeps) {
         requireUser: requireUser(deps.sessions),
       }),
     );
-  }
-
-  if (deps.clientDir) {
-    const index = path.join(deps.clientDir, "index.html");
-    app.use(express.static(deps.clientDir));
-    // SPA fallback for any non-API GET (excludes bare /api too)
-    app.get(/^\/(?!api(\/|$)).*/, (_req, res, next) => {
-      if (fs.existsSync(index)) {
-        res.sendFile(index);
-      } else {
-        next();
-      }
-    });
   }
 
   return app;

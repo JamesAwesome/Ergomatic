@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createApp } from "./app.js";
 import { baseDeps } from "./testDeps.js";
 
@@ -49,69 +46,29 @@ describe("GET /api/health", () => {
   });
 });
 
-describe("static client serving", () => {
-  const clientDir = mkdtempSync(join(tmpdir(), "erg-client-"));
-  writeFileSync(
-    join(clientDir, "index.html"),
-    "<!doctype html><h1>Ergomatic test shell</h1>",
-  );
-
-  it("serves index.html at /", async () => {
-    const res = await request(
-      createApp(baseDeps({ checkDb: async () => true, clientDir })),
-    ).get("/");
-    expect(res.status).toBe(200);
-    expect(res.text).toContain("Ergomatic test shell");
-  });
-
-  it("falls back to index.html for client routes", async () => {
-    const res = await request(
-      createApp(baseDeps({ checkDb: async () => true, clientDir })),
-    ).get("/plan/today");
-    expect(res.status).toBe(200);
-    expect(res.text).toContain("Ergomatic test shell");
-  });
-
-  it("does not shadow /api routes", async () => {
-    const res = await request(
-      createApp(baseDeps({ checkDb: async () => false, clientDir })),
-    ).get("/api/health");
-    expect(res.status).toBe(503);
-  });
-
-  it("404s at / when no clientDir is configured", async () => {
+describe("non-API paths (api container serves no client)", () => {
+  it("404s at / — static serving lives in the web container now", async () => {
     const res = await request(
       createApp(baseDeps({ checkDb: async () => true })),
     ).get("/");
     expect(res.status).toBe(404);
   });
 
-  it("404s when clientDir has no index.html", async () => {
-    const emptyDir = mkdtempSync(join(tmpdir(), "erg-client-empty-"));
+  it("keeps non-API paths outside requireUser: / is 404, never 401, with stores mounted (2026-07-28 root-401 hotfix)", async () => {
+    // Regression re-pinned post-split: an unscoped router.use(requireUser)
+    // would turn this 404 into a 401. Keep the contrast pair below honest.
+    const stores = {} as unknown as import("./routes/data.js").Stores;
     const res = await request(
-      createApp(baseDeps({ checkDb: async () => true, clientDir: emptyDir })),
+      createApp(baseDeps({ checkDb: async () => true, stores })),
     ).get("/");
     expect(res.status).toBe(404);
   });
-});
 
-describe("regression: data router must not shadow non-API paths", () => {
-  it("serves the SPA at / when stores are mounted (2026-07-28 root-401 hotfix)", async () => {
-    const { mkdtempSync, writeFileSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const clientDir = mkdtempSync(join(tmpdir(), "erg-hotfix-"));
-    writeFileSync(
-      join(clientDir, "index.html"),
-      "<!doctype html><h1>shell</h1>",
-    );
-    // The stub never receives a call: the bug was the router 401ing "/" before
-    // any handler; a mounted-but-untouched stores object reproduces it.
+  it("still 401s unauthenticated /api requests (contrast pin)", async () => {
     const stores = {} as unknown as import("./routes/data.js").Stores;
     const res = await request(
-      createApp(baseDeps({ checkDb: async () => true, clientDir, stores })),
-    ).get("/");
-    expect(res.status).toBe(200);
-    expect(res.text).toContain("shell");
+      createApp(baseDeps({ checkDb: async () => true, stores })),
+    ).get("/api/workouts");
+    expect(res.status).toBe(401);
   });
 });
