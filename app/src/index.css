@@ -72,6 +72,25 @@ main {
   cursor: pointer;
 }
 
+/* Disabled controls read as present-but-inactive: ink-5 is the handoff's
+   "completed/disabled text" token, rule/rule-3 keep borders/fills neutral
+   instead of the accent color a still-enabled control would use. Scoped to
+   :disabled (not a one-off class) so any button in this state — not just
+   the workout-detail Start/Log it after pair — picks this up automatically. */
+button:disabled {
+  cursor: not-allowed;
+  color: var(--ink-5);
+}
+
+.button-primary:disabled,
+.button-primary:disabled:hover {
+  background: var(--rule);
+}
+
+.button-outline:disabled {
+  border-color: var(--rule-3);
+}
+
 .you {
   display: flex;
   align-items: center;
