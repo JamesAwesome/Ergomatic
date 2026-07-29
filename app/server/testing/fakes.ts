@@ -42,6 +42,21 @@ interface WorkoutRow extends WorkoutInput {
 // level even though they do at runtime — matching that exactly would make
 // the fakes lie about the very null case the routes need to handle.
 
+// Postgres uuid columns 500 on a malformed literal (SQLSTATE 22P02) rather
+// than finding no row — see app/server/routes/data.ts's UUID_RE guard,
+// added after that shipped as a live regression. The fakes must throw here
+// too so tests written against them can't quietly diverge from real
+// Postgres on this path again (app/server/stores/contracts/storeContracts.ts
+// asserts it explicitly).
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function assertUuidShape(id: string): void {
+  if (!UUID_RE.test(id)) {
+    throw new Error(`invalid input syntax for type uuid: "${id}"`);
+  }
+}
+
 function makeFakeBaselinesStore(): BaselinesStore {
   const rows = new Map<string, BaselinesRow>();
   return {
@@ -105,6 +120,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       return all.map(withIsGlobal).sort((a, b) => a.num - b.num);
     },
     async get(userId: string, id: string) {
+      assertUuidShape(id);
       const g = globals.get(id);
       if (g) return withIsGlobal(g);
       const row = forUser(userId).get(id);
@@ -119,6 +135,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       return out;
     },
     async update(userId: string, id: string, input: WorkoutInput) {
+      assertUuidShape(id);
       const m = forUser(userId);
       const existing = m.get(id);
       if (!existing) return null;
@@ -130,6 +147,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       return withIsGlobal(row);
     },
     async remove(userId: string, id: string) {
+      assertUuidShape(id);
       forUser(userId).delete(id);
     },
     async count(userId: string) {
@@ -230,6 +248,14 @@ function makeFakePreferencesStore(): PreferencesStore {
       return rows.get(userId) ?? { ...PREFERENCES_DEFAULTS };
     },
     async put(userId: string, patch: PreferencesPatch) {
+      // Real regression (see storeContracts.ts): an empty patch reaches the
+      // real store's `onConflictDoUpdate({ set: patch })` with nothing in
+      // `set`, which Postgres rejects outright. A plain `{...current,
+      // ...patch}` merge can't reproduce that on its own, so it's asserted
+      // explicitly here.
+      if (Object.keys(patch).length === 0) {
+        throw new Error("empty patch: no columns to set");
+      }
       const current = rows.get(userId) ?? { ...PREFERENCES_DEFAULTS };
       rows.set(userId, { ...current, ...patch });
     },

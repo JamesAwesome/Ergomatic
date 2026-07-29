@@ -46,6 +46,7 @@ export default defineConfig({
         "server/index.ts",
         "server/testDeps.ts",
         "server/testing/**",
+        "server/stores/contracts/**",
         "**/*.test.*",
       ],
       // Ratchet floor: near-total coverage is cheap on a skeleton. Raise, never
