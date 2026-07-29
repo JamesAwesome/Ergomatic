@@ -87,6 +87,13 @@ if (allowlist.size === 0) {
   );
 }
 
+const testAuthSecret = process.env.TEST_AUTH_SECRET || null;
+if (testAuthSecret) {
+  console.warn(
+    "WARNING: TEST_AUTH_SECRET set — test sign-in backdoor ACTIVE (never in production)",
+  );
+}
+
 const stores: Stores = {
   baselines: createBaselinesStore(db),
   workouts: createWorkoutsStore(db),
@@ -107,6 +114,7 @@ createApp({
   siteUrl,
   clientDir: path.resolve(process.cwd(), "dist/client"),
   stores,
+  testAuthSecret,
 }).listen(port, () => {
   console.log(`ergomatic api listening on :${port}`);
 });

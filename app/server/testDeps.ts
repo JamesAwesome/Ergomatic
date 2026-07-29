@@ -13,6 +13,7 @@ export function baseDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     allowlist: new Set(),
     siteUrl: "https://ergomatic.example",
     stores: null,
+    testAuthSecret: null,
     ...overrides,
   };
 }

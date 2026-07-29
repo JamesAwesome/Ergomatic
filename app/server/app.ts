@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { noStore, originCheck, requireUser } from "./auth/middleware.js";
 import { createAuthRouter } from "./auth/routes.js";
+import { createTestSigninRouter } from "./auth/testSignin.js";
 import type { OAuthProvider } from "./auth/google.js";
 import type { NativeTokenVerifier } from "./auth/nativeVerify.js";
 import type { SessionStore } from "./auth/sessions.js";
@@ -21,6 +22,10 @@ export interface AppDeps {
   // Backing stores for the per-user data API. Null in auth-only tests: the
   // data router is mounted only when present, so those tests stay untouched.
   stores: Stores | null;
+  // E2E-only backdoor gate (see auth/testSignin.ts). Null everywhere except
+  // when TEST_AUTH_SECRET is explicitly set (index.ts) — the route it guards
+  // is absent entirely (404), not just secret-checked, when this is null.
+  testAuthSecret: string | null;
 }
 
 export function createApp(deps: AppDeps) {
@@ -45,6 +50,16 @@ export function createApp(deps: AppDeps) {
   });
 
   app.use(createAuthRouter(deps));
+
+  if (deps.testAuthSecret) {
+    app.use(
+      createTestSigninRouter({
+        sessions: deps.sessions,
+        users: deps.users,
+        testAuthSecret: deps.testAuthSecret,
+      }),
+    );
+  }
 
   if (deps.stores) {
     app.use(

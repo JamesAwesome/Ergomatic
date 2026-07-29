@@ -40,6 +40,7 @@ function deps(overrides: Partial<AppDeps> = {}): AppDeps {
     allowlist: new Set(["a@x.com"]),
     siteUrl: "https://ergomatic.example",
     stores: null,
+    testAuthSecret: null,
     ...overrides,
   };
 }
