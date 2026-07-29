@@ -73,10 +73,10 @@ jobs:
       - name: Install Playwright + Chromium (with OS deps)
         working-directory: app
         run: pnpm exec playwright install --with-deps chromium
-      - name: Boot the compose stack
+      - name: Boot the compose stack (e2e override arms the test-signin backdoor)
         run: |
           POSTGRES_PASSWORD=devpass TEST_AUTH_SECRET=e2e-secret APP_VERSION=e2e \
-            docker compose up -d --build --wait --wait-timeout 120
+            docker compose -f compose.yml -f compose.e2e.yml up -d --build --wait --wait-timeout 120
       - name: Run Playwright (flows + design)
         working-directory: app
         run: pnpm exec playwright test --project=chromium

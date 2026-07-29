@@ -1,0 +1,10 @@
+# e2e-only override — never applied on a real deploy. Arms the test-signin
+# backdoor (app/server/auth/testSignin.ts) by injecting TEST_AUTH_SECRET into
+# the app service, which compose.yml alone structurally cannot do (that file
+# has no TEST_AUTH_SECRET reference at all). Applied explicitly by
+# scripts/e2e.sh, scripts/screenshots.sh, and the CI `e2e` job via:
+#   docker compose -f compose.yml -f compose.e2e.yml up ...
+services:
+  app:
+    environment:
+      TEST_AUTH_SECRET: ${TEST_AUTH_SECRET:?TEST_AUTH_SECRET is required for the e2e override}

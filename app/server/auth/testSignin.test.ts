@@ -48,6 +48,17 @@ describe("POST /api/auth/test-signin", () => {
     expect(res.body).toStrictEqual({ error: "unauthorized" });
   });
 
+  it("401s when secret is missing or not a string", async () => {
+    const noSecret = await request(createApp(deps()))
+      .post("/api/auth/test-signin")
+      .send({});
+    expect(noSecret.status).toBe(401);
+    const numericSecret = await request(createApp(deps()))
+      .post("/api/auth/test-signin")
+      .send({ secret: 12345 });
+    expect(numericSecret.status).toBe(401);
+  });
+
   it("signs in with the correct secret: 200, session cookie, user created", async () => {
     const d = deps({
       users: makeFakeUsers({ createUser: vi.fn(async () => baseUser) }),
@@ -90,9 +101,23 @@ describe("POST /api/auth/test-signin", () => {
   });
 
   it("reuses the existing user on a second call for the same email", async () => {
+    // Stateful fake: absent on the first lookup (so the route must create),
+    // present on the second (so the route must find it instead of creating
+    // a duplicate) — mirrors what the real UserStore does across two calls.
+    // `findByGoogleSub`'s real return type infers as never-null (see
+    // fakes.ts's comment on this exact quirk), so it's mutated post-
+    // construction via the vi.fn cast other tests use, rather than through
+    // the type-checked `overrides` param.
+    let created: typeof baseUser | null = null;
     const users = makeFakeUsers({
-      findByGoogleSub: vi.fn(async () => baseUser),
+      createUser: vi.fn(async () => {
+        created = baseUser;
+        return baseUser;
+      }),
     });
+    (users.findByGoogleSub as ReturnType<typeof vi.fn>).mockImplementation(
+      async () => created,
+    );
     const d = deps({ users });
     const first = await request(createApp(d))
       .post("/api/auth/test-signin")
@@ -102,6 +127,6 @@ describe("POST /api/auth/test-signin", () => {
       .send({ secret: "e2e-secret" });
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
-    expect(users.createUser).not.toHaveBeenCalled();
+    expect(users.createUser).toHaveBeenCalledTimes(1);
   });
 });
