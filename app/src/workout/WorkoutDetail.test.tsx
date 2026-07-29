@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import type { api } from "../api";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -61,7 +62,37 @@ const WORKOUT_WITH_REPS: LibraryWorkout = {
   lastDoneDaysAgo: null,
 };
 
+// A personal (non-global) workout, otherwise identical in shape to
+// WORKOUT_WITH_REPS's simplicity — used to exercise the Edit/Delete
+// affordances that only a workout's owner is allowed to see (the server
+// 403s a global workout's mutations, so the UI must never offer them).
+const PERSONAL_WORKOUT: LibraryWorkout = {
+  id: "w3",
+  num: 9,
+  title: "My Own Session",
+  type: "O2",
+  difficulty: "easy",
+  pain: 2,
+  steps: [
+    {
+      k: "w",
+      duration: { kind: "time", minutes: 20 },
+      ref: { base: "2k", off: 10 },
+    },
+  ],
+  isGlobal: false,
+  lastDoneDaysAgo: null,
+};
+
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
+
+// Typed against the real `api` signature (matching Builder.test.tsx's
+// helper) so `.mock.calls` carry the real `[path, RequestInit]` shape.
+function mockApi(handler: () => Response) {
+  const fn = vi.fn<typeof api>(async () => handler());
+  vi.doMock("../api", () => ({ api: fn }));
+  return fn;
+}
 
 function mockHooks(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
@@ -105,6 +136,21 @@ async function renderWithSiblingLinks(initialPath: string) {
             </>
           }
         />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// Renders WorkoutDetail alongside a real /library route (rather than just
+// asserting a navigate() call), so the delete-then-redirect test proves the
+// actual route change rather than a mocked useNavigate call.
+async function renderDetailWithLibraryRoute(initialPath: string) {
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/library" element={<p>LIBRARY SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -299,5 +345,67 @@ describe("WorkoutDetail", () => {
     }
 
     expect(screen.getByText("0:59.0–1:01.0")).toBeInTheDocument();
+  });
+
+  it("renders Edit and Delete controls for a personal (non-global) workout", async () => {
+    mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetail("/library/w3");
+
+    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      "/library/w3/edit",
+    );
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("renders neither Edit nor Delete for a global workout, since the server 403s its mutations", async () => {
+    mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [WORKOUT]);
+    await renderDetail("/library/w1");
+
+    expect(
+      screen.queryByRole("link", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks for confirmation before deleting — the API is not called on the first Delete press", async () => {
+    const api = mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetail("/library/w3");
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(api).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Delete workout" }),
+    ).toBeInTheDocument();
+  });
+
+  it("issues DELETE /api/workouts/:id once the confirmation is pressed", async () => {
+    const api = mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetailWithLibraryRoute("/library/w3");
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
+
+    expect(api).toHaveBeenCalledWith("/api/workouts/w3", { method: "DELETE" });
+    expect(await screen.findByText("LIBRARY SCREEN")).toBeInTheDocument();
+  });
+
+  it("tells the rower their logged history survives in the delete confirmation copy", async () => {
+    mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetail("/library/w3");
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(screen.getByText(/logged sessions are kept/i)).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Builder from "../builder/Builder";
+import EditWorkout from "../builder/EditWorkout";
 import Library from "../library/Library";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
@@ -40,6 +41,7 @@ export default function AppRoutes({
             precede /library/:id below — but WorkoutDetail's :id route DOES
             need to keep matching /library/w1 etc. unaffected by this change. */}
         <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/library/:id/edit" element={<EditWorkout />} />
         <Route
           path="/plan"
           element={<Placeholder title="Plan" phase="Phase 8" />}

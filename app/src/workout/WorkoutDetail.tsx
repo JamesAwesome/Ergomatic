@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
@@ -116,6 +117,7 @@ function WorkoutDetailView({
   // never persisted (Phase 6 will pass them per-request).
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [tolerance] = useState(readPaceTolerance);
+  const navigate = useNavigate();
 
   const minutesLabel = baselines
     ? `${estimateMinutes(workout.steps, baselines).minutes} MIN`
@@ -196,6 +198,91 @@ function WorkoutDetailView({
           Log it after
         </button>
       </div>
+      {/* Globals are read-only server-side (a 403 on any mutation) — the UI
+          must never present controls whose only outcome is that rejection,
+          so Edit/Delete render only for the rower's own workouts. */}
+      {!workout.isGlobal && (
+        <OwnerActions workoutId={workout.id} navigate={navigate} />
+      )}
     </main>
+  );
+}
+
+function OwnerActions({
+  workoutId,
+  navigate,
+}: {
+  workoutId: string;
+  navigate: (path: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    setError(null);
+    setDeleting(true);
+    try {
+      const res = await api(`/api/workouts/${workoutId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        setError("Couldn't delete this workout. Try again.");
+        return;
+      }
+      navigate("/library");
+    } catch {
+      setError("Couldn't delete this workout. Try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="workout-owner-actions">
+      <Link to={`/library/${workoutId}/edit`} className="button-outline">
+        Edit
+      </Link>
+      {!confirming ? (
+        <button
+          type="button"
+          className="button-outline"
+          onClick={() => setConfirming(true)}
+        >
+          Delete
+        </button>
+      ) : (
+        // Staged-confirm idiom (src/you/BaselineEditor.tsx): the destructive
+        // action never fires on the first press. Copy is explicit that
+        // logged history survives — session_logs.workout_id is set to NULL
+        // on delete and each log keeps its own frozen title/type, so
+        // deleting a workout does NOT erase the rower's past sessions of it.
+        <div className="baseline-confirm">
+          <p className="baseline-confirm-line">
+            Delete this workout? Your logged sessions are kept — they keep their
+            own copy of the title and type.
+          </p>
+          {error && <p className="baseline-error">{error}</p>}
+          <div className="baseline-actions">
+            <button
+              type="button"
+              className="button-outline"
+              onClick={() => setConfirming(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button-primary"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              Delete workout
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

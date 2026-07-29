@@ -511,6 +511,17 @@ button:disabled {
   margin-top: 20px;
 }
 
+.workout-owner-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.workout-owner-actions > .button-outline {
+  text-align: center;
+}
+
 .section-heading {
   font-family: var(--font-mono);
   font-size: 11px;
