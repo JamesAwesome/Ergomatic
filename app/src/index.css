@@ -124,13 +124,17 @@ button:disabled {
 }
 
 .app-shell {
-  padding-bottom: var(--tap);
+  /* Tab bar height plus the home-indicator inset, so the last row of any
+     scrolling screen never lands underneath the fixed bar. */
+  padding-bottom: calc(var(--tap) + env(safe-area-inset-bottom, 0px));
 }
 
 .screen {
   max-width: 480px;
   margin: 0 auto;
-  padding: 6px 20px 20px;
+  padding: calc(6px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px)) 20px
+    calc(20px + env(safe-area-inset-left, 0px));
 }
 
 .screen-title {
@@ -151,6 +155,9 @@ button:disabled {
   display: flex;
   background: var(--surface);
   border-top: 1px solid var(--rule);
+  /* Background still spans to the physical edge; this keeps the tab
+     labels themselves clear of the home indicator. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .tab {

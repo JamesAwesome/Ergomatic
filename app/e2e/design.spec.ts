@@ -190,3 +190,88 @@ test.describe("you screen", () => {
     expect(baselineValueColor).toBe("rgb(181, 52, 31)"); // --accent
   });
 });
+
+test.describe("iOS safe-area insets", () => {
+  // A desktop-Chrome e2e run always resolves env(safe-area-inset-*) to 0,
+  // so pixel/computed-style assertions here would pass whether or not the
+  // env() rules exist at all (0px is also the default for an undeclared
+  // padding). Instead these assert the *mechanism*: the viewport meta that
+  // makes env() resolve on iOS, and the literal env() expressions in the
+  // stylesheet source — both of which genuinely fail if someone deletes the
+  // safe-area handling, unlike a computed-value check would.
+
+  test("viewport meta opts into safe-area insets (viewport-fit=cover)", async ({
+    page,
+  }) => {
+    const response = await page.goto("/");
+    const html = await response!.text();
+    const match = html.match(/<meta\s+name="viewport"\s+content="([^"]*)"/);
+    expect(match, "no <meta name=viewport> found in served HTML").not.toBe(
+      null,
+    );
+    expect(match![1]).toContain("viewport-fit=cover");
+  });
+
+  test("tab bar, app shell, and screen padding declare safe-area env() expressions", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "design-safe-area@e2e.test",
+      name: "Design Safe Area Tester",
+    });
+    await page.goto("/library");
+
+    const declarations = await page.evaluate(() => {
+      // Walk every same-origin stylesheet's rules (skip any that throw,
+      // e.g. cross-origin font sheets) and return the raw declaration
+      // block text for each selector we care about, so the assertion
+      // inspects the *authored* CSS value rather than a resolved/computed
+      // one that can't distinguish "env() present, evaluates to 0" from
+      // "no such padding rule at all".
+      function cssTextFor(selector: string): string {
+        for (const sheet of Array.from(document.styleSheets)) {
+          let rules: CSSRuleList;
+          try {
+            rules = sheet.cssRules;
+          } catch {
+            continue;
+          }
+          for (const rule of Array.from(rules)) {
+            if (
+              rule instanceof CSSStyleRule &&
+              rule.selectorText === selector
+            ) {
+              return rule.cssText;
+            }
+          }
+        }
+        return "";
+      }
+      return {
+        tabbar: cssTextFor(".tabbar"),
+        appShell: cssTextFor(".app-shell"),
+        screen: cssTextFor(".screen"),
+      };
+    });
+
+    expect(
+      declarations.tabbar,
+      "no .tabbar rule found in any stylesheet",
+    ).not.toBe("");
+    expect(declarations.tabbar).toContain("env(safe-area-inset-bottom");
+
+    expect(
+      declarations.appShell,
+      "no .app-shell rule found in any stylesheet",
+    ).not.toBe("");
+    expect(declarations.appShell).toContain("env(safe-area-inset-bottom");
+
+    expect(
+      declarations.screen,
+      "no .screen rule found in any stylesheet",
+    ).not.toBe("");
+    expect(declarations.screen).toContain("env(safe-area-inset-top");
+    expect(declarations.screen).toContain("env(safe-area-inset-left");
+    expect(declarations.screen).toContain("env(safe-area-inset-right");
+  });
+});
