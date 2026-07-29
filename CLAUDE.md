@@ -33,6 +33,13 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 
 ## Rules
 
+- **SDLC (binding for all agents — brief every subagent with this bullet before
+  it starts work):** All implementation happens in git worktrees, never in the
+  main checkout; tear the worktree down immediately after its PR merges (and
+  only then). **No PR merges without James's explicit approval** — green CI and
+  a clean final review are necessary but not sufficient; present the review
+  verdict and stop. Subagents never merge, close, or approve PRs and never
+  remove worktrees; main is PR-only, no merge commits.
 - **Verify current versions before adding/pinning any dependency** (`npm view <pkg> version`).
   Never trust versions from memory or other repos. TypeScript stays `~6.0.x` until
   typescript-eslint's peer range admits 7 (check `npm view typescript-eslint peerDependencies`).
