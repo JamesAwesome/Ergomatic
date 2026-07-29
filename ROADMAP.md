@@ -57,7 +57,7 @@ they go stale (this has burned us before). Concretely:
   dropping web or rewriting in Swift was evaluated and rejected (harness
   loss / domain-layer duplication). Revisit the topology only if web and
   API release cadences diverge. iOS resolves Capacitor via SPM (verified
-  2026-07-29; Cockapods sunset 2026-12-02 does not affect us).
+  2026-07-29; Cocoapods sunset 2026-12-02 does not affect us).
 
 ---
 
