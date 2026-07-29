@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Library from "../library/Library";
+import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
@@ -32,6 +33,11 @@ export default function AppRoutes({
           element={<Placeholder title="Today" phase="Phase 6" />}
         />
         <Route path="/library" element={<Library />} />
+        <Route
+          path="/library/new"
+          element={<Placeholder title="New Workout" phase="Phase 5B" />}
+        />
+        <Route path="/library/:id" element={<WorkoutDetail />} />
         <Route
           path="/plan"
           element={<Placeholder title="Plan" phase="Phase 8" />}
