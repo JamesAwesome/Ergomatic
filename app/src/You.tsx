@@ -1,5 +1,5 @@
 import type { Me } from "./useMe";
-import { isNative } from "./platform";
+import { signOut as authSignOut } from "./adapters/auth";
 
 function initials(name: string): string {
   return name
@@ -17,16 +17,6 @@ export default function You({
   user: Me;
   onSignedOut: () => void;
 }) {
-  async function signOut() {
-    if (isNative()) {
-      const { nativeSignOut } = await import("./native/signin");
-      await nativeSignOut();
-    } else {
-      await fetch("/api/auth/signout", { method: "POST" });
-    }
-    onSignedOut();
-  }
-
   return (
     <section className="you">
       <div className="avatar" aria-hidden="true">
@@ -36,7 +26,13 @@ export default function You({
         <p className="you-name">{user.name}</p>
         <p className="you-email">{user.email}</p>
       </div>
-      <button className="button-outline" onClick={signOut}>
+      <button
+        className="button-outline"
+        onClick={async () => {
+          await authSignOut();
+          onSignedOut();
+        }}
+      >
         Sign out
       </button>
     </section>

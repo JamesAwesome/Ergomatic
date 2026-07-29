@@ -6,8 +6,7 @@ import You from "./You";
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.resetModules();
-  vi.doUnmock("./platform");
-  vi.doUnmock("./native/signin");
+  vi.doUnmock("./adapters/auth");
 });
 
 describe("You", () => {
@@ -32,15 +31,22 @@ describe("You", () => {
     expect(onSignedOut).toHaveBeenCalled();
   });
 
-  it("signs out via the native Keychain path when isNative()", async () => {
+  it("awaits the auth adapter's signOut before notifying onSignedOut", async () => {
     const onSignedOut = vi.fn();
-    const nativeSignOut = vi.fn(async () => {});
-    vi.doMock("./platform", () => ({ isNative: () => true }));
-    vi.doMock("./native/signin", () => ({ nativeSignOut }));
-    const { default: NativeYou } = await import("./You");
-    render(<NativeYou user={user} onSignedOut={onSignedOut} />);
+    let resolveSignOut!: () => void;
+    const authSignOut = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSignOut = resolve;
+        }),
+    );
+    vi.doMock("./adapters/auth", () => ({ signOut: authSignOut }));
+    const { default: AdapterYou } = await import("./You");
+    render(<AdapterYou user={user} onSignedOut={onSignedOut} />);
     await userEvent.click(screen.getByRole("button", { name: /sign out/i }));
-    expect(nativeSignOut).toHaveBeenCalled();
-    expect(onSignedOut).toHaveBeenCalled();
+    expect(authSignOut).toHaveBeenCalledOnce();
+    expect(onSignedOut).not.toHaveBeenCalled();
+    resolveSignOut();
+    await vi.waitFor(() => expect(onSignedOut).toHaveBeenCalledOnce());
   });
 });

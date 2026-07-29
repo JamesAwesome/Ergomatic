@@ -55,5 +55,48 @@ export default tseslint.config(
       "vitest/prefer-strict-equal": "error",
     },
   },
+  {
+    // Native-first policy (CLAUDE.md): screens never branch on platform.
+    // Platform/Capacitor imports are legal ONLY in the adapter layer; tests
+    // are exempt so they can mock the seams (vi.doMock hits no import
+    // syntax anyway — this exemption is for adapter tests importing seams).
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: [
+      "src/platform.ts",
+      "src/api.ts",
+      "src/native/**",
+      "src/adapters/**",
+      "src/**/*.test.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@capacitor/*",
+                "@capacitor-community/*",
+                "@capgo/*",
+                "@aparajita/*",
+              ],
+              message:
+                "Capacitor plugins live behind the adapter layer (src/platform.ts, src/api.ts, src/native/, src/adapters/) — native-first policy, see CLAUDE.md.",
+            },
+            {
+              group: ["./platform", "../platform", "**/platform"],
+              message:
+                "Screens must not call isNative(): import a function/component from src/adapters/ instead.",
+            },
+            {
+              group: ["./native/*", "../native/*", "**/native/*"],
+              message:
+                "Native modules are adapter-internal: import from src/adapters/ instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   prettierConfig,
 );
