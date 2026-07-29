@@ -136,3 +136,26 @@ transition machinery, Android.
   absent (401-unauthenticated fall-through signature).
 - Release recommendation posted (expected: not needed — serving topology
   only, no client/native change).
+
+## Topology diagram
+
+```mermaid
+flowchart LR
+    ios["iOS app (Capacitor, same React build)"]
+    browser["Browser (fallback)"]
+    pw["Playwright e2e — 127.0.0.1:APP_PORT"]
+    cf["Cloudflare tunnel — ergomatic.waffle.haus"]
+    subgraph host["docker compose — shared host"]
+        cfd["cloudflared"]
+        web["web: nginx :8080 — static build + SPA fallback"]
+        api["api: Express :8080 — JSON only, no host port"]
+        pg[("postgres — 127.0.0.1:POSTGRES_PORT")]
+    end
+    ios --> cf
+    browser --> cf
+    cf --- cfd
+    cfd -- "origin http://web:8080 (cutover edit)" --> web
+    pw -.-> web
+    web -- "proxy /api/* (Host passed through)" --> api
+    api --> pg
+```
