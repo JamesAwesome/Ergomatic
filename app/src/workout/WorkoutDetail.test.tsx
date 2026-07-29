@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
@@ -25,32 +25,86 @@ const WORKOUT: LibraryWorkout = {
       k: "w",
       duration: { kind: "distance", meters: 2500 },
       ref: { base: "2k", off: -4 },
+      restMinutes: 2,
     },
+    { k: "r", minutes: 3 },
+    { k: "test", label: "2k test" },
   ],
   isGlobal: true,
   lastDoneDaysAgo: 12,
 };
 
+// A repeat-block workout for the handoff's nudge model: one raw "reps"
+// marker step governs everything after it, so the block is nudged once
+// rather than per-repetition. 2k baseline 1:52.0 (112s); off 0 -> 112s
+// target; tolerance 1 -> 1:51.0-1:53.0. Its work step sits at raw index 1
+// — the SAME index as WORKOUT's first nudgeable work step — so the
+// per-workout scoping test below actually exercises the bug (stale nudge
+// state reappearing at a matching index) rather than passing by
+// coincidence.
+const WORKOUT_WITH_REPS: LibraryWorkout = {
+  id: "w2",
+  num: 7,
+  title: "Rep City",
+  type: "AN",
+  difficulty: "hard",
+  pain: 4,
+  steps: [
+    { k: "reps", count: 4 },
+    {
+      k: "w",
+      duration: { kind: "time", minutes: 1 },
+      ref: { base: "2k", off: 0 },
+    },
+  ],
+  isGlobal: true,
+  lastDoneDaysAgo: null,
+};
+
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
-function mockHooks(baselines: {
-  k2Seconds: number | null;
-  k6Seconds: number | null;
-}) {
+function mockHooks(
+  baselines: { k2Seconds: number | null; k6Seconds: number | null },
+  workouts: LibraryWorkout[] = [WORKOUT],
+) {
   vi.doMock("../api/useWorkouts", () => ({
-    useWorkouts: () => ({ state: "ready", workouts: [WORKOUT] }),
+    useWorkouts: () => ({ state: "ready", workouts }),
   }));
   vi.doMock("../api/useBaselines", () => ({
     useBaselines: () => ({ state: "ready", baselines }),
   }));
 }
 
-async function renderDetail() {
+async function renderDetail(initialPath = "/library/w1") {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
   render(
-    <MemoryRouter initialEntries={["/library/w1"]}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/library/:id" element={<WorkoutDetail />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// Renders WorkoutDetail alongside sibling links to other /library/:id
+// paths, all matched by the SAME <Route>, so clicking one changes just the
+// :id param rather than unmounting/remounting the route element — the
+// exact shape of the "no key on the route" scoping bug (finding 2).
+async function renderWithSiblingLinks(initialPath: string) {
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route
+          path="/library/:id"
+          element={
+            <>
+              <WorkoutDetail />
+              <Link to="/library/w1">Go to w1</Link>
+              <Link to="/library/w2">Go to w2</Link>
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -91,6 +145,9 @@ describe("WorkoutDetail", () => {
     );
 
     expect(screen.getByText(/nudged \+1s/)).toBeInTheDocument();
+    // Hardcoded expectation (EN DASH, U+2013) — not recomputed via
+    // resolveSplit/toleranceRange, which would make this tautological.
+    expect(screen.getByText("2:00.0–2:02.0")).toBeInTheDocument();
   });
 
   it("shows the step's stroke rate in the sub-line", async () => {
@@ -136,5 +193,71 @@ describe("WorkoutDetail", () => {
 
     expect(faster).toHaveClass("nudge-btn");
     expect(slower).toHaveClass("nudge-btn");
+  });
+
+  it("shows a work step's between-sets rest duration in the sub-line", async () => {
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    expect(screen.getByText(/2′ rest/)).toBeInTheDocument();
+  });
+
+  it("renders a rest step's label and duration with no target range or nudge controls", async () => {
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const restRow = screen.getByText("Rest").closest(".step-row");
+    expect(restRow).not.toBeNull();
+    expect(within(restRow as HTMLElement).getByText("3′")).toBeInTheDocument();
+    expect(
+      within(restRow as HTMLElement).queryByRole("button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders a test step's label with no target range or nudge controls", async () => {
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const testRow = screen.getByText("2k test").closest(".step-row");
+    expect(testRow).not.toBeNull();
+    expect(
+      within(testRow as HTMLElement).queryByRole("button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders one marker row above a repeat block instead of expanding it per repetition", async () => {
+    mockHooks(BASELINES, [WORKOUT, WORKOUT_WITH_REPS]);
+    await renderDetail("/library/w2");
+
+    // liveSteps() would have expanded this into 4 separate work rows; the
+    // handoff's raw-step model renders the block once with a marker above
+    // it, so there is exactly one range and exactly one pair of nudge
+    // buttons for the whole 4x block.
+    expect(screen.getByText("4× the block below")).toBeInTheDocument();
+    expect(screen.getByText("1:51.0–1:53.0")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "Nudge faster" }),
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Nudge slower" }),
+    ).toHaveLength(1);
+  });
+
+  it("does not carry nudges from one workout to another when the route id changes without a component remount", async () => {
+    mockHooks(BASELINES, [WORKOUT, WORKOUT_WITH_REPS]);
+    await renderWithSiblingLinks("/library/w1");
+
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Nudge slower" })[0]!,
+    );
+    expect(screen.getByText(/nudged \+1s/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("link", { name: "Go to w2" }));
+
+    // w2's step at the same raw index (its first work step) must render
+    // its neutral, un-nudged range — not w1's leftover nudge re-applied by
+    // index.
+    expect(screen.queryByText(/nudged/)).not.toBeInTheDocument();
+    expect(screen.getByText("1:51.0–1:53.0")).toBeInTheDocument();
   });
 });

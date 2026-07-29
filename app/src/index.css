@@ -413,6 +413,15 @@ main {
   margin-top: 8px;
 }
 
+.step-reps-marker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+  padding: 12px 0 0;
+  margin: 0;
+}
+
 .nudge-btn {
   min-width: var(--tap);
   min-height: var(--tap);

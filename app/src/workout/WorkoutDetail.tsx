@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
+import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
-import { estimateMinutes, liveSteps } from "../../domain/expand.js";
+import { estimateMinutes } from "../../domain/expand.js";
 import type { Baselines } from "../../domain/types.js";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 
-// Settings expose --pace-tolerance (tokens.css); read once at mount rather
-// than hardcoding 1 so a future settings screen can change it without a
-// WorkoutDetail code change.
+// Settings expose --pace-tolerance (tokens.css); read once, in this lazy
+// initializer, so it's captured at mount. A future settings screen changing
+// the custom property at runtime would NOT propagate here without a remount
+// (useState's initializer only runs once) — that's a known limitation, not
+// an oversight.
 function readPaceTolerance(): number {
   if (typeof window === "undefined") return 1;
   const raw = getComputedStyle(document.documentElement)
@@ -23,10 +26,6 @@ export default function WorkoutDetail() {
   const { id } = useParams();
   const workoutsState = useWorkouts();
   const baselinesState = useBaselines();
-  // Session-only preview nudges, keyed by expanded step index — never
-  // persisted (Phase 6 will pass them per-request).
-  const [nudges, setNudges] = useState<Record<number, number>>({});
-  const [tolerance] = useState(readPaceTolerance);
 
   if (workoutsState.state === "loading" || baselinesState.state === "loading") {
     return (
@@ -89,7 +88,33 @@ export default function WorkoutDetail() {
         }
       : null;
 
-  const steps = liveSteps(workout.steps);
+  // `key={workout.id}` forces a fresh WorkoutDetailView (and thus fresh
+  // nudge state) on every workout switch — otherwise a direct
+  // /library/w1 → /library/w2 navigation would reuse this component
+  // instance and reapply w1's nudges to w2's steps by index.
+  return (
+    <WorkoutDetailView
+      key={workout.id}
+      workout={workout}
+      baselines={baselines}
+    />
+  );
+}
+
+function WorkoutDetailView({
+  workout,
+  baselines,
+}: {
+  workout: LibraryWorkout;
+  baselines: Baselines | null;
+}) {
+  // Session-only preview nudges, keyed by the RAW step index (the handoff's
+  // model: one nudge covers a whole repeat block, since we render
+  // workout.steps directly rather than the expanded per-repetition list) —
+  // never persisted (Phase 6 will pass them per-request).
+  const [nudges, setNudges] = useState<Record<number, number>>({});
+  const [tolerance] = useState(readPaceTolerance);
+
   const minutesLabel = baselines
     ? `${estimateMinutes(workout.steps, baselines).minutes} MIN`
     : "— MIN";
@@ -119,17 +144,22 @@ export default function WorkoutDetail() {
       </p>
       <p className="workout-detail-note">PREVIEW — NUDGE ANY TARGET</p>
       <div className="step-list">
-        {steps.map((step, index) => (
-          <StepRow
-            key={index}
-            step={step}
-            index={index}
-            baselines={baselines}
-            tolerance={tolerance}
-            nudge={nudges[index] ?? 0}
-            onNudge={(delta) => handleNudge(index, delta)}
-          />
-        ))}
+        {workout.steps.map((step, index) =>
+          step.k === "reps" ? (
+            <p key={index} className="step-reps-marker">
+              {step.count}× the block below
+            </p>
+          ) : (
+            <StepRow
+              key={index}
+              step={step}
+              baselines={baselines}
+              tolerance={tolerance}
+              nudge={nudges[index] ?? 0}
+              onNudge={(delta) => handleNudge(index, delta)}
+            />
+          ),
+        )}
       </div>
       <div className="workout-detail-actions">
         <button
