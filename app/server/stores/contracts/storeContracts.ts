@@ -1,0 +1,355 @@
+import { describe, expect, it } from "vitest";
+import type { WorkoutInput } from "../../../domain/types.js";
+import type { BaselinesStore } from "../baselines.js";
+import { StoreConflictError } from "../errors.js";
+import type { LogInput, LogsStore } from "../logs.js";
+import type { PlanStateStore } from "../planState.js";
+import { PREFERENCES_DEFAULTS, type PreferencesStore } from "../preferences.js";
+import type { TestDistance, TestHistoryStore } from "../testHistory.js";
+import type { NewWorkoutInput, WorkoutsStore } from "../workouts.js";
+
+// ---------------------------------------------------------------------------
+// One suite-of-suites, run against BOTH the real (Postgres-backed) stores and
+// the in-memory fakes. Real behavior is the specification: any case that
+// doesn't match what the real stores do gets fixed HERE, not by changing the
+// store under test. See contracts.real.integration.test.ts (run first, to
+// prove the cases themselves are honest) and contracts.fake.test.ts (proves
+// the fakes mirror that truth).
+// ---------------------------------------------------------------------------
+
+export interface SeededGlobalWorkout {
+  id: string;
+  num: number;
+  title: string;
+}
+
+export interface StoresUnderTest {
+  baselines: BaselinesStore;
+  workouts: WorkoutsStore;
+  logs: LogsStore;
+  planState: PlanStateStore;
+  preferences: PreferencesStore;
+  testHistory: TestHistoryStore;
+  /**
+   * Registers a brand-new user and returns its id (real: inserts into
+   * `users`; fake: mints and remembers an id). Every case below starts from
+   * a fresh user nobody else has touched, so userId-scoping can be asserted
+   * without cross-case interference or import-order coupling.
+   */
+  makeUser: () => Promise<string>;
+  /**
+   * Seeds a global (`userId: null`) workout row, exactly like
+   * `seedGlobalLibrary` does at boot against Postgres (see
+   * app/server/seed/seed.ts). The public `WorkoutsStore` surface
+   * intentionally has no route from a caller to create a global — only
+   * tests reach in this way (mirrors the `_seedGlobal` seam already used by
+   * server/routes/data.test.ts).
+   */
+  seedGlobalWorkout: (input: NewWorkoutInput) => Promise<SeededGlobalWorkout>;
+}
+
+function workoutInput(overrides: Partial<WorkoutInput> = {}): NewWorkoutInput {
+  return {
+    num: 1,
+    title: "Steady state",
+    type: "AT",
+    difficulty: "medium",
+    pain: 2,
+    steps: [{ k: "wu", minutes: 10 }],
+    source: "user",
+    ...overrides,
+  };
+}
+
+function logInput(overrides: Partial<LogInput> = {}): LogInput {
+  return {
+    workoutId: null,
+    workoutTitle: "Frozen title",
+    workoutType: "AN",
+    baselineK2: null,
+    baselineK6: null,
+    held: "held",
+    pain: 2,
+    notes: null,
+    steps: [],
+    ...overrides,
+  };
+}
+
+export function describeStoreContracts(
+  makeStores: () => Promise<StoresUnderTest>,
+  opts: { label: string },
+) {
+  describe(`store contracts (${opts.label})`, () => {
+    describe("baselines", () => {
+      it("get returns null before any put", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        expect(await stores.baselines.get(userId)).toBeNull();
+      });
+
+      it("put then get round-trips", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.baselines.put(userId, {
+          k2Seconds: 420,
+          k6Seconds: 1500,
+        });
+        expect(await stores.baselines.get(userId)).toStrictEqual({
+          k2Seconds: 420,
+          k6Seconds: 1500,
+        });
+      });
+
+      it("a partial put preserves the other field", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.baselines.put(userId, { k2Seconds: 420 });
+        await stores.baselines.put(userId, { k6Seconds: 1500 });
+        expect(await stores.baselines.get(userId)).toStrictEqual({
+          k2Seconds: 420,
+          k6Seconds: 1500,
+        });
+      });
+    });
+
+    describe("preferences", () => {
+      it("get returns spec defaults for a user with no prefs row", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        expect(await stores.preferences.get(userId)).toStrictEqual(
+          PREFERENCES_DEFAULTS,
+        );
+      });
+
+      it("put upserts a partial patch and get reflects the merge", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.preferences.put(userId, { accentColor: "#00ff00" });
+        expect(await stores.preferences.get(userId)).toMatchObject({
+          accentColor: "#00ff00",
+          timeCapMinutes: PREFERENCES_DEFAULTS.timeCapMinutes,
+        });
+        await stores.preferences.put(userId, { timeCapMinutes: 45 });
+        expect(await stores.preferences.get(userId)).toMatchObject({
+          accentColor: "#00ff00",
+          timeCapMinutes: 45,
+        });
+      });
+
+      it("empty patch throws — the 2026-07-28 empty-update regression", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await expect(stores.preferences.put(userId, {})).rejects.toThrow();
+      });
+    });
+
+    describe("workouts", () => {
+      it("create/list/get round-trip, decorated isGlobal: false", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const created = await stores.workouts.create(
+          userId,
+          workoutInput({ num: 11, title: "Row one" }),
+        );
+        expect(created).toMatchObject({
+          num: 11,
+          title: "Row one",
+          isGlobal: false,
+        });
+
+        const fetched = await stores.workouts.get(userId, created.id);
+        expect(fetched).toMatchObject({ id: created.id, isGlobal: false });
+
+        const list = await stores.workouts.list(userId);
+        expect(list.some((w) => w.id === created.id)).toBe(true);
+      });
+
+      it("throws StoreConflictError when num clashes for the same user", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.workouts.create(userId, workoutInput({ num: 21 }));
+        await expect(
+          stores.workouts.create(userId, workoutInput({ num: 21 })),
+        ).rejects.toThrow(StoreConflictError);
+      });
+
+      it("update against a global id cannot touch it: returns null, row unchanged", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const g = await stores.seedGlobalWorkout(
+          workoutInput({ num: 31, title: "Global Immutable" }),
+        );
+        const result = await stores.workouts.update(
+          userId,
+          g.id,
+          workoutInput({ num: 31, title: "Hijacked" }),
+        );
+        expect(result).toBeNull();
+        const stillThere = await stores.workouts.get(userId, g.id);
+        expect(stillThere).toMatchObject({
+          title: "Global Immutable",
+          isGlobal: true,
+        });
+      });
+
+      it("remove against a global id cannot touch it: row still present afterward", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const g = await stores.seedGlobalWorkout(
+          workoutInput({ num: 32, title: "Global Survivor" }),
+        );
+        await stores.workouts.remove(userId, g.id);
+        const stillThere = await stores.workouts.get(userId, g.id);
+        expect(stillThere).toMatchObject({
+          title: "Global Survivor",
+          isGlobal: true,
+        });
+      });
+
+      it("non-UUID input throws — the 2026-07-28 22P02 regression", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await expect(
+          stores.workouts.get(userId, "not-a-uuid"),
+        ).rejects.toThrow();
+      });
+
+      it("is invisible across users: list and get see nothing", async () => {
+        const stores = await makeStores();
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        const created = await stores.workouts.create(
+          userA,
+          workoutInput({ num: 41 }),
+        );
+        expect(await stores.workouts.get(userB, created.id)).toBeNull();
+        const listB = await stores.workouts.list(userB);
+        expect(listB.some((w) => w.id === created.id)).toBe(false);
+      });
+    });
+
+    describe("logs", () => {
+      it("create bumps plan_state.done_n atomically, verified via planState.get", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        expect(await stores.planState.get(userId)).toBeNull();
+        await stores.logs.create(userId, logInput());
+        expect(await stores.planState.get(userId)).toStrictEqual({
+          planKey: null,
+          doneN: 1,
+        });
+        await stores.logs.create(userId, logInput());
+        expect(await stores.planState.get(userId)).toStrictEqual({
+          planKey: null,
+          doneN: 2,
+        });
+      });
+
+      it("list is scoped per user", async () => {
+        const stores = await makeStores();
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        await stores.logs.create(userA, logInput());
+        await stores.logs.create(userA, logInput());
+        expect(await stores.logs.list(userA, 10)).toHaveLength(2);
+        expect(await stores.logs.list(userB, 10)).toHaveLength(0);
+      });
+
+      it("lastDonePerWorkout groups by workout, excludes workout-less logs, and is scoped per user", async () => {
+        const stores = await makeStores();
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        const wA = await stores.workouts.create(
+          userA,
+          workoutInput({ num: 51 }),
+        );
+        const wB = await stores.workouts.create(
+          userA,
+          workoutInput({ num: 52 }),
+        );
+        await stores.logs.create(userA, logInput({ workoutId: null }));
+        await stores.logs.create(userA, logInput({ workoutId: wA.id }));
+        await stores.logs.create(userA, logInput({ workoutId: wB.id }));
+
+        const map = await stores.logs.lastDonePerWorkout(userA);
+        expect(Object.keys(map).sort()).toStrictEqual([wA.id, wB.id].sort());
+        expect(await stores.logs.lastDonePerWorkout(userB)).toStrictEqual({});
+      });
+    });
+
+    describe("plan state", () => {
+      it("get returns null by default", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        expect(await stores.planState.get(userId)).toBeNull();
+      });
+
+      it("set zeroes doneN even when progress already exists", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.planState.set(userId, "sprint");
+        await stores.logs.create(userId, logInput());
+        expect(await stores.planState.get(userId)).toMatchObject({
+          doneN: 1,
+        });
+
+        await stores.planState.set(userId, "head");
+        expect(await stores.planState.get(userId)).toStrictEqual({
+          planKey: "head",
+          doneN: 0,
+        });
+      });
+
+      it("reset zeroes doneN without changing the plan key", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.planState.set(userId, "sprint");
+        await stores.logs.create(userId, logInput());
+
+        await stores.planState.reset(userId);
+        expect(await stores.planState.get(userId)).toStrictEqual({
+          planKey: "sprint",
+          doneN: 0,
+        });
+      });
+    });
+
+    describe("test history", () => {
+      it("append computes delta against the same-distance prior entry", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const first = await stores.testHistory.append(userId, {
+          distance: "2k" as TestDistance,
+          splitSeconds: 420,
+        });
+        expect(first.deltaSeconds).toBeNull();
+
+        const second = await stores.testHistory.append(userId, {
+          distance: "2k" as TestDistance,
+          splitSeconds: 410,
+        });
+        expect(second.deltaSeconds).toBe(-10);
+
+        // a different distance does not interfere
+        const otherDistance = await stores.testHistory.append(userId, {
+          distance: "6k" as TestDistance,
+          splitSeconds: 1500,
+        });
+        expect(otherDistance.deltaSeconds).toBeNull();
+      });
+
+      it("list is scoped per user", async () => {
+        const stores = await makeStores();
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        await stores.testHistory.append(userA, {
+          distance: "2k" as TestDistance,
+          splitSeconds: 400,
+        });
+        expect(await stores.testHistory.list(userA)).toHaveLength(1);
+        expect(await stores.testHistory.list(userB)).toHaveLength(0);
+      });
+    });
+  });
+}
