@@ -1,1 +1,3 @@
-pnpm --dir app test
+. "$(dirname "$0")/common.sh"
+# Unit + client only: fast (~1s) and Docker-free. CI runs integration + e2e.
+pnpm --dir app test --project unit --project client
