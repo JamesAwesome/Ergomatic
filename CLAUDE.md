@@ -17,8 +17,13 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 ## Commands (run in `app/`)
 
 - `pnpm dev` / `pnpm dev:server` — Vite client :5173 (proxies /api) / API :8080
-- `pnpm lint` · `pnpm typecheck` · `pnpm test` · `pnpm test:coverage` (90% gate) · `pnpm build`
+- `pnpm lint` · `pnpm format` / `pnpm format:check` · `pnpm typecheck` · `pnpm test` ·
+  `pnpm test:coverage` (90% gate) · `pnpm build`
 - Single Vitest project: `pnpm test --project unit|client|integration`
+- `pnpm e2e` — Playwright flows + structural design assertions against the real
+  compose stack (boots it if not running). `pnpm screenshots` — captures
+  `docs/screenshots/*.png` the same way. `pnpm mutate` — Stryker mutation testing,
+  on-demand (see docs/TESTING.md §3); minutes, not part of the push/CI gate.
 - Local dev DB: `docker run --rm -d --name erg-dev-pg -p 5433:5432 -e POSTGRES_PASSWORD=dev postgres:18.4`
   then `DATABASE_URL=postgres://postgres:dev@localhost:5433/postgres pnpm dev:server`.
   The server refuses to start without `DATABASE_URL` (no dotenv — real env only).
@@ -31,6 +36,9 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
 - **Verify current versions before adding/pinning any dependency** (`npm view <pkg> version`).
   Never trust versions from memory or other repos. TypeScript stays `~6.0.x` until
   typescript-eslint's peer range admits 7 (check `npm view typescript-eslint peerDependencies`).
+- Testing policy: docs/TESTING.md governs — the pyramid, naming/assertion-quality
+  rules, coverage stance, contract-test rule, and structural design assertions all
+  live there. Read it before writing or reviewing tests.
 - TDD: failing test first. Domain code gets the heaviest coverage.
 - Hooks: pre-commit = lint-staged + typecheck; pre-push = unit + client tests only
   (fast, Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
