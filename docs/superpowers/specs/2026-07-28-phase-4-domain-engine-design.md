@@ -99,8 +99,9 @@ two-user isolation obligation is discharged here).
   plan presets. Each entry carries a one-line generation rationale comment.
 - **James review gate before merge**: rendered into a readable document and
   sent for approval as an explicit plan step.
-- Seeding: `seedStarterLibraryIfEmpty(db, userId)` called at sign-in
-  (signInWithClaims), transactional; tags `source:'starter'`.
+- Seeding (AMENDED): `seedGlobalLibrary(db)` — boot-time, idempotent
+  (skips when globals exist), transactional, inserts with `userId: null` +
+  `source:'starter'`; called in index.ts after migrate(). No per-user seeding.
 - Guardrails restated: no book titles/list/prose; methodology only;
   "The Erg Book" never in code identifiers, UI strings, or seed comments.
 
