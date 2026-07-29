@@ -4,7 +4,19 @@
 # has no TEST_AUTH_SECRET reference at all). Applied explicitly by
 # scripts/e2e.sh, scripts/screenshots.sh, and the CI `e2e` job via:
 #   docker compose -f compose.yml -f compose.e2e.yml up ...
+#
+# Also overrides SITE_URL: compose.yml's default is the real prod origin
+# (https://ergomatic.waffle.haus), but this stack is reachable at
+# http://127.0.0.1:${APP_PORT:-8081} (the web service's host port binding,
+# and playwright.config.ts's baseURL). server/auth/middleware.ts's
+# originCheck() 403s any mutating (POST/PUT/PATCH/DELETE) request whose
+# Origin header isn't in the set derived from SITE_URL — so without this,
+# every real in-browser mutation an e2e test drives through the UI (e.g.
+# BaselineEditor's "Apply baselines") 403s as "bad origin" against the real
+# stack, even though the exact same request works in prod. Found via Task 9's
+# e2e coverage of the You -> baseline -> detail-target flow.
 services:
   api:
     environment:
       TEST_AUTH_SECRET: ${TEST_AUTH_SECRET:?TEST_AUTH_SECRET is required for the e2e override}
+      SITE_URL: http://127.0.0.1:${APP_PORT:-8081}
