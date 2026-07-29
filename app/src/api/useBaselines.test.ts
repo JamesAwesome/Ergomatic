@@ -1,0 +1,117 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, waitFor, act } from "@testing-library/react";
+
+beforeEach(() => {
+  vi.resetModules();
+  vi.restoreAllMocks();
+});
+
+describe("useBaselines", () => {
+  it("exposes the fetched baselines once loaded, including the null shape", async () => {
+    const baselines = { k2Seconds: null, k6Seconds: null };
+    vi.doMock("../api", () => ({
+      api: vi.fn(
+        async () => new Response(JSON.stringify(baselines), { status: 200 }),
+      ),
+    }));
+    const { useBaselines } = await import("./useBaselines");
+    const { result } = renderHook(() => useBaselines());
+    expect(result.current.state).toBe("loading");
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    expect(result.current.baselines).toStrictEqual(baselines);
+  });
+
+  it("surfaces a retry when the GET fails", async () => {
+    vi.doMock("../api", () => ({
+      api: vi.fn(async () => new Response("nope", { status: 500 })),
+    }));
+    const { useBaselines } = await import("./useBaselines");
+    const { result } = renderHook(() => useBaselines());
+    await waitFor(() => expect(result.current.state).toBe("error"));
+    if (result.current.state !== "error") throw new Error("expected error");
+    expect(typeof result.current.retry).toBe("function");
+  });
+
+  it("save() PUTs to /api/baselines with the serialized values", async () => {
+    const initial = { k2Seconds: null, k6Seconds: null };
+    const api = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return new Response(null, { status: 200 });
+      }
+      return new Response(JSON.stringify(initial), { status: 200 });
+    });
+    vi.doMock("../api", () => ({ api }));
+    const { useBaselines } = await import("./useBaselines");
+    const { result } = renderHook(() => useBaselines());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { save } = result.current;
+
+    await act(async () => {
+      await save({ k2Seconds: 95, k6Seconds: 310 });
+    });
+
+    const putCall = api.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(putCall).toBeDefined();
+    const [url, init] = putCall as [string, RequestInit];
+    expect(url).toBe("/api/baselines");
+    expect(JSON.parse(init.body as string)).toStrictEqual({
+      k2Seconds: 95,
+      k6Seconds: 310,
+    });
+  });
+
+  it("refetches after a successful save and exposes the updated values", async () => {
+    const oldValues = { k2Seconds: 100, k6Seconds: 320 };
+    const newValues = { k2Seconds: 95, k6Seconds: 310 };
+    let getCount = 0;
+    const api = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return new Response(null, { status: 200 });
+      }
+      getCount += 1;
+      const body = getCount === 1 ? oldValues : newValues;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    vi.doMock("../api", () => ({ api }));
+    const { useBaselines } = await import("./useBaselines");
+    const { result } = renderHook(() => useBaselines());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    expect(result.current.baselines).toStrictEqual(oldValues);
+    const { save } = result.current;
+
+    await act(async () => {
+      await save({ k2Seconds: 95, k6Seconds: 310 });
+    });
+
+    await waitFor(() => {
+      if (result.current.state !== "ready") throw new Error("expected ready");
+      expect(result.current.baselines).toStrictEqual(newValues);
+    });
+    expect(getCount).toBe(2);
+  });
+
+  it("rejects when the PUT response is not ok", async () => {
+    const api = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return new Response("nope", { status: 500 });
+      }
+      return new Response(
+        JSON.stringify({ k2Seconds: null, k6Seconds: null }),
+        { status: 200 },
+      );
+    });
+    vi.doMock("../api", () => ({ api }));
+    const { useBaselines } = await import("./useBaselines");
+    const { result } = renderHook(() => useBaselines());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { save } = result.current;
+
+    await expect(save({ k2Seconds: 95, k6Seconds: 310 })).rejects.toThrow(
+      "failed to save baselines",
+    );
+  });
+});
