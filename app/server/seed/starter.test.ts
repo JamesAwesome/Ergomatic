@@ -28,7 +28,7 @@ describe("STARTER_WORKOUTS", () => {
 
   it("nums are exactly 1..N with no gaps or duplicates", () => {
     const nums = STARTER_WORKOUTS.map((w) => w.num).sort((a, b) => a - b);
-    expect(nums).toEqual(
+    expect(nums).toStrictEqual(
       Array.from({ length: STARTER_WORKOUTS.length }, (_, i) => i + 1),
     );
   });
@@ -82,8 +82,8 @@ describe("STARTER_WORKOUTS", () => {
       for (const s of w.steps) {
         if (s.k !== "w") continue;
         expect(s.spm, `${w.title}: work step missing spm`).toBeDefined();
-        expect(s.spm, w.title).toBeGreaterThanOrEqual(18);
-        expect(s.spm, w.title).toBeLessThanOrEqual(32);
+        expect(s.spm, `${w.title}`).toBeGreaterThanOrEqual(18);
+        expect(s.spm, `${w.title}`).toBeLessThanOrEqual(32);
       }
     }
   });
@@ -106,11 +106,20 @@ describe("STARTER_WORKOUTS", () => {
   });
 
   it("assigns pain sensibly: easy O2 stays low, hard AN/TR stays high", () => {
-    for (const w of STARTER_WORKOUTS) {
-      if (w.type === "O2" && w.difficulty === "easy")
-        expect(w.pain, w.title).toBeLessThanOrEqual(2);
-      if ((w.type === "AN" || w.type === "TR") && w.difficulty === "hard")
-        expect(w.pain, w.title).toBeGreaterThanOrEqual(4);
+    const easyO2 = STARTER_WORKOUTS.filter(
+      (w) => w.type === "O2" && w.difficulty === "easy",
+    );
+    expect(easyO2.length).toBeGreaterThan(0);
+    for (const w of easyO2) {
+      expect(w.pain, `${w.title}`).toBeLessThanOrEqual(2);
+    }
+
+    const hardAnTr = STARTER_WORKOUTS.filter(
+      (w) => (w.type === "AN" || w.type === "TR") && w.difficulty === "hard",
+    );
+    expect(hardAnTr.length).toBeGreaterThan(0);
+    for (const w of hardAnTr) {
+      expect(w.pain, `${w.title}`).toBeGreaterThanOrEqual(4);
     }
   });
 });

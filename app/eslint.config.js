@@ -4,6 +4,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 import prettierConfig from "eslint-config-prettier";
+import vitest from "@vitest/eslint-plugin";
 
 export default tseslint.config(
   { ignores: ["dist", "coverage", "drizzle"] },
@@ -32,6 +33,18 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: "^_",
         },
       ],
+    },
+  },
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    plugins: { vitest },
+    rules: {
+      ...vitest.configs.recommended.rules,
+      "vitest/expect-expect": "error",
+      "vitest/no-conditional-expect": "error",
+      "vitest/no-disabled-tests": "error",
+      "vitest/no-focused-tests": "error",
+      "vitest/prefer-strict-equal": "error",
     },
   },
   prettierConfig,

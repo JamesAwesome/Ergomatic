@@ -27,7 +27,7 @@ describe("suggest", () => {
       ],
     });
     expect(r.recommendationId).toBe("c");
-    expect(r.poolIds).toEqual(["c", "b", "a"]);
+    expect(r.poolIds).toStrictEqual(["c", "b", "a"]);
     expect(r.fellBack).toBe(false);
   });
   it("filters by difficulty prefs and time cap", () => {
@@ -40,7 +40,7 @@ describe("suggest", () => {
         w("fit", { difficulty: "easy", estMinutes: 30 }),
       ],
     });
-    expect(r.poolIds).toEqual(["fit"]);
+    expect(r.poolIds).toStrictEqual(["fit"]);
   });
   it("treats TEST as TR", () => {
     const r = suggest({

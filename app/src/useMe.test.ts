@@ -16,7 +16,7 @@ describe("useMe", () => {
     );
     const { result } = renderHook(() => useMe());
     await waitFor(() => {
-      expect(result.current[0]).toEqual({ state: "out" });
+      expect(result.current[0]).toStrictEqual({ state: "out" });
     });
   });
 
@@ -27,7 +27,7 @@ describe("useMe", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { result } = renderHook(() => useMe());
     await waitFor(() => {
-      expect(result.current[0]).toEqual({ state: "out" });
+      expect(result.current[0]).toStrictEqual({ state: "out" });
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
 

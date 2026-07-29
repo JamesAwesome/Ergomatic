@@ -10,7 +10,7 @@ describe("liveSteps", () => {
   });
   it("is identity without a marker", () => {
     const steps = [{ k: "wu" as const, minutes: 5 }, intervalLadder.steps[2]];
-    expect(liveSteps(steps)).toEqual(steps);
+    expect(liveSteps(steps)).toStrictEqual(steps);
   });
 });
 
@@ -39,14 +39,27 @@ describe("phases", () => {
   });
   it("marks set membership on repeated steps", () => {
     const p = phases(intervalLadder.steps, B, 1);
-    expect(p[1].set).toEqual({ index: 1, of: 4 });
-    expect(p.at(-1)!.set).toEqual({ index: 4, of: 4 });
+    expect(p[1].set).toStrictEqual({ index: 1, of: 4 });
+    expect(p.at(-1)!.set).toStrictEqual({ index: 4, of: 4 });
+  });
+  it("expands a test step to an 'All out' phase with no timing fields", () => {
+    const steps = [
+      { k: "wu" as const, minutes: 5 },
+      { k: "test" as const, label: "2k test" },
+    ];
+    const p = phases(steps, B, 1);
+    expect(p).toHaveLength(2);
+    expect(p[1]).toStrictEqual({
+      type: "test",
+      label: "All out",
+      set: undefined,
+    });
   });
 });
 
 describe("estimateMinutes", () => {
   it("sums exact time workouts without the estimated flag", () => {
-    expect(estimateMinutes(intervalLadder.steps, B)).toEqual({
+    expect(estimateMinutes(intervalLadder.steps, B)).toStrictEqual({
       minutes: 50,
       estimated: false,
     });
@@ -56,5 +69,15 @@ describe("estimateMinutes", () => {
     // 2500m at 108 s/500m = 540 s = 9 min per rep; 5 reps × (9 + 5 rest) + 10 wu = 80
     expect(r.estimated).toBe(true);
     expect(r.minutes).toBe(80);
+  });
+  it("ignores test-step phases (no seconds/meters) when summing duration", () => {
+    const steps = [
+      { k: "wu" as const, minutes: 5 },
+      { k: "test" as const, label: "2k test" },
+    ];
+    expect(estimateMinutes(steps, B)).toStrictEqual({
+      minutes: 5,
+      estimated: false,
+    });
   });
 });

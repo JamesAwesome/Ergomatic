@@ -12,10 +12,13 @@ describe("parsePaceRef", () => {
     ["6k -2.5", { base: "6k", off: -2.5 }],
     ["2K + 1", { base: "2k", off: 1 }],
   ])("parses %s", (input, expected) => {
-    expect(parsePaceRef(input)).toEqual(expected);
+    expect(parsePaceRef(input)).toStrictEqual(expected);
   });
   it.each(["5k", "2k*3", "", "k2", "2k--1", "2k-"])("rejects %s", (input) => {
     expect(parsePaceRef(input)).toBeNull();
+  });
+  it("rejects an offset so large it overflows to a non-finite number", () => {
+    expect(parsePaceRef(`2k+${"9".repeat(400)}`)).toBeNull();
   });
 });
 
@@ -30,7 +33,7 @@ describe("resolveSplit", () => {
 
 describe("toleranceRange", () => {
   it("builds the ± band with formatted label", () => {
-    expect(toleranceRange(120, 1)).toEqual({
+    expect(toleranceRange(120, 1)).toStrictEqual({
       lo: 119,
       hi: 121,
       label: "1:59.0–2:01.0",

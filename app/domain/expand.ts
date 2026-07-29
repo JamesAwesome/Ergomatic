@@ -32,7 +32,13 @@ export function phases(
     idx === -1 ? null : (steps[idx] as Extract<Step, { k: "reps" }>);
   const perSet = marker ? steps.length - idx - 1 : 0;
   const out: Phase[] = [];
-  const expanded = liveSteps(steps);
+  // Step's "reps" variant is documented as "at most one per workout"
+  // (types.ts) and validate.ts enforces that; liveSteps strips the sole
+  // marker before this point, so any live "reps" step remaining here can
+  // only be a second, invalid marker nested inside the first's repeated
+  // block — a shape validateSteps already rejects. Drop it defensively
+  // rather than giving the switch below a dead no-op case for it.
+  const expanded = liveSteps(steps).filter((s) => s.k !== "reps");
   const preCount = marker ? idx : expanded.length;
 
   expanded.forEach((s, i) => {
@@ -76,8 +82,6 @@ export function phases(
           });
         break;
       }
-      case "reps":
-        break;
     }
   });
   return out;

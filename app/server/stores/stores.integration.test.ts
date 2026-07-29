@@ -343,13 +343,13 @@ describe("domain stores against real Postgres", () => {
     it("set stores a plan key with doneN reset to 0, reset zeroes doneN keeping the key", async () => {
       const s = store();
       await s.set(userA, "sprint");
-      expect(await s.get(userA)).toEqual({ planKey: "sprint", doneN: 0 });
+      expect(await s.get(userA)).toStrictEqual({ planKey: "sprint", doneN: 0 });
 
       await s.set(userA, "head");
-      expect(await s.get(userA)).toEqual({ planKey: "head", doneN: 0 });
+      expect(await s.get(userA)).toStrictEqual({ planKey: "head", doneN: 0 });
 
       await s.set(userA, null);
-      expect(await s.get(userA)).toEqual({ planKey: null, doneN: 0 });
+      expect(await s.get(userA)).toStrictEqual({ planKey: null, doneN: 0 });
     });
 
     it("is invisible across users", async () => {
@@ -385,10 +385,16 @@ describe("domain stores against real Postgres", () => {
         notes: null,
         steps: [],
       });
-      expect(await s.get(fresh.id)).toEqual({ planKey: "head", doneN: 1 });
+      expect(await s.get(fresh.id)).toStrictEqual({
+        planKey: "head",
+        doneN: 1,
+      });
 
       await s.reset(fresh.id);
-      expect(await s.get(fresh.id)).toEqual({ planKey: "head", doneN: 0 });
+      expect(await s.get(fresh.id)).toStrictEqual({
+        planKey: "head",
+        doneN: 0,
+      });
     });
 
     it("reset creates a fresh row when none exists", async () => {
@@ -400,7 +406,7 @@ describe("domain stores against real Postgres", () => {
         name: "PRN",
       });
       await s.reset(fresh.id);
-      expect(await s.get(fresh.id)).toEqual({ planKey: null, doneN: 0 });
+      expect(await s.get(fresh.id)).toStrictEqual({ planKey: null, doneN: 0 });
     });
   });
 
@@ -416,7 +422,7 @@ describe("domain stores against real Postgres", () => {
         name: "Pref",
       });
       const defaults = await s.get(fresh.id);
-      expect(defaults).toEqual({
+      expect(defaults).toStrictEqual({
         difficulties: ["easy", "medium", "hard"],
         timeCapMinutes: 60,
         warmupMinutes: 10,
@@ -524,7 +530,7 @@ describe("domain stores against real Postgres", () => {
       const { id } = await logs.create(fresh.id, logInput());
       expect(id).toBeDefined();
 
-      expect(await planState.get(fresh.id)).toEqual({
+      expect(await planState.get(fresh.id)).toStrictEqual({
         planKey: null,
         doneN: 1,
       });
@@ -539,12 +545,12 @@ describe("domain stores against real Postgres", () => {
       const planState = createPlanStateStore(db);
       await planState.set(userA, "sprint");
       await logs.create(userA, logInput());
-      expect(await planState.get(userA)).toEqual({
+      expect(await planState.get(userA)).toStrictEqual({
         planKey: "sprint",
         doneN: 1,
       });
       await logs.create(userA, logInput());
-      expect(await planState.get(userA)).toEqual({
+      expect(await planState.get(userA)).toStrictEqual({
         planKey: "sprint",
         doneN: 2,
       });
@@ -620,7 +626,7 @@ describe("domain stores against real Postgres", () => {
       await logs.create(fresh.id, logInput({ workoutId: workoutB.id }));
 
       const map = await logs.lastDonePerWorkout(fresh.id);
-      expect(Object.keys(map).sort()).toEqual(
+      expect(Object.keys(map).sort()).toStrictEqual(
         [workoutA.id, workoutB.id].sort(),
       );
       // logged moments ago: days-ago is 0 for both
@@ -632,7 +638,7 @@ describe("domain stores against real Postgres", () => {
         email: "lastdonecross@x.com",
         name: "LDC",
       });
-      expect(await logs.lastDonePerWorkout(other.id)).toEqual({});
+      expect(await logs.lastDonePerWorkout(other.id)).toStrictEqual({});
     });
   });
 

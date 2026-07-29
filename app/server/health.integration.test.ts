@@ -10,7 +10,11 @@ describe("health over real HTTP", () => {
       const { port } = server.address() as AddressInfo;
       const res = await fetch(`http://127.0.0.1:${port}/api/health`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true, db: true, version: "dev" });
+      expect(await res.json()).toStrictEqual({
+        ok: true,
+        db: true,
+        version: "dev",
+      });
     } finally {
       server.close();
     }

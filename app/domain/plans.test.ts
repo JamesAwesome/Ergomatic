@@ -10,7 +10,9 @@ describe.each(["sprint", "head"] as const)("PLANS.%s", (key) => {
     expect(s.every((c) => CODES.includes(c))).toBe(true);
   });
   it("places exactly three TESTs at 6, 34, 62", () => {
-    expect(s.flatMap((c, i) => (c === "TEST" ? [i] : []))).toEqual([6, 34, 62]);
+    expect(s.flatMap((c, i) => (c === "TEST" ? [i] : []))).toStrictEqual([
+      6, 34, 62,
+    ]);
   });
   it("uses every workout type at least 8 times", () => {
     for (const t of ["AN", "O2", "AT", "TR"]) {
@@ -32,14 +34,14 @@ it("pins the O2-forward type mixes exactly (O2 > AT > TR > AN pyramid)", () => {
     for (const c of arr) t[c] += 1;
     return t;
   };
-  expect(tally(PLANS.sprint.sessions)).toEqual({
+  expect(tally(PLANS.sprint.sessions)).toStrictEqual({
     O2: 34,
     AT: 23,
     TR: 14,
     AN: 10,
     TEST: 3,
   });
-  expect(tally(PLANS.head.sessions)).toEqual({
+  expect(tally(PLANS.head.sessions)).toStrictEqual({
     O2: 41,
     AT: 21,
     TR: 11,

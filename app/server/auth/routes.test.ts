@@ -158,7 +158,7 @@ describe("POST /api/auth/signout and GET /api/me", () => {
     const res = await request(createApp(d))
       .get("/api/me")
       .set("Cookie", `${SESSION_COOKIE}=tok`);
-    expect(res.body).toEqual({
+    expect(res.body).toStrictEqual({
       user: { id: "u1", email: "a@x.com", name: "A" },
     });
     expect(res.headers["cache-control"]).toBe("no-store");
