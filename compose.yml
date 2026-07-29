@@ -21,12 +21,13 @@ services:
       retries: 5
       start_period: 10s
 
-  app:
+  api:
     build:
       context: ./app
+      target: api
       args:
         APP_VERSION: ${APP_VERSION:-dev}
-    container_name: ergomatic-app
+    container_name: ergomatic-api
     restart: unless-stopped
     # Defense-in-depth: drop privileges, read-only root FS (natalie convention)
     security_opt:
@@ -36,10 +37,6 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    ports:
-      # Container always listens on 8080; host port defaults to 8081 because
-      # natalie owns 8080 on this box. Localhost-bound unless APP_BIND is set.
-      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8081}:8080"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-ergomatic}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ergomatic}
       SITE_URL: ${SITE_URL:-https://ergomatic.waffle.haus}
@@ -60,6 +57,36 @@ services:
       retries: 5
       start_period: 20s
 
+  web:
+    build:
+      context: ./app
+      target: web
+    container_name: ergomatic-web
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      # unprivileged nginx keeps pid + cache under /tmp
+      - /tmp
+    ports:
+      # The ONLY host-facing app port (shared host: natalie owns 8080/8081,
+      # prod .env sets APP_PORT=8082). api has no host mapping at all.
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8081}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    # Fetches through nginx's own /api proxy: `compose up --wait` (the
+    # deploy.sh health gate) now proves web -> api -> postgres end-to-end.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   cloudflared:
     image: cloudflare/cloudflared:2026.7.3
     container_name: ergomatic-cloudflared
@@ -69,7 +96,7 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
-      - app
+      - web
 
 volumes:
   pgdata:
