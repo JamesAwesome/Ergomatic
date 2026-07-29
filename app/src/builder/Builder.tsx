@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
 import PainPicker from "../components/PainPicker";
 import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
+import BulkImport from "./BulkImport";
 import {
   addRow,
   newForm,
@@ -375,6 +376,8 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       >
         Save to library
       </button>
+
+      <BulkImport onImported={() => navigate("/library")} />
     </main>
   );
 }
