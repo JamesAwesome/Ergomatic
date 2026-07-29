@@ -56,7 +56,7 @@ export interface WorkoutInput {
 - `validateSteps(value: unknown): { ok: true; steps: Step[] } | { ok: false; errors: string[] }` — structural + bounds validation of untrusted jsonb (minutes 0.5..180 in 0.5 increments; meters int 100..42195; spm int 10..60; reps 1..12, max one marker, must not be last step; at least one `w` or `test` step; max 100 steps).
 - `validateWorkoutInput(value: unknown): { ok: true; workout: WorkoutInput } | { ok: false; errors: string[] }` — title 1..80 chars, num int 1..9999, type/difficulty enums, pain int 1..5, then validateSteps.
 
-- [ ] **Step 1: Write the failing tests** — `app/domain/validate.test.ts`:
+- [x] **Step 1: Write the failing tests** — `app/domain/validate.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -122,8 +122,8 @@ describe('validateWorkoutInput', () => {
 })
 ```
 
-- [ ] **Step 2: RED** — `cd app && pnpm test --project unit` (module missing).
-- [ ] **Step 3: Implement** `types.ts` exactly as the Interfaces block above (types only, no logic), then `validate.ts`:
+- [x] **Step 2: RED** — `cd app && pnpm test --project unit` (module missing).
+- [x] **Step 3: Implement** `types.ts` exactly as the Interfaces block above (types only, no logic), then `validate.ts`:
 
 ```ts
 import type { Difficulty, PaceRef, Step, WorkDuration, WorkoutInput, WorkoutType } from './types.js'
@@ -209,7 +209,7 @@ export function validateWorkoutInput(value: unknown): { ok: true; workout: Worko
 }
 ```
 
-- [ ] **Step 4: GREEN**, lint, typecheck. **Step 5: Commit** `feat(domain): step and workout validators`
+- [x] **Step 4: GREEN**, lint, typecheck. **Step 5: Commit** `feat(domain): step and workout validators`
 
 ---
 
@@ -221,7 +221,7 @@ export function validateWorkoutInput(value: unknown): { ok: true; workout: Worko
 **Interfaces:**
 - Produces: `parsePaceRef(input: string): PaceRef | null` (handoff regex, whitespace-tolerant, case-insensitive base); `resolveSplit(baselines: Baselines, ref: PaceRef, nudge = 0): number`; `toleranceRange(split: number, tol: number): { lo: number; hi: number; label: string }` (tol 0 → `label = fmtSplit(split)`; else `fmt(lo)–fmt(hi)` with EN DASH).
 
-- [ ] **Step 1: Failing tests** — `app/domain/pace.test.ts`:
+- [x] **Step 1: Failing tests** — `app/domain/pace.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -264,7 +264,7 @@ describe('toleranceRange', () => {
 })
 ```
 
-- [ ] **Step 2: RED. Step 3: Implement:**
+- [x] **Step 2: RED. Step 3: Implement:**
 
 ```ts
 import { fmtSplit } from './format.js'
@@ -292,7 +292,7 @@ export function toleranceRange(split: number, tol: number): { lo: number; hi: nu
 }
 ```
 
-- [ ] **Step 4: GREEN + commit** `feat(domain): pace ref parsing and resolution`
+- [x] **Step 4: GREEN + commit** `feat(domain): pace ref parsing and resolution`
 
 ---
 
@@ -320,7 +320,7 @@ export function estimateMinutes(steps: Step[], baselines: Baselines): { minutes:
 ```
 - `fixtures.ts` exports `intervalLadder` (10′ wu + reps 4 + five 1′ AT works + 5′ rest — 25 phases / 50′) and `distanceRepeats` (`wu 10 + reps 5 + w{2500m at 2k-4, rest 5}` — the amendment example), both with original names. These are THE canonical math fixtures; later tasks import them.
 
-- [ ] **Step 1: Failing tests** (key assertions — write all):
+- [x] **Step 1: Failing tests** (key assertions — write all):
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -378,7 +378,7 @@ describe('estimateMinutes', () => {
 })
 ```
 
-- [ ] **Step 2: fixtures.ts** (write with the tests):
+- [x] **Step 2: fixtures.ts** (write with the tests):
 
 ```ts
 import type { Step } from './types.js'
@@ -409,7 +409,7 @@ export const distanceRepeats: { title: string; steps: Step[] } = {
 }
 ```
 
-- [ ] **Step 3: RED**, then implement `expand.ts`:
+- [x] **Step 3: RED**, then implement `expand.ts`:
 
 ```ts
 import { resolveSplit, toleranceRange } from './pace.js'
@@ -496,7 +496,7 @@ export function estimateMinutes(steps: Step[], baselines: Baselines): { minutes:
 }
 ```
 
-- [ ] **Step 4: GREEN** (verify the 25/50 and 80-minute assertions pass EXACTLY — if not, the bug is real; do not adjust fixtures). Lint/typecheck. **Step 5: Commit** `feat(domain): phase expansion and duration estimation`
+- [x] **Step 4: GREEN** (verify the 25/50 and 80-minute assertions pass EXACTLY — if not, the bug is real; do not adjust fixtures). Lint/typecheck. **Step 5: Commit** `feat(domain): phase expansion and duration estimation`
 
 ---
 
@@ -525,7 +525,7 @@ export function suggest(input: SuggestInput): Suggestion
 - Plans are ORIGINAL sequences (authored here, James-reviews with the starter library in Task 8): periodized base→build→peak over 12 weeks × 7 sessions; `sprint` biases AN/TR in later thirds, `head` biases O2/AT throughout; `TEST` at indices 6, 34, 62 (start-of-block checkpoints — deliberately NOT the handoff's 7/31/55).
 - suggest behavior (handoff contract): TEST→TR for pool matching; pool = type match → difficulty ∈ prefs AND est ≤ cap → sort least-recently-done first (null lastDone = never = first); empty filtered pool → fall back to unfiltered type list with `filtered: false` and reason "closest match" phrasing; `todayPickId` (if present in pool) wins with reason 'YOUR PICK'.
 
-- [ ] **Step 1: Failing tests.** `plans.test.ts` (write exactly these):
+- [x] **Step 1: Failing tests.** `plans.test.ts` (write exactly these):
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -620,8 +620,8 @@ describe('suggest', () => {
   })
 })
 ```
-- [ ] **Step 2: RED. Step 3: Implement** — `plans.ts` sessions arrays generated by a tiny deterministic builder function IN THE FILE (weekly templates per third, e.g. sprint weeks 1-4 `['O2','AT','O2','O2','AT','O2','TR']` … documented rationale comment per third) then flattened, with TEST spliced at 6/34/62; export the literal result. `suggest.ts` per the contract above; reasons built from inputs.
-- [ ] **Step 4: GREEN + commit** `feat(domain): original plan presets and suggestion engine`
+- [x] **Step 2: RED. Step 3: Implement** — `plans.ts` sessions arrays generated by a tiny deterministic builder function IN THE FILE (weekly templates per third, e.g. sprint weeks 1-4 `['O2','AT','O2','O2','AT','O2','TR']` … documented rationale comment per third) then flattened, with TEST spliced at 6/34/62; export the literal result. `suggest.ts` per the contract above; reasons built from inputs.
+- [x] **Step 4: GREEN + commit** `feat(domain): original plan presets and suggestion engine`
 
 ---
 
@@ -634,10 +634,10 @@ describe('suggest', () => {
 **Interfaces:**
 - Produces Drizzle tables exactly per the spec's Schema section: `baselines`, `workouts`, `sessionLogs`, `planState`, `preferences`, `testHistory` — names, columns, enums (`workout_type`, `difficulty`, `workout_source`, `held_result`, `test_distance` as pgEnum), CHECK constraints (pain 1..5 on both workouts and session_logs via `check()`), FK behaviors (all user_id cascade; session_logs.workout_id SET NULL), indexes on every user_id + unique (user_id, num) on workouts.
 
-- [ ] **Step 1:** Write the table definitions (follow the spec column-for-column; use `jsonb('steps')`, `real()` for seconds, `pgEnum` for the five enums, composite unique `unique().on(t.userId, t.num)`).
-- [ ] **Step 2:** `pnpm db:generate` — inspect the SQL: 5 CREATE TYPE + 6 CREATE TABLE + FKs (one SET NULL, rest CASCADE) + indexes + unique + CHECKs. Commit the migration files as generated (expand-only: no ALTERs of existing tables).
-- [ ] **Step 3:** Integration test (Testcontainers, migrate, then): information_schema lists all six; inserting workout with pain 6 throws; deleting a user cascades workouts/logs/prefs; deleting a workout nulls session_logs.workout_id (insert minimal rows to prove both).
-- [ ] **Step 4:** Full suite + commit `feat(db): domain tables (baselines, workouts, logs, plan, prefs, tests)`
+- [x] **Step 1:** Write the table definitions (follow the spec column-for-column; use `jsonb('steps')`, `real()` for seconds, `pgEnum` for the five enums, composite unique `unique().on(t.userId, t.num)`).
+- [x] **Step 2:** `pnpm db:generate` — inspect the SQL: 5 CREATE TYPE + 6 CREATE TABLE + FKs (one SET NULL, rest CASCADE) + indexes + unique + CHECKs. Commit the migration files as generated (expand-only: no ALTERs of existing tables).
+- [x] **Step 3:** Integration test (Testcontainers, migrate, then): information_schema lists all six; inserting workout with pain 6 throws; deleting a user cascades workouts/logs/prefs; deleting a workout nulls session_logs.workout_id (insert minimal rows to prove both).
+- [x] **Step 4:** Full suite + commit `feat(db): domain tables (baselines, workouts, logs, plan, prefs, tests)`
 
 ---
 
@@ -662,8 +662,8 @@ export class StoreConflictError extends Error {}
 ```
 - `LogInput`: `{workoutId: string|null, workoutTitle, workoutType, baselineK2, baselineK6, held, pain, notes, steps: LogStep[]}` with `LogStep = {label, targetSplit, actualSplit?, actualSource: 'assumed'|'stopwatch'|'pm5', spm?, meters?, seconds?}`.
 
-- [ ] **Step 1:** One integration test file covering per store: round-trip, defaults (preferences), num-clash conflict, transactional done_n bump on log create, test-history delta computation, and that `get`/`list` with a DIFFERENT userId returns nothing (store-level isolation — the API-level test comes in Task 9). Write tests first (RED against missing modules), then implement stores with drizzle queries. Preferences defaults: exactly the spec's default column values, returned without inserting.
-- [ ] **Step 2:** GREEN, lint, typecheck, coverage still ≥90. Commit `feat(server): user-scoped domain stores`
+- [x] **Step 1:** One integration test file covering per store: round-trip, defaults (preferences), num-clash conflict, transactional done_n bump on log create, test-history delta computation, and that `get`/`list` with a DIFFERENT userId returns nothing (store-level isolation — the API-level test comes in Task 9). Write tests first (RED against missing modules), then implement stores with drizzle queries. Preferences defaults: exactly the spec's default column values, returned without inserting.
+- [x] **Step 2:** GREEN, lint, typecheck, coverage still ≥90. Commit `feat(server): user-scoped domain stores`
 
 ---
 
@@ -681,9 +681,9 @@ export class StoreConflictError extends Error {}
   - Step lines, one per step: `wu 10` · `x4` (reps marker) · `w 1' 6k-2 @22 r5` · `w 2500m 2k-4 @24 r5` (`@spm` and `r<rest-minutes>` optional; `'` marks minutes, `m` marks meters) · `r 5` · `test 2k`
   - Parser returns `{workouts: WorkoutInput[], errors: [{block, line, message}]}`; every parsed workout still goes through `validateWorkoutInput`. Tests: one valid multi-block paste, each malformed-line class (bad header field, unknown step word, bad duration unit, bad pace ref), and blank-lines-tolerant splitting.
 
-- [ ] **Step 1:** Route unit tests with in-memory fake stores (write the fakes in the test file — maps keyed by userId): per route happy path + validation failure + the specific status codes (409 num clash via StoreConflictError, 422 today/`baselines_required` when baselines null, 404 cross-user id → note: fakes return null for unknown, route maps to 404). Two sessions stubbed via the existing fakeStore pattern for requireUser. ~30 tests; write them ALL (this file is the API contract).
-- [ ] **Step 2:** RED → implement `data.ts`: thin handlers — parse/validate (domain validators), call store, map errors (`StoreConflictError`→409); `POST /api/logs` validates steps' actualSource enum; `GET /api/today`: baselines→422 if either null; assemble SuggestInput from stores (lastDoneDaysAgo from latest log per workout — add `logsStore.lastDonePerWorkout(userId)` if needed: add it in Task 6's file WITH a test when you get here; note it in the report).
-- [ ] **Step 3:** Wire app.ts/index.ts (stores built from db in index.ts). GREEN all projects. Commit `feat(api): complete user-scoped data surface`
+- [x] **Step 1:** Route unit tests with in-memory fake stores (write the fakes in the test file — maps keyed by userId): per route happy path + validation failure + the specific status codes (409 num clash via StoreConflictError, 422 today/`baselines_required` when baselines null, 404 cross-user id → note: fakes return null for unknown, route maps to 404). Two sessions stubbed via the existing fakeStore pattern for requireUser. ~30 tests; write them ALL (this file is the API contract).
+- [x] **Step 2:** RED → implement `data.ts`: thin handlers — parse/validate (domain validators), call store, map errors (`StoreConflictError`→409); `POST /api/logs` validates steps' actualSource enum; `GET /api/today`: baselines→422 if either null; assemble SuggestInput from stores (lastDoneDaysAgo from latest log per workout — add `logsStore.lastDonePerWorkout(userId)` if needed: add it in Task 6's file WITH a test when you get here; note it in the report).
+- [x] **Step 3:** Wire app.ts/index.ts (stores built from db in index.ts). GREEN all projects. Commit `feat(api): complete user-scoped data surface`
 
 ---
 
@@ -695,10 +695,10 @@ export class StoreConflictError extends Error {}
 **Interfaces:**
 - Produces `STARTER_WORKOUTS: Array<WorkoutInput>` (~35) and re-exports `PLANS` for review context.
 
-- [ ] **Step 1:** Author ~35 ORIGINAL workouts per the spec's composition matrix (4 types × 3 difficulties × time bands; ≥6 with distance steps; pain 1–5 sensibly assigned; original naming scheme — pick a coherent theme, e.g. weather/geography/tools, NOT book-style names; one-line rationale comment per workout citing its methodology basis: "AN: 8×45s at ~1:4 rest", etc.).
-- [ ] **Step 2:** `starter.test.ts`: every entry passes `validateWorkoutInput`; nums unique 1..35; matrix coverage assertions (each type×difficulty combo ≥2; each time band ≥6 members via estimateMinutes at reference baselines; ≥6 distance workouts); no title collides with the fixtures.
-- [ ] **Step 3:** Render a review document (markdown table: num, title, type, difficulty, pain, structure summary, est duration + the two plan-preset week-by-week grids) to `.superpowers/sdd/starter-review.md` and STOP: the controller sends it to James. **Do not proceed to commit until the controller relays approval.** Apply any edits he requests, re-run tests.
-- [ ] **Step 4:** After approval: commit `feat(seed): original starter library and plan presets (James-approved)`
+- [x] **Step 1:** Author ~35 ORIGINAL workouts per the spec's composition matrix (4 types × 3 difficulties × time bands; ≥6 with distance steps; pain 1–5 sensibly assigned; original naming scheme — pick a coherent theme, e.g. weather/geography/tools, NOT book-style names; one-line rationale comment per workout citing its methodology basis: "AN: 8×45s at ~1:4 rest", etc.).
+- [x] **Step 2:** `starter.test.ts`: every entry passes `validateWorkoutInput`; nums unique 1..35; matrix coverage assertions (each type×difficulty combo ≥2; each time band ≥6 members via estimateMinutes at reference baselines; ≥6 distance workouts); no title collides with the fixtures.
+- [x] **Step 3:** Render a review document (markdown table: num, title, type, difficulty, pain, structure summary, est duration + the two plan-preset week-by-week grids) to `.superpowers/sdd/starter-review.md` and STOP: the controller sends it to James. **Do not proceed to commit until the controller relays approval.** Apply any edits he requests, re-run tests.
+- [x] **Step 4:** After approval: commit `feat(seed): original starter library and plan presets (James-approved)`
 
 ---
 
@@ -715,32 +715,32 @@ export class StoreConflictError extends Error {}
 - Routes: PUT/DELETE `/api/workouts/:id` on a global id → 403 `{error:'starter_readonly'}` (get() the row; if isGlobal → 403 before any store write). GET list/get include globals. `/api/today` pool spans both.
 - Seeding: `seedGlobalLibrary(db)` — idempotent (skip when `countGlobals() > 0`), transactional, inserts STARTER_WORKOUTS with `userId: null`; called in `index.ts` after `migrate()`.
 
-- [ ] **Step 1:** Schema change + regenerate migration (verify SQL: nullable user_id, both partial uniques). Update the Task 5 integration test expectations if they assert NOT NULL.
-- [ ] **Step 2:** TDD stores: extend stores.integration.test.ts — list returns 35 globals for a fresh user + their creations; update/remove against a global id no-ops (row unchanged); num uniqueness independent between global and personal namespaces.
-- [ ] **Step 3:** TDD routes: data.test.ts — GET list includes `isGlobal:true` rows; PUT/DELETE global → 403 starter_readonly; POST create personal num colliding with a GLOBAL num → allowed (namespaces separate).
-- [ ] **Step 4:** seed.ts + seed.integration.test.ts: fresh DB seeds 35 globals; second call inserts none; wired in index.ts post-migrate (boot order documented).
-- [ ] **Step 5:** isolation.integration.test.ts — THE PHASE 2 OBLIGATION: two real users via stubbed-verifier native sign-ins → bearers → full API sweep: globals visible to BOTH (by design, assert identical 35); A's personal workout/log/baselines/prefs/plan invisible to B on EVERY endpoint; B's mutations on A's ids → 404; A logs → changes baselines → frozen log values unchanged.
-- [ ] **Step 6:** Full suite + coverage ≥90; commit `feat(library): global starter library, boot seeding, two-user isolation proven`
+- [x] **Step 1:** Schema change + regenerate migration (verify SQL: nullable user_id, both partial uniques). Update the Task 5 integration test expectations if they assert NOT NULL.
+- [x] **Step 2:** TDD stores: extend stores.integration.test.ts — list returns 35 globals for a fresh user + their creations; update/remove against a global id no-ops (row unchanged); num uniqueness independent between global and personal namespaces.
+- [x] **Step 3:** TDD routes: data.test.ts — GET list includes `isGlobal:true` rows; PUT/DELETE global → 403 starter_readonly; POST create personal num colliding with a GLOBAL num → allowed (namespaces separate).
+- [x] **Step 4:** seed.ts + seed.integration.test.ts: fresh DB seeds 35 globals; second call inserts none; wired in index.ts post-migrate (boot order documented).
+- [x] **Step 5:** isolation.integration.test.ts — THE PHASE 2 OBLIGATION: two real users via stubbed-verifier native sign-ins → bearers → full API sweep: globals visible to BOTH (by design, assert identical 35); A's personal workout/log/baselines/prefs/plan invisible to B on EVERY endpoint; B's mutations on A's ids → 404; A logs → changes baselines → frozen log values unchanged.
+- [x] **Step 6:** Full suite + coverage ≥90; commit `feat(library): global starter library, boot seeding, two-user isolation proven`
 
 ---
 
 ### Task 10: Full verify + PR
 
-- [ ] `cd app && pnpm lint && pnpm typecheck && pnpm test && pnpm test:coverage && pnpm build` all green.
-- [ ] Compose stack up locally: `POSTGRES_PASSWORD=devpass docker compose up -d --build --wait`; `curl :8081/api/health` ok; `curl :8081/api/workouts` → 401 (guard holds); down -v.
-- [ ] Push, PR (body: spec link, isolation-obligation discharged, James-approved starter content note), `gh run watch --exit-status` green.
+- [x] `cd app && pnpm lint && pnpm typecheck && pnpm test && pnpm test:coverage && pnpm build` all green.
+- [x] Compose stack up locally: `POSTGRES_PASSWORD=devpass docker compose up -d --build --wait`; `curl :8081/api/health` ok; `curl :8081/api/workouts` → 401 (guard holds); down -v.
+- [x] Push, PR (body: spec link, isolation-obligation discharged, James-approved starter content note), `gh run watch --exit-status` green.
 
 ---
 
 ### Task 11: Merge + close-out (controller + James)
 
-- [ ] Merge (rebase) → deploy green → live: `/api/workouts` 401s; sign in on the WEB prototype → library seeds 35 for existing accounts on next sign-in (verify via James's account or psql count).
-- [ ] Release recommendation: expected "No TestFlight release needed" (server-only — but STATE it, per the standing rule).
-- [ ] ROADMAP Phase 4 → Done + boxes; plan checkboxes; ledger. Close-out PR.
+- [x] Merge (rebase) → deploy green → live: `/api/workouts` 401s; sign in on the WEB prototype → library seeds 35 for existing accounts on next sign-in (verify via James's account or psql count).
+- [x] Release recommendation: expected "No TestFlight release needed" (server-only — but STATE it, per the standing rule).
+- [x] ROADMAP Phase 4 → Done + boxes; plan checkboxes; ledger. Close-out PR.
 
 ## Exit criteria (spec)
 
-- [ ] Every handoff domain-model formula passes tests (Tasks 1–4; the 25-phase/50′ and distance-estimate contracts exact)
-- [ ] Two users hold fully isolated data across the entire API (Task 9)
-- [ ] James approved the starter library + original plan presets before merge (Task 8 gate)
-- [ ] Deployed; guard verified live; seeding verified for an existing account
+- [x] Every handoff domain-model formula passes tests (Tasks 1–4; the 25-phase/50′ and distance-estimate contracts exact)
+- [x] Two users hold fully isolated data across the entire API (Task 9)
+- [x] James approved the starter library + original plan presets before merge (Task 8 gate)
+- [x] Deployed; guard verified live; seeding verified for an existing account
