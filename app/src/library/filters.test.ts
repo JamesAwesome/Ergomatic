@@ -51,6 +51,11 @@ describe("chip state transitions", () => {
     expect(f.recency).toBe("not-recent");
   });
 
+  it("clears a recency chip when the active one is tapped again", () => {
+    const on = setRecency(EMPTY_FILTERS, "recent");
+    expect(setRecency(on, "recent").recency).toBeNull();
+  });
+
   it("clears every chip at once", () => {
     const busy: Filters = {
       type: "AN",
