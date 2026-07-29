@@ -127,12 +127,32 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       return row ? withIsGlobal(row) : null;
     },
     create,
+    // The real store wraps this in a db.transaction: a num clash anywhere
+    // in the batch rolls the WHOLE batch back, not just the clashing
+    // input. Validate every input against both the existing rows and each
+    // other BEFORE writing any of them, so a mid-batch throw here can't
+    // leave earlier inputs committed the way a naive per-input loop would.
     async createMany(userId: string, inputs: NewWorkoutInput[]) {
-      const out: WorkoutRow[] = [];
+      const m = forUser(userId);
+      const existingNums = new Set([...m.values()].map((w) => w.num));
+      const seenNums = new Set<number>();
       for (const input of inputs) {
-        out.push(await create(userId, input));
+        if (existingNums.has(input.num) || seenNums.has(input.num)) {
+          throw new StoreConflictError(
+            `workout num ${input.num} already exists`,
+          );
+        }
+        seenNums.add(input.num);
       }
-      return out;
+      const rows: WorkoutRow[] = inputs.map((input) => ({
+        ...input,
+        id: crypto.randomUUID(),
+        userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+      for (const row of rows) m.set(row.id, row);
+      return rows.map((row) => withIsGlobal(row) as unknown as WorkoutRow);
     },
     async update(userId: string, id: string, input: WorkoutInput) {
       assertUuidShape(id);
@@ -218,6 +238,9 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
   return {
     async list(userId: string, limit: number) {
       return (byUser.get(userId) ?? []).slice(0, limit);
+    },
+    async count(userId: string) {
+      return (byUser.get(userId) ?? []).length;
     },
     async create(userId: string, input: LogInput) {
       const rows = byUser.get(userId) ?? [];
