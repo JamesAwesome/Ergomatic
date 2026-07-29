@@ -34,7 +34,6 @@ function deps(overrides: Partial<AppDeps> = {}): AppDeps {
     allowlist: new Set(['a@x.com']),
     siteUrl: 'https://ergomatic.example',
     stores: null,
-    seed: vi.fn(async () => {}),
     ...overrides,
   }
 }
@@ -67,7 +66,6 @@ describe('GET /api/auth/callback', () => {
     const cookies = (res.headers['set-cookie'] as unknown as string[]).join(';')
     expect(cookies).toContain(`${SESSION_COOKIE}=tok`)
     expect(cookies).toContain(`${OAUTH_COOKIE}=;`)
-    expect(d.seed).toHaveBeenCalledWith('u1')
   })
   it('signs in an existing user without touching the allowlist, and upserts profile', async () => {
     const d = deps({ allowlist: new Set() })
@@ -76,18 +74,12 @@ describe('GET /api/auth/callback', () => {
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe('/')
     expect(d.users.updateProfile).toHaveBeenCalledWith('u1', 'a@x.com', 'A')
-    // Seed is called on EVERY sign-in, not just account creation: the
-    // seed-if-empty rule is what makes it a no-op on repeat visits, and
-    // that's also what lets pre-existing accounts pick up the starter
-    // library on their next sign-in after this feature shipped.
-    expect(d.seed).toHaveBeenCalledWith('u1')
   })
-  it('denies a non-allowlisted new user, creating nothing and never seeding', async () => {
+  it('denies a non-allowlisted new user, creating nothing', async () => {
     const d = deps({ allowlist: new Set(['other@x.com']) })
     const res = await cb(d)
     expect(res.headers.location).toBe('/?denied=a%40x.com')
     expect(d.users.createUser).not.toHaveBeenCalled()
-    expect(d.seed).not.toHaveBeenCalled()
   })
   it('denies an unverified email before consulting the allowlist', async () => {
     const d = deps()
@@ -98,7 +90,6 @@ describe('GET /api/auth/callback', () => {
     const res = await cb(d)
     expect(res.headers.location).toBe('/?denied=a%40x.com')
     expect(d.users.createUser).not.toHaveBeenCalled()
-    expect(d.seed).not.toHaveBeenCalled()
   })
   it('handles user-cancelled consent silently', async () => {
     const res = await request(createApp(deps())).get('/api/auth/callback?error=access_denied')

@@ -55,7 +55,7 @@ CREATE TABLE "test_history" (
 --> statement-breakpoint
 CREATE TABLE "workouts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"user_id" uuid NOT NULL,
+	"user_id" uuid,
 	"num" integer NOT NULL,
 	"title" text NOT NULL,
 	"type" "workout_type" NOT NULL,
@@ -65,7 +65,6 @@ CREATE TABLE "workouts" (
 	"steps" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "workouts_user_id_num_unique" UNIQUE("user_id","num"),
 	CONSTRAINT "workouts_pain_check" CHECK ("workouts"."pain" between 1 and 5)
 );
 --> statement-breakpoint
@@ -78,4 +77,6 @@ ALTER TABLE "test_history" ADD CONSTRAINT "test_history_user_id_users_id_fk" FOR
 ALTER TABLE "workouts" ADD CONSTRAINT "workouts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "session_logs_user_id_idx" ON "session_logs" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "test_history_user_id_idx" ON "test_history" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "workouts_user_id_idx" ON "workouts" USING btree ("user_id");
+CREATE INDEX "workouts_user_id_idx" ON "workouts" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "workouts_user_num_unique" ON "workouts" USING btree ("user_id","num") WHERE "workouts"."user_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "workouts_global_num_unique" ON "workouts" USING btree ("num") WHERE "workouts"."user_id" is null;

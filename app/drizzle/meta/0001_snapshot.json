@@ -1,5 +1,5 @@
 {
-  "id": "ef75c99d-4139-4eb2-8a6f-1839cb3b6e3d",
+  "id": "c93cae8a-7fc2-4b76-a900-a7c461249d5a",
   "prevId": "f3881123-d770-46ed-896e-b3d32efead64",
   "version": "7",
   "dialect": "postgresql",
@@ -558,7 +558,7 @@
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "num": {
           "name": "num",
@@ -635,6 +635,44 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "workouts_user_num_unique": {
+          "name": "workouts_user_num_unique",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "num",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"workouts\".\"user_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "workouts_global_num_unique": {
+          "name": "workouts_global_num_unique",
+          "columns": [
+            {
+              "expression": "num",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"workouts\".\"user_id\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -653,16 +691,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "workouts_user_id_num_unique": {
-          "name": "workouts_user_id_num_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "user_id",
-            "num"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
         "workouts_pain_check": {
