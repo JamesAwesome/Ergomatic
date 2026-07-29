@@ -21,6 +21,8 @@
     "test:coverage": "NODE_OPTIONS=--no-experimental-webstorage vitest run --coverage",
     "db:generate": "drizzle-kit generate",
     "start": "node dist/server/server/index.js",
+    "e2e": "bash scripts/e2e.sh",
+    "screenshots": "bash scripts/screenshots.sh",
     "ios:build": "VITE_API_BASE=${ERGOMATIC_API_BASE:-https://ergomatic.waffle.haus} VITE_GOOGLE_IOS_CLIENT_ID=${GOOGLE_IOS_CLIENT_ID:-} vite build && npx cap sync ios && bash scripts/ios-version.sh",
     "ios:open": "npx cap open ios"
   },
@@ -39,9 +41,11 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
     "@capacitor/cli": "^8.4.2",
     "@capacitor/ios": "^8.4.2",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.62.0",
     "@testcontainers/postgresql": "^12.0.4",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",

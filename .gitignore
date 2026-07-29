@@ -4,6 +4,8 @@ coverage/
 *.tsbuildinfo
 .env
 .DS_Store
+playwright-report/
+test-results/
 app/ios/App/Pods/
 app/ios/App/output/
 app/ios/DerivedData/

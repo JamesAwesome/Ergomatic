@@ -3,3 +3,5 @@ coverage
 drizzle
 ios
 pnpm-lock.yaml
+playwright-report
+test-results
