@@ -49,6 +49,16 @@ they go stale (this has burned us before). Concretely:
 - Version numbers in this file (e.g. "React 19", "Postgres 18") are what was
   current at writing — re-verify at install time, do not copy them blindly
 
+### Standing rule: serving topology
+
+- Serving topology (2026-07-29 investigation): web and API are split into
+  nginx + Express containers; the API has no host port and is reachable
+  only through nginx. Keeping the single React codebase was deliberate —
+  dropping web or rewriting in Swift was evaluated and rejected (harness
+  loss / domain-layer duplication). Revisit the topology only if web and
+  API release cadences diverge. iOS resolves Capacitor via SPM (verified
+  2026-07-29; Cockapods sunset 2026-12-02 does not affect us).
+
 ---
 
 ## Phase 0 — Scaffold & tooling

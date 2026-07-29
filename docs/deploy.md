@@ -37,13 +37,16 @@ automatic rollback to the previous commit.
    `docker` group.
 4. **Tunnel**: Cloudflare Zero Trust → Networks → Tunnels → create
    `ergomatic`; add a public hostname `ergomatic.waffle.haus` →
-   `http://app:8080`; copy the token into `.env`. (Hostname may change later —
+   `http://web:8080`; copy the token into `.env`. (Hostname may change later —
    it lives only here and in `SITE_URL`.)
-   **The service URL must use the CONTAINER port 8080** — `app` resolves on
+   **The service URL must use the CONTAINER port 8080** — `web` resolves on
    the compose network, where `APP_PORT`/8082 does not exist (that's only the
-   host-side bind). Setting `http://app:8082` yields 502s from the edge.
+   host-side bind). Setting `http://web:8082` yields 502s from the edge.
    Also: keep exactly ONE `APP_PORT=` line in `.env` — compose takes the
    last occurrence when duplicates exist.
+   After changing the compose topology, the tunnel origin must be edited in
+   the Cloudflare Zero Trust dashboard — expect 502s from the edge until
+   it is.
 5. **GitHub environment**: create environment `production` with secrets
    `DEPLOY_SSH_KEY` (the private key), `DEPLOY_KNOWN_HOSTS`
    (`ssh-keyscan -H <host>` output), `DEPLOY_HOST`, `DEPLOY_USER`.
