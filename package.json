@@ -11,7 +11,11 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "app/**/*.{ts,tsx}": "pnpm --dir app exec eslint --max-warnings 0 --no-warn-ignored"
+    "app/**/*.{ts,tsx}": [
+      "pnpm --dir app exec prettier --write",
+      "pnpm --dir app exec eslint --max-warnings 0 --no-warn-ignored"
+    ],
+    "app/**/*.{json,css,md,html}": "pnpm --dir app exec prettier --write"
   },
   "devDependencies": {
     "husky": "^9.1.7",
