@@ -48,9 +48,6 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_IOS_CLIENT_ID: ${GOOGLE_IOS_CLIENT_ID:-}
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
-      # e2e-only backdoor gate (see app/server/auth/testSignin.ts). Leave
-      # unset on any real deploy host — see .env.example.
-      TEST_AUTH_SECRET: ${TEST_AUTH_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy
