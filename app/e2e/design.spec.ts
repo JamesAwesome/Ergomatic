@@ -13,6 +13,26 @@ async function assertTapTargets(page: Page): Promise<void> {
     .all();
   for (const el of elements) {
     if (!(await el.isVisible())) continue;
+    const className = await el.evaluate(
+      (node) => (node as HTMLElement).className,
+    );
+    // The one narrow, already-documented exception (docs/design/
+    // DEVIATIONS.md, "N/A — the handoff has no notion of a 'convenience'
+    // tap area..."): StepCard.tsx's collapsed `.step-card-line1` (326x18)
+    // and `.step-card-sub` (180x14) each duplicate the fully-compliant
+    // 48x44 EDIT cell's own onExpand action, in the same card, at less than
+    // 44x44 — WCAG 2.5.8's Equivalent Control exception covers exactly
+    // this. The project's own stricter, exception-free 44px rule still
+    // treats these as a genuine, accepted violation (per DEVIATIONS.md);
+    // excluding them here is that one recorded carve-out, not a general
+    // weakening of this sweep.
+    if (
+      typeof className === "string" &&
+      (className.includes("step-card-line1") ||
+        className.includes("step-card-sub"))
+    ) {
+      continue;
+    }
     const box = await el.boundingBox();
     const label = await el.evaluate((node) => node.outerHTML.slice(0, 120));
     expect(box, `missing bounding box for: ${label}`).not.toBeNull();
@@ -198,8 +218,11 @@ test.describe("builder screen", () => {
   // that state instead.
   test.describe("error state (Save pressed on a blank form)", () => {
     test.beforeEach(async ({ page }) => {
-      await page.getByRole("button", { name: "Save" }).click();
-      await expect(page.locator(".builder-save-status")).toBeVisible();
+      await page.getByRole("button", { name: "Save to library" }).click();
+      // Builder.tsx's own invalid-field-count banner (`role="alert"`) —
+      // there's no dedicated status class any more, this IS the error
+      // state's marker.
+      await expect(page.getByText(/needs? attention/i)).toBeVisible();
     });
 
     test("every visible interactive element has a >=44x44 tap target", async ({
@@ -210,6 +233,68 @@ test.describe("builder screen", () => {
 
     test("zero WCAG 2A/2AA violations", async ({ page }) => {
       await assertNoA11yViolations(page);
+    });
+  });
+
+  // Task 6 (this phase): the plain /library/new sweep above only ever
+  // exercises the accordion's EXPANDED state — a brand-new form's one row
+  // opens by default, so no StepCard ever renders. Add a second step to
+  // force a real collapsed/expanded split (StepCard.tsx + StepEditor.tsx)
+  // and re-run the same sweep, plus pin the two tokens the redesign
+  // introduced for these cards: the collapsed surface/marker colours and
+  // the step-index numeral's ink-4 substitution for the handoff's
+  // AA-failing `#8a8478` (docs/design/builder-redesign/README.md's own
+  // accessibility note: "if the axe scan flags it, move it to `#6f6a5f`" —
+  // already done in tokens.css; this pins it structurally).
+  test.describe("accordion states (one card collapsed, one expanded)", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole("button", { name: "+ ADD STEP" }).click();
+      await expect(page.locator(".step-card")).toHaveCount(1);
+      await expect(page.locator(".step-editor")).toHaveCount(1);
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+
+    test("the collapsed card, its step index, and the expanded card's left marker match the token palette", async ({
+      page,
+    }) => {
+      const collapsedBg = await page
+        .locator(".step-card")
+        .evaluate((el) => getComputedStyle(el).backgroundColor);
+      expect(collapsedBg).toBe("rgb(251, 249, 241)"); // --surface-collapsed
+
+      const collapsedMarker = await page
+        .locator(".step-card")
+        .evaluate((el) => getComputedStyle(el).borderLeftColor);
+      expect(collapsedMarker).toBe("rgb(222, 216, 201)"); // --rule-2
+
+      // The step-index numeral: the handoff's own `#8a8478` measures
+      // ~3.4:1 and fails AA at this size — index.css already substitutes
+      // --ink-4 (#6f6a5f) here, same convention as every other mono label
+      // in docs/design/DEVIATIONS.md. Pinning the resolved colour, not just
+      // the absence of an axe violation, is what keeps this from silently
+      // regressing back to the literal hex.
+      const indexColor = await page
+        .locator(".step-card-index")
+        .first()
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(indexColor).toBe("rgb(111, 106, 95)"); // --ink-4
+
+      // The expanded card's left marker is the current TYPE colour
+      // (StepEditor.tsx's inline borderLeftColor) — O2 is the builder's
+      // default type (Builder.tsx's newForm).
+      const expandedMarker = await page
+        .locator(".step-editor")
+        .evaluate((el) => getComputedStyle(el).borderLeftColor);
+      expect(expandedMarker).toBe("rgb(42, 98, 117)"); // --type-o2
     });
   });
 });
@@ -343,6 +428,7 @@ test.describe("iOS safe-area insets", () => {
         tabbar: cssTextFor(".tabbar"),
         appShell: cssTextFor(".app-shell"),
         screen: cssTextFor(".screen"),
+        builderScreen: cssTextFor(".screen.builder-screen"),
       };
     });
 
@@ -365,5 +451,23 @@ test.describe("iOS safe-area insets", () => {
     expect(declarations.screen).toContain("env(safe-area-inset-top");
     expect(declarations.screen).toContain("env(safe-area-inset-left");
     expect(declarations.screen).toContain("env(safe-area-inset-right");
+
+    // The builder screen's own compound-selector override (index.css:
+    // "The compound selector (rather than a bare .builder-screen rule)
+    // guarantees this wins over .screen's own padding/margin regardless of
+    // stylesheet order") silently dropped the insets earlier this phase —
+    // the header rendered under the Dynamic Island on a notched iPhone
+    // until it was caught and fixed. Assert it structurally so a future
+    // edit to this override can't drop the insets again unnoticed. Bottom
+    // is deliberately a plain 24px here (index.css: the bottom inset is
+    // already reserved once, screen-wide, by .app-shell), so only top/
+    // right/left are asserted, matching the base `.screen` rule above.
+    expect(
+      declarations.builderScreen,
+      "no .screen.builder-screen rule found in any stylesheet",
+    ).not.toBe("");
+    expect(declarations.builderScreen).toContain("env(safe-area-inset-top");
+    expect(declarations.builderScreen).toContain("env(safe-area-inset-left");
+    expect(declarations.builderScreen).toContain("env(safe-area-inset-right");
   });
 });

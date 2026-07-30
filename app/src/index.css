@@ -1108,7 +1108,13 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--ink-4);
+  /* --ink-4 (#6f6a5f) measures 4.48:1 against --surface-sunken at this
+     size/weight — just under WCAG AA's 4.5:1 floor for normal text below
+     the large-text threshold (this italic serif "em" doesn't qualify as
+     large text). --ink-3 (#57544c) clears it comfortably, same fix-the-
+     violation-not-the-assertion approach as the ink-4 substitution
+     recorded in docs/design/DEVIATIONS.md. */
+  color: var(--ink-3);
   font-size: 13px;
 }
 
