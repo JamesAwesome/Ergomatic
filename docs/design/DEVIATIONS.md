@@ -23,6 +23,8 @@ here. These are intentional product decisions (spec:
 | §11's 64px accent-text `PACE REF` field, accepting free text (`2k`/`6k-2`/`2k+4`) per a named regex | A `2K`/`6K` chip pair plus a ±60 offset stepper, on its own line beneath the row | Free text let a rower type `8k` and get an inline error — the defect that started this phase; a structured control makes an invalid ref unrepresentable. Four extra tappables (two base chips, two stepper buttons) don't fit inline at 390px |
 | §11's `+ PASTE TO BULK IMPORT` toggle on the New-workout screen | Its own screen at `/library/import`, reached from a control in the Library header | James reported that mixing bulk paste into the single-entry form was confusing |
 | §11's column-header strip `SET · DUR · PACE REF · SPM · REST · SPLIT` sitting above the rows of 44px fields | No header strip at all. Every field carries its own static, visible affix or label beside it instead: `DUR` and `REST` next to their value controls, `SPM` next to the stroke-rate stepper, plus each control's own aria-label (SET has no equivalent — see the clone-button row above) | The row grew to three (now four, with REST's own line) lines — duration+unit toggle, REST, SPM stepper, pace control — so a single horizontal strip sitting above the row pointed at controls that were no longer on the line beneath it. A previous pass removed the header outright without replacing it (nothing named the SET-replacement clone button, the SPM stepper, or distinguished DUR from REST on screen — aria-labels covered screen readers but not the visible layer James was looking at); per-field affixes fix that without reintroducing a strip that can't span a multi-line row |
+| Handoff's × on a step row deletes it immediately, no confirmation | `StepCard.tsx`'s collapsed × swaps the row's action group for an inline `DELETE?` / `YES` / `NO` confirm (`confirmingDelete` state) instead of deleting on the first tap | The × sits 44px away from the duplicate (⧉) cell in one joined action group, tapped mid-authoring on a phone — a mis-tap there must not silently destroy an already-configured step. `NO` restores the normal action group with nothing lost; only `YES` calls `onDelete` |
+| N/A — the handoff has no notion of a "convenience" tap area smaller than a real control | `StepCard.tsx`'s collapsed card exposes two extra clickable areas that duplicate the 48×44 `EDIT` cell's action (`onExpand`) at less than 44×44: `.step-card-line1` (326×18, the index/summary/split line) and `.step-card-sub` (180×14, the sub-summary line) | Design doc §4a's own geometry (an **~86px** collapsed card holding an 18px summary line, a 14px sub-summary line, and a 48×44 `EDIT` cell side by side) makes a compliant-height summary line impossible without growing the card past spec. WCAG **2.5.8 Target Size (Minimum, AA)** — not 2.5.5 Enhanced (AAA), which does not apply here — requires 24×24 *or* one of several exceptions; the **Equivalent Control** exception is satisfied because the fully compliant 48×44 `EDIT` cell performs the identical action in the same card, so these two lines are a redundant path to that target, not the only one. CLAUDE.md's own rule ("every tappable ≥44×44") is flatter than WCAG and carries no such exception, so these two areas are a genuine, acknowledged violation of the *project's* rule — accepted as unavoidable given §4a's fixed card geometry, not fixed here |
 
 Superseded by the builder redesign (`docs/design/builder-redesign/`, Phase 5E):
 the row-level controls above (SET/clone, per-field affixes, the `Save`
@@ -30,7 +32,21 @@ shortening) belong to the pre-redesign screen. The redesign replaces the
 permanently-expanded row list with an accordion (one card open at a time;
 StepCard.tsx/StepEditor.tsx) and reinstates the handoff's own `Save to
 library` label — a recorded reversion of the `Save` shortening above, at
-James's request; no longer a deviation.
+James's request; no longer a deviation. Two more rows above are superseded
+the same way, by the same redesign:
+- The five-cell SVG-face pain picker (`--pain-1`…`--pain-5` and their
+  `-fill` counterparts) is gone — `PainPicker.tsx` and those tokens were
+  deleted this phase, replaced by `ClassificationCard.tsx`'s numerals-only
+  EXPECTED PAIN control on the separate `--pain-ramp-1..5` family. This
+  isn't just superseded, it's reconciled: the redesign handoff itself
+  (`builder-redesign/README.md`, EXPECTED PAIN section) explicitly drops
+  the ink-stroke faces, so numerals-only is no longer a deviation from the
+  (current) handoff at all.
+- The free-text-plus-steppers `SpmInput.tsx` is deleted; SPM is now a bare
+  Stepper built directly into `StepEditor.tsx`, per the redesign's own SPM
+  row spec (label + stepper, no typable field). The bounds/wake behaviour
+  this row records (clamp 10..60, wake at 20 from empty) carried over into
+  the new control unchanged — only the control's identity changed.
 
 Everything else in the handoff (palette, type, spacing, 44px targets, AA,
 2px radii, screen structures, pace math, timer behavior) remains binding.

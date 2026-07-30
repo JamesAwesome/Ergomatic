@@ -31,11 +31,11 @@ export default function StepCard({
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
-  // James's departure from the handoff (recorded in the task brief): the
-  // handoff's × deletes immediately. The × sits 44px from the duplicate
-  // cell in a joined control, on a phone, mid-authoring — a mis-tap must
-  // not silently destroy a configured step, so it swaps the action group
-  // for an inline confirm instead.
+  // James's departure from the handoff, recorded in docs/design/
+  // DEVIATIONS.md: the handoff's × deletes immediately. The × sits 44px
+  // from the duplicate cell in a joined control, on a phone, mid-authoring
+  // — a mis-tap must not silently destroy a configured step, so it swaps
+  // the action group for an inline confirm instead.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const stepLabel = `Step ${index + 1}`;

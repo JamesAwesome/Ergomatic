@@ -55,11 +55,12 @@ describe("DurationInput", () => {
     expect(onChange).toHaveBeenCalledWith({ value: "10", unit: "m" });
   });
 
-  // Mirrors PainPicker.test.tsx / PaceRefInput.test.tsx's roving-tabIndex
-  // and arrow-key suites for this control's own radiogroup — only two
-  // chips (MIN/M), so "wraps" and "moves forward/back" collapse into the
-  // same transition, but the handler is the identical roving-tabindex
-  // pattern and needs the identical coverage.
+  // Mirrors PaceRefInput.test.tsx's (and the deleted PainPicker.test.tsx's)
+  // roving-tabIndex and arrow-key suites for this control's own
+  // radiogroup — only two chips (MIN/M), so "wraps" and "moves
+  // forward/back" collapse into the same transition, but the handler is
+  // the identical roving-tabindex pattern and needs the identical
+  // coverage.
   describe("roving tabIndex", () => {
     it("makes only the checked chip tabbable", () => {
       setup({ unit: "min" });

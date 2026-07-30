@@ -40,9 +40,9 @@ export default function DurationInput({
   // own `registerRef` prop.
   registerRef?: (el: HTMLInputElement | null) => void;
 }) {
-  // Roving tabindex (WAI-ARIA radiogroup pattern), same as PainPicker.tsx
-  // and PaceRefInput.tsx: the group is one tab stop and arrow keys move
-  // focus (and selection) within it.
+  // Roving tabindex (WAI-ARIA radiogroup pattern), same as the deleted
+  // PainPicker.tsx and PaceRefInput.tsx: the group is one tab stop and
+  // arrow keys move focus (and selection) within it.
   const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   function selectByIndex(index: number) {

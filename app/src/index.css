@@ -719,12 +719,23 @@ button:disabled {
    each direct-child "block" (header, title row, classification card, steps,
    repeat card, totals+Save) — Phase 5E Task 5's assembly. The compound
    selector (rather than a bare .builder-screen rule) guarantees this wins
-   over .screen's own padding/margin regardless of stylesheet order. */
+   over .screen's own padding/margin regardless of stylesheet order. Top/
+   right/left each still add .screen's own env(safe-area-inset-*) term
+   (index.html sets viewport-fit=cover) — a bare 14/20/24 would render the
+   header under a notch/Dynamic Island and run the column into rounded
+   corners in landscape, exactly the regression James asked to avoid
+   earlier in the project. Bottom stays a plain 24px, same as .screen's own
+   plain 20px: the bottom inset is already reserved once, screen-wide, by
+   .app-shell's own padding-bottom (this screen renders inside the same
+   .app-shell as every other screen), so adding it here too would double
+   it. */
 .screen.builder-screen {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 14px 20px 24px;
+  padding: calc(14px + env(safe-area-inset-top, 0px))
+    calc(20px + env(safe-area-inset-right, 0px)) 24px
+    calc(20px + env(safe-area-inset-left, 0px));
 }
 
 /* §1 Header: back link + H1, 10px between them — the 18px gap to the next
@@ -1136,6 +1147,20 @@ button:disabled {
    restyled to the handoff's joined-segment treatment: the 2K/6K toggle
    becomes one bordered pair of fixed-width segments (like DurationInput's
    MIN/M toggle below) and the offset control reads like a Stepper. */
+.pace-ref-input {
+  /* One 44px line per docs/design/builder-redesign/README.md §4b row 3:
+     baseline toggle (fixed-width joined pair) + offset stepper (flex: 1),
+     same row layout as .duration-input's value+units line below. Without
+     this the two children fall back to block layout — the joined pair on
+     one line, the offset stepper dropping to a second, with no container
+     border around it — a regression caught only by rendering at 390px. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .pace-ref-bases {
   /* Joined pair (docs/design/builder-redesign/README.md §4b: two 48×44
      segments), not two separate chips with a gap — one border around the
@@ -1146,9 +1171,10 @@ button:disabled {
   overflow: hidden;
 }
 
-/* Toggled via aria-checked (PainPicker.tsx's radio pattern) since these are
-   mutually-exclusive radios, not independent pressed toggles. Fixed 48px
-   width per the handoff's pace-ref segment spec. */
+/* Toggled via aria-checked (the same radio pattern the deleted
+   PainPicker.tsx used) since these are mutually-exclusive radios, not
+   independent pressed toggles. Fixed 48px width per the handoff's
+   pace-ref segment spec. */
 .pace-ref-chip {
   flex: 0 0 48px;
   width: 48px;
@@ -1175,11 +1201,25 @@ button:disabled {
   color: var(--on-color);
 }
 
-/* The offset control restyled to read like a Stepper (joined container,
-   value cell with side borders) even though it stays PaceRefInput's own
-   bespoke markup rather than the shared Stepper component — PaceRefInput
-   already clamps the offset to the domain's ±60 bound, so nothing about its
-   behaviour needed to change, only its look. */
+/* The offset control restyled to read like a Stepper: `.pace-ref-offset` is
+   the joined container (border, radius, overflow: hidden, same shape as
+   `.stepper` below), `.pace-ref-step` the two −/+ cells and
+   `.pace-ref-display` the value cell with side borders — even though it
+   stays PaceRefInput's own bespoke markup rather than the shared Stepper
+   component, since PaceRefInput already clamps the offset to the domain's
+   ±60 bound, so nothing about its behaviour needed to change, only its
+   look. */
+.pace-ref-offset {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
 .pace-ref-step {
   flex: 0 0 var(--tap);
   width: var(--tap);

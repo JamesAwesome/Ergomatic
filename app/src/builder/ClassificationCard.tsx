@@ -55,7 +55,7 @@ const PAIN_RAMP_VAR: Record<PainLevel, string> = {
  *  pickers read as a single unit instead of three loose strips.
  *
  *  Two departures the handoff calls out explicitly:
- *  - PAIN drops the ink-stroke face graphics from the previous
+ *  - PAIN drops the ink-stroke face graphics from the deleted
  *    PainPicker.tsx — numerals only, with the current level's word
  *    (PAIN_WORDS) rendered opposite the group label instead.
  *  - DIFFICULTY's selected fill moves off --accent onto --ink, so accent

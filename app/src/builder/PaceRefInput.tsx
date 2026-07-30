@@ -43,9 +43,9 @@ export default function PaceRefInput({
   invalid?: boolean;
   errorId?: string;
 }) {
-  // Roving tabindex (WAI-ARIA radiogroup pattern), same as PainPicker.tsx:
-  // the group is one tab stop and arrow keys move focus (and selection)
-  // within it.
+  // Roving tabindex (WAI-ARIA radiogroup pattern), same pattern the deleted
+  // PainPicker.tsx used: the group is one tab stop and arrow keys move
+  // focus (and selection) within it.
   const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   function selectByIndex(index: number) {
@@ -110,23 +110,25 @@ export default function PaceRefInput({
           );
         })}
       </div>
-      <button
-        type="button"
-        className="pace-ref-step"
-        aria-label={`${rowLabel} pace faster`}
-        onClick={() => step(-1)}
-      >
-        −
-      </button>
-      <span className="pace-ref-display">{formatRef(base, off)}</span>
-      <button
-        type="button"
-        className="pace-ref-step"
-        aria-label={`${rowLabel} pace slower`}
-        onClick={() => step(1)}
-      >
-        +
-      </button>
+      <div className="pace-ref-offset">
+        <button
+          type="button"
+          className="pace-ref-step"
+          aria-label={`${rowLabel} pace faster`}
+          onClick={() => step(-1)}
+        >
+          −
+        </button>
+        <span className="pace-ref-display">{formatRef(base, off)}</span>
+        <button
+          type="button"
+          className="pace-ref-step"
+          aria-label={`${rowLabel} pace slower`}
+          onClick={() => step(1)}
+        >
+          +
+        </button>
+      </div>
     </div>
   );
 }

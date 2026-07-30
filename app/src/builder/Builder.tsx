@@ -224,7 +224,11 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   // Available from both collapsed and expanded states; only closes the
   // editor when the row it removes is the one currently open — deleting a
   // collapsed row while a *different* row is expanded must leave that other
-  // row open.
+  // row open. Recorded departure from the design doc's "Interactions &
+  // behaviour" section, which says a delete always sets `editing = null`:
+  // that would collapse an unrelated, still-valid open row just because
+  // some other collapsed row was deleted, which this behaviour (tested
+  // above) avoids without losing anything the doc's version was for.
   function handleDeleteRow(id: string) {
     setForm((f) => removeRow(f, id));
     setEditing((current) => (current === id ? null : current));
@@ -321,7 +325,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
           ← BACK
         </Link>
         <h1 className="screen-title">
-          {mode ? "Edit Workout" : "New workout"}
+          {mode ? "Edit workout" : "New workout"}
         </h1>
       </div>
 
