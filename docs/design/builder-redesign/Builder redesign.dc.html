@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"></link>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"></link>
+<style>
+  body { margin:0; background:#e8e4d8; font-family:Archivo,system-ui,sans-serif; }
+  a { color:#b5341f; text-decoration:none; }
+  a:hover { color:#9c2c19; }
+  input, textarea { font-family:'IBM Plex Mono',monospace; }
+</style>
+</helmet>
+
+<div style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;color:#1b1a17;overflow:hidden">
+
+  <div style="flex:1;overflow-y:auto;padding:14px 20px 24px;display:flex;flex-direction:column;gap:18px">
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#6f6a5f;cursor:pointer">← BACK</div>
+      <div style="font-family:Newsreader,serif;font-size:30px;font-weight:500;letter-spacing:-0.01em">New workout</div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <input value="{{ title }}" onChange="{{ setTitle }}" placeholder="Title" style="flex:1;height:48px;background:#fffdf7;border:1px solid #c9c3b2;border-radius:2px;padding:0 12px;color:#1b1a17;font-family:Archivo,sans-serif;font-size:15px;outline:none"></input>
+      <div onClick="{{ roll }}" title="suggest an on-theme name" style="height:48px;flex:none;display:flex;align-items:center;justify-content:center;gap:6px;padding:0 14px;border:1px solid #1b1a17;background:#1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#fffdf7;cursor:pointer" style-hover="background:#3f3c35;border-color:#3f3c35"><span style="font-size:13px">↻</span>AUTO NAME</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px;background:#fffdf7;border:1px solid #ded8c9;border-radius:2px;padding:14px">
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">TYPE</span>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ types }}" as="t" hint-placeholder-count="4">
+            <div onClick="{{ t.onClick }}" style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:2px;border:1px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500;letter-spacing:0.06em">{{ t.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">DIFFICULTY</span>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ diffs }}" as="d" hint-placeholder-count="3">
+            <div onClick="{{ d.onClick }}" style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:2px;border:1px solid {{ d.border }};background:{{ d.bg }};color:{{ d.fg }};font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em">{{ d.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">EXPECTED PAIN</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#3f3c35">{{ painWord }}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <sc-for list="{{ pains }}" as="p" hint-placeholder-count="5">
+            <div onClick="{{ p.onClick }}" style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:2px;border:1px solid {{ p.border }};background:{{ p.bg }};color:{{ p.fg }};font-family:'IBM Plex Mono',monospace;font-size:13px">{{ p.n }}</div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">STEPS</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">{{ stepCount }}</span>
+      </div>
+
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="2">
+        <div style="display:flex;flex-direction:column;background:{{ r.cardBg }};border:1px solid {{ r.cardBorder }};border-left:3px solid {{ r.mark }};border-radius:2px">
+
+          <sc-if value="{{ r.closed }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:6px;padding:9px 9px 9px 11px">
+              <div onClick="{{ r.open }}" style="display:flex;align-items:baseline;gap:10px;cursor:pointer">
+                <span style="width:16px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;flex:none">{{ r.i }}</span>
+                <span style="flex:1;min-width:0;font-family:'IBM Plex Mono',monospace;font-size:14px;color:#1b1a17;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.summary }}</span>
+                <sc-if value="{{ r.showSplit }}" hint-placeholder-val="{{ true }}">
+                  <span style="flex:none;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c;white-space:nowrap">{{ r.pace }}</span>
+                </sc-if>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span onClick="{{ r.open }}" style="flex:1;min-width:0;padding-left:26px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#57544c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer">{{ r.sub }}</span>
+                <div style="display:flex;flex:none;border:1px solid #d8d3c4;border-radius:2px;background:#fffdf7;overflow:hidden">
+                  <div onClick="{{ r.open }}" style="width:48px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#3f3c35;cursor:pointer" style-hover="background:#efeade">EDIT</div>
+                  <div onClick="{{ r.quickCopy }}" title="duplicate step" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#3f3c35;cursor:pointer" style-hover="background:#efeade">⧉</div>
+                  <div onClick="{{ r.remove }}" title="delete step" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;font-size:17px;color:#6f6a5f;cursor:pointer" style-hover="background:#efeade;color:#b5341f">×</div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ r.editing }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px;padding:10px 11px 11px">
+
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">STEP {{ r.i }}</span>
+                <div onClick="{{ r.copy }}" style="height:44px;padding:0 12px;display:flex;align-items:center;justify-content:center;border:1px solid #d8d3c4;border-radius:2px;background:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#3f3c35;cursor:pointer" style-hover="border-color:#8a8478">DUPLICATE</div>
+                <div onClick="{{ r.remove }}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid #d8d3c4;border-radius:2px;background:#fffdf7;color:#6f6a5f;font-size:17px;cursor:pointer" style-hover="border-color:#b5341f;color:#b5341f">×</div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#6f6a5f">DUR</span>
+                <input value="{{ r.dur }}" onChange="{{ r.setDur }}" style="flex:1;min-width:0;height:44px;background:#fffdf7;border:1px solid #c9c3b2;border-radius:2px;padding:0 10px;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:15px;outline:none"></input>
+                <div style="display:flex;flex:none;border:1px solid #c9c3b2;border-radius:2px;overflow:hidden">
+                  <div onClick="{{ r.setMin }}" style="width:56px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:{{ r.minBg }};color:{{ r.minFg }};font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em">MIN</div>
+                  <div onClick="{{ r.setMet }}" style="width:56px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-left:1px solid #c9c3b2;background:{{ r.metBg }};color:{{ r.metFg }};font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em">M</div>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#6f6a5f">PACE</span>
+                <div style="display:flex;flex:none;border:1px solid #c9c3b2;border-radius:2px;overflow:hidden">
+                  <div onClick="{{ r.set2k }}" style="width:48px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:{{ r.k2Bg }};color:{{ r.k2Fg }};font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em">2K</div>
+                  <div onClick="{{ r.set6k }}" style="width:48px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-left:1px solid #c9c3b2;background:{{ r.k6Bg }};color:{{ r.k6Fg }};font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em">6K</div>
+                </div>
+                <div style="flex:1;min-width:0;display:flex;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;overflow:hidden">
+                  <div onClick="{{ r.offDown }}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">−</div>
+                  <span style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17;border-left:1px solid #ded8c9;border-right:1px solid #ded8c9">{{ r.offLabel }}</span>
+                  <div onClick="{{ r.offUp }}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">+</div>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#6f6a5f">SPM</span>
+                <div style="flex:1;display:flex;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;overflow:hidden">
+                  <div onClick="{{ r.spmDown }}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">−</div>
+                  <span style="flex:1;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:15px;color:{{ r.spmFg }};border-left:1px solid #ded8c9;border-right:1px solid #ded8c9">{{ r.spmLabel }}</span>
+                  <div onClick="{{ r.spmUp }}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">+</div>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#6f6a5f">REST</span>
+                <div style="flex:1;display:flex;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;overflow:hidden">
+                  <div onClick="{{ r.restDown }}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">−</div>
+                  <span style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:15px;color:{{ r.restFg }};border-left:1px solid #ded8c9;border-right:1px solid #ded8c9">{{ r.restLabel }}</span>
+                  <div onClick="{{ r.restUp }}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">+</div>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:#efeade;border:1px solid #ded8c9;border-radius:2px;padding:0 12px;height:44px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TARGET</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17">{{ r.pace }}</span>
+              </div>
+
+              <div onClick="{{ r.done }}" style="height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #1b1a17;border-radius:2px;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;cursor:pointer" style-hover="background:#3f3c35;border-color:#3f3c35">DONE</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <div onClick="{{ addRow }}" style="height:48px;display:flex;align-items:center;justify-content:center;border:1px dashed #c9c3b2;border-radius:2px;color:#57544c;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;cursor:pointer" style-hover="color:#b5341f;border-color:#b5341f">+ ADD STEP</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;background:#fffdf7;border:1px solid #ded8c9;border-radius:2px;padding:14px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">REPEAT ALL STEPS</span>
+        <div style="display:flex;flex:none;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;overflow:hidden">
+          <div onClick="{{ repsDown }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">−</div>
+          <span style="width:52px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17;border-left:1px solid #ded8c9;border-right:1px solid #ded8c9">{{ repsLabel }}</span>
+          <div onClick="{{ repsUp }}" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#1b1a17;font-family:'IBM Plex Mono',monospace;font-size:17px" style-hover="background:#efeade">+</div>
+        </div>
+      </div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#57544c">{{ setLabel }}</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #ded8c9;padding-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#6f6a5f">TOTAL</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:19px;color:#1b1a17">{{ total }}</span>
+      </div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6f6a5f">+ 10′ warm-up from your preferences</span>
+    </div>
+
+    <div onClick="{{ noop }}" style="height:62px;flex:none;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">Save to library</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;restStep&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:30,&quot;tsType&quot;:&quot;number&quot;,&quot;options&quot;:[15,30,60],&quot;section&quot;:&quot;Behaviour&quot;},&quot;splitOnCollapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behaviour&quot;},&quot;paceTolerance&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:0,&quot;max&quot;:3,&quot;step&quot;:0.5,&quot;unit&quot;:&quot;s&quot;,&quot;section&quot;:&quot;Pace math&quot;}}">
+const TYPE_COLORS = { AN: '#5c4382', O2: '#2a6275', AT: '#8a5f18', TR: '#b5341f' };
+const PAIN_COLORS = ['#5b6b46', '#6e7040', '#8a5f18', '#a3491f', '#b5341f'];
+const PAIN_WORDS = ['EASY BREATH', 'COMFORTABLE', 'WORKING', 'HURTS', 'BRUTAL'];
+const NAMES = ['Zephyr', 'Squall', 'Doldrums', 'Monsoon', 'Cirrus', 'Hailstone'];
+const BASE = { '2K': 112.0, '6K': 121.0 };
+
+class Component extends DCLogic {
+  state = {
+    title: 'Screenshot Intervals',
+    type: 'O2',
+    diff: 'EASY',
+    pain: 3,
+    reps: 4,
+    editing: null,
+    nextId: 3,
+    rows: [
+      { id: 1, dur: '20', unit: 'MIN', ref: '6K', off: 10, spm: 20, rest: 90 },
+      { id: 2, dur: '2000', unit: 'M', ref: '2K', off: 0, spm: 26, rest: 180 }
+    ]
+  };
+
+  set(id, patch) {
+    this.setState(s => ({ rows: s.rows.map(r => (r.id === id ? { ...r, ...patch } : r)) }));
+  }
+
+  fmt(sec) {
+    const m = Math.floor(sec / 60);
+    const r = sec - m * 60;
+    return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1);
+  }
+
+  clock(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec - m * 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  splitSec(r) { return BASE[r.ref] + r.off; }
+
+  rowSec(r) {
+    const n = parseFloat(r.dur) || 0;
+    return r.unit === 'MIN' ? n * 60 : (n / 500) * this.splitSec(r);
+  }
+
+  renderVals() {
+    const tol = this.props.paceTolerance ?? 1;
+    const step = this.props.restStep ?? 30;
+    const showSplit = this.props.splitOnCollapsed ?? true;
+    const st = this.state;
+    const accent = '#b5341f';
+
+    const rows = st.rows.map((r, i) => {
+      const editing = st.editing === r.id;
+      const sSec = this.splitSec(r);
+      const offLabel = (r.off > 0 ? '+' : r.off < 0 ? '−' : '±') + Math.abs(r.off);
+      const durLabel = r.unit === 'MIN' ? (parseFloat(r.dur) || 0) + '′' : r.dur + ' m';
+      const restLabel = r.rest ? this.clock(r.rest) : 'NONE';
+      const pace = this.fmt(sSec - tol) + '–' + this.fmt(sSec + tol);
+      const bits = [];
+      if (r.spm) bits.push(r.spm + ' spm');
+      bits.push('rest ' + restLabel.toLowerCase());
+      return {
+        i: i + 1,
+        editing,
+        closed: !editing,
+        showSplit,
+        quickCopy: () => this.setState(s => {
+          const id = s.nextId;
+          const idx = s.rows.findIndex(x => x.id === r.id);
+          const next = s.rows.slice();
+          next.splice(idx + 1, 0, { ...r, id });
+          return { rows: next, nextId: id + 1 };
+        }),
+        mark: editing ? TYPE_COLORS[st.type] : '#ded8c9',
+        cardBg: editing ? '#fffdf7' : '#fbf9f1',
+        cardBorder: editing ? '#c9c3b2' : '#ded8c9',
+        summary: durLabel + ' @ ' + r.ref.toLowerCase() + ' ' + offLabel,
+        sub: bits.join(' · '),
+        dur: r.dur,
+        offLabel: r.ref.toLowerCase() + ' ' + offLabel,
+        spmLabel: r.spm ? String(r.spm) : 'FREE',
+        spmFg: r.spm ? '#1b1a17' : '#6f6a5f',
+        restLabel,
+        restFg: r.rest ? '#1b1a17' : '#6f6a5f',
+        pace,
+        minBg: r.unit === 'MIN' ? accent : '#fffdf7',
+        minFg: r.unit === 'MIN' ? '#fffdf7' : '#3f3c35',
+        metBg: r.unit === 'M' ? accent : '#fffdf7',
+        metFg: r.unit === 'M' ? '#fffdf7' : '#3f3c35',
+        k2Bg: r.ref === '2K' ? accent : '#fffdf7',
+        k2Fg: r.ref === '2K' ? '#fffdf7' : '#3f3c35',
+        k6Bg: r.ref === '6K' ? accent : '#fffdf7',
+        k6Fg: r.ref === '6K' ? '#fffdf7' : '#3f3c35',
+        open: () => this.setState({ editing: r.id }),
+        done: () => this.setState({ editing: null }),
+        setDur: e => this.set(r.id, { dur: e.target.value }),
+        setMin: () => this.set(r.id, { unit: 'MIN' }),
+        setMet: () => this.set(r.id, { unit: 'M' }),
+        set2k: () => this.set(r.id, { ref: '2K' }),
+        set6k: () => this.set(r.id, { ref: '6K' }),
+        offUp: () => this.set(r.id, { off: Math.min(30, r.off + 1) }),
+        offDown: () => this.set(r.id, { off: Math.max(-15, r.off - 1) }),
+        spmUp: () => this.set(r.id, { spm: Math.min(40, (r.spm || 17) + 1) }),
+        spmDown: () => this.set(r.id, { spm: r.spm <= 16 ? 0 : r.spm - 1 }),
+        restUp: () => this.set(r.id, { rest: Math.min(900, r.rest + step) }),
+        restDown: () => this.set(r.id, { rest: Math.max(0, r.rest - step) }),
+        copy: () => this.setState(s => {
+          const id = s.nextId;
+          const idx = s.rows.findIndex(x => x.id === r.id);
+          const next = s.rows.slice();
+          next.splice(idx + 1, 0, { ...r, id });
+          return { rows: next, nextId: id + 1, editing: id };
+        }),
+        remove: () => this.setState(s => ({ rows: s.rows.filter(x => x.id !== r.id), editing: null }))
+      };
+    });
+
+    const perSet = st.rows.reduce((a, r) => a + this.rowSec(r) + r.rest, 0);
+    const totalMin = Math.round((perSet * st.reps) / 60);
+
+    return {
+      title: st.title,
+      setTitle: e => this.setState({ title: e.target.value }),
+      roll: () => this.setState({ title: NAMES[Math.floor(Math.random() * NAMES.length)] }),
+      types: Object.keys(TYPE_COLORS).map(k => ({
+        label: k,
+        bg: st.type === k ? TYPE_COLORS[k] : '#fffdf7',
+        fg: st.type === k ? '#fffdf7' : '#3f3c35',
+        border: st.type === k ? TYPE_COLORS[k] : '#d8d3c4',
+        onClick: () => this.setState({ type: k })
+      })),
+      diffs: ['EASY', 'MEDIUM', 'HARD'].map(k => ({
+        label: k,
+        bg: st.diff === k ? '#1b1a17' : '#fffdf7',
+        fg: st.diff === k ? '#fffdf7' : '#3f3c35',
+        border: st.diff === k ? '#1b1a17' : '#d8d3c4',
+        onClick: () => this.setState({ diff: k })
+      })),
+      pains: [1, 2, 3, 4, 5].map(n => ({
+        n,
+        bg: st.pain === n ? PAIN_COLORS[n - 1] : '#fffdf7',
+        fg: st.pain === n ? '#fffdf7' : '#6f6a5f',
+        border: st.pain === n ? PAIN_COLORS[n - 1] : '#d8d3c4',
+        onClick: () => this.setState({ pain: n })
+      })),
+      painWord: PAIN_WORDS[st.pain - 1],
+      stepCount: st.rows.length + (st.rows.length === 1 ? ' STEP' : ' STEPS'),
+      rows,
+      addRow: () => this.setState(s => {
+        const id = s.nextId;
+        const last = s.rows[s.rows.length - 1];
+        const seed = last ? { ...last, id } : { id, dur: '5', unit: 'MIN', ref: '6K', off: 0, spm: 22, rest: 60 };
+        return { rows: s.rows.concat([seed]), nextId: id + 1, editing: id };
+      }),
+      reps: st.reps,
+      repsLabel: '×' + st.reps,
+      repsUp: () => this.setState(s => ({ reps: Math.min(20, s.reps + 1) })),
+      repsDown: () => this.setState(s => ({ reps: Math.max(1, s.reps - 1) })),
+      setLabel: st.rows.length + ' steps · ' + this.clock(perSet) + ' per set',
+      total: totalMin + ' MIN',
+      noop: () => {}
+    };
+  }
+}
+</script>
+</body>
+</html>
