@@ -347,7 +347,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             key={row.id}
             row={row}
             index={index}
-            inSet={index >= spanStart}
+            inSet={index >= spanStart && form.reps > 1}
             baselines={baselines}
             tolerance={tolerance}
             fieldError={(field) => errors[`row:${row.id}:${field}`]}
@@ -412,6 +412,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       {rowsInSet > 0 && form.reps > 1 && (
         <p className="mono-status builder-repeat-readout">
           {rowsInSet} row{rowsInSet === 1 ? "" : "s"} repeat
+          {rowsInSet === 1 ? "s" : ""}
           {totalsResult ? ` · ${fmtMinutes(totalsResult.perSet)} per set` : ""}
         </p>
       )}

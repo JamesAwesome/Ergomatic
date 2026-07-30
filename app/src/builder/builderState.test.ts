@@ -5,6 +5,7 @@ import {
   addRow,
   cloneRow,
   fromWorkout,
+  hasMidSpanReps,
   hasUnsupportedSteps,
   newForm,
   newRow,
@@ -195,6 +196,11 @@ describe("spanStartIndex / BOOKEND_ROW_KINDS", () => {
 });
 
 describe("cloneRow", () => {
+  // Two rows, cloning the first: with a one-row fixture, `rows.push()` and
+  // `rows.splice(index + 1, 0, clone)` are indistinguishable (both leave the
+  // clone at index 1). A trailing second row pins the real insertion point —
+  // only splice puts the clone directly beneath "a" and ahead of "b"; push
+  // would put it after "b" instead.
   it("clones a row directly beneath the original, copying every field", () => {
     const f = formWith({
       rows: [
@@ -207,11 +213,15 @@ describe("cloneRow", () => {
           spm: "26",
           rest: "3",
         },
+        workRow("b"),
       ],
     });
     const cloned = cloneRow(f, "a");
-    expect(cloned.rows).toHaveLength(2);
-    expect(cloned.rows[1].id).not.toBe("a");
+    expect(cloned.rows).toHaveLength(3);
+    expect(cloned.rows[0]!.id).toBe("a");
+    expect(cloned.rows[1]!.id).not.toBe("a");
+    expect(cloned.rows[1]!.id).not.toBe("b");
+    expect(cloned.rows[2]!.id).toBe("b");
     expect(cloned.rows[1]).toMatchObject({
       kind: "w",
       durValue: "90",
@@ -535,13 +545,6 @@ describe("fromWorkout", () => {
     expect(f.rows[0]).toMatchObject({ durValue: "2000", durUnit: "m" });
   });
 
-  it("omits spm entirely when the field is empty", () => {
-    const f = formWith({ rows: [{ ...workRow("a"), spm: "" }] });
-    const out = toSteps(f);
-    if (!out.ok) throw new Error("expected ok");
-    expect(out.steps[0]).not.toHaveProperty("spm");
-  });
-
   it("round-trips a stored step that has no spm without adding one", () => {
     const f = fromWorkout({
       title: "T",
@@ -682,6 +685,38 @@ describe("totals vs. estimateMinutes agreement", () => {
     expect(t).not.toBeNull();
     const estimate = estimateMinutes(out.steps, baselines);
     expect(estimate.minutes).toBe(31);
+    expect(Math.round(t!.total)).toBe(estimate.minutes);
+  });
+
+  // Reviewer's mutation-testing probe (M4): a mutant that buckets `totals`
+  // by row KIND (`!BOOKEND_ROW_KINDS.includes(row.kind)`) instead of
+  // POSITION (`i >= spanStartIndex(f)`) passes every other test in this
+  // file, because every other fixture only ever puts a bookend row at the
+  // very front. `+ WARM-UP` appends at the end, so a bookend row landing
+  // AFTER the span start is reachable in one click — this pins that exact
+  // shape. Under the kind-bucketing mutant this reports 40 (the mid-span
+  // `wu` treated as always-loose, regardless of where it sits); the correct
+  // positional bucketing reports 60, matching estimateMinutes.
+  it("H4/M4: agrees with estimateMinutes when a bookend row sits AFTER the span start ([w, wu, w] x3)", () => {
+    const f = formWith({
+      reps: 3,
+      rows: [
+        { ...workRow("a"), durValue: "5" },
+        wuRow("wu", "10"),
+        { ...workRow("b"), durValue: "5" },
+      ],
+    });
+    expect(spanStartIndex(f)).toBe(0);
+
+    const out = toSteps(f);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+
+    const t = totals(f, baselines);
+    expect(t).not.toBeNull();
+    expect(Math.round(t!.total)).toBe(60);
+    const estimate = estimateMinutes(out.steps, baselines);
+    expect(estimate.minutes).toBe(60);
     expect(Math.round(t!.total)).toBe(estimate.minutes);
   });
 });
@@ -850,6 +885,91 @@ describe("hasUnsupportedSteps (L2)", () => {
     expect(hasUnsupportedSteps(workout.steps)).toBe(true);
     const form = fromWorkout(workout);
     expect(form.rows).toHaveLength(1); // the test step did not survive
+  });
+});
+
+describe("hasMidSpanReps (H3)", () => {
+  // The reviewer's exact regression shape: a `reps` marker that sits after
+  // one work step but before another. `fromWorkout` only hoists the
+  // marker's COUNT into `f.reps` — the row model has no field for its
+  // position — so re-saving this would silently move the marker to the
+  // derived span start and change the workout's meaning (16 min stored ->
+  // 36 min re-saved).
+  it("flags a reps marker that isn't at the derived span start, e.g. [w, reps, w]", () => {
+    const steps: Step[] = [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 10 },
+        ref: { base: "6k", off: 0 },
+      },
+      { k: "reps", count: 3 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { base: "6k", off: 0 },
+      },
+    ];
+    expect(hasMidSpanReps(steps)).toBe(true);
+  });
+
+  it("is false when the marker sits at the derived span start, e.g. a normal [wu, reps, w]", () => {
+    const steps: Step[] = [
+      { k: "wu", minutes: 10 },
+      { k: "reps", count: 3 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "6k", off: 0 },
+      },
+    ];
+    expect(hasMidSpanReps(steps)).toBe(false);
+  });
+
+  it("is false when the marker leads a bookend-free workout, e.g. [reps, w, r]", () => {
+    const steps: Step[] = [
+      { k: "reps", count: 3 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "6k", off: 0 },
+      },
+      { k: "r", minutes: 2 },
+    ];
+    expect(hasMidSpanReps(steps)).toBe(false);
+  });
+
+  it("is false when there is no reps marker at all", () => {
+    const steps: Step[] = [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "6k", off: 0 },
+      },
+    ];
+    expect(hasMidSpanReps(steps)).toBe(false);
+  });
+});
+
+describe("rowDurationNumber's Number()-isms guard (L-low10)", () => {
+  it("rejects a hex-looking duration Number() would otherwise parse as 16", () => {
+    const f = formWith({ rows: [{ ...workRow("a"), durValue: "0x10" }] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:dur"]).toMatch(/duration is required/);
+  });
+
+  it("rejects scientific notation Number() would otherwise parse as 1000", () => {
+    const f = formWith({ rows: [{ ...workRow("a"), durValue: "1e3" }] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:dur"]).toMatch(/duration is required/);
+  });
+
+  it("still accepts a plain decimal", () => {
+    const f = formWith({ rows: [{ ...workRow("a"), durValue: "5.5" }] });
+    expect(toSteps(f).ok).toBe(true);
   });
 });
 

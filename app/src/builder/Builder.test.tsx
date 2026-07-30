@@ -237,9 +237,11 @@ describe("Builder", () => {
     };
     await renderBuilder({ kind: "edit", id: "w1", initial });
 
-    // total = loose(10, the warm-up) + perSet(5) * reps(3) = 25.
+    // total = loose(10, the warm-up) + perSet(5) * reps(3) = 25. Exact
+    // singular-verb spelling ("1 row repeats", not "1 row repeat") — a
+    // looser `repeats?` regex here would mask a grammar regression.
     expect(
-      screen.getByText(/^1 row repeats? · 5:00 per set$/),
+      screen.getByText("1 row repeats · 5:00 per set"),
     ).toBeInTheDocument();
     expect(screen.getByText(/^TOTAL 25 MIN$/)).toBeInTheDocument();
   });

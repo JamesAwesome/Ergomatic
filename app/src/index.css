@@ -718,17 +718,13 @@ button:disabled {
   color: var(--ink-4);
 }
 
-/* Widths match the row fields directly below (.set-toggle / .field-dur /
-   .field-spm / .field-rest / .row-delete) so each label sits over its
-   column — see the comment on ColumnHeader in Builder.tsx. There is no
-   PACE REF column any more (.pace-ref-input, below, spans its own
-   full-width line beneath the row, not a slot in this header). */
+/* Widths match the row fields directly below (.field-dur / .field-spm /
+   .field-rest / .row-delete) so each label sits over its column — see the
+   comment on ColumnHeader in Builder.tsx. There is no PACE REF column any
+   more (.pace-ref-input, below, spans its own full-width line beneath the
+   row, not a slot in this header). */
 .builder-columns span {
   text-align: center;
-}
-
-.col-set {
-  width: var(--tap);
 }
 
 .col-dur {
@@ -780,23 +776,6 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.set-toggle {
-  min-width: var(--tap);
-  min-height: var(--tap);
-  background: transparent;
-  border: 1px solid var(--rule-3);
-  color: var(--ink-4);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.set-toggle[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--on-color);
-  border: none;
 }
 
 .step-row-editor-line1 input {

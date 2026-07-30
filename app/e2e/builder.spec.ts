@@ -78,7 +78,7 @@ test.describe("authoring loop", () => {
     const title = "Exit Criterion Row";
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 3" }).click();
-    await page.getByLabel("Row 1 duration").fill("20'");
+    await page.getByLabel("Row 1 duration").fill("20");
     // Base defaults to 6k (builderState.ts's newRow) — two clicks on the
     // faster stepper reaches the "-2" offset the exit criterion needs.
     const fasterButton = page.getByRole("button", {
@@ -169,7 +169,7 @@ test.describe("authoring loop", () => {
     const originalTitle = "Edit Target Row";
     await page.getByLabel("Title").fill(originalTitle);
     await page.getByRole("radio", { name: "Pain 2" }).click();
-    await page.getByLabel("Row 1 duration").fill("10'");
+    await page.getByLabel("Row 1 duration").fill("10");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
@@ -208,7 +208,7 @@ test.describe("authoring loop", () => {
     const title = "Delete Me Row";
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 1" }).click();
-    await page.getByLabel("Row 1 duration").fill("5'");
+    await page.getByLabel("Row 1 duration").fill("5");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
