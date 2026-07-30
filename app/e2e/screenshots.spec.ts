@@ -138,8 +138,16 @@ test("builder", async ({ page }) => {
   // any save.
   await expect(page.locator(".step-row-range")).toHaveCount(2);
   await expect(page.locator(".builder-repeat-readout")).toBeVisible();
+  // fillSampleWorkout scrolls the page down while filling rows near the
+  // bottom of the form, so a viewport-only screenshot here would start at
+  // DIFFICULTY and never show `← BACK`, the "New Workout" heading, the
+  // Title field, or the 🎲 — the two most visible before/after changes of
+  // this phase (the retired No. field, the new dice control). fullPage
+  // captures the whole scrollable form regardless of current scroll
+  // position.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "builder.png"),
+    fullPage: true,
   });
 });
 

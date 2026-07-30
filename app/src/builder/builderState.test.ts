@@ -426,6 +426,42 @@ describe("toSteps", () => {
     expect(toSteps(f).ok).toBe(false);
   });
 
+  // Final-review fix wave item 1: rest must accept the same optional-
+  // apostrophe grammar as dur (parseDurationInput), not a bare Number() —
+  // otherwise the literal `5'` from James's device screenshot is rejected
+  // by REST while DUR accepts it, 40px apart on the same row.
+  it("accepts a bare number rest, matching dur's optional apostrophe", () => {
+    const f = formWith({ rows: [{ ...defaultValidRow(), rest: "5" }] });
+    const out = toSteps(f);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps[0]).toMatchObject({ restMinutes: 5 });
+  });
+
+  it("accepts an apostrophe rest, e.g. 5'", () => {
+    const f = formWith({ rows: [{ ...defaultValidRow(), rest: "5'" }] });
+    const out = toSteps(f);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps[0]).toMatchObject({ restMinutes: 5 });
+  });
+
+  it("rejects a distance in the rest field with a message that doesn't mention the apostrophe", () => {
+    const f = formWith({ rows: [{ ...defaultValidRow(), rest: "2500m" }] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:default:rest"]).toMatch(/rest must be minutes/);
+  });
+
+  it("still enforces the rest half-step bound", () => {
+    const f = formWith({ rows: [{ ...defaultValidRow(), rest: "0.25" }] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:default:rest"]).toMatch(/0\.5\.\.60 in 0\.5 steps/);
+  });
+
   it("requires a title", () => {
     const out = toSteps(formWith({ title: "" }));
     expect(out.ok).toBe(false);

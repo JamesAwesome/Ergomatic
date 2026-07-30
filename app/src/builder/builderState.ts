@@ -263,12 +263,18 @@ export function toSteps(
 
     let restMinutes: number | undefined;
     if (row.rest.trim() !== "") {
-      const n = Number(row.rest.trim());
-      if (!isHalfStep(n, 0.5, 60)) {
+      // Same duration grammar as `dur` (bare number or `5'`, both minutes) —
+      // rest is always time, so a `2500m`-shaped distance is rejected here
+      // rather than silently misread as a number.
+      const restDuration = parseDurationInput(row.rest.trim());
+      if (!restDuration || restDuration.kind !== "time") {
+        errors[`row:${row.id}:rest`] = "rest must be minutes, e.g. 5 or 5'";
+        rowOk = false;
+      } else if (!isHalfStep(restDuration.minutes, 0.5, 60)) {
         errors[`row:${row.id}:rest`] = "rest must be 0.5..60 in 0.5 steps";
         rowOk = false;
       } else {
-        restMinutes = n;
+        restMinutes = restDuration.minutes;
       }
     }
 
@@ -317,8 +323,10 @@ function rowMinutes(
   // phase after a work step, so the builder's total must add it here too or
   // the two disagree on the same workout's length.
   if (row.kind === "w" && row.rest.trim() !== "") {
-    const rest = Number(row.rest.trim());
-    if (Number.isFinite(rest)) minutes += rest;
+    const restDuration = parseDurationInput(row.rest.trim());
+    if (restDuration && restDuration.kind === "time") {
+      minutes += restDuration.minutes;
+    }
   }
 
   return minutes;
@@ -378,11 +386,13 @@ function stepToRow(
     row.refBase = s.ref.base;
     row.refOff = s.ref.off;
     row.spm = s.spm !== undefined ? String(s.spm) : "";
-    // Unlike `dur` (which uses the `10'`/`2500m` duration grammar), `rest`
-    // is parsed in toSteps as a bare number of minutes — no apostrophe.
-    // This must produce exactly what toSteps' `Number(row.rest.trim())`
-    // expects, or round-tripping a stored workout with restMinutes set
-    // produces an unparseable field and the edit can't be saved.
+    // `rest` uses the same duration grammar as `dur` (parseDurationInput),
+    // restricted to `kind: "time"`. Writing the bare number form (no
+    // apostrophe) here is just this function's choice of round-trip
+    // spelling — toSteps accepts either, so this must keep producing
+    // something parseDurationInput reads back as the same minutes, or
+    // round-tripping a stored workout with restMinutes set produces an
+    // unparseable field and the edit can't be saved.
     row.rest = s.restMinutes !== undefined ? String(s.restMinutes) : "";
   }
   return row;

@@ -16,7 +16,6 @@ const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
 function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   return {
-    num: 1,
     title: "T",
     type: "O2",
     difficulty: "easy",
