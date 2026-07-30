@@ -17,7 +17,7 @@ inline errors (`8k` typed as a pace ref, `500` spm, `5'` in rest) and
 | Duration | **Bare numbers mean minutes.** `5` = 5 minutes; `5'` still accepted; `2500m` for distance. The apostrophe was hostile on a phone keyboard |
 | Rest | **REST column only, labelled optional** (James's call). The `+ REST` button goes — but the builder keeps RENDERING standalone rest steps so a bulk-imported workout stays editable |
 | Numbers | **Dropped from the UI everywhere** (James's call) — builder, Library rows, detail |
-| `num` column | **Retired**, replaced by `sort_order` + `created_at`. Made nullable and unwritten this phase; `DROP COLUMN` is the first commit of Phase 6 so the health-gated rollback stays armed |
+| `num` column | **Retired**, replaced by `sort_order` + `created_at`. Made nullable and unwritten this phase, but Drizzle still selects it on every plain query while `schema.ts` declares it; Phase 6 opens with two releases — drop it from `schema.ts` and deploy green, then `DROP COLUMN` — so the health-gated rollback stays armed |
 | Globals vs customs | **One table, nullable owner** — splitting was considered and rejected (would force a polymorphic FK the DB can't enforce, voiding the logs-survive-delete guarantee) |
 | Bulk paste header | **Number optional**: accept 4 or 5 fields, so existing paste text keeps working |
 | Save | Scrolls to and focuses the first invalid field, with a count at the button |
@@ -75,14 +75,21 @@ nothing.
     `ORDER BY sort_order NULLS LAST, created_at` gives the starter library
     first in its authored order, then the rower's own by creation.
   - Make `num` **nullable**, drop its partial unique indexes, and stop
-    writing it. Nothing reads it after this phase.
+    writing it. No application code reads it by name after this phase — but
+    `app/server/db/schema.ts` still declares the column, and Drizzle expands
+    a schema into an explicit column list for every projection-less
+    `db.select()`, so this phase's image still selects `num` off the wire on
+    every plain workout query. The column is unused, not unread.
   - **Do NOT drop the column this phase.** `scripts/deploy.sh` rolls back to
-    the previous image when a deploy comes up unhealthy; if the same release
-    both drops `num` and ships code that no longer needs it, an unhealthy
-    deploy rolls back to old code that still `SELECT`s a column that no
-    longer exists — so the rollback fails too, turning a recoverable deploy
-    into a dead site. **The `DROP COLUMN` is the first commit of Phase 6**,
-    after one green deploy has proven the new code runs without it.
+    the previous image when a deploy comes up unhealthy; if a release both
+    removes `num` from `schema.ts` and drops the column, an unhealthy deploy
+    rolls back to the old image, which still selects a column that no longer
+    exists — so the rollback fails too, turning a recoverable deploy into a
+    dead site. **Phase 6 therefore opens with two separate releases**: first,
+    remove `num` from `schema.ts` (no migration) and deploy green — only
+    then does a second release run the `DROP COLUMN` migration, once a green
+    deploy has proven the schema change alone is safe to roll back to. See
+    ROADMAP.md's Phase 6 entry.
 - **No `max(num) + 1`.** An earlier draft of this spec proposed computing the
   next number at insert time. That is a contention anti-pattern — it
   serializes concurrent inserts and needs a lock or a retry loop. With `num`
@@ -152,9 +159,16 @@ looping forever. Pure and seedable so tests are deterministic (no
   (duration grammar, optional header number), so its tests grow with it.
 - **Exit:** James can author a workout on his phone without typing an
   apostrophe, without inventing a number, without reaching an invalid pace
-  ref, and with Save telling him what's wrong when it refuses. Nothing in the
-  codebase reads `workouts.num` afterwards — verified by grep, which is the
-  precondition for Phase 6's `DROP COLUMN`.
+  ref, and with Save telling him what's wrong when it refuses. No application
+  code references `workouts.num` by name afterwards — verified by grep. That
+  is **not** the same as "nothing reads the column": `app/server/db/schema.ts`
+  still declares it, and Drizzle expands a schema into an explicit column
+  list for every projection-less `db.select()`, so this phase's image still
+  puts `num` on the wire on every plain workout query. Because of that, the
+  `DROP COLUMN` cannot be Phase 6's first commit on its own — Phase 6 opens
+  with an intermediate release that removes `num` from `schema.ts` (no
+  migration) and deploys green, only then does the `DROP COLUMN` release
+  follow. See ROADMAP.md's Phase 6 entry for the sequencing.
 
 ## Out of scope
 

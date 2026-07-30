@@ -343,6 +343,24 @@ w 1' 6k-2`);
     expect(result.workouts[0]).not.toHaveProperty("num");
   });
 
+  // Final-review fix wave item 6: documents two header ambiguities that
+  // parseHeader's four-vs-five-field heuristic produces. Not a bug fix —
+  // the parser isn't changed — just recording the current behavior so the
+  // next reader learns it from the suite instead of rediscovering it.
+  it("documents a 4-field header with a numeric-looking title parsing as that title, not a leading number", () => {
+    const result = parseBulk(`12 | AT | medium | 3
+w 1' 6k-2`);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts[0].title).toBe("12");
+  });
+
+  it("documents a 5-field header silently discarding a non-numeric leading token as if it were the legacy number", () => {
+    const result = parseBulk(`Ladder | Day | AT | medium | 3
+w 1' 6k-2`);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts[0].title).toBe("Day");
+  });
+
   it("names both accepted header shapes when the field count is wrong", () => {
     const result = parseBulk(`One | Two | Three
 w 1' 6k-2`);

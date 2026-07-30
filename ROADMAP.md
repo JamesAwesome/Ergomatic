@@ -159,6 +159,17 @@ they go stale (this has burned us before). Concretely:
 **Status:** Not started
 **Goal:** The app replaces paper for an entire workout — the core loop.
 
+- [ ] **`num` column retirement is TWO separate releases, not one** (before
+      any other Phase 6 work): (a) remove `num` from
+      `app/server/db/schema.ts` with no migration, deploy green; only then
+      (b) run the `DROP COLUMN num` migration. Reason: Drizzle expands a
+      schema into an explicit column list for every projection-less
+      `db.select()`, so as long as `schema.ts` declares `num`, every plain
+      workout query puts it on the wire — if a single release both removed
+      it from `schema.ts` and dropped the column, an unhealthy deploy would
+      make `scripts/deploy.sh` roll back to the old image, which still
+      selects a column that no longer exists, so the rollback itself fails
+      and turns a recoverable deploy into a dead site.
 - [ ] Today screen: suggestion engine + reason line, SHUFFLE, swap pool (`todayPick`), last three
 - [ ] Confirm targets: per-run session overlay (duration steppers, rep stepper, step removal/restore, live minute recount) — timer reads the session copy, never the library workout; per-step SPM adjustment at workout start (18-32 range), alongside the split nudge
 - [ ] Countdown (configurable, skippable, 0 = off)

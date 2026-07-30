@@ -11,7 +11,6 @@ describe("useWorkouts", () => {
     const rows = [
       {
         id: "w1",
-        num: 1,
         title: "Zephyr",
         type: "O2",
         difficulty: "easy",
@@ -57,7 +56,6 @@ describe("useWorkouts", () => {
     const rows = [
       {
         id: "w1",
-        num: 1,
         title: "Zephyr",
         type: "O2",
         difficulty: "easy",
