@@ -38,35 +38,26 @@ export default function StepRowEditor({
   row,
   index,
   inSet,
-  isBlockStart,
   baselines,
   tolerance,
   fieldError,
   onChange,
-  onSetBlockStart,
   onRemove,
   registerRef,
 }: {
   row: BuilderRow;
   index: number;
-  // Whether this row falls inside the repeated block — computed by the
-  // parent from `setRowIds(form)`, NOT from `row.marked`. The domain
-  // repeats everything positioned after the first marked row, so every row
-  // from there on is "in the set" even if its own `marked` flag is false;
-  // both the left-rule highlight and the SET cell's filled state must
-  // agree with that, or the row would visually contradict the totals the
-  // same module computes.
+  // Whether this row falls inside the derived repeat span — computed by the
+  // parent from `spanStartIndex(form)`. Only used for the left-rule
+  // highlight now; the per-row SET toggle that used to live in this
+  // component is gone along with the marking model it drove (Phase 5D
+  // Task 2) — a future task adds the real ×N/clone controls this row will
+  // need instead.
   inSet: boolean;
-  // Whether this row is specifically the block's current start (the first
-  // marked row), not merely inside it — determines what clicking the SET
-  // cell does (move/start the block vs. clear it) and what its accessible
-  // name says, so it has to be more precise than `inSet`.
-  isBlockStart: boolean;
   baselines: Baselines | null;
   tolerance: number;
   fieldError: (field: RowField) => string | undefined;
   onChange: (patch: Partial<BuilderRow>) => void;
-  onSetBlockStart: () => void;
   onRemove: () => void;
   // Lets the parent build a `row:<id>:<field>` → element map (the same keys
   // `toSteps` uses for its error object) so a failed Save can focus the
@@ -91,17 +82,6 @@ export default function StepRowEditor({
       }
     >
       <div className="step-row-editor-line1">
-        <button
-          type="button"
-          className="set-toggle"
-          aria-pressed={inSet}
-          aria-label={
-            isBlockStart ? "Clear the repeat set" : "Start the repeat set here"
-          }
-          onClick={onSetBlockStart}
-        >
-          ↻
-        </button>
         <input
           ref={(el) => registerRef?.("dur", el)}
           className="field-dur"
@@ -109,8 +89,8 @@ export default function StepRowEditor({
           aria-invalid={Boolean(fieldError("dur"))}
           aria-describedby={fieldError("dur") ? errorId("dur") : undefined}
           placeholder={isWork ? "5' or 2500m" : "10'"}
-          value={row.dur}
-          onChange={(e) => onChange({ dur: e.target.value })}
+          value={row.durValue}
+          onChange={(e) => onChange({ durValue: e.target.value })}
         />
         {isWork && (
           <>

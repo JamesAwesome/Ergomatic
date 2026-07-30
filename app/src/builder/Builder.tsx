@@ -9,9 +9,8 @@ import {
   addRow,
   newForm,
   removeRow,
-  setBlockStart,
   setReps,
-  setRowIds,
+  spanStartIndex,
   toSteps,
   totals,
   type BuilderForm,
@@ -72,18 +71,20 @@ function fmtMinutes(minutes: number): string {
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
-// Widths mirror the actual row fields below (StepRowEditor's .set-toggle /
-// .field-dur / .field-spm / .field-rest, plus a spacer the width of
-// .row-delete) so each label sits over its column — see docs/design/Erg
-// Log.dc.html:765 for the handoff's equivalent fixed widths. Purely
-// decorative (aria-hidden), but it'll show in screenshots. There is no
-// PACE REF slot any more: PaceRefInput.tsx renders on its own full-width
-// line below the row rather than in a column, so a header slot for it would
-// just be dead space that pushes every column after it out of alignment.
+// Widths mirror the actual row fields below (StepRowEditor's .field-dur /
+// .field-spm / .field-rest, plus a spacer the width of .row-delete) so each
+// label sits over its column — see docs/design/Erg Log.dc.html:765 for the
+// handoff's equivalent fixed widths. Purely decorative (aria-hidden), but
+// it'll show in screenshots. There is no PACE REF slot any more:
+// PaceRefInput.tsx renders on its own full-width line below the row rather
+// than in a column, so a header slot for it would just be dead space that
+// pushes every column after it out of alignment. There is likewise no SET
+// slot any more: the per-row repeat toggle it labeled went away with the
+// `marked` model (Phase 5D Task 2) — a future task adds whatever control
+// (e.g. clone) replaces it.
 function ColumnHeader() {
   return (
     <div className="builder-columns" aria-hidden="true">
-      <span className="col-set">SET</span>
       <span className="col-dur">DUR</span>
       <span className="col-spm">SPM</span>
       <span className="col-rest">REST (OPT)</span>
@@ -152,7 +153,8 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         }
       : null;
 
-  const markedIds = setRowIds(form);
+  const spanStart = spanStartIndex(form);
+  const rowsInSet = form.rows.length - spanStart;
   const totalsResult = totals(form, baselines);
   // Empty while loading/erroring rather than blocking the screen on it — the
   // 🎲 is a nicety, not something worth gating the whole builder on. Worst
@@ -345,13 +347,11 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             key={row.id}
             row={row}
             index={index}
-            inSet={markedIds.includes(row.id)}
-            isBlockStart={markedIds[0] === row.id}
+            inSet={index >= spanStart}
             baselines={baselines}
             tolerance={tolerance}
             fieldError={(field) => errors[`row:${row.id}:${field}`]}
             onChange={(patch) => updateRow(row.id, patch)}
-            onSetBlockStart={() => setForm((f) => setBlockStart(f, row.id))}
             onRemove={() => setForm((f) => removeRow(f, row.id))}
             registerRef={(field, el) => {
               fieldRefs.current[`row:${row.id}:${field}`] = el;
@@ -409,9 +409,9 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         </button>
       </div>
       {errors.reps && <p className="field-error">{errors.reps}</p>}
-      {markedIds.length > 0 && (
+      {rowsInSet > 0 && form.reps > 1 && (
         <p className="mono-status builder-repeat-readout">
-          {markedIds.length} row{markedIds.length === 1 ? "" : "s"} marked
+          {rowsInSet} row{rowsInSet === 1 ? "" : "s"} repeat
           {totalsResult ? ` · ${fmtMinutes(totalsResult.perSet)} per set` : ""}
         </p>
       )}

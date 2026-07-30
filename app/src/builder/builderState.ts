@@ -14,8 +14,8 @@ export type RowKind = "wu" | "w" | "r";
 export interface BuilderRow {
   id: string;
   kind: RowKind;
-  marked: boolean;
-  dur: string;
+  durValue: string;
+  durUnit: "min" | "m";
   refBase: PaceBase;
   refOff: number;
   spm: string;
@@ -31,6 +31,13 @@ export interface BuilderForm {
   reps: number;
 }
 
+// Row kinds that sit OUTSIDE the derived repeat span (see `spanStartIndex`).
+// The 35 starter workouts all open with a stored `wu` step, so opening one
+// in the builder must not start repeating its warm-up. Adding a cooldown
+// later is one entry here plus a domain kind — nothing else about the span
+// logic needs to change.
+export const BOOKEND_ROW_KINDS: readonly RowKind[] = ["wu"];
+
 // Deterministic, reproducible row ids. No Math.random()/Date.now() — this
 // module-local counter never resets, so ids stay unique across the whole
 // session even as forms are copied and edited.
@@ -44,8 +51,8 @@ export function newRow(kind: RowKind): BuilderRow {
   return {
     id: nextRowId(),
     kind,
-    marked: false,
-    dur: "",
+    durValue: "",
+    durUnit: "min",
     refBase: "6k",
     refOff: 0,
     spm: "",
@@ -71,7 +78,7 @@ export function newForm(): BuilderForm {
 // EMPTY_FORM is a shared module-level constant, so it's deep-frozen: without
 // this, `addRow`/`removeRow`'s shallow copies leave every form derived from
 // EMPTY_FORM pointing at the very same row object, and a future in-place
-// edit (`row.dur = …`) would silently corrupt that shared row for every
+// edit (`row.durValue = …`) would silently corrupt that shared row for every
 // other form in the session. Freezing turns that into a loud TypeError
 // instead of silent corruption. Callers that need a form they intend to
 // mutate should use `newForm()` instead.
@@ -83,51 +90,36 @@ function deepFreezeForm(f: BuilderForm): BuilderForm {
 
 export const EMPTY_FORM: BuilderForm = deepFreezeForm(newForm());
 
-// A row appended while a repeat block is open must join that block, not
-// land after it as `marked: false` — otherwise `[F,T]` (block open on the
-// last row) becomes `[F,T,F]`, breaking the contiguous-suffix invariant
-// `setBlockStart`/`totals`/`setRowIds` all rely on (see the comment above
-// `setBlockStart`). The screen looks identical to a well-formed block right
-// up until the *original* start row is removed, at which point the
-// highlight, the readout, and the ×reps multiplier in TOTAL all silently
-// vanish rather than shrinking by one row.
 export function addRow(f: BuilderForm, kind: RowKind): BuilderForm {
-  const blockOpen = f.rows.some((r) => r.marked);
-  return { ...f, rows: [...f.rows, { ...newRow(kind), marked: blockOpen }] };
+  return { ...f, rows: [...f.rows, newRow(kind)] };
 }
 
 export function removeRow(f: BuilderForm, id: string): BuilderForm {
   return { ...f, rows: f.rows.filter((r) => r.id !== id) };
 }
 
-// Positional semantics, not per-row: the domain has no way to express a
-// non-contiguous repeat. `toSteps` emits the single reps marker immediately
-// before the FIRST marked row, and the domain's `liveSteps` then repeats
-// EVERYTHING positioned after that marker — including rows the user never
-// marked, if they happen to sit after a marked one. `setBlockStart` embraces
-// that by keeping `marked` always a contiguous suffix of `f.rows`: clicking
-// a row makes IT and every row after it `marked: true` and every row before
-// it `marked: false`, so "the block's current start" is always exactly
-// `f.rows.findIndex((r) => r.marked)` — there's no separate stored start
-// index that could drift out of sync with the flags. Clicking the row that
-// is already the start clears the whole block (all `marked: false`) rather
-// than leaving a one-row block, or repeatedly clicking the same SET cell
-// would walk the start forward one row at a time instead of toggling it
-// off. `totals` and `setRowIds` both bucket by the position of the first
-// marked row for exactly this reason — don't reintroduce per-row bucketing
-// here or in any consumer of `marked`.
-export function setBlockStart(f: BuilderForm, id: string): BuilderForm {
-  const currentStartIndex = f.rows.findIndex((r) => r.marked);
-  const clickedIndex = f.rows.findIndex((r) => r.id === id);
-  const clearing = clickedIndex === currentStartIndex;
+/** Index of the first row NOT in `BOOKEND_ROW_KINDS` — where the derived
+ *  repeat span begins. Everything before this index (a run of bookend rows,
+ *  e.g. a leading `wu`) sits outside the repeat; everything from here to the
+ *  end of `f.rows` repeats. Returns `f.rows.length` when every row is a
+ *  bookend (or there are no rows), meaning there's nothing to repeat. */
+export function spanStartIndex(f: BuilderForm): number {
+  const index = f.rows.findIndex((r) => !BOOKEND_ROW_KINDS.includes(r.kind));
+  return index === -1 ? f.rows.length : index;
+}
 
-  return {
-    ...f,
-    rows: f.rows.map((r, i) => ({
-      ...r,
-      marked: !clearing && i >= clickedIndex,
-    })),
-  };
+/** Deep-copies every field of the row named `id` and inserts the copy
+ *  immediately after the original, with a fresh id. Returns `f` unchanged
+ *  if `id` isn't found (defensive — every real caller passes an id it just
+ *  read off `f.rows`). */
+export function cloneRow(f: BuilderForm, id: string): BuilderForm {
+  const index = f.rows.findIndex((r) => r.id === id);
+  if (index === -1) return f;
+
+  const clone: BuilderRow = { ...f.rows[index]!, id: nextRowId() };
+  const rows = [...f.rows];
+  rows.splice(index + 1, 0, clone);
+  return { ...f, rows };
 }
 
 export function setReps(f: BuilderForm, reps: number): BuilderForm {
@@ -139,7 +131,12 @@ export function setReps(f: BuilderForm, reps: number): BuilderForm {
  *  `2500m` is meters (integers only). The bare-number regex is byte-identical
  *  to bulk.ts's — typing a duration in the builder and pasting the same text
  *  into a bulk-import block must never disagree on what it means. Kept in
- *  lockstep by hand since it isn't exported. */
+ *  lockstep by hand since it isn't exported.
+ *
+ *  Only the `rest` field still uses this grammar (a single free-text field
+ *  with an optional apostrophe). A row's own duration is now the structured
+ *  `durValue`/`durUnit` pair — see `rowDurationNumber` below — with no
+ *  grammar to parse at all. */
 export function parseDurationInput(text: string): WorkDuration | null {
   const trimmed = text.trim();
   const bare = /^(\d+(?:\.\d+)?)$/.exec(trimmed);
@@ -159,6 +156,17 @@ const isHalfStep = (n: number, lo: number, hi: number): boolean =>
 const isInt = (n: number, lo: number, hi: number): boolean =>
   Number.isInteger(n) && n >= lo && n <= hi;
 
+/** Parses `row.durValue` as a plain number — no grammar, just
+ *  `Number(text.trim())` — or `null` for blank/non-numeric input. Shared by
+ *  `toSteps` (which additionally enforces the domain's bounds) and
+ *  `rowMinutes` (which is a lenient live preview and doesn't). */
+function rowDurationNumber(row: BuilderRow): number | null {
+  const trimmed = row.durValue.trim();
+  if (trimmed === "") return null;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function toSteps(
   f: BuilderForm,
 ): { ok: true; steps: Step[] } | { ok: false; errors: Record<string, string> } {
@@ -172,71 +180,69 @@ export function toSteps(
     errors.pain = "pain rating 1..5 is required";
   }
 
-  // A reps marker is only emitted when a row is marked, so the emitted step
-  // count (what the server actually bounds) can be one more than the row
-  // count — mirror that here rather than checking rows.length directly, or
-  // 100 marked rows would emit 101 steps and pass the client check only to
-  // be rejected by the server.
-  const hasMarker = f.rows.some((r) => r.marked);
-  const emittedStepCount = f.rows.length + (hasMarker ? 1 : 0);
+  const startIndex = spanStartIndex(f);
+  // A reps marker is only emitted when there's a repeat span AND more than
+  // one rep — mirror that here rather than checking rows.length directly,
+  // so the emitted step count (what the server actually bounds) can be one
+  // more than the row count without a 100-row form silently emitting 101
+  // steps and passing the client check only to be rejected by the server.
+  const emitsMarker = f.reps > 1 && startIndex < f.rows.length;
+  const emittedStepCount = f.rows.length + (emitsMarker ? 1 : 0);
   if (f.rows.length === 0 || emittedStepCount > 100) {
     errors.steps = "steps must be a non-empty list (max 100)";
   }
 
   // mirroring validateSteps, which only checks a "reps" step's count when
   // one actually exists.
-  if (hasMarker && !isInt(f.reps, 1, 12)) {
+  if (emitsMarker && !isInt(f.reps, 1, 12)) {
     errors.reps = "reps must be a whole number 1..12";
   }
 
   const steps: Step[] = [];
   let hasWork = false;
-  let markerEmitted = false;
 
-  for (const row of f.rows) {
-    if (row.marked && !markerEmitted) {
+  f.rows.forEach((row, i) => {
+    if (emitsMarker && i === startIndex) {
       steps.push({ k: "reps", count: f.reps });
-      markerEmitted = true;
     }
 
     if (row.kind === "wu" || row.kind === "r") {
-      const duration = parseDurationInput(row.dur);
-      if (!duration || duration.kind !== "time") {
-        errors[`row:${row.id}:dur`] = "duration must be minutes, e.g. 10'";
-        continue;
+      const n = rowDurationNumber(row);
+      if (n === null || row.durUnit !== "min") {
+        errors[`row:${row.id}:dur`] = "duration must be minutes";
+        return;
       }
-      if (!isHalfStep(duration.minutes, 0.5, 180)) {
+      if (!isHalfStep(n, 0.5, 180)) {
         errors[`row:${row.id}:dur`] = "minutes must be 0.5..180 in 0.5 steps";
-        continue;
+        return;
       }
       steps.push(
-        row.kind === "wu"
-          ? { k: "wu", minutes: duration.minutes }
-          : { k: "r", minutes: duration.minutes },
+        row.kind === "wu" ? { k: "wu", minutes: n } : { k: "r", minutes: n },
       );
-      continue;
+      return;
     }
 
     // row.kind === "w"
     hasWork = true;
     let rowOk = true;
 
-    const duration = parseDurationInput(row.dur);
-    if (!duration) {
-      errors[`row:${row.id}:dur`] = "duration is required, e.g. 5' or 2500m";
+    const n = rowDurationNumber(row);
+    let duration: WorkDuration | null = null;
+    if (n === null) {
+      errors[`row:${row.id}:dur`] = "duration is required, e.g. 5";
       rowOk = false;
-    } else if (
-      duration.kind === "time" &&
-      !isHalfStep(duration.minutes, 0.5, 180)
-    ) {
+    } else if (row.durUnit === "m") {
+      if (!isInt(n, 100, 42195)) {
+        errors[`row:${row.id}:dur`] = "meters must be 100..42195";
+        rowOk = false;
+      } else {
+        duration = { kind: "distance", meters: n };
+      }
+    } else if (!isHalfStep(n, 0.5, 180)) {
       errors[`row:${row.id}:dur`] = "minutes must be 0.5..180 in 0.5 steps";
       rowOk = false;
-    } else if (
-      duration.kind === "distance" &&
-      !isInt(duration.meters, 100, 42195)
-    ) {
-      errors[`row:${row.id}:dur`] = "meters must be 100..42195";
-      rowOk = false;
+    } else {
+      duration = { kind: "time", minutes: n };
     }
 
     // refBase/refOff always describe a structurally valid PaceRef (the base
@@ -252,20 +258,20 @@ export function toSteps(
 
     let spm: number | undefined;
     if (row.spm.trim() !== "") {
-      const n = Number(row.spm.trim());
-      if (!isInt(n, 10, 60)) {
+      const spmN = Number(row.spm.trim());
+      if (!isInt(spmN, 10, 60)) {
         errors[`row:${row.id}:spm`] = "spm must be 10..60";
         rowOk = false;
       } else {
-        spm = n;
+        spm = spmN;
       }
     }
 
     let restMinutes: number | undefined;
     if (row.rest.trim() !== "") {
-      // Same duration grammar as `dur` (bare number or `5'`, both minutes) —
-      // rest is always time, so a `2500m`-shaped distance is rejected here
-      // rather than silently misread as a number.
+      // Same duration grammar as `parseDurationInput` (bare number or `5'`,
+      // both minutes) — rest is always time, so a `2500m`-shaped distance is
+      // rejected here rather than silently misread as a number.
       const restDuration = parseDurationInput(row.rest.trim());
       if (!restDuration || restDuration.kind !== "time") {
         errors[`row:${row.id}:rest`] = "rest must be minutes, e.g. 5 or 5'";
@@ -287,7 +293,7 @@ export function toSteps(
         ...(restMinutes !== undefined ? { restMinutes } : {}),
       });
     }
-  }
+  });
 
   if (!hasWork && !errors.steps) {
     errors.steps = "workout needs at least one work step";
@@ -307,16 +313,16 @@ function rowMinutes(
   row: BuilderRow,
   baselines: Baselines | null,
 ): number | null {
-  const duration = parseDurationInput(row.dur);
-  if (!duration) return 0;
+  const n = rowDurationNumber(row);
+  if (n === null) return 0;
 
   let minutes: number;
-  if (duration.kind === "time") {
-    minutes = duration.minutes;
+  if (row.durUnit === "min") {
+    minutes = n;
   } else {
     if (!baselines) return null;
     const ref: PaceRef = { base: row.refBase, off: row.refOff };
-    minutes = (resolveSplit(baselines, ref) * duration.meters) / 500 / 60;
+    minutes = (resolveSplit(baselines, ref) * n) / 500 / 60;
   }
 
   // The domain's phases()/estimateMinutes() emit restMinutes as its own
@@ -332,61 +338,50 @@ function rowMinutes(
   return minutes;
 }
 
-/** Positional, to match `toSteps`/`liveSteps` (see the comment on
- *  `setBlockStart`): every row from the FIRST marked row onward is bucketed
- *  into `perSet`, even if that particular row's own `marked` flag is false.
- *  Bucketing per-row instead — as this used to do — would let `totals`
- *  disagree with `estimateMinutes(toSteps(f).steps, baselines)` for any form
- *  with a non-contiguous marked set, since the domain always repeats the
- *  full tail after the marker regardless of which rows in it were clicked. */
+/** Sums rows before `spanStartIndex(f)` into `loose` (paid once) and every
+ *  row from `spanStartIndex(f)` onward into `perSet` (paid `f.reps` times) —
+ *  matching exactly what `toSteps`/the domain's `liveSteps` repeat, since
+ *  the reps marker is spliced in at that same index. */
 export function totals(
   f: BuilderForm,
   baselines: Baselines | null,
 ): { loose: number; perSet: number; total: number } | null {
-  const firstMarkedIndex = f.rows.findIndex((r) => r.marked);
+  const start = spanStartIndex(f);
   let loose = 0;
   let perSet = 0;
 
   for (let i = 0; i < f.rows.length; i++) {
-    const minutes = rowMinutes(f.rows[i], baselines);
+    const minutes = rowMinutes(f.rows[i]!, baselines);
     if (minutes === null) return null;
-    if (firstMarkedIndex !== -1 && i >= firstMarkedIndex) perSet += minutes;
+    if (i >= start) perSet += minutes;
     else loose += minutes;
   }
 
   return { loose, perSet, total: loose + perSet * f.reps };
 }
 
-/** Ids of every row inside the repeated set, in form order: the first
- *  marked row and every row after it (positionally — see `setBlockStart`),
- *  or `[]` when nothing is marked. Lets a rendering screen show the whole
- *  repeated block as "in the set" — including rows the user didn't
- *  personally click — rather than only the ones with `marked: true`, which
- *  would misrepresent what `toSteps`/`liveSteps` actually repeat. */
-export function setRowIds(f: BuilderForm): string[] {
-  const firstMarkedIndex = f.rows.findIndex((r) => r.marked);
-  if (firstMarkedIndex === -1) return [];
-  return f.rows.slice(firstMarkedIndex).map((r) => r.id);
+function formatDurationValue(d: WorkDuration): {
+  durValue: string;
+  durUnit: "min" | "m";
+} {
+  return d.kind === "time"
+    ? { durValue: String(d.minutes), durUnit: "min" }
+    : { durValue: String(d.meters), durUnit: "m" };
 }
 
-function formatDuration(d: WorkDuration): string {
-  return d.kind === "time" ? `${d.minutes}'` : `${d.meters}m`;
-}
-
-function stepToRow(
-  s: Extract<Step, { k: "wu" | "w" | "r" }>,
-  marked: boolean,
-): BuilderRow {
+function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
   const row = newRow(s.k);
-  row.marked = marked;
   if (s.k === "wu" || s.k === "r") {
-    row.dur = `${s.minutes}'`;
+    row.durValue = String(s.minutes);
+    row.durUnit = "min";
   } else {
-    row.dur = formatDuration(s.duration);
+    const { durValue, durUnit } = formatDurationValue(s.duration);
+    row.durValue = durValue;
+    row.durUnit = durUnit;
     row.refBase = s.ref.base;
     row.refOff = s.ref.off;
     row.spm = s.spm !== undefined ? String(s.spm) : "";
-    // `rest` uses the same duration grammar as `dur` (parseDurationInput),
+    // `rest` uses the same duration grammar as before (parseDurationInput),
     // restricted to `kind: "time"`. Writing the bare number form (no
     // apostrophe) here is just this function's choice of round-trip
     // spelling — toSteps accepts either, so this must keep producing
@@ -437,16 +432,14 @@ export function fromWorkout(w: {
   pain: number;
   steps: Step[];
 }): BuilderForm {
-  const markerIndex = w.steps.findIndex((s) => s.k === "reps");
-  const marker =
-    markerIndex === -1
-      ? null
-      : (w.steps[markerIndex] as Extract<Step, { k: "reps" }>);
+  const marker = w.steps.find(
+    (s): s is Extract<Step, { k: "reps" }> => s.k === "reps",
+  );
 
   const rows: BuilderRow[] = [];
-  w.steps.forEach((s, i) => {
+  w.steps.forEach((s) => {
     if (s.k === "reps" || isUnrepresentable(s)) return;
-    rows.push(stepToRow(s, marker !== null && i > markerIndex));
+    rows.push(stepToRow(s));
   });
 
   return {

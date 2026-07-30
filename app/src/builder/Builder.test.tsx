@@ -57,7 +57,12 @@ async function renderBuilder(mode?: BuilderEditMode) {
 async function fillValidForm() {
   await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
   await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
-  await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
+  // Bare number, no apostrophe: the DUR field is now the row's plain
+  // `durValue` (Phase 5D Task 2) — no grammar is parsed from it any more,
+  // so a typed `5'` would leave `durValue` as the literal unparseable
+  // string "5'". The unit toggle that will let this field mean meters
+  // lands in the next task; today it's always minutes.
+  await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5");
   // The row's pace ref starts at the default 6k/+0 (PaceRefInput.tsx) —
   // two clicks on the faster stepper reaches the 6k-2 ref every test here
   // expects.
@@ -77,13 +82,17 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    for (const label of ["SET", "DUR", "SPM", "REST (OPT)", "SPLIT"]) {
+    for (const label of ["DUR", "SPM", "REST (OPT)", "SPLIT"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     // PACE REF no longer has a column of its own (PaceRefInput.tsx renders
     // on its own full-width line beneath the row) — a header slot for it
     // would just be dead space pushing every other label out of alignment.
+    // Likewise no SET column any more: the per-row repeat toggle it labeled
+    // went away with the `marked` model (Phase 5D Task 2) — the repeat span
+    // is derived, not clicked.
     expect(screen.queryByText("PACE REF")).not.toBeInTheDocument();
+    expect(screen.queryByText("SET")).not.toBeInTheDocument();
   });
 
   it("live-resolves a work row's typed duration and pace ref into the tolerance range", async () => {
@@ -91,7 +100,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
+    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5");
     const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
     await userEvent.click(faster);
     await userEvent.click(faster);
@@ -121,27 +130,6 @@ describe("Builder", () => {
     expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
       1,
     );
-  });
-
-  it("starting the block on a row puts that row AND every row after it into the set", async () => {
-    mockBaselines(BASELINES);
-    mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
-
-    // Two rows so there's a "following row" to prove comes along with the
-    // clicked one — a single-row form can't distinguish "this row" from
-    // "this row and everything after it".
-    await userEvent.click(screen.getByRole("button", { name: "+ ADD ROW" }));
-    expect(screen.queryByText(/rows? marked/)).not.toBeInTheDocument();
-
-    const startButtons = screen.getAllByRole("button", {
-      name: "Start the repeat set here",
-    });
-    expect(startButtons).toHaveLength(2);
-
-    await userEvent.click(startButtons[0]!);
-
-    expect(screen.getByText(/2 rows marked/)).toBeInTheDocument();
   });
 
   it("POSTs a valid form to /api/workouts with the resolved steps and picked pain", async () => {
@@ -224,45 +212,36 @@ describe("Builder", () => {
     ).toHaveAttribute("href", "/you");
   });
 
-  it("agrees end to end on the totals chain: readout, TOTAL, and both rows' aria-pressed match which row starts the block (M2)", async () => {
+  // Phase 5D Task 2 replaced per-row marking with a derived repeat span: a
+  // leading `wu` row is a bookend (stays outside the span, paid once) and
+  // every row from the first non-bookend row onward repeats — nothing left
+  // to click, so this constructs the form directly (like the out-of-range
+  // pace-ref test below) rather than driving a SET toggle that no longer
+  // exists.
+  it("derives the repeat span from bookend rows: a leading warm-up stays loose, the rest repeats (M2)", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
 
-    // Row 1 (the form's initial row): 5 loose minutes, outside the block.
-    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-    const row1Faster = screen.getByRole("button", {
-      name: "Row 1 pace faster",
-    });
-    await userEvent.click(row1Faster);
-    await userEvent.click(row1Faster);
+    const wu = newRow("wu");
+    wu.durValue = "10";
+    const work = newRow("w");
+    work.durValue = "5";
 
-    // Row 2: 10 minutes, marked as the block start.
-    await userEvent.click(screen.getByRole("button", { name: "+ ADD ROW" }));
-    const durInputs = screen.getAllByPlaceholderText("5' or 2500m");
-    await userEvent.type(durInputs[1]!, "10'");
-    await userEvent.click(screen.getByRole("radio", { name: "Row 2 pace 2K" }));
+    const initial: BuilderForm = {
+      title: "Ladder Sets",
+      type: "O2",
+      difficulty: "easy",
+      pain: 3,
+      rows: [wu, work],
+      reps: 3,
+    };
+    await renderBuilder({ kind: "edit", id: "w1", initial });
 
-    const toggles = screen.getAllByRole("button", { name: /repeat set/i });
-    expect(toggles).toHaveLength(2);
-    await userEvent.click(toggles[1]!);
-
-    // reps: 1 -> 3.
-    const moreReps = screen.getByRole("button", { name: "More reps" });
-    await userEvent.click(moreReps);
-    await userEvent.click(moreReps);
-
-    // total = loose(5) + perSet(10) * reps(3) = 35.
+    // total = loose(10, the warm-up) + perSet(5) * reps(3) = 25.
     expect(
-      screen.getByText(/^1 row marked · 10:00 per set$/),
+      screen.getByText(/^1 row repeats? · 5:00 per set$/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/^TOTAL 35 MIN$/)).toBeInTheDocument();
-
-    const toggledAfter = screen.getAllByRole("button", {
-      name: /repeat set/i,
-    });
-    expect(toggledAfter[0]).toHaveAttribute("aria-pressed", "false");
-    expect(toggledAfter[1]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/^TOTAL 25 MIN$/)).toBeInTheDocument();
   });
 
   it("adds a warm-up row via + WARM-UP and includes it as a wu step in the saved payload (M3)", async () => {
@@ -274,8 +253,10 @@ describe("Builder", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "+ WARM-UP" }));
     // The warm-up row uses StepRowEditor's minutes-only branch (placeholder
-    // "10'") — otherwise unreachable in create mode before this fix.
-    await userEvent.type(screen.getByPlaceholderText("10'"), "10'");
+    // "10'") — otherwise unreachable in create mode before this fix. Bare
+    // number, no apostrophe: DUR is the row's plain `durValue` now, with no
+    // grammar (Phase 5D Task 2).
+    await userEvent.type(screen.getByPlaceholderText("10'"), "10");
 
     await fillValidForm();
     await userEvent.click(
@@ -356,7 +337,7 @@ describe("Builder", () => {
     );
 
     const expectations: [string, string][] = [
-      ["Row 1 duration", "duration is required, e.g. 5' or 2500m"],
+      ["Row 1 duration", "duration is required, e.g. 5"],
       ["Row 1 stroke rate", "spm must be 10..60"],
       ["Row 1 rest", "rest must be 0.5..60 in 0.5 steps"],
     ];
@@ -382,7 +363,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
 
     const badRow = newRow("w");
-    badRow.dur = "5'";
+    badRow.durValue = "5";
     badRow.refOff = 999;
     const initial: BuilderForm = {
       title: "Ladder Sets",

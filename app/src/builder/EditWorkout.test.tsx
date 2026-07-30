@@ -180,8 +180,9 @@ describe("EditWorkout", () => {
     // Row 3 (after the wu and w rows): the standalone `r` step from the
     // fixture. Not a `w` row, so it gets none of StepRowEditor's isWork-only
     // controls (SPM/REST/pace) — only the shared duration field, pre-filled
-    // from `stepToRow`'s `${minutes}'` formatting.
-    expect(screen.getByLabelText("Row 3 duration")).toHaveValue("3'");
+    // from `stepToRow`'s plain `durValue` (Phase 5D Task 2 dropped the
+    // `${minutes}'` grammar in favor of a bare numeric string).
+    expect(screen.getByLabelText("Row 3 duration")).toHaveValue("3");
     // Distinguishes it from also being a `w` row rendered with blank
     // optional fields: a `w` row would additionally expose SPM/REST inputs
     // and a pace-ref radiogroup, none of which exist for this row.
