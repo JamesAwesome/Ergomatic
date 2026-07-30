@@ -13,7 +13,7 @@ Approved 2026-07-30. A second round of device feedback on the builder, after
 | Warm-ups | **Not authored per workout.** `+ WARM-UP` is removed; warm-up comes from the rower's `warmupMinutes` preference, pulled forward from Phase 9 |
 | Warm-up storage | The preference is **applied at session time, never baked into a workout's steps** — otherwise changing the preference would leave old workouts untouched |
 | Duration input | **Numeric field + a MIN / M unit toggle.** No apostrophe, no grammar, no placeholder that reads like a format string |
-| SPM input | **Defaults to 20, with 44px −/+ either side of the value.** Third stepper-style control on the row; another free-text field gone |
+| SPM input | **Stays optional.** Empty by default; 44px −/+ either side, and the FIRST press of either button lands on 20. Clearable back to empty |
 | Rest input | **Stays minutes-only — no unit toggle** (considered and rejected; see below). Gains an explicit `MIN` marking so it can't be misread beside the duration field's new toggle |
 | Dice | Fixed — see the diagnosis below. It is not a no-op; it returns the same name every press against a real library |
 | Selection styling | Selected states get a **filled tint**, not an outline. The pain picker's red outline was hard to see and drew mis-taps |
@@ -89,17 +89,22 @@ free text — the builder no longer parses anything.
 
 ## SPM
 
-The free-text `spm` field becomes a stepper: `− 20 +`, with 44px buttons on
-either side of the value. It **defaults to 20** on every new work row and is
-always emitted — the domain allows `spm` to be omitted, but every starter
-workout carries one and a stepper cannot express "none", so 5D makes SPM
-always-present rather than optional-in-practice. Clamped to the domain's
-`10..60` (`app/domain/validate.ts`); note that is the storable range, not the
-18–32 guidance used when authoring the starter content.
+The `spm` field gains 44px −/+ buttons either side of its value, but
+**remains optional** — the domain declares `spm?`, and 5D keeps it that way.
 
-Stored workouts whose work steps have no `spm` load showing 20; saving such a
-workout therefore adds one. That is a deliberate, one-way normalisation —
-call it out in the task report rather than treating it as incidental.
+- A new work row starts **empty**, not at 20.
+- The **first press of either button sets it to 20** — up and down both wake
+  the control at 20 rather than 21/19. From there each press moves by 1.
+- The field stays a clearable numeric input, so emptying it returns the row to
+  "no SPM" and the next press wakes at 20 again.
+- Clamped to the domain's `10..60` (`app/domain/validate.ts`). That is the
+  storable range, not the 18–32 guidance used when authoring starter content —
+  do not enforce 18–32 here.
+
+**No normalisation.** A stored step without `spm` loads empty and saves without
+one; nothing is added to a rower's existing data by opening a workout. An
+earlier draft made SPM mandatory-in-practice and would have silently written a
+value into every edited workout — explicitly rejected.
 
 **Layout warning.** The row now wants: clone, duration + unit toggle, SPM with
 two steppers, rest, delete — plus the pace control already on its own line
@@ -154,8 +159,10 @@ the fill itself ≥ 3:1 against the page.
   inserts directly beneath and focuses the new row; the unit toggle switches a
   stored distance step to M on load; the warm-up line reflects the preference;
   Save reads `Save`.
-- **SPM:** a new row defaults to 20; the steppers move it by 1 and clamp at
-  10 and 60; a stored step without `spm` loads as 20 and saves with it.
+- **SPM:** a new row starts empty; the first press of EITHER button yields
+  exactly 20; subsequent presses move by 1 and clamp at 10 and 60; clearing
+  the field returns it to empty and the next press wakes at 20 again; a
+  stored step without `spm` loads empty and round-trips **without** one.
 - **Rest:** its minutes unit is visible without focusing or typing into the
   field, and it offers no unit toggle.
 - **Contrast:** computed ratios for every new filled state recorded in the
