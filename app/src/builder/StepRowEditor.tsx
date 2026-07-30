@@ -1,20 +1,28 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   parsePaceRef,
   resolveSplit,
   toleranceRange,
 } from "../../domain/pace.js";
-import type { Baselines } from "../../domain/types.js";
+import type { Baselines, PaceBase, PaceRef } from "../../domain/types.js";
 import type { BuilderRow } from "./builderState";
 
 type RowField = "dur" | "ref" | "spm" | "rest";
 
-// Resolves a work row's live SPLIT cell. Baselines missing takes priority
-// over an unparseable ref: per the handoff, "no target" means "you haven't
-// set baselines yet," not "you haven't finished typing a valid pace ref" —
-// those are different states with different fixes (go set baselines vs.
-// keep typing), so an in-progress/invalid ref while baselines ARE set
-// renders nothing rather than a misleading "no target" + link to /you.
+// Interim text rendering of a structured ref, for the free-text pace input
+// below — `PaceRefInput` (a later task) replaces this input with a base
+// chip + offset stepper that never needs to format/parse text at all.
+function formatPaceRef(base: PaceBase, off: number): string {
+  if (off === 0) return base;
+  return `${base}${off > 0 ? "+" : ""}${off}`;
+}
+
+// Resolves a work row's live SPLIT cell. `refBase`/`refOff` are always
+// structurally valid (the builder can no longer represent an unparseable
+// base like "8k"), so — unlike the old free-text `ref` field — there's no
+// "in-progress/invalid ref" state to special-case here; only "baselines
+// aren't set yet" needs the no-target treatment.
 function resolvedSplit(
   row: BuilderRow,
   baselines: Baselines | null,
@@ -27,8 +35,7 @@ function resolvedSplit(
       </span>
     );
   }
-  const ref = parsePaceRef(row.ref);
-  if (!ref) return null;
+  const ref: PaceRef = { base: row.refBase, off: row.refOff };
   // No nudge in the builder — nudging a target is a per-run timer concept
   // (WorkoutDetail), not something a not-yet-saved workout has yet.
   const resolved = resolveSplit(baselines, ref);
@@ -82,6 +89,24 @@ export default function StepRowEditor({
     return `row-${row.id}-${field}-error`;
   }
 
+  // Interim free-text adapter over the structured refBase/refOff fields — a
+  // later task replaces this whole input with a base chip + offset stepper
+  // that writes refBase/refOff directly and never needs text at all. This
+  // local draft, rather than a value derived straight from
+  // `formatPaceRef(row.refBase, row.refOff)`, is what lets someone type
+  // "6k-2" one character at a time: an in-progress "6k-" doesn't parse, so
+  // it must NOT be clobbered back to the last committed value on every
+  // keystroke the way a fully row-derived value would be.
+  const [refDraft, setRefDraft] = useState(() =>
+    formatPaceRef(row.refBase, row.refOff),
+  );
+
+  function handleRefChange(text: string) {
+    setRefDraft(text);
+    const parsed = parsePaceRef(text);
+    if (parsed) onChange({ refBase: parsed.base, refOff: parsed.off });
+  }
+
   return (
     <div
       className={
@@ -117,8 +142,8 @@ export default function StepRowEditor({
               aria-invalid={Boolean(fieldError("ref"))}
               aria-describedby={fieldError("ref") ? errorId("ref") : undefined}
               placeholder="2k / 6k-2"
-              value={row.ref}
-              onChange={(e) => onChange({ ref: e.target.value })}
+              value={refDraft}
+              onChange={(e) => handleRefChange(e.target.value)}
             />
             <input
               className="field-spm"
