@@ -121,26 +121,41 @@ beforeEach(() => {
 });
 
 describe("Builder", () => {
-  it("renders the step table's column header labels", async () => {
+  // Phase 5D fix wave 1: the row grew to three lines (main line, SPM, pace)
+  // and the old single-line column header strip (DUR / REST (OPT) / SPLIT)
+  // no longer sits over the fields it named — see docs/screenshots/
+  // builder.png before this fix. The header was removed rather than
+  // reshaped ("no header" beats "wrong header"); every control is
+  // self-describing via its own aria-label or static marking instead. This
+  // test used to assert the header's text directly; it now asserts the
+  // guarantee that text was proving — that rest reads as minutes without
+  // focusing the field — via the row's own static "MIN" marking next to
+  // the REST input (StepRowEditor.tsx's `.field-rest-unit`).
+  it("has no column header, and marks REST as minutes on the row itself", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    for (const label of ["DUR", "REST (OPT)", "SPLIT"]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Row 1 rest").closest(".field-rest-group"),
+    ).toHaveTextContent("MIN");
+
+    // The header strip itself, and every label it used to carry, are gone —
+    // DUR/SPLIT never had another on-screen source, so their absence alone
+    // proves the header is gone (REST's guarantee moved rather than
+    // vanished, hence the positive assertion above instead of "REST (OPT)"
+    // here). PACE REF, SPM and SET were already dropped from the header in
+    // earlier phases and stay dropped.
+    for (const label of [
+      "DUR",
+      "REST (OPT)",
+      "SPLIT",
+      "PACE REF",
+      "SPM",
+      "SET",
+    ]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
     }
-    // PACE REF no longer has a column of its own (PaceRefInput.tsx renders
-    // on its own full-width line beneath the row) — a header slot for it
-    // would just be dead space pushing every other label out of alignment.
-    // SPM moved off this row for the same reason (Phase 5D Task 4 —
-    // StepRowEditor.tsx's `.step-row-editor-spm`), so it drops out of this
-    // header too. Likewise no SET column any more: the per-row repeat
-    // toggle it labeled went away with the `marked` model (Phase 5D Task
-    // 2) — its cell position is now the clone button (Task 4), which needs
-    // no header the way "DUR"/"REST" do.
-    expect(screen.queryByText("PACE REF")).not.toBeInTheDocument();
-    expect(screen.queryByText("SPM")).not.toBeInTheDocument();
-    expect(screen.queryByText("SET")).not.toBeInTheDocument();
   });
 
   // Requirement 1 of the Task 4 brief: no SET cell, and no readout naming

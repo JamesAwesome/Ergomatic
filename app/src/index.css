@@ -713,64 +713,13 @@ button:disabled {
   cursor: pointer;
 }
 
-.builder-columns {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 22px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--rule);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--ink-4);
-}
-
-/* Widths match the row fields directly below (.row-clone / DurationInput's
-   value field / .field-rest / .row-delete) so each label sits over its
-   column — see the comment on ColumnHeader in Builder.tsx. There is no
-   PACE REF or SPM column any more (PaceRefInput and SpmInput both span
-   their own full-width line beneath the row, not a slot in this header). */
-.builder-columns span {
-  text-align: center;
-}
-
-/* Spacer matching .row-clone's width (var(--tap)) — no label of its own,
-   same idiom as .col-delete below it: "clone" needs no column header the
-   way "DUR"/"REST" do. */
-.col-clone {
-  width: var(--tap);
-}
-
-.col-dur {
-  /* Matches DurationInput's value field (var(--tap)), not just its own
-     label width, so its center lines up with the actual input below — same
-     idiom .col-rest below uses for .field-rest. */
-  width: var(--tap);
-}
-
-.col-rest {
-  /* Wider than .field-rest's 44px and allowed to wrap ("(OPT)" onto its own
-     line) — "REST (OPT)" doesn't fit in 44px at this font size, and
-     .col-split's flex: 1 absorbs the difference rather than the columns
-     after it drifting out of alignment. */
-  width: 60px;
-  white-space: normal;
-  line-height: 1.3;
-}
-
-.col-split {
-  flex: 1;
-  text-align: right;
-}
-
-.col-delete {
-  width: var(--tap);
-}
-
 .builder-rows {
   display: flex;
   flex-direction: column;
+  /* Matches .section-heading's margin-top — preserves the gap below the pain
+     picker that the removed column header used to carry (its own
+     margin-top: 22px) now that there's no header between them. */
+  margin-top: 22px;
 }
 
 .step-row-editor {
