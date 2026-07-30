@@ -110,20 +110,21 @@ function nameAt(index: number): string {
   return `${modifier} ${noun}`;
 }
 
-/** A multiplier coprime to `NAME_POOL_SIZE`: `2N + 1` mod `N` is always `1`,
- *  so `gcd(2N + 1, N)` is always `1`, for any pool size — no search needed,
- *  and it stays correct if the word lists ever change size. Multiplying by
- *  a unit mod N is a bijection on integers, so consecutive seeds (as the
- *  exhaustion test uses) land on distinct positions and sweep the whole
- *  name space with no repeats before the space wraps around. */
-const SEED_MULTIPLIER = 2 * NAME_POOL_SIZE + 1;
-
-/** Small, deterministic integer hash — no `Math.random()`. */
+/** Deterministic seed → starting position. No `Math.random()`, no
+ *  `Date.now()`: the caller owns the seed so tests are reproducible.
+ *
+ *  This is plain `seed mod N` — deliberately NOT a mixing hash. Consecutive
+ *  seeds therefore walk the pool in array order, which is what makes the
+ *  exhaustion test genuinely exhaustive: seeds 0..N-1 map onto all N names
+ *  exactly once. An earlier revision multiplied by `2N + 1` here on the
+ *  theory that a coprime unit added dispersion; it does not — `2N + 1 ≡ 1
+ *  (mod N)` for every N, so the multiply always reduced to identity. If
+ *  scattered-looking names are ever wanted, that needs a real mixing
+ *  function AND a re-proof that the mapping stays a bijection, or the
+ *  exhaustion guarantee quietly disappears. */
 function startIndex(seed: number): number {
   const truncated = Math.trunc(seed);
-  const normalized =
-    ((truncated % NAME_POOL_SIZE) + NAME_POOL_SIZE) % NAME_POOL_SIZE;
-  return (normalized * SEED_MULTIPLIER) % NAME_POOL_SIZE;
+  return ((truncated % NAME_POOL_SIZE) + NAME_POOL_SIZE) % NAME_POOL_SIZE;
 }
 
 export function generateName(
