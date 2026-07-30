@@ -4,8 +4,10 @@ import { createWorkoutsStore } from "../stores/workouts.js";
 import { STARTER_WORKOUTS } from "./starter.js";
 
 // Arbitrary but fixed application-wide key for the seed advisory lock. Any
-// constant works; it only has to be the same in every process.
-const SEED_LOCK_KEY = 4021739871;
+// constant works; it only has to be the same in every process. Exported so
+// seed.integration.test.ts can take the SAME lock from an independent
+// connection and prove seedGlobalLibrary actually blocks on it (M2).
+export const SEED_LOCK_KEY = 4021739871;
 
 /**
  * Seeds the ORIGINAL starter library as a shared, read-only global set —

@@ -137,15 +137,22 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     }
     return m;
   };
-  const withIsGlobal = (row: WorkoutRow) => ({
-    ...row,
-    isGlobal: row.userId === null,
-  });
+  // `seq` is a fake-only bookkeeping field (see byListOrder/newWorkoutRow
+  // above) — real rows never carry it, so it must never flow out through a
+  // route response (L2).
+  const withIsGlobal = (row: WorkoutRow) => {
+    const { seq: _seq, ...rest } = row;
+    return { ...rest, isGlobal: row.userId === null };
+  };
   const create = async (
     userId: string,
     input: NewWorkoutInput,
   ): Promise<WorkoutRow> => {
-    const row = newWorkoutRow(input, userId);
+    // Always a personal row: mirror the real store's create() (H1) — force
+    // sortOrder null regardless of what `input` carries, since a
+    // client-supplied value on the request body must never take effect.
+    // Only createMany(null, …)/_seedGlobal below (the seed path) author one.
+    const row = newWorkoutRow({ ...input, sortOrder: null }, userId);
     forUser(userId).set(row.id, row);
     return withIsGlobal(row) as unknown as WorkoutRow;
   };
@@ -182,9 +189,23 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       const existing = m.get(id);
       if (!existing) return null;
       assertWorkoutType(input.type);
-      // sortOrder is not part of WorkoutInput and the real store's UPDATE
-      // never sets it, so an edit leaves the row's ordering key alone.
-      const row: WorkoutRow = { ...existing, ...input, updatedAt: new Date() };
+      // Mirror the real store's UPDATE exactly (app/server/stores/
+      // workouts.ts): only title/type/difficulty/pain/steps/updatedAt are
+      // ever set — sortOrder (and every other column) is left alone. Built
+      // from an explicit field list, NOT `{ ...existing, ...input }` (M1):
+      // `input` is the same object reference as the request body at
+      // runtime, so a naive spread would let a client-supplied `sortOrder`
+      // reorder the fake even though the real UPDATE never sets that
+      // column, silently diverging fake from real.
+      const row: WorkoutRow = {
+        ...existing,
+        title: input.title,
+        type: input.type,
+        difficulty: input.difficulty,
+        pain: input.pain,
+        steps: input.steps,
+        updatedAt: new Date(),
+      };
       m.set(id, row);
       return withIsGlobal(row);
     },

@@ -295,8 +295,15 @@ describe("domain stores against real Postgres", () => {
 
       // Nothing about a global row is unique any more (the two partial
       // unique indexes went with `num` on 2026-07-30), so a personal row may
-      // freely duplicate a global's title AND its sort_order.
-      it("a personal row may duplicate a global's title and sort_order", async () => {
+      // freely duplicate a global's title. It may NOT, however, carry a
+      // client-supplied sort_order (H1): create() is always a personal row,
+      // and personal rows order strictly by created_at, so any `sortOrder`
+      // an input carries is ignored and the stored row's sort_order is NULL
+      // — verified below straight off the object create() returns AND via a
+      // fresh read from Postgres, so a bug that only mis-shaped the return
+      // value (but wrote the real column correctly, or vice versa) would
+      // still be caught.
+      it("a personal row may duplicate a global's title, but a client-supplied sort_order is ignored and stored as NULL", async () => {
         const s = store();
         const users = createUserStore(db);
         const fresh = await users.createUser({
@@ -314,12 +321,16 @@ describe("domain stores against real Postgres", () => {
         );
         expect(personal).toMatchObject({
           title: "Shared 830",
-          sortOrder: 830,
+          sortOrder: null,
           userId: fresh.id,
           isGlobal: false,
         });
 
-        // And a second global at the same sort_order is accepted too.
+        const reFetched = await s.get(fresh.id, personal.id);
+        expect(reFetched).toMatchObject({ sortOrder: null });
+
+        // And a second global at the same sort_order is still accepted (the
+        // seed path is the only one allowed to author sort_order at all).
         await expect(
           s.createMany(null, [
             workoutInput({ title: "Shared 830 again", sortOrder: 830 }),

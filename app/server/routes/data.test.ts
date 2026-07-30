@@ -239,6 +239,29 @@ describe("workouts CRUD", () => {
     expect(list.body).toHaveLength(2);
   });
 
+  // H1 regression: validateWorkoutInput returns the SAME object reference as
+  // req.body, so an extra `sortOrder` field the client tacked on used to
+  // flow straight through create() and pin a personal row anywhere in the
+  // list (or reach Postgres as a bad type and 500). create() now hard-codes
+  // sortOrder null for every personal row, so a client can no longer author
+  // it at all — proved end-to-end through the route, not just the store.
+  it("POST ignores a client-supplied sortOrder rather than honoring it", async () => {
+    const stores = makeStores();
+    seedGlobalWorkout(stores, { sortOrder: 1, title: "Global Leader" });
+    const app = appFor(stores);
+    const created = await asA(request(app).post("/api/workouts")).send({
+      ...validWorkoutBody(),
+      sortOrder: -1,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.sortOrder).toBeNull();
+
+    // The global still leads the list: a negative sortOrder did not pin the
+    // personal row above it.
+    const list = await asA(request(app).get("/api/workouts"));
+    expect(list.body[0]).toMatchObject({ title: "Global Leader" });
+  });
+
   it("GET /:id returns the workout", async () => {
     const app = appFor(makeStores());
     const created = await asA(request(app).post("/api/workouts")).send(
@@ -282,6 +305,41 @@ describe("workouts CRUD", () => {
     ).send(validWorkoutBody({ title: "Renamed" }));
     expect(res.status).toBe(200);
     expect(res.body.title).toBe("Renamed");
+  });
+
+  // M1 regression: the real UPDATE (app/server/stores/workouts.ts) never
+  // touches sort_order, and the in-memory fake now mirrors that exactly
+  // (previously it spread the raw request body over the existing row,
+  // silently honoring a client-supplied sortOrder that Postgres would have
+  // ignored). Proved through the route so a future re-introduction of
+  // `{ ...existing, ...input }` shows up here, not just in a store-level test.
+  it("PUT ignores a client-supplied sortOrder rather than honoring it", async () => {
+    const app = appFor(makeStores());
+    const first = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({ title: "First" }),
+    );
+    const second = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({ title: "Second" }),
+    );
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+
+    const res = await asA(
+      request(app).put(`/api/workouts/${second.body.id}`),
+    ).send({
+      ...validWorkoutBody({ title: "Second Renamed" }),
+      sortOrder: -100,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.sortOrder).toBeNull();
+
+    // Creation order is unchanged: the PUT's sortOrder did not pin "Second
+    // Renamed" ahead of "First".
+    const list = await asA(request(app).get("/api/workouts"));
+    expect(list.body.map((w: { title: string }) => w.title)).toStrictEqual([
+      "First",
+      "Second Renamed",
+    ]);
   });
 
   it("PUT /:id 404s on a malformed (non-uuid) id", async () => {
