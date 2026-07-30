@@ -13,6 +13,7 @@ Approved 2026-07-30. A second round of device feedback on the builder, after
 | Warm-ups | **Not authored per workout.** `+ WARM-UP` is removed; warm-up comes from the rower's `warmupMinutes` preference, pulled forward from Phase 9 |
 | Warm-up storage | The preference is **applied at session time, never baked into a workout's steps** — otherwise changing the preference would leave old workouts untouched |
 | Duration input | **Numeric field + a MIN / M unit toggle.** No apostrophe, no grammar, no placeholder that reads like a format string |
+| SPM input | **Defaults to 20, with 44px −/+ either side of the value.** Third stepper-style control on the row; another free-text field gone |
 | Dice | Fixed — see the diagnosis below. It is not a no-op; it returns the same name every press against a real library |
 | Selection styling | Selected states get a **filled tint**, not an outline. The pain picker's red outline was hard to see and drew mis-taps |
 | Cooldowns | Not built. A **named seam** is left: the repeat span is computed by excluding *bookend* row kinds, a list that today holds `wu` and later `cd` |
@@ -85,6 +86,27 @@ keep the domain's 0.5-step and 0.5..180 bounds; meters stay integer 100..42195.
 `parseDurationInput` remains for the **bulk-paste** path only, which is still
 free text — the builder no longer parses anything.
 
+## SPM
+
+The free-text `spm` field becomes a stepper: `− 20 +`, with 44px buttons on
+either side of the value. It **defaults to 20** on every new work row and is
+always emitted — the domain allows `spm` to be omitted, but every starter
+workout carries one and a stepper cannot express "none", so 5D makes SPM
+always-present rather than optional-in-practice. Clamped to the domain's
+`10..60` (`app/domain/validate.ts`); note that is the storable range, not the
+18–32 guidance used when authoring the starter content.
+
+Stored workouts whose work steps have no `spm` load showing 20; saving such a
+workout therefore adds one. That is a deliberate, one-way normalisation —
+call it out in the task report rather than treating it as incidental.
+
+**Layout warning.** The row now wants: clone, duration + unit toggle, SPM with
+two steppers, rest, delete — plus the pace control already on its own line
+beneath. That will not fit across 390px. The implementer must verify the real
+viewport and, if it overflows, give SPM its own line the way the pace control
+got one; do not shrink any control below 44px to make it fit. Whatever layout
+results, the e2e tap-target sweep and a screenshot are the acceptance evidence.
+
 ## Selection styling
 
 Every selected control gets a filled tint rather than a bare outline. The pain
@@ -108,6 +130,8 @@ the fill itself ≥ 3:1 against the page.
   inserts directly beneath and focuses the new row; the unit toggle switches a
   stored distance step to M on load; the warm-up line reflects the preference;
   Save reads `Save`.
+- **SPM:** a new row defaults to 20; the steppers move it by 1 and clamp at
+  10 and 60; a stored step without `spm` loads as 20 and saves with it.
 - **Contrast:** computed ratios for every new filled state recorded in the
   task report, not asserted by eye.
 - **e2e:** author `5×1′ @ 6k−2` using clone and the `×N` control, save, and
