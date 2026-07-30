@@ -35,13 +35,13 @@ console.log("migrations up to date");
 //
 // seedGlobalLibrary's own check-then-insert isn't atomic across processes:
 // if two replicas boot at once, both can see zero globals and both attempt
-// the insert. The two partial unique indexes on workouts (see schema.ts)
-// guarantee only one write actually lands; the loser's insert fails with a
-// unique violation, which the store surfaces as StoreConflictError. That's
-// not a real failure here — it just means another booter already won the
-// race — so it's caught and logged rather than crashing this process. Any
-// OTHER error (a real DB outage, a schema mismatch, etc.) still propagates
-// and fails boot as before.
+// the insert. It serialises them with a transaction-scoped advisory lock (see
+// seed/seed.ts), so the loser now just no-ops. Until 2026-07-30 the two
+// partial unique indexes on `num` did that job instead and the loser's insert
+// failed with a unique violation surfaced as StoreConflictError; the catch
+// below is kept as a belt-and-braces boot guard for exactly that shape of
+// "someone else already seeded it" conflict. Any OTHER error (a real DB
+// outage, a schema mismatch, etc.) still propagates and fails boot as before.
 try {
   await seedGlobalLibrary(db);
   console.log("global starter library seeded (idempotent)");

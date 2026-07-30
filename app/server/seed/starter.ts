@@ -29,11 +29,14 @@ export { PLANS } from "../../domain/plans.js";
 // and ladder-shaped structures step the rate together with the intensity.
 // ---------------------------------------------------------------------------
 
-export const STARTER_WORKOUTS: WorkoutInput[] = [
+// `sortOrder` is the authored library order (1..N) — the ordering key that
+// replaced the retired `num` column in Phase 5C. It is never shown to a
+// reader; it only decides what comes first in the library list.
+export const STARTER_WORKOUTS: Array<WorkoutInput & { sortOrder: number }> = [
   // ------------------------------------------------------------- O2 (1–10)
   {
     // O2: 20' continuous UT2 steady state at 6k+18 — the shortest aerobic entry point.
-    num: 1,
+    sortOrder: 1,
     title: "Zephyr",
     type: "O2",
     difficulty: "easy",
@@ -50,7 +53,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 30' continuous UT2 steady state at 6k+16, conversational effort.
-    num: 2,
+    sortOrder: 2,
     title: "Drizzle",
     type: "O2",
     difficulty: "easy",
@@ -67,7 +70,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 40' continuous steady state at 6k+15 — classic single-piece aerobic volume.
-    num: 3,
+    sortOrder: 3,
     title: "Trade Winds",
     type: "O2",
     difficulty: "easy",
@@ -84,7 +87,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 24' continuous UT2 at 6k+17 — easy recovery-day volume.
-    num: 4,
+    sortOrder: 4,
     title: "Halcyon",
     type: "O2",
     difficulty: "easy",
@@ -101,7 +104,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 2×20' UT2 at 6k+16 with a short break — broken steady state for building sit-time.
-    num: 5,
+    sortOrder: 5,
     title: "Doldrums",
     type: "O2",
     difficulty: "easy",
@@ -120,7 +123,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 3×15' alternating UT1 pieces at 6k+12 with 2' paddles between.
-    num: 6,
+    sortOrder: 6,
     title: "Westerlies",
     type: "O2",
     difficulty: "medium",
@@ -139,7 +142,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 60' continuous steady state at 6k+14 — the long-season volume staple.
-    num: 7,
+    sortOrder: 7,
     title: "Monsoon",
     type: "O2",
     difficulty: "medium",
@@ -156,7 +159,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 45' negative-split steady piece — 15' each at 6k+16 / +13 / +10, rate ladder 18→20→22.
-    num: 8,
+    sortOrder: 8,
     title: "Mackerel Sky",
     type: "O2",
     difficulty: "medium",
@@ -185,7 +188,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 10,000 m continuous at 6k+8 — upper-end aerobic distance benchmark.
-    num: 9,
+    sortOrder: 9,
     title: "Jet Stream",
     type: "O2",
     difficulty: "hard",
@@ -202,7 +205,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // O2: 3×20' UT1 at 6k+10 with 3' rest — a big aerobic block for strong weeks.
-    num: 10,
+    sortOrder: 10,
     title: "High Pressure",
     type: "O2",
     difficulty: "hard",
@@ -223,7 +226,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------------ AT (11–18)
   {
     // AT: 3×8' at 6k+4 with 1:2 rest — threshold introduction session.
-    num: 11,
+    sortOrder: 11,
     title: "Isobar",
     type: "AT",
     difficulty: "easy",
@@ -242,7 +245,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AT: 2×10' at 6k+5 with equal rest — gentle threshold with full recovery.
-    num: 12,
+    sortOrder: 12,
     title: "Warm Front",
     type: "AT",
     difficulty: "easy",
@@ -261,7 +264,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AT: 3×5' at 6k+4 with 1:2 rest — compact threshold dose for tight days.
-    num: 13,
+    sortOrder: 13,
     title: "Tailwind",
     type: "AT",
     difficulty: "easy",
@@ -280,7 +283,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AT: 4×2000 m at 6k+1 with 5' rest — the canonical threshold distance set.
-    num: 14,
+    sortOrder: 14,
     title: "Cold Front",
     type: "AT",
     difficulty: "medium",
@@ -299,7 +302,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AT: 3×12' at 6k+2 with 1:2 rest — extended threshold intervals.
-    num: 15,
+    sortOrder: 15,
     title: "Low Pressure",
     type: "AT",
     difficulty: "medium",
@@ -318,7 +321,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AT: 5×2000 m at 6k+3 with 4' rest — threshold volume by distance.
-    num: 16,
+    sortOrder: 16,
     title: "Crosswind",
     type: "AT",
     difficulty: "medium",
@@ -337,7 +340,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AT: 4×3000 m at 6k+2 with 6' rest — heavy threshold day by distance.
-    num: 17,
+    sortOrder: 17,
     title: "Storm Front",
     type: "AT",
     difficulty: "hard",
@@ -356,7 +359,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AT: 2×20' at 6k+1 with 8' rest — long threshold pieces at the top of the band.
-    num: 18,
+    sortOrder: 18,
     title: "Headwind",
     type: "AT",
     difficulty: "hard",
@@ -377,7 +380,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------------ AN (19–26)
   {
     // AN: 6×30 s at 2k-2 with 1:4 rest — anaerobic starter dose.
-    num: 19,
+    sortOrder: 19,
     title: "Dust Devil",
     type: "AN",
     difficulty: "easy",
@@ -396,7 +399,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AN: 8×30 s at 2k-1 with 1:5 rest — short bursts, generous recovery.
-    num: 20,
+    sortOrder: 20,
     title: "Brickfielder",
     type: "AN",
     difficulty: "easy",
@@ -415,7 +418,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AN: 8×60 s at 2k-3 with 1:4 rest — the classic minute-on anaerobic set.
-    num: 21,
+    sortOrder: 21,
     title: "Squall",
     type: "AN",
     difficulty: "medium",
@@ -434,7 +437,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AN: 8×250 m at 2k-4 with ~1:4.5 rest — anaerobic power by distance.
-    num: 22,
+    sortOrder: 22,
     title: "Haboob",
     type: "AN",
     difficulty: "medium",
@@ -453,7 +456,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AN: 10×60 s at 2k-2 with 1:4.5 rest — extended minute-rep volume.
-    num: 23,
+    sortOrder: 23,
     title: "Sirocco",
     type: "AN",
     difficulty: "medium",
@@ -472,7 +475,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AN: 10×30 s at 2k-5 with 1:5 rest — maximal short bursts.
-    num: 24,
+    sortOrder: 24,
     title: "Microburst",
     type: "AN",
     difficulty: "hard",
@@ -491,7 +494,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AN: 6×90 s at 2k-2 with ~1:4.3 rest — long anaerobic reps, full commitment.
-    num: 25,
+    sortOrder: 25,
     title: "Williwaw",
     type: "AN",
     difficulty: "hard",
@@ -510,7 +513,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // AN: 12×60 s at 2k-4 with 1:4 rest — peak anaerobic volume session.
-    num: 26,
+    sortOrder: 26,
     title: "Derecho",
     type: "AN",
     difficulty: "hard",
@@ -531,7 +534,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------------ TR (27–35)
   {
     // TR: 4×60 s at 2k+2 with 1:3 rest — race-pace touch without the damage.
-    num: 27,
+    sortOrder: 27,
     title: "Waterspout",
     type: "TR",
     difficulty: "easy",
@@ -550,7 +553,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 3×2' at 2k+4 with 1:2 rest — race-rhythm rehearsal at low cost.
-    num: 28,
+    sortOrder: 28,
     title: "Anvil Cloud",
     type: "TR",
     difficulty: "easy",
@@ -569,7 +572,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 5×2' at 2k+3 with 1:2.5 rest — sustained race-pace intervals.
-    num: 29,
+    sortOrder: 29,
     title: "Gale",
     type: "TR",
     difficulty: "medium",
@@ -588,7 +591,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 6×90 s at 2k+2 with 1:3 rest — race-pace repeats with full reset.
-    num: 30,
+    sortOrder: 30,
     title: "Cyclone",
     type: "TR",
     difficulty: "medium",
@@ -607,7 +610,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 4×1000 m at 2k+1 with 8' rest — the canonical 1k race-pace repeat.
-    num: 31,
+    sortOrder: 31,
     title: "Cloudburst",
     type: "TR",
     difficulty: "medium",
@@ -626,7 +629,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 750/750/500 m descending sprint set, finishing faster than 2k pace; rate builds 25→26→28.
-    num: 32,
+    sortOrder: 32,
     title: "Nor'easter",
     type: "TR",
     difficulty: "medium",
@@ -657,7 +660,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 8×500 m at 2k pace with 4' rest — the community-canon speed workout.
-    num: 33,
+    sortOrder: 33,
     title: "Thunderhead",
     type: "TR",
     difficulty: "hard",
@@ -676,7 +679,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 500-1000-1500-1000-500 m pyramid at 2k+2 — the classic distance pyramid; rate mirrors it, 27-26-25-26-28.
-    num: 34,
+    sortOrder: 34,
     title: "Tempest",
     type: "TR",
     difficulty: "hard",
@@ -721,7 +724,7 @@ export const STARTER_WORKOUTS: WorkoutInput[] = [
   },
   {
     // TR: 4×4' at 2k+3 with 1:2 rest — long race-pace pieces for 2k endurance.
-    num: 35,
+    sortOrder: 35,
     title: "Storm Surge",
     type: "TR",
     difficulty: "hard",

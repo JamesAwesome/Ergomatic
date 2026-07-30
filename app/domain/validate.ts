@@ -103,7 +103,6 @@ export function validateWorkoutInput(
 ): { ok: true; workout: WorkoutInput } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (!isRec(value)) return { ok: false, errors: ["not an object"] };
-  if (!int(value.num, 1, 9999)) errors.push("num must be 1..9999");
   if (
     typeof value.title !== "string" ||
     value.title.length < 1 ||

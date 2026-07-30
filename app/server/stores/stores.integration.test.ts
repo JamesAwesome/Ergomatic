@@ -10,13 +10,12 @@ import { createDb, type Db } from "../db/index.js";
 import { preferences } from "../db/schema.js";
 import { createUserStore } from "../auth/users.js";
 import { createBaselinesStore } from "./baselines.js";
-import { createWorkoutsStore } from "./workouts.js";
+import { createWorkoutsStore, type NewWorkoutInput } from "./workouts.js";
 import { createLogsStore } from "./logs.js";
 import { createPlanStateStore } from "./planState.js";
 import { createPreferencesStore } from "./preferences.js";
 import { createTestHistoryStore } from "./testHistory.js";
-import { StoreConflictError } from "./errors.js";
-import type { WorkoutInput } from "../../domain/types.js";
+import type { WorkoutType } from "../../domain/types.js";
 import type { LogInput } from "./logs.js";
 
 describe("domain stores against real Postgres", () => {
@@ -27,9 +26,8 @@ describe("domain stores against real Postgres", () => {
   let userB: string;
 
   const workoutInput = (
-    overrides: Partial<WorkoutInput> = {},
-  ): WorkoutInput & { source: "starter" | "user" } => ({
-    num: 1,
+    overrides: Partial<NewWorkoutInput> = {},
+  ): NewWorkoutInput => ({
     title: "Steady state",
     type: "AT",
     difficulty: "medium",
@@ -98,13 +96,9 @@ describe("domain stores against real Postgres", () => {
 
     it("creates, gets, lists, updates, removes, and counts, scoped to userId", async () => {
       const s = store();
-      const created = await s.create(
-        userA,
-        workoutInput({ num: 101, title: "Row one" }),
-      );
+      const created = await s.create(userA, workoutInput({ title: "Row one" }));
       expect(created).toMatchObject({
         userId: userA,
-        num: 101,
         title: "Row one",
         source: "user",
       });
@@ -120,7 +114,7 @@ describe("domain stores against real Postgres", () => {
       const updated = await s.update(
         userA,
         created.id,
-        workoutInput({ num: 101, title: "Row one updated" }),
+        workoutInput({ title: "Row one updated" }),
       );
       expect(updated).toMatchObject({ title: "Row one updated" });
 
@@ -134,67 +128,76 @@ describe("domain stores against real Postgres", () => {
       const s = store();
       const before = await s.count(userA);
       const created = await s.createMany(userA, [
-        workoutInput({ num: 201, title: "Bulk one" }),
-        workoutInput({ num: 202, title: "Bulk two" }),
+        workoutInput({ title: "Bulk one" }),
+        workoutInput({ title: "Bulk two" }),
       ]);
       expect(created).toHaveLength(2);
       expect(await s.count(userA)).toBe(before + 2);
     });
 
-    it("throws StoreConflictError on num clash within the same user", async () => {
+    // 2026-07-30 (Phase 5C): `num` and its two partial unique indexes are
+    // retired, so nothing about a workout is unique any more — duplicates
+    // are simply allowed. What still has to hold is createMany's all-or-
+    // nothing transaction, proved below with an input Postgres genuinely
+    // rejects.
+    it("allows a duplicate of an existing workout, for the same user", async () => {
       const s = store();
-      await s.create(userA, workoutInput({ num: 301, title: "First" }));
-      await expect(
-        s.create(userA, workoutInput({ num: 301, title: "Clash" })),
-      ).rejects.toThrow(StoreConflictError);
-    });
-
-    it("does not clash across users with the same num", async () => {
-      const s = store();
-      await s.create(userA, workoutInput({ num: 401, title: "Owner A" }));
-      const created = await s.create(
-        userB,
-        workoutInput({ num: 401, title: "Owner B" }),
-      );
-      expect(created).toMatchObject({ userId: userB, num: 401 });
-    });
-
-    it("throws StoreConflictError on update when the new num clashes for that user", async () => {
-      const s = store();
-      await s.create(userA, workoutInput({ num: 501, title: "Keep" }));
-      const other = await s.create(
+      await s.create(userA, workoutInput({ title: "Duplicated" }));
+      const again = await s.create(
         userA,
-        workoutInput({ num: 502, title: "Move me" }),
+        workoutInput({ title: "Duplicated" }),
       );
-      await expect(
-        s.update(userA, other.id, workoutInput({ num: 501, title: "Move me" })),
-      ).rejects.toThrow(StoreConflictError);
+      expect(again).toMatchObject({ userId: userA, title: "Duplicated" });
     });
 
-    it("throws StoreConflictError from createMany on an internal num clash", async () => {
+    it("rolls the whole createMany batch back when one row is rejected", async () => {
       const s = store();
       await expect(
         s.createMany(userA, [
-          workoutInput({ num: 701, title: "Batch one" }),
-          workoutInput({ num: 701, title: "Batch clash" }),
+          workoutInput({ title: "Batch one" }),
+          workoutInput({ title: "Batch invalid", type: "NOPE" as WorkoutType }),
         ]),
-      ).rejects.toThrow(StoreConflictError);
+      ).rejects.toThrow();
       // the whole batch rolled back: neither row landed
       const list = await s.list(userA);
-      expect(list.some((w) => w.num === 701)).toBe(false);
+      expect(list.some((w) => w.title === "Batch one")).toBe(false);
+    });
+
+    it("orders globals by sort_order, then everything without one by creation", async () => {
+      const s = store();
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "order-user",
+        email: "order@x.com",
+        name: "OU",
+      });
+
+      await s.createMany(null, [
+        workoutInput({ title: "Ordered Global Two", sortOrder: 2 }),
+        workoutInput({ title: "Ordered Global One", sortOrder: 1 }),
+      ]);
+      await s.create(fresh.id, workoutInput({ title: "Ordered Mine First" }));
+      await s.create(fresh.id, workoutInput({ title: "Ordered Mine Second" }));
+
+      const list = await s.list(fresh.id);
+      expect(
+        list.map((w) => w.title).filter((t) => t.startsWith("Ordered ")),
+      ).toStrictEqual([
+        "Ordered Global One",
+        "Ordered Global Two",
+        "Ordered Mine First",
+        "Ordered Mine Second",
+      ]);
     });
 
     it("cross-user list and get see nothing", async () => {
       const s = store();
-      const created = await s.create(
-        userA,
-        workoutInput({ num: 601, title: "Only A" }),
-      );
+      const created = await s.create(userA, workoutInput({ title: "Only A" }));
       const listForB = await s.list(userB);
       expect(listForB.some((w) => w.id === created.id)).toBe(false);
     });
 
-    describe("global library (Task 9: nullable user_id + partial unique indexes)", () => {
+    describe("global library (nullable user_id)", () => {
       it("createMany(null, ...) inserts global rows visible to every user via list/get, tagged isGlobal", async () => {
         const s = store();
         const users = createUserStore(db);
@@ -205,15 +208,17 @@ describe("domain stores against real Postgres", () => {
         });
 
         const globals = await s.createMany(null, [
-          workoutInput({ num: 800, title: "Global Alpha" }),
-          workoutInput({ num: 801, title: "Global Beta" }),
+          workoutInput({ title: "Global Alpha", sortOrder: 800 }),
+          workoutInput({ title: "Global Beta", sortOrder: 801 }),
         ]);
         expect(globals).toHaveLength(2);
         expect(globals.every((w) => w.userId === null)).toBe(true);
         expect(globals.every((w) => w.isGlobal === true)).toBe(true);
 
         const list = await s.list(fresh.id);
-        const seen = list.filter((w) => w.num === 800 || w.num === 801);
+        const seen = list.filter(
+          (w) => w.title === "Global Alpha" || w.title === "Global Beta",
+        );
         expect(seen).toHaveLength(2);
         expect(seen.every((w) => w.isGlobal === true)).toBe(true);
 
@@ -239,11 +244,11 @@ describe("domain stores against real Postgres", () => {
         });
 
         const [g] = await s.createMany(null, [
-          workoutInput({ num: 810, title: "Global Mix" }),
+          workoutInput({ title: "Global Mix", sortOrder: 810 }),
         ]);
         const personal = await s.create(
           fresh.id,
-          workoutInput({ num: 811, title: "Personal Mix" }),
+          workoutInput({ title: "Personal Mix" }),
         );
 
         const list = await s.list(fresh.id);
@@ -256,13 +261,13 @@ describe("domain stores against real Postgres", () => {
       it("update against a global id no-ops: returns null, row unchanged", async () => {
         const s = store();
         const [g] = await s.createMany(null, [
-          workoutInput({ num: 820, title: "Global Immutable" }),
+          workoutInput({ title: "Global Immutable", sortOrder: 820 }),
         ]);
 
         const result = await s.update(
           userA,
           g.id,
-          workoutInput({ num: 820, title: "Hijacked" }),
+          workoutInput({ title: "Hijacked" }),
         );
         expect(result).toBeNull();
 
@@ -276,7 +281,7 @@ describe("domain stores against real Postgres", () => {
       it("remove against a global id no-ops: row still present afterward", async () => {
         const s = store();
         const [g] = await s.createMany(null, [
-          workoutInput({ num: 821, title: "Global Survivor" }),
+          workoutInput({ title: "Global Survivor", sortOrder: 821 }),
         ]);
 
         await s.remove(userA, g.id);
@@ -288,41 +293,38 @@ describe("domain stores against real Postgres", () => {
         });
       });
 
-      it("num uniqueness is independent between the global and personal namespaces", async () => {
+      // Nothing about a global row is unique any more (the two partial
+      // unique indexes went with `num` on 2026-07-30), so a personal row may
+      // freely duplicate a global's title AND its sort_order.
+      it("a personal row may duplicate a global's title and sort_order", async () => {
         const s = store();
         const users = createUserStore(db);
         const fresh = await users.createUser({
-          googleSub: "global-num",
-          email: "globalnum@x.com",
-          name: "GN",
+          googleSub: "global-dup",
+          email: "globaldup@x.com",
+          name: "GD",
         });
 
         await s.createMany(null, [
-          workoutInput({ num: 830, title: "Global 830" }),
+          workoutInput({ title: "Shared 830", sortOrder: 830 }),
         ]);
-        // A personal workout at the SAME num, for a user who owns nothing
-        // else at that num, must succeed — the namespaces don't clash.
         const personal = await s.create(
           fresh.id,
-          workoutInput({ num: 830, title: "My 830" }),
+          workoutInput({ title: "Shared 830", sortOrder: 830 }),
         );
         expect(personal).toMatchObject({
-          num: 830,
+          title: "Shared 830",
+          sortOrder: 830,
           userId: fresh.id,
           isGlobal: false,
         });
 
-        // But two globals at the same num DO clash with each other.
+        // And a second global at the same sort_order is accepted too.
         await expect(
           s.createMany(null, [
-            workoutInput({ num: 830, title: "Global Clash" }),
+            workoutInput({ title: "Shared 830 again", sortOrder: 830 }),
           ]),
-        ).rejects.toThrow(StoreConflictError);
-
-        // And two personal rows for the SAME user at the same num still clash.
-        await expect(
-          s.create(fresh.id, workoutInput({ num: 830, title: "Clash mine" })),
-        ).rejects.toThrow(StoreConflictError);
+        ).resolves.toHaveLength(1);
       });
     });
   });
@@ -611,14 +613,8 @@ describe("domain stores against real Postgres", () => {
         name: "LD",
       });
 
-      const workoutA = await wk.create(
-        fresh.id,
-        workoutInput({ num: 901, title: "A" }),
-      );
-      const workoutB = await wk.create(
-        fresh.id,
-        workoutInput({ num: 902, title: "B" }),
-      );
+      const workoutA = await wk.create(fresh.id, workoutInput({ title: "A" }));
+      const workoutB = await wk.create(fresh.id, workoutInput({ title: "B" }));
 
       // A workout-less log (e.g. an ad-hoc session) must not appear in the map.
       await logs.create(fresh.id, logInput({ workoutId: null }));

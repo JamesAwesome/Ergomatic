@@ -15,6 +15,13 @@
       "when": 1785283922462,
       "tag": "0001_tan_thunderball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785373768486,
+      "tag": "0002_rare_khan",
+      "breakpoints": true
     }
   ]
 }

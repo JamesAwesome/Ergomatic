@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { WorkoutInput } from "../../../domain/types.js";
+import type { WorkoutType } from "../../../domain/types.js";
 import type { BaselinesStore } from "../baselines.js";
-import { StoreConflictError } from "../errors.js";
 import type { LogInput, LogsStore } from "../logs.js";
 import type { PlanStateStore } from "../planState.js";
 import { PREFERENCES_DEFAULTS, type PreferencesStore } from "../preferences.js";
@@ -19,7 +18,7 @@ import type { NewWorkoutInput, WorkoutsStore } from "../workouts.js";
 
 export interface SeededGlobalWorkout {
   id: string;
-  num: number;
+  sortOrder: number | null;
   title: string;
 }
 
@@ -48,9 +47,10 @@ export interface StoresUnderTest {
   seedGlobalWorkout: (input: NewWorkoutInput) => Promise<SeededGlobalWorkout>;
 }
 
-function workoutInput(overrides: Partial<WorkoutInput> = {}): NewWorkoutInput {
+function workoutInput(
+  overrides: Partial<NewWorkoutInput> = {},
+): NewWorkoutInput {
   return {
-    num: 1,
     title: "Steady state",
     type: "AT",
     difficulty: "medium",
@@ -150,10 +150,9 @@ export function describeStoreContracts(
         const userId = await stores.makeUser();
         const created = await stores.workouts.create(
           userId,
-          workoutInput({ num: 11, title: "Row one" }),
+          workoutInput({ title: "Row one" }),
         );
         expect(created).toMatchObject({
-          num: 11,
           title: "Row one",
           isGlobal: false,
         });
@@ -165,25 +164,60 @@ export function describeStoreContracts(
         expect(list.some((w) => w.id === created.id)).toBe(true);
       });
 
-      it("throws StoreConflictError when num clashes for the same user", async () => {
+      // Ordering is `sort_order ASC, created_at ASC`. Postgres puts NULLs
+      // last for ASC by default, so authored globals (which carry a
+      // sort_order) lead, and everything without one — every personal row —
+      // follows in creation order. The real suite shares one database across
+      // cases, so the assertion filters to this case's own four rows: what
+      // is under test is their RELATIVE order, which unrelated rows can't
+      // change.
+      it("lists globals in their authored order, then personal rows by creation (2026-07-30: num retired)", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
-        await stores.workouts.create(userId, workoutInput({ num: 21 }));
+        await stores.workouts.createMany(null, [
+          workoutInput({ title: "Ordering Global Two", sortOrder: 2 }),
+          workoutInput({ title: "Ordering Global One", sortOrder: 1 }),
+        ]);
+        await stores.workouts.create(
+          userId,
+          workoutInput({ title: "Ordering Mine First" }),
+        );
+        await stores.workouts.create(
+          userId,
+          workoutInput({ title: "Ordering Mine Second" }),
+        );
+
+        const listed = await stores.workouts.list(userId);
+
+        expect(
+          listed.map((w) => w.title).filter((t) => t.startsWith("Ordering ")),
+        ).toStrictEqual([
+          "Ordering Global One",
+          "Ordering Global Two",
+          "Ordering Mine First",
+          "Ordering Mine Second",
+        ]);
+      });
+
+      it("accepts two personal workouts with the same title and no number", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.workouts.create(userId, workoutInput({ title: "Twice" }));
         await expect(
-          stores.workouts.create(userId, workoutInput({ num: 21 })),
-        ).rejects.toThrow(StoreConflictError);
+          stores.workouts.create(userId, workoutInput({ title: "Twice" })),
+        ).resolves.toMatchObject({ title: "Twice" });
       });
 
       it("update against a global id cannot touch it: returns null, row unchanged", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
         const g = await stores.seedGlobalWorkout(
-          workoutInput({ num: 31, title: "Global Immutable" }),
+          workoutInput({ title: "Global Immutable" }),
         );
         const result = await stores.workouts.update(
           userId,
           g.id,
-          workoutInput({ num: 31, title: "Hijacked" }),
+          workoutInput({ title: "Hijacked" }),
         );
         expect(result).toBeNull();
         const stillThere = await stores.workouts.get(userId, g.id);
@@ -197,7 +231,7 @@ export function describeStoreContracts(
         const stores = await makeStores();
         const userId = await stores.makeUser();
         const g = await stores.seedGlobalWorkout(
-          workoutInput({ num: 32, title: "Global Survivor" }),
+          workoutInput({ title: "Global Survivor" }),
         );
         await stores.workouts.remove(userId, g.id);
         const stillThere = await stores.workouts.get(userId, g.id);
@@ -221,7 +255,7 @@ export function describeStoreContracts(
         const userB = await stores.makeUser();
         const created = await stores.workouts.create(
           userA,
-          workoutInput({ num: 41 }),
+          workoutInput({ title: "Only visible to A" }),
         );
         expect(await stores.workouts.get(userB, created.id)).toBeNull();
         const listB = await stores.workouts.list(userB);
@@ -235,10 +269,13 @@ export function describeStoreContracts(
         const stores = await makeStores();
         const userId = await stores.makeUser();
         expect(await stores.workouts.count(userId)).toBe(0);
-        await stores.workouts.create(userId, workoutInput({ num: 61 }));
+        await stores.workouts.create(
+          userId,
+          workoutInput({ title: "Personal for count" }),
+        );
         expect(await stores.workouts.count(userId)).toBe(1);
         await stores.seedGlobalWorkout(
-          workoutInput({ num: 62, title: "Global for count" }),
+          workoutInput({ title: "Global for count" }),
         );
         expect(await stores.workouts.count(userId)).toBe(1);
       });
@@ -247,39 +284,48 @@ export function describeStoreContracts(
         const stores = await makeStores();
         const userId = await stores.makeUser();
         const g = await stores.seedGlobalWorkout(
-          workoutInput({ num: 71, title: "Global Listed" }),
+          workoutInput({ title: "Global Listed" }),
         );
         await stores.workouts.create(
           userId,
-          workoutInput({ num: 72, title: "Personal Not Listed" }),
+          workoutInput({ title: "Personal Not Listed" }),
         );
         const globals = await stores.workouts.listGlobals();
         expect(globals.some((w) => w.id === g.id)).toBe(true);
-        expect(globals.some((w) => w.num === 72)).toBe(false);
+        expect(globals.some((w) => w.title === "Personal Not Listed")).toBe(
+          false,
+        );
       });
 
       it("countGlobals matches listGlobals().length", async () => {
         const stores = await makeStores();
         const before = await stores.workouts.countGlobals();
         await stores.seedGlobalWorkout(
-          workoutInput({ num: 81, title: "Global Counted" }),
+          workoutInput({ title: "Global Counted" }),
         );
         const after = await stores.workouts.countGlobals();
         expect(after).toBe(before + 1);
         expect(after).toBe((await stores.workouts.listGlobals()).length);
       });
 
-      it("createMany rolls back the whole batch on an internal num clash", async () => {
+      // createMany is one transaction in the real store. There are no num
+      // clashes left to trigger a rollback, so the guarantee is proved with a
+      // genuine failure instead: an out-of-enum `type`, which Postgres
+      // rejects mid-statement.
+      it("createMany rolls back the whole batch when one input is rejected", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
         await expect(
           stores.workouts.createMany(userId, [
-            workoutInput({ num: 91, title: "Batch one" }),
-            workoutInput({ num: 91, title: "Batch clash" }),
+            workoutInput({ title: "Batch one" }),
+            workoutInput({
+              title: "Batch invalid",
+              type: "NOPE" as WorkoutType,
+            }),
           ]),
-        ).rejects.toThrow(StoreConflictError);
+        ).rejects.toThrow();
         const list = await stores.workouts.list(userId);
-        expect(list.some((w) => w.num === 91)).toBe(false);
+        expect(list.some((w) => w.title === "Batch one")).toBe(false);
       });
     });
 
@@ -328,11 +374,11 @@ export function describeStoreContracts(
         const userB = await stores.makeUser();
         const wA = await stores.workouts.create(
           userA,
-          workoutInput({ num: 51 }),
+          workoutInput({ title: "Grouped A" }),
         );
         const wB = await stores.workouts.create(
           userA,
-          workoutInput({ num: 52 }),
+          workoutInput({ title: "Grouped B" }),
         );
         await stores.logs.create(userA, logInput({ workoutId: null }));
         await stores.logs.create(userA, logInput({ workoutId: wA.id }));

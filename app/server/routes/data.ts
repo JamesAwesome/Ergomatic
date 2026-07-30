@@ -6,7 +6,6 @@ import { suggest, type LibraryEntry } from "../../domain/suggest.js";
 import type { Baselines, Difficulty, Step } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
 import type { BaselinesStore } from "../stores/baselines.js";
-import { StoreConflictError } from "../stores/errors.js";
 import type {
   ActualSource,
   HeldResult,
@@ -238,19 +237,11 @@ export function createDataRouter({
       badRequest(res, validated.errors.join("; "));
       return;
     }
-    try {
-      const row = await stores.workouts.create(req.user!.id, {
-        ...validated.workout,
-        source: "user",
-      });
-      res.status(201).json(row);
-    } catch (err) {
-      if (err instanceof StoreConflictError) {
-        res.status(409).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    const row = await stores.workouts.create(req.user!.id, {
+      ...validated.workout,
+      source: "user",
+    });
+    res.status(201).json(row);
   });
 
   router.get("/api/workouts/:id", async (req, res) => {
@@ -285,22 +276,14 @@ export function createDataRouter({
       badRequest(res, validated.errors.join("; "));
       return;
     }
-    try {
-      const row = await stores.workouts.update(
-        req.user!.id,
-        req.params.id,
-        validated.workout,
-      );
-      // The store no-ops (returns null) on an id it can't find, but we
-      // already confirmed existence above, so this can't happen in practice.
-      res.json(row ?? existing);
-    } catch (err) {
-      if (err instanceof StoreConflictError) {
-        res.status(409).json({ error: err.message });
-        return;
-      }
-      throw err;
-    }
+    const row = await stores.workouts.update(
+      req.user!.id,
+      req.params.id,
+      validated.workout,
+    );
+    // The store no-ops (returns null) on an id it can't find, but we
+    // already confirmed existence above, so this can't happen in practice.
+    res.json(row ?? existing);
   });
 
   router.delete("/api/workouts/:id", async (req, res) => {
@@ -341,23 +324,15 @@ export function createDataRouter({
       if (!validated.ok) {
         errors.push({
           line: null,
-          message: `workout ${workout.num}: ${validated.errors.join("; ")}`,
+          message: `workout "${workout.title}": ${validated.errors.join("; ")}`,
         });
         continue;
       }
-      try {
-        const row = await stores.workouts.create(req.user!.id, {
-          ...validated.workout,
-          source: "user",
-        });
-        created.push(row);
-      } catch (err) {
-        if (err instanceof StoreConflictError) {
-          errors.push({ line: null, message: err.message });
-          continue;
-        }
-        throw err;
-      }
+      const row = await stores.workouts.create(req.user!.id, {
+        ...validated.workout,
+        source: "user",
+      });
+      created.push(row);
     }
 
     res.json({ created, errors });
