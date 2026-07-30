@@ -5,7 +5,13 @@ import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
 import { useWorkouts } from "../api/useWorkouts";
 import PainPicker from "../components/PainPicker";
-import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
+import { resolveSplit, toleranceRange } from "../../domain/pace.js";
+import type {
+  Baselines,
+  Difficulty,
+  PaceRef,
+  WorkoutType,
+} from "../../domain/types.js";
 import {
   addRow,
   cloneRow,
@@ -16,9 +22,28 @@ import {
   toSteps,
   totals,
   type BuilderForm,
+  type BuilderRow,
 } from "./builderState";
 import { generateName } from "./nameGenerator";
-import StepRowEditor from "./StepRowEditor";
+import StepEditor from "./StepEditor";
+
+type RowField = "dur" | "ref" | "spm" | "rest";
+
+// Resolves a work row's live TARGET string, or null when baselines aren't
+// set yet — StepEditor.tsx does no pace math of its own (same convention as
+// StepCard.tsx's splitLabel), so this is the one place Builder computes it.
+// No nudge here — nudging a target is a per-run timer concept
+// (WorkoutDetail), not something a not-yet-saved workout has yet.
+function splitLabelFor(
+  row: BuilderRow,
+  baselines: Baselines | null,
+  tolerance: number,
+): string | null {
+  if (baselines === null) return null;
+  const ref: PaceRef = { base: row.refBase, off: row.refOff };
+  const resolved = resolveSplit(baselines, ref);
+  return toleranceRange(resolved, tolerance).label;
+}
 
 export interface BuilderEditMode {
   kind: "edit";
@@ -96,7 +121,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   // field wasn't in view). `pain` registers its `tabIndex={-1}` wrapper div
   // (PainPicker itself has no single focusable root — it's a radiogroup of
   // five cells), same trick `PainPickerField` below borrows from
-  // StepRowEditor's `.step-row-editor-pace` wrapper around PaceRefInput.
+  // StepEditor's `.step-editor-pace` wrapper around PaceRefInput.
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   if (baselinesState.state === "loading") {
@@ -178,7 +203,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
     setForm(next);
     if (clonedId !== id) {
       // Deferred past this render — the new row's DOM node, and thus its
-      // `fieldRefs` entry, doesn't exist until StepRowEditor mounts it.
+      // `fieldRefs` entry, doesn't exist until StepEditor mounts it.
       // React flushes a discrete event's state update (and runs ref
       // callbacks) synchronously before this click handler returns, so by
       // the time the microtask queue drains, the new row is already
@@ -351,20 +376,27 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         }}
       />
 
+      {/* Every row renders permanently expanded via StepEditor.tsx for now
+          — the accordion (`editing: rowId | null`, StepCard.tsx for every
+          collapsed row) is Task 5's "assemble the screen" job. This is the
+          minimal swap needed to keep the builder compiling once
+          StepRowEditor.tsx (this task's replaced component) is gone; Task 5
+          renders StepCard for every row except whichever one is `editing`. */}
       <div className="builder-rows">
         {form.rows.map((row, index) => (
-          <StepRowEditor
+          <StepEditor
             key={row.id}
             row={row}
             index={index}
-            inSet={index >= spanStart && form.reps > 1}
-            baselines={baselines}
-            tolerance={tolerance}
-            fieldError={(field) => errors[`row:${row.id}:${field}`]}
+            splitLabel={
+              row.kind === "w" ? splitLabelFor(row, baselines, tolerance) : null
+            }
             onChange={(patch) => updateRow(row.id, patch)}
-            onRemove={() => setForm((f) => removeRow(f, row.id))}
-            onClone={() => handleClone(row.id)}
-            registerRef={(field, el) => {
+            onDuplicate={() => handleClone(row.id)}
+            onDelete={() => setForm((f) => removeRow(f, row.id))}
+            onDone={() => {}}
+            fieldError={(field: RowField) => errors[`row:${row.id}:${field}`]}
+            registerRef={(field: RowField, el) => {
               fieldRefs.current[`row:${row.id}:${field}`] = el;
             }}
           />
@@ -375,14 +407,14 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       {/* No "+ WARM-UP" any more (Phase 5D Task 4): warm-up leaves the
           workout entirely for a preference read at session time (Task 5),
           rather than being authored per workout. `addRow(f, "wu")` and
-          StepRowEditor's `kind === "wu"` render branch both stay, though —
+          StepEditor's `isWork`-only render branch both stay, though —
           bulk import and edit-mode `fromWorkout` can still produce a stored
           warm-up step, and a pasted or starter workout that already has one
           has to stay editable (its row just isn't reachable by a create-mode
           button any more, only via clone or an existing wu row's own DUR).
           There is likewise no "+ REST" any more: rest is authored via a
           work row's own REST (OPT) field. `addRow(f, "r")` and
-          StepRowEditor's `kind === "r"` render branch both stay for the
+          StepEditor's `isWork`-only render branch both stay for the
           same bulk-import/edit-mode reason. See docs/design/DEVIATIONS.md. */}
       <div className="builder-add-row-group">
         <button
