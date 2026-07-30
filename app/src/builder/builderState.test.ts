@@ -1,16 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
+  BOOKEND_ROW_KINDS,
   EMPTY_FORM,
   addRow,
+  cloneRow,
   fromWorkout,
   hasUnsupportedSteps,
   newForm,
   newRow,
   parseDurationInput,
   removeRow,
-  setBlockStart,
   setReps,
-  setRowIds,
+  spanStartIndex,
   toSteps,
   totals,
   type BuilderForm,
@@ -22,16 +23,59 @@ import type { Step } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
-// A default row with a valid duration and ref (unlike EMPTY_FORM's blank
-// starter row) so `formWith()` alone yields a form `toSteps` accepts —
-// callers that need to exercise a specific invalid row still override
-// `rows` explicitly, same as before.
+// A default work row with a valid duration and ref (unlike EMPTY_FORM's
+// blank starter row) so `formWith()` alone yields a form `toSteps` accepts —
+// callers that need to exercise a specific invalid row still override `rows`
+// explicitly, same as before.
 function defaultValidRow(): BuilderRow {
   return {
     id: "default",
     kind: "w",
-    marked: false,
-    dur: "5'",
+    durValue: "5",
+    durUnit: "min",
+    refBase: "6k",
+    refOff: 0,
+    spm: "",
+    rest: "",
+  };
+}
+
+// Shared row-shape helpers for the new BuilderRow (no `marked`, `durValue` +
+// `durUnit` instead of `dur`). `workRow`/`wuRow`/`restRow` all default to a
+// valid, minimal row of their kind — callers spread and override for
+// anything more specific, same convention as `defaultValidRow`.
+function workRow(id: string): BuilderRow {
+  return {
+    id,
+    kind: "w",
+    durValue: "5",
+    durUnit: "min",
+    refBase: "6k",
+    refOff: 0,
+    spm: "",
+    rest: "",
+  };
+}
+
+function wuRow(id: string, minutes: string): BuilderRow {
+  return {
+    id,
+    kind: "wu",
+    durValue: minutes,
+    durUnit: "min",
+    refBase: "6k",
+    refOff: 0,
+    spm: "",
+    rest: "",
+  };
+}
+
+function restRow(id: string, minutes: string): BuilderRow {
+  return {
+    id,
+    kind: "r",
+    durValue: minutes,
+    durUnit: "min",
     refBase: "6k",
     refOff: 0,
     spm: "",
@@ -124,140 +168,64 @@ describe("rows", () => {
     setReps(EMPTY_FORM, 5);
     expect(JSON.stringify(EMPTY_FORM)).toBe(before);
   });
+});
 
-  it("keeps an open repeat block contiguous when a row is appended, so removing the block's original start still leaves the rest of the block marked (M1)", () => {
-    // Reviewer's exact probe: rows a,b -> SET on b -> [F,T] -> +ADD ROW.
-    // Before the fix, addRow always appended `marked: false`, producing
-    // [F,T,F] — the block looked intact (b and c both highlighted, "2 rows
-    // marked") until b was removed, at which point the whole block
-    // vanished instead of shrinking to just c.
-    const twoRows = addRow(EMPTY_FORM, "w");
-    const [, b] = twoRows.rows;
-    const started = setBlockStart(twoRows, b!.id);
-    expect(started.rows.map((r) => r.marked)).toStrictEqual([false, true]);
+describe("spanStartIndex / BOOKEND_ROW_KINDS", () => {
+  it("only 'wu' is a bookend kind today", () => {
+    expect(BOOKEND_ROW_KINDS).toStrictEqual(["wu"]);
+  });
 
-    const withThird = addRow(started, "w");
-    const c = withThird.rows[2]!;
-    expect(withThird.rows.map((r) => r.marked)).toStrictEqual([
-      false,
-      true,
-      true,
-    ]);
-    expect(setRowIds(withThird)).toStrictEqual([b!.id, c.id]);
+  it("keeps a leading warm-up outside the repeat so editing a starter workout doesn't repeat it", () => {
+    const f = formWith({ reps: 3, rows: [wuRow("wu1", "10"), workRow("a")] });
+    expect(spanStartIndex(f)).toBe(1);
+  });
 
-    const afterRemovingStart = removeRow(withThird, b!.id);
-    expect(afterRemovingStart.rows.map((r) => r.marked)).toStrictEqual([
-      false,
-      true,
-    ]);
-    expect(setRowIds(afterRemovingStart)).toStrictEqual([c.id]);
+  it("repeats everything when there is no bookend row", () => {
+    const f = formWith({ reps: 3, rows: [workRow("a"), restRow("r1", "2")] });
+    expect(spanStartIndex(f)).toBe(0);
+    const out = toSteps(f);
+    if (!out.ok) throw new Error("expected ok");
+    expect(out.steps[0]).toStrictEqual({ k: "reps", count: 3 });
+  });
+
+  it("returns rows.length (nothing to repeat) when every row is a bookend", () => {
+    const f = formWith({ rows: [wuRow("wu1", "10")] });
+    expect(spanStartIndex(f)).toBe(1);
   });
 });
 
-describe("setBlockStart", () => {
-  function fourRowForm(): BuilderForm {
-    return formWith({
-      reps: 3,
+describe("cloneRow", () => {
+  it("clones a row directly beneath the original, copying every field", () => {
+    const f = formWith({
       rows: [
         {
-          id: "wu",
-          kind: "wu",
-          marked: false,
-          dur: "10'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "1'",
+          ...workRow("a"),
+          durValue: "90",
+          durUnit: "m",
           refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "b",
-          kind: "w",
-          marked: false,
-          dur: "2'",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "c",
-          kind: "r",
-          marked: false,
-          dur: "3'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
+          refOff: -4,
+          spm: "26",
+          rest: "3",
         },
       ],
     });
-  }
-
-  it("starts a block mid-list, marking that row and every row after it", () => {
-    const f = setBlockStart(fourRowForm(), "a");
-    expect(f.rows.map((r) => r.marked)).toStrictEqual([
-      false,
-      true,
-      true,
-      true,
-    ]);
-  });
-
-  it("clicking the current block start clears the whole block", () => {
-    const started = setBlockStart(fourRowForm(), "a");
-    const cleared = setBlockStart(started, "a");
-    expect(cleared.rows.map((r) => r.marked)).toStrictEqual([
-      false,
-      false,
-      false,
-      false,
-    ]);
-  });
-
-  it("clicking a later row inside the block moves the start and unmarks the rows before it", () => {
-    const started = setBlockStart(fourRowForm(), "a");
-    const moved = setBlockStart(started, "b");
-    expect(moved.rows.map((r) => r.marked)).toStrictEqual([
-      false,
-      false,
-      true,
-      true,
-    ]);
-  });
-
-  it("round-trips through toSteps into a valid single-marker step list after a block move", () => {
-    const started = setBlockStart(fourRowForm(), "a");
-    const moved = setBlockStart(started, "b");
-    const out = toSteps(moved);
-    if (!out.ok)
-      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
-    expect(out.steps.filter((s) => s.k === "reps")).toHaveLength(1);
-    expect(validateSteps(out.steps)).toStrictEqual({
-      ok: true,
-      steps: out.steps,
+    const cloned = cloneRow(f, "a");
+    expect(cloned.rows).toHaveLength(2);
+    expect(cloned.rows[1].id).not.toBe("a");
+    expect(cloned.rows[1]).toMatchObject({
+      kind: "w",
+      durValue: "90",
+      durUnit: "m",
+      refBase: "2k",
+      refOff: -4,
+      spm: "26",
+      rest: "3",
     });
   });
 
-  it("keeps totals agreeing with estimateMinutes after a block move", () => {
-    const started = setBlockStart(fourRowForm(), "a");
-    const moved = setBlockStart(started, "b");
-    const out = toSteps(moved);
-    if (!out.ok)
-      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
-    const t = totals(moved, baselines);
-    expect(t).not.toBeNull();
-    const estimate = estimateMinutes(out.steps, baselines);
-    expect(Math.round(t!.total)).toBe(estimate.minutes);
+  it("returns the form unchanged when the id isn't found", () => {
+    const f = formWith();
+    expect(cloneRow(f, "nope")).toBe(f);
   });
 });
 
@@ -268,8 +236,8 @@ describe("toSteps", () => {
         {
           id: "a",
           kind: "w",
-          marked: false,
-          dur: "5'",
+          durValue: "5",
+          durUnit: "min",
           refBase: "6k",
           refOff: -2,
           spm: "22",
@@ -297,8 +265,8 @@ describe("toSteps", () => {
         {
           id: "a",
           kind: "w",
-          marked: false,
-          dur: "5",
+          durValue: "5",
+          durUnit: "min",
           refBase: "6k",
           refOff: -2,
           spm: "22",
@@ -323,111 +291,82 @@ describe("toSteps", () => {
     expect(out).not.toHaveProperty("num");
   });
 
-  it("emits a reps marker before the first marked row and nowhere else", () => {
-    const f = formWith({
-      reps: 4,
-      rows: [
-        {
-          id: "wu",
-          kind: "wu",
-          marked: false,
-          dur: "10'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "a",
-          kind: "w",
-          marked: true,
-          dur: "1'",
-          refBase: "6k",
-          refOff: -2,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "b",
-          kind: "r",
-          marked: true,
-          dur: "5'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-      ],
-    });
-    const out = toSteps(f);
-    if (!out.ok)
-      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
-    expect(out.steps.map((s) => s.k)).toStrictEqual(["wu", "reps", "w", "r"]);
-    expect(out.steps[1]).toStrictEqual({ k: "reps", count: 4 });
-  });
-
-  it("omits the reps marker entirely when no row is marked", () => {
-    const f = formWith({
-      reps: 4,
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "1'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-      ],
-    });
+  it("emits no reps marker at x1", () => {
+    const f = formWith({ reps: 1, rows: [workRow("a")] });
     const out = toSteps(f);
     if (!out.ok) throw new Error("expected ok");
     expect(out.steps.some((s) => s.k === "reps")).toBe(false);
   });
 
-  it("rejects a form with no work step, matching the domain rule", () => {
+  it("emits one marker before the first non-bookend row at xN", () => {
     const f = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "wu",
-          marked: false,
-          dur: "10'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-      ],
+      reps: 4,
+      rows: [wuRow("wu1", "10"), workRow("a"), restRow("r1", "5")],
     });
+    const out = toSteps(f);
+    if (!out.ok) throw new Error("expected ok");
+    expect(out.steps.map((s) => s.k)).toStrictEqual(["wu", "reps", "w", "r"]);
+    expect(out.steps[1]).toStrictEqual({ k: "reps", count: 4 });
+  });
+
+  it("rejects a form with no work step, matching the domain rule", () => {
+    const f = formWith({ rows: [wuRow("a", "10")] });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
     expect(Object.values(out.errors).join(" ")).toMatch(/work/i);
   });
 
+  it("rejects a blank duration on a warm-up/rest row", () => {
+    const f = formWith({ rows: [wuRow("a", ""), workRow("b")] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:dur"]).toMatch(/duration must be minutes/);
+  });
+
+  it("rejects a warm-up/rest row's minutes off the domain's half-step grid", () => {
+    const f = formWith({ rows: [wuRow("a", "5.25"), workRow("b")] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:dur"]).toMatch(/0\.5\.\.180 in 0\.5 steps/);
+  });
+
   it("enforces the domain's spm bounds", () => {
-    const f = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "5'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "70",
-          rest: "",
-        },
-      ],
-    });
+    const f = formWith({ rows: [{ ...workRow("a"), spm: "70" }] });
     expect(toSteps(f).ok).toBe(false);
   });
 
+  it("rejects a work row's distance below the domain's 100m floor", () => {
+    const f = formWith({
+      rows: [{ ...workRow("a"), durValue: "50", durUnit: "m" }],
+    });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:dur"]).toMatch(/100\.\.42195/);
+  });
+
+  it("rejects a work row's minutes off the domain's half-step grid", () => {
+    const f = formWith({
+      rows: [{ ...workRow("a"), durValue: "5.25", durUnit: "min" }],
+    });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:dur"]).toMatch(/0\.5\.\.180 in 0\.5 steps/);
+  });
+
+  it("omits spm entirely when the field is empty", () => {
+    const f = formWith({ rows: [{ ...workRow("a"), spm: "" }] });
+    const out = toSteps(f);
+    if (!out.ok) throw new Error("expected ok");
+    expect(out.steps[0]).not.toHaveProperty("spm");
+  });
+
   // Final-review fix wave item 1: rest must accept the same optional-
-  // apostrophe grammar as dur (parseDurationInput), not a bare Number() —
+  // apostrophe grammar as before (parseDurationInput), not a bare Number() —
   // otherwise the literal `5'` from James's device screenshot is rejected
   // by REST while DUR accepts it, 40px apart on the same row.
   it("accepts a bare number rest, matching dur's optional apostrophe", () => {
@@ -482,36 +421,9 @@ describe("totals", () => {
     const f = formWith({
       reps: 4,
       rows: [
-        {
-          id: "wu",
-          kind: "wu",
-          marked: false,
-          dur: "10'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "a",
-          kind: "w",
-          marked: true,
-          dur: "1'",
-          refBase: "6k",
-          refOff: -2,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "b",
-          kind: "r",
-          marked: true,
-          dur: "5'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
+        wuRow("wu", "10"),
+        { ...workRow("a"), durValue: "1", refOff: -2 },
+        restRow("b", "5"),
       ],
     });
     expect(totals(f, baselines)).toStrictEqual({
@@ -521,21 +433,27 @@ describe("totals", () => {
     });
   });
 
+  it("totals bookend minutes once and the span N times", () => {
+    const f = formWith({
+      reps: 4,
+      rows: [
+        wuRow("wu1", "10"),
+        { ...workRow("a"), durValue: "5", durUnit: "min" },
+      ],
+    });
+    expect(totals(f, baselines)).toStrictEqual({
+      loose: 10,
+      perSet: 5,
+      total: 30,
+    });
+  });
+
   it("estimates a distance set from the resolved pace", () => {
     // 2000m at 2k+0 = 112.0s/500m -> 4 x 112s = 448s = 7.4666 min
     const f = formWith({
       reps: 2,
       rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: true,
-          dur: "2000m",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
+        { ...workRow("a"), durValue: "2000", durUnit: "m", refBase: "2k" },
       ],
     });
     const t = totals(f, baselines);
@@ -547,16 +465,7 @@ describe("totals", () => {
   it("returns null when a distance row cannot be estimated without baselines", () => {
     const f = formWith({
       rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "2000m",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
+        { ...workRow("a"), durValue: "2000", durUnit: "m", refBase: "2k" },
       ],
     });
     expect(totals(f, null)).toBeNull();
@@ -584,13 +493,12 @@ describe("fromWorkout", () => {
     expect(f.reps).toBe(4);
     expect(f.rows.map((r) => r.kind)).toStrictEqual(["wu", "w"]);
     expect(f.rows[1]).toMatchObject({
-      marked: true,
-      dur: "1'",
+      durValue: "1",
+      durUnit: "min",
       refBase: "6k",
       refOff: -2,
       spm: "22",
     });
-    expect(f.rows[0].marked).toBe(false);
   });
 
   it("round-trips the structured ref out of a stored workout", () => {
@@ -608,6 +516,50 @@ describe("fromWorkout", () => {
       ],
     });
     expect(f.rows[0]).toMatchObject({ refBase: "2k", refOff: 4 });
+  });
+
+  it("splits a stored duration into value and unit", () => {
+    const f = fromWorkout({
+      title: "T",
+      type: "O2",
+      difficulty: "easy",
+      pain: 2,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 2000 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
+    });
+    expect(f.rows[0]).toMatchObject({ durValue: "2000", durUnit: "m" });
+  });
+
+  it("omits spm entirely when the field is empty", () => {
+    const f = formWith({ rows: [{ ...workRow("a"), spm: "" }] });
+    const out = toSteps(f);
+    if (!out.ok) throw new Error("expected ok");
+    expect(out.steps[0]).not.toHaveProperty("spm");
+  });
+
+  it("round-trips a stored step that has no spm without adding one", () => {
+    const f = fromWorkout({
+      title: "T",
+      type: "O2",
+      difficulty: "easy",
+      pain: 2,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+    });
+    expect(f.rows[0].spm).toBe("");
+    const out = toSteps(f);
+    if (!out.ok) throw new Error("expected ok");
+    expect(out.steps[0]).not.toHaveProperty("spm");
   });
 
   it("round-trips restMinutes so an edited workout with rest can be saved (H1/H2)", () => {
@@ -704,47 +656,20 @@ describe("totals vs. estimateMinutes agreement", () => {
     expect(Math.round(t!.total)).toBe(estimate.minutes);
   });
 
-  it("H3: agrees with estimateMinutes for a non-contiguous marked set, by treating everything from the first marked row onward as repeated", () => {
-    // Reviewer's exact probe: [wu 10' unmarked, w 5' marked, r 2' unmarked],
-    // reps 3. toSteps emits [wu, reps, w, r] because the marker goes before
-    // the FIRST marked row and liveSteps repeats everything after it — so
-    // the "r" row repeats even though the user never marked it. Before this
-    // fix, `totals` bucketed rows by their own `marked` flag: loose = 10
-    // (wu) + 2 (r) = 12, perSet = 5 (w), total = 12 + 5*3 = 27 — contradicting
-    // estimateMinutes's 31 for this exact same form.
+  it("H3: agrees with estimateMinutes for a bookend + repeated tail, including a row kind that isn't itself a bookend", () => {
+    // [wu 10' bookend, w 5' repeated, r 2' repeated], reps 3. toSteps emits
+    // [wu, reps, w, r] because the marker goes at spanStartIndex (right
+    // after the bookend) and liveSteps repeats everything after it — so the
+    // "r" row repeats even though it was never individually marked, the
+    // same shape the old per-row `marked` model needed a dedicated
+    // non-contiguous-marking regression test for. Under the bookend model
+    // this just falls out of `r` not being in BOOKEND_ROW_KINDS.
     const f = formWith({
       reps: 3,
       rows: [
-        {
-          id: "wu",
-          kind: "wu",
-          marked: false,
-          dur: "10'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "w",
-          kind: "w",
-          marked: true,
-          dur: "5'",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "r",
-          kind: "r",
-          marked: false,
-          dur: "2'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
+        wuRow("wu", "10"),
+        { ...workRow("w"), durValue: "5", refBase: "2k" },
+        restRow("r", "2"),
       ],
     });
 
@@ -761,80 +686,11 @@ describe("totals vs. estimateMinutes agreement", () => {
   });
 });
 
-describe("setRowIds", () => {
-  it("returns every row id from the first marked row onward, including rows the user never clicked", () => {
-    const f = formWith({
-      rows: [
-        {
-          id: "wu",
-          kind: "wu",
-          marked: false,
-          dur: "10'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "w",
-          kind: "w",
-          marked: true,
-          dur: "5'",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-        {
-          id: "r",
-          kind: "r",
-          marked: false,
-          dur: "2'",
-          refBase: "6k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-      ],
-    });
-
-    expect(setRowIds(f)).toStrictEqual(["w", "r"]);
-  });
-
-  it("returns an empty list when nothing is marked", () => {
-    const f = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "5'",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-      ],
-    });
-
-    expect(setRowIds(f)).toStrictEqual([]);
-  });
-});
-
 describe("toSteps additional coverage", () => {
   it("builds a distance work step", () => {
     const f = formWith({
       rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "2500m",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
+        { ...workRow("a"), durValue: "2500", durUnit: "m", refBase: "2k" },
       ],
     });
     const out = toSteps(f);
@@ -852,18 +708,7 @@ describe("toSteps additional coverage", () => {
 
   it("rejects a pace-ref offset beyond the domain's ±60 bound (M1)", () => {
     const f = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "5'",
-          refBase: "2k",
-          refOff: 99,
-          spm: "",
-          rest: "",
-        },
-      ],
+      rows: [{ ...workRow("a"), refBase: "2k", refOff: 99 }],
     });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
@@ -873,18 +718,7 @@ describe("toSteps additional coverage", () => {
 
   it("agrees with the domain on the ±60 pace-ref boundary (M1): +60 is accepted by both, +61 by neither", () => {
     const inside = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "5'",
-          refBase: "2k",
-          refOff: 60,
-          spm: "",
-          rest: "",
-        },
-      ],
+      rows: [{ ...workRow("a"), refBase: "2k", refOff: 60 }],
     });
     const insideOut = toSteps(inside);
     if (!insideOut.ok)
@@ -897,18 +731,7 @@ describe("toSteps additional coverage", () => {
     });
 
     const outside = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "5'",
-          refBase: "2k",
-          refOff: 61,
-          spm: "",
-          rest: "",
-        },
-      ],
+      rows: [{ ...workRow("a"), refBase: "2k", refOff: 61 }],
     });
     expect(toSteps(outside).ok).toBe(false);
     // Confirm the domain rejects the same offset too — the client didn't
@@ -925,16 +748,9 @@ describe("toSteps additional coverage", () => {
   });
 
   it("bounds the emitted step count, not just the row count (M2)", () => {
-    const rows: BuilderRow[] = Array.from({ length: 100 }, (_, i) => ({
-      id: `r${i}`,
-      kind: "w",
-      marked: i === 0,
-      dur: "1'",
-      refBase: "2k",
-      refOff: 0,
-      spm: "",
-      rest: "",
-    }));
+    const rows: BuilderRow[] = Array.from({ length: 100 }, (_, i) =>
+      workRow(`r${i}`),
+    );
     // 100 rows + 1 reps marker = 101 emitted steps, over the domain's cap.
     const out = toSteps(formWith({ rows, reps: 2 }));
     expect(out.ok).toBe(false);
@@ -943,16 +759,9 @@ describe("toSteps additional coverage", () => {
   });
 
   it("allows exactly 100 emitted steps (rows plus the reps marker), and the domain agrees (M2)", () => {
-    const rows: BuilderRow[] = Array.from({ length: 99 }, (_, i) => ({
-      id: `r${i}`,
-      kind: "w",
-      marked: i === 0,
-      dur: "1'",
-      refBase: "2k",
-      refOff: 0,
-      spm: "",
-      rest: "",
-    }));
+    const rows: BuilderRow[] = Array.from({ length: 99 }, (_, i) =>
+      workRow(`r${i}`),
+    );
     // 99 rows + 1 reps marker = 100 emitted steps, exactly at the cap.
     const out = toSteps(formWith({ rows, reps: 2 }));
     expect(out.ok).toBe(true);
@@ -968,18 +777,7 @@ describe("toSteps additional coverage", () => {
 
   it("tolerates surrounding whitespace in a duration field, like every other field (L1)", () => {
     const f = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: " 5' ",
-          refBase: "2k",
-          refOff: 0,
-          spm: "",
-          rest: "",
-        },
-      ],
+      rows: [{ ...workRow("a"), durValue: " 5 ", refBase: "2k" }],
     });
     const out = toSteps(f);
     expect(out.ok).toBe(true);
@@ -1061,7 +859,7 @@ describe("EMPTY_FORM safety (L4)", () => {
       (EMPTY_FORM as { title: string }).title = "changed";
     }).toThrow();
     expect(() => {
-      (EMPTY_FORM.rows[0] as { dur: string }).dur = "5'";
+      (EMPTY_FORM.rows[0] as { durValue: string }).durValue = "5";
     }).toThrow();
   });
 
