@@ -738,7 +738,13 @@ button:disabled {
   gap: 6px;
 }
 
-.step-row-editor-line1 input {
+/* The row's own plain <input> elements — historically scoped to line1 (the
+   only place one lived), but REST's own input moved onto its own line
+   below (fix wave, Task 1) once its new "REST" affix no longer fit inline
+   with DUR at 390px, so this is scoped to the whole row now. DUR's own
+   value field (DurationInput) and SPM's (SpmInput) carry equivalent rules
+   on their own classes already — this exists for `.field-rest`. */
+.step-row-editor input {
   min-height: var(--tap);
   padding: 0 4px;
   background: var(--surface);
@@ -749,7 +755,7 @@ button:disabled {
   text-align: center;
 }
 
-.step-row-editor-line1 input[aria-invalid="true"] {
+.step-row-editor input[aria-invalid="true"] {
   border-color: var(--accent);
 }
 
@@ -757,19 +763,30 @@ button:disabled {
   width: 44px;
 }
 
-/* Groups the REST input with its static "MIN" marking (Phase 5D Task 4 —
-   James couldn't tell what the old SET cell did, and a placeholder-only
-   unit had the same problem: it vanishes the moment the field is typed
-   into). Rest stays minutes-only — no unit toggle, ever (rest has no pace
-   ref, so meters could never convert to time for totals or the timer; see
-   docs/design/DEVIATIONS.md) — so this is static text, not a control. */
+/* Groups the REST input with its "REST" and static "MIN" markings (Phase 5D
+   Task 4 — James couldn't tell what the old SET cell did, and a
+   placeholder-only unit had the same problem: it vanishes the moment the
+   field is typed into). Rest stays minutes-only — no unit toggle, ever
+   (rest has no pace ref, so meters could never convert to time for totals
+   or the timer; see docs/design/DEVIATIONS.md) — so both affixes are
+   static text, not controls. Its own line (fix wave, Task 1) rather than
+   inline in .step-row-editor-line1 — adding the "REST" affix alongside
+   line1's new "DUR" affix didn't leave room for both at the 390px mobile
+   viewport this app targets, so REST moved out, same as SPM and the pace
+   ref already had to. */
 .field-rest-group {
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-top: 8px;
 }
 
-.field-rest-unit {
+/* Shared static-affix treatment: REST's "MIN" unit marking, plus the
+   "DUR"/"REST"/"SPM" labels added beside their controls in the fix wave
+   that follows Phase 5D Task 4 — every row control now carries a visible
+   on-screen name, not just an aria-label. */
+.field-rest-unit,
+.row-affix {
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
@@ -777,18 +794,38 @@ button:disabled {
   color: var(--ink-4);
 }
 
+/* Groups the "DUR" affix with the duration value+unit control (fix wave,
+   Task 1) — line1 used to distinguish duration from rest only by chip
+   weight. */
+.field-dur-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Same cell position the old SET toggle occupied (leftmost in line1) —
    duplicates the row directly beneath itself rather than marking it into
    the repeat span (Phase 5D Task 4; see docs/design/DEVIATIONS.md). Same
-   idiom as .row-delete below, just not pinned to the row's trailing edge. */
+   idiom as .row-delete below, just not pinned to the row's trailing edge.
+   Carries a visible "COPY" text label alongside the glyph now (fix wave,
+   Task 1) — a bare "↻" in this exact cell position was the control James
+   couldn't identify in the first place. */
 .row-clone {
   min-width: var(--tap);
   min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 8px;
   background: transparent;
   border: 1px solid var(--rule-3);
   color: var(--ink);
-  font-size: 16px;
-  line-height: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -811,8 +848,13 @@ button:disabled {
 /* SPM doesn't fit alongside clone/DUR/REST/delete in .step-row-editor-line1
    at the 390px mobile viewport this app targets either (Phase 5D Task 4) —
    same reasoning as .step-row-editor-pace just below, which the pace
-   control needed for the same reason one phase earlier. */
+   control needed for the same reason one phase earlier. Flex row (fix
+   wave, Task 1) to lay the new "SPM" affix beside the stepper — the bare
+   "− 20 +" never said what it stepped. */
 .step-row-editor-spm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 8px;
 }
 
@@ -1017,10 +1059,14 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Same treatment as .builder-repeat-readout (both are ".mono-status" lines
+   sitting beside each other): only margin-top is this class's own — the
+   font-size/color used to be overridden to ink-4/11px on the claim that
+   matched the repeat readout, but .builder-repeat-readout is actually
+   ink-3/12px (inherited, unoverridden, from .mono-status). Fixed (fix wave,
+   Task 3) so the two supporting lines read as one family. */
 .builder-warmup-readout {
   margin-top: 4px;
-  font-size: 11px;
-  color: var(--ink-4);
 }
 
 .builder-submit-error {

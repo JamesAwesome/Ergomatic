@@ -114,10 +114,12 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByLabel("Row 1 stroke rate", { exact: true }).fill("20");
 
   await page.getByRole("button", { name: "+ ADD ROW" }).click();
-  // Bare number in minutes — DurationInput's unit chip defaults to MIN
-  // (Phase 5D Task 4), so this stays a duration in minutes without
-  // touching the M chip at all.
-  await page.getByLabel("Row 2 duration", { exact: true }).fill("8");
+  // A distance row (2000m), not another minutes row — Row 1 already covers
+  // MIN; this row exercises the M chip (fix wave, Task 4) so the committed
+  // screenshot shows a distance row actually resolving, not just the
+  // default unit.
+  await page.getByLabel("Row 2 duration", { exact: true }).fill("2000");
+  await page.getByRole("radio", { name: "Row 2 duration unit meters" }).click();
   await page.getByRole("radio", { name: "Row 2 pace 2K" }).click();
   await page.getByLabel("Row 2 stroke rate", { exact: true }).fill("26");
   await page.getByLabel("Row 2 rest").fill("3");

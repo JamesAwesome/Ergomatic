@@ -88,49 +88,37 @@ export default function StepRowEditor({
       }
     >
       <div className="step-row-editor-line1">
+        {/* Same cell position the old bare "↻" SET-cell replacement used to
+            occupy (Phase 5D Task 4) — now carries a visible text label too
+            (fix wave: James could name the old SET cell no better than this
+            unlabelled glyph, so the glyph alone can't be the fix). The
+            glyph stays (established shorthand for "duplicate"), but "COPY"
+            is real text content, not a placeholder or icon-only affordance. */}
         <button
           type="button"
           className="row-clone"
           aria-label={`Duplicate ${rowLabel}`}
           onClick={onClone}
         >
-          ↻
+          <span aria-hidden="true">↻</span> COPY
         </button>
-        <DurationInput
-          value={row.durValue}
-          unit={row.durUnit}
-          onChange={({ value, unit }) =>
-            onChange({ durValue: value, durUnit: unit })
-          }
-          rowLabel={rowLabel}
-          invalid={Boolean(fieldError("dur"))}
-          errorId={fieldError("dur") ? errorId("dur") : undefined}
-          registerRef={(el) => registerRef?.("dur", el)}
-        />
-        {isWork && (
-          // REST has no pace ref (see docs/design/DEVIATIONS.md), so it can
-          // never be a distance the way DUR can — no unit toggle, just a
-          // static "MIN" marking next to the field so it's never mistaken
-          // for the unitless free text it used to be. Static, not a
-          // placeholder: a placeholder vanishes the moment the rower types,
-          // which was the exact complaint that started this phase (James
-          // couldn't tell what the SET cell — or, here, the unit — meant).
-          <div className="field-rest-group">
-            <input
-              ref={(el) => registerRef?.("rest", el)}
-              className="field-rest"
-              aria-label={`${rowLabel} rest`}
-              aria-invalid={Boolean(fieldError("rest"))}
-              aria-describedby={
-                fieldError("rest") ? errorId("rest") : undefined
-              }
-              placeholder="opt"
-              value={row.rest}
-              onChange={(e) => onChange({ rest: e.target.value })}
-            />
-            <span className="field-rest-unit">MIN</span>
-          </div>
-        )}
+        {/* "DUR" is a static affix beside the value+unit control, same
+            treatment as REST's own affix below — line1 used to distinguish
+            duration from rest only by chip weight (fix wave). */}
+        <div className="field-dur-group">
+          <span className="row-affix">DUR</span>
+          <DurationInput
+            value={row.durValue}
+            unit={row.durUnit}
+            onChange={({ value, unit }) =>
+              onChange({ durValue: value, durUnit: unit })
+            }
+            rowLabel={rowLabel}
+            invalid={Boolean(fieldError("dur"))}
+            errorId={fieldError("dur") ? errorId("dur") : undefined}
+            registerRef={(el) => registerRef?.("dur", el)}
+          />
+        </div>
         <button
           type="button"
           className="row-delete"
@@ -141,11 +129,41 @@ export default function StepRowEditor({
         </button>
       </div>
       {isWork && (
-        // SPM doesn't fit alongside clone/DUR/REST/delete in line1 at the
-        // 390px mobile viewport this app targets — the same reason
-        // PaceRefInput got its own line below (see that control's own
-        // comment) — so it gets one too, between line1 and the pace line.
+        // REST has no pace ref (see docs/design/DEVIATIONS.md), so it can
+        // never be a distance the way DUR can — no unit toggle, just a
+        // static "MIN" marking next to the field so it's never mistaken for
+        // the unitless free text it used to be. Static, not a placeholder: a
+        // placeholder vanishes the moment the rower types, which was the
+        // exact complaint that started this phase (James couldn't tell what
+        // the SET cell — or, here, the unit — meant). Moved off line1 onto
+        // its own line (fix wave, Task 1): adding the "DUR"/"REST" affixes
+        // that same complaint asked for didn't leave room for REST beside
+        // DUR at the 390px mobile viewport this app targets, so REST gets a
+        // line the same way SPM and the pace ref already do below.
+        <div className="field-rest-group">
+          <span className="row-affix">REST</span>
+          <input
+            ref={(el) => registerRef?.("rest", el)}
+            className="field-rest"
+            aria-label={`${rowLabel} rest`}
+            aria-invalid={Boolean(fieldError("rest"))}
+            aria-describedby={fieldError("rest") ? errorId("rest") : undefined}
+            placeholder="opt"
+            value={row.rest}
+            onChange={(e) => onChange({ rest: e.target.value })}
+          />
+          <span className="field-rest-unit">MIN</span>
+        </div>
+      )}
+      {isWork && (
+        // SPM doesn't fit alongside clone/DUR/delete in line1 at the 390px
+        // mobile viewport this app targets — the same reason PaceRefInput
+        // got its own line below (see that control's own comment) — so it
+        // gets one too, between line1 and the pace line. "SPM" is a static
+        // affix beside the stepper (fix wave, Task 1) — the bare "− 20 +"
+        // never said what it was stepping.
         <div className="step-row-editor-spm">
+          <span className="row-affix">SPM</span>
           <SpmInput
             value={row.spm}
             onChange={(spm) => onChange({ spm })}
