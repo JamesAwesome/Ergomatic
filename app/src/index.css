@@ -889,6 +889,90 @@ button:disabled {
   text-align: center;
 }
 
+/* DurationInput (builder/DurationInput.tsx) — a numeric field plus a
+   MIN/M radiogroup, replacing the old free-text "5' or 2500m" field. */
+.duration-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.duration-input-value {
+  /* >= --tap (44px): a real <input>, in scope for the 44x44 tap-target
+     sweep (app/e2e/design.spec.ts), same idiom as .field-spm above. */
+  width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 4px;
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: center;
+}
+
+.duration-input-units {
+  display: flex;
+  gap: 6px;
+}
+
+/* Same idiom as .pace-ref-chip: a checked/unchecked radio styled like
+   library/FilterChips.tsx's .chip, toggled via aria-checked since MIN/M
+   are mutually exclusive. */
+.duration-input-chip {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.duration-input-chip[aria-checked="true"] {
+  background: var(--accent);
+  color: var(--on-color);
+  border: none;
+}
+
+/* SpmInput (builder/SpmInput.tsx) — a clearable numeric field with 44px
+   −/+ steppers either side. SPM stays optional (domain's `spm?`), so this
+   control has no unchecked/checked state to style, unlike the radiogroups
+   above. */
+.spm-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spm-input-value {
+  width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 4px;
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: center;
+}
+
+.spm-input-step {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .builder-add-row-group {
   display: flex;
   gap: 8px;
