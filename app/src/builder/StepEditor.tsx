@@ -186,13 +186,7 @@ export default function StepEditor({
       )}
 
       {isWork && (
-        <div
-          className="step-editor-row"
-          tabIndex={-1}
-          ref={(el) => registerRef?.("spm", el)}
-          aria-invalid={Boolean(fieldError?.("spm"))}
-          aria-describedby={fieldError?.("spm") ? errorId("spm") : undefined}
-        >
+        <div className="step-editor-row">
           <span className="step-editor-row-label">SPM</span>
           <Stepper
             label={`${rowLabel} stroke rate`}
@@ -202,6 +196,9 @@ export default function StepEditor({
             }
             onDecrement={() => stepSpm(-1)}
             onIncrement={() => stepSpm(1)}
+            invalid={Boolean(fieldError?.("spm"))}
+            errorId={fieldError?.("spm") ? errorId("spm") : undefined}
+            registerRef={(el) => registerRef?.("spm", el)}
           />
         </div>
       )}
@@ -212,13 +209,7 @@ export default function StepEditor({
       )}
 
       {isWork && (
-        <div
-          className="step-editor-row"
-          tabIndex={-1}
-          ref={(el) => registerRef?.("rest", el)}
-          aria-invalid={Boolean(fieldError?.("rest"))}
-          aria-describedby={fieldError?.("rest") ? errorId("rest") : undefined}
-        >
+        <div className="step-editor-row">
           <span className="step-editor-row-label">REST</span>
           <Stepper
             label={`${rowLabel} rest`}
@@ -228,6 +219,9 @@ export default function StepEditor({
             }
             onDecrement={() => stepRest(-REST_STEP_SECONDS)}
             onIncrement={() => stepRest(REST_STEP_SECONDS)}
+            invalid={Boolean(fieldError?.("rest"))}
+            errorId={fieldError?.("rest") ? errorId("rest") : undefined}
+            registerRef={(el) => registerRef?.("rest", el)}
           />
         </div>
       )}

@@ -205,14 +205,17 @@ describe("EditWorkout", () => {
       screen.getByRole("heading", { name: "Edit Workout" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Ladder Sets");
+    // Edit mode opens with every row collapsed (Phase 5E Task 5's
+    // accordion) — expand Row 2 (the `w` row; PERSONAL_WORKOUT's steps are
+    // [wu, w, r], so the work row is the second card) to reach its
+    // pace-ref control.
+    await userEvent.click(screen.getAllByRole("button", { name: "EDIT" })[1]!);
     // Pins the structured-ref round trip through fromWorkout/stepToRow: the
     // stored step's ref ({base:"6k", off:-2}) must load back into
     // PaceRefInput's base/off props exactly, not just the base. The
     // base+offset -> display-string rendering itself ("6k −2") is
     // PaceRefInput's own concern, covered by PaceRefInput.test.tsx — this
-    // only needs to confirm the *value* survived the round trip. PERSONAL_
-    // WORKOUT's steps are [wu, w], so the work row (the only one with a
-    // pace-ref control) is row 2, not row 1.
+    // only needs to confirm the *value* survived the round trip.
     expect(screen.getByRole("radio", { name: "Row 2 pace 6K" })).toBeChecked();
     expect(screen.getByText("6k −2")).toBeInTheDocument();
   });
@@ -223,9 +226,11 @@ describe("EditWorkout", () => {
     await renderEdit("/library/w1/edit");
 
     // Row 3 (after the wu and w rows): the standalone `r` step from the
-    // fixture. Not a `w` row, so it gets none of StepRowEditor's isWork-only
-    // controls (SPM/REST/pace) — only the shared duration field, pre-filled
-    // from `stepToRow`'s plain `durValue` (Phase 5D Task 2 dropped the
+    // fixture. Expand it — edit mode starts collapsed (Phase 5E Task 5).
+    await userEvent.click(screen.getAllByRole("button", { name: "EDIT" })[2]!);
+    // Not a `w` row, so it gets none of StepEditor's isWork-only controls
+    // (SPM/REST/pace) — only the shared duration field, pre-filled from
+    // `stepToRow`'s plain `durValue` (Phase 5D Task 2 dropped the
     // `${minutes}'` grammar in favor of a bare numeric string).
     expect(screen.getByLabelText("Row 3 duration")).toHaveValue("3");
     // Distinguishes it from also being a `w` row rendered with blank
@@ -235,7 +240,9 @@ describe("EditWorkout", () => {
       screen.queryByRole("radio", { name: "Row 3 pace 6K" }),
     ).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
 
     // Exact body equality (not just "contains an r step") — proves the wu
     // and w steps also survived the round trip unchanged, not just the one

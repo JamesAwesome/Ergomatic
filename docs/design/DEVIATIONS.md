@@ -23,7 +23,14 @@ here. These are intentional product decisions (spec:
 | §11's 64px accent-text `PACE REF` field, accepting free text (`2k`/`6k-2`/`2k+4`) per a named regex | A `2K`/`6K` chip pair plus a ±60 offset stepper, on its own line beneath the row | Free text let a rower type `8k` and get an inline error — the defect that started this phase; a structured control makes an invalid ref unrepresentable. Four extra tappables (two base chips, two stepper buttons) don't fit inline at 390px |
 | §11's `+ PASTE TO BULK IMPORT` toggle on the New-workout screen | Its own screen at `/library/import`, reached from a control in the Library header | James reported that mixing bulk paste into the single-entry form was confusing |
 | §11's column-header strip `SET · DUR · PACE REF · SPM · REST · SPLIT` sitting above the rows of 44px fields | No header strip at all. Every field carries its own static, visible affix or label beside it instead: `DUR` and `REST` next to their value controls, `SPM` next to the stroke-rate stepper, plus each control's own aria-label (SET has no equivalent — see the clone-button row above) | The row grew to three (now four, with REST's own line) lines — duration+unit toggle, REST, SPM stepper, pace control — so a single horizontal strip sitting above the row pointed at controls that were no longer on the line beneath it. A previous pass removed the header outright without replacing it (nothing named the SET-replacement clone button, the SPM stepper, or distinguished DUR from REST on screen — aria-labels covered screen readers but not the visible layer James was looking at); per-field affixes fix that without reintroducing a strip that can't span a multi-line row |
-| §11's `Save to library` button label | `Save` | Shortened during implementation; kept as a deliberate, not accidental, departure — `Save to library` is redundant with the screen the button already sits on (`New Workout`/`Edit Workout`), and every other primary action in the app (Library, WorkoutDetail) reads as a single verb |
+
+Superseded by the builder redesign (`docs/design/builder-redesign/`, Phase 5E):
+the row-level controls above (SET/clone, per-field affixes, the `Save`
+shortening) belong to the pre-redesign screen. The redesign replaces the
+permanently-expanded row list with an accordion (one card open at a time;
+StepCard.tsx/StepEditor.tsx) and reinstates the handoff's own `Save to
+library` label — a recorded reversion of the `Save` shortening above, at
+James's request; no longer a deviation.
 
 Everything else in the handoff (palette, type, spacing, 44px targets, AA,
 2px radii, screen structures, pace math, timer behavior) remains binding.
