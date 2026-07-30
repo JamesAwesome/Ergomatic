@@ -73,33 +73,6 @@ function fmtMinutes(minutes: number): string {
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
-// Widths mirror the actual row fields below (StepRowEditor's DurationInput /
-// .field-rest, plus spacers the width of .row-clone / .row-delete) so each
-// label sits over its column — see docs/design/Erg Log.dc.html:765 for the
-// handoff's equivalent fixed widths. Purely decorative (aria-hidden), but
-// it'll show in screenshots. There is no PACE REF slot any more:
-// PaceRefInput.tsx renders on its own full-width line below the row rather
-// than in a column, so a header slot for it would just be dead space that
-// pushes every column after it out of alignment. There is likewise no SET
-// slot any more: the per-row repeat toggle it labeled went away with the
-// `marked` model (Phase 5D Task 2) — its cell position is now the clone
-// button (Phase 5D Task 4), a spacer here rather than a labeled column since
-// "clone" needs no header the way "DUR"/"REST" do. SPM moved off this row
-// entirely too (StepRowEditor's `.step-row-editor-spm`, its own full-width
-// line beneath — it didn't fit alongside clone/DUR/REST/delete at 390px),
-// so it drops out of this header for the same reason PACE REF already did.
-function ColumnHeader() {
-  return (
-    <div className="builder-columns" aria-hidden="true">
-      <span className="col-clone" />
-      <span className="col-dur">DUR</span>
-      <span className="col-rest">REST (OPT)</span>
-      <span className="col-split">SPLIT</span>
-      <span className="col-delete" />
-    </div>
-  );
-}
-
 export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const baselinesState = useBaselines();
   const workoutsState = useWorkouts();
@@ -374,7 +347,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         }}
       />
 
-      <ColumnHeader />
       <div className="builder-rows">
         {form.rows.map((row, index) => (
           <StepRowEditor
