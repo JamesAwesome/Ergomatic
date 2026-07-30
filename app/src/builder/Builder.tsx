@@ -113,9 +113,10 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   // the exact keys `toSteps` returns in its `errors` object. Lets a failed
   // Save focus the first invalid control even when it's scrolled off-screen
   // (the reported bug: pressing Save did nothing visible when the invalid
-  // field wasn't in view). Not every possible key has an entry (e.g. `pain`
-  // — PainPicker doesn't expose a focusable ref) — focusing is best-effort,
-  // the "N field(s) need attention" count is the part that's always shown.
+  // field wasn't in view). `pain` registers its `tabIndex={-1}` wrapper div
+  // (PainPicker itself has no single focusable root — it's a radiogroup of
+  // five cells), same trick `PainPickerField` below borrows from
+  // StepRowEditor's `.step-row-editor-pace` wrapper around PaceRefInput.
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   if (baselinesState.state === "loading") {
@@ -333,6 +334,9 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         pain={form.pain}
         error={errors.pain}
         onChange={(pain) => setForm((f) => ({ ...f, pain }))}
+        registerRef={(el) => {
+          fieldRefs.current.pain = el;
+        }}
       />
 
       <ColumnHeader />
@@ -451,14 +455,24 @@ function PainPickerField({
   pain,
   error,
   onChange,
+  registerRef,
 }: {
   pain: number | null;
   error: string | undefined;
   onChange: (n: number) => void;
+  // Registers the wrapper div below (not a PainPicker cell) as the `pain`
+  // save-focus target — see the `fieldRefs` comment in Builder(). A plain
+  // wrapper div isn't natively focusable, hence that div's own
+  // `tabIndex={-1}`: enough to accept `.focus()` without adding a stop to
+  // the page's tab order (PainPicker's five radio cells already form their
+  // own roving-tabindex group).
+  registerRef: (el: HTMLElement | null) => void;
 }) {
   return (
     <>
-      <PainPicker value={pain} onChange={onChange} />
+      <div className="pain-picker-field" tabIndex={-1} ref={registerRef}>
+        <PainPicker value={pain} onChange={onChange} />
+      </div>
       {error && <p className="field-error">{error}</p>}
     </>
   );
