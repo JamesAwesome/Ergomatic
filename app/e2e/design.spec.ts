@@ -190,6 +190,62 @@ test.describe("builder screen", () => {
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(o2ChipBg).toBe("rgb(42, 98, 117)"); // --type-o2
   });
+
+  // A prior review (5B) only ever swept the builder blank — never after a
+  // failed Save exposes its error-state markup (role=alert banners,
+  // aria-invalid/aria-describedby on the first bad field, inline field-error
+  // text). Press Save on the untouched form and re-run the sweep against
+  // that state instead.
+  test.describe("error state (Save pressed on a blank form)", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole("button", { name: "Save to library" }).click();
+      await expect(page.locator(".builder-save-status")).toBeVisible();
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+  });
+});
+
+test.describe("import screen", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-import@e2e.test",
+      name: "Design Import Tester",
+    });
+    await page.goto("/library/import");
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("body background and the back link match the token palette", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+
+    const backLinkColor = await page
+      .locator(".back-link")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(backLinkColor).toBe("rgb(27, 26, 23)"); // --ink
+  });
 });
 
 test.describe("you screen", () => {

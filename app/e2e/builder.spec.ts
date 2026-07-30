@@ -117,9 +117,10 @@ test.describe("authoring loop", () => {
       name: "Builder Bulk Tester",
     });
     await setBaselines(page);
-    await page.goto("/library/new");
-
-    await page.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }).click();
+    // Bulk import is its own screen now (Library's IMPORT link / BulkImport
+    // route in AppRoutes.tsx) — there's no in-builder toggle to click any
+    // more.
+    await page.goto("/library/import");
 
     // Two blocks, blank-line separated (domain/bulk.ts's splitBlocks). The
     // first is entirely valid; the second's only work step references "9k",
@@ -248,5 +249,111 @@ test.describe("authoring loop", () => {
     await expect(
       page.getByRole("button", { name: "Delete", exact: true }),
     ).toHaveCount(0);
+  });
+});
+
+test.describe("new controls this phase introduced", () => {
+  test("authoring with a bare-number duration and no legacy number field saves and appears in the Library", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-bare-duration@e2e.test",
+      name: "Builder Bare Duration Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    const title = "Bare Duration Row";
+    await page.getByLabel("Title").fill(title);
+    await page.getByRole("radio", { name: "Pain 2" }).click();
+    // "5" alone means 5 minutes (builderState.ts's parseDurationInput) — no
+    // trailing apostrophe needed, and there is no numeric "No." field
+    // anywhere on this screen to fill in the first place.
+    await page.getByLabel("Row 1 duration").fill("5");
+    await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
+
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    await page.goto("/library");
+    await expect(page.getByText(title, { exact: false })).toBeVisible();
+
+    await cleanupByTitle(page, title);
+  });
+
+  test("/library/import loads directly on a full page reload and imports a four-field-header paste", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-import-direct@e2e.test",
+      name: "Builder Import Direct Tester",
+    });
+    await setBaselines(page);
+
+    // A direct page.goto to /library/import is a real network request to
+    // nginx for a path with no matching static file on disk — it renders
+    // the importer (not a 404, and not WorkoutDetail's dynamic :id route)
+    // only because nginx's SPA fallback serves index.html and
+    // AppRoutes.tsx's static /library/import route matches ahead of the
+    // dynamic one. A hard reload re-issues that same fresh GET a second
+    // time, rather than any client-side transition ever standing in.
+    await page.goto("/library/import");
+    await expect(page.locator("h1.screen-title")).toHaveText("Import");
+    await page.reload();
+    await expect(page.locator("h1.screen-title")).toHaveText("Import");
+
+    // Four-field header — "title | TYPE | difficulty | pain", no leading
+    // legacy number (domain/bulk.ts's parseHeader accepts both shapes; this
+    // paste exercises the current one).
+    const title = "Import Screen Row";
+    const text = [`${title} | AT | medium | 3`, "wu 5", "w 5 6k @20"].join(
+      "\n",
+    );
+    await page.getByLabel("Bulk import text").fill(text);
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+
+    // A clean import (zero errors) navigates away to /library
+    // (BulkImportRoute's onImported in AppRoutes.tsx).
+    await expect(page).toHaveURL(/\/library$/);
+    await expect(page.getByText(title, { exact: false })).toBeVisible();
+
+    await cleanupByTitle(page, title);
+  });
+
+  test("pressing the dice icon fills the Title field with a non-empty suggested name", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-dice@e2e.test",
+      name: "Builder Dice Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    const titleInput = page.getByLabel("Title");
+    await expect(titleInput).toHaveValue("");
+    await page.getByRole("button", { name: "Suggest a name" }).click();
+    await expect(titleInput).not.toHaveValue("");
+  });
+
+  test("saving a blank form scrolls the first invalid field into view and focuses it", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-focus@e2e.test",
+      name: "Builder Focus Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    // Nothing is filled in: title and pain are both invalid, but toSteps
+    // (builderState.ts) sets errors.title first, so Title is the field
+    // handleSave's fieldRefs lookup focuses and scrolls into view — the
+    // reported bug was that pressing Save did nothing visible when the
+    // invalid field was scrolled off-screen.
+    await page.getByRole("button", { name: "Save to library" }).click();
+
+    await expect(page.getByLabel("Title")).toBeFocused();
   });
 });
