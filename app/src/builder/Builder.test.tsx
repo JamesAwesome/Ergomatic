@@ -131,7 +131,7 @@ describe("Builder", () => {
   // static, visible affix beside each field instead of a header strip: this
   // test now asserts both halves — the strip stays gone, and its job is
   // covered per-field.
-  it("has no column-header strip; DUR, REST and SPM each carry their own visible affix", async () => {
+  it("has no column-header strip; DUR, SPM and REST each carry their own visible row label", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -144,24 +144,21 @@ describe("Builder", () => {
       expect(screen.queryByText(label)).not.toBeInTheDocument();
     }
 
-    // DUR and REST distinguish themselves on screen now, not just by chip
-    // weight — each carries its own short static affix, the same treatment
-    // REST's "MIN" unit marking already used.
+    // DUR, SPM and REST each carry their own visible row label
+    // (StepEditor.tsx §4b) — not just an aria-label.
     expect(
-      screen.getByLabelText("Row 1 duration").closest(".field-dur-group"),
+      screen.getByLabelText("Row 1 duration").closest(".step-editor-row"),
     ).toHaveTextContent("DUR");
-    const restGroup = screen
-      .getByLabelText("Row 1 rest")
-      .closest(".field-rest-group");
-    expect(restGroup).toHaveTextContent("REST");
-    expect(restGroup).toHaveTextContent("MIN");
-
-    // The SPM stepper is no longer a bare "− 20 +" — "SPM" sits beside it.
     expect(
       screen
-        .getByLabelText("Row 1 stroke rate")
-        .closest(".step-row-editor-spm"),
+        .getByRole("button", { name: "Row 1 stroke rate up" })
+        .closest(".step-editor-row"),
     ).toHaveTextContent("SPM");
+    expect(
+      screen
+        .getByRole("button", { name: "Row 1 rest up" })
+        .closest(".step-editor-row"),
+    ).toHaveTextContent("REST");
   });
 
   // Requirement 1 of the Task 4 brief: no SET cell, and no readout naming
@@ -198,21 +195,21 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
-      1,
-    );
+    expect(
+      screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
+    ).toHaveLength(1);
 
     await userEvent.click(screen.getByRole("button", { name: "+ ADD ROW" }));
-    expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
-      2,
-    );
+    expect(
+      screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
+    ).toHaveLength(2);
 
     await userEvent.click(
-      screen.getAllByRole("button", { name: "Remove row" })[0]!,
+      screen.getAllByRole("button", { name: /^Delete Step \d+$/ })[0]!,
     );
-    expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
-      1,
-    );
+    expect(
+      screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
+    ).toHaveLength(1);
   });
 
   it("POSTs a valid form to /api/workouts with the resolved steps and picked pain", async () => {
@@ -364,9 +361,9 @@ describe("Builder", () => {
     // though there's no "+ WARM-UP" button in this screen any more to have
     // authored it from scratch.
     expect(screen.getByLabelText("Row 1 duration")).toHaveValue("10");
-    expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
-      2,
-    );
+    expect(
+      screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
+    ).toHaveLength(2);
   });
 
   it("saves a non-default TYPE and DIFFICULTY, and renders the active TYPE chip in its own type color (L1)", async () => {
@@ -391,7 +388,7 @@ describe("Builder", () => {
     expect(body.difficulty).toBe("hard");
   });
 
-  it("types SPM and REST and both reach the saved step (L2)", async () => {
+  it("steps SPM and REST and both reach the saved step (L2)", async () => {
     const api = mockApi(
       () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
     );
@@ -399,8 +396,18 @@ describe("Builder", () => {
     await renderBuilder();
 
     await fillValidForm();
-    await userEvent.type(screen.getByLabelText("Row 1 stroke rate"), "24");
-    await userEvent.type(screen.getByPlaceholderText("opt"), "2");
+    // spm starts empty: the first + wakes at 20, four more presses reach 24.
+    const spmUp = screen.getByRole("button", {
+      name: "Row 1 stroke rate up",
+    });
+    for (let i = 0; i < 5; i++) {
+      await userEvent.click(spmUp);
+    }
+    // rest starts at 0 ("NONE"); four 30s presses reach 2:00 (2 minutes).
+    const restUp = screen.getByRole("button", { name: "Row 1 rest up" });
+    for (let i = 0; i < 4; i++) {
+      await userEvent.click(restUp);
+    }
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const [, options] = api.mock.calls[0]!;
@@ -414,34 +421,58 @@ describe("Builder", () => {
     });
   });
 
+  // SPM and REST are steppers now (no free-text field to type an
+  // out-of-range value into — both clamp to legal values as they're
+  // pressed), so an out-of-range value can only arrive the same way an
+  // out-of-range pace-ref offset can: via edit-mode data loaded straight
+  // from a stored step, same construction as the pace-ref case below.
   it("wires aria-invalid/aria-describedby on each of a row's dur/spm/rest fields to its own error message", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
 
-    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
-    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
-    // dur is left blank (triggers "required"); the pace ref can no longer be
-    // driven out of range from here at all — PaceRefInput.tsx's stepper
-    // clamps to ±60 (see the out-of-range case below, which loads it a
-    // different way) — so only spm and rest get out-of-range values.
-    await userEvent.type(screen.getByLabelText("Row 1 stroke rate"), "99");
-    await userEvent.type(screen.getByPlaceholderText("opt"), "0.3");
+    const badRow = newRow("w");
+    badRow.durValue = "";
+    badRow.spm = "99";
+    badRow.rest = "0.3";
+    const initial: BuilderForm = {
+      title: "Ladder Sets",
+      type: "O2",
+      difficulty: "easy",
+      pain: 3,
+      rows: [badRow],
+      reps: 1,
+    };
+    await renderBuilder({ kind: "edit", id: "w1", initial });
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    const expectations: [string, string][] = [
-      ["Row 1 duration", "duration is required, e.g. 5"],
-      ["Row 1 stroke rate", "spm must be 10..60"],
-      ["Row 1 rest", "rest must be 0.5..60 in 0.5 steps"],
-    ];
-    for (const [label, message] of expectations) {
-      const input = screen.getByLabelText(label);
-      expect(input).toHaveAttribute("aria-invalid", "true");
-      const describedBy = input.getAttribute("aria-describedby");
-      expect(describedBy).toBeTruthy();
-      expect(document.getElementById(describedBy!)).toHaveTextContent(message);
-    }
+    const durInput = screen.getByLabelText("Row 1 duration");
+    expect(durInput).toHaveAttribute("aria-invalid", "true");
+    const durDescribedBy = durInput.getAttribute("aria-describedby");
+    expect(durDescribedBy).toBeTruthy();
+    expect(document.getElementById(durDescribedBy!)).toHaveTextContent(
+      "duration is required, e.g. 5",
+    );
+
+    const spmRow = screen
+      .getByRole("button", { name: "Row 1 stroke rate up" })
+      .closest(".step-editor-row")!;
+    expect(spmRow).toHaveAttribute("aria-invalid", "true");
+    const spmDescribedBy = spmRow.getAttribute("aria-describedby");
+    expect(spmDescribedBy).toBeTruthy();
+    expect(document.getElementById(spmDescribedBy!)).toHaveTextContent(
+      "spm must be 10..60",
+    );
+
+    const restRow = screen
+      .getByRole("button", { name: "Row 1 rest up" })
+      .closest(".step-editor-row")!;
+    expect(restRow).toHaveAttribute("aria-invalid", "true");
+    const restDescribedBy = restRow.getAttribute("aria-describedby");
+    expect(restDescribedBy).toBeTruthy();
+    expect(document.getElementById(restDescribedBy!)).toHaveTextContent(
+      "rest must be 0.5..60 in 0.5 steps",
+    );
   });
 
   // PaceRefInput.tsx clamps its stepper to ±60, so an out-of-range offset can
@@ -604,8 +635,6 @@ describe("Builder", () => {
   });
 
   it("shows a needs-attention count and focuses the first invalid control when Save fails validation", async () => {
-    mockBaselines(BASELINES);
-    mockApi(() => new Response(null, { status: 201 }));
     // jsdom doesn't implement scrollIntoView at all (confirmed separately:
     // `typeof el.scrollIntoView` is "undefined" there, not a stubbed
     // no-op) — Builder.tsx guards the call with a `typeof` check for
@@ -618,16 +647,27 @@ describe("Builder", () => {
     };
     elementProto.scrollIntoView = scrollIntoView;
 
-    await renderBuilder();
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
 
-    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
-    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
     // DUR is left blank (the first field `toSteps` checks on a work row);
-    // SPM and REST are also out of range, so there are three row errors —
-    // proving the count reflects however many there actually are, not just
-    // whether there are any.
-    await userEvent.type(screen.getByLabelText("Row 1 stroke rate"), "99");
-    await userEvent.type(screen.getByPlaceholderText("opt"), "0.3");
+    // SPM and REST are also out of range (loaded via edit-mode data — both
+    // are steppers now, so neither can be typed out of range from the UI),
+    // so there are three row errors — proving the count reflects however
+    // many there actually are, not just whether there are any.
+    const badRow = newRow("w");
+    badRow.durValue = "";
+    badRow.spm = "99";
+    badRow.rest = "0.3";
+    const initial: BuilderForm = {
+      title: "Ladder Sets",
+      type: "O2",
+      difficulty: "easy",
+      pain: 3,
+      rows: [badRow],
+      reps: 1,
+    };
+    await renderBuilder({ kind: "edit", id: "w1", initial });
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -684,14 +724,14 @@ describe("Builder", () => {
   // exact cell position James couldn't name on sight — the aria-label
   // ("Duplicate Row N") was always correct, but that's not what he was
   // looking at. It must now carry real visible text too, not just an icon.
-  it("labels the clone button with visible text, not a bare glyph", async () => {
+  it("labels the duplicate button with visible text, not a bare glyph", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
     expect(
-      screen.getByRole("button", { name: "Duplicate Row 1" }),
-    ).toHaveTextContent("COPY");
+      screen.getByRole("button", { name: /Duplicate Step 1/i }),
+    ).toHaveTextContent("DUPLICATE");
   });
 
   // Requirement 2 of the Task 4 brief: the clone button is the SET cell's
@@ -713,12 +753,12 @@ describe("Builder", () => {
     await userEvent.type(screen.getByLabelText("Row 2 duration"), "8");
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Duplicate Row 1" }),
+      screen.getByRole("button", { name: /Duplicate Step 1/i }),
     );
 
-    expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
-      3,
-    );
+    expect(
+      screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
+    ).toHaveLength(3);
     // The clone copies Row 1's fields (durValue "5"), and lands directly
     // beneath it as the new Row 2 — the old Row 2 ("8") is pushed to Row 3.
     await waitFor(() =>
@@ -732,33 +772,28 @@ describe("Builder", () => {
     );
   });
 
-  // Requirement 3: REST is marked as minutes with static text, not a
-  // placeholder that vanishes once the rower types into the field —
-  // exactly James's complaint about the old SET cell, applied to REST's
-  // unit. Asserts the field still holds its typed value AND the "MIN" text
-  // is present at the same time, which a placeholder could never do.
-  it("marks REST as minutes with visible static MIN text, not a placeholder, and never focuses it", async () => {
+  // REST is a stepper reading "NONE"/"m:ss" now, not a free-text minutes
+  // field — the redesign's own answer to the same complaint the old static
+  // "MIN" affix addressed (an unlabelled bare "− 20 +" never said what it
+  // stepped). Asserts it renders correctly before any interaction, never
+  // steals focus on mount, and updates as it's pressed.
+  it("renders REST as a stepper reading NONE by default, without stealing focus, and steps in 30s increments", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    const restInput = screen.getByLabelText("Row 1 rest");
-    // The MIN marking renders on mount, before any interaction — it must
-    // not itself steal focus onto the rest field the way clicking clone
-    // deliberately does onto a new row's duration field (the test above).
-    expect(document.activeElement).not.toBe(restInput);
+    const restUp = screen.getByRole("button", { name: "Row 1 rest up" });
+    // Renders on mount, before any interaction — it must not itself steal
+    // focus the way clicking duplicate deliberately does onto a new row's
+    // duration field (the test above).
+    expect(screen.getByText("NONE")).toBeInTheDocument();
+    expect(document.activeElement).not.toBe(restUp);
 
-    await userEvent.type(restInput, "2");
+    await userEvent.click(restUp);
+    await userEvent.click(restUp);
+    await userEvent.click(restUp);
 
-    // Scoped by class (DurationInput's own MIN/M unit chip also renders the
-    // text "MIN" elsewhere on the row) — this is REST's static marking
-    // specifically, `.field-rest-unit`, not a DurationInput radio. Still
-    // present and still readable alongside the typed value — a placeholder
-    // would have vanished the moment "2" was typed.
-    expect(
-      screen.getByText("MIN", { selector: ".field-rest-unit" }),
-    ).toBeInTheDocument();
-    expect(restInput).toHaveValue("2");
+    expect(screen.getByText("1:30")).toBeInTheDocument();
   });
 
   // Requirement 4: the primary button reads exactly "Save" — the old

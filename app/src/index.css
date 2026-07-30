@@ -722,167 +722,300 @@ button:disabled {
   margin-top: 22px;
 }
 
-.step-row-editor {
-  padding: 10px 0 10px 6px;
-  border-bottom: 1px solid var(--rule-2);
-  border-left: 3px solid transparent;
-}
+/* -- Stepper: the shared "− value +" control (Phase 5E Task 3) --------- */
+/* docs/design/builder-redesign/README.md, the "Stepper pattern" paragraph.
+   Used by PACE offset (via PaceRefInput's own restyled offset control,
+   below), SPM and REST (StepEditor.tsx) and REPEAT (Task 5). */
 
-.step-row-editor--marked {
-  border-left: 3px solid var(--accent);
-}
-
-.step-row-editor-line1 {
+.stepper {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-/* The row's own plain <input> elements — historically scoped to line1 (the
-   only place one lived), but REST's own input moved onto its own line
-   below (fix wave, Task 1) once its new "REST" affix no longer fit inline
-   with DUR at 390px, so this is scoped to the whole row now. DUR's own
-   value field (DurationInput) and SPM's (SpmInput) carry equivalent rules
-   on their own classes already — this exists for `.field-rest`. */
-.step-row-editor input {
-  min-height: var(--tap);
-  padding: 0 4px;
+  flex: 1;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--rule-3);
-  font: inherit;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  text-align: center;
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
-.step-row-editor input[aria-invalid="true"] {
-  border-color: var(--accent);
-}
-
-.field-rest {
-  width: 44px;
-}
-
-/* Groups the REST input with its "REST" and static "MIN" markings (Phase 5D
-   Task 4 — James couldn't tell what the old SET cell did, and a
-   placeholder-only unit had the same problem: it vanishes the moment the
-   field is typed into). Rest stays minutes-only — no unit toggle, ever
-   (rest has no pace ref, so meters could never convert to time for totals
-   or the timer; see docs/design/DEVIATIONS.md) — so both affixes are
-   static text, not controls. Its own line (fix wave, Task 1) rather than
-   inline in .step-row-editor-line1 — adding the "REST" affix alongside
-   line1's new "DUR" affix didn't leave room for both at the 390px mobile
-   viewport this app targets, so REST moved out, same as SPM and the pace
-   ref already had to. */
-.field-rest-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-/* Shared static-affix treatment: REST's "MIN" unit marking, plus the
-   "DUR"/"REST"/"SPM" labels added beside their controls in the fix wave
-   that follows Phase 5D Task 4 — every row control now carries a visible
-   on-screen name, not just an aria-label. */
-.field-rest-unit,
-.row-affix {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--ink-4);
-}
-
-/* Groups the "DUR" affix with the duration value+unit control (fix wave,
-   Task 1) — line1 used to distinguish duration from rest only by chip
-   weight. */
-.field-dur-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Same cell position the old SET toggle occupied (leftmost in line1) —
-   duplicates the row directly beneath itself rather than marking it into
-   the repeat span (Phase 5D Task 4; see docs/design/DEVIATIONS.md). Same
-   idiom as .row-delete below, just not pinned to the row's trailing edge.
-   Carries a visible "COPY" text label alongside the glyph now (fix wave,
-   Task 1) — a bare "↻" in this exact cell position was the control James
-   couldn't identify in the first place. */
-.row-clone {
-  min-width: var(--tap);
+.stepper-btn {
+  flex: 0 0 var(--tap);
+  width: var(--tap);
   min-height: var(--tap);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 8px;
   background: transparent;
-  border: 1px solid var(--rule-3);
+  border: none;
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.row-delete {
-  min-width: var(--tap);
-  min-height: var(--tap);
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--rule-3);
-  color: var(--ink);
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1;
   cursor: pointer;
 }
 
-.step-row-editor-split {
-  margin: 6px 0 0;
+.stepper-btn:hover {
+  background: var(--surface-sunken);
 }
 
-/* SPM doesn't fit alongside clone/DUR/REST/delete in .step-row-editor-line1
-   at the 390px mobile viewport this app targets either (Phase 5D Task 4) —
-   same reasoning as .step-row-editor-pace just below, which the pace
-   control needed for the same reason one phase earlier. Flex row (fix
-   wave, Task 1) to lay the new "SPM" affix beside the stepper — the bare
-   "− 20 +" never said what it stepped. */
-.step-row-editor-spm {
+.stepper-value {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  border-left: 1px solid var(--rule-2);
+  border-right: 1px solid var(--rule-2);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* SPM's "FREE" / REST's "NONE" empty-state reading (StepEditor.tsx). */
+.stepper-value-muted {
+  color: var(--ink-4);
+}
+
+/* -- StepEditor: the expanded step editor (Phase 5E Task 3) ------------ */
+/* docs/design/builder-redesign/README.md §4b. Replaces StepRowEditor.tsx —
+   renders every row permanently expanded until Task 5's accordion assembly
+   swaps in StepCard.tsx for whichever rows aren't `editing`. */
+
+.step-editor {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 11px 11px;
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  border-left: 3px solid var(--rule-3);
+  border-radius: var(--radius);
 }
 
-/* PaceRefInput doesn't fit alongside DUR/REST in .step-row-editor-line1 at
-   the 390px mobile viewport this app targets (two 44px radio chips plus
-   two 44px steppers alone exceed the space DUR/REST leave), so — unlike
-   the old .field-ref text input it replaces — it gets its own full-width
-   line beneath line1 instead of squeezing into that row's flex layout. */
-.step-row-editor-pace {
-  margin-top: 8px;
-}
-
-.pace-ref-input {
+.step-editor-header {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.pace-ref-bases {
-  display: flex;
-  gap: 6px;
+.step-editor-header-label {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-4);
 }
 
-/* Same idiom as .chip (library/FilterChips.tsx) for the base, unchecked
-   look, but toggled via aria-checked (PainPicker.tsx's radio pattern) since
-   these are mutually-exclusive radios, not independent pressed toggles. */
-.pace-ref-chip {
+.step-editor-duplicate {
+  min-height: var(--tap);
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.step-editor-duplicate:hover {
+  border-color: var(--ink-4);
+}
+
+.step-editor-delete {
   min-width: var(--tap);
+  min-height: var(--tap);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  color: var(--ink-4);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.step-editor-delete:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.step-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-editor-row-label {
+  flex: 0 0 34px;
+  width: 34px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-4);
+}
+
+.step-editor-target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--tap);
+  padding: 0 12px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+}
+
+.step-editor-target-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+/* Ink, not accent — deliberately: the resolved range is output, not a
+   selected state, and accent stays reserved for the unit/pace toggles and
+   Save (docs/design/builder-redesign/README.md §4b). */
+.step-editor-target-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.step-editor-no-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-4);
+  font-size: 13px;
+}
+
+.step-editor-no-target em {
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.step-editor-no-target a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+.step-editor-done {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--on-color);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.step-editor-done:hover {
+  background: var(--ink-2);
+  border-color: var(--ink-2);
+}
+
+/* PaceRefInput (builder/PaceRefInput.tsx) — reused wholesale by StepEditor's
+   PACE row (it already clamps its offset to the domain's ±60 bound), just
+   restyled to the handoff's joined-segment treatment: the 2K/6K toggle
+   becomes one bordered pair of fixed-width segments (like DurationInput's
+   MIN/M toggle below) and the offset control reads like a Stepper. */
+.pace-ref-bases {
+  /* Joined pair (docs/design/builder-redesign/README.md §4b: two 48×44
+     segments), not two separate chips with a gap — one border around the
+     pair, an internal divider between the segments. */
+  display: flex;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Toggled via aria-checked (PainPicker.tsx's radio pattern) since these are
+   mutually-exclusive radios, not independent pressed toggles. Fixed 48px
+   width per the handoff's pace-ref segment spec. */
+.pace-ref-chip {
+  flex: 0 0 48px;
+  width: 48px;
+  min-height: var(--tap);
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--rule-3);
+  border-radius: 0;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.pace-ref-chip:last-child {
+  border-right: none;
+}
+
+.pace-ref-chip[aria-checked="true"] {
+  background: var(--accent);
+  color: var(--on-color);
+}
+
+/* The offset control restyled to read like a Stepper (joined container,
+   value cell with side borders) even though it stays PaceRefInput's own
+   bespoke markup rather than the shared Stepper component — PaceRefInput
+   already clamps the offset to the domain's ±60 bound, so nothing about its
+   behaviour needed to change, only its look. */
+.pace-ref-step {
+  flex: 0 0 var(--tap);
+  width: var(--tap);
+  min-height: var(--tap);
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pace-ref-step:hover {
+  background: var(--surface-sunken);
+}
+
+.pace-ref-display {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  border-left: 1px solid var(--rule-2);
+  border-right: 1px solid var(--rule-2);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* DurationInput (builder/DurationInput.tsx) — a numeric field plus a
+   MIN/M toggle, replacing the old free-text "5' or 2500m" field. Reused
+   wholesale by StepEditor's DUR row. */
+.duration-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.duration-input-value {
+  flex: 1;
+  min-width: 0;
   min-height: var(--tap);
   padding: 0 10px;
   background: var(--surface);
@@ -890,57 +1023,7 @@ button:disabled {
   border-radius: var(--radius);
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-}
-
-.pace-ref-chip[aria-checked="true"] {
-  background: var(--accent);
-  color: var(--on-color);
-  border: none;
-}
-
-.pace-ref-step {
-  min-width: var(--tap);
-  min-height: var(--tap);
-  background: transparent;
-  border: 1px solid var(--rule-3);
-  color: var(--ink);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.pace-ref-display {
-  min-width: 56px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent);
-  text-align: center;
-}
-
-/* DurationInput (builder/DurationInput.tsx) — a numeric field plus a
-   MIN/M radiogroup, replacing the old free-text "5' or 2500m" field. */
-.duration-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.duration-input-value {
-  /* >= --tap (44px): a real <input>, in scope for the 44x44 tap-target
-     sweep (app/e2e/design.spec.ts), same idiom as .spm-input-value below. */
-  width: var(--tap);
-  min-height: var(--tap);
-  padding: 0 4px;
-  background: var(--surface);
-  border: 1px solid var(--rule-3);
-  font: inherit;
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 15px;
   text-align: center;
 }
 
@@ -948,33 +1031,41 @@ button:disabled {
   border-color: var(--accent);
 }
 
+/* Joined pair (docs/design/builder-redesign/README.md §4b: two 56×44
+   segments), not two separate chips with a gap. */
 .duration-input-units {
   display: flex;
-  gap: 6px;
-}
-
-/* Same idiom as .pace-ref-chip: a checked/unchecked radio styled like
-   library/FilterChips.tsx's .chip, toggled via aria-checked since MIN/M
-   are mutually exclusive. */
-.duration-input-chip {
-  min-width: var(--tap);
-  min-height: var(--tap);
-  padding: 0 10px;
-  background: var(--surface);
   border: 1px solid var(--rule-3);
   border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* Toggled via aria-checked since MIN/M are mutually exclusive. Fixed 56px
+   width per the handoff's unit segment spec. */
+.duration-input-chip {
+  flex: 0 0 56px;
+  width: 56px;
+  min-height: var(--tap);
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--rule-3);
+  border-radius: 0;
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
   cursor: pointer;
+}
+
+.duration-input-chip:last-child {
+  border-right: none;
 }
 
 .duration-input-chip[aria-checked="true"] {
   background: var(--accent);
   color: var(--on-color);
-  border: none;
 }
 
 /* SpmInput (builder/SpmInput.tsx) — a clearable numeric field with 44px
