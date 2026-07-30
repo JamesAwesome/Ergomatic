@@ -1,7 +1,11 @@
 import { Link, useParams } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
 import Builder from "./Builder";
-import { fromWorkout, hasUnsupportedSteps } from "./builderState";
+import {
+  fromWorkout,
+  hasMidSpanReps,
+  hasUnsupportedSteps,
+} from "./builderState";
 
 // Loading/error/404 states mirror WorkoutDetail.tsx's — deliberately
 // duplicated rather than extracted, matching the precedent Builder.tsx set
@@ -70,6 +74,25 @@ export default function EditWorkout() {
         <p className="mono-status">
           This workout can't be edited yet — it has a step type the builder
           doesn't support.
+        </p>
+        <Link to={`/library/${workout.id}`} className="back-link">
+          ← BACK
+        </Link>
+      </main>
+    );
+  }
+
+  // The row model's repeat span is derived from row kinds/position
+  // (spanStartIndex), not stored — so a `reps` marker anywhere other than
+  // where that derivation would put it can't be represented either. Same
+  // precedent as the check above: refuse to open rather than let a save
+  // silently move the marker and change the workout's meaning.
+  if (hasMidSpanReps(workout.steps)) {
+    return (
+      <main className="screen">
+        <p className="mono-status">
+          This workout can't be edited yet — its repeat structure can't be
+          represented here.
         </p>
         <Link to={`/library/${workout.id}`} className="back-link">
           ← BACK

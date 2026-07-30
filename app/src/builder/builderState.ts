@@ -156,15 +156,20 @@ const isHalfStep = (n: number, lo: number, hi: number): boolean =>
 const isInt = (n: number, lo: number, hi: number): boolean =>
   Number.isInteger(n) && n >= lo && n <= hi;
 
-/** Parses `row.durValue` as a plain number — no grammar, just
- *  `Number(text.trim())` — or `null` for blank/non-numeric input. Shared by
- *  `toSteps` (which additionally enforces the domain's bounds) and
- *  `rowMinutes` (which is a lenient live preview and doesn't). */
+// A plain decimal number, nothing else — guards `rowDurationNumber` against
+// everything bare `Number()` would otherwise happily accept: hex literals
+// ("0x10" -> 16), scientific notation ("1e3" -> 1000), leading "+", etc.
+// Same shape as `parseDurationInput`'s own bare-number branch.
+const DUR_VALUE_PATTERN = /^\d+(\.\d+)?$/;
+
+/** Parses `row.durValue` as a plain number — `^\d+(\.\d+)?$` only, no
+ *  grammar and no `Number()`-isms like hex or scientific notation — or
+ *  `null` for blank/non-matching input. Shared by `toSteps` (which
+ *  additionally enforces the domain's bounds) and `rowMinutes` (which is a
+ *  lenient live preview and doesn't). */
 function rowDurationNumber(row: BuilderRow): number | null {
   const trimmed = row.durValue.trim();
-  if (trimmed === "") return null;
-  const n = Number(trimmed);
-  return Number.isFinite(n) ? n : null;
+  return DUR_VALUE_PATTERN.test(trimmed) ? Number(trimmed) : null;
 }
 
 export function toSteps(
@@ -423,6 +428,43 @@ function isUnrepresentable(s: Step): s is Extract<Step, { k: "test" }> {
  *  it just gives callers a way to detect the loss ahead of time. */
 export function hasUnsupportedSteps(steps: Step[]): boolean {
   return steps.some((s) => isUnrepresentable(s));
+}
+
+/** True when `steps` carries a `reps` marker that sits somewhere other than
+ *  where the derived-span model (`spanStartIndex`) would place it once the
+ *  workout is opened here — immediately before the first representable,
+ *  non-bookend step. `fromWorkout` keeps only the marker's *count*, never
+ *  its position (the row model has no field for "this is where the span
+ *  starts"; `spanStartIndex` derives it purely from row kinds), so a
+ *  workout shaped like `[w 10', reps 3, w 2']` would silently change
+ *  meaning on open-and-save: 16 minutes stored, 36 minutes re-saved, with
+ *  no error at any point. Sibling to `hasUnsupportedSteps` — same "check
+ *  before calling `fromWorkout`" precedent, for the same reason (the row
+ *  model genuinely cannot represent this shape, so `fromWorkout` itself
+ *  can't be the one to detect it after the fact). Steps `fromWorkout`
+ *  drops entirely (`isUnrepresentable`) are excluded before comparing
+ *  positions, matching what it actually builds rows from. */
+export function hasMidSpanReps(steps: Step[]): boolean {
+  const markerIndex = steps.findIndex((s) => s.k === "reps");
+  if (markerIndex === -1) return false;
+
+  const representable = steps.filter(
+    (s): s is Exclude<Step, { k: "reps" } | { k: "test" }> =>
+      s.k !== "reps" && !isUnrepresentable(s),
+  );
+  const bookendEnd = representable.findIndex(
+    (s) => !BOOKEND_ROW_KINDS.includes(s.k),
+  );
+  const derivedSpanStart =
+    bookendEnd === -1 ? representable.length : bookendEnd;
+
+  // How many representable rows `fromWorkout` would have built before this
+  // marker — i.e. where the marker actually sits today.
+  const precedingRepresentableCount = steps
+    .slice(0, markerIndex)
+    .filter((s) => !isUnrepresentable(s)).length;
+
+  return precedingRepresentableCount !== derivedSpanStart;
 }
 
 export function fromWorkout(w: {

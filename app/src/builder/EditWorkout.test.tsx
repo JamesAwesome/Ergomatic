@@ -51,6 +51,32 @@ const GLOBAL_WORKOUT: LibraryWorkout = {
   isGlobal: true,
 };
 
+// The reviewer's HIGH-3 regression shape: a `reps` marker sitting between
+// two work steps rather than at the derived span start. The row model has
+// no field for a marker's position (only its count, hoisted into
+// `f.reps`), so opening this in the builder and saving again would
+// silently move the marker and change the workout's meaning (16 min ->
+// 36 min for this exact shape). EditWorkout must call `hasMidSpanReps`
+// BEFORE `fromWorkout` and refuse to open, the same precedent as the
+// `test`-step guard above.
+const WORKOUT_WITH_MID_SPAN_REPS: LibraryWorkout = {
+  ...PERSONAL_WORKOUT,
+  id: "w4",
+  steps: [
+    {
+      k: "w",
+      duration: { kind: "time", minutes: 10 },
+      ref: { base: "6k", off: 0 },
+    },
+    { k: "reps", count: 3 },
+    {
+      k: "w",
+      duration: { kind: "time", minutes: 2 },
+      ref: { base: "6k", off: 0 },
+    },
+  ],
+};
+
 function mockHooks(workouts: LibraryWorkout[]) {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -149,6 +175,25 @@ describe("EditWorkout", () => {
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
       "href",
       "/library/w2",
+    );
+  });
+
+  it("refuses to open the builder for a workout whose reps marker isn't at the derived span start (H3)", async () => {
+    mockHooks([WORKOUT_WITH_MID_SPAN_REPS]);
+    await renderEdit("/library/w4/edit");
+
+    expect(
+      screen.queryByRole("heading", { name: "Edit Workout" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save to library" }),
+    ).not.toBeInTheDocument();
+    // Explains WHY (a different reason from the unsupported-step case
+    // above), so the rower isn't left guessing.
+    expect(screen.getByText(/repeat structure/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
+      "href",
+      "/library/w4",
     );
   });
 

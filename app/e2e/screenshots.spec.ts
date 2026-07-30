@@ -89,12 +89,15 @@ test("workout-detail", async ({ page }) => {
   });
 });
 
-/** Fills the top-level fields plus a two-row, repeat-marked body so the
- *  builder screenshot shows a realistic in-progress workout rather than the
- *  blank/default form: a steady row outside the block, a faster interval row
- *  inside it, both resolving to real target ranges once baselines are set
- *  (SCREENSHOT_BASELINES), and a non-trivial reps count so the "N rows
- *  marked · M per set" readout has something to say. */
+/** Fills the top-level fields plus a two-row body so the builder screenshot
+ *  shows a realistic in-progress workout rather than the blank/default
+ *  form: two work rows, both resolving to real target ranges once
+ *  baselines are set (SCREENSHOT_BASELINES), and a non-trivial reps count
+ *  so the "N row(s) repeat · M per set" readout has something to say.
+ *  Neither row is a `wu` bookend (builderState.ts's BOOKEND_ROW_KINDS), so
+ *  the derived repeat span (Phase 5D Task 2) starts at row 1 — both rows
+ *  repeat, which is what "+ MORE REPS" alone now needs to show, with no
+ *  per-row toggle to click any more. */
 async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByLabel("Title").fill("Screenshot Intervals");
   await page.getByRole("radio", { name: "Pain 3" }).click();
@@ -111,13 +114,16 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByLabel("Row 1 stroke rate").fill("20");
 
   await page.getByRole("button", { name: "+ ADD ROW" }).click();
-  await page.getByLabel("Row 2 duration").fill("2000m");
+  // Bare number in minutes — the DUR field has no unit toggle yet
+  // (builderState.ts's `durUnit` stays "min" unless a stored workout
+  // arrives via `fromWorkout` with a distance step already on it), so
+  // "2000m" is unreachable through the UI and would just leave `durValue`
+  // unparseable.
+  await page.getByLabel("Row 2 duration").fill("8");
   await page.getByRole("radio", { name: "Row 2 pace 2K" }).click();
   await page.getByLabel("Row 2 stroke rate").fill("26");
   await page.getByLabel("Row 2 rest").fill("3");
 
-  const row2 = page.locator(".step-row-editor").nth(1);
-  await row2.getByRole("button", { name: "Start the repeat set here" }).click();
   const moreReps = page.getByRole("button", { name: "More reps" });
   await moreReps.click();
   await moreReps.click();
