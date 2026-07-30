@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { api } from "../api";
@@ -25,6 +25,21 @@ function mockApi(handler: () => Response) {
   const fn = vi.fn<typeof api>(async () => handler());
   vi.doMock("../api", () => ({ api: fn }));
   return fn;
+}
+
+// Defaults to an empty library — most tests don't care what 🎲 would
+// generate, they just need `useWorkouts` mocked so Builder's own call to it
+// doesn't fall through to the (also-mocked-but-generically-so) `api` module
+// and race a background state update against the test. Tests that DO care
+// (the 🎲 test) call this again, after the default from `beforeEach`, with
+// real titles — vi.doMock's last call before the dynamic import wins.
+function mockWorkouts(titles: readonly string[] = []) {
+  vi.doMock("../api/useWorkouts", () => ({
+    useWorkouts: () => ({
+      state: "ready",
+      workouts: titles.map((title, i) => ({ id: `w${i}`, title })),
+    }),
+  }));
 }
 
 async function renderBuilder(mode?: BuilderEditMode) {
@@ -53,6 +68,7 @@ async function fillValidForm() {
 
 beforeEach(() => {
   vi.resetModules();
+  mockWorkouts();
 });
 
 describe("Builder", () => {
@@ -61,7 +77,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    for (const label of ["SET", "DUR", "SPM", "REST", "SPLIT"]) {
+    for (const label of ["SET", "DUR", "SPM", "REST (OPT)", "SPLIT"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     // PACE REF no longer has a column of its own (PaceRefInput.tsx renders
@@ -305,7 +321,7 @@ describe("Builder", () => {
 
     await fillValidForm();
     await userEvent.type(screen.getByPlaceholderText("spm"), "24");
-    await userEvent.type(screen.getByPlaceholderText("rest"), "2");
+    await userEvent.type(screen.getByPlaceholderText("opt"), "2");
     await userEvent.click(
       screen.getByRole("button", { name: "Save to library" }),
     );
@@ -333,7 +349,7 @@ describe("Builder", () => {
     // clamps to ±60 (see the out-of-range case below, which loads it a
     // different way) — so only spm and rest get out-of-range values.
     await userEvent.type(screen.getByPlaceholderText("spm"), "99");
-    await userEvent.type(screen.getByPlaceholderText("rest"), "0.3");
+    await userEvent.type(screen.getByPlaceholderText("opt"), "0.3");
 
     await userEvent.click(
       screen.getByRole("button", { name: "Save to library" }),
@@ -410,5 +426,153 @@ describe("Builder", () => {
     expect(
       screen.queryByText("Couldn't save this workout. Try again."),
     ).not.toBeInTheDocument();
+  });
+
+  // Pins the removal of the row-number field (dropped in an earlier task,
+  // once the type reshape made it unrepresentable) so it can't quietly come
+  // back — and proves the server-facing contract agrees: no `num` key at
+  // all, not even `num: undefined`, since JSON.stringify would still emit
+  // the latter as an absent key but a stray `num: null` or similar would
+  // slip through a looser check.
+  it("has no No. field, and a successful save posts a body with no num key", async () => {
+    const api = mockApi(
+      () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
+    );
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    expect(screen.queryByLabelText(/^No\.?$/i)).not.toBeInTheDocument();
+
+    await fillValidForm();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
+    const [, options] = api.mock.calls[0]!;
+    const body = JSON.parse((options as RequestInit).body as string);
+    expect(body).not.toHaveProperty("num");
+  });
+
+  it("has no + REST button; + WARM-UP and + ADD ROW remain", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(
+      screen.queryByRole("button", { name: /\+ REST/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ WARM-UP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ ADD ROW" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a work row's pace as a structured control (two radios), not a free-text field", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    const paceGroup = screen.getByRole("radiogroup", {
+      name: "Row 1 pace base",
+    });
+    expect(within(paceGroup).getAllByRole("radio")).toHaveLength(2);
+    expect(
+      within(paceGroup).getByRole("radio", { name: "Row 1 pace 2K" }),
+    ).toBeInTheDocument();
+    expect(
+      within(paceGroup).getByRole("radio", { name: "Row 1 pace 6K" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/pace/i)).not.toBeInTheDocument();
+  });
+
+  it("resolves a DUR typed without an apostrophe (bare '5') into the tolerance range", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5");
+    const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
+    await userEvent.click(faster);
+    await userEvent.click(faster);
+
+    // Hardcoded (EN DASH, U+2013) — never recomputed via resolveSplit.
+    expect(screen.getByText("1:59.0–2:01.0")).toBeInTheDocument();
+  });
+
+  it("fills Title with a non-empty name not already in the library when 🎲 is pressed", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    // generateName([], 0)'s first pick — the same name a fresh 🎲 press
+    // would offer if the library were empty. Seeding the library with it
+    // forces the real press (nameSeed starts at 0 too) to skip past it.
+    mockWorkouts(["Zephyr"]);
+    await renderBuilder();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Suggest a name" }),
+    );
+
+    const title = screen.getByLabelText("Title") as HTMLInputElement;
+    expect(title.value).not.toBe("");
+    expect(title.value).not.toBe("Zephyr");
+  });
+
+  it("still generates a name from 🎲 while the library is loading (empty existing-titles list)", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({ state: "loading" }),
+    }));
+    await renderBuilder();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Suggest a name" }),
+    );
+
+    const title = screen.getByLabelText("Title") as HTMLInputElement;
+    expect(title.value).not.toBe("");
+  });
+
+  it("shows a needs-attention count and focuses the first invalid control when Save fails validation", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    // jsdom doesn't implement scrollIntoView at all (confirmed separately:
+    // `typeof el.scrollIntoView` is "undefined" there, not a stubbed
+    // no-op) — Builder.tsx guards the call with a `typeof` check for
+    // exactly this reason. Stubbing it here, rather than leaving it
+    // unimplemented, exercises that guard's true branch too, not just the
+    // jsdom-default false one.
+    const scrollIntoView = vi.fn();
+    const elementProto = Element.prototype as unknown as {
+      scrollIntoView?: () => void;
+    };
+    elementProto.scrollIntoView = scrollIntoView;
+
+    await renderBuilder();
+
+    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
+    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
+    // DUR is left blank (the first field `toSteps` checks on a work row);
+    // SPM and REST are also out of range, so there are three row errors —
+    // proving the count reflects however many there actually are, not just
+    // whether there are any.
+    await userEvent.type(screen.getByPlaceholderText("spm"), "99");
+    await userEvent.type(screen.getByPlaceholderText("opt"), "0.3");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    expect(screen.getByText(/needs? attention/i)).toBeInTheDocument();
+    const durInput = screen.getByLabelText("Row 1 duration");
+    expect(document.activeElement).toBe(durInput);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+
+    // Restores jsdom's own (missing) implementation so the stub doesn't
+    // leak into other tests in this file.
+    delete elementProto.scrollIntoView;
   });
 });
