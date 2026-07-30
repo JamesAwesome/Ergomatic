@@ -50,6 +50,24 @@
   --pain-4-fill: #9a4e22;
   --pain-5-fill: #a6311e;
 
+  /* Classification-card pain ramp (Task 4,
+     docs/design/builder-redesign/README.md §3) — the redesign's own hex
+     values, distinct from --pain-N/-N-fill above (which stay PainPicker.tsx's,
+     still imported by Builder.tsx). Named per the brief rather than reusing
+     --pain-N, since the two ramps' hexes disagree and PainPicker.tsx's
+     consumer can't be repointed without breaking it.
+     Computed (not eyeballed) contrast of on-color text (#fffdf7) against
+     each fill: ramp-1 5.68:1, ramp-2 5.09:1, ramp-3 5.53:1, ramp-4 5.85:1,
+     ramp-5 5.94:1 — all clear the 4.5:1 WCAG AA floor. ramp-2 (#6e7040) is
+     the tightest of the five (the handoff's own estimate put it closer to
+     4.6:1; measured against this exact on-color value it's 5.09:1, but
+     still the ramp's minimum) — per the handoff, DO NOT lighten it. */
+  --pain-ramp-1: #5b6b46;
+  --pain-ramp-2: #6e7040;
+  --pain-ramp-3: #8a5f18;
+  --pain-ramp-4: #a3491f;
+  --pain-ramp-5: #b5341f;
+
   --radius: 2px;
   --tap: 44px;
 

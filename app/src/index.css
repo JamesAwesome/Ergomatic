@@ -349,6 +349,102 @@ button:disabled {
   border: none;
 }
 
+/* Classification card (Task 4, docs/design/builder-redesign/README.md §3):
+   one card holding TYPE, DIFFICULTY and EXPECTED PAIN. Deliberately its own
+   `.classification-chip*` class family rather than reusing `.chip` above —
+   `.chip[aria-pressed="true"]` fills --accent unconditionally, which is
+   exactly the treatment DIFFICULTY must NOT get (the handoff moves it to
+   ink so accent stays reserved for the in-row unit/pace toggles and Save).
+   A shared base class would have made "don't inherit the accent fill" a
+   thing every future reader has to remember; a separate class makes it
+   structurally impossible. */
+.classification-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.classification-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.classification-group-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-4);
+}
+
+/* EXPECTED PAIN's label row only: space-between, label left, the current
+   level's word on the right (design doc §3). */
+.classification-pain-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.classification-pain-word {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
+.classification-chip-row {
+  display: flex;
+  gap: 6px;
+}
+
+.classification-chip {
+  flex: 1;
+  height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.classification-chip-type {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.classification-chip-difficulty {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+/* The one selected-state fill that lives entirely in CSS rather than an
+   inline style (TYPE and PAIN both need a per-instance colour, so those are
+   set inline in ClassificationCard.tsx) — ink, never accent. */
+.classification-chip-difficulty[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
+}
+
+.classification-chip-pain {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-4);
+}
+
 .workout-list {
   list-style: none;
   margin: 0;
