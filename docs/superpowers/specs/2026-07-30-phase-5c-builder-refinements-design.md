@@ -16,7 +16,9 @@ inline errors (`8k` typed as a pace ref, `500` spm, `5'` in rest) and
 | Pace ref | **Structured input**: `2K`/`6K` chips + a numeric offset stepper. Free text made `8k` reachable |
 | Duration | **Bare numbers mean minutes.** `5` = 5 minutes; `5'` still accepted; `2500m` for distance. The apostrophe was hostile on a phone keyboard |
 | Rest | **REST column only, labelled optional** (James's call). The `+ REST` button goes — but the builder keeps RENDERING standalone rest steps so a bulk-imported workout stays editable |
-| Numbers | **Dropped from the UI everywhere** (James's call) — builder, Library rows, detail. `num` survives as an invisible ordering key, auto-assigned server-side |
+| Numbers | **Dropped from the UI everywhere** (James's call) — builder, Library rows, detail |
+| `num` column | **Retired**, replaced by `sort_order` + `created_at`. Made nullable and unwritten this phase; `DROP COLUMN` is the first commit of Phase 6 so the health-gated rollback stays armed |
+| Globals vs customs | **One table, nullable owner** — splitting was considered and rejected (would force a polymorphic FK the DB can't enforce, voiding the logs-survive-delete guarantee) |
 | Bulk paste header | **Number optional**: accept 4 or 5 fields, so existing paste text keeps working |
 | Save | Scrolls to and focuses the first invalid field, with a count at the button |
 | Bulk import | **Its own screen** at `/library/import`, off the Library header |
@@ -64,18 +66,38 @@ nothing.
 
 - **UI:** no `No.` field in the builder; Library rows show the title without
   a `12.` prefix; detail's meta line drops `NO. 12 ·`.
-- **Storage:** `workouts.num` stays NOT NULL with its existing partial unique
-  indexes — no destructive migration (expand-only rule). It becomes an
-  invisible ordering key, which is exactly how `list()` already sorts
-  (`orderBy(asc(workouts.num))`), so the curated starter order is preserved
-  and new personal workouts append in creation order.
-- **Assignment:** `num` becomes **optional** in `POST /api/workouts` and the
-  bulk endpoint (additive — the API rule allows this). When absent the server
-  assigns `max(num) + 1` **within the caller's own space** (personal rows for
-  a user; globals are seeded, not created through this path). It must be
-  assigned server-side inside the insert's transaction, not computed by the
-  client, so two devices cannot race to the same value. A unique-violation
-  retry covers the remaining race.
+- **Storage — `num` is RETIRED, not repaired.** Once numbers leave the UI the
+  column has no job: display identity is gone (James's call), and uniqueness
+  on a number nobody can see protects nothing. It is an ordering key wearing
+  a display column's clothes.
+  - Add `sort_order int` (nullable). Backfill from `num`. Globals keep their
+    curated order; personal rows sort by `created_at`.
+    `ORDER BY sort_order NULLS LAST, created_at` gives the starter library
+    first in its authored order, then the rower's own by creation.
+  - Make `num` **nullable**, drop its partial unique indexes, and stop
+    writing it. Nothing reads it after this phase.
+  - **Do NOT drop the column this phase.** `scripts/deploy.sh` rolls back to
+    the previous image when a deploy comes up unhealthy; if the same release
+    both drops `num` and ships code that no longer needs it, an unhealthy
+    deploy rolls back to old code that still `SELECT`s a column that no
+    longer exists — so the rollback fails too, turning a recoverable deploy
+    into a dead site. **The `DROP COLUMN` is the first commit of Phase 6**,
+    after one green deploy has proven the new code runs without it.
+- **No `max(num) + 1`.** An earlier draft of this spec proposed computing the
+  next number at insert time. That is a contention anti-pattern — it
+  serializes concurrent inserts and needs a lock or a retry loop. With `num`
+  retired there is nothing to compute: `sort_order` is NULL for personal rows
+  and `created_at` orders them.
+- **Single table stays.** Splitting globals and personal rows into two tables
+  was considered and rejected: `session_logs.workout_id` is a real FK with
+  `ON DELETE SET NULL`, and a split forces either two nullable FK columns on
+  every log or a polymorphic `type`+`id` pair — an antipattern the database
+  cannot enforce a foreign key against (SQL Antipatterns ch. 7; GitLab bans
+  it outright), which would silently void the "your logged sessions are kept"
+  guarantee. Copy-on-write editing of globals (a recorded Phase 5 follow-on)
+  is also an `INSERT … SELECT` in one table and a cross-table copy in two.
+  One table with a nullable owner is the standard shared-reference-rows
+  pattern.
 - This departs from the handoff, which features `NO. 159` prominently, so it
   gets a DEVIATIONS row.
 
@@ -112,8 +134,10 @@ looping forever. Pure and seedable so tests are deterministic (no
   number, apostrophe, and meters forms; the same three forms through
   `parseBulk`; the name generator's uniqueness-vs-existing-titles and
   pool-exhaustion behavior; `num`-absent auto-assignment.
-- **Integration (Testcontainers):** two workouts created without `num`
-  receive distinct numbers; concurrent creates do not collide.
+- **Integration (Testcontainers):** the library returns globals in their
+  curated `sort_order` followed by personal rows in `created_at` order;
+  creating a workout writes no `num`; two workouts created concurrently both
+  succeed (nothing to collide over now).
 - **Component:** Save with an off-screen invalid field focuses it and shows
   the count; the builder renders a bulk-imported standalone rest row and
   round-trips it; no `No.` field exists; the 🎲 fills Title with a name not
@@ -128,7 +152,9 @@ looping forever. Pure and seedable so tests are deterministic (no
   (duration grammar, optional header number), so its tests grow with it.
 - **Exit:** James can author a workout on his phone without typing an
   apostrophe, without inventing a number, without reaching an invalid pace
-  ref, and with Save telling him what's wrong when it refuses.
+  ref, and with Save telling him what's wrong when it refuses. Nothing in the
+  codebase reads `workouts.num` afterwards — verified by grep, which is the
+  precondition for Phase 6's `DROP COLUMN`.
 
 ## Out of scope
 
