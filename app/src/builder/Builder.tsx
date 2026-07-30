@@ -167,12 +167,16 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   // fresh row id as a side effect of being called, so calling it inside an
   // updater (which React may invoke more than once, e.g. Strict Mode's
   // double-invoke) risks minting an id that's thrown away.
+  //
+  // `cloneRow` now hands back the new id directly instead of leaving the
+  // caller to re-derive it from an index, and echoes `id` itself back
+  // unchanged when nothing was found to clone — comparing `clonedId === id`
+  // is how this tells "nothing happened" from "a new row was inserted"
+  // without recomputing an index here too.
   function handleClone(id: string) {
-    const index = form.rows.findIndex((r) => r.id === id);
-    const next = cloneRow(form, id);
-    const clonedId = next.rows[index + 1]?.id;
+    const { form: next, id: clonedId } = cloneRow(form, id);
     setForm(next);
-    if (clonedId) {
+    if (clonedId !== id) {
       // Deferred past this render — the new row's DOM node, and thus its
       // `fieldRefs` entry, doesn't exist until StepRowEditor mounts it.
       // React flushes a discrete event's state update (and runs ref

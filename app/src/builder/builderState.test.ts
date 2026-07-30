@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   BOOKEND_ROW_KINDS,
   EMPTY_FORM,
+  REST_MAX_SECONDS,
+  REST_STEP_SECONDS,
   addRow,
+  addStepLike,
   cloneRow,
+  fmtRestSeconds,
   fromWorkout,
   hasMidSpanReps,
   hasUnsupportedSteps,
@@ -11,8 +15,12 @@ import {
   newRow,
   parseDurationInput,
   removeRow,
+  restSecondsFromRow,
+  rowWithRestSeconds,
   setReps,
   spanStartIndex,
+  stepSubSummary,
+  stepSummary,
   toSteps,
   totals,
   type BuilderForm,
@@ -201,7 +209,7 @@ describe("cloneRow", () => {
   // clone at index 1). A trailing second row pins the real insertion point —
   // only splice puts the clone directly beneath "a" and ahead of "b"; push
   // would put it after "b" instead.
-  it("clones a row directly beneath the original, copying every field", () => {
+  it("clones a row directly beneath the original, copying every field, and returns the new id", () => {
     const f = formWith({
       rows: [
         {
@@ -216,12 +224,13 @@ describe("cloneRow", () => {
         workRow("b"),
       ],
     });
-    const cloned = cloneRow(f, "a");
+    const { form: cloned, id } = cloneRow(f, "a");
     expect(cloned.rows).toHaveLength(3);
     expect(cloned.rows[0]!.id).toBe("a");
     expect(cloned.rows[1]!.id).not.toBe("a");
     expect(cloned.rows[1]!.id).not.toBe("b");
     expect(cloned.rows[2]!.id).toBe("b");
+    expect(id).toBe(cloned.rows[1]!.id);
     expect(cloned.rows[1]).toMatchObject({
       kind: "w",
       durValue: "90",
@@ -233,9 +242,11 @@ describe("cloneRow", () => {
     });
   });
 
-  it("returns the form unchanged when the id isn't found", () => {
+  it("returns the form unchanged, and the same id back, when the id isn't found", () => {
     const f = formWith();
-    expect(cloneRow(f, "nope")).toBe(f);
+    const result = cloneRow(f, "nope");
+    expect(result.form).toBe(f);
+    expect(result.id).toBe("nope");
   });
 });
 
@@ -989,5 +1000,132 @@ describe("EMPTY_FORM safety (L4)", () => {
     expect(a.rows[0]).not.toBe(b.rows[0]);
     expect(a.rows[0]).not.toBe(EMPTY_FORM.rows[0]);
     expect(a).not.toBe(EMPTY_FORM);
+  });
+});
+
+describe("rest seconds bridge", () => {
+  it("reads an empty rest as zero seconds", () => {
+    expect(restSecondsFromRow({ ...workRow("a"), rest: "" })).toBe(0);
+  });
+
+  it("reads minutes as seconds", () => {
+    expect(restSecondsFromRow({ ...workRow("a"), rest: "1.5" })).toBe(90);
+  });
+
+  it("writes seconds back as minutes, snapped to the 30s step", () => {
+    const row = rowWithRestSeconds(workRow("a"), 90);
+    expect(row.rest).toBe("1.5");
+    expect(rowWithRestSeconds(workRow("a"), 100).rest).toBe("1.5");
+  });
+
+  it("clears rest at zero rather than storing 0", () => {
+    expect(rowWithRestSeconds({ ...workRow("a"), rest: "2" }, 0).rest).toBe("");
+  });
+
+  it("clamps at the 15-minute ceiling", () => {
+    expect(rowWithRestSeconds(workRow("a"), 99999).rest).toBe("15");
+  });
+
+  it("every reachable rest value is a legal domain half-step", () => {
+    for (let s = 0; s <= REST_MAX_SECONDS; s += REST_STEP_SECONDS) {
+      const rest = rowWithRestSeconds(workRow("a"), s).rest;
+      if (rest === "") continue;
+      const minutes = Number(rest);
+      expect(minutes * 2).toBe(Math.round(minutes * 2)); // 0.5 steps
+      expect(minutes).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it("formats seconds for display", () => {
+    expect(fmtRestSeconds(0)).toBe("NONE");
+    expect(fmtRestSeconds(90)).toBe("1:30");
+    expect(fmtRestSeconds(600)).toBe("10:00");
+  });
+});
+
+describe("summaries", () => {
+  it("summarises a minutes step with a signed offset", () => {
+    expect(
+      stepSummary({
+        ...workRow("a"),
+        durValue: "20",
+        durUnit: "min",
+        refBase: "6k",
+        refOff: 10,
+      }),
+    ).toBe("20′ @ 6k +10");
+  });
+
+  it("summarises a metres step and renders a zero offset as ±0", () => {
+    expect(
+      stepSummary({
+        ...workRow("a"),
+        durValue: "2000",
+        durUnit: "m",
+        refBase: "2k",
+        refOff: 0,
+      }),
+    ).toBe("2000 m @ 2k ±0");
+  });
+
+  it("renders a negative offset with a real minus sign", () => {
+    expect(
+      stepSummary({
+        ...workRow("a"),
+        durValue: "5",
+        durUnit: "min",
+        refBase: "6k",
+        refOff: -2,
+      }),
+    ).toBe("5′ @ 6k −2");
+  });
+
+  it("omits the spm term when spm is free", () => {
+    expect(stepSubSummary({ ...workRow("a"), spm: "", rest: "1.5" })).toBe(
+      "rest 1:30",
+    );
+  });
+
+  it("says rest none at zero", () => {
+    expect(stepSubSummary({ ...workRow("a"), spm: "20", rest: "" })).toBe(
+      "20 spm · rest none",
+    );
+  });
+});
+
+describe("addStepLike", () => {
+  it("copies the last row's values and returns the new id", () => {
+    const base = formWith({
+      rows: [
+        {
+          ...workRow("a"),
+          durValue: "90",
+          durUnit: "m",
+          refOff: -4,
+          spm: "26",
+        },
+      ],
+    });
+    const { form, id } = addStepLike(base);
+    expect(form.rows).toHaveLength(2);
+    expect(id).toBe(form.rows[1].id);
+    expect(form.rows[1]).toMatchObject({
+      durValue: "90",
+      durUnit: "m",
+      refOff: -4,
+      spm: "26",
+    });
+  });
+
+  it("uses a sensible default when there are no rows", () => {
+    const { form } = addStepLike(formWith({ rows: [] }));
+    expect(form.rows[0]).toMatchObject({
+      kind: "w",
+      durValue: "5",
+      durUnit: "min",
+      refBase: "6k",
+      refOff: 0,
+      spm: "22",
+    });
   });
 });
