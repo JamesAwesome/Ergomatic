@@ -143,6 +143,8 @@ export default function StepRowEditor({
             base={row.refBase}
             off={row.refOff}
             rowLabel={`Row ${index + 1}`}
+            invalid={Boolean(fieldError("ref"))}
+            errorId={fieldError("ref") ? errorId("ref") : undefined}
             onChange={({ base, off }) =>
               onChange({ refBase: base, refOff: off })
             }

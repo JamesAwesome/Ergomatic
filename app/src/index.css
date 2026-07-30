@@ -684,9 +684,9 @@ button:disabled {
 
 /* Widths match the row fields directly below (.set-toggle / .field-dur /
    .field-spm / .field-rest / .row-delete) so each label sits over its
-   column — see the comment on ColumnHeader in Builder.tsx. PACE REF has no
-   single column of its own any more (.pace-ref-input, below, spans its own
-   full-width line). */
+   column — see the comment on ColumnHeader in Builder.tsx. There is no
+   PACE REF column any more (.pace-ref-input, below, spans its own
+   full-width line beneath the row, not a slot in this header). */
 .builder-columns span {
   text-align: center;
 }
@@ -699,12 +699,11 @@ button:disabled {
   width: 48px;
 }
 
-.col-ref {
-  width: 64px;
-}
-
 .col-spm {
-  width: 40px;
+  /* Matches .field-spm's width (var(--tap)), not just its own label width,
+     so its center lines up with the actual input below — see .field-spm's
+     comment. */
+  width: var(--tap);
 }
 
 .col-rest {
@@ -779,8 +778,9 @@ button:disabled {
 
 .field-spm {
   /* >= --tap (44px): this is a real <input>, in scope for the 44x44 tap-
-     target sweep (app/e2e/design.spec.ts) unlike .col-spm, its purely
-     decorative column-header label above, which can stay narrower. */
+     target sweep (app/e2e/design.spec.ts). .col-spm above mirrors this
+     width too, but only so its label's center lines up with this field —
+     it's still purely decorative and not itself a tap target. */
   width: var(--tap);
 }
 
