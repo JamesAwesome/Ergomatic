@@ -96,7 +96,6 @@ test("workout-detail", async ({ page }) => {
  *  (SCREENSHOT_BASELINES), and a non-trivial reps count so the "N rows
  *  marked · M per set" readout has something to say. */
 async function fillSampleWorkout(page: Page): Promise<void> {
-  await page.getByLabel("Workout number").fill("50");
   await page.getByLabel("Title").fill("Screenshot Intervals");
   await page.getByRole("radio", { name: "Pain 3" }).click();
 

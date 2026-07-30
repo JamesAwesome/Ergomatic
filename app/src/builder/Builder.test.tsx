@@ -36,7 +36,7 @@ async function renderBuilder() {
 
 // Fills in every field required for `toSteps` to succeed: title, pain, and
 // one work row's duration + pace ref. Shared by the save-success and
-// 409-conflict tests so both start from an identically valid form.
+// save-failure tests so both start from an identically valid form.
 async function fillValidForm() {
   await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
   await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
@@ -168,11 +168,79 @@ describe("Builder", () => {
     ).toBeInTheDocument();
   });
 
-  it("maps a 409 to 'that number's taken' and leaves the entered values on screen", async () => {
-    const api = mockApi(
-      () =>
-        new Response(JSON.stringify({ error: "num taken" }), { status: 409 }),
+  // StepRowEditor keeps a free-text draft over the structured
+  // refBase/refOff fields (a transitional adapter — see its own comments).
+  // Before this fix, an unparseable draft silently kept the row's last
+  // *committed* refBase/refOff, so the screen showed the bad text but the
+  // save would have gone out with a stale, different value and no error.
+  // These two cover the reviewer-reproduced cases: clearing the field
+  // entirely, and a half-typed ref that never becomes valid.
+  it("blocks save and shows a row ref error when the pace-ref draft is cleared to blank", async () => {
+    const api = mockApi(() => new Response(null, { status: 201 }));
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
+    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
+    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
+    await userEvent.clear(screen.getByPlaceholderText("2k / 6k-2"));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
     );
+
+    expect(api).not.toHaveBeenCalled();
+    const input = screen.getByLabelText("Row 1 pace reference");
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    const describedBy = input.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      "invalid pace reference",
+    );
+  });
+
+  it("blocks save on a half-typed pace-ref draft ('2k-') and unblocks once it's completed into something valid", async () => {
+    const api = mockApi(() => new Response(null, { status: 201 }));
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
+    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
+    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
+    const refField = screen.getByPlaceholderText("2k / 6k-2");
+    await userEvent.clear(refField);
+    await userEvent.type(refField, "2k-");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    expect(api).not.toHaveBeenCalled();
+    expect(refField).toHaveValue("2k-");
+    expect(screen.getByLabelText("Row 1 pace reference")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByText("invalid pace reference")).toBeInTheDocument();
+
+    // Finishing the draft into "2k-2" (base 2k, offset -2) parses, so the
+    // error clears and save proceeds.
+    await userEvent.type(refField, "2");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
+  // The server can no longer 409 a workout create/update (no `num` field
+  // left to clash on — see server/routes/data.ts's POST/PUT /api/workouts,
+  // which only ever return 400/201/200/403/404). Any non-2xx response is
+  // therefore a genuine, otherwise-uncategorized failure, so this covers
+  // the honest generic message rather than a status code the product can't
+  // produce anymore.
+  it("shows the generic save error, announced via role=alert, and leaves the entered values on screen", async () => {
+    const api = mockApi(() => new Response(null, { status: 500 }));
     mockBaselines(BASELINES);
     await renderBuilder();
 
@@ -181,7 +249,9 @@ describe("Builder", () => {
       screen.getByRole("button", { name: "Save to library" }),
     );
 
-    expect(await screen.findByText(/that number's taken/)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't save this workout. Try again.",
+    );
     expect(screen.getByLabelText("Title")).toHaveValue("Ladder Sets");
     expect(api).toHaveBeenCalledTimes(1);
   });
@@ -342,25 +412,6 @@ describe("Builder", () => {
       expect(describedBy).toBeTruthy();
       expect(document.getElementById(describedBy!)).toHaveTextContent(message);
     }
-  });
-
-  it("announces the submit error region to assistive tech via role=alert", async () => {
-    const api = mockApi(
-      () =>
-        new Response(JSON.stringify({ error: "num taken" }), { status: 409 }),
-    );
-    mockBaselines(BASELINES);
-    await renderBuilder();
-
-    await fillValidForm();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "that number's taken",
-    );
-    expect(api).toHaveBeenCalledTimes(1);
   });
 
   it("treats a successful save as success even when the response body isn't valid JSON (L3)", async () => {

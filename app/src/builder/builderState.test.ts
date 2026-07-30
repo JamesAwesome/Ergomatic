@@ -5,6 +5,7 @@ import {
   fromWorkout,
   hasUnsupportedSteps,
   newForm,
+  newRow,
   parseDurationInput,
   removeRow,
   setBlockStart,
@@ -94,6 +95,14 @@ describe("rows", () => {
     const f = addRow(EMPTY_FORM, "r");
     expect(f.rows).toHaveLength(EMPTY_FORM.rows.length + 1);
     expect(f.rows.at(-1)!.kind).toBe("r");
+  });
+
+  // The brief names "6k" as the specific default (not "2k" or any other
+  // base) for a freshly-created work row's pace reference.
+  it("defaults a new row's pace reference to the 6k base with no offset", () => {
+    const row = newRow("w");
+    expect(row.refBase).toBe("6k");
+    expect(row.refOff).toBe(0);
   });
 
   it("removes only the named row and leaves the form otherwise untouched", () => {

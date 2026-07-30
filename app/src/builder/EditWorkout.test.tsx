@@ -142,5 +142,13 @@ describe("EditWorkout", () => {
       screen.getByRole("heading", { name: "Edit Workout" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Ladder Sets");
+    // Pins StepRowEditor's `formatPaceRef`: the stored step's structured
+    // ref ({base:"6k", off:-2}) must render back as the "6k-2" text a rower
+    // typed originally, offset included — not just the base. Create-mode
+    // tests all clear this field before typing, so a stored non-zero offset
+    // is only ever exercised here, on the edit-mode round trip. PERSONAL_
+    // WORKOUT's steps are [wu, w], so the work row (the only one with a
+    // pace-ref field) is row 2, not row 1.
+    expect(screen.getByLabelText("Row 2 pace reference")).toHaveValue("6k-2");
   });
 });
