@@ -26,9 +26,11 @@ describe("STARTER_WORKOUTS", () => {
     }
   });
 
-  it("nums are exactly 1..N with no gaps or duplicates", () => {
-    const nums = STARTER_WORKOUTS.map((w) => w.num).sort((a, b) => a - b);
-    expect(nums).toStrictEqual(
+  it("sortOrders are exactly 1..N with no gaps or duplicates", () => {
+    const order = STARTER_WORKOUTS.map((w) => w.sortOrder).sort(
+      (a, b) => a - b,
+    );
+    expect(order).toStrictEqual(
       Array.from({ length: STARTER_WORKOUTS.length }, (_, i) => i + 1),
     );
   });

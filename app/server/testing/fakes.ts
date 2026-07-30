@@ -1,10 +1,9 @@
 import { vi } from "vitest";
 import type { SessionStore } from "../auth/sessions.js";
 import type { UserStore } from "../auth/users.js";
-import type { WorkoutInput } from "../../domain/types.js";
+import type { WorkoutInput, WorkoutType } from "../../domain/types.js";
 import { type Stores } from "../routes/data.js";
 import type { BaselinesRow, BaselinesStore } from "../stores/baselines.js";
-import { StoreConflictError } from "../stores/errors.js";
 import type { LogInput, LogsStore } from "../stores/logs.js";
 import type {
   PlanKey,
@@ -30,8 +29,54 @@ interface WorkoutRow extends WorkoutInput {
   id: string;
   userId: string | null;
   source: "starter" | "user";
+  sortOrder: number | null;
+  seq: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// Postgres orders `sort_order ASC, created_at ASC` with NULLs last (see
+// app/server/stores/workouts.ts). `createdAt` here can tie inside a single
+// millisecond, so insertion order is tracked separately as `seq` and used as
+// the creation-order key — same observable ordering, without a fake-only
+// flake the real store can't have.
+let insertionSeq = 0;
+
+const WORKOUT_TYPES: WorkoutType[] = ["AN", "O2", "AT", "TR"];
+
+// The `workout_type` enum rejects anything else outright, and createMany
+// runs in one transaction, so a bad type anywhere in a batch takes the whole
+// batch down. Mirrored here so the contract suite's rollback case is honest.
+function assertWorkoutType(type: WorkoutType): void {
+  if (!WORKOUT_TYPES.includes(type)) {
+    throw new Error(`invalid input value for enum workout_type: "${type}"`);
+  }
+}
+
+function byListOrder(a: WorkoutRow, b: WorkoutRow): number {
+  if (a.sortOrder !== b.sortOrder) {
+    if (a.sortOrder === null) return 1;
+    if (b.sortOrder === null) return -1;
+    return a.sortOrder - b.sortOrder;
+  }
+  return a.seq - b.seq;
+}
+
+function newWorkoutRow(
+  input: NewWorkoutInput,
+  userId: string | null,
+): WorkoutRow {
+  assertWorkoutType(input.type);
+  insertionSeq += 1;
+  return {
+    ...input,
+    sortOrder: input.sortOrder ?? null,
+    seq: insertionSeq,
+    id: crypto.randomUUID(),
+    userId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 }
 
 // Fakes are cast with `as unknown as <RealStoreType>` (the same pattern the
@@ -100,24 +145,14 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     userId: string,
     input: NewWorkoutInput,
   ): Promise<WorkoutRow> => {
-    const m = forUser(userId);
-    if ([...m.values()].some((w) => w.num === input.num)) {
-      throw new StoreConflictError(`workout num ${input.num} already exists`);
-    }
-    const row: WorkoutRow = {
-      ...input,
-      id: crypto.randomUUID(),
-      userId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    m.set(row.id, row);
+    const row = newWorkoutRow(input, userId);
+    forUser(userId).set(row.id, row);
     return withIsGlobal(row) as unknown as WorkoutRow;
   };
   return {
     async list(userId: string) {
       const all = [...globals.values(), ...forUser(userId).values()];
-      return all.map(withIsGlobal).sort((a, b) => a.num - b.num);
+      return all.sort(byListOrder).map(withIsGlobal);
     },
     async get(userId: string, id: string) {
       assertUuidShape(id);
@@ -127,31 +162,18 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       return row ? withIsGlobal(row) : null;
     },
     create,
-    // The real store wraps this in a db.transaction: a num clash anywhere
-    // in the batch rolls the WHOLE batch back, not just the clashing
-    // input. Validate every input against both the existing rows and each
-    // other BEFORE writing any of them, so a mid-batch throw here can't
-    // leave earlier inputs committed the way a naive per-input loop would.
-    async createMany(userId: string, inputs: NewWorkoutInput[]) {
-      const m = forUser(userId);
-      const existingNums = new Set([...m.values()].map((w) => w.num));
-      const seenNums = new Set<number>();
-      for (const input of inputs) {
-        if (existingNums.has(input.num) || seenNums.has(input.num)) {
-          throw new StoreConflictError(
-            `workout num ${input.num} already exists`,
-          );
-        }
-        seenNums.add(input.num);
-      }
-      const rows: WorkoutRow[] = inputs.map((input) => ({
-        ...input,
-        id: crypto.randomUUID(),
-        userId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-      for (const row of rows) m.set(row.id, row);
+    // The real store wraps this in a db.transaction: a rejected row anywhere
+    // in the batch rolls the WHOLE batch back, not just that input. Build
+    // (and so validate) every row BEFORE writing any of them, so a mid-batch
+    // throw here can't leave earlier inputs committed the way a naive
+    // per-input loop would. `userId: null` seeds globals, exactly as
+    // seedGlobalLibrary does against Postgres.
+    async createMany(userId: string | null, inputs: NewWorkoutInput[]) {
+      const rows: WorkoutRow[] = inputs.map((input) =>
+        newWorkoutRow(input, userId),
+      );
+      const target = userId === null ? globals : forUser(userId);
+      for (const row of rows) target.set(row.id, row);
       return rows.map((row) => withIsGlobal(row) as unknown as WorkoutRow);
     },
     async update(userId: string, id: string, input: WorkoutInput) {
@@ -159,9 +181,9 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       const m = forUser(userId);
       const existing = m.get(id);
       if (!existing) return null;
-      if ([...m.values()].some((w) => w.id !== id && w.num === input.num)) {
-        throw new StoreConflictError(`workout num ${input.num} already exists`);
-      }
+      assertWorkoutType(input.type);
+      // sortOrder is not part of WorkoutInput and the real store's UPDATE
+      // never sets it, so an edit leaves the row's ordering key alone.
       const row: WorkoutRow = { ...existing, ...input, updatedAt: new Date() };
       m.set(id, row);
       return withIsGlobal(row);
@@ -174,9 +196,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
       return forUser(userId).size;
     },
     async listGlobals() {
-      return [...globals.values()]
-        .map(withIsGlobal)
-        .sort((a, b) => a.num - b.num);
+      return [...globals.values()].sort(byListOrder).map(withIsGlobal);
     },
     async countGlobals() {
       return globals.size;
@@ -184,13 +204,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     // Test-only seam: the real store's globals come from seedGlobalLibrary
     // at boot, never through this router. Injects a global row directly.
     _seedGlobal(input: NewWorkoutInput) {
-      const row: WorkoutRow = {
-        ...input,
-        id: crypto.randomUUID(),
-        userId: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const row = newWorkoutRow(input, null);
       globals.set(row.id, row);
       return withIsGlobal(row) as unknown as WorkoutRow;
     },

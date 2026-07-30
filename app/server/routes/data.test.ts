@@ -57,7 +57,6 @@ const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
 
 function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
   return {
-    num: 1,
     title: "Steady State",
     type: "AT",
     difficulty: "medium",
@@ -78,17 +77,18 @@ function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
 // seam, mirroring what seedGlobalLibrary does for real against Postgres.
 function seedGlobalWorkout(
   stores: Stores,
-  overrides: Partial<WorkoutInput> = {},
+  overrides: Partial<NewWorkoutInput> = {},
 ) {
+  const { sortOrder = null, source = "starter", ...rest } = overrides;
   return (
     stores.workouts as unknown as {
       _seedGlobal: (input: NewWorkoutInput) => {
         id: string;
-        num: number;
+        sortOrder: number | null;
         title: string;
       };
     }
-  )._seedGlobal({ ...validWorkoutBody(overrides), source: "starter" });
+  )._seedGlobal({ ...validWorkoutBody(rest), source, sortOrder });
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ describe("workouts CRUD", () => {
       validWorkoutBody(),
     );
     expect(created.status).toBe(201);
-    expect(created.body).toMatchObject({ num: 1, title: "Steady State" });
+    expect(created.body).toMatchObject({ title: "Steady State" });
 
     const list = await asA(request(app).get("/api/workouts"));
     expect(list.body).toHaveLength(1);
@@ -226,26 +226,17 @@ describe("workouts CRUD", () => {
     expect(res.body.error).toBeTruthy();
   });
 
-  it("POST 409s on a num clash for the same user", async () => {
+  // 2026-07-30: `num` is retired, so there is no workout-level uniqueness
+  // left to violate — two identical posts both succeed rather than 409ing.
+  it("POST accepts a second workout identical to the first", async () => {
     const app = appFor(makeStores());
-    await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ num: 5 }),
+    await asA(request(app).post("/api/workouts")).send(validWorkoutBody());
+    const again = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody(),
     );
-    const clash = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ num: 5, title: "Other" }),
-    );
-    expect(clash.status).toBe(409);
-  });
-
-  it("the same num does not clash across users", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ num: 5 }),
-    );
-    const res = await asB(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ num: 5 }),
-    );
-    expect(res.status).toBe(201);
+    expect(again.status).toBe(201);
+    const list = await asA(request(app).get("/api/workouts"));
+    expect(list.body).toHaveLength(2);
   });
 
   it("GET /:id returns the workout", async () => {
@@ -329,18 +320,19 @@ describe("workouts CRUD", () => {
     expect(res.status).toBe(400);
   });
 
-  it("PUT /:id 409s on a num clash with a sibling workout", async () => {
+  it("PUT /:id may make a workout identical to a sibling", async () => {
     const app = appFor(makeStores());
     await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ num: 1 }),
+      validWorkoutBody({ title: "First" }),
     );
     const second = await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ num: 2 }),
+      validWorkoutBody({ title: "Second" }),
     );
     const res = await asA(
       request(app).put(`/api/workouts/${second.body.id}`),
-    ).send(validWorkoutBody({ num: 1 }));
-    expect(res.status).toBe(409);
+    ).send(validWorkoutBody({ title: "First" }));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: second.body.id, title: "First" });
   });
 
   it("DELETE /:id removes the workout", async () => {
@@ -394,7 +386,6 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
   it("includes lastDoneDaysAgo on each workout so the library can filter by recency", async () => {
     const stores = makeStores();
     const workout = await stores.workouts.create(userA.id, {
-      num: 1,
       title: "Zephyr",
       type: "O2",
       difficulty: "easy",
@@ -413,7 +404,6 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
   it("reports lastDoneDaysAgo as null for a workout that has never been logged", async () => {
     const stores = makeStores();
     await stores.workouts.create(userA.id, {
-      num: 2,
       title: "Squall",
       type: "AT",
       difficulty: "hard",
@@ -431,10 +421,10 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
 describe("global starter library", () => {
   it("GET list includes global rows tagged isGlobal:true alongside the caller's own isGlobal:false rows", async () => {
     const stores = makeStores();
-    seedGlobalWorkout(stores, { num: 500, title: "Global One" });
-    seedGlobalWorkout(stores, { num: 501, title: "Global Two" });
+    seedGlobalWorkout(stores, { sortOrder: 500, title: "Global One" });
+    seedGlobalWorkout(stores, { sortOrder: 501, title: "Global Two" });
     await asA(request(appFor(stores)).post("/api/workouts")).send(
-      validWorkoutBody({ num: 1 }),
+      validWorkoutBody(),
     );
 
     const res = await asA(request(appFor(stores)).get("/api/workouts"));
@@ -455,7 +445,10 @@ describe("global starter library", () => {
 
   it("GET /:id resolves a global id for any caller, tagged isGlobal:true", async () => {
     const stores = makeStores();
-    const g = seedGlobalWorkout(stores, { num: 502, title: "Global Gettable" });
+    const g = seedGlobalWorkout(stores, {
+      sortOrder: 502,
+      title: "Global Gettable",
+    });
     const res = await asB(request(appFor(stores)).get(`/api/workouts/${g.id}`));
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
@@ -468,12 +461,12 @@ describe("global starter library", () => {
   it("PUT /:id on a global workout 403s starter_readonly instead of writing", async () => {
     const stores = makeStores();
     const g = seedGlobalWorkout(stores, {
-      num: 503,
+      sortOrder: 503,
       title: "Global Untouchable",
     });
     const res = await asA(
       request(appFor(stores)).put(`/api/workouts/${g.id}`),
-    ).send(validWorkoutBody({ num: 503, title: "Hijacked" }));
+    ).send(validWorkoutBody({ title: "Hijacked" }));
     expect(res.status).toBe(403);
     expect(res.body).toStrictEqual({ error: "starter_readonly" });
 
@@ -486,7 +479,10 @@ describe("global starter library", () => {
 
   it("DELETE /:id on a global workout 403s starter_readonly instead of deleting", async () => {
     const stores = makeStores();
-    const g = seedGlobalWorkout(stores, { num: 504, title: "Global Survivor" });
+    const g = seedGlobalWorkout(stores, {
+      sortOrder: 504,
+      title: "Global Survivor",
+    });
     const res = await asA(
       request(appFor(stores)).delete(`/api/workouts/${g.id}`),
     );
@@ -499,16 +495,15 @@ describe("global starter library", () => {
     expect(after.status).toBe(200);
   });
 
-  it("POST creates a personal workout whose num collides with a GLOBAL num (separate namespaces)", async () => {
+  it("POST creates a personal workout sharing a global's title, as its own isGlobal:false row", async () => {
     const stores = makeStores();
-    seedGlobalWorkout(stores, { num: 505, title: "Global Five-Oh-Five" });
+    seedGlobalWorkout(stores, { sortOrder: 505, title: "Squall Line" });
     const res = await asA(request(appFor(stores)).post("/api/workouts")).send(
-      validWorkoutBody({ num: 505, title: "My Own 505" }),
+      validWorkoutBody({ title: "Squall Line" }),
     );
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({
-      num: 505,
-      title: "My Own 505",
+      title: "Squall Line",
       isGlobal: false,
     });
   });
@@ -540,19 +535,6 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.status).toBe(200);
     expect(res.body.created).toHaveLength(1);
     expect(res.body.errors.length).toBeGreaterThan(0);
-  });
-
-  it("reports a per-line num-clash without failing the rest of the batch", async () => {
-    const app = appFor(makeStores());
-    await asA(request(app).post("/api/workouts")).send(
-      validWorkoutBody({ num: 1 }),
-    );
-    const text = `1 | Clash | AT | medium | 3\nwu 10\nw 1' 6k @20\n\n2 | Fine | O2 | easy | 1\nwu 10\nw 1' 2k @20`;
-    const res = await asA(request(app).post("/api/workouts/bulk")).send({
-      text,
-    });
-    expect(res.body.created).toHaveLength(1);
-    expect(res.body.errors).toHaveLength(1);
   });
 
   it("reports domain validation failures for syntactically-valid but out-of-bounds workouts", async () => {
@@ -1061,7 +1043,6 @@ describe("GET /api/today", () => {
     const created = await asA(request(app).post("/api/workouts")).send(
       validWorkoutBody({
         type: todayCode as "AN" | "O2" | "AT" | "TR",
-        num: 1,
       }),
     );
     const res = await asA(request(app).get("/api/today"));
@@ -1094,7 +1075,7 @@ describe("GET /api/today", () => {
     // stores.workouts.list()/today's library-building step failed to span
     // globals.
     const g = seedGlobalWorkout(stores, {
-      num: 900,
+      sortOrder: 900,
       title: "Global Pool Entry",
       type: todayCode as "AN" | "O2" | "AT" | "TR",
     });

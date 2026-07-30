@@ -149,8 +149,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   const asA = () => bearerAgent(() => bearerA);
   const asB = () => bearerAgent(() => bearerB);
 
-  const workoutBody = (num: number, title: string) => ({
-    num,
+  const workoutBody = (title: string) => ({
     title,
     type: "AT",
     difficulty: "medium",
@@ -205,7 +204,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   it("A creates a workout, baselines, prefs, a plan, and a log", async () => {
     const created = await asA()
       .post("/api/workouts")
-      .send(workoutBody(9001, "Only A Custom"));
+      .send(workoutBody("Only A Custom"));
     expect(created.status).toBe(201);
     expect(created.body.isGlobal).toBe(false);
     aWorkoutId = created.body.id;
@@ -299,9 +298,6 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         (w: { title: string }) => w.title === "Only A Custom",
       ),
     ).toBe(false);
-    expect(workoutsB.body.some((w: { num: number }) => w.num === 9001)).toBe(
-      false,
-    );
 
     expect((await asB().get(`/api/workouts/${aWorkoutId}`)).status).toBe(404);
     // But B can still GET a global id A happened to look at first.
@@ -347,7 +343,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   it("B's mutations against A's personal id 404 and never touch A's data", async () => {
     const putRes = await asB()
       .put(`/api/workouts/${aWorkoutId}`)
-      .send(workoutBody(9001, "Hijacked"));
+      .send(workoutBody("Hijacked"));
     expect(putRes.status).toBe(404);
 
     const deleteRes = await asB().delete(`/api/workouts/${aWorkoutId}`);
@@ -372,7 +368,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     // A's workout survived B's PUT/DELETE attempts, untouched.
     const stillA = await asA().get(`/api/workouts/${aWorkoutId}`);
     expect(stillA.status).toBe(200);
-    expect(stillA.body).toMatchObject({ title: "Only A Custom", num: 9001 });
+    expect(stillA.body).toMatchObject({ title: "Only A Custom" });
 
     // B's failed log attempt did not land for B either.
     expect((await asB().get("/api/logs")).body).toStrictEqual([]);
@@ -381,7 +377,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   it("neither A nor B can mutate a GLOBAL workout: 403 starter_readonly, not 404, not a silent no-op", async () => {
     const putA = await asA()
       .put(`/api/workouts/${globalWorkoutId}`)
-      .send(workoutBody(1, "Hijacked Global"));
+      .send(workoutBody("Hijacked Global"));
     expect(putA.status).toBe(403);
     expect(putA.body).toStrictEqual({ error: "starter_readonly" });
 
@@ -398,12 +394,10 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     expect(stillGlobalForA.body.title).not.toBe("Hijacked Global");
   });
 
-  it("B's own writes are symmetric to A's and stay on B's side, including a num colliding with a global", async () => {
-    // A global num (1, from Zephyr/STARTER_WORKOUTS) reused for B's own
-    // personal workout — namespaces are independent, this must succeed.
+  it("B's own writes are symmetric to A's and stay on B's side", async () => {
     const createdB = await asB()
       .post("/api/workouts")
-      .send(workoutBody(1, "Only B Custom"));
+      .send(workoutBody("Only B Custom"));
     expect(createdB.status).toBe(201);
     expect(createdB.body.isGlobal).toBe(false);
     const bWorkoutId = createdB.body.id;
@@ -498,7 +492,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     const preC = await asC().get("/api/today");
     expect(preC.status).toBe(200);
     expect(preC.body.todayCode).toBe("O2");
-    // globalWorkoutId (captured in the very first test above) is num 1,
+    // globalWorkoutId (captured in the very first test above) is
     // "Zephyr", type O2, difficulty easy, ~25 estimated minutes — already
     // known to sit inside C/D's default prefs filters (all difficulties,
     // 60 min cap), so it's in the O2 pool for a totally fresh account too.

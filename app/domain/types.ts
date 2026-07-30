@@ -25,7 +25,6 @@ export interface Baselines {
   k6Seconds: number;
 }
 export interface WorkoutInput {
-  num: number;
   title: string;
   type: WorkoutType;
   difficulty: Difficulty;

@@ -94,7 +94,6 @@ describe("validateSteps", () => {
 
 describe("validateWorkoutInput", () => {
   const base = {
-    num: 12,
     title: "Ladder Day",
     type: "AT",
     difficulty: "medium",
@@ -117,27 +116,19 @@ describe("validateWorkoutInput", () => {
       validateWorkoutInput({ ...base, difficulty: "introductory" }).ok,
     ).toBe(false);
   });
-  it("rejects bad num/title/type", () => {
-    expect(validateWorkoutInput({ ...base, num: 0 }).ok).toBe(false);
+  it("rejects bad title/type", () => {
     expect(validateWorkoutInput({ ...base, title: "" }).ok).toBe(false);
     expect(validateWorkoutInput({ ...base, type: "XX" }).ok).toBe(false);
   });
-  it("rejects a non-integer num/pain even when the value is in range", () => {
-    // 12.5 and 2.5 fall inside 1..9999 / 1..5, so this only fails if
-    // integer-ness is actually enforced rather than just the numeric range.
-    expect(validateWorkoutInput({ ...base, num: 12.5 }).ok).toBe(false);
+  it("rejects a non-integer pain even when the value is in range", () => {
+    // 2.5 falls inside 1..5, so this only fails if integer-ness is actually
+    // enforced rather than just the numeric range.
     expect(validateWorkoutInput({ ...base, pain: 2.5 }).ok).toBe(false);
   });
-  it("rejects num given as a numeric string, not just an out-of-range number", () => {
-    // Number.isInteger("12") is already false regardless of the typeof
-    // guard, so this doesn't kill any mutant on its own — it's cheap
-    // documentation that a numeric-string num is rejected, pinning the
-    // contract in case int()'s implementation changes later.
-    const r = validateWorkoutInput({ ...base, num: "12" });
-    expect(r.ok).toBe(false);
-    const errors = r.ok ? [] : r.errors;
-    expect(errors).toStrictEqual(
-      expect.arrayContaining([expect.stringContaining("num must be")]),
-    );
+  it("ignores a leftover `num` field rather than rejecting it (2026-07-30: num retired)", () => {
+    // Old clients (and the pre-5C bulk grammar) still send a number. It is
+    // no longer part of WorkoutInput, so it must neither be required nor be
+    // grounds for rejection — the store simply never writes it.
+    expect(validateWorkoutInput({ ...base, num: 12 }).ok).toBe(true);
   });
 });

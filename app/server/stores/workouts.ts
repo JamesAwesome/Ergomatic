@@ -2,10 +2,15 @@ import { and, asc, eq, isNull, or } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { workouts } from "../db/schema.js";
 import type { WorkoutInput } from "../../domain/types.js";
-import { StoreConflictError, isUniqueViolation } from "./errors.js";
 
 export type WorkoutSource = "starter" | "user";
-export type NewWorkoutInput = WorkoutInput & { source: WorkoutSource };
+// `sortOrder` is the authored ordering key that replaced the retired `num`
+// column (Phase 5C). Only the seeded global library sets it; personal rows
+// leave it null and fall back to creation order — see list()'s orderBy.
+export type NewWorkoutInput = WorkoutInput & {
+  source: WorkoutSource;
+  sortOrder?: number | null;
+};
 
 // user_id NULL marks a global starter-library row (seeded once at boot,
 // shared read-only by every user — see app/server/seed/seed.ts). Every row
@@ -25,7 +30,10 @@ export function createWorkoutsStore(db: Db) {
         .select()
         .from(workouts)
         .where(or(isNull(workouts.userId), eq(workouts.userId, userId)))
-        .orderBy(asc(workouts.num));
+        // Postgres sorts NULLs last for ASC, so the authored globals lead and
+        // every row without a sort_order (all personal rows) follows in
+        // creation order.
+        .orderBy(asc(workouts.sortOrder), asc(workouts.createdAt));
       return rows.map(withIsGlobal);
     },
 
@@ -47,58 +55,44 @@ export function createWorkoutsStore(db: Db) {
 
     // Always personal: userId is never null here.
     async create(userId: string, input: NewWorkoutInput) {
-      try {
-        const [row] = await db
-          .insert(workouts)
-          .values({
-            userId,
-            num: input.num,
-            title: input.title,
-            type: input.type,
-            difficulty: input.difficulty,
-            pain: input.pain,
-            source: input.source,
-            steps: input.steps,
-          })
-          .returning();
-        return withIsGlobal(row);
-      } catch (err) {
-        if (isUniqueViolation(err))
-          throw new StoreConflictError(
-            `workout num ${input.num} already exists`,
-          );
-        throw err;
-      }
+      const [row] = await db
+        .insert(workouts)
+        .values({
+          userId,
+          sortOrder: input.sortOrder ?? null,
+          title: input.title,
+          type: input.type,
+          difficulty: input.difficulty,
+          pain: input.pain,
+          source: input.source,
+          steps: input.steps,
+        })
+        .returning();
+      return withIsGlobal(row);
     },
 
     // userId may be null here — that's how seedGlobalLibrary (see
     // app/server/seed/seed.ts) inserts the shared starter set at boot.
     async createMany(userId: string | null, inputs: NewWorkoutInput[]) {
+      // One transaction: if any row in the batch is rejected, none of them
+      // land.
       return db.transaction(async (tx) => {
-        try {
-          const rows = await tx
-            .insert(workouts)
-            .values(
-              inputs.map((input) => ({
-                userId,
-                num: input.num,
-                title: input.title,
-                type: input.type,
-                difficulty: input.difficulty,
-                pain: input.pain,
-                source: input.source,
-                steps: input.steps,
-              })),
-            )
-            .returning();
-          return rows.map(withIsGlobal);
-        } catch (err) {
-          if (isUniqueViolation(err))
-            throw new StoreConflictError(
-              "one or more workout nums already exist",
-            );
-          throw err;
-        }
+        const rows = await tx
+          .insert(workouts)
+          .values(
+            inputs.map((input) => ({
+              userId,
+              sortOrder: input.sortOrder ?? null,
+              title: input.title,
+              type: input.type,
+              difficulty: input.difficulty,
+              pain: input.pain,
+              source: input.source,
+              steps: input.steps,
+            })),
+          )
+          .returning();
+        return rows.map(withIsGlobal);
       });
     },
 
@@ -112,28 +106,19 @@ export function createWorkoutsStore(db: Db) {
     // application-level 403 (not a silent no-op) by checking isGlobal via
     // get() before calling update — see routes/data.ts.
     async update(userId: string, id: string, input: WorkoutInput) {
-      try {
-        const [row] = await db
-          .update(workouts)
-          .set({
-            num: input.num,
-            title: input.title,
-            type: input.type,
-            difficulty: input.difficulty,
-            pain: input.pain,
-            steps: input.steps,
-            updatedAt: new Date(),
-          })
-          .where(and(eq(workouts.userId, userId), eq(workouts.id, id)))
-          .returning();
-        return row ? withIsGlobal(row) : null;
-      } catch (err) {
-        if (isUniqueViolation(err))
-          throw new StoreConflictError(
-            `workout num ${input.num} already exists`,
-          );
-        throw err;
-      }
+      const [row] = await db
+        .update(workouts)
+        .set({
+          title: input.title,
+          type: input.type,
+          difficulty: input.difficulty,
+          pain: input.pain,
+          steps: input.steps,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(workouts.userId, userId), eq(workouts.id, id)))
+        .returning();
+      return row ? withIsGlobal(row) : null;
     },
 
     // See update()'s note: scoped to `user_id = userId`, structurally
@@ -161,7 +146,7 @@ export function createWorkoutsStore(db: Db) {
         .select()
         .from(workouts)
         .where(isNull(workouts.userId))
-        .orderBy(asc(workouts.num));
+        .orderBy(asc(workouts.sortOrder), asc(workouts.createdAt));
       return rows.map(withIsGlobal);
     },
 

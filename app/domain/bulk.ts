@@ -13,8 +13,14 @@ export interface BulkError {
   message: string;
 }
 
+// `num` is no longer part of WorkoutInput (Phase 5C retired the column), but
+// the bulk grammar's header still parses one for now, so it rides along here
+// as an extra field that nothing downstream persists. Task 2 of this phase
+// removes it from the grammar itself.
+export type BulkWorkout = WorkoutInput & { num: number };
+
 export interface BulkResult {
-  workouts: WorkoutInput[];
+  workouts: BulkWorkout[];
   errors: BulkError[];
 }
 
@@ -27,7 +33,7 @@ interface RawLine {
 }
 
 type HeaderFields = Pick<
-  WorkoutInput,
+  BulkWorkout,
   "num" | "title" | "type" | "difficulty" | "pain"
 >;
 
@@ -250,7 +256,7 @@ function parseStepLine(
  *  reps 1..12 are that layer's job, not this one's). */
 export function parseBulk(text: string): BulkResult {
   const errors: BulkError[] = [];
-  const workouts: WorkoutInput[] = [];
+  const workouts: BulkWorkout[] = [];
 
   splitBlocks(text).forEach((block, blockIndex) => {
     const [headerLine, ...stepLines] = block;

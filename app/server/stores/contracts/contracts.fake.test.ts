@@ -25,7 +25,7 @@ async function makeStores(): Promise<StoresUnderTest> {
         stores.workouts as unknown as {
           _seedGlobal: (i: NewWorkoutInput) => {
             id: string;
-            num: number;
+            sortOrder: number | null;
             title: string;
           };
         }

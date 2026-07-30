@@ -41,8 +41,8 @@ describe("seedGlobalLibrary against real Postgres", () => {
     expect(globals.every((w) => w.userId === null)).toBe(true);
     expect(globals.every((w) => w.isGlobal === true)).toBe(true);
     expect(globals.every((w) => w.source === "starter")).toBe(true);
-    expect(globals.map((w) => w.num).sort((a, b) => a - b)).toStrictEqual(
-      STARTER_WORKOUTS.map((w) => w.num).sort((a, b) => a - b),
+    expect(globals.map((w) => w.sortOrder)).toStrictEqual(
+      STARTER_WORKOUTS.map((w) => w.sortOrder).sort((a, b) => a - b),
     );
   });
 
@@ -83,7 +83,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
     // the starter count".
     await wk.createMany(null, [
       {
-        num: 99999,
+        sortOrder: 99999,
         title: "Manually added",
         type: "AT",
         difficulty: "medium",
@@ -96,16 +96,16 @@ describe("seedGlobalLibrary against real Postgres", () => {
     expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length + 1);
   });
 
-  // index.ts wraps seedGlobalLibrary() in a try/catch that specifically
-  // tolerates StoreConflictError, because the check-then-insert inside
-  // seedGlobalLibrary is not atomic across processes: two booters can both
-  // observe zero globals and both attempt the insert, and only one of the
-  // two partial unique indexes' writes can land. This test drives that
-  // exact race against real Postgres — wiping to a genuinely unseeded
-  // state first so both calls race the gap for real, not short-circuiting
-  // on the idempotency guard the earlier tests in this file already
-  // exercised.
-  it("tolerates a genuine two-booter race: never duplicates, and any loser fails with exactly StoreConflictError", async () => {
+  // seedGlobalLibrary's check-then-insert is not atomic on its own: two
+  // booters can both observe zero globals and both attempt the insert. Until
+  // 2026-07-30 the two partial unique indexes on `num` stopped the loser's
+  // write from landing; those went with the column, so the mutual exclusion
+  // is now a transaction-scoped advisory lock inside seedGlobalLibrary. This
+  // test drives that exact race against real Postgres — wiping to a
+  // genuinely unseeded state first so both calls race the gap for real, not
+  // short-circuiting on the idempotency guard the earlier tests in this file
+  // already exercised.
+  it("tolerates a genuine two-booter race: never duplicates, and any loser that does reject rejects with exactly StoreConflictError", async () => {
     await db.delete(workouts);
     expect(await wk.countGlobals()).toBe(0);
 
@@ -114,16 +114,15 @@ describe("seedGlobalLibrary against real Postgres", () => {
       seedGlobalLibrary(db),
     ]);
 
-    // Whichever call(s) "won", the two partial unique indexes guarantee the
-    // starter set landed exactly once — never doubled.
+    // Whichever call(s) "won", the advisory lock guarantees the starter set
+    // landed exactly once — never doubled.
     expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length);
 
-    // Not every run of this test is guaranteed to actually interleave the
-    // two calls' check-then-insert windows (timing-dependent), so a clean
-    // pair of resolves is an acceptable outcome. But whenever a loser DOES
-    // reject, it must reject with precisely the error type index.ts's
-    // boot-time catch pattern-matches on — anything else would mean that
-    // catch is silently swallowing something it shouldn't.
+    // The lock serialises the two calls, so the loser now no-ops rather than
+    // failing — both resolving is the expected outcome. index.ts still
+    // pattern-matches StoreConflictError at boot, so if a rejection ever
+    // does surface it must still be exactly that type and nothing else,
+    // or that catch would be swallowing something it shouldn't.
     const rejected = results.filter(
       (r): r is PromiseRejectedResult => r.status === "rejected",
     );
