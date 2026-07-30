@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
+import { useWorkouts } from "../api/useWorkouts";
 import PainPicker from "../components/PainPicker";
 import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
 import BulkImport from "./BulkImport";
@@ -16,6 +17,7 @@ import {
   totals,
   type BuilderForm,
 } from "./builderState";
+import { generateName } from "./nameGenerator";
 import StepRowEditor from "./StepRowEditor";
 
 export interface BuilderEditMode {
@@ -85,7 +87,7 @@ function ColumnHeader() {
       <span className="col-set">SET</span>
       <span className="col-dur">DUR</span>
       <span className="col-spm">SPM</span>
-      <span className="col-rest">REST</span>
+      <span className="col-rest">REST (OPT)</span>
       <span className="col-split">SPLIT</span>
       <span className="col-delete" />
     </div>
@@ -94,6 +96,7 @@ function ColumnHeader() {
 
 export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const baselinesState = useBaselines();
+  const workoutsState = useWorkouts();
   const navigate = useNavigate();
 
   const [form, setForm] = useState<BuilderForm>(mode?.initial ?? newForm());
@@ -101,6 +104,19 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [tolerance] = useState(readPaceTolerance);
+  // Bumped on every 🎲 press so repeated presses cycle through the name
+  // pool instead of re-offering the same candidate — generateName is pure,
+  // so without this the button would be a no-op after the first click.
+  const [nameSeed, setNameSeed] = useState(0);
+
+  // `row:<id>:<field>` / bare form-field name -> the control's DOM element,
+  // the exact keys `toSteps` returns in its `errors` object. Lets a failed
+  // Save focus the first invalid control even when it's scrolled off-screen
+  // (the reported bug: pressing Save did nothing visible when the invalid
+  // field wasn't in view). Not every possible key has an entry (e.g. `pain`
+  // — PainPicker doesn't expose a focusable ref) — focusing is best-effort,
+  // the "N field(s) need attention" count is the part that's always shown.
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   if (baselinesState.state === "loading") {
     return (
@@ -138,6 +154,20 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
 
   const markedIds = setRowIds(form);
   const totalsResult = totals(form, baselines);
+  // Empty while loading/erroring rather than blocking the screen on it — the
+  // 🎲 is a nicety, not something worth gating the whole builder on. Worst
+  // case (loading not yet resolved) is a suggested name that happens to
+  // collide with a title already in the library, same as if the user typed
+  // it by hand.
+  const existingTitles =
+    workoutsState.state === "ready"
+      ? workoutsState.workouts.map((w) => w.title)
+      : [];
+  // Recomputed from `errors` rather than tracked separately: `errors` is
+  // only ever set from a failed `toSteps` (or cleared to `{}` on success),
+  // so its key count and "how many fields need attention" are the same
+  // number by construction.
+  const invalidFieldCount = Object.keys(errors).length;
 
   function updateRow(id: string, patch: Partial<BuilderForm["rows"][number]>) {
     setForm((f) => ({
@@ -146,11 +176,31 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
     }));
   }
 
+  function handleGenerateName() {
+    const name = generateName(existingTitles, nameSeed);
+    setNameSeed((s) => s + 1);
+    setForm((f) => ({ ...f, title: name }));
+  }
+
   async function handleSave() {
     setSubmitError(null);
     const result = toSteps(form);
     if (!result.ok) {
       setErrors(result.errors);
+      // `toSteps` only ever returns `ok: false` when `errors` is non-empty
+      // (see its own return statement), so there's always a first key here
+      // — no "no errors at all" case to fall back from.
+      const [firstKey] = Object.keys(result.errors);
+      const target = fieldRefs.current[firstKey!];
+      if (target) {
+        target.focus();
+        // jsdom doesn't implement scrollIntoView at all (unlike the rest of
+        // this guard's namesakes, which are stubbed no-ops there) — guard
+        // the call so tests exercising this path don't throw.
+        if (typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({ block: "center" });
+        }
+      }
       return;
     }
     setErrors({});
@@ -202,15 +252,32 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       <div className="builder-header-fields">
         <div className="field field-title-wrap">
           <label htmlFor="builder-title">Title</label>
-          <input
-            id="builder-title"
-            className="builder-title-input"
-            aria-label="Title"
-            aria-invalid={Boolean(errors.title)}
-            aria-describedby={errors.title ? "builder-title-error" : undefined}
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          />
+          <div className="builder-title-row">
+            <input
+              ref={(el) => {
+                fieldRefs.current.title = el;
+              }}
+              id="builder-title"
+              className="builder-title-input"
+              aria-label="Title"
+              aria-invalid={Boolean(errors.title)}
+              aria-describedby={
+                errors.title ? "builder-title-error" : undefined
+              }
+              value={form.title}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, title: e.target.value }))
+              }
+            />
+            <button
+              type="button"
+              className="builder-dice"
+              aria-label="Suggest a name"
+              onClick={handleGenerateName}
+            >
+              🎲
+            </button>
+          </div>
           {errors.title && (
             <p id="builder-title-error" className="field-error">
               {errors.title}
@@ -283,17 +350,24 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             onChange={(patch) => updateRow(row.id, patch)}
             onSetBlockStart={() => setForm((f) => setBlockStart(f, row.id))}
             onRemove={() => setForm((f) => removeRow(f, row.id))}
+            registerRef={(field, el) => {
+              fieldRefs.current[`row:${row.id}:${field}`] = el;
+            }}
           />
         ))}
       </div>
       {errors.steps && <p className="field-error">{errors.steps}</p>}
 
-      {/* Three kind-specific controls rather than one generic "+ ADD ROW"
-          (the handoff's shape): the domain distinguishes wu/w/r steps, and
+      {/* Two kind-specific controls rather than one generic "+ ADD ROW" (the
+          handoff's shape): the domain distinguishes wu/w/r steps, and
           without a way to pick a row's kind, StepRowEditor's minutes-only
           branch is unreachable in create mode — every starter workout opens
           with a warm-up, so a builder that can't author one is incomplete.
-          See docs/design/DEVIATIONS.md. */}
+          See docs/design/DEVIATIONS.md. There is no "+ REST" any more: rest
+          is authored via a work row's own REST (OPT) field. `addRow(f, "r")`
+          and StepRowEditor's `kind === "r"` render branch both stay, though
+          — bulk import and edit-mode `fromWorkout` can still produce a
+          standalone rest step, and a pasted workout has to stay editable. */}
       <div className="builder-add-row-group">
         <button
           type="button"
@@ -308,13 +382,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
           onClick={() => setForm((f) => addRow(f, "w"))}
         >
           + ADD ROW
-        </button>
-        <button
-          type="button"
-          className="builder-add-row"
-          onClick={() => setForm((f) => addRow(f, "r"))}
-        >
-          + REST
         </button>
       </div>
 
@@ -355,6 +422,12 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       {submitError && (
         <p className="field-error builder-submit-error" role="alert">
           {submitError}
+        </p>
+      )}
+
+      {invalidFieldCount > 0 && (
+        <p className="field-error builder-save-status" role="alert">
+          {`${invalidFieldCount} field${invalidFieldCount === 1 ? "" : "s"} need${invalidFieldCount === 1 ? "s" : ""} attention`}
         </p>
       )}
 

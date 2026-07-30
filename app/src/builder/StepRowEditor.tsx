@@ -45,6 +45,7 @@ export default function StepRowEditor({
   onChange,
   onSetBlockStart,
   onRemove,
+  registerRef,
 }: {
   row: BuilderRow;
   index: number;
@@ -67,6 +68,12 @@ export default function StepRowEditor({
   onChange: (patch: Partial<BuilderRow>) => void;
   onSetBlockStart: () => void;
   onRemove: () => void;
+  // Lets the parent build a `row:<id>:<field>` → element map (the same keys
+  // `toSteps` uses for its error object) so a failed Save can focus the
+  // first invalid control even when it's scrolled off-screen. Optional
+  // because a caller that doesn't need save-focus (there is none today, but
+  // nothing here should require it) shouldn't have to wire a no-op.
+  registerRef?: (field: RowField, el: HTMLElement | null) => void;
 }) {
   const isWork = row.kind === "w";
 
@@ -96,6 +103,7 @@ export default function StepRowEditor({
           ↻
         </button>
         <input
+          ref={(el) => registerRef?.("dur", el)}
           className="field-dur"
           aria-label={`Row ${index + 1} duration`}
           aria-invalid={Boolean(fieldError("dur"))}
@@ -107,6 +115,7 @@ export default function StepRowEditor({
         {isWork && (
           <>
             <input
+              ref={(el) => registerRef?.("spm", el)}
               className="field-spm"
               aria-label={`Row ${index + 1} stroke rate`}
               aria-invalid={Boolean(fieldError("spm"))}
@@ -116,13 +125,14 @@ export default function StepRowEditor({
               onChange={(e) => onChange({ spm: e.target.value })}
             />
             <input
+              ref={(el) => registerRef?.("rest", el)}
               className="field-rest"
               aria-label={`Row ${index + 1} rest`}
               aria-invalid={Boolean(fieldError("rest"))}
               aria-describedby={
                 fieldError("rest") ? errorId("rest") : undefined
               }
-              placeholder="rest"
+              placeholder="opt"
               value={row.rest}
               onChange={(e) => onChange({ rest: e.target.value })}
             />
@@ -138,7 +148,16 @@ export default function StepRowEditor({
         </button>
       </div>
       {isWork && (
-        <div className="step-row-editor-pace">
+        <div
+          className="step-row-editor-pace"
+          // Not natively focusable (a plain wrapper div) — tabIndex=-1 makes
+          // it a valid `.focus()` target (out of tab order) so a failed Save
+          // can land keyboard/screen-reader focus here when this row's pace
+          // ref is the first invalid control, the same way it can land on a
+          // plain <input> for dur/spm/rest.
+          tabIndex={-1}
+          ref={(el) => registerRef?.("ref", el)}
+        >
           <PaceRefInput
             base={row.refBase}
             off={row.refOff}

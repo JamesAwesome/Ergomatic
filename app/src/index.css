@@ -657,7 +657,14 @@ button:disabled {
   color: var(--ink-3);
 }
 
+.builder-title-row {
+  display: flex;
+  gap: 8px;
+}
+
 .builder-title-input {
+  flex: 1;
+  min-width: 0;
   min-height: var(--tap);
   padding: 0 10px;
   background: var(--surface);
@@ -667,6 +674,16 @@ button:disabled {
 
 .builder-title-input[aria-invalid="true"] {
   border-color: var(--accent);
+}
+
+.builder-dice {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .builder-columns {
@@ -707,7 +724,13 @@ button:disabled {
 }
 
 .col-rest {
-  width: 44px;
+  /* Wider than .field-rest's 44px and allowed to wrap ("(OPT)" onto its own
+     line) — "REST (OPT)" doesn't fit in 44px at this font size, and
+     .col-split's flex: 1 absorbs the difference rather than the columns
+     after it drifting out of alignment. */
+  width: 60px;
+  white-space: normal;
+  line-height: 1.3;
 }
 
 .col-split {
@@ -914,6 +937,10 @@ button:disabled {
 }
 
 .builder-submit-error {
+  margin-top: 12px;
+}
+
+.builder-save-status {
   margin-top: 12px;
 }
 
