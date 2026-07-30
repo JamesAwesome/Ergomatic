@@ -29,11 +29,19 @@ export default function PaceRefInput({
   off,
   onChange,
   rowLabel,
+  invalid,
+  errorId,
 }: {
   base: PaceBase;
   off: number;
   onChange: (next: { base: PaceBase; off: number }) => void;
   rowLabel: string;
+  // Optional error wiring from StepRowEditor's `fieldError("ref")` — the
+  // radiogroup is the anchor (there's no single "ref" input any more to
+  // carry aria-invalid/aria-describedby the way the old free-text field
+  // did). Both are undefined/false when the row has no ref error.
+  invalid?: boolean;
+  errorId?: string;
 }) {
   // Roving tabindex (WAI-ARIA radiogroup pattern), same as PainPicker.tsx:
   // the group is one tab stop and arrow keys move focus (and selection)
@@ -77,6 +85,8 @@ export default function PaceRefInput({
         className="pace-ref-bases"
         role="radiogroup"
         aria-label={`${rowLabel} pace base`}
+        aria-invalid={Boolean(invalid)}
+        aria-describedby={errorId}
       >
         {BASES.map((b, index) => {
           const checked = base === b;

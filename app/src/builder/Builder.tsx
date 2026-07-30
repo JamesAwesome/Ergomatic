@@ -75,15 +75,15 @@ function fmtMinutes(minutes: number): string {
 // .field-dur / .field-spm / .field-rest, plus a spacer the width of
 // .row-delete) so each label sits over its column — see docs/design/Erg
 // Log.dc.html:765 for the handoff's equivalent fixed widths. Purely
-// decorative (aria-hidden), but it'll show in screenshots. PACE REF has no
-// single column to sit over any more (PaceRefInput.tsx renders on its own
-// full-width line below), but stays in the header as a section label.
+// decorative (aria-hidden), but it'll show in screenshots. There is no
+// PACE REF slot any more: PaceRefInput.tsx renders on its own full-width
+// line below the row rather than in a column, so a header slot for it would
+// just be dead space that pushes every column after it out of alignment.
 function ColumnHeader() {
   return (
     <div className="builder-columns" aria-hidden="true">
       <span className="col-set">SET</span>
       <span className="col-dur">DUR</span>
-      <span className="col-ref">PACE REF</span>
       <span className="col-spm">SPM</span>
       <span className="col-rest">REST</span>
       <span className="col-split">SPLIT</span>

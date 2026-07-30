@@ -61,9 +61,13 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    for (const label of ["SET", "DUR", "PACE REF", "SPM", "REST", "SPLIT"]) {
+    for (const label of ["SET", "DUR", "SPM", "REST", "SPLIT"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+    // PACE REF no longer has a column of its own (PaceRefInput.tsx renders
+    // on its own full-width line beneath the row) — a header slot for it
+    // would just be dead space pushing every other label out of alignment.
+    expect(screen.queryByText("PACE REF")).not.toBeInTheDocument();
   });
 
   it("live-resolves a work row's typed duration and pace ref into the tolerance range", async () => {
@@ -379,6 +383,17 @@ describe("Builder", () => {
     );
 
     expect(screen.getByText("invalid pace reference")).toBeInTheDocument();
+
+    // L1: the error is wired to PaceRefInput's radiogroup (the only
+    // anchor the control has, since it replaced a free-text input that
+    // used to carry aria-invalid/aria-describedby itself), not orphaned.
+    const group = screen.getByRole("radiogroup", { name: "Row 1 pace base" });
+    expect(group).toHaveAttribute("aria-invalid", "true");
+    const describedBy = group.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      "invalid pace reference",
+    );
   });
 
   it("treats a successful save as success even when the response body isn't valid JSON (L3)", async () => {
