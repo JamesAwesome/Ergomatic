@@ -89,45 +89,92 @@ test("workout-detail", async ({ page }) => {
   });
 });
 
-/** Fills the top-level fields plus a two-row body so the builder screenshot
- *  shows a realistic in-progress workout rather than the blank/default
- *  form: two work rows, both resolving to real target ranges once
- *  baselines are set (SCREENSHOT_BASELINES), and a non-trivial reps count
- *  so the "N row(s) repeat · M per set" readout has something to say.
- *  Neither row is a `wu` bookend (builderState.ts's BOOKEND_ROW_KINDS), so
- *  the derived repeat span (Phase 5D Task 2) starts at row 1 — both rows
- *  repeat, which is what "+ MORE REPS" alone now needs to show, with no
- *  per-row toggle to click any more. */
+/** Fills the top-level fields plus a six-step body so the committed
+ *  screenshot shows the whole point of the accordion redesign
+ *  (docs/design/builder-redesign/README.md): only the LAST step ends up
+ *  expanded — every other step folds down to its ~86px collapsed summary
+ *  card (StepCard.tsx), which is exactly the vertical-density problem this
+ *  phase's redesign exists to fix. A blank/default form (one row, always
+ *  open) could never show that, so this deliberately builds more than one
+ *  step and explicitly collapses each one via DONE before moving on.
+ *
+ *  Step 1: a minutes row (bare number, builderState.ts's
+ *  parseDurationInput), stroke rate raised off FREE via the SPM stepper
+ *  (Stepper.tsx) — collapsed once configured.
+ *  Steps 2-4: a distance row (2000m @ 2k, exercising DurationInput's M
+ *  chip and the REST stepper's 30s increments) plus two collapsed-card ⧉
+ *  duplicates of it (docs/design/DEVIATIONS.md's SET-cell replacement) —
+ *  the fast way to build a realistic multi-step ladder without opening
+ *  three separate editors.
+ *  Step 5: "+ ADD STEP" appends a sixth, deliberately different row (a
+ *  minutes row back at 6k, offset) and — being the freshly-added step —
+ *  is the one left open when this function returns, since that's the
+ *  state the screenshot needs to capture. */
 async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByLabel("Title").fill("Screenshot Intervals");
-  await page.getByRole("radio", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Pain 3" }).click();
 
-  // Bare number, no apostrophe (builderState.ts's parseDurationInput) — the
-  // structured pace control (PaceRefInput.tsx) replaces the old free-text
-  // ref field: base defaults to 6k, so ten clicks on the "slower" stepper
-  // reaches "6k +10".
+  // Row 1: base defaults to 6k (builderState.ts's newRow) — ten clicks on
+  // the "slower" stepper reaches "6k +10".
   await page.getByLabel("Row 1 duration", { exact: true }).fill("20");
   const row1Slower = page.getByRole("button", { name: "Row 1 pace slower" });
   for (let i = 0; i < 10; i++) {
     await row1Slower.click();
   }
-  await page.getByLabel("Row 1 stroke rate", { exact: true }).fill("20");
+  const row1SpmUp = page.getByRole("button", {
+    name: "Row 1 stroke rate up",
+  });
+  await row1SpmUp.click();
+  await row1SpmUp.click();
+  await page.getByRole("button", { name: "DONE" }).click();
 
-  await page.getByRole("button", { name: "+ ADD ROW" }).click();
-  // A distance row (2000m), not another minutes row — Row 1 already covers
-  // MIN; this row exercises the M chip (fix wave, Task 4) so the committed
-  // screenshot shows a distance row actually resolving, not just the
-  // default unit.
+  // Row 2: a distance row (2000m against 2k).
+  await page.getByRole("button", { name: "+ ADD STEP" }).click();
   await page.getByLabel("Row 2 duration", { exact: true }).fill("2000");
   await page.getByRole("radio", { name: "Row 2 duration unit meters" }).click();
   await page.getByRole("radio", { name: "Row 2 pace 2K" }).click();
-  await page.getByLabel("Row 2 stroke rate", { exact: true }).fill("26");
-  await page.getByLabel("Row 2 rest").fill("3");
+  const row2SpmUp = page.getByRole("button", {
+    name: "Row 2 stroke rate up",
+  });
+  for (let i = 0; i < 6; i++) {
+    await row2SpmUp.click();
+  }
+  const row2RestUp = page.getByRole("button", { name: "Row 2 rest up" });
+  for (let i = 0; i < 6; i++) {
+    await row2RestUp.click();
+  }
+  await page.getByRole("button", { name: "DONE" }).click();
 
-  const moreReps = page.getByRole("button", { name: "More reps" });
-  await moreReps.click();
-  await moreReps.click();
-  await moreReps.click();
+  // Two collapsed-card ⧉ duplicates of Row 2 (Steps 3 and 4) — everything
+  // stays collapsed the whole time.
+  const duplicateRow2 = page.getByRole("button", { name: "Duplicate Step 2" });
+  await duplicateRow2.click();
+  await duplicateRow2.click();
+  await duplicateRow2.click();
+
+  // Step 6: "+ ADD STEP" appends a copy of the last row's values and opens
+  // it — nudge it to look deliberately different (minutes, not metres;
+  // 6k, not 2k) so the screenshot doesn't read as four identical clones.
+  await page.getByRole("button", { name: "+ ADD STEP" }).click();
+  const lastRowLabel = "Row 6";
+  await page.getByLabel(`${lastRowLabel} duration`, { exact: true }).fill("8");
+  await page
+    .getByRole("radio", { name: `${lastRowLabel} duration unit minutes` })
+    .click();
+  await page.getByRole("radio", { name: `${lastRowLabel} pace 6K` }).click();
+  const lastFaster = page.getByRole("button", {
+    name: `${lastRowLabel} pace faster`,
+  });
+  for (let i = 0; i < 5; i++) {
+    await lastFaster.click();
+  }
+  // Row 6 is left EXPANDED here (no DONE press) — this is the one card the
+  // screenshot needs open.
+
+  const repeatUp = page.getByRole("button", { name: "Repeat up" });
+  await repeatUp.click();
+  await repeatUp.click();
+  await repeatUp.click();
 }
 
 test("builder", async ({ page }) => {
@@ -139,18 +186,30 @@ test("builder", async ({ page }) => {
   await page.goto("/library/new");
   await fillSampleWorkout(page);
 
-  // Two resolved splits (real ranges, not the "no target" fallback — see
-  // StepRowEditor.tsx's resolvedSplit) and the reps readout, all live before
-  // any save.
-  await expect(page.locator(".step-row-range")).toHaveCount(2);
-  await expect(page.locator(".builder-repeat-readout")).toBeVisible();
+  // Six steps total: five collapsed cards (StepCard.tsx) and exactly one
+  // open editor (StepEditor.tsx) — the accordion invariant this whole
+  // redesign exists to prove, captured live before any save. Every
+  // collapsed row is a work step with baselines set, so each one resolves
+  // its own split (StepCard's `splitOnCollapsed`); the open row shows its
+  // resolved range in the TARGET strip instead.
+  await expect(page.locator(".step-card")).toHaveCount(5);
+  await expect(page.locator(".step-card-split")).toHaveCount(5);
+  await expect(page.locator(".step-editor")).toHaveCount(1);
+  await expect(page.locator(".step-editor-target-value")).toHaveCount(1);
+  // Scoped to the REPEAT stepper's own value cell, not a page-wide text
+  // search: StepCard.tsx's collapsed delete button is also the "×" glyph,
+  // so an unscoped getByText("×4") can match across two adjacent rows'
+  // concatenated text (a delete "×" immediately followed by the next
+  // card's index digit) as readily as it matches the real stepper.
+  await expect(page.locator(".builder-repeat-row .stepper-value")).toHaveText(
+    "×4",
+  );
+
   // fillSampleWorkout scrolls the page down while filling rows near the
   // bottom of the form, so a viewport-only screenshot here would start at
-  // DIFFICULTY and never show `← BACK`, the "New Workout" heading, the
-  // Title field, or the 🎲 — the two most visible before/after changes of
-  // this phase (the retired No. field, the new dice control). fullPage
-  // captures the whole scrollable form regardless of current scroll
-  // position.
+  // the classification card and never show `← BACK`, the "New workout"
+  // heading, the Title field, or ↻ AUTO NAME. fullPage captures the whole
+  // scrollable form regardless of current scroll position.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "builder.png"),
     fullPage: true,

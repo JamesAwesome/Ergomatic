@@ -13,6 +13,15 @@ import { signInViaBackdoor } from "./helpers";
 // each test deletes its own workout again at the end via `cleanupByTitle` so
 // a re-run against a dirty database (same email -> same user row) doesn't
 // accumulate stale rows.
+//
+// The builder is an accordion now (docs/design/builder-redesign/README.md,
+// wired up by src/builder/Builder.tsx/StepCard.tsx/StepEditor.tsx): a fresh
+// form opens its one row for editing; every other row renders as a
+// collapsed ~86px StepCard with inline EDIT/duplicate/delete, and only one
+// StepEditor is ever mounted at a time. SPM/REST/PACE-offset/REPEAT are all
+// "− value +" Stepper controls (src/builder/Stepper.tsx), not typable
+// fields, and EXPECTED PAIN/TYPE/DIFFICULTY are plain toggle buttons
+// (`aria-pressed`), not radios — see ClassificationCard.tsx.
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 /** Sets baselines for the signed-in user via an in-page `fetch`, not
@@ -77,7 +86,12 @@ test.describe("authoring loop", () => {
 
     const title = "Exit Criterion Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("radio", { name: "Pain 3" }).click();
+    // EXPECTED PAIN's chips are plain toggle buttons (aria-pressed), not
+    // radios (ClassificationCard.tsx) — each carries its own
+    // `aria-label="Pain N"`.
+    await page.getByRole("button", { name: "Pain 3" }).click();
+    // A fresh builder opens Row 1's editor immediately (Builder.tsx: nothing
+    // to scan yet, only something to fill in) — no EDIT tap needed here.
     await page.getByLabel("Row 1 duration", { exact: true }).fill("20");
     // Base defaults to 6k (builderState.ts's newRow) — two clicks on the
     // faster stepper reaches the "-2" offset the exit criterion needs.
@@ -86,22 +100,30 @@ test.describe("authoring loop", () => {
     });
     await fasterButton.click();
     await fasterButton.click();
-    await page.getByLabel("Row 1 stroke rate", { exact: true }).fill("22");
+    // SPM is a bare stepper now (StepEditor.tsx), no typable field: from
+    // empty, "+" wakes at 20, then steps by 1 — three presses reaches 22.
+    const spmUp = page.getByRole("button", { name: "Row 1 stroke rate up" });
+    await spmUp.click();
+    await spmUp.click();
+    await spmUp.click();
 
     // With a 6k baseline of 122.0s: 122 - 2 = 120.0, tolerance +/-1s (the
     // token default, tokens.css's --pace-tolerance) -> "1:59.0-2:01.0" (EN
     // DASH, domain/pace.ts's toleranceRange). The builder resolves this live
-    // (StepRowEditor.tsx), before any save — check it here too, not just on
-    // the post-save detail screen below, so a failure here (bad live math)
-    // isn't confused with a failure there (bad round-trip through the API).
-    await expect(page.locator(".step-row-range").first()).toHaveText(
+    // (StepEditor.tsx's TARGET strip), before any save — check it here too,
+    // not just on the post-save detail screen below, so a failure here (bad
+    // live math) isn't confused with a failure there (bad round-trip
+    // through the API).
+    await expect(page.locator(".step-editor-target-value")).toHaveText(
       "1:59.0–2:01.0",
     );
 
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    // WorkoutDetail's own resolved-range class (StepRow.tsx) — untouched by
+    // the builder redesign.
     await expect(page.locator(".step-row-range").first()).toHaveText(
       "1:59.0–2:01.0",
     );
@@ -168,10 +190,10 @@ test.describe("authoring loop", () => {
 
     const originalTitle = "Edit Target Row";
     await page.getByLabel("Title").fill(originalTitle);
-    await page.getByRole("radio", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Pain 2" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("10");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
@@ -185,7 +207,7 @@ test.describe("authoring loop", () => {
     const titleInput = page.getByLabel("Title");
     await expect(titleInput).toHaveValue(originalTitle);
     await titleInput.fill(renamedTitle);
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
@@ -207,10 +229,10 @@ test.describe("authoring loop", () => {
 
     const title = "Delete Me Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("radio", { name: "Pain 1" }).click();
+    await page.getByRole("button", { name: "Pain 1" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("5");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
@@ -265,13 +287,13 @@ test.describe("new controls this phase introduced", () => {
 
     const title = "Bare Duration Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("radio", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Pain 2" }).click();
     // "5" alone means 5 minutes (builderState.ts's parseDurationInput) — no
     // trailing apostrophe needed, and there is no numeric "No." field
     // anywhere on this screen to fill in the first place.
     await page.getByLabel("Row 1 duration", { exact: true }).fill("5");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
@@ -321,7 +343,7 @@ test.describe("new controls this phase introduced", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("pressing the dice icon fills the Title field with a non-empty suggested name", async ({
+  test("pressing AUTO NAME fills the Title field with a non-empty suggested name", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -333,7 +355,10 @@ test.describe("new controls this phase introduced", () => {
 
     const titleInput = page.getByLabel("Title");
     await expect(titleInput).toHaveValue("");
-    await page.getByRole("button", { name: "Suggest a name" }).click();
+    // "↻ AUTO NAME" (Builder.tsx) replaced the old 🎲/"Suggest a name"
+    // button this phase — the handoff's own rationale: the dice read as a
+    // label, not a button.
+    await page.getByRole("button", { name: /AUTO NAME/i }).click();
     await expect(titleInput).not.toHaveValue("");
   });
 
@@ -352,12 +377,55 @@ test.describe("new controls this phase introduced", () => {
     // handleSave's fieldRefs lookup focuses and scrolls into view — the
     // reported bug was that pressing Save did nothing visible when the
     // invalid field was scrolled off-screen.
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page.getByLabel("Title")).toBeFocused();
   });
 
-  test("cloning row 1 duplicates every field, and ×5 on the remaining single row repeats it 5 times", async ({
+  test("expanding a second step collapses the first — only one editor is present at a time", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-accordion@e2e.test",
+      name: "Builder Accordion Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    // A fresh builder opens Row 1's editor by default — nothing to scan yet.
+    await expect(page.locator(".step-editor")).toHaveCount(1);
+    await expect(
+      page.getByLabel("Row 1 duration", { exact: true }),
+    ).toBeVisible();
+
+    // "+ ADD STEP" opens the new Row 2, which collapses Row 1 to a card —
+    // never two editors at once (Builder.tsx's `editing: rowId | null`).
+    await page.getByRole("button", { name: "+ ADD STEP" }).click();
+    await expect(page.locator(".step-editor")).toHaveCount(1);
+    await expect(page.locator(".step-card")).toHaveCount(1);
+    await expect(
+      page.getByLabel("Row 2 duration", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Row 1 duration", { exact: true }),
+    ).toHaveCount(0);
+
+    // Expanding the now-collapsed Row 1 swaps which row is open — Row 2
+    // collapses in turn, still exactly one editor mounted.
+    await page
+      .locator(".step-card")
+      .getByRole("button", { name: "EDIT" })
+      .click();
+    await expect(page.locator(".step-editor")).toHaveCount(1);
+    await expect(
+      page.getByLabel("Row 1 duration", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Row 2 duration", { exact: true }),
+    ).toHaveCount(0);
+  });
+
+  test("cloning a collapsed row via ⧉ copies every field; deleting the clone confirms first; ×5 builds 5×1′ @ 6k−2", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -369,7 +437,7 @@ test.describe("new controls this phase introduced", () => {
 
     const title = "Clone Reps Row";
     await page.getByLabel("Title").fill(title);
-    await page.getByRole("radio", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Pain 2" }).click();
     await page.getByLabel("Row 1 duration", { exact: true }).fill("1");
     const fasterButton = page.getByRole("button", {
       name: "Row 1 pace faster",
@@ -377,37 +445,56 @@ test.describe("new controls this phase introduced", () => {
     await fasterButton.click();
     await fasterButton.click();
 
-    // The clone button (row-clone, "↻") is the SET cell's replacement
-    // (docs/design/DEVIATIONS.md) — prove it actually copies every field,
-    // not just that a second row appears, by reading the duplicate's
-    // duration and pace back. This two-row shape is a deliberate
-    // intermediate: the test collapses back to one row below so `×5`
-    // multiplies exactly the `5×1′ @ 6k−2` workout it's named for, not a
-    // 10-phase one.
-    await page.getByRole("button", { name: "Duplicate Row 1" }).click();
+    // Collapse Row 1 so the fast "5x1'" path — the collapsed card's own ⧉
+    // — is what actually gets exercised, not the expanded card's DUPLICATE.
+    await page.getByRole("button", { name: "DONE" }).click();
+
+    const rows = page.locator(".builder-step-list > div");
+    // The clone button (⧉) is the SET cell's replacement
+    // (docs/design/DEVIATIONS.md) — it inserts a copy beneath and leaves
+    // everything collapsed, the fast way to build `5×1′`.
+    await page.getByRole("button", { name: "Duplicate Step 1" }).click();
+    await expect(rows).toHaveCount(2);
+    await expect(page.locator(".step-editor")).toHaveCount(0);
+
+    // Prove it actually copied every field, not just that a second card
+    // appeared, by expanding the clone and reading its duration/pace back.
+    await rows.nth(1).getByRole("button", { name: "EDIT" }).click();
     await expect(
       page.getByLabel("Row 2 duration", { exact: true }),
     ).toHaveValue("1");
-    await expect(
-      page.locator(".step-row-editor").nth(1).locator(".pace-ref-display"),
-    ).toHaveText("6k −2");
+    await expect(page.locator(".step-editor .pace-ref-display")).toHaveText(
+      "6k −2",
+    );
+    await page.getByRole("button", { name: "DONE" }).click();
 
-    await page
-      .locator(".step-row-editor")
+    // Delete the clone from its own collapsed card — James's recorded
+    // departure from the handoff (docs/design/DEVIATIONS.md): the first
+    // press only asks, so a mis-tap can't silently destroy a configured
+    // step.
+    await rows.nth(1).getByRole("button", { name: "Delete Step 2" }).click();
+    await expect(rows).toHaveCount(2);
+    await rows
       .nth(1)
-      .getByRole("button", { name: "Remove row" })
+      .getByRole("button", { name: "Yes, confirm delete Step 2" })
       .click();
-    await expect(page.locator(".step-row-editor")).toHaveCount(1);
+    await expect(rows).toHaveCount(1);
 
     // The bottom-only ×N control (no more per-row SET) — 4 presses from the
-    // default ×1 reaches ×5.
-    const moreReps = page.getByRole("button", { name: "More reps" });
+    // default ×1 reaches ×5, completing the `5×1′ @ 6k−2` workout.
+    const repeatUp = page.getByRole("button", { name: "Repeat up" });
     for (let i = 0; i < 4; i++) {
-      await moreReps.click();
+      await repeatUp.click();
     }
-    await expect(page.locator(".builder-reps-count")).toHaveText("×5");
+    // Scoped to the REPEAT stepper's own value cell, not a page-wide text
+    // search: StepCard.tsx's collapsed delete button is also the "×"
+    // glyph, so an unscoped getByText("×5") risks matching across two
+    // adjacent rows' concatenated text as readily as the real stepper.
+    await expect(page.locator(".builder-repeat-row .stepper-value")).toHaveText(
+      "×5",
+    );
 
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     // One row, 1 minute, ×5, no warm-up/rest bookends — five work phases'
@@ -446,7 +533,17 @@ test.describe("new controls this phase introduced", () => {
     await page.getByRole("link", { name: "Edit" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/edit$/);
 
-    // Row 1 is the stored `wu` row — StepRowEditor's non-work branch, so it
+    // Edit mode opens with every row collapsed (Builder.tsx: reviewing
+    // already-authored steps is exactly the wall-of-inputs problem the
+    // accordion exists to fix) — expand Row 1 (the stored `wu` row) via its
+    // own collapsed card before reading its field values.
+    await page
+      .locator(".builder-step-list > div")
+      .first()
+      .getByRole("button", { name: "EDIT" })
+      .click();
+
+    // Row 1 is the stored `wu` row — StepEditor's non-work branch, so it
     // renders only a duration field (no pace/SPM/rest), still showing the
     // 5 minutes bulk import stored.
     await expect(
@@ -459,7 +556,7 @@ test.describe("new controls this phase introduced", () => {
     const putRequestPromise = page.waitForRequest(
       (req) => req.method() === "PUT" && req.url().includes("/api/workouts/"),
     );
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Save to library" }).click();
     const putRequest = await putRequestPromise;
     const body = putRequest.postDataJSON() as {
       steps: Array<{ k: string }>;
@@ -470,7 +567,7 @@ test.describe("new controls this phase introduced", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("pressing the dice icon twice yields two different suggested titles", async ({
+  test("pressing AUTO NAME twice yields two different suggested titles", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -481,10 +578,10 @@ test.describe("new controls this phase introduced", () => {
     await page.goto("/library/new");
 
     const titleInput = page.getByLabel("Title");
-    const dice = page.getByRole("button", { name: "Suggest a name" });
-    await dice.click();
+    const autoName = page.getByRole("button", { name: /AUTO NAME/i });
+    await autoName.click();
     const first = await titleInput.inputValue();
-    await dice.click();
+    await autoName.click();
     const second = await titleInput.inputValue();
 
     // The reported bug, end to end: nameGenerator.ts used to probe linearly
@@ -505,11 +602,11 @@ test.describe("new controls this phase introduced", () => {
     await setBaselines(page);
     await page.goto("/library/new");
 
-    const spmField = page.getByLabel("Row 1 stroke rate", { exact: true });
-    await expect(spmField).toHaveValue("");
-    await page
-      .getByRole("button", { name: "Row 1 stroke rate increase" })
-      .click();
-    await expect(spmField).toHaveValue("20");
+    // SPM is a bare Stepper (StepEditor.tsx) — no typable field, just the
+    // joined "− value +" group (Stepper.tsx) reading FREE when empty.
+    const spmGroup = page.getByRole("group", { name: "Row 1 stroke rate" });
+    await expect(spmGroup.locator(".stepper-value")).toHaveText("FREE");
+    await page.getByRole("button", { name: "Row 1 stroke rate up" }).click();
+    await expect(spmGroup.locator(".stepper-value")).toHaveText("20");
   });
 });
