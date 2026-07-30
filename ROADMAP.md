@@ -135,24 +135,31 @@ they go stale (this has burned us before). Concretely:
 
 ## Phase 5A — Library & baselines
 
-**Status:** Not started
+**Status:** Done (2026-07-29, PR #22)
 **Goal:** Enter real baselines and start transcribing The Erg Book.
 
-- [ ] Design-token CSS foundation (paper palette, Newsreader/Archivo/IBM Plex Mono, 2 px radii, spacing scale) + bottom tab shell
-- [ ] Library screen: rows with **5-segment** pain bars, filter chips (type single-select toggle, duration multi-select union, `PAIN ≤3`, RECENT/NOT RECENT exclusivity, ALL clears); chips read EASY/MEDIUM/HARD; library counter is a plain count (no /375)
-- [ ] Workout detail: resolved ranges, ▲▼ per-step nudges, derived duration
-- [ ] **You** — staged baseline editor (drafts, − = faster, 0.5 s steps, Discard/Apply confirm block)
+- [x] Design-token CSS foundation (paper palette, Newsreader/Archivo/IBM Plex Mono, 2 px radii, spacing scale) + bottom tab shell — fonts self-hosted via @fontsource (offline-capable native shell, no CDN)
+- [x] Library screen: rows with **5-segment** pain bars, filter chips (type single-select toggle, duration multi-select union, `PAIN ≤3`, RECENT/NOT RECENT exclusivity, ALL clears); chips read EASY/MEDIUM/HARD; library counter is a plain count (no /375)
+- [x] Workout detail: resolved ranges, ▲▼ per-step nudges (session-local, never persisted), derived duration
+- [x] **You** — staged baseline editor (drafts, − = faster, 0.5 s steps, Discard/Apply confirm block)
+- [x] App icon; iOS safe areas (`viewport-fit=cover` + `env(safe-area-inset-*)`) so the UI clears the notch and home indicator
+- [x] `GET /api/workouts` gains `lastDoneDaysAgo` (additive; reuses the existing grouped query — no N+1)
 
-**Exit:** A workout entered as `6k -2 @ 22 SPM` displays the correct range from your real baselines; deployed and usable for cataloguing.
+**Exit:** Pace resolution verified end to end against real baselines and deployed. The literal `6k -2 @ 22 SPM` case moved to 5B — it needs the Builder, since no seeded workout carries a negative 6k offset.
 
 ## Phase 5B — Builder & bulk import
 
-**Status:** Not started
+**Status:** Done (2026-07-30, PR #23)
 **Goal:** Add new workouts to the library from the app instead of hand-editing seed data.
 
-- [ ] Builder: type/difficulty/pain pickers, step rows with live resolved splits, repeat block, totals, bulk-import paste; DUR field takes minutes OR meters (`10'` vs `2500m`, explicit unit) in rows and bulk import
+- [x] Builder: type/difficulty/pain pickers, step rows with live resolved splits, repeat block, totals, bulk-import paste; DUR field takes minutes OR meters (`10'` vs `2500m`, explicit unit) in rows and bulk import
+- [x] 1–5 pain picker with SVG faces + numerals on a measured green→red ramp — shared component, reused by Phase 6's log screen
+- [x] Three row kinds authorable (`+ WARM-UP` / `+ ADD ROW` / `+ REST`); SET cell chooses where the repeat block starts (see docs/design/DEVIATIONS.md — the handoff's per-row model can't round-trip through the domain's single marker)
+- [x] Edit + delete personal workouts; globals stay read-only and refuse a hand-typed edit URL
 
-**Exit:** A workout transcribed from The Erg Book via Builder (rows or bulk paste) saves, appears in the Library, and resolves targets identically to the seeded workouts.
+**Exit:** MET — a workout authored as `6k -2 @ 22 SPM` saves, appears in the Library, and resolves to `1:59.0–2:01.0` from real baselines, identically to the seeded workouts.
+
+**Follow-ups (not blockers, recorded at merge):** DUR field width clips long distances (`42195m`); the `×N` stepper keeps its value after the block is cleared; no unsaved-changes guard when leaving the builder; re-importing after a partial bulk failure re-submits the blocks that already landed; `design.spec` sweeps only the blank builder, not the bulk panel or the edit screen; the bulk endpoint inserts blocks sequentially without a transaction (now UI-reachable for the first time).
 
 ## Phase 6 — Session flow
 
