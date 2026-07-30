@@ -1,0 +1,169 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { Difficulty, WorkoutType } from "../../domain/types.js";
+import ClassificationCard from "./ClassificationCard";
+
+type Handlers = {
+  type: WorkoutType;
+  difficulty: Difficulty;
+  pain: number | null;
+  onTypeChange: (type: WorkoutType) => void;
+  onDifficultyChange: (difficulty: Difficulty) => void;
+  onPainChange: (pain: number) => void;
+};
+
+function setup(overrides: Partial<Handlers> = {}) {
+  const props = {
+    type: "O2" as WorkoutType,
+    difficulty: "easy" as Difficulty,
+    pain: null as number | null,
+    onTypeChange: vi.fn<(type: WorkoutType) => void>(),
+    onDifficultyChange: vi.fn<(difficulty: Difficulty) => void>(),
+    onPainChange: vi.fn<(pain: number) => void>(),
+    ...overrides,
+  };
+  const view = render(<ClassificationCard {...props} />);
+  return { ...props, container: view.container };
+}
+
+describe("ClassificationCard", () => {
+  it("renders all three groups inside a single card", () => {
+    const { container } = setup();
+    const card = container.querySelector(".classification-card");
+    expect(card).not.toBeNull();
+    expect(card).toContainElement(screen.getByText("TYPE"));
+    expect(card).toContainElement(screen.getByText("DIFFICULTY"));
+    expect(card).toContainElement(screen.getByText("EXPECTED PAIN"));
+  });
+
+  describe("TYPE", () => {
+    it("fills the selected chip with that type's own colour and cream text, leaving the rest unstyled", () => {
+      setup({ type: "AN" });
+      const selected = screen.getByRole("button", { name: "AN" });
+      expect(selected).toHaveAttribute(
+        "style",
+        expect.stringContaining("--type-an"),
+      );
+      expect(selected).toHaveAttribute(
+        "style",
+        expect.stringContaining("--on-color"),
+      );
+      expect(screen.getByRole("button", { name: "O2" })).not.toHaveAttribute(
+        "style",
+      );
+    });
+
+    it("reports the chosen type", async () => {
+      const onTypeChange = vi.fn();
+      setup({ onTypeChange });
+      await userEvent.click(screen.getByRole("button", { name: "TR" }));
+      expect(onTypeChange).toHaveBeenCalledWith("TR");
+    });
+  });
+
+  describe("DIFFICULTY", () => {
+    it("fills the selected chip with ink, not accent — no inline style, no accent-named class", () => {
+      setup({ difficulty: "hard" });
+      const selected = screen.getByRole("button", { name: "HARD" });
+      expect(selected).toHaveAttribute("aria-pressed", "true");
+      expect(selected).not.toHaveAttribute("style");
+      expect(selected.className).not.toMatch(/accent/i);
+    });
+
+    it("never puts the accent-named class on any DIFFICULTY chip, selected or not", () => {
+      setup({ difficulty: "medium" });
+      for (const label of ["EASY", "MEDIUM", "HARD"]) {
+        expect(
+          screen.getByRole("button", { name: label }).className,
+        ).not.toMatch(/accent/i);
+      }
+    });
+
+    it("reports the chosen difficulty", async () => {
+      const onDifficultyChange = vi.fn();
+      setup({ onDifficultyChange });
+      await userEvent.click(screen.getByRole("button", { name: "MEDIUM" }));
+      expect(onDifficultyChange).toHaveBeenCalledWith("medium");
+    });
+  });
+
+  describe("EXPECTED PAIN", () => {
+    it("renders numerals only — no face graphic markup", () => {
+      const { container } = setup({ pain: 3 });
+      expect(container.querySelector("svg")).toBeNull();
+      for (const n of [1, 2, 3, 4, 5]) {
+        expect(
+          screen.getByRole("button", { name: `Pain ${n}` }),
+        ).toHaveTextContent(String(n));
+      }
+    });
+
+    it("shows the selected level's word from PAIN_WORDS on the right of the label row (pain 3 -> WORKING)", () => {
+      setup({ pain: 3 });
+      expect(screen.getByText("WORKING")).toBeInTheDocument();
+    });
+
+    it.each([
+      [1, "EASY BREATH"],
+      [2, "COMFORTABLE"],
+      [3, "WORKING"],
+      [4, "HURTS"],
+      [5, "BRUTAL"],
+    ])("shows %s's word as %s", (level, word) => {
+      setup({ pain: level });
+      expect(screen.getByText(word)).toBeInTheDocument();
+    });
+
+    it("shows no level word when nothing is selected yet", () => {
+      setup({ pain: null });
+      for (const word of [
+        "EASY BREATH",
+        "COMFORTABLE",
+        "WORKING",
+        "HURTS",
+        "BRUTAL",
+      ]) {
+        expect(screen.queryByText(word)).not.toBeInTheDocument();
+      }
+    });
+
+    it("fills the selected cell with its own ramp colour and cream text", () => {
+      setup({ pain: 2 });
+      const selected = screen.getByRole("button", { name: "Pain 2" });
+      expect(selected).toHaveAttribute(
+        "style",
+        expect.stringContaining("--pain-ramp-2"),
+      );
+      expect(selected).toHaveAttribute(
+        "style",
+        expect.stringContaining("--on-color"),
+      );
+      expect(
+        screen.getByRole("button", { name: "Pain 1" }),
+      ).not.toHaveAttribute("style");
+    });
+
+    it("reports the chosen pain level", async () => {
+      const onPainChange = vi.fn();
+      setup({ onPainChange });
+      await userEvent.click(screen.getByRole("button", { name: "Pain 4" }));
+      expect(onPainChange).toHaveBeenCalledWith(4);
+    });
+  });
+
+  it("gives every chip in every group the 44px hit-target class", () => {
+    setup({ pain: 1 });
+    const labels = ["AN", "O2", "AT", "TR", "EASY", "MEDIUM", "HARD"];
+    for (const label of labels) {
+      expect(screen.getByRole("button", { name: label })).toHaveClass(
+        "classification-chip",
+      );
+    }
+    for (const n of [1, 2, 3, 4, 5]) {
+      expect(screen.getByRole("button", { name: `Pain ${n}` })).toHaveClass(
+        "classification-chip",
+      );
+    }
+  });
+});
