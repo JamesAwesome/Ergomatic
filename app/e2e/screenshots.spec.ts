@@ -99,13 +99,20 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByLabel("Title").fill("Screenshot Intervals");
   await page.getByRole("radio", { name: "Pain 3" }).click();
 
-  await page.getByLabel("Row 1 duration").fill("20'");
-  await page.getByLabel("Row 1 pace reference").fill("6k+10");
+  // Bare number, no apostrophe (builderState.ts's parseDurationInput) — the
+  // structured pace control (PaceRefInput.tsx) replaces the old free-text
+  // ref field: base defaults to 6k, so ten clicks on the "slower" stepper
+  // reaches "6k +10".
+  await page.getByLabel("Row 1 duration").fill("20");
+  const row1Slower = page.getByRole("button", { name: "Row 1 pace slower" });
+  for (let i = 0; i < 10; i++) {
+    await row1Slower.click();
+  }
   await page.getByLabel("Row 1 stroke rate").fill("20");
 
   await page.getByRole("button", { name: "+ ADD ROW" }).click();
   await page.getByLabel("Row 2 duration").fill("2000m");
-  await page.getByLabel("Row 2 pace reference").fill("2k");
+  await page.getByRole("radio", { name: "Row 2 pace 2K" }).click();
   await page.getByLabel("Row 2 stroke rate").fill("26");
   await page.getByLabel("Row 2 rest").fill("3");
 
@@ -136,25 +143,31 @@ test("builder", async ({ page }) => {
   });
 });
 
-test("builder-bulk", async ({ page }) => {
+test("import", async ({ page }) => {
   await signInViaBackdoor(page, {
-    email: "screenshots-builder-bulk@e2e.test",
+    email: "screenshots-import@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  await page.goto("/library/new");
-  await fillSampleWorkout(page);
+  // Its own screen now (Library's IMPORT link / the /library/import route
+  // in AppRoutes.tsx), not a toggle inside the builder.
+  await page.goto("/library/import");
 
-  await page.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }).click();
-  const grammarHelp = page.locator(".bulk-import-help");
-  await grammarHelp.waitFor();
-  // The filled-in rows above push the panel below the fold on a 390x844
-  // viewport screenshot (not fullPage, matching every other capture in this
-  // file) — scroll the grammar help itself into view so it's what's on
-  // screen, not just present in the DOM.
-  await grammarHelp.scrollIntoViewIfNeeded();
+  // A filled textarea, not the blank placeholder state — the grammar help
+  // below it (.bulk-import-help) is static and always rendered either way,
+  // but an empty control isn't "real content" for a screenshot. Same
+  // example text as BulkImport.tsx's own GRAMMAR_EXAMPLE constant.
+  const text = [
+    "Ladder Day | AT | medium | 3",
+    "wu 10",
+    "x4",
+    "w 1' 6k-2 @22 r5",
+    "r 5",
+  ].join("\n");
+  await page.getByLabel("Bulk import text").fill(text);
+  await page.locator(".bulk-import-help").waitFor();
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "builder-bulk.png"),
+    path: path.join(SCREENSHOTS_DIR, "import.png"),
   });
 });
 

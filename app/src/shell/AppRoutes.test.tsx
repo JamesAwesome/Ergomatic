@@ -14,7 +14,12 @@ vi.mock("../workout/WorkoutDetail", () => ({
 }));
 
 describe("AppRoutes", () => {
-  it("routes the static /library/import to the importer, not the dynamic /library/:id detail screen", async () => {
+  // NOT a proof of declaration order: react-router-dom 7.18.2 ranks a
+  // static path segment ("import") over a dynamic one (":id") regardless of
+  // which route is registered first in AppRoutes.tsx, so this test would
+  // pass even with the two routes swapped. It exists purely as a regression
+  // guard that /library/import renders the importer.
+  it("renders the importer at /library/import", async () => {
     render(
       <MemoryRouter initialEntries={["/library/import"]}>
         <AppRoutes />

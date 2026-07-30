@@ -59,10 +59,10 @@ test.describe("library list", () => {
     page,
   }) => {
     const firstRow = page.locator(".workout-row").first();
-    const rowTitle = await firstRow.locator(".workout-row-title").innerText();
-    // Row renders "<num>. <title>" (WorkoutRow.tsx); detail renders the bare
-    // title (WorkoutDetail.tsx's <h1>) — strip the "N. " prefix to compare.
-    const title = rowTitle.replace(/^\d+\.\s*/, "");
+    // Row and detail both render the bare title now (WorkoutRow.tsx /
+    // WorkoutDetail.tsx's <h1>) — there's no leading "N. " to strip; the
+    // server orders the library itself (sort_order), invisibly to the UI.
+    const title = await firstRow.locator(".workout-row-title").innerText();
 
     await firstRow.click();
 
@@ -74,8 +74,7 @@ test.describe("library list", () => {
     page,
   }) => {
     const firstRow = page.locator(".workout-row").first();
-    const rowTitle = await firstRow.locator(".workout-row-title").innerText();
-    const title = rowTitle.replace(/^\d+\.\s*/, "");
+    const title = await firstRow.locator(".workout-row-title").innerText();
 
     await firstRow.click();
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
