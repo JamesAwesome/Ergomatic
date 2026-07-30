@@ -156,4 +156,54 @@ describe("DurationInput", () => {
       screen.getByRole("radio", { name: /Row 1 duration unit meters/i }),
     ).toHaveClass("duration-input-chip");
   });
+
+  // Task 4 wiring: StepRowEditor passes fieldError("dur")-derived
+  // invalid/errorId through, the same idiom PaceRefInput's `ref` group
+  // already uses, so a failed Save's aria-invalid/aria-describedby wiring
+  // survives the swap from a plain <input> to this control.
+  it("wires aria-invalid/aria-describedby onto the value field when invalid/errorId are given", () => {
+    render(
+      <DurationInput
+        value=""
+        unit="min"
+        onChange={vi.fn()}
+        rowLabel="Row 1"
+        invalid
+        errorId="row-1-dur-error"
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: /Row 1 duration/i });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", "row-1-dur-error");
+  });
+
+  it("defaults to aria-invalid=false with no aria-describedby when invalid/errorId are omitted", () => {
+    setup();
+    const input = screen.getByRole("textbox", { name: /Row 1 duration/i });
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(input).not.toHaveAttribute("aria-describedby");
+  });
+
+  // Exercises `registerRef`'s truthy branch — every other test in this file
+  // renders without it, covering the falsy (optional-chaining no-op)
+  // branch. Builder.tsx uses this to focus the value field directly (the
+  // clone-focus and failed-Save-focus behaviors), so it must resolve to the
+  // real <input>, not a wrapper.
+  it("exposes the value input's DOM node via registerRef", () => {
+    let captured: HTMLInputElement | null = null;
+    render(
+      <DurationInput
+        value=""
+        unit="min"
+        onChange={vi.fn()}
+        rowLabel="Row 1"
+        registerRef={(el) => {
+          captured = el;
+        }}
+      />,
+    );
+    expect(captured).toBe(
+      screen.getByRole("textbox", { name: /Row 1 duration/i }),
+    );
+  });
 });

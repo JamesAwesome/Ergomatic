@@ -20,11 +20,25 @@ export default function DurationInput({
   unit,
   onChange,
   rowLabel,
+  invalid,
+  errorId,
+  registerRef,
 }: {
   value: string;
   unit: "min" | "m";
   onChange: (next: { value: string; unit: "min" | "m" }) => void;
   rowLabel: string;
+  // Optional error wiring from StepRowEditor's `fieldError("dur")` — same
+  // idiom as PaceRefInput's `invalid`/`errorId` props. Both are
+  // undefined/false when the row's duration is valid.
+  invalid?: boolean;
+  errorId?: string;
+  // Exposes the value input's DOM node to a caller that needs to
+  // `.focus()` it programmatically — Builder's `fieldRefs` map (for a
+  // failed Save's focus-first-invalid-field behavior) and, after a clone,
+  // focusing the new row's duration field. Same idiom as StepRowEditor's
+  // own `registerRef` prop.
+  registerRef?: (el: HTMLInputElement | null) => void;
 }) {
   // Roving tabindex (WAI-ARIA radiogroup pattern), same as PainPicker.tsx
   // and PaceRefInput.tsx: the group is one tab stop and arrow keys move
@@ -64,10 +78,13 @@ export default function DurationInput({
   return (
     <div className="duration-input">
       <input
+        ref={registerRef}
         type="text"
         inputMode="decimal"
         className="duration-input-value"
         aria-label={`${rowLabel} duration`}
+        aria-invalid={Boolean(invalid)}
+        aria-describedby={errorId}
         value={value}
         onChange={handleValueChange}
       />

@@ -7,6 +7,7 @@ import PainPicker from "../components/PainPicker";
 import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
 import {
   addRow,
+  cloneRow,
   newForm,
   removeRow,
   setReps,
@@ -71,8 +72,8 @@ function fmtMinutes(minutes: number): string {
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
-// Widths mirror the actual row fields below (StepRowEditor's .field-dur /
-// .field-spm / .field-rest, plus a spacer the width of .row-delete) so each
+// Widths mirror the actual row fields below (StepRowEditor's DurationInput /
+// .field-rest, plus spacers the width of .row-clone / .row-delete) so each
 // label sits over its column — see docs/design/Erg Log.dc.html:765 for the
 // handoff's equivalent fixed widths. Purely decorative (aria-hidden), but
 // it'll show in screenshots. There is no PACE REF slot any more:
@@ -80,13 +81,17 @@ function fmtMinutes(minutes: number): string {
 // than in a column, so a header slot for it would just be dead space that
 // pushes every column after it out of alignment. There is likewise no SET
 // slot any more: the per-row repeat toggle it labeled went away with the
-// `marked` model (Phase 5D Task 2) — a future task adds whatever control
-// (e.g. clone) replaces it.
+// `marked` model (Phase 5D Task 2) — its cell position is now the clone
+// button (Phase 5D Task 4), a spacer here rather than a labeled column since
+// "clone" needs no header the way "DUR"/"REST" do. SPM moved off this row
+// entirely too (StepRowEditor's `.step-row-editor-spm`, its own full-width
+// line beneath — it didn't fit alongside clone/DUR/REST/delete at 390px),
+// so it drops out of this header for the same reason PACE REF already did.
 function ColumnHeader() {
   return (
     <div className="builder-columns" aria-hidden="true">
+      <span className="col-clone" />
       <span className="col-dur">DUR</span>
-      <span className="col-spm">SPM</span>
       <span className="col-rest">REST (OPT)</span>
       <span className="col-split">SPLIT</span>
       <span className="col-delete" />
@@ -176,6 +181,33 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       ...f,
       rows: f.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
     }));
+  }
+
+  // The SET cell's replacement (Phase 5D Task 4): duplicates row `id`
+  // directly beneath itself via `cloneRow`, then focuses the new row's
+  // duration field — the same `fieldRefs` map a failed Save uses, keyed the
+  // identical `row:<id>:dur` way. Computed from the closed-over `form`
+  // (fresh every render, like every other handler in this component) rather
+  // than a `setForm` updater callback — `cloneRow` is pure but generates a
+  // fresh row id as a side effect of being called, so calling it inside an
+  // updater (which React may invoke more than once, e.g. Strict Mode's
+  // double-invoke) risks minting an id that's thrown away.
+  function handleClone(id: string) {
+    const index = form.rows.findIndex((r) => r.id === id);
+    const next = cloneRow(form, id);
+    const clonedId = next.rows[index + 1]?.id;
+    setForm(next);
+    if (clonedId) {
+      // Deferred past this render — the new row's DOM node, and thus its
+      // `fieldRefs` entry, doesn't exist until StepRowEditor mounts it.
+      // React flushes a discrete event's state update (and runs ref
+      // callbacks) synchronously before this click handler returns, so by
+      // the time the microtask queue drains, the new row is already
+      // mounted and registered.
+      queueMicrotask(() => {
+        fieldRefs.current[`row:${clonedId}:dur`]?.focus();
+      });
+    }
   }
 
   function handleGenerateName() {
@@ -353,6 +385,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             fieldError={(field) => errors[`row:${row.id}:${field}`]}
             onChange={(patch) => updateRow(row.id, patch)}
             onRemove={() => setForm((f) => removeRow(f, row.id))}
+            onClone={() => handleClone(row.id)}
             registerRef={(field, el) => {
               fieldRefs.current[`row:${row.id}:${field}`] = el;
             }}
@@ -361,24 +394,19 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       </div>
       {errors.steps && <p className="field-error">{errors.steps}</p>}
 
-      {/* Two kind-specific controls rather than one generic "+ ADD ROW" (the
-          handoff's shape): the domain distinguishes wu/w/r steps, and
-          without a way to pick a row's kind, StepRowEditor's minutes-only
-          branch is unreachable in create mode — every starter workout opens
-          with a warm-up, so a builder that can't author one is incomplete.
-          See docs/design/DEVIATIONS.md. There is no "+ REST" any more: rest
-          is authored via a work row's own REST (OPT) field. `addRow(f, "r")`
-          and StepRowEditor's `kind === "r"` render branch both stay, though
-          — bulk import and edit-mode `fromWorkout` can still produce a
-          standalone rest step, and a pasted workout has to stay editable. */}
+      {/* No "+ WARM-UP" any more (Phase 5D Task 4): warm-up leaves the
+          workout entirely for a preference read at session time (Task 5),
+          rather than being authored per workout. `addRow(f, "wu")` and
+          StepRowEditor's `kind === "wu"` render branch both stay, though —
+          bulk import and edit-mode `fromWorkout` can still produce a stored
+          warm-up step, and a pasted or starter workout that already has one
+          has to stay editable (its row just isn't reachable by a create-mode
+          button any more, only via clone or an existing wu row's own DUR).
+          There is likewise no "+ REST" any more: rest is authored via a
+          work row's own REST (OPT) field. `addRow(f, "r")` and
+          StepRowEditor's `kind === "r"` render branch both stay for the
+          same bulk-import/edit-mode reason. See docs/design/DEVIATIONS.md. */}
       <div className="builder-add-row-group">
-        <button
-          type="button"
-          className="builder-add-row"
-          onClick={() => setForm((f) => addRow(f, "wu"))}
-        >
-          + WARM-UP
-        </button>
         <button
           type="button"
           className="builder-add-row"
@@ -439,7 +467,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         onClick={handleSave}
         disabled={saving}
       >
-        Save to library
+        Save
       </button>
     </main>
   );

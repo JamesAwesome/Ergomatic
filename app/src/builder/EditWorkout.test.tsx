@@ -152,7 +152,7 @@ describe("EditWorkout", () => {
       screen.queryByRole("heading", { name: "Edit Workout" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Save to library" }),
+      screen.queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
       "href",
@@ -168,7 +168,7 @@ describe("EditWorkout", () => {
       screen.queryByRole("heading", { name: "Edit Workout" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Save to library" }),
+      screen.queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
     // Explains WHY, so the rower isn't left guessing.
     expect(screen.getByText(/can't be edited/i)).toBeInTheDocument();
@@ -186,7 +186,7 @@ describe("EditWorkout", () => {
       screen.queryByRole("heading", { name: "Edit Workout" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Save to library" }),
+      screen.queryByRole("button", { name: "Save" }),
     ).not.toBeInTheDocument();
     // Explains WHY (a different reason from the unsupported-step case
     // above), so the rower isn't left guessing.
@@ -235,9 +235,7 @@ describe("EditWorkout", () => {
       screen.queryByRole("radio", { name: "Row 3 pace 6K" }),
     ).not.toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     // Exact body equality (not just "contains an r step") — proves the wu
     // and w steps also survived the round trip unchanged, not just the one

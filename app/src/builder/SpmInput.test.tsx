@@ -111,4 +111,50 @@ describe("SpmInput", () => {
     expect(dec).toHaveClass("spm-input-step");
     expect(inc).toHaveClass("spm-input-step");
   });
+
+  // Task 4 wiring: StepRowEditor passes fieldError("spm")-derived
+  // invalid/errorId through, same idiom as DurationInput/PaceRefInput, so a
+  // failed Save's aria-invalid/aria-describedby wiring survives the swap
+  // from a plain <input> to this control.
+  it("wires aria-invalid/aria-describedby onto the value field when invalid/errorId are given", () => {
+    render(
+      <SpmInput
+        value=""
+        onChange={vi.fn()}
+        rowLabel="Row 1"
+        invalid
+        errorId="row-1-spm-error"
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: /Row 1 stroke rate/i });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAttribute("aria-describedby", "row-1-spm-error");
+  });
+
+  it("defaults to aria-invalid=false with no aria-describedby when invalid/errorId are omitted", () => {
+    setup("");
+    const input = screen.getByRole("textbox", { name: /Row 1 stroke rate/i });
+    expect(input).toHaveAttribute("aria-invalid", "false");
+    expect(input).not.toHaveAttribute("aria-describedby");
+  });
+
+  // Exercises `registerRef`'s truthy branch — every other test in this file
+  // renders without it, covering the falsy (optional-chaining no-op)
+  // branch.
+  it("exposes the value input's DOM node via registerRef", () => {
+    let captured: HTMLInputElement | null = null;
+    render(
+      <SpmInput
+        value=""
+        onChange={vi.fn()}
+        rowLabel="Row 1"
+        registerRef={(el) => {
+          captured = el;
+        }}
+      />,
+    );
+    expect(captured).toBe(
+      screen.getByRole("textbox", { name: /Row 1 stroke rate/i }),
+    );
+  });
 });

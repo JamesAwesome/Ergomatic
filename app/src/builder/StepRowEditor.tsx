@@ -2,7 +2,9 @@ import { Link } from "react-router-dom";
 import { resolveSplit, toleranceRange } from "../../domain/pace.js";
 import type { Baselines, PaceRef } from "../../domain/types.js";
 import type { BuilderRow } from "./builderState";
+import DurationInput from "./DurationInput";
 import PaceRefInput from "./PaceRefInput";
+import SpmInput from "./SpmInput";
 
 type RowField = "dur" | "ref" | "spm" | "rest";
 
@@ -43,22 +45,25 @@ export default function StepRowEditor({
   fieldError,
   onChange,
   onRemove,
+  onClone,
   registerRef,
 }: {
   row: BuilderRow;
   index: number;
   // Whether this row falls inside the derived repeat span — computed by the
-  // parent from `spanStartIndex(form)`. Only used for the left-rule
-  // highlight now; the per-row SET toggle that used to live in this
-  // component is gone along with the marking model it drove (Phase 5D
-  // Task 2) — a future task adds the real ×N/clone controls this row will
-  // need instead.
+  // parent from `spanStartIndex(form)`. Used for the left-rule highlight;
+  // the repeat span itself is derived, not clicked (Phase 5D Task 2).
   inSet: boolean;
   baselines: Baselines | null;
   tolerance: number;
   fieldError: (field: RowField) => string | undefined;
   onChange: (patch: Partial<BuilderRow>) => void;
   onRemove: () => void;
+  // Duplicates this row directly beneath itself — the SET cell's
+  // replacement (Phase 5D Task 4; see docs/design/DEVIATIONS.md). The
+  // parent owns `cloneRow` and the post-clone focus call (it needs the new
+  // row's generated id, which this component never sees).
+  onClone: () => void;
   // Lets the parent build a `row:<id>:<field>` → element map (the same keys
   // `toSteps` uses for its error object) so a failed Save can focus the
   // first invalid control even when it's scrolled off-screen. Optional
@@ -67,6 +72,7 @@ export default function StepRowEditor({
   registerRef?: (field: RowField, el: HTMLElement | null) => void;
 }) {
   const isWork = row.kind === "w";
+  const rowLabel = `Row ${index + 1}`;
 
   // Stable per-row ids (keyed off row.id, not `index`, which shifts as rows
   // are added/removed) so each field's aria-describedby points at exactly
@@ -82,32 +88,38 @@ export default function StepRowEditor({
       }
     >
       <div className="step-row-editor-line1">
-        <input
-          ref={(el) => registerRef?.("dur", el)}
-          className="field-dur"
-          aria-label={`Row ${index + 1} duration`}
-          aria-invalid={Boolean(fieldError("dur"))}
-          aria-describedby={fieldError("dur") ? errorId("dur") : undefined}
-          placeholder={isWork ? "5' or 2500m" : "10'"}
+        <button
+          type="button"
+          className="row-clone"
+          aria-label={`Duplicate ${rowLabel}`}
+          onClick={onClone}
+        >
+          ↻
+        </button>
+        <DurationInput
           value={row.durValue}
-          onChange={(e) => onChange({ durValue: e.target.value })}
+          unit={row.durUnit}
+          onChange={({ value, unit }) =>
+            onChange({ durValue: value, durUnit: unit })
+          }
+          rowLabel={rowLabel}
+          invalid={Boolean(fieldError("dur"))}
+          errorId={fieldError("dur") ? errorId("dur") : undefined}
+          registerRef={(el) => registerRef?.("dur", el)}
         />
         {isWork && (
-          <>
-            <input
-              ref={(el) => registerRef?.("spm", el)}
-              className="field-spm"
-              aria-label={`Row ${index + 1} stroke rate`}
-              aria-invalid={Boolean(fieldError("spm"))}
-              aria-describedby={fieldError("spm") ? errorId("spm") : undefined}
-              placeholder="spm"
-              value={row.spm}
-              onChange={(e) => onChange({ spm: e.target.value })}
-            />
+          // REST has no pace ref (see docs/design/DEVIATIONS.md), so it can
+          // never be a distance the way DUR can — no unit toggle, just a
+          // static "MIN" marking next to the field so it's never mistaken
+          // for the unitless free text it used to be. Static, not a
+          // placeholder: a placeholder vanishes the moment the rower types,
+          // which was the exact complaint that started this phase (James
+          // couldn't tell what the SET cell — or, here, the unit — meant).
+          <div className="field-rest-group">
             <input
               ref={(el) => registerRef?.("rest", el)}
               className="field-rest"
-              aria-label={`Row ${index + 1} rest`}
+              aria-label={`${rowLabel} rest`}
               aria-invalid={Boolean(fieldError("rest"))}
               aria-describedby={
                 fieldError("rest") ? errorId("rest") : undefined
@@ -116,7 +128,8 @@ export default function StepRowEditor({
               value={row.rest}
               onChange={(e) => onChange({ rest: e.target.value })}
             />
-          </>
+            <span className="field-rest-unit">MIN</span>
+          </div>
         )}
         <button
           type="button"
@@ -127,6 +140,22 @@ export default function StepRowEditor({
           ×
         </button>
       </div>
+      {isWork && (
+        // SPM doesn't fit alongside clone/DUR/REST/delete in line1 at the
+        // 390px mobile viewport this app targets — the same reason
+        // PaceRefInput got its own line below (see that control's own
+        // comment) — so it gets one too, between line1 and the pace line.
+        <div className="step-row-editor-spm">
+          <SpmInput
+            value={row.spm}
+            onChange={(spm) => onChange({ spm })}
+            rowLabel={rowLabel}
+            invalid={Boolean(fieldError("spm"))}
+            errorId={fieldError("spm") ? errorId("spm") : undefined}
+            registerRef={(el) => registerRef?.("spm", el)}
+          />
+        </div>
+      )}
       {isWork && (
         <div
           className="step-row-editor-pace"
@@ -141,7 +170,7 @@ export default function StepRowEditor({
           <PaceRefInput
             base={row.refBase}
             off={row.refOff}
-            rowLabel={`Row ${index + 1}`}
+            rowLabel={rowLabel}
             invalid={Boolean(fieldError("ref"))}
             errorId={fieldError("ref") ? errorId("ref") : undefined}
             onChange={({ base, off }) =>

@@ -198,7 +198,7 @@ test.describe("builder screen", () => {
   // that state instead.
   test.describe("error state (Save pressed on a blank form)", () => {
     test.beforeEach(async ({ page }) => {
-      await page.getByRole("button", { name: "Save to library" }).click();
+      await page.getByRole("button", { name: "Save" }).click();
       await expect(page.locator(".builder-save-status")).toBeVisible();
     });
 

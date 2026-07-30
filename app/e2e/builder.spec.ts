@@ -78,7 +78,7 @@ test.describe("authoring loop", () => {
     const title = "Exit Criterion Row";
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 3" }).click();
-    await page.getByLabel("Row 1 duration").fill("20");
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("20");
     // Base defaults to 6k (builderState.ts's newRow) — two clicks on the
     // faster stepper reaches the "-2" offset the exit criterion needs.
     const fasterButton = page.getByRole("button", {
@@ -86,7 +86,7 @@ test.describe("authoring loop", () => {
     });
     await fasterButton.click();
     await fasterButton.click();
-    await page.getByLabel("Row 1 stroke rate").fill("22");
+    await page.getByLabel("Row 1 stroke rate", { exact: true }).fill("22");
 
     // With a 6k baseline of 122.0s: 122 - 2 = 120.0, tolerance +/-1s (the
     // token default, tokens.css's --pace-tolerance) -> "1:59.0-2:01.0" (EN
@@ -98,7 +98,7 @@ test.describe("authoring loop", () => {
       "1:59.0–2:01.0",
     );
 
-    await page.getByRole("button", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
@@ -169,9 +169,9 @@ test.describe("authoring loop", () => {
     const originalTitle = "Edit Target Row";
     await page.getByLabel("Title").fill(originalTitle);
     await page.getByRole("radio", { name: "Pain 2" }).click();
-    await page.getByLabel("Row 1 duration").fill("10");
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("10");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
-    await page.getByRole("button", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
@@ -185,7 +185,7 @@ test.describe("authoring loop", () => {
     const titleInput = page.getByLabel("Title");
     await expect(titleInput).toHaveValue(originalTitle);
     await titleInput.fill(renamedTitle);
-    await page.getByRole("button", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
@@ -208,9 +208,9 @@ test.describe("authoring loop", () => {
     const title = "Delete Me Row";
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 1" }).click();
-    await page.getByLabel("Row 1 duration").fill("5");
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("5");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
-    await page.getByRole("button", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
@@ -269,9 +269,9 @@ test.describe("new controls this phase introduced", () => {
     // "5" alone means 5 minutes (builderState.ts's parseDurationInput) — no
     // trailing apostrophe needed, and there is no numeric "No." field
     // anywhere on this screen to fill in the first place.
-    await page.getByLabel("Row 1 duration").fill("5");
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("5");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
-    await page.getByRole("button", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
@@ -352,7 +352,7 @@ test.describe("new controls this phase introduced", () => {
     // handleSave's fieldRefs lookup focuses and scrolls into view — the
     // reported bug was that pressing Save did nothing visible when the
     // invalid field was scrolled off-screen.
-    await page.getByRole("button", { name: "Save to library" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
 
     await expect(page.getByLabel("Title")).toBeFocused();
   });

@@ -29,10 +29,22 @@ export default function SpmInput({
   value,
   onChange,
   rowLabel,
+  invalid,
+  errorId,
+  registerRef,
 }: {
   value: string;
   onChange: (next: string) => void;
   rowLabel: string;
+  // Optional error wiring from StepRowEditor's `fieldError("spm")` — same
+  // idiom as PaceRefInput's `invalid`/`errorId` props. Both are
+  // undefined/false when the row's spm is valid.
+  invalid?: boolean;
+  errorId?: string;
+  // Exposes the value input's DOM node to Builder's `fieldRefs` map, the
+  // same idiom DurationInput's own `registerRef` prop uses — lets a failed
+  // Save focus this field when spm is the first invalid one.
+  registerRef?: (el: HTMLInputElement | null) => void;
 }) {
   function step(delta: number) {
     const current = parseSpm(value);
@@ -55,10 +67,13 @@ export default function SpmInput({
         −
       </button>
       <input
+        ref={registerRef}
         type="text"
         inputMode="numeric"
         className="spm-input-value"
         aria-label={`${rowLabel} stroke rate`}
+        aria-invalid={Boolean(invalid)}
+        aria-describedby={errorId}
         value={value}
         onChange={handleValueChange}
       />

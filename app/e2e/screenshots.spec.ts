@@ -106,22 +106,20 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   // structured pace control (PaceRefInput.tsx) replaces the old free-text
   // ref field: base defaults to 6k, so ten clicks on the "slower" stepper
   // reaches "6k +10".
-  await page.getByLabel("Row 1 duration").fill("20");
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("20");
   const row1Slower = page.getByRole("button", { name: "Row 1 pace slower" });
   for (let i = 0; i < 10; i++) {
     await row1Slower.click();
   }
-  await page.getByLabel("Row 1 stroke rate").fill("20");
+  await page.getByLabel("Row 1 stroke rate", { exact: true }).fill("20");
 
   await page.getByRole("button", { name: "+ ADD ROW" }).click();
-  // Bare number in minutes — the DUR field has no unit toggle yet
-  // (builderState.ts's `durUnit` stays "min" unless a stored workout
-  // arrives via `fromWorkout` with a distance step already on it), so
-  // "2000m" is unreachable through the UI and would just leave `durValue`
-  // unparseable.
-  await page.getByLabel("Row 2 duration").fill("8");
+  // Bare number in minutes — DurationInput's unit chip defaults to MIN
+  // (Phase 5D Task 4), so this stays a duration in minutes without
+  // touching the M chip at all.
+  await page.getByLabel("Row 2 duration", { exact: true }).fill("8");
   await page.getByRole("radio", { name: "Row 2 pace 2K" }).click();
-  await page.getByLabel("Row 2 stroke rate").fill("26");
+  await page.getByLabel("Row 2 stroke rate", { exact: true }).fill("26");
   await page.getByLabel("Row 2 rest").fill("3");
 
   const moreReps = page.getByRole("button", { name: "More reps" });
