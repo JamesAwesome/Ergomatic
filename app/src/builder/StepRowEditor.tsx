@@ -55,6 +55,7 @@ export default function StepRowEditor({
   tolerance,
   fieldError,
   onChange,
+  onRefDraftValidity,
   onSetBlockStart,
   onRemove,
 }: {
@@ -77,6 +78,13 @@ export default function StepRowEditor({
   tolerance: number;
   fieldError: (field: RowField) => string | undefined;
   onChange: (patch: Partial<BuilderRow>) => void;
+  // Reports whether the free-text pace-ref draft below currently parses.
+  // The parent (Builder) uses this to surface a `row:<id>:ref` error and
+  // block save while the draft is unparseable — since an unparseable draft
+  // leaves `row.refBase`/`row.refOff` unchanged (see `handleRefChange`),
+  // `toSteps` alone has no way to see that the visible text disagrees with
+  // the committed value.
+  onRefDraftValidity: (valid: boolean) => void;
   onSetBlockStart: () => void;
   onRemove: () => void;
 }) {
@@ -104,7 +112,13 @@ export default function StepRowEditor({
   function handleRefChange(text: string) {
     setRefDraft(text);
     const parsed = parsePaceRef(text);
-    if (parsed) onChange({ refBase: parsed.base, refOff: parsed.off });
+    if (parsed) {
+      onChange({ refBase: parsed.base, refOff: parsed.off });
+    }
+    // Report validity unconditionally (not just in the `else` branch): a
+    // previously-invalid draft that now parses must clear the row's error,
+    // not just skip re-setting it.
+    onRefDraftValidity(parsed !== null);
   }
 
   return (

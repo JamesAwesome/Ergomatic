@@ -643,22 +643,13 @@ button:disabled {
   margin-top: 12px;
 }
 
-.field-num-wrap,
 .field-title-wrap {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.field-num-wrap {
-  width: 64px;
-}
-
-.field-title-wrap {
   flex: 1;
 }
 
-.field-num-wrap label,
 .field-title-wrap label {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -666,7 +657,6 @@ button:disabled {
   color: var(--ink-3);
 }
 
-.builder-num-input,
 .builder-title-input {
   min-height: var(--tap);
   padding: 0 10px;
@@ -675,7 +665,6 @@ button:disabled {
   font: inherit;
 }
 
-.builder-num-input[aria-invalid="true"],
 .builder-title-input[aria-invalid="true"] {
   border-color: var(--accent);
 }

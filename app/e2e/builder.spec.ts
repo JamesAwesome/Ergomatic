@@ -7,12 +7,12 @@ import { signInViaBackdoor } from "./helpers";
 // Book math itself (domain/pace.test.ts and domain/bulk.test.ts own that).
 //
 // Every test signs in as its own unique email (a fresh, workout-free user)
-// and sets these same baselines, matching the task brief. Workouts this file
-// creates use `num` values in the 94xx range — well clear of the 35 seeded
-// starters (1-35, server/seed/starter.ts) and of any other spec's fixtures —
-// and are deleted again at the end of each test via `cleanupByTitle` so a
-// re-run against a dirty database (same email -> same user row) doesn't hit
-// a 409 "that number's taken" on the next pass.
+// and sets these same baselines, matching the task brief. The server orders
+// workouts itself now (no user-visible `num` field), so there's nothing left
+// to clash on across reruns — titles here are still spec-distinctive, and
+// each test deletes its own workout again at the end via `cleanupByTitle` so
+// a re-run against a dirty database (same email -> same user row) doesn't
+// accumulate stale rows.
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 /** Sets baselines for the signed-in user via an in-page `fetch`, not
@@ -76,7 +76,6 @@ test.describe("authoring loop", () => {
     await page.goto("/library/new");
 
     const title = "Exit Criterion Row";
-    await page.getByLabel("Workout number").fill("9401");
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 3" }).click();
     await page.getByLabel("Row 1 duration").fill("20'");
@@ -161,7 +160,6 @@ test.describe("authoring loop", () => {
     await page.goto("/library/new");
 
     const originalTitle = "Edit Target Row";
-    await page.getByLabel("Workout number").fill("9420");
     await page.getByLabel("Title").fill(originalTitle);
     await page.getByRole("radio", { name: "Pain 2" }).click();
     await page.getByLabel("Row 1 duration").fill("10'");
@@ -201,7 +199,6 @@ test.describe("authoring loop", () => {
     await page.goto("/library/new");
 
     const title = "Delete Me Row";
-    await page.getByLabel("Workout number").fill("9430");
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 1" }).click();
     await page.getByLabel("Row 1 duration").fill("5'");
