@@ -13,14 +13,8 @@ export interface BulkError {
   message: string;
 }
 
-// `num` is no longer part of WorkoutInput (Phase 5C retired the column), but
-// the bulk grammar's header still parses one for now, so it rides along here
-// as an extra field that nothing downstream persists. Task 2 of this phase
-// removes it from the grammar itself.
-export type BulkWorkout = WorkoutInput & { num: number };
-
 export interface BulkResult {
-  workouts: BulkWorkout[];
+  workouts: WorkoutInput[];
   errors: BulkError[];
 }
 
@@ -33,8 +27,8 @@ interface RawLine {
 }
 
 type HeaderFields = Pick<
-  BulkWorkout,
-  "num" | "title" | "type" | "difficulty" | "pain"
+  WorkoutInput,
+  "title" | "type" | "difficulty" | "pain"
 >;
 
 /** Groups non-blank lines into blocks, splitting on one-or-more blank lines.
@@ -62,25 +56,19 @@ function parseHeader(
   errors: BulkError[],
 ): HeaderFields | null {
   const parts = line.text.split("|").map((p) => p.trim());
-  if (parts.length !== 5) {
+  if (parts.length !== 4 && parts.length !== 5) {
     errors.push({
       block: blockIndex,
       line: line.lineNumber,
       message:
-        "header must have 5 fields: num | title | TYPE | difficulty | pain",
+        'header must be "title | TYPE | difficulty | pain" (a leading number is accepted and ignored)',
     });
     return null;
   }
-  const [numStr, title, type, difficulty, painStr] = parts;
-  const num = Number(numStr);
-  if (!Number.isInteger(num)) {
-    errors.push({
-      block: blockIndex,
-      line: line.lineNumber,
-      message: `invalid num: ${numStr}`,
-    });
-    return null;
-  }
+  // The legacy five-field form leads with a workout number that's no longer
+  // persisted anywhere; parse it only far enough to discard it.
+  const [title, type, difficulty, painStr] =
+    parts.length === 5 ? parts.slice(1) : parts;
   if (title.length === 0) {
     errors.push({
       block: blockIndex,
@@ -115,7 +103,6 @@ function parseHeader(
     return null;
   }
   return {
-    num,
     title,
     type: type as WorkoutType,
     difficulty: difficulty as Difficulty,
@@ -123,8 +110,13 @@ function parseHeader(
   };
 }
 
-/** `1'` -> 1 minute (time). `2500m` -> 2500 meters (distance). */
+/** `5` -> 5 minutes (time, bare). `1'` -> 1 minute (time). `2500m` -> 2500
+ *  meters (distance). Bare numbers are accepted because the apostrophe is
+ *  awkward to type on a phone; the builder's duration field accepts the
+ *  identical bare-number branch so typing and pasting never disagree. */
 function parseDuration(token: string): WorkDuration | null {
+  const bare = /^(\d+(?:\.\d+)?)$/.exec(token);
+  if (bare) return { kind: "time", minutes: Number(bare[1]) };
   const time = /^(\d+(?:\.\d+)?)'$/.exec(token);
   if (time) return { kind: "time", minutes: Number(time[1]) };
   const distance = /^(\d+)m$/.exec(token);
@@ -256,7 +248,7 @@ function parseStepLine(
  *  reps 1..12 are that layer's job, not this one's). */
 export function parseBulk(text: string): BulkResult {
   const errors: BulkError[] = [];
-  const workouts: BulkWorkout[] = [];
+  const workouts: WorkoutInput[] = [];
 
   splitBlocks(text).forEach((block, blockIndex) => {
     const [headerLine, ...stepLines] = block;
