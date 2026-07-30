@@ -110,21 +110,13 @@ function nameAt(index: number): string {
   return `${modifier} ${noun}`;
 }
 
-/** Deterministic seed → starting position. No `Math.random()`, no
- *  `Date.now()`: the caller owns the seed so tests are reproducible.
- *
- *  This is plain `seed mod N` — deliberately NOT a mixing hash. Consecutive
- *  seeds therefore walk the pool in array order, which is what makes the
- *  exhaustion test genuinely exhaustive: seeds 0..N-1 map onto all N names
- *  exactly once. An earlier revision multiplied by `2N + 1` here on the
- *  theory that a coprime unit added dispersion; it does not — `2N + 1 ≡ 1
- *  (mod N)` for every N, so the multiply always reduced to identity. If
- *  scattered-looking names are ever wanted, that needs a real mixing
- *  function AND a re-proof that the mapping stays a bijection, or the
- *  exhaustion guarantee quietly disappears. */
-function startIndex(seed: number): number {
+/** Deterministic seed → index into a list of `size` items, via `Math.trunc`
+ *  + positive-modulo normalisation. No `Math.random()`, no `Date.now()`: the
+ *  caller owns the seed so tests are reproducible, and negative/fractional
+ *  seeds still land in range. */
+function seedIndex(seed: number, size: number): number {
   const truncated = Math.trunc(seed);
-  return ((truncated % NAME_POOL_SIZE) + NAME_POOL_SIZE) % NAME_POOL_SIZE;
+  return ((truncated % size) + size) % size;
 }
 
 export function generateName(
@@ -132,13 +124,23 @@ export function generateName(
   seed: number,
 ): string {
   const taken = new Set(existing.map((name) => name.toLowerCase()));
-  const start = startIndex(seed);
 
-  for (let offset = 0; offset < NAME_POOL_SIZE; offset++) {
-    const candidate = nameAt((start + offset) % NAME_POOL_SIZE);
-    if (!taken.has(candidate.toLowerCase())) {
-      return candidate;
+  // Select from the untaken names directly, rather than probing forward from
+  // a seed-derived start: the pool's early positions are the same
+  // weather-word nouns a populated library is likely to already have taken,
+  // so probing from a cluster of taken slots slides many different seeds to
+  // the same first-free name. Building the untaken list up front and
+  // indexing into it by seed means every seed maps to a genuinely different
+  // (still deterministic) name whenever more than one is free.
+  const untaken: number[] = [];
+  for (let index = 0; index < NAME_POOL_SIZE; index++) {
+    if (!taken.has(nameAt(index).toLowerCase())) {
+      untaken.push(index);
     }
+  }
+
+  if (untaken.length > 0) {
+    return nameAt(untaken[seedIndex(seed, untaken.length)]);
   }
 
   // Every name in the pool is taken. Fall back to the seed's first choice
@@ -146,7 +148,7 @@ export function generateName(
   // NAME_POOL_SIZE attempts — a fixed bound independent of `existing.length`
   // — so this is bounded and cannot loop forever regardless of how large a
   // library the caller passes in.
-  const base = nameAt(start);
+  const base = nameAt(seedIndex(seed, NAME_POOL_SIZE));
   for (let suffix = 2; suffix < NAME_POOL_SIZE + 2; suffix++) {
     const candidate = `${base} ${suffix}`;
     if (
