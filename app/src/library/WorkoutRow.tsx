@@ -18,9 +18,7 @@ export default function WorkoutRow({
   return (
     <Link to={`/library/${workout.id}`} className="workout-row">
       <div className="workout-row-line1">
-        <span className="workout-row-title">
-          {workout.num}. {workout.title}
-        </span>
+        <span className="workout-row-title">{workout.title}</span>
         <span className="workout-row-duration">
           {durationMinutes !== null ? `${durationMinutes}′` : "—"}
         </span>

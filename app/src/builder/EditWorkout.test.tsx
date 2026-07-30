@@ -18,7 +18,6 @@ const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 // `fromWorkout`/`stepToRow` handle it in isolation.
 const PERSONAL_WORKOUT: LibraryWorkout = {
   id: "w1",
-  num: 12,
   title: "Ladder Sets",
   type: "AT",
   difficulty: "medium",

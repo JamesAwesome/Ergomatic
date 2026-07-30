@@ -9,7 +9,6 @@ import type { api } from "../api";
 // meters, never an estimated duration.
 const WORKOUT: LibraryWorkout = {
   id: "w1",
-  num: 42,
   title: "Ladder Sets",
   type: "AT",
   difficulty: "medium",
@@ -45,7 +44,6 @@ const WORKOUT: LibraryWorkout = {
 // coincidence.
 const WORKOUT_WITH_REPS: LibraryWorkout = {
   id: "w2",
-  num: 7,
   title: "Rep City",
   type: "AN",
   difficulty: "hard",
@@ -68,7 +66,6 @@ const WORKOUT_WITH_REPS: LibraryWorkout = {
 // 403s a global workout's mutations, so the UI must never offer them).
 const PERSONAL_WORKOUT: LibraryWorkout = {
   id: "w3",
-  num: 9,
   title: "My Own Session",
   type: "O2",
   difficulty: "easy",
@@ -201,6 +198,14 @@ describe("WorkoutDetail", () => {
     await renderDetail();
 
     expect(screen.getByText(/22 spm/)).toBeInTheDocument();
+  });
+
+  it("shows the difficulty in the meta line with no catalogue number", async () => {
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    expect(screen.getByText("MEDIUM")).toBeInTheDocument();
+    expect(screen.queryByText(/NO\.\s*\d+/i)).not.toBeInTheDocument();
   });
 
   it("renders a distance step's meters, never an estimated minute count", async () => {
