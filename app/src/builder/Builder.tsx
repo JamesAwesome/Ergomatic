@@ -72,10 +72,12 @@ function fmtMinutes(minutes: number): string {
 }
 
 // Widths mirror the actual row fields below (StepRowEditor's .set-toggle /
-// .field-dur / .field-ref / .field-spm / .field-rest, plus a spacer the
-// width of .row-delete) so each label sits over its column — see
-// docs/design/Erg Log.dc.html:765 for the handoff's equivalent fixed
-// widths. Purely decorative (aria-hidden), but it'll show in screenshots.
+// .field-dur / .field-spm / .field-rest, plus a spacer the width of
+// .row-delete) so each label sits over its column — see docs/design/Erg
+// Log.dc.html:765 for the handoff's equivalent fixed widths. Purely
+// decorative (aria-hidden), but it'll show in screenshots. PACE REF has no
+// single column to sit over any more (PaceRefInput.tsx renders on its own
+// full-width line below), but stays in the header as a section label.
 function ColumnHeader() {
   return (
     <div className="builder-columns" aria-hidden="true">
@@ -99,15 +101,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [tolerance] = useState(readPaceTolerance);
-  // Row ids whose free-text pace-ref draft (StepRowEditor's transitional
-  // adapter over refBase/refOff) does not currently parse. `toSteps` can't
-  // see this on its own — an unparseable draft leaves refBase/refOff at
-  // their last committed value, so the form itself always looks valid. Any
-  // row in this set must block save, exactly like the old free-text `ref`
-  // field's save-time validation did.
-  const [invalidRefRowIds, setInvalidRefRowIds] = useState<Set<string>>(
-    new Set(),
-  );
 
   if (baselinesState.state === "loading") {
     return (
@@ -153,33 +146,8 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
     }));
   }
 
-  function setRefDraftValidity(id: string, valid: boolean) {
-    setInvalidRefRowIds((prev) => {
-      const alreadyInvalid = prev.has(id);
-      if (valid === !alreadyInvalid) return prev;
-      const next = new Set(prev);
-      if (valid) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   async function handleSave() {
     setSubmitError(null);
-    // An unparseable pace-ref draft blocks save even though `toSteps` alone
-    // wouldn't catch it (see `invalidRefRowIds`'s declaration) — check it
-    // first, before spending a validation pass on a form whose displayed
-    // ref text doesn't match what would actually be posted.
-    if (invalidRefRowIds.size > 0) {
-      setErrors((e) => {
-        const merged = { ...e };
-        for (const id of invalidRefRowIds) {
-          merged[`row:${id}:ref`] = "invalid pace reference";
-        }
-        return merged;
-      });
-      return;
-    }
     const result = toSteps(form);
     if (!result.ok) {
       setErrors(result.errors);
@@ -311,18 +279,10 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             isBlockStart={markedIds[0] === row.id}
             baselines={baselines}
             tolerance={tolerance}
-            fieldError={(field) =>
-              field === "ref" && invalidRefRowIds.has(row.id)
-                ? "invalid pace reference"
-                : errors[`row:${row.id}:${field}`]
-            }
+            fieldError={(field) => errors[`row:${row.id}:${field}`]}
             onChange={(patch) => updateRow(row.id, patch)}
-            onRefDraftValidity={(valid) => setRefDraftValidity(row.id, valid)}
             onSetBlockStart={() => setForm((f) => setBlockStart(f, row.id))}
-            onRemove={() => {
-              setForm((f) => removeRow(f, row.id));
-              setRefDraftValidity(row.id, true);
-            }}
+            onRemove={() => setForm((f) => removeRow(f, row.id))}
           />
         ))}
       </div>

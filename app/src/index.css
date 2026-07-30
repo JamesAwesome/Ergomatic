@@ -683,8 +683,10 @@ button:disabled {
 }
 
 /* Widths match the row fields directly below (.set-toggle / .field-dur /
-   .field-ref / .field-spm / .field-rest / .row-delete) so each label sits
-   over its column — see the comment on ColumnHeader in Builder.tsx. */
+   .field-spm / .field-rest / .row-delete) so each label sits over its
+   column — see the comment on ColumnHeader in Builder.tsx. PACE REF has no
+   single column of its own any more (.pace-ref-input, below, spans its own
+   full-width line). */
 .builder-columns span {
   text-align: center;
 }
@@ -775,12 +777,6 @@ button:disabled {
   width: 48px;
 }
 
-.field-ref {
-  width: 64px;
-  color: var(--accent);
-  font-weight: 600;
-}
-
 .field-spm {
   /* >= --tap (44px): this is a real <input>, in scope for the 44x44 tap-
      target sweep (app/e2e/design.spec.ts) unlike .col-spm, its purely
@@ -806,6 +802,70 @@ button:disabled {
 
 .step-row-editor-split {
   margin: 6px 0 0;
+}
+
+/* PaceRefInput doesn't fit alongside DUR/SPM/REST in .step-row-editor-line1
+   at the 390px mobile viewport this app targets (two 44px radio chips plus
+   two 44px steppers alone exceed the space DUR/SPM/REST leave), so — unlike
+   the old .field-ref text input it replaces — it gets its own full-width
+   line beneath line1 instead of squeezing into that row's flex layout. */
+.step-row-editor-pace {
+  margin-top: 8px;
+}
+
+.pace-ref-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pace-ref-bases {
+  display: flex;
+  gap: 6px;
+}
+
+/* Same idiom as .chip (library/FilterChips.tsx) for the base, unchecked
+   look, but toggled via aria-checked (PainPicker.tsx's radio pattern) since
+   these are mutually-exclusive radios, not independent pressed toggles. */
+.pace-ref-chip {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.pace-ref-chip[aria-checked="true"] {
+  background: var(--accent);
+  color: var(--on-color);
+  border: none;
+}
+
+.pace-ref-step {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pace-ref-display {
+  min-width: 56px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: center;
 }
 
 .builder-add-row-group {

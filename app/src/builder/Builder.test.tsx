@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { api } from "../api";
+import type { BuilderEditMode } from "./Builder";
+import { newRow, type BuilderForm } from "./builderState";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -25,11 +27,11 @@ function mockApi(handler: () => Response) {
   return fn;
 }
 
-async function renderBuilder() {
+async function renderBuilder(mode?: BuilderEditMode) {
   const { default: Builder } = await import("./Builder");
   render(
     <MemoryRouter>
-      <Builder />
+      <Builder mode={mode} />
     </MemoryRouter>,
   );
 }
@@ -41,12 +43,12 @@ async function fillValidForm() {
   await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
   await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
   await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-  // The pace-ref field starts pre-filled with the row's default "6k" (a
-  // structured refBase/refOff under the hood, not free text) — clear it
-  // before typing a full replacement, same as any other pre-filled field.
-  const refField = screen.getByPlaceholderText("2k / 6k-2");
-  await userEvent.clear(refField);
-  await userEvent.type(refField, "6k-2");
+  // The row's pace ref starts at the default 6k/+0 (PaceRefInput.tsx) —
+  // two clicks on the faster stepper reaches the 6k-2 ref every test here
+  // expects.
+  const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
+  await userEvent.click(faster);
+  await userEvent.click(faster);
 }
 
 beforeEach(() => {
@@ -70,9 +72,9 @@ describe("Builder", () => {
     await renderBuilder();
 
     await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-    const refField = screen.getByPlaceholderText("2k / 6k-2");
-    await userEvent.clear(refField);
-    await userEvent.type(refField, "6k-2");
+    const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
+    await userEvent.click(faster);
+    await userEvent.click(faster);
 
     // Hardcoded expectation (EN DASH, U+2013) — never recomputed by calling
     // resolveSplit/toleranceRange, which would make this assertion tautological.
@@ -168,71 +170,6 @@ describe("Builder", () => {
     ).toBeInTheDocument();
   });
 
-  // StepRowEditor keeps a free-text draft over the structured
-  // refBase/refOff fields (a transitional adapter — see its own comments).
-  // Before this fix, an unparseable draft silently kept the row's last
-  // *committed* refBase/refOff, so the screen showed the bad text but the
-  // save would have gone out with a stale, different value and no error.
-  // These two cover the reviewer-reproduced cases: clearing the field
-  // entirely, and a half-typed ref that never becomes valid.
-  it("blocks save and shows a row ref error when the pace-ref draft is cleared to blank", async () => {
-    const api = mockApi(() => new Response(null, { status: 201 }));
-    mockBaselines(BASELINES);
-    await renderBuilder();
-
-    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
-    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
-    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-    await userEvent.clear(screen.getByPlaceholderText("2k / 6k-2"));
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
-
-    expect(api).not.toHaveBeenCalled();
-    const input = screen.getByLabelText("Row 1 pace reference");
-    expect(input).toHaveValue("");
-    expect(input).toHaveAttribute("aria-invalid", "true");
-    const describedBy = input.getAttribute("aria-describedby");
-    expect(describedBy).toBeTruthy();
-    expect(document.getElementById(describedBy!)).toHaveTextContent(
-      "invalid pace reference",
-    );
-  });
-
-  it("blocks save on a half-typed pace-ref draft ('2k-') and unblocks once it's completed into something valid", async () => {
-    const api = mockApi(() => new Response(null, { status: 201 }));
-    mockBaselines(BASELINES);
-    await renderBuilder();
-
-    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
-    await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
-    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-    const refField = screen.getByPlaceholderText("2k / 6k-2");
-    await userEvent.clear(refField);
-    await userEvent.type(refField, "2k-");
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
-
-    expect(api).not.toHaveBeenCalled();
-    expect(refField).toHaveValue("2k-");
-    expect(screen.getByLabelText("Row 1 pace reference")).toHaveAttribute(
-      "aria-invalid",
-      "true",
-    );
-    expect(screen.getByText("invalid pace reference")).toBeInTheDocument();
-
-    // Finishing the draft into "2k-2" (base 2k, offset -2) parses, so the
-    // error clears and save proceeds.
-    await userEvent.type(refField, "2");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
-    expect(api).toHaveBeenCalledTimes(1);
-  });
-
   // The server can no longer 409 a workout create/update (no `num` field
   // left to clash on — see server/routes/data.ts's POST/PUT /api/workouts,
   // which only ever return 400/201/200/403/404). Any non-2xx response is
@@ -274,14 +211,17 @@ describe("Builder", () => {
 
     // Row 1 (the form's initial row): 5 loose minutes, outside the block.
     await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-    await userEvent.type(screen.getByPlaceholderText("2k / 6k-2"), "6k-2");
+    const row1Faster = screen.getByRole("button", {
+      name: "Row 1 pace faster",
+    });
+    await userEvent.click(row1Faster);
+    await userEvent.click(row1Faster);
 
     // Row 2: 10 minutes, marked as the block start.
     await userEvent.click(screen.getByRole("button", { name: "+ ADD ROW" }));
     const durInputs = screen.getAllByPlaceholderText("5' or 2500m");
-    const refInputs = screen.getAllByPlaceholderText("2k / 6k-2");
     await userEvent.type(durInputs[1]!, "10'");
-    await userEvent.type(refInputs[1]!, "2k");
+    await userEvent.click(screen.getByRole("radio", { name: "Row 2 pace 2K" }));
 
     const toggles = screen.getAllByRole("button", { name: /repeat set/i });
     expect(toggles).toHaveLength(2);
@@ -377,21 +317,17 @@ describe("Builder", () => {
     });
   });
 
-  it("wires aria-invalid/aria-describedby on each of a row's dur/ref/spm/rest fields to its own error message", async () => {
+  it("wires aria-invalid/aria-describedby on each of a row's dur/spm/rest fields to its own error message", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
     await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
     await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
-    // dur is left blank (triggers "required"). The pace ref can no longer be
-    // left invalid by leaving it blank — refBase/refOff always describe a
-    // structurally valid ref — so give it an out-of-range offset instead;
-    // spm and rest get out-of-range values too, so all four row fields have
-    // a live error at once.
-    const refField = screen.getByPlaceholderText("2k / 6k-2");
-    await userEvent.clear(refField);
-    await userEvent.type(refField, "2k+999");
+    // dur is left blank (triggers "required"); the pace ref can no longer be
+    // driven out of range from here at all — PaceRefInput.tsx's stepper
+    // clamps to ±60 (see the out-of-range case below, which loads it a
+    // different way) — so only spm and rest get out-of-range values.
     await userEvent.type(screen.getByPlaceholderText("spm"), "99");
     await userEvent.type(screen.getByPlaceholderText("rest"), "0.3");
 
@@ -401,7 +337,6 @@ describe("Builder", () => {
 
     const expectations: [string, string][] = [
       ["Row 1 duration", "duration is required, e.g. 5' or 2500m"],
-      ["Row 1 pace reference", "invalid pace reference"],
       ["Row 1 stroke rate", "spm must be 10..60"],
       ["Row 1 rest", "rest must be 0.5..60 in 0.5 steps"],
     ];
@@ -412,6 +347,38 @@ describe("Builder", () => {
       expect(describedBy).toBeTruthy();
       expect(document.getElementById(describedBy!)).toHaveTextContent(message);
     }
+  });
+
+  // PaceRefInput.tsx clamps its stepper to ±60, so an out-of-range offset can
+  // no longer be typed through the UI — but builderState.ts's `toSteps`
+  // keeps its own ±60 check anyway, because edit mode loads a row's
+  // refBase/refOff straight from stored step data (`fromWorkout`/
+  // `stepToRow`) without clamping. This constructs exactly that: a form
+  // whose row already has an out-of-range offset before the screen ever
+  // renders, the same shape a corrupted or pre-limit-change stored workout
+  // would produce.
+  it("still rejects a row's out-of-range pace-ref offset if it arrives via edit-mode data rather than the stepper", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+
+    const badRow = newRow("w");
+    badRow.dur = "5'";
+    badRow.refOff = 999;
+    const initial: BuilderForm = {
+      title: "Ladder Sets",
+      type: "O2",
+      difficulty: "easy",
+      pain: 3,
+      rows: [badRow],
+      reps: 1,
+    };
+    await renderBuilder({ kind: "edit", id: "w1", initial });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    expect(screen.getByText("invalid pace reference")).toBeInTheDocument();
   });
 
   it("treats a successful save as success even when the response body isn't valid JSON (L3)", async () => {

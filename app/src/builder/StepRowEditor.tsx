@@ -1,22 +1,10 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  parsePaceRef,
-  resolveSplit,
-  toleranceRange,
-} from "../../domain/pace.js";
-import type { Baselines, PaceBase, PaceRef } from "../../domain/types.js";
+import { resolveSplit, toleranceRange } from "../../domain/pace.js";
+import type { Baselines, PaceRef } from "../../domain/types.js";
 import type { BuilderRow } from "./builderState";
+import PaceRefInput from "./PaceRefInput";
 
 type RowField = "dur" | "ref" | "spm" | "rest";
-
-// Interim text rendering of a structured ref, for the free-text pace input
-// below — `PaceRefInput` (a later task) replaces this input with a base
-// chip + offset stepper that never needs to format/parse text at all.
-function formatPaceRef(base: PaceBase, off: number): string {
-  if (off === 0) return base;
-  return `${base}${off > 0 ? "+" : ""}${off}`;
-}
 
 // Resolves a work row's live SPLIT cell. `refBase`/`refOff` are always
 // structurally valid (the builder can no longer represent an unparseable
@@ -55,7 +43,6 @@ export default function StepRowEditor({
   tolerance,
   fieldError,
   onChange,
-  onRefDraftValidity,
   onSetBlockStart,
   onRemove,
 }: {
@@ -78,13 +65,6 @@ export default function StepRowEditor({
   tolerance: number;
   fieldError: (field: RowField) => string | undefined;
   onChange: (patch: Partial<BuilderRow>) => void;
-  // Reports whether the free-text pace-ref draft below currently parses.
-  // The parent (Builder) uses this to surface a `row:<id>:ref` error and
-  // block save while the draft is unparseable — since an unparseable draft
-  // leaves `row.refBase`/`row.refOff` unchanged (see `handleRefChange`),
-  // `toSteps` alone has no way to see that the visible text disagrees with
-  // the committed value.
-  onRefDraftValidity: (valid: boolean) => void;
   onSetBlockStart: () => void;
   onRemove: () => void;
 }) {
@@ -95,30 +75,6 @@ export default function StepRowEditor({
   // its own error message rather than colliding with another row's.
   function errorId(field: RowField): string {
     return `row-${row.id}-${field}-error`;
-  }
-
-  // Interim free-text adapter over the structured refBase/refOff fields — a
-  // later task replaces this whole input with a base chip + offset stepper
-  // that writes refBase/refOff directly and never needs text at all. This
-  // local draft, rather than a value derived straight from
-  // `formatPaceRef(row.refBase, row.refOff)`, is what lets someone type
-  // "6k-2" one character at a time: an in-progress "6k-" doesn't parse, so
-  // it must NOT be clobbered back to the last committed value on every
-  // keystroke the way a fully row-derived value would be.
-  const [refDraft, setRefDraft] = useState(() =>
-    formatPaceRef(row.refBase, row.refOff),
-  );
-
-  function handleRefChange(text: string) {
-    setRefDraft(text);
-    const parsed = parsePaceRef(text);
-    if (parsed) {
-      onChange({ refBase: parsed.base, refOff: parsed.off });
-    }
-    // Report validity unconditionally (not just in the `else` branch): a
-    // previously-invalid draft that now parses must clear the row's error,
-    // not just skip re-setting it.
-    onRefDraftValidity(parsed !== null);
   }
 
   return (
@@ -151,15 +107,6 @@ export default function StepRowEditor({
         {isWork && (
           <>
             <input
-              className="field-ref"
-              aria-label={`Row ${index + 1} pace reference`}
-              aria-invalid={Boolean(fieldError("ref"))}
-              aria-describedby={fieldError("ref") ? errorId("ref") : undefined}
-              placeholder="2k / 6k-2"
-              value={refDraft}
-              onChange={(e) => handleRefChange(e.target.value)}
-            />
-            <input
               className="field-spm"
               aria-label={`Row ${index + 1} stroke rate`}
               aria-invalid={Boolean(fieldError("spm"))}
@@ -190,6 +137,18 @@ export default function StepRowEditor({
           ×
         </button>
       </div>
+      {isWork && (
+        <div className="step-row-editor-pace">
+          <PaceRefInput
+            base={row.refBase}
+            off={row.refOff}
+            rowLabel={`Row ${index + 1}`}
+            onChange={({ base, off }) =>
+              onChange({ refBase: base, refOff: off })
+            }
+          />
+        </div>
+      )}
       {fieldError("dur") && (
         <p id={errorId("dur")} className="field-error">
           {fieldError("dur")}
