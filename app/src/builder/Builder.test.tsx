@@ -575,4 +575,35 @@ describe("Builder", () => {
     // leak into other tests in this file.
     delete elementProto.scrollIntoView;
   });
+
+  // Regression test: `pain` used to have no entry in Builder's `fieldRefs`
+  // map, so when it was the first invalid key (as it is here — title valid,
+  // pain untouched, so `toSteps`'s insertion order title -> pain -> steps
+  // makes `pain` first) `handleSave` silently no-opped on focus. The count
+  // still rendered, but the rower was never taken to the problem.
+  it("focuses the pain field's container and still shows the count when pain is the first invalid field", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    // Valid title, pain deliberately left unset — the row fields are also
+    // still blank/invalid, but pain comes first in `toSteps`'s errors.
+    await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    expect(screen.getByText(/needs? attention/i)).toBeInTheDocument();
+    const painGroup = screen.getByRole("radiogroup", {
+      name: "Expected pain",
+    });
+    // The focus target is the `tabIndex={-1}` wrapper div registered around
+    // the radiogroup (PainPicker has no single focusable root of its own),
+    // not the radiogroup element itself.
+    expect(document.activeElement).toBe(painGroup.parentElement);
+    // That wrapper must not add a stop to the page's tab order — only the
+    // (roving-tabindex) radio cells inside it should be tabbable.
+    expect(painGroup.parentElement).toHaveAttribute("tabIndex", "-1");
+  });
 });

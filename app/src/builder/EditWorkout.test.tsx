@@ -1,12 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 // A fully-supported personal workout — every step kind the builder's row
 // model can represent (wu/w/r), so `hasUnsupportedSteps` must NOT refuse it.
+// The trailing `r` step matters specifically for phase 5c: the builder
+// dropped its own "+ REST" button (rest is now authored via a work row's
+// REST (OPT) field) but kept StepRowEditor's `kind === "r"` render branch,
+// because bulk import — and a workout like this one, pasted in before that
+// change — can still produce a standalone rest step. This fixture proves
+// that step stays representable and editable end to end, not just that
+// `fromWorkout`/`stepToRow` handle it in isolation.
 const PERSONAL_WORKOUT: LibraryWorkout = {
   id: "w1",
   num: 12,
@@ -21,6 +30,7 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
       duration: { kind: "time", minutes: 5 },
       ref: { base: "6k", off: -2 },
     },
+    { k: "r", minutes: 3 },
   ],
   isGlobal: false,
   lastDoneDaysAgo: 12,
@@ -49,6 +59,15 @@ function mockHooks(workouts: LibraryWorkout[]) {
   vi.doMock("../api/useBaselines", () => ({
     useBaselines: () => ({ state: "ready", baselines: BASELINES }),
   }));
+}
+
+// Mirrors Builder.test.tsx's own mockApi: typed against the real `api`
+// signature so `.mock.calls[0]` carries the actual `[path, RequestInit]`
+// shape the round-trip test below destructures to inspect the PUT body.
+function mockApi(handler: () => Response) {
+  const fn = vi.fn<typeof api>(async () => handler());
+  vi.doMock("../api", () => ({ api: fn }));
+  return fn;
 }
 
 function mockLoadingWorkouts() {
@@ -152,5 +171,50 @@ describe("EditWorkout", () => {
     // pace-ref control) is row 2, not row 1.
     expect(screen.getByRole("radio", { name: "Row 2 pace 6K" })).toBeChecked();
     expect(screen.getByText("6k −2")).toBeInTheDocument();
+  });
+
+  it("renders a standalone rest row and round-trips it unchanged on save", async () => {
+    const api = mockApi(() => new Response(null, { status: 200 }));
+    mockHooks([PERSONAL_WORKOUT]);
+    await renderEdit("/library/w1/edit");
+
+    // Row 3 (after the wu and w rows): the standalone `r` step from the
+    // fixture. Not a `w` row, so it gets none of StepRowEditor's isWork-only
+    // controls (SPM/REST/pace) — only the shared duration field, pre-filled
+    // from `stepToRow`'s `${minutes}'` formatting.
+    expect(screen.getByLabelText("Row 3 duration")).toHaveValue("3'");
+    // Distinguishes it from also being a `w` row rendered with blank
+    // optional fields: a `w` row would additionally expose SPM/REST inputs
+    // and a pace-ref radiogroup, none of which exist for this row.
+    expect(
+      screen.queryByRole("radio", { name: "Row 3 pace 6K" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    // Exact body equality (not just "contains an r step") — proves the wu
+    // and w steps also survived the round trip unchanged, not just the one
+    // this test is nominally about.
+    expect(api).toHaveBeenCalledWith("/api/workouts/w1", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Ladder Sets",
+        type: "AT",
+        difficulty: "medium",
+        pain: 3,
+        steps: [
+          { k: "wu", minutes: 10 },
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 5 },
+            ref: { base: "6k", off: -2 },
+          },
+          { k: "r", minutes: 3 },
+        ],
+      }),
+    });
   });
 });
