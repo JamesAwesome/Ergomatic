@@ -5,6 +5,10 @@
   --page: #f4f1e8;
   --surface: #fffdf7;
   --surface-sunken: #efeade;
+  /* Collapsed step card bg (docs/design/builder-redesign/README.md §4a) —
+     one shade off --surface, distinguishing a collapsed card from the
+     expanded one (which stays --surface) without a border-only change. */
+  --surface-collapsed: #fbf9f1;
   --ink: #1b1a17;
   --ink-2: #3f3c35;
   --ink-3: #57544c;
