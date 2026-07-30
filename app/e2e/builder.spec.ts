@@ -356,4 +356,160 @@ test.describe("new controls this phase introduced", () => {
 
     await expect(page.getByLabel("Title")).toBeFocused();
   });
+
+  test("cloning row 1 duplicates every field, and ×5 on the remaining single row repeats it 5 times", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-clone-reps@e2e.test",
+      name: "Builder Clone Reps Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    const title = "Clone Reps Row";
+    await page.getByLabel("Title").fill(title);
+    await page.getByRole("radio", { name: "Pain 2" }).click();
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("1");
+    const fasterButton = page.getByRole("button", {
+      name: "Row 1 pace faster",
+    });
+    await fasterButton.click();
+    await fasterButton.click();
+
+    // The clone button (row-clone, "↻") is the SET cell's replacement
+    // (docs/design/DEVIATIONS.md) — prove it actually copies every field,
+    // not just that a second row appears, by reading the duplicate's
+    // duration and pace back. This two-row shape is a deliberate
+    // intermediate: the test collapses back to one row below so `×5`
+    // multiplies exactly the `5×1′ @ 6k−2` workout it's named for, not a
+    // 10-phase one.
+    await page.getByRole("button", { name: "Duplicate Row 1" }).click();
+    await expect(
+      page.getByLabel("Row 2 duration", { exact: true }),
+    ).toHaveValue("1");
+    await expect(
+      page.locator(".step-row-editor").nth(1).locator(".pace-ref-display"),
+    ).toHaveText("6k −2");
+
+    await page
+      .locator(".step-row-editor")
+      .nth(1)
+      .getByRole("button", { name: "Remove row" })
+      .click();
+    await expect(page.locator(".step-row-editor")).toHaveCount(1);
+
+    // The bottom-only ×N control (no more per-row SET) — 4 presses from the
+    // default ×1 reaches ×5.
+    const moreReps = page.getByRole("button", { name: "More reps" });
+    for (let i = 0; i < 4; i++) {
+      await moreReps.click();
+    }
+    await expect(page.locator(".builder-reps-count")).toHaveText("×5");
+
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    // One row, 1 minute, ×5, no warm-up/rest bookends — five work phases'
+    // worth of duration is 5 minutes total (domain/expand.ts's
+    // estimateMinutes), asserted here as a hardcoded literal rather than
+    // recomputed via the production function under test.
+    await expect(page.locator("p.mono-status").first()).toContainText("5 MIN");
+
+    await cleanupByTitle(page, title);
+  });
+
+  test("editing a workout with a stored warm-up keeps its wu row, and Save still PUTs it unchanged", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-wu-edit@e2e.test",
+      name: "Builder WU Edit Tester",
+    });
+    await setBaselines(page);
+    // The builder has no `+ WARM-UP` control any more (docs/design/
+    // DEVIATIONS.md) — a `wu` row can only land in a form via bulk import
+    // or an already-saved workout, so bulk import is how this test
+    // manufactures one to then edit, mirroring every starter workout's own
+    // shape (they all open with a stored warm-up).
+    await page.goto("/library/import");
+    const title = "WU Edit Row";
+    const text = [`${title} | O2 | easy | 2`, "wu 5", "w 10' 6k @20"].join(
+      "\n",
+    );
+    await page.getByLabel("Bulk import text").fill(text);
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    await expect(page).toHaveURL(/\/library$/);
+
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/edit$/);
+
+    // Row 1 is the stored `wu` row — StepRowEditor's non-work branch, so it
+    // renders only a duration field (no pace/SPM/rest), still showing the
+    // 5 minutes bulk import stored.
+    await expect(
+      page.getByLabel("Row 1 duration", { exact: true }),
+    ).toHaveValue("5");
+    await expect(
+      page.getByRole("radio", { name: "Row 1 duration unit minutes" }),
+    ).toHaveAttribute("aria-checked", "true");
+
+    const putRequestPromise = page.waitForRequest(
+      (req) => req.method() === "PUT" && req.url().includes("/api/workouts/"),
+    );
+    await page.getByRole("button", { name: "Save" }).click();
+    const putRequest = await putRequestPromise;
+    const body = putRequest.postDataJSON() as {
+      steps: Array<{ k: string }>;
+    };
+    expect(body.steps.some((s) => s.k === "wu")).toBe(true);
+
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await cleanupByTitle(page, title);
+  });
+
+  test("pressing the dice icon twice yields two different suggested titles", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-dice-twice@e2e.test",
+      name: "Builder Dice Twice Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    const titleInput = page.getByLabel("Title");
+    const dice = page.getByRole("button", { name: "Suggest a name" });
+    await dice.click();
+    const first = await titleInput.inputValue();
+    await dice.click();
+    const second = await titleInput.inputValue();
+
+    // The reported bug, end to end: nameGenerator.ts used to probe linearly
+    // forward from a seed-derived start index, and its noun list opened
+    // with the same weather words the starter library's own titles use —
+    // every seed inside that taken cluster slid to the same first-free
+    // slot, so repeated presses returned the same name forever (fixed in
+    // Task 1; unit-covered in nameGenerator.test.ts against the real
+    // starter library — this proves the same fix through the live UI).
+    expect(second).not.toBe(first);
+  });
+
+  test("SPM's + from an empty field shows 20, not 21", async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-spm-wake@e2e.test",
+      name: "Builder SPM Wake Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    const spmField = page.getByLabel("Row 1 stroke rate", { exact: true });
+    await expect(spmField).toHaveValue("");
+    await page
+      .getByRole("button", { name: "Row 1 stroke rate increase" })
+      .click();
+    await expect(spmField).toHaveValue("20");
+  });
 });
