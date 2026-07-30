@@ -14,6 +14,7 @@ Approved 2026-07-30. A second round of device feedback on the builder, after
 | Warm-up storage | The preference is **applied at session time, never baked into a workout's steps** — otherwise changing the preference would leave old workouts untouched |
 | Duration input | **Numeric field + a MIN / M unit toggle.** No apostrophe, no grammar, no placeholder that reads like a format string |
 | SPM input | **Defaults to 20, with 44px −/+ either side of the value.** Third stepper-style control on the row; another free-text field gone |
+| Rest input | **Stays minutes-only — no unit toggle** (considered and rejected; see below). Gains an explicit `MIN` marking so it can't be misread beside the duration field's new toggle |
 | Dice | Fixed — see the diagnosis below. It is not a no-op; it returns the same name every press against a real library |
 | Selection styling | Selected states get a **filled tint**, not an outline. The pain picker's red outline was hard to see and drew mis-taps |
 | Cooldowns | Not built. A **named seam** is left: the repeat span is computed by excluding *bookend* row kinds, a list that today holds `wu` and later `cd` |
@@ -107,6 +108,29 @@ viewport and, if it overflows, give SPM its own line the way the pace control
 got one; do not shrink any control below 44px to make it fit. Whatever layout
 results, the e2e tap-target sweep and a screenshot are the acceptance evidence.
 
+## Rest stays minutes — and why
+
+A meters option for rest was requested and **deliberately rejected**. Record
+the reasoning here so it isn't re-litigated:
+
+A work step converts meters into time using its own pace ref
+(`resolveSplit`). **Rest carries no pace ref**, so a meters rest cannot be
+turned into minutes at all — and minutes are what `estimateMinutes` needs to
+produce the builder's TOTAL, the Library's per-workout duration, and plan
+estimates, and what Phase 6's timer needs to count a rest phase down. Any
+meters rest would therefore force one of: an invented recovery-pace constant
+that silently shifts every affected total, or a workout whose duration reads
+"—" everywhere it appears.
+
+Distance recovery is still authorable, and more honestly: add a work row at an
+easy pace (`500m @ 6k+30`). That is what a paddle actually is — a work step
+with a recovery target — and it keeps every total exact.
+
+**Consequence for this phase:** with duration gaining a MIN / M toggle, a
+neighbouring rest field carrying no unit becomes ambiguous. Rest must be
+explicitly marked as minutes — a static `MIN` affix on the field or in its
+column header, not a placeholder that disappears once typing starts.
+
 ## Selection styling
 
 Every selected control gets a filled tint rather than a bare outline. The pain
@@ -132,6 +156,8 @@ the fill itself ≥ 3:1 against the page.
   Save reads `Save`.
 - **SPM:** a new row defaults to 20; the steppers move it by 1 and clamp at
   10 and 60; a stored step without `spm` loads as 20 and saves with it.
+- **Rest:** its minutes unit is visible without focusing or typing into the
+  field, and it offers no unit toggle.
 - **Contrast:** computed ratios for every new filled state recorded in the
   task report, not asserted by eye.
 - **e2e:** author `5×1′ @ 6k−2` using clone and the `×N` control, save, and
