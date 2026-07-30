@@ -77,6 +77,9 @@ export default function PainPicker({
             aria-checked={checked}
             aria-label={`Pain ${level}`}
             className="pain-picker-cell"
+            style={
+              checked ? { background: `var(--pain-${level}-fill)` } : undefined
+            }
             tabIndex={tabbable ? 0 : -1}
             onClick={() => onChange(level)}
             onKeyDown={(event) => handleKeyDown(event, index)}

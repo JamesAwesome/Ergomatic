@@ -233,8 +233,12 @@ button:disabled {
   cursor: pointer;
 }
 
+/* Filled, not merely outlined (Task 6) — background comes from the
+   level's own --pain-N-fill tint via an inline style in PainPicker.tsx
+   (background varies per level, so it can't live in this shared rule).
+   The border stays and thickens so selection reads even in grayscale. */
 .pain-picker-cell[aria-checked="true"] {
-  border: 1px solid var(--accent);
+  border: 2px solid var(--ink);
 }
 
 .pain-picker-face {
@@ -248,6 +252,10 @@ button:disabled {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--ink-3);
+}
+
+.pain-picker-cell[aria-checked="true"] .pain-picker-num {
+  color: var(--on-color);
 }
 
 .library-header {

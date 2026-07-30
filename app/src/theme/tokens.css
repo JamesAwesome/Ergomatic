@@ -35,6 +35,17 @@
   --pain-4: #a85423;
   --pain-5: #b5341f;
 
+  /* Selected pain-picker-cell fill (Task 6, docs/design/DEVIATIONS.md):
+     each --pain-N mixed with 10% --ink so the tint clears both floors even
+     at the ramp's tightest step. Computed, not eyeballed — fill/--page and
+     --on-color-text/fill: 5.88/6.53, 4.62/5.13, 4.45/4.94, 5.33/5.92,
+     6.04/6.70 (>= the 3:1 / 4.5:1 WCAG floors with margin to spare). */
+  --pain-1-fill: #4a6345;
+  --pain-2-fill: #65723b;
+  --pain-3-fill: #886b28;
+  --pain-4-fill: #9a4e22;
+  --pain-5-fill: #a6311e;
+
   --radius: 2px;
   --tap: 44px;
 
