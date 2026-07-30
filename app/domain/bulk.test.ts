@@ -21,7 +21,6 @@ test 2k
     expect(result.workouts).toHaveLength(2);
 
     expect(result.workouts[0]).toStrictEqual({
-      num: 12,
       title: "Ladder Day",
       type: "AT",
       difficulty: "medium",
@@ -41,7 +40,6 @@ test 2k
     });
 
     expect(result.workouts[1]).toStrictEqual({
-      num: 13,
       title: "Long Repeats",
       type: "O2",
       difficulty: "easy",
@@ -79,7 +77,10 @@ w 1' 2k @20
 `;
     const result = parseBulk(text);
     expect(result.errors).toStrictEqual([]);
-    expect(result.workouts.map((w) => w.num)).toStrictEqual([12, 13]);
+    expect(result.workouts.map((w) => w.title)).toStrictEqual([
+      "Ladder Day",
+      "Repeat",
+    ]);
   });
 
   it("reports a bad header field (invalid type) and skips the block", () => {
@@ -94,12 +95,16 @@ w 1' 6k @20`;
   });
 
   it("reports a bad header field (wrong field count) and skips the block", () => {
-    const text = `12 | Ladder Day | AT | medium
+    const text = `12 | Ladder Day | AT
 wu 10`;
     const result = parseBulk(text);
     expect(result.workouts).toStrictEqual([]);
     expect(result.errors).toStrictEqual([
-      { block: 0, line: 1, message: expect.stringContaining("5 fields") },
+      {
+        block: 0,
+        line: 1,
+        message: expect.stringContaining("title | TYPE | difficulty | pain"),
+      },
     ]);
   });
 
@@ -137,16 +142,6 @@ w 1' 9k-2 @20`;
     expect(result.workouts).toStrictEqual([]);
     expect(result.errors).toStrictEqual([
       { block: 0, line: 3, message: expect.stringContaining("pace ref") },
-    ]);
-  });
-
-  it("reports a non-integer num in the header", () => {
-    const text = `abc | Ladder Day | AT | medium | 3
-wu 10`;
-    const result = parseBulk(text);
-    expect(result.workouts).toStrictEqual([]);
-    expect(result.errors).toStrictEqual([
-      { block: 0, line: 1, message: expect.stringContaining("invalid num") },
     ]);
   });
 
@@ -317,5 +312,43 @@ zzz 5`;
   it("returns empty result for blank input", () => {
     expect(parseBulk("")).toStrictEqual({ workouts: [], errors: [] });
     expect(parseBulk("   \n\n  ")).toStrictEqual({ workouts: [], errors: [] });
+  });
+
+  it("accepts a bare number as minutes, matching what the builder now accepts", () => {
+    const result = parseBulk(`Bare Minutes | O2 | easy | 2
+wu 10
+w 5 6k+0 @20`);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts[0].steps[1]).toStrictEqual({
+      k: "w",
+      duration: { kind: "time", minutes: 5 },
+      ref: { base: "6k", off: 0 },
+      spm: 20,
+    });
+  });
+
+  it("accepts a four-field header without a number", () => {
+    const result = parseBulk(`No Number | AT | medium | 3
+w 1' 6k-2`);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts[0].title).toBe("No Number");
+    expect(result.workouts[0].type).toBe("AT");
+  });
+
+  it("still accepts the legacy five-field header and ignores the leading number", () => {
+    const result = parseBulk(`12 | Legacy | AT | medium | 3
+w 1' 6k-2`);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.workouts[0].title).toBe("Legacy");
+    expect(result.workouts[0]).not.toHaveProperty("num");
+  });
+
+  it("names both accepted header shapes when the field count is wrong", () => {
+    const result = parseBulk(`One | Two | Three
+w 1' 6k-2`);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors[0].message).toMatch(
+      /title \| TYPE \| difficulty \| pain/,
+    );
   });
 });
