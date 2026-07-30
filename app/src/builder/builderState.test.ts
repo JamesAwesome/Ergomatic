@@ -1091,6 +1091,29 @@ describe("summaries", () => {
       "20 spm · rest none",
     );
   });
+
+  // The landmine Task 1's review carried forward: called on a `wu`/`r` row,
+  // `stepSummary` used to echo `refBase`/`refOff` straight off `newRow`'s
+  // unused defaults, fabricating a pace reference ("10′ @ 6k ±0") the row
+  // never represents. StepCard renders stored workouts — the 35 starters and
+  // anything bulk-imported genuinely contain `wu` and standalone `r` rows —
+  // so this can't stay a `w`-only assumption.
+  it("summarises a warm-up row by duration and kind, with no fabricated pace reference", () => {
+    expect(stepSummary(wuRow("wu1", "10"))).toBe("10′ warm-up");
+  });
+
+  it("summarises a standalone rest row by duration and kind, with no fabricated pace reference", () => {
+    // Non-default refBase/refOff on the row itself — proves the guard keys
+    // off `row.kind`, not off whether the ref happens to still be blank.
+    expect(
+      stepSummary({ ...restRow("r1", "5"), refBase: "2k", refOff: 10 }),
+    ).toBe("5′ rest");
+  });
+
+  it("gives a wu/r row nothing to add on the sub-summary line — no fabricated spm/rest", () => {
+    expect(stepSubSummary(wuRow("wu1", "10"))).toBe("");
+    expect(stepSubSummary(restRow("r1", "5"))).toBe("");
+  });
 });
 
 describe("addStepLike", () => {

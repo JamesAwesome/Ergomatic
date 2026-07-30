@@ -1132,3 +1132,213 @@ button:disabled {
   padding: 0;
   list-style: none;
 }
+
+/* -- StepCard: the collapsed accordion card (Phase 5E Task 2) ---------- */
+/* docs/design/builder-redesign/README.md §4a. Renders only the collapsed
+   state — StepEditor.tsx (Task 3) is the separate expanded-editor
+   component the parent swaps in for whichever row is `editing`. */
+
+.step-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 9px 9px 11px;
+  background: var(--surface-collapsed);
+  border: 1px solid var(--rule-2);
+  /* The 3px left "state marker" (design doc §4a) — always --rule-2 here;
+     the expanded card's own marker (StepEditor.tsx) is the TYPE colour. */
+  border-left: 3px solid var(--rule-2);
+  border-radius: var(--radius);
+}
+
+/* Line 1: index + summary + resolved split, the whole line tappable to
+   expand. A <button>, not a <div onClick>, so it's keyboard/AT operable
+   without any extra role/tabIndex wiring. */
+.step-card-line1 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-card-index {
+  flex: none;
+  width: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  /* Handoff's #8a8478 for this numeral fails AA at this size — same
+     --ink-4 substitution already recorded for every other mono label in
+     docs/design/DEVIATIONS.md, not a new deviation. */
+  color: var(--ink-4);
+}
+
+.step-card-summary {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.step-card-split {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* Line 2: sub-summary (tappable to expand, same as line 1) + the joined
+   action group / delete confirm. */
+.step-card-line2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.step-card-sub {
+  flex: 1;
+  min-width: 0;
+  /* Aligns under the summary text, which starts after the 16px index +
+     10px gap (design doc §4a). */
+  padding: 0 0 0 26px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* The joined EDIT / duplicate / delete control — one bordered group with
+   internal dividers, each cell >= 44x44 (EDIT 48 wide, the glyph cells 44;
+   design doc §4a's "narrowest cell is 44px" holds here too). Fixed total
+   width 136px (48 + 44 + 44) so the two text lines above always know how
+   much room they have to truncate into. */
+.step-card-actions {
+  flex: none;
+  display: flex;
+  width: 136px;
+  height: var(--tap);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.step-card-action {
+  flex: none;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--rule-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.step-card-action:last-child {
+  border-right: none;
+}
+
+.step-card-edit {
+  width: 48px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+.step-card-duplicate {
+  width: 44px;
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.step-card-delete {
+  width: 44px;
+  color: var(--ink-4);
+  font-size: 17px;
+}
+
+.step-card-delete:hover {
+  color: var(--accent);
+}
+
+.step-card-action:hover {
+  background: var(--surface-sunken);
+}
+
+/* James's departure from the handoff: the delete cell confirms before
+   deleting (see docs/design/DEVIATIONS.md) — this replaces
+   .step-card-actions inline, at the same width/height, rather than opening
+   any overlay. */
+.step-card-confirm {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: var(--tap);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.step-card-confirm-label {
+  padding: 0 8px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.step-card-confirm-btn {
+  flex: none;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-left: 1px solid var(--rule-2);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.step-card-confirm-yes {
+  background: var(--accent);
+  color: var(--on-color);
+}
+
+.step-card-confirm-no {
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+.step-card-confirm-no:hover {
+  background: var(--surface-sunken);
+}

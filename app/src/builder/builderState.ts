@@ -187,13 +187,19 @@ function fmtSignedOffset(off: number): string {
 }
 
 /** Line 1 of the collapsed accordion card (design doc §4a): `20′ @ 6k +10`
- *  for a minutes row, `2000 m @ 2k ±0` for a metres row. Only ever called
- *  on `w` rows in practice (the accordion redesign collapses `w` rows;
- *  `wu`/`r` rows have no pace ref to summarise this way), but reads
- *  whatever `durUnit`/`refBase`/`refOff` the row actually carries either
- *  way. */
+ *  for a minutes work row, `2000 m @ 2k ±0` for a metres work row.
+ *
+ *  Guarded by `row.kind` (Task 1's review flagged this as a landmine
+ *  carried into Task 2): a `wu`/`r` row has no pace ref of its own —
+ *  `refBase`/`refOff` on those rows are just `newRow`'s unused defaults,
+ *  never anything the row represents — so echoing them here would fabricate
+ *  a target line the row never had. StepCard renders stored workouts (the
+ *  35 starters, anything bulk-imported), which genuinely contain `wu` and
+ *  standalone `r` rows, so this can no longer assume `w`-only callers. */
 export function stepSummary(row: BuilderRow): string {
   const dur = row.durUnit === "min" ? `${row.durValue}′` : `${row.durValue} m`;
+  if (row.kind === "wu") return `${dur} warm-up`;
+  if (row.kind === "r") return `${dur} rest`;
   return `${dur} @ ${row.refBase} ${fmtSignedOffset(row.refOff)}`;
 }
 
@@ -202,8 +208,18 @@ export function stepSummary(row: BuilderRow): string {
  *  when spm is blank, and rest reads `rest none` at zero — both match the
  *  expanded editor's own "FREE"/"NONE" empty-state conventions, just
  *  lowercased to read as prose in a summary line rather than a field
- *  value. */
+ *  value.
+ *
+ *  `wu`/`r` rows return `""` rather than reading their spm/rest fields:
+ *  those rows have no editor UI for either (StepRowEditor/StepEditor only
+ *  render SPM/REST for `isWork`), so the fields are always blank defaults,
+ *  never authored values — and a standalone `r`/`wu` row's own duration
+ *  (line 1) already IS its rest length / warm-up length, so there's nothing
+ *  honest left to add on a second line. Same landmine as `stepSummary`
+ *  above: no `row.kind` guard here used to mean a `wu`/`r` row rendered
+ *  `"rest none"` as if it had a rest sub-field of its own. */
 export function stepSubSummary(row: BuilderRow): string {
+  if (row.kind !== "w") return "";
   const seconds = restSecondsFromRow(row);
   const restTerm =
     seconds === 0 ? "rest none" : `rest ${fmtRestSeconds(seconds)}`;
