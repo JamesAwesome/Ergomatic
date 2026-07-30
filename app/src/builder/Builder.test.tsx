@@ -55,6 +55,31 @@ function mockWorkoutsLoading() {
   workoutsMock = { state: "loading" };
 }
 
+// Same mutable-box idiom as `workoutsMock` above, and for the same reason:
+// a single `vi.doMock` registration per test (the `beforeEach` below),
+// tests just mutate this box rather than re-registering the mock. Defaults
+// to a ready 10' warm-up so every pre-existing test in this file — none of
+// which know about preferences — keeps rendering exactly as before.
+let preferencesMock:
+  | { state: "ready"; preferences: { warmupMinutes: number } }
+  | { state: "loading" }
+  | { state: "error"; retry: () => void } = {
+  state: "ready",
+  preferences: { warmupMinutes: 10 },
+};
+
+function mockPreferences(warmupMinutes: number) {
+  preferencesMock = { state: "ready", preferences: { warmupMinutes } };
+}
+
+function mockPreferencesLoading() {
+  preferencesMock = { state: "loading" };
+}
+
+function mockPreferencesError(retry: () => void = vi.fn()) {
+  preferencesMock = { state: "error", retry };
+}
+
 async function renderBuilder(mode?: BuilderEditMode) {
   const { default: Builder } = await import("./Builder");
   render(
@@ -86,8 +111,12 @@ async function fillValidForm() {
 beforeEach(() => {
   vi.resetModules();
   mockWorkouts();
+  preferencesMock = { state: "ready", preferences: { warmupMinutes: 10 } };
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => workoutsMock,
+  }));
+  vi.doMock("../api/usePreferences", () => ({
+    usePreferences: () => preferencesMock,
   }));
 });
 
@@ -738,6 +767,80 @@ describe("Builder", () => {
         pain: 3,
         steps: [
           { k: "reps", count: 3 },
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 5 },
+            ref: { base: "6k", off: -2 },
+          },
+        ],
+      }),
+    });
+  });
+
+  // Task 5: the warm-up is a preference read at session time, never
+  // authored per workout (see Builder.tsx's removed "+ WARM-UP" button,
+  // Task 4). This proves the preference is surfaced as context text below
+  // TOTAL, not baked into the steps the builder saves.
+  it("shows the warm-up from preferences as a line beneath TOTAL", async () => {
+    mockBaselines(BASELINES);
+    mockPreferences(10);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    const total = screen.getByText(/^TOTAL/);
+    const warmup = screen.getByText(/warm-up/i);
+    expect(warmup).toHaveTextContent("+ 10′ warm-up (from your preferences)");
+    // "beneath" is a DOM-order claim, not just "present somewhere" — a
+    // regression that moved the line above TOTAL would still pass a bare
+    // toBeInTheDocument() check.
+    expect(
+      total.compareDocumentPosition(warmup) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders no warm-up line while preferences are loading", async () => {
+    mockBaselines(BASELINES);
+    mockPreferencesLoading();
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
+  });
+
+  it("renders no warm-up line — no placeholder number either — when preferences fail to load", async () => {
+    mockBaselines(BASELINES);
+    mockPreferencesError();
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
+  });
+
+  // The critical rule from the task brief: baking the warm-up into a
+  // workout's steps would leave every existing workout stale the moment
+  // the rower changes their preference. Asserts the exact POST body (not
+  // just "no wu step somewhere in it") so a stray extra key can't slip
+  // through.
+  it("does not include a wu step in the saved request body even though preferences supply a warm-up", async () => {
+    const api = mockApi(
+      () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
+    );
+    mockBaselines(BASELINES);
+    mockPreferences(10);
+    await renderBuilder();
+
+    await fillValidForm();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(api).toHaveBeenCalledWith("/api/workouts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Ladder Sets",
+        type: "O2",
+        difficulty: "easy",
+        pain: 3,
+        steps: [
           {
             k: "w",
             duration: { kind: "time", minutes: 5 },
