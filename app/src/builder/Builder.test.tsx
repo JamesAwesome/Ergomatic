@@ -606,4 +606,14 @@ describe("Builder", () => {
     // (roving-tabindex) radio cells inside it should be tabbable.
     expect(painGroup.parentElement).toHaveAttribute("tabIndex", "-1");
   });
+
+  it("no longer mounts the bulk-import toggle — it moved to its own /library/import screen", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(
+      screen.queryByRole("button", { name: /BULK IMPORT/i }),
+    ).not.toBeInTheDocument();
+  });
 });

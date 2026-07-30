@@ -17,9 +17,14 @@ function Header() {
   return (
     <div className="library-header">
       <h1 className="screen-title">Library</h1>
-      <Link to="/library/new" className="library-new">
-        + NEW
-      </Link>
+      <div className="library-header-actions">
+        <Link to="/library/import" className="library-import">
+          IMPORT
+        </Link>
+        <Link to="/library/new" className="library-new">
+          + NEW
+        </Link>
+      </div>
     </div>
   );
 }

@@ -257,6 +257,12 @@ button:disabled {
   gap: 12px;
 }
 
+.library-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .library-new {
   display: inline-flex;
   align-items: center;
@@ -267,6 +273,19 @@ button:disabled {
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--accent);
+  text-decoration: none;
+}
+
+.library-import {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
   text-decoration: none;
 }
 
@@ -948,12 +967,8 @@ button:disabled {
   margin-top: 16px;
 }
 
-.bulk-import {
-  margin-top: 12px;
-}
-
 .bulk-import-panel {
-  margin-top: 8px;
+  margin-top: 12px;
 }
 
 .bulk-import-textarea {
@@ -968,6 +983,14 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 13px;
   resize: vertical;
+}
+
+.bulk-import-grammar {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .bulk-import-help {

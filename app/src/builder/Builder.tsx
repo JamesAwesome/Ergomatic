@@ -5,7 +5,6 @@ import { useBaselines } from "../api/useBaselines";
 import { useWorkouts } from "../api/useWorkouts";
 import PainPicker from "../components/PainPicker";
 import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
-import BulkImport from "./BulkImport";
 import {
   addRow,
   newForm,
@@ -420,8 +419,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       <p className="section-heading builder-total">
         TOTAL {totalsResult ? `${Math.round(totalsResult.total)} MIN` : "— MIN"}
       </p>
-
-      <BulkImport onImported={() => navigate("/library")} />
 
       {submitError && (
         <p className="field-error builder-submit-error" role="alert">

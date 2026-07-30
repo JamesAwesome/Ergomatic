@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 
 interface BulkError {
@@ -12,20 +13,31 @@ interface BulkResponse {
 }
 
 // Verbatim from domain/bulk.test.ts's own "parses one valid multi-block
-// paste" fixture (app/domain/bulk.ts owns the grammar) — a real, currently
-// passing example rather than field-name placeholders, so a rower can copy
-// its shape directly instead of guessing what TYPE/difficulty accept.
-const GRAMMAR_EXAMPLE = `12 | Ladder Day | AT | medium | 3
+// paste" fixture minus its leading legacy number (app/domain/bulk.ts owns
+// the grammar) — a real, currently passing example rather than field-name
+// placeholders, so a rower can copy its shape directly instead of guessing
+// what TYPE/difficulty accept. The header is "title | TYPE | difficulty |
+// pain"; a legacy five-field form with a leading number is still accepted
+// and the number discarded (see bulk.ts's parseHeader), but the four-field
+// shape is what this help teaches since the number is dead weight now.
+const GRAMMAR_EXAMPLE = `Ladder Day | AT | medium | 3
 wu 10
 x4
 w 1' 6k-2 @22 r5
 r 5`;
 
-/** Bulk-paste import panel: posts raw text to the server, which owns all
+// Spells out the header shape in words, matching parseHeader's own error
+// message verbatim (app/domain/bulk.ts) — the example above shows a real
+// header but never states the placeholder names, so a rower whose paste
+// doesn't fit either shape has no error message to go on and this text is
+// what tells them what's optional.
+const GRAMMAR_HELP =
+  'header: "title | TYPE | difficulty | pain" (a leading number, e.g. "12 | ...", is still accepted and ignored)';
+
+/** Bulk-paste import screen: posts raw text to the server, which owns all
  *  parsing (app/domain/bulk.ts) — this component never parses, pre-validates,
  *  or lints the pasted text itself, so there's no second grammar to drift. */
 export default function BulkImport({ onImported }: { onImported: () => void }) {
-  const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<BulkResponse | null>(null);
@@ -61,51 +73,46 @@ export default function BulkImport({ onImported }: { onImported: () => void }) {
   }
 
   return (
-    <div className="bulk-import">
-      <button
-        type="button"
-        className="builder-add-row"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        + PASTE TO BULK IMPORT
-      </button>
-      {open && (
-        <div className="bulk-import-panel">
-          <textarea
-            className="bulk-import-textarea"
-            aria-label="Bulk import text"
-            placeholder="One workout per block, blank line between"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <pre className="bulk-import-help">{GRAMMAR_EXAMPLE}</pre>
-          <button
-            type="button"
-            className="button-outline bulk-import-submit"
-            onClick={handleSubmit}
-            disabled={submitting || text.trim().length === 0}
-          >
-            Import
-          </button>
-          {submitError && <p className="field-error">{submitError}</p>}
-          {result && (
-            <div className="bulk-import-result" role="alert">
-              <p className="mono-status">{result.created.length} created</p>
-              {result.errors.length > 0 && (
-                <ul className="bulk-import-errors">
-                  {result.errors.map((err, i) => (
-                    <li key={i} className="field-error">
-                      {err.line !== null ? `line ${err.line}: ` : ""}
-                      {err.message}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <main className="screen">
+      <Link to="/library" className="back-link">
+        ← BACK
+      </Link>
+      <h1 className="screen-title">Import</h1>
+      <div className="bulk-import-panel">
+        <textarea
+          className="bulk-import-textarea"
+          aria-label="Bulk import text"
+          placeholder="One workout per block, blank line between"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <p className="bulk-import-grammar">{GRAMMAR_HELP}</p>
+        <pre className="bulk-import-help">{GRAMMAR_EXAMPLE}</pre>
+        <button
+          type="button"
+          className="button-outline bulk-import-submit"
+          onClick={handleSubmit}
+          disabled={submitting || text.trim().length === 0}
+        >
+          Import
+        </button>
+        {submitError && <p className="field-error">{submitError}</p>}
+        {result && (
+          <div className="bulk-import-result" role="alert">
+            <p className="mono-status">{result.created.length} created</p>
+            {result.errors.length > 0 && (
+              <ul className="bulk-import-errors">
+                {result.errors.map((err, i) => (
+                  <li key={i} className="field-error">
+                    {err.line !== null ? `line ${err.line}: ` : ""}
+                    {err.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+    </main>
   );
 }
