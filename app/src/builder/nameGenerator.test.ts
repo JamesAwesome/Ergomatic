@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { NAME_POOL_SIZE, generateName } from "./nameGenerator";
+import { STARTER_WORKOUTS } from "../../server/seed/starter";
 
 describe("generateName", () => {
   it("offers a pool large enough that collisions are rare", () => {
@@ -65,5 +66,24 @@ describe("generateName", () => {
     );
     const existing = [...pool, ...allNumberedFallbacks];
     expect(generateName(existing, 0)).toBe(base.slice(0, 80));
+  });
+
+  it("gives a different name on each press against the real starter library", () => {
+    // Regression: the generator probed linearly forward from a seed-derived
+    // start index. Its noun list opens with the same weather words the starter
+    // library uses, so every seed inside that taken cluster slid to the same
+    // first-free slot and repeated presses returned "Riptide" forever. Every
+    // prior test used an empty or one-name library, so this was invisible.
+    const titles = STARTER_WORKOUTS.map((w) => w.title);
+    const picks = [0, 1, 2, 3].map((seed) => generateName(titles, seed));
+    expect(new Set(picks).size).toBe(4);
+  });
+
+  it("never returns a name the library already has", () => {
+    const titles = STARTER_WORKOUTS.map((w) => w.title);
+    const taken = new Set(titles.map((t) => t.toLowerCase()));
+    for (let seed = 0; seed < 50; seed++) {
+      expect(taken.has(generateName(titles, seed).toLowerCase())).toBe(false);
+    }
   });
 });
