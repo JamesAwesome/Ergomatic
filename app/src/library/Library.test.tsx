@@ -69,6 +69,20 @@ beforeEach(() => {
 });
 
 describe("Library", () => {
+  it("shows an IMPORT link beside + NEW so bulk-paste no longer hides inside the builder", async () => {
+    mockReady();
+    await renderLibrary();
+
+    expect(screen.getByRole("link", { name: "IMPORT" })).toHaveAttribute(
+      "href",
+      "/library/import",
+    );
+    expect(screen.getByRole("link", { name: "+ NEW" })).toHaveAttribute(
+      "href",
+      "/library/new",
+    );
+  });
+
   it("renders every row's bare title and estimated duration, with no numeric prefix", async () => {
     mockReady();
     await renderLibrary();

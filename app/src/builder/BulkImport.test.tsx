@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import type { api } from "../api";
 
 // Typed against the real `api` signature so `.mock.calls[0]` carries the
@@ -14,7 +15,11 @@ function mockApi(handler: () => Response) {
 
 async function renderBulkImport(onImported: () => void = vi.fn()) {
   const { default: BulkImport } = await import("./BulkImport");
-  render(<BulkImport onImported={onImported} />);
+  render(
+    <MemoryRouter>
+      <BulkImport onImported={onImported} />
+    </MemoryRouter>,
+  );
 }
 
 beforeEach(() => {
@@ -22,23 +27,31 @@ beforeEach(() => {
 });
 
 describe("BulkImport", () => {
-  it("hides the panel until + PASTE TO BULK IMPORT is pressed, then reveals the textarea with its placeholder", async () => {
+  it("renders as its own screen with a heading, a back link to the library, and the textarea already visible", async () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBulkImport();
 
-    expect(
-      screen.queryByPlaceholderText(
-        "One workout per block, blank line between",
-      ),
-    ).not.toBeInTheDocument();
-
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
+    expect(screen.getByRole("heading", { name: "Import" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+      "href",
+      "/library",
     );
-
+    // No reveal toggle any more — the textarea is on screen immediately.
+    expect(
+      screen.queryByRole("button", { name: /BULK IMPORT/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("One workout per block, blank line between"),
     ).toBeInTheDocument();
+  });
+
+  it("documents the now-optional leading number in the grammar help", async () => {
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBulkImport();
+
+    expect(document.body.textContent).toMatch(
+      /title \| TYPE \| difficulty \| pain/,
+    );
   });
 
   it("posts the raw pasted text to /api/workouts/bulk", async () => {
@@ -50,10 +63,7 @@ describe("BulkImport", () => {
     );
     await renderBulkImport();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
-    const pasted = "12 | Ladder Day | AT | medium | 3\nwu 10\nw 1' 6k-2 @22 r5";
+    const pasted = "Ladder Day | AT | medium | 3\nwu 10\nw 1' 6k-2 @22 r5";
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       pasted,
@@ -81,9 +91,6 @@ describe("BulkImport", () => {
     );
     await renderBulkImport(onImported);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       "irrelevant, server owns parsing",
@@ -114,9 +121,6 @@ describe("BulkImport", () => {
     );
     await renderBulkImport(onImported);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       "irrelevant, server owns parsing",
@@ -139,9 +143,6 @@ describe("BulkImport", () => {
     );
     await renderBulkImport(onImported);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       "irrelevant, server owns parsing",
@@ -161,9 +162,6 @@ describe("BulkImport", () => {
     );
     await renderBulkImport();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       "irrelevant, server owns parsing",
@@ -178,9 +176,6 @@ describe("BulkImport", () => {
     mockApi(() => new Response(null, { status: 413 }));
     await renderBulkImport(onImported);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       "a paste too large for the server to accept",
@@ -202,9 +197,6 @@ describe("BulkImport", () => {
     vi.doMock("../api", () => ({ api: fn }));
     await renderBulkImport(onImported);
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       "irrelevant, connection drops before a response arrives",
@@ -231,9 +223,6 @@ describe("BulkImport", () => {
     );
     await renderBulkImport();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "+ PASTE TO BULK IMPORT" }),
-    );
     await userEvent.type(
       screen.getByPlaceholderText("One workout per block, blank line between"),
       "irrelevant, server owns parsing",
