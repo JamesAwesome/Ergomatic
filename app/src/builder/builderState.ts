@@ -109,17 +109,143 @@ export function spanStartIndex(f: BuilderForm): number {
 }
 
 /** Deep-copies every field of the row named `id` and inserts the copy
- *  immediately after the original, with a fresh id. Returns `f` unchanged
- *  if `id` isn't found (defensive — every real caller passes an id it just
- *  read off `f.rows`). */
-export function cloneRow(f: BuilderForm, id: string): BuilderForm {
+ *  immediately after the original, with a fresh id — returned alongside the
+ *  form so a caller (e.g. the accordion's collapsed `⧉` / expanded
+ *  `DUPLICATE` controls) can open the copy for editing without having to
+ *  re-derive its id from the returned form. Returns `{ form: f, id }`
+ *  (the same `id` that was passed in) unchanged if `id` isn't found
+ *  (defensive — every real caller passes an id it just read off `f.rows`);
+ *  a caller can detect "nothing was cloned" by checking whether the
+ *  returned id is still the one it passed in. */
+export function cloneRow(
+  f: BuilderForm,
+  id: string,
+): { form: BuilderForm; id: string } {
   const index = f.rows.findIndex((r) => r.id === id);
-  if (index === -1) return f;
+  if (index === -1) return { form: f, id };
 
   const clone: BuilderRow = { ...f.rows[index]!, id: nextRowId() };
   const rows = [...f.rows];
   rows.splice(index + 1, 0, clone);
-  return { ...f, rows };
+  return { form: { ...f, rows }, id: clone.id };
+}
+
+// The stepper's own grid: rest displays and edits in 30-second increments,
+// clamped 0..900s (15 minutes) — well inside the domain's 0.5..60-minute
+// half-step bound, so every value this grid can produce is a legal
+// `restMinutes`. The stored field is ALWAYS minutes (`BuilderRow.rest`,
+// `domain/validate.ts`'s `restMinutes`) — these two bridge functions are the
+// only place that ever multiplies/divides by 60, specifically so a future
+// caller can't accidentally read/write seconds into `row.rest` by hand.
+export const REST_STEP_SECONDS = 30;
+export const REST_MAX_SECONDS = 900;
+
+/** `row.rest` (minutes, e.g. "1.5") as whole seconds for the stepper —
+ *  `""` reads as 0 ("no rest"), matching how `toSteps` treats a blank rest
+ *  field. Rounds rather than truncates so a hand-edited or imported minutes
+ *  value that isn't an exact half-step (e.g. from a future looser import
+ *  path) still lands on the nearest whole second instead of drifting down. */
+export function restSecondsFromRow(row: BuilderRow): number {
+  const trimmed = row.rest.trim();
+  return trimmed === "" ? 0 : Math.round(Number(trimmed) * 60);
+}
+
+/** Writes a stepper-produced seconds value back into `row.rest` as MINUTES
+ *  — never seconds. Clamps to `0..REST_MAX_SECONDS` and snaps to the
+ *  nearest `REST_STEP_SECONDS` multiple first, so every value this can ever
+ *  write lands exactly on the domain's 0.5-minute half-step grid (see the
+ *  property test in builderState.test.ts that walks the whole reachable
+ *  range and asserts this). Zero seconds clears the field to `""` rather
+ *  than storing the literal string "0", matching how a blank rest field
+ *  already means "no rest" everywhere else in this module. */
+export function rowWithRestSeconds(
+  row: BuilderRow,
+  seconds: number,
+): BuilderRow {
+  const clamped = Math.min(REST_MAX_SECONDS, Math.max(0, seconds));
+  const snapped = Math.round(clamped / REST_STEP_SECONDS) * REST_STEP_SECONDS;
+  return { ...row, rest: snapped === 0 ? "" : String(snapped / 60) };
+}
+
+/** `m:ss` for a seconds value, or `"NONE"` at zero — the accordion's REST
+ *  stepper value cell and the expanded editor's REST row both read this
+ *  directly (design doc §4b row 5). */
+export function fmtRestSeconds(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return seconds === 0 ? "NONE" : `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// U+2212 MINUS SIGN (not the ASCII hyphen) for a negative offset, matching
+// PaceRefInput.tsx's own convention — but unlike that control, the
+// collapsed summary line always shows a sign, including a zero offset as
+// `±0`, so a step reads as "explicitly at pace" rather than looking like
+// the offset field was left blank.
+function fmtSignedOffset(off: number): string {
+  if (off === 0) return "±0";
+  return off > 0 ? `+${off}` : `−${Math.abs(off)}`;
+}
+
+/** Line 1 of the collapsed accordion card (design doc §4a): `20′ @ 6k +10`
+ *  for a minutes row, `2000 m @ 2k ±0` for a metres row. Only ever called
+ *  on `w` rows in practice (the accordion redesign collapses `w` rows;
+ *  `wu`/`r` rows have no pace ref to summarise this way), but reads
+ *  whatever `durUnit`/`refBase`/`refOff` the row actually carries either
+ *  way. */
+export function stepSummary(row: BuilderRow): string {
+  const dur = row.durUnit === "min" ? `${row.durValue}′` : `${row.durValue} m`;
+  return `${dur} @ ${row.refBase} ${fmtSignedOffset(row.refOff)}`;
+}
+
+/** Line 2 of the collapsed accordion card (design doc §4a): `20 spm ·
+ *  rest 1:30`. The spm term is omitted entirely (not shown as "FREE spm")
+ *  when spm is blank, and rest reads `rest none` at zero — both match the
+ *  expanded editor's own "FREE"/"NONE" empty-state conventions, just
+ *  lowercased to read as prose in a summary line rather than a field
+ *  value. */
+export function stepSubSummary(row: BuilderRow): string {
+  const seconds = restSecondsFromRow(row);
+  const restTerm =
+    seconds === 0 ? "rest none" : `rest ${fmtRestSeconds(seconds)}`;
+  const spm = row.spm.trim();
+  return spm === "" ? restTerm : `${spm} spm · ${restTerm}`;
+}
+
+// Indexed `pain - 1` (pain is 1..5, see toSteps' isInt(f.pain, 1, 5) check)
+// — the accordion redesign's pain control shows this word instead of (or
+// alongside) the bare 1..5 number.
+export const PAIN_WORDS: readonly string[] = [
+  "EASY BREATH",
+  "COMFORTABLE",
+  "WORKING",
+  "HURTS",
+  "BRUTAL",
+];
+
+/** Appends a copy of the last row's values (design doc's "+ ADD STEP"
+ *  behaviour: "appends a copy of the last step's values … or a default …
+ *  when the list is empty") and returns the new row's id so the caller can
+ *  open it for editing immediately — the accordion always opens a freshly
+ *  added step rather than leaving it collapsed. The empty-list default (`5`
+ *  MIN / `6k` ±0 / spm `22` / rest `1` minute = 60s) matches `newRow("w")`'s
+ *  own pace-reference default (6k, no offset) plus the values design review
+ *  settled on for a first step's duration/cadence/rest. */
+export function addStepLike(f: BuilderForm): { form: BuilderForm; id: string } {
+  if (f.rows.length === 0) {
+    const row: BuilderRow = {
+      ...newRow("w"),
+      durValue: "5",
+      durUnit: "min",
+      refBase: "6k",
+      refOff: 0,
+      spm: "22",
+      rest: "1",
+    };
+    return { form: { ...f, rows: [row] }, id: row.id };
+  }
+
+  const row: BuilderRow = { ...f.rows[f.rows.length - 1]!, id: nextRowId() };
+  return { form: { ...f, rows: [...f.rows, row] }, id: row.id };
 }
 
 export function setReps(f: BuilderForm, reps: number): BuilderForm {
