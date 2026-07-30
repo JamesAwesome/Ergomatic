@@ -27,35 +27,11 @@
   --on-color: #fffdf7;
   --pain-empty: #e0dacb;
 
-  /* Pain ramp (1 calm → 5 max) — a deliberate palette extension, see
-     docs/design/DEVIATIONS.md. Measured against --surface/--page: 5.84/5.26,
-     4.48/4.04, 4.31/3.88, 5.22/4.70, 5.94/5.35 — all clear the 3:1 floor
-     WCAG 1.4.11 sets for meaningful graphics. Adjacent steps differ in hue
-     rather than luminance, so the numeral and the mouth curve each carry the
-     meaning independently (WCAG 1.4.1). */
-  --pain-1: #4f6b4a;
-  --pain-2: #6d7c3f;
-  --pain-3: #94742a;
-  --pain-4: #a85423;
-  --pain-5: #b5341f;
-
-  /* Selected pain-picker-cell fill (Task 6, docs/design/DEVIATIONS.md):
-     each --pain-N mixed with 10% --ink so the tint clears both floors even
-     at the ramp's tightest step. Computed, not eyeballed — fill/--page and
-     --on-color-text/fill: 5.88/6.53, 4.62/5.13, 4.45/4.94, 5.33/5.92,
-     6.04/6.70 (>= the 3:1 / 4.5:1 WCAG floors with margin to spare). */
-  --pain-1-fill: #4a6345;
-  --pain-2-fill: #65723b;
-  --pain-3-fill: #886b28;
-  --pain-4-fill: #9a4e22;
-  --pain-5-fill: #a6311e;
-
-  /* Classification-card pain ramp (Task 4,
-     docs/design/builder-redesign/README.md §3) — the redesign's own hex
-     values, distinct from --pain-N/-N-fill above (which stay PainPicker.tsx's,
-     still imported by Builder.tsx). Named per the brief rather than reusing
-     --pain-N, since the two ramps' hexes disagree and PainPicker.tsx's
-     consumer can't be repointed without breaking it.
+  /* Classification-card pain ramp (docs/design/builder-redesign/README.md
+     §3) — the sole pain palette left after Phase 5E Task 5 retired
+     PainPicker.tsx (deleted; its own --pain-N/--pain-N-fill family, the
+     face-illustration ramp, went with it — nothing else ever referenced
+     those tokens). ClassificationCard.tsx is the only remaining consumer.
      Computed (not eyeballed) contrast of on-color text (#fffdf7) against
      each fill: ramp-1 5.68:1, ramp-2 5.09:1, ramp-3 5.53:1, ramp-4 5.85:1,
      ramp-5 5.94:1 — all clear the 4.5:1 WCAG AA floor. ramp-2 (#6e7040) is

@@ -35,12 +35,13 @@ type PainLevel = (typeof PAIN_LEVELS)[number];
 
 // Selected pain-cell fill var per level — the handoff's pain ramp
 // (docs/design/builder-redesign/README.md §3), added to tokens.css as its
-// own named properties. Deliberately NOT the pre-existing --pain-N /
-// --pain-N-fill tokens: those belong to PainPicker.tsx, whose five-face
-// radiogroup is still imported by Builder.tsx today (grepped before writing
-// this file — Phase 6's log screen was also expected to reuse it), so this
-// card can't repoint them at the handoff's different hex values without
-// breaking that still-live consumer.
+// own named properties. Originally kept distinct from PainPicker.tsx's own
+// --pain-N/--pain-N-fill tokens (the two ramps' hexes disagreed and
+// PainPicker was still Builder.tsx's live consumer at the time this file
+// was written) — Phase 5E Task 5 wired this card into Builder.tsx in
+// PainPicker's place and deleted PainPicker.tsx/its tokens entirely (grepped
+// first: nothing else, including Phase 6's not-yet-built log screen,
+// imported it), leaving --pain-ramp-N as the sole surviving pain palette.
 const PAIN_RAMP_VAR: Record<PainLevel, string> = {
   1: "--pain-ramp-1",
   2: "--pain-ramp-2",

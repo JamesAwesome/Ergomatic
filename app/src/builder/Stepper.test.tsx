@@ -107,4 +107,61 @@ describe("Stepper", () => {
       "stepper-value-muted",
     );
   });
+
+  // Phase 5E Task 5, fix-wave item 4: SPM/REST used to anchor their
+  // save-time error to a role-less wrapping <div aria-invalid> in
+  // StepEditor.tsx — a failed Save's `.focus()` landed on a target nothing
+  // announced. Stepper now carries its own real `role="group"`, the same
+  // way PaceRefInput already anchors to a real `role="radiogroup"`, so
+  // `invalid`/`errorId` land on a properly-announced target.
+  it("wires invalid/errorId onto its own role=group, named from the same label the buttons use", () => {
+    render(
+      <Stepper
+        label="Row 1 rest"
+        value="NONE"
+        onDecrement={vi.fn()}
+        onIncrement={vi.fn()}
+        invalid
+        errorId="row-1-rest-error"
+      />,
+    );
+    const group = screen.getByRole("group", { name: "Row 1 rest" });
+    expect(group).toHaveAttribute("aria-invalid", "true");
+    expect(group).toHaveAttribute("aria-describedby", "row-1-rest-error");
+  });
+
+  it("defaults aria-invalid to false and omits aria-describedby when no error is given", () => {
+    render(
+      <Stepper
+        label="SPM"
+        value="20"
+        onDecrement={vi.fn()}
+        onIncrement={vi.fn()}
+      />,
+    );
+    const group = screen.getByRole("group", { name: "SPM" });
+    expect(group).toHaveAttribute("aria-invalid", "false");
+    expect(group).not.toHaveAttribute("aria-describedby");
+  });
+
+  // Exposes the group element itself (not either button) — what makes it
+  // possible for a caller's fieldRefs map to `.focus()` this control at all,
+  // since a bare role="group" div isn't natively focusable.
+  it("exposes its own group element via registerRef, and makes it focusable", () => {
+    const registerRef = vi.fn();
+    render(
+      <Stepper
+        label="Row 1 rest"
+        value="NONE"
+        onDecrement={vi.fn()}
+        onIncrement={vi.fn()}
+        registerRef={registerRef}
+      />,
+    );
+    const group = screen.getByRole("group", { name: "Row 1 rest" });
+    expect(registerRef).toHaveBeenCalledWith(group);
+    expect(group).toHaveAttribute("tabIndex", "-1");
+    group.focus();
+    expect(document.activeElement).toBe(group);
+  });
 });

@@ -4,16 +4,11 @@ import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
 import { useWorkouts } from "../api/useWorkouts";
-import PainPicker from "../components/PainPicker";
 import { resolveSplit, toleranceRange } from "../../domain/pace.js";
-import type {
-  Baselines,
-  Difficulty,
-  PaceRef,
-  WorkoutType,
-} from "../../domain/types.js";
+import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
+import ClassificationCard from "./ClassificationCard";
 import {
-  addRow,
+  addStepLike,
   cloneRow,
   newForm,
   removeRow,
@@ -25,15 +20,15 @@ import {
   type BuilderRow,
 } from "./builderState";
 import { generateName } from "./nameGenerator";
+import StepCard from "./StepCard";
 import StepEditor from "./StepEditor";
+import Stepper from "./Stepper";
 
 type RowField = "dur" | "ref" | "spm" | "rest";
 
 // Resolves a work row's live TARGET string, or null when baselines aren't
-// set yet — StepEditor.tsx does no pace math of its own (same convention as
-// StepCard.tsx's splitLabel), so this is the one place Builder computes it.
-// No nudge here — nudging a target is a per-run timer concept
-// (WorkoutDetail), not something a not-yet-saved workout has yet.
+// set yet — StepEditor.tsx/StepCard.tsx do no pace math of their own, so
+// this is the one place Builder computes it.
 function splitLabelFor(
   row: BuilderRow,
   baselines: Baselines | null,
@@ -51,31 +46,16 @@ export interface BuilderEditMode {
   initial: BuilderForm;
 }
 
-// Chip order per docs/design/README.md §Screens → "2. Library" (AN before
-// O2 — not alphabetical), matching src/library/FilterChips.tsx.
-const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
-  { type: "AN", label: "AN" },
-  { type: "O2", label: "O2" },
-  { type: "AT", label: "AT" },
-  { type: "TR", label: "TR" },
-];
-
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept
 // local rather than importing from TypeBadge.tsx, which doesn't export it.
+// This is also the accordion's left-marker colour source for whichever row
+// is expanded (design doc §4: "left marker: the current TYPE colour").
 const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   O2: "--type-o2",
   AT: "--type-at",
   AN: "--type-an",
   TR: "--type-tr",
 };
-
-// Difficulty reads EASY/MEDIUM/HARD (docs/design/DEVIATIONS.md), not the
-// handoff's Introductory/Moderate/Advanced.
-const DIFFICULTY_CHIPS: { value: Difficulty; label: string }[] = [
-  { value: "easy", label: "EASY" },
-  { value: "medium", label: "MEDIUM" },
-  { value: "hard", label: "HARD" },
-];
 
 // Duplicated from WorkoutDetail.tsx rather than extracted to a shared
 // module — out of scope for this screen. Reads the settings custom
@@ -98,6 +78,19 @@ function fmtMinutes(minutes: number): string {
   return `${mm}:${String(ss).padStart(2, "0")}`;
 }
 
+// Section header count (design doc §4: "STEPS" / "2 STEPS", singular
+// "1 STEP") and the repeat card's own step count both need the same
+// singular/plural grammar — kept as one helper so the two can't drift.
+function pluralStep(n: number): string {
+  return `${n} step${n === 1 ? "" : "s"}`;
+}
+
+// Only a row-scoped error key (`row:<id>:<field>`) needs its owning card
+// expanded before a failed Save can focus it — `title`/`pain` are always
+// visible regardless of the accordion state. Matched against the same four
+// fields `toSteps` ever keys an error under (see `RowField` above).
+const ROW_ERROR_KEY = /^row:(.+):(?:dur|ref|spm|rest)$/;
+
 export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const baselinesState = useBaselines();
   const workoutsState = useWorkouts();
@@ -105,23 +98,29 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const navigate = useNavigate();
 
   const [form, setForm] = useState<BuilderForm>(mode?.initial ?? newForm());
+  // At most one row expanded at a time (design doc's "Interactions &
+  // behaviour": `editing = rowId | null`). A brand-new workout opens its one
+  // default row immediately — there's nothing to scan yet, only something to
+  // fill in, the same reasoning "+ ADD STEP" uses to open what it appends.
+  // Opening an existing (edit-mode) workout leaves everything collapsed —
+  // reviewing six already-authored steps is exactly the wall-of-inputs
+  // problem this accordion exists to fix.
+  const [editing, setEditing] = useState<string | null>(() =>
+    mode ? null : (form.rows[0]?.id ?? null),
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [tolerance] = useState(readPaceTolerance);
-  // Bumped on every 🎲 press so repeated presses cycle through the name
-  // pool instead of re-offering the same candidate — generateName is pure,
-  // so without this the button would be a no-op after the first click.
+  // Bumped on every AUTO NAME press so repeated presses cycle through the
+  // name pool instead of re-offering the same candidate — generateName is
+  // pure, so without this the button would be a no-op after the first click.
   const [nameSeed, setNameSeed] = useState(0);
 
   // `row:<id>:<field>` / bare form-field name -> the control's DOM element,
   // the exact keys `toSteps` returns in its `errors` object. Lets a failed
-  // Save focus the first invalid control even when it's scrolled off-screen
-  // (the reported bug: pressing Save did nothing visible when the invalid
-  // field wasn't in view). `pain` registers its `tabIndex={-1}` wrapper div
-  // (PainPicker itself has no single focusable root — it's a radiogroup of
-  // five cells), same trick `PainPickerField` below borrows from
-  // StepEditor's `.step-editor-pace` wrapper around PaceRefInput.
+  // Save focus the first invalid control even when its card is collapsed
+  // (`handleSave` expands the owning row first) or scrolled off-screen.
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
 
   if (baselinesState.state === "loading") {
@@ -161,8 +160,11 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const spanStart = spanStartIndex(form);
   const rowsInSet = form.rows.length - spanStart;
   const totalsResult = totals(form, baselines);
-  // Empty while loading/erroring rather than blocking the screen on it — the
-  // 🎲 is a nicety, not something worth gating the whole builder on. Worst
+  const repeatSubLine = totalsResult
+    ? `${pluralStep(rowsInSet)} · ${fmtMinutes(totalsResult.perSet)} per set`
+    : pluralStep(rowsInSet);
+  // Empty while loading/erroring rather than blocking the screen on it — AUTO
+  // NAME is a nicety, not something worth gating the whole builder on. Worst
   // case (loading not yet resolved) is a suggested name that happens to
   // collide with a title already in the library, same as if the user typed
   // it by hand.
@@ -175,6 +177,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   // so its key count and "how many fields need attention" are the same
   // number by construction.
   const invalidFieldCount = Object.keys(errors).length;
+  const typeColorVar = TYPE_COLOR_VAR[form.type];
 
   function updateRow(id: string, patch: Partial<BuilderForm["rows"][number]>) {
     setForm((f) => ({
@@ -183,35 +186,48 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
     }));
   }
 
-  // The SET cell's replacement (Phase 5D Task 4): duplicates row `id`
-  // directly beneath itself via `cloneRow`, then focuses the new row's
-  // duration field — the same `fieldRefs` map a failed Save uses, keyed the
-  // identical `row:<id>:dur` way. Computed from the closed-over `form`
-  // (fresh every render, like every other handler in this component) rather
-  // than a `setForm` updater callback — `cloneRow` is pure but generates a
-  // fresh row id as a side effect of being called, so calling it inside an
-  // updater (which React may invoke more than once, e.g. Strict Mode's
-  // double-invoke) risks minting an id that's thrown away.
-  //
-  // `cloneRow` now hands back the new id directly instead of leaving the
-  // caller to re-derive it from an index, and echoes `id` itself back
-  // unchanged when nothing was found to clone — comparing `clonedId === id`
-  // is how this tells "nothing happened" from "a new row was inserted"
-  // without recomputing an index here too.
-  function handleClone(id: string) {
+  function handleExpand(id: string) {
+    setEditing(id);
+  }
+
+  function handleDone() {
+    setEditing(null);
+  }
+
+  // "+ ADD STEP" (design doc §4c): appends a copy of the last step's values
+  // (or a sensible default when the list is empty — see `addStepLike`) and
+  // opens it, same as any other newly-authored step needs immediate editing
+  // rather than a summary nothing has been entered for yet.
+  function handleAddStep() {
+    const { form: next, id } = addStepLike(form);
+    setForm(next);
+    setEditing(id);
+  }
+
+  // Two duplicate entry points, different intent (design doc "Interactions &
+  // behaviour"): the collapsed card's ⧉ is the fast way to build `5×1′` —
+  // it inserts a copy directly beneath and leaves everything collapsed,
+  // never touching `editing`.
+  function handleDuplicateCollapsed(id: string) {
+    const { form: next } = cloneRow(form, id);
+    setForm(next);
+  }
+
+  // The expanded card's DUPLICATE button is duplicate-then-tweak instead —
+  // it inserts a copy directly beneath and opens the copy for editing.
+  function handleDuplicateExpanded(id: string) {
     const { form: next, id: clonedId } = cloneRow(form, id);
     setForm(next);
-    if (clonedId !== id) {
-      // Deferred past this render — the new row's DOM node, and thus its
-      // `fieldRefs` entry, doesn't exist until StepEditor mounts it.
-      // React flushes a discrete event's state update (and runs ref
-      // callbacks) synchronously before this click handler returns, so by
-      // the time the microtask queue drains, the new row is already
-      // mounted and registered.
-      queueMicrotask(() => {
-        fieldRefs.current[`row:${clonedId}:dur`]?.focus();
-      });
-    }
+    setEditing(clonedId);
+  }
+
+  // Available from both collapsed and expanded states; only closes the
+  // editor when the row it removes is the one currently open — deleting a
+  // collapsed row while a *different* row is expanded must leave that other
+  // row open.
+  function handleDeleteRow(id: string) {
+    setForm((f) => removeRow(f, id));
+    setEditing((current) => (current === id ? null : current));
   }
 
   function handleGenerateName() {
@@ -229,16 +245,34 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       // (see its own return statement), so there's always a first key here
       // — no "no errors at all" case to fall back from.
       const [firstKey] = Object.keys(result.errors);
-      const target = fieldRefs.current[firstKey!];
-      if (target) {
-        target.focus();
-        // jsdom doesn't implement scrollIntoView at all (unlike the rest of
-        // this guard's namesakes, which are stubbed no-ops there) — guard
-        // the call so tests exercising this path don't throw.
-        if (typeof target.scrollIntoView === "function") {
-          target.scrollIntoView({ block: "center" });
-        }
+      // The trap this task's brief calls out by name: if the first invalid
+      // field lives on a row that's currently collapsed, focusing it does
+      // nothing visible — the original "Save appears to do nothing" bug,
+      // back in a new form. Expand that row's card before focusing.
+      const rowMatch = ROW_ERROR_KEY.exec(firstKey!);
+      if (rowMatch) {
+        setEditing(rowMatch[1]!);
       }
+      // Deferred past this render — a just-expanded row's fields (and thus
+      // their `fieldRefs` entries) don't exist until StepEditor mounts them.
+      // React flushes a discrete event's state update synchronously before
+      // this handler returns, so by the time the microtask queue drains, the
+      // newly-expanded row is already mounted and registered. `title`/`pain`
+      // are always mounted regardless of `editing`, so deferring their focus
+      // here too is harmless — same microtask-focus idiom `handleClone` (see
+      // `handleDuplicateExpanded`'s sibling in earlier phases) established.
+      queueMicrotask(() => {
+        const target = fieldRefs.current[firstKey!];
+        if (target) {
+          target.focus();
+          // jsdom doesn't implement scrollIntoView at all (unlike the rest of
+          // this guard's namesakes, which are stubbed no-ops there) — guard
+          // the call so tests exercising this path don't throw.
+          if (typeof target.scrollIntoView === "function") {
+            target.scrollIntoView({ block: "center" });
+          }
+        }
+      });
       return;
     }
     setErrors({});
@@ -281,247 +315,176 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   }
 
   return (
-    <main className="screen">
-      <Link to="/library" className="back-link">
-        ← BACK
-      </Link>
-      <h1 className="screen-title">{mode ? "Edit Workout" : "New Workout"}</h1>
-
-      <div className="builder-header-fields">
-        <div className="field field-title-wrap">
-          <label htmlFor="builder-title">Title</label>
-          <div className="builder-title-row">
-            <input
-              ref={(el) => {
-                fieldRefs.current.title = el;
-              }}
-              id="builder-title"
-              className="builder-title-input"
-              aria-label="Title"
-              aria-invalid={Boolean(errors.title)}
-              aria-describedby={
-                errors.title ? "builder-title-error" : undefined
-              }
-              value={form.title}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, title: e.target.value }))
-              }
-            />
-            <button
-              type="button"
-              className="builder-dice"
-              aria-label="Suggest a name"
-              onClick={handleGenerateName}
-            >
-              🎲
-            </button>
-          </div>
-          {errors.title && (
-            <p id="builder-title-error" className="field-error">
-              {errors.title}
-            </p>
-          )}
-        </div>
+    <main className="screen builder-screen">
+      <div className="builder-header">
+        <Link to="/library" className="back-link">
+          ← BACK
+        </Link>
+        <h1 className="screen-title">
+          {mode ? "Edit Workout" : "New workout"}
+        </h1>
       </div>
 
-      <p className="section-heading">TYPE</p>
-      <div className="chip-wrap">
-        {TYPE_CHIPS.map(({ type, label }) => {
-          const active = form.type === type;
-          return (
-            <button
-              key={type}
-              type="button"
-              className="chip"
-              aria-pressed={active}
-              style={
-                active
-                  ? {
-                      background: `var(${TYPE_COLOR_VAR[type]})`,
-                      color: "var(--on-color)",
-                      border: "none",
-                    }
-                  : undefined
-              }
-              onClick={() => setForm((f) => ({ ...f, type }))}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      <p className="section-heading">DIFFICULTY</p>
-      <div className="chip-wrap">
-        {DIFFICULTY_CHIPS.map(({ value, label }) => (
-          <button
-            key={value}
-            type="button"
-            className="chip"
-            aria-pressed={form.difficulty === value}
-            onClick={() => setForm((f) => ({ ...f, difficulty: value }))}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <p className="section-heading">EXPECTED PAIN</p>
-      <PainPickerField
-        pain={form.pain}
-        error={errors.pain}
-        onChange={(pain) => setForm((f) => ({ ...f, pain }))}
-        registerRef={(el) => {
-          fieldRefs.current.pain = el;
-        }}
-      />
-
-      {/* Every row renders permanently expanded via StepEditor.tsx for now
-          — the accordion (`editing: rowId | null`, StepCard.tsx for every
-          collapsed row) is Task 5's "assemble the screen" job. This is the
-          minimal swap needed to keep the builder compiling once
-          StepRowEditor.tsx (this task's replaced component) is gone; Task 5
-          renders StepCard for every row except whichever one is `editing`. */}
-      <div className="builder-rows">
-        {form.rows.map((row, index) => (
-          <StepEditor
-            key={row.id}
-            row={row}
-            index={index}
-            splitLabel={
-              row.kind === "w" ? splitLabelFor(row, baselines, tolerance) : null
-            }
-            onChange={(patch) => updateRow(row.id, patch)}
-            onDuplicate={() => handleClone(row.id)}
-            onDelete={() => setForm((f) => removeRow(f, row.id))}
-            onDone={() => {}}
-            fieldError={(field: RowField) => errors[`row:${row.id}:${field}`]}
-            registerRef={(field: RowField, el) => {
-              fieldRefs.current[`row:${row.id}:${field}`] = el;
+      <div>
+        <div className="builder-title-row">
+          <input
+            ref={(el) => {
+              fieldRefs.current.title = el;
             }}
+            className="builder-title-input"
+            placeholder="Title"
+            aria-label="Title"
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={errors.title ? "builder-title-error" : undefined}
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
           />
-        ))}
+          <button
+            type="button"
+            className="builder-auto-name"
+            onClick={handleGenerateName}
+          >
+            ↻ AUTO NAME
+          </button>
+        </div>
+        {errors.title && (
+          <p id="builder-title-error" className="field-error">
+            {errors.title}
+          </p>
+        )}
       </div>
-      {errors.steps && <p className="field-error">{errors.steps}</p>}
 
-      {/* No "+ WARM-UP" any more (Phase 5D Task 4): warm-up leaves the
-          workout entirely for a preference read at session time (Task 5),
-          rather than being authored per workout. `addRow(f, "wu")` and
-          StepEditor's `isWork`-only render branch both stay, though —
-          bulk import and edit-mode `fromWorkout` can still produce a stored
-          warm-up step, and a pasted or starter workout that already has one
-          has to stay editable (its row just isn't reachable by a create-mode
-          button any more, only via clone or an existing wu row's own DUR).
-          There is likewise no "+ REST" any more: rest is authored via a
-          work row's own REST (OPT) field. `addRow(f, "r")` and
-          StepEditor's `isWork`-only render branch both stay for the
-          same bulk-import/edit-mode reason. See docs/design/DEVIATIONS.md. */}
-      <div className="builder-add-row-group">
+      <div>
+        <div
+          className="builder-classification-wrap"
+          tabIndex={-1}
+          ref={(el) => {
+            fieldRefs.current.pain = el;
+          }}
+        >
+          <ClassificationCard
+            type={form.type}
+            difficulty={form.difficulty}
+            pain={form.pain}
+            onTypeChange={(type) => setForm((f) => ({ ...f, type }))}
+            onDifficultyChange={(difficulty) =>
+              setForm((f) => ({ ...f, difficulty }))
+            }
+            onPainChange={(pain) => setForm((f) => ({ ...f, pain }))}
+          />
+        </div>
+        {errors.pain && <p className="field-error">{errors.pain}</p>}
+      </div>
+
+      <div className="builder-steps">
+        <div className="builder-steps-header">
+          <span>STEPS</span>
+          <span>{pluralStep(form.rows.length).toUpperCase()}</span>
+        </div>
+        <div className="builder-step-list">
+          {form.rows.map((row, index) => {
+            const splitLabel =
+              row.kind === "w"
+                ? splitLabelFor(row, baselines, tolerance)
+                : null;
+            return row.id === editing ? (
+              <StepEditor
+                key={row.id}
+                row={row}
+                index={index}
+                splitLabel={splitLabel}
+                typeColorVar={typeColorVar}
+                onChange={(patch) => updateRow(row.id, patch)}
+                onDuplicate={() => handleDuplicateExpanded(row.id)}
+                onDelete={() => handleDeleteRow(row.id)}
+                onDone={handleDone}
+                fieldError={(field: RowField) =>
+                  errors[`row:${row.id}:${field}`]
+                }
+                registerRef={(field: RowField, el) => {
+                  fieldRefs.current[`row:${row.id}:${field}`] = el;
+                }}
+              />
+            ) : (
+              <StepCard
+                key={row.id}
+                index={index}
+                row={row}
+                splitLabel={splitLabel}
+                typeColorVar={typeColorVar}
+                onExpand={() => handleExpand(row.id)}
+                onDuplicate={() => handleDuplicateCollapsed(row.id)}
+                onDelete={() => handleDeleteRow(row.id)}
+              />
+            );
+          })}
+        </div>
+        {errors.steps && <p className="field-error">{errors.steps}</p>}
         <button
           type="button"
-          className="builder-add-row"
-          onClick={() => setForm((f) => addRow(f, "w"))}
+          className="builder-add-step"
+          onClick={handleAddStep}
         >
-          + ADD ROW
+          + ADD STEP
         </button>
       </div>
 
-      <p className="section-heading">REPEAT (OPTIONAL)</p>
-      <div className="builder-repeat">
-        <button
-          type="button"
-          className="baseline-stepper"
-          aria-label="Fewer reps"
-          onClick={() => setForm((f) => setReps(f, f.reps - 1))}
-        >
-          −
-        </button>
-        <span className="builder-reps-count">×{form.reps}</span>
-        <button
-          type="button"
-          className="baseline-stepper"
-          aria-label="More reps"
-          onClick={() => setForm((f) => setReps(f, f.reps + 1))}
-        >
-          +
-        </button>
+      <div className="builder-repeat-card">
+        <div className="builder-repeat-row">
+          <span className="builder-repeat-label">REPEAT ALL STEPS</span>
+          <Stepper
+            label="Repeat"
+            value={`×${form.reps}`}
+            valueWidth={52}
+            onDecrement={() => setForm((f) => setReps(f, f.reps - 1))}
+            onIncrement={() => setForm((f) => setReps(f, f.reps + 1))}
+          />
+        </div>
+        <p className="builder-repeat-sub">{repeatSubLine}</p>
+        {errors.reps && <p className="field-error">{errors.reps}</p>}
       </div>
-      {errors.reps && <p className="field-error">{errors.reps}</p>}
-      {rowsInSet > 0 && form.reps > 1 && (
-        <p className="mono-status builder-repeat-readout">
-          {rowsInSet} row{rowsInSet === 1 ? "" : "s"} repeat
-          {rowsInSet === 1 ? "s" : ""}
-          {totalsResult ? ` · ${fmtMinutes(totalsResult.perSet)} per set` : ""}
-        </p>
-      )}
 
-      <p className="section-heading builder-total">
-        TOTAL {totalsResult ? `${Math.round(totalsResult.total)} MIN` : "— MIN"}
-      </p>
-      {preferencesState.state === "ready" && (
-        // Context only, never authored into the workout: `toSteps` never
-        // sees this value, so changing the preference later doesn't leave
-        // any saved workout stale (Phase 6's session flow prepends the
-        // actual warm-up when a workout is started). Rendered only once the
-        // preference has actually loaded — while loading or on error this
-        // renders nothing rather than a placeholder number, since a wrong
-        // warm-up figure is worse than none.
-        <p className="mono-status builder-warmup-readout">
-          {`+ ${preferencesState.preferences.warmupMinutes}′ warm-up (from your preferences)`}
-        </p>
-      )}
+      <div className="builder-totals">
+        <div className="builder-total-row">
+          <span className="builder-total-label">TOTAL</span>
+          <span className="builder-total-value">
+            {totalsResult ? `${Math.round(totalsResult.total)} MIN` : "— MIN"}
+          </span>
+        </div>
+        {preferencesState.state === "ready" && (
+          // Context only, never authored into the workout: `toSteps` never
+          // sees this value, so changing the preference later doesn't leave
+          // any saved workout stale (Phase 6's session flow prepends the
+          // actual warm-up when a workout is started). Rendered only once the
+          // preference has actually loaded — while loading or on error this
+          // renders nothing rather than a placeholder number, since a wrong
+          // warm-up figure is worse than none.
+          <p className="builder-warmup-line">
+            {`+ ${preferencesState.preferences.warmupMinutes}′ warm-up from your preferences`}
+          </p>
+        )}
+      </div>
 
       {submitError && (
-        <p className="field-error builder-submit-error" role="alert">
+        <p className="field-error" role="alert">
           {submitError}
         </p>
       )}
 
       {invalidFieldCount > 0 && (
-        <p className="field-error builder-save-status" role="alert">
+        <p className="field-error" role="alert">
           {`${invalidFieldCount} field${invalidFieldCount === 1 ? "" : "s"} need${invalidFieldCount === 1 ? "s" : ""} attention`}
         </p>
       )}
 
       <button
         type="button"
-        className="button-primary builder-save"
+        className="builder-save"
         onClick={handleSave}
         disabled={saving}
       >
-        Save
+        Save to library
       </button>
     </main>
-  );
-}
-
-// Local rather than a top-level import from PainPicker.tsx's own module,
-// since the field also needs to render an inline validation message beneath
-// it — kept as one unit so a future reader sees the picker and its error
-// together instead of hunting for where `errors.pain` is rendered.
-function PainPickerField({
-  pain,
-  error,
-  onChange,
-  registerRef,
-}: {
-  pain: number | null;
-  error: string | undefined;
-  onChange: (n: number) => void;
-  // Registers the wrapper div below (not a PainPicker cell) as the `pain`
-  // save-focus target — see the `fieldRefs` comment in Builder(). A plain
-  // wrapper div isn't natively focusable, hence that div's own
-  // `tabIndex={-1}`: enough to accept `.focus()` without adding a stop to
-  // the page's tab order (PainPicker's five radio cells already form their
-  // own roving-tabindex group).
-  registerRef: (el: HTMLElement | null) => void;
-}) {
-  return (
-    <>
-      <div className="pain-picker-field" tabIndex={-1} ref={registerRef}>
-        <PainPicker value={pain} onChange={onChange} />
-      </div>
-      {error && <p className="field-error">{error}</p>}
-    </>
   );
 }

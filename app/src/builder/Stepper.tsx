@@ -18,10 +18,14 @@ export default function Stepper({
   onIncrement,
   valueWidth,
   valueClassName,
+  invalid,
+  errorId,
+  registerRef,
 }: {
   // Supplies the accessible names for the two buttons: `${label} down` /
-  // `${label} up`. Callers pass something field-specific ("Row 1 stroke
-  // rate", "Row 1 rest") so two steppers on the same row never collide.
+  // `${label} up`, and for the control's own `role="group"` (below).
+  // Callers pass something field-specific ("Row 1 stroke rate", "Row 1
+  // rest") so two steppers on the same row never collide.
   label: string;
   // Already formatted for display — "20", "FREE", "1:30", "NONE", "6k −2",
   // "×4". This component does no number formatting of its own.
@@ -38,6 +42,20 @@ export default function Stepper({
   // that's a display-state distinction this generic control has no opinion
   // of its own about.
   valueClassName?: string;
+  // Optional error wiring (Phase 5E Task 5, fix-wave item 4): SPM/REST used
+  // to anchor their save-time error to a role-less wrapping <div
+  // aria-invalid> in StepEditor.tsx — a failed Save's `.focus()` landed on a
+  // target nothing announced. Delegating to this control's own `role="group"`
+  // instead mirrors how PACE already anchors to PaceRefInput's real
+  // `role="radiogroup"`. Both undefined/false when the caller has no error.
+  invalid?: boolean;
+  errorId?: string;
+  // Exposes the group element itself (not either button) for a caller's
+  // fieldRefs map — same idiom as DurationInput/PaceRefInput's own
+  // registerRef props, and what makes the group focusable at all
+  // (`tabIndex={-1}` below; a bare `role="group"` div isn't natively
+  // focusable).
+  registerRef?: (el: HTMLDivElement | null) => void;
 }) {
   const fixedWidth = typeof valueWidth === "number" ? valueWidth : undefined;
   const valueStyle =
@@ -49,7 +67,15 @@ export default function Stepper({
     : "stepper-value";
 
   return (
-    <div className="stepper">
+    <div
+      className="stepper"
+      role="group"
+      aria-label={label}
+      aria-invalid={Boolean(invalid)}
+      aria-describedby={errorId}
+      tabIndex={-1}
+      ref={registerRef}
+    >
       <button
         type="button"
         className="stepper-btn"
