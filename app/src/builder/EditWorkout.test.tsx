@@ -142,6 +142,5 @@ describe("EditWorkout", () => {
       screen.getByRole("heading", { name: "Edit Workout" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Ladder Sets");
-    expect(screen.getByLabelText("Workout number")).toHaveValue("12");
   });
 });

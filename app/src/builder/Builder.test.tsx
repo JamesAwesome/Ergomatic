@@ -34,15 +34,19 @@ async function renderBuilder() {
   );
 }
 
-// Fills in every field required for `toSteps` to succeed: num, title, pain,
-// and one work row's duration + pace ref. Shared by the save-success and
+// Fills in every field required for `toSteps` to succeed: title, pain, and
+// one work row's duration + pace ref. Shared by the save-success and
 // 409-conflict tests so both start from an identically valid form.
 async function fillValidForm() {
-  await userEvent.type(screen.getByLabelText("Workout number"), "12");
   await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
   await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
   await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-  await userEvent.type(screen.getByPlaceholderText("2k / 6k-2"), "6k-2");
+  // The pace-ref field starts pre-filled with the row's default "6k" (a
+  // structured refBase/refOff under the hood, not free text) — clear it
+  // before typing a full replacement, same as any other pre-filled field.
+  const refField = screen.getByPlaceholderText("2k / 6k-2");
+  await userEvent.clear(refField);
+  await userEvent.type(refField, "6k-2");
 }
 
 beforeEach(() => {
@@ -66,7 +70,9 @@ describe("Builder", () => {
     await renderBuilder();
 
     await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5'");
-    await userEvent.type(screen.getByPlaceholderText("2k / 6k-2"), "6k-2");
+    const refField = screen.getByPlaceholderText("2k / 6k-2");
+    await userEvent.clear(refField);
+    await userEvent.type(refField, "6k-2");
 
     // Hardcoded expectation (EN DASH, U+2013) — never recomputed by calling
     // resolveSplit/toleranceRange, which would make this assertion tautological.
@@ -132,7 +138,6 @@ describe("Builder", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        num: 12,
         title: "Ladder Sets",
         type: "O2",
         difficulty: "easy",
@@ -302,38 +307,21 @@ describe("Builder", () => {
     });
   });
 
-  it("wires aria-invalid/aria-describedby on the No. field to its visible error message", async () => {
-    mockBaselines(BASELINES);
-    mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
-
-    // Blank submit triggers errors.num (default form.num is "").
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
-
-    const numInput = screen.getByLabelText("Workout number");
-    expect(numInput).toHaveAttribute("aria-invalid", "true");
-    const describedBy = numInput.getAttribute("aria-describedby");
-    expect(describedBy).toBeTruthy();
-    // The id it points at must be the actually-visible error message, not
-    // just any truthy string — a screen reader announces whatever text
-    // lives at that id.
-    expect(document.getElementById(describedBy!)).toHaveTextContent(
-      "num must be a whole number 1..9999",
-    );
-  });
-
   it("wires aria-invalid/aria-describedby on each of a row's dur/ref/spm/rest fields to its own error message", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByLabelText("Workout number"), "12");
     await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
     await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
-    // dur and ref are left blank (triggers "required"); spm and rest get
-    // out-of-range values so all four row fields have a live error at once.
+    // dur is left blank (triggers "required"). The pace ref can no longer be
+    // left invalid by leaving it blank — refBase/refOff always describe a
+    // structurally valid ref — so give it an out-of-range offset instead;
+    // spm and rest get out-of-range values too, so all four row fields have
+    // a live error at once.
+    const refField = screen.getByPlaceholderText("2k / 6k-2");
+    await userEvent.clear(refField);
+    await userEvent.type(refField, "2k+999");
     await userEvent.type(screen.getByPlaceholderText("spm"), "99");
     await userEvent.type(screen.getByPlaceholderText("rest"), "0.3");
 

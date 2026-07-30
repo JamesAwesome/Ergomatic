@@ -21,8 +21,31 @@ import type { Step } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
+// A default row with a valid duration and ref (unlike EMPTY_FORM's blank
+// starter row) so `formWith()` alone yields a form `toSteps` accepts —
+// callers that need to exercise a specific invalid row still override
+// `rows` explicitly, same as before.
+function defaultValidRow(): BuilderRow {
+  return {
+    id: "default",
+    kind: "w",
+    marked: false,
+    dur: "5'",
+    refBase: "6k",
+    refOff: 0,
+    spm: "",
+    rest: "",
+  };
+}
+
 function formWith(over: Partial<BuilderForm> = {}): BuilderForm {
-  return { ...EMPTY_FORM, num: "7", title: "Test Piece", pain: 3, ...over };
+  return {
+    ...EMPTY_FORM,
+    title: "Test Piece",
+    pain: 3,
+    rows: [defaultValidRow()],
+    ...over,
+  };
 }
 
 describe("duration input", () => {
@@ -41,8 +64,23 @@ describe("duration input", () => {
     });
   });
 
-  it("rejects a bare number, so the unit is always explicit", () => {
-    expect(parseDurationInput("10")).toBeNull();
+  it("reads a bare number as minutes so no apostrophe is needed", () => {
+    expect(parseDurationInput("5")).toStrictEqual({ kind: "time", minutes: 5 });
+    expect(parseDurationInput("2.5")).toStrictEqual({
+      kind: "time",
+      minutes: 2.5,
+    });
+  });
+
+  it("still reads the apostrophe and meters forms", () => {
+    expect(parseDurationInput("5'")).toStrictEqual({
+      kind: "time",
+      minutes: 5,
+    });
+    expect(parseDurationInput("2500m")).toStrictEqual({
+      kind: "distance",
+      meters: 2500,
+    });
   });
 
   it("rejects fractional meters and junk", () => {
@@ -117,7 +155,8 @@ describe("setBlockStart", () => {
           kind: "wu",
           marked: false,
           dur: "10'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -126,7 +165,8 @@ describe("setBlockStart", () => {
           kind: "w",
           marked: false,
           dur: "1'",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -135,7 +175,8 @@ describe("setBlockStart", () => {
           kind: "w",
           marked: false,
           dur: "2'",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -144,7 +185,8 @@ describe("setBlockStart", () => {
           kind: "r",
           marked: false,
           dur: "3'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -219,7 +261,8 @@ describe("toSteps", () => {
           kind: "w",
           marked: false,
           dur: "5'",
-          ref: "6k-2",
+          refBase: "6k",
+          refOff: -2,
           spm: "22",
           rest: "",
         },
@@ -239,6 +282,38 @@ describe("toSteps", () => {
     });
   });
 
+  it("builds a pace ref from the structured base and offset", () => {
+    const f = formWith({
+      rows: [
+        {
+          id: "a",
+          kind: "w",
+          marked: false,
+          dur: "5",
+          refBase: "6k",
+          refOff: -2,
+          spm: "22",
+          rest: "",
+        },
+      ],
+    });
+    const out = toSteps(f);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps[0]).toStrictEqual({
+      k: "w",
+      duration: { kind: "time", minutes: 5 },
+      ref: { base: "6k", off: -2 },
+      spm: 22,
+    });
+  });
+
+  it("emits no num, so the server assigns ordering itself", () => {
+    const out = toSteps(formWith());
+    if (!out.ok) throw new Error("expected ok");
+    expect(out).not.toHaveProperty("num");
+  });
+
   it("emits a reps marker before the first marked row and nowhere else", () => {
     const f = formWith({
       reps: 4,
@@ -248,7 +323,8 @@ describe("toSteps", () => {
           kind: "wu",
           marked: false,
           dur: "10'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -257,7 +333,8 @@ describe("toSteps", () => {
           kind: "w",
           marked: true,
           dur: "1'",
-          ref: "6k-2",
+          refBase: "6k",
+          refOff: -2,
           spm: "",
           rest: "",
         },
@@ -266,7 +343,8 @@ describe("toSteps", () => {
           kind: "r",
           marked: true,
           dur: "5'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -288,7 +366,8 @@ describe("toSteps", () => {
           kind: "w",
           marked: false,
           dur: "1'",
-          ref: "6k",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -299,26 +378,6 @@ describe("toSteps", () => {
     expect(out.steps.some((s) => s.k === "reps")).toBe(false);
   });
 
-  it("reports a bad pace ref against the row that owns it", () => {
-    const f = formWith({
-      rows: [
-        {
-          id: "a",
-          kind: "w",
-          marked: false,
-          dur: "5'",
-          ref: "9k",
-          spm: "",
-          rest: "",
-        },
-      ],
-    });
-    const out = toSteps(f);
-    expect(out.ok).toBe(false);
-    if (out.ok) throw new Error("expected failure");
-    expect(out.errors["row:a:ref"]).toMatch(/pace/i);
-  });
-
   it("rejects a form with no work step, matching the domain rule", () => {
     const f = formWith({
       rows: [
@@ -327,7 +386,8 @@ describe("toSteps", () => {
           kind: "wu",
           marked: false,
           dur: "10'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -347,7 +407,8 @@ describe("toSteps", () => {
           kind: "w",
           marked: false,
           dur: "5'",
-          ref: "6k",
+          refBase: "6k",
+          refOff: 0,
           spm: "70",
           rest: "",
         },
@@ -356,11 +417,10 @@ describe("toSteps", () => {
     expect(toSteps(f).ok).toBe(false);
   });
 
-  it("requires num and title", () => {
-    const out = toSteps(formWith({ num: "", title: "" }));
+  it("requires a title", () => {
+    const out = toSteps(formWith({ title: "" }));
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
-    expect(out.errors.num).toBeTruthy();
     expect(out.errors.title).toBeTruthy();
   });
 
@@ -382,7 +442,8 @@ describe("totals", () => {
           kind: "wu",
           marked: false,
           dur: "10'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -391,7 +452,8 @@ describe("totals", () => {
           kind: "w",
           marked: true,
           dur: "1'",
-          ref: "6k-2",
+          refBase: "6k",
+          refOff: -2,
           spm: "",
           rest: "",
         },
@@ -400,7 +462,8 @@ describe("totals", () => {
           kind: "r",
           marked: true,
           dur: "5'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -423,7 +486,8 @@ describe("totals", () => {
           kind: "w",
           marked: true,
           dur: "2000m",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -443,7 +507,8 @@ describe("totals", () => {
           kind: "w",
           marked: false,
           dur: "2000m",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -456,7 +521,6 @@ describe("totals", () => {
 describe("fromWorkout", () => {
   it("round-trips a workout into editable rows, hoisting the reps count", () => {
     const f = fromWorkout({
-      num: 12,
       title: "Ladder",
       type: "AT",
       difficulty: "medium",
@@ -472,21 +536,37 @@ describe("fromWorkout", () => {
         },
       ],
     });
-    expect(f.num).toBe("12");
     expect(f.reps).toBe(4);
     expect(f.rows.map((r) => r.kind)).toStrictEqual(["wu", "w"]);
     expect(f.rows[1]).toMatchObject({
       marked: true,
       dur: "1'",
-      ref: "6k-2",
+      refBase: "6k",
+      refOff: -2,
       spm: "22",
     });
     expect(f.rows[0].marked).toBe(false);
   });
 
+  it("round-trips the structured ref out of a stored workout", () => {
+    const f = fromWorkout({
+      title: "Ladder",
+      type: "AT",
+      difficulty: "medium",
+      pain: 3,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "2k", off: 4 },
+        },
+      ],
+    });
+    expect(f.rows[0]).toMatchObject({ refBase: "2k", refOff: 4 });
+  });
+
   it("round-trips restMinutes so an edited workout with rest can be saved (H1/H2)", () => {
     const workout = {
-      num: 9,
       title: "Rest Test",
       type: "AT" as const,
       difficulty: "medium" as const,
@@ -522,7 +602,6 @@ describe("fromWorkout", () => {
 describe("totals vs. estimateMinutes agreement", () => {
   it("counts a work step's restMinutes, matching the domain's phases()/estimateMinutes()", () => {
     const workout = {
-      num: 9,
       title: "Rest Test",
       type: "AT" as const,
       difficulty: "medium" as const,
@@ -553,7 +632,6 @@ describe("totals vs. estimateMinutes agreement", () => {
     // 2-minute rest = 11.3333 min, rounding to 11 — matching the reviewer's
     // probe. Only the time-duration case had a regression test before this.
     const workout = {
-      num: 9,
       title: "Distance Rest Test",
       type: "AT" as const,
       difficulty: "medium" as const,
@@ -597,7 +675,8 @@ describe("totals vs. estimateMinutes agreement", () => {
           kind: "wu",
           marked: false,
           dur: "10'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -606,7 +685,8 @@ describe("totals vs. estimateMinutes agreement", () => {
           kind: "w",
           marked: true,
           dur: "5'",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -615,7 +695,8 @@ describe("totals vs. estimateMinutes agreement", () => {
           kind: "r",
           marked: false,
           dur: "2'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -644,7 +725,8 @@ describe("setRowIds", () => {
           kind: "wu",
           marked: false,
           dur: "10'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -653,7 +735,8 @@ describe("setRowIds", () => {
           kind: "w",
           marked: true,
           dur: "5'",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -662,7 +745,8 @@ describe("setRowIds", () => {
           kind: "r",
           marked: false,
           dur: "2'",
-          ref: "",
+          refBase: "6k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -680,7 +764,8 @@ describe("setRowIds", () => {
           kind: "w",
           marked: false,
           dur: "5'",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -700,7 +785,8 @@ describe("toSteps additional coverage", () => {
           kind: "w",
           marked: false,
           dur: "2500m",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -727,7 +813,8 @@ describe("toSteps additional coverage", () => {
           kind: "w",
           marked: false,
           dur: "5'",
-          ref: "2k+99",
+          refBase: "2k",
+          refOff: 99,
           spm: "",
           rest: "",
         },
@@ -747,7 +834,8 @@ describe("toSteps additional coverage", () => {
           kind: "w",
           marked: false,
           dur: "5'",
-          ref: "2k+60",
+          refBase: "2k",
+          refOff: 60,
           spm: "",
           rest: "",
         },
@@ -770,7 +858,8 @@ describe("toSteps additional coverage", () => {
           kind: "w",
           marked: false,
           dur: "5'",
-          ref: "2k+61",
+          refBase: "2k",
+          refOff: 61,
           spm: "",
           rest: "",
         },
@@ -796,7 +885,8 @@ describe("toSteps additional coverage", () => {
       kind: "w",
       marked: i === 0,
       dur: "1'",
-      ref: "2k",
+      refBase: "2k",
+      refOff: 0,
       spm: "",
       rest: "",
     }));
@@ -813,7 +903,8 @@ describe("toSteps additional coverage", () => {
       kind: "w",
       marked: i === 0,
       dur: "1'",
-      ref: "2k",
+      refBase: "2k",
+      refOff: 0,
       spm: "",
       rest: "",
     }));
@@ -838,7 +929,8 @@ describe("toSteps additional coverage", () => {
           kind: "w",
           marked: false,
           dur: " 5' ",
-          ref: "2k",
+          refBase: "2k",
+          refOff: 0,
           spm: "",
           rest: "",
         },
@@ -855,13 +947,6 @@ describe("toSteps additional coverage", () => {
         ref: { base: "2k", off: 0 },
       },
     ]);
-  });
-
-  it("rejects exponent notation in num, requiring plain digits (L3)", () => {
-    const out = toSteps(formWith({ num: "1e3" }));
-    expect(out.ok).toBe(false);
-    if (out.ok) throw new Error("expected failure");
-    expect(out.errors.num).toBeTruthy();
   });
 });
 
@@ -905,7 +990,6 @@ describe("hasUnsupportedSteps (L2)", () => {
 
   it("lets a caller detect the loss before fromWorkout silently drops the test step", () => {
     const workout = {
-      num: 1,
       title: "Has a test piece",
       type: "AT" as const,
       difficulty: "medium" as const,
@@ -929,7 +1013,7 @@ describe("hasUnsupportedSteps (L2)", () => {
 describe("EMPTY_FORM safety (L4)", () => {
   it("is frozen, so an in-place edit throws instead of corrupting shared state", () => {
     expect(() => {
-      (EMPTY_FORM as { num: string }).num = "5";
+      (EMPTY_FORM as { title: string }).title = "changed";
     }).toThrow();
     expect(() => {
       (EMPTY_FORM.rows[0] as { dur: string }).dur = "5'";

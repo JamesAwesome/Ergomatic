@@ -1,7 +1,8 @@
-import { parsePaceRef, resolveSplit } from "../../domain/pace.js";
+import { resolveSplit } from "../../domain/pace.js";
 import type {
   Baselines,
   Difficulty,
+  PaceBase,
   PaceRef,
   Step,
   WorkDuration,
@@ -15,13 +16,13 @@ export interface BuilderRow {
   kind: RowKind;
   marked: boolean;
   dur: string;
-  ref: string;
+  refBase: PaceBase;
+  refOff: number;
   spm: string;
   rest: string;
 }
 
 export interface BuilderForm {
-  num: string;
   title: string;
   type: WorkoutType;
   difficulty: Difficulty;
@@ -45,7 +46,8 @@ export function newRow(kind: RowKind): BuilderRow {
     kind,
     marked: false,
     dur: "",
-    ref: "",
+    refBase: "6k",
+    refOff: 0,
     spm: "",
     rest: "",
   };
@@ -57,7 +59,6 @@ export function newRow(kind: RowKind): BuilderRow {
  *  any other form, including previous calls to `newForm()` itself. */
 export function newForm(): BuilderForm {
   return {
-    num: "",
     title: "",
     type: "O2",
     difficulty: "easy",
@@ -133,11 +134,16 @@ export function setReps(f: BuilderForm, reps: number): BuilderForm {
   return { ...f, reps: Math.min(12, Math.max(1, reps)) };
 }
 
-/** Same grammar as `domain/bulk.ts`'s (unexported) `parseDuration`: `10'` is
- *  minutes (decimals allowed), `2500m` is meters (integers only), a bare
- *  number is invalid. Kept in lockstep by hand since it isn't exported. */
+/** Same grammar as `domain/bulk.ts`'s (unexported) `parseDuration`: a bare
+ *  number is minutes, `10'` is also minutes (decimals allowed on both),
+ *  `2500m` is meters (integers only). The bare-number regex is byte-identical
+ *  to bulk.ts's — typing a duration in the builder and pasting the same text
+ *  into a bulk-import block must never disagree on what it means. Kept in
+ *  lockstep by hand since it isn't exported. */
 export function parseDurationInput(text: string): WorkDuration | null {
   const trimmed = text.trim();
+  const bare = /^(\d+(?:\.\d+)?)$/.exec(trimmed);
+  if (bare) return { kind: "time", minutes: Number(bare[1]) };
   const time = /^(\d+(?:\.\d+)?)'$/.exec(trimmed);
   if (time) return { kind: "time", minutes: Number(time[1]) };
   const distance = /^(\d+)m$/.exec(trimmed);
@@ -157,13 +163,6 @@ export function toSteps(
   f: BuilderForm,
 ): { ok: true; steps: Step[] } | { ok: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
-
-  // Plain digits only — Number()'s coercion would otherwise accept exponent
-  // notation ("1e3") as workout #1000, which isn't what a user typing that
-  // string means, even though it's domain-valid.
-  const numText = f.num.trim();
-  const num = /^\d+$/.test(numText) ? Number(numText) : NaN;
-  if (!isInt(num, 1, 9999)) errors.num = "num must be a whole number 1..9999";
 
   if (f.title.length < 1 || f.title.length > 80) {
     errors.title = "title must be 1..80 characters";
@@ -240,8 +239,13 @@ export function toSteps(
       rowOk = false;
     }
 
-    const ref = parsePaceRef(row.ref);
-    if (!ref || Math.abs(ref.off) > 60) {
+    // refBase/refOff always describe a structurally valid PaceRef (the base
+    // chip and offset stepper the client control offers can't produce
+    // anything else) — the only thing left to check here is the domain's
+    // ±60 offset bound, which the control clamps but a hand-built form must
+    // still be rejected for.
+    const ref: PaceRef = { base: row.refBase, off: row.refOff };
+    if (Math.abs(ref.off) > 60) {
       errors[`row:${row.id}:ref`] = "invalid pace reference";
       rowOk = false;
     }
@@ -268,7 +272,7 @@ export function toSteps(
       }
     }
 
-    if (rowOk && duration && ref) {
+    if (rowOk && duration) {
       steps.push({
         k: "w",
         duration,
@@ -288,8 +292,9 @@ export function toSteps(
     : { ok: true, steps };
 }
 
-/** Minutes contributed by one row, or null if it's a distance row that
- *  can't be resolved (unparseable pace ref, or no baselines yet). An
+/** Minutes contributed by one row, or null if it's a distance row and
+ *  baselines aren't set yet (refBase/refOff are always structurally valid,
+ *  so a distance row can only fail to resolve for lack of baselines). An
  *  unparseable duration contributes 0 rather than failing the whole
  *  computation — totals is a live preview, not a validator. */
 function rowMinutes(
@@ -303,8 +308,8 @@ function rowMinutes(
   if (duration.kind === "time") {
     minutes = duration.minutes;
   } else {
-    const ref = parsePaceRef(row.ref);
-    if (!ref || !baselines) return null;
+    if (!baselines) return null;
+    const ref: PaceRef = { base: row.refBase, off: row.refOff };
     minutes = (resolveSplit(baselines, ref) * duration.meters) / 500 / 60;
   }
 
@@ -360,11 +365,6 @@ function formatDuration(d: WorkDuration): string {
   return d.kind === "time" ? `${d.minutes}'` : `${d.meters}m`;
 }
 
-function formatPaceRef(ref: PaceRef): string {
-  if (ref.off === 0) return ref.base;
-  return `${ref.base}${ref.off > 0 ? "+" : ""}${ref.off}`;
-}
-
 function stepToRow(
   s: Extract<Step, { k: "wu" | "w" | "r" }>,
   marked: boolean,
@@ -375,7 +375,8 @@ function stepToRow(
     row.dur = `${s.minutes}'`;
   } else {
     row.dur = formatDuration(s.duration);
-    row.ref = formatPaceRef(s.ref);
+    row.refBase = s.ref.base;
+    row.refOff = s.ref.off;
     row.spm = s.spm !== undefined ? String(s.spm) : "";
     // Unlike `dur` (which uses the `10'`/`2500m` duration grammar), `rest`
     // is parsed in toSteps as a bare number of minutes — no apostrophe.
@@ -420,7 +421,6 @@ export function hasUnsupportedSteps(steps: Step[]): boolean {
 }
 
 export function fromWorkout(w: {
-  num: number;
   title: string;
   type: WorkoutType;
   difficulty: Difficulty;
@@ -440,7 +440,6 @@ export function fromWorkout(w: {
   });
 
   return {
-    num: String(w.num),
     title: w.title,
     type: w.type,
     difficulty: w.difficulty,

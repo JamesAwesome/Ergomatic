@@ -155,7 +155,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
     setSaving(true);
     try {
       const body = JSON.stringify({
-        num: Number(form.num.trim()),
         title: form.title,
         type: form.type,
         difficulty: form.difficulty,
@@ -203,23 +202,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       <h1 className="screen-title">{mode ? "Edit Workout" : "New Workout"}</h1>
 
       <div className="builder-header-fields">
-        <div className="field field-num-wrap">
-          <label htmlFor="builder-num">No.</label>
-          <input
-            id="builder-num"
-            className="builder-num-input"
-            aria-label="Workout number"
-            aria-invalid={Boolean(errors.num)}
-            aria-describedby={errors.num ? "builder-num-error" : undefined}
-            value={form.num}
-            onChange={(e) => setForm((f) => ({ ...f, num: e.target.value }))}
-          />
-          {errors.num && (
-            <p id="builder-num-error" className="field-error">
-              {errors.num}
-            </p>
-          )}
-        </div>
         <div className="field field-title-wrap">
           <label htmlFor="builder-title">Title</label>
           <input
