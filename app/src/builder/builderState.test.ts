@@ -1151,4 +1151,22 @@ describe("addStepLike", () => {
       spm: "22",
     });
   });
+
+  // "+ ADD STEP" only ever authors a work step (no `+ WARM-UP`/`+ REST`
+  // control exists to add anything else) — a workout that happens to end
+  // in a bookend `wu` or standalone `r` row must still get a `w` row back,
+  // not another copy of the bookend.
+  it("always adds a work step, even when the last row is a warm-up", () => {
+    const base = formWith({ rows: [wuRow("wu1", "10")] });
+    const { form } = addStepLike(base);
+    expect(form.rows).toHaveLength(2);
+    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "10" });
+  });
+
+  it("always adds a work step, even when the last row is a standalone rest", () => {
+    const base = formWith({ rows: [restRow("r1", "5")] });
+    const { form } = addStepLike(base);
+    expect(form.rows).toHaveLength(2);
+    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "5" });
+  });
 });

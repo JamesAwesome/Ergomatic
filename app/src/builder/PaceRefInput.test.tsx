@@ -62,11 +62,12 @@ describe("PaceRefInput", () => {
     expect(screen.getByText("2k")).toBeInTheDocument();
   });
 
-  // Mirrors PainPicker.test.tsx's "roving tabIndex" / "arrow key navigation"
-  // suites for this control's own radiogroup — only two chips here (2k/6k),
-  // so "wraps" and "moves forward/back" collapse into the same transition,
-  // but the handler (selectByIndex/handleKeyDown, PaceRefInput.tsx:43-67)
-  // is the identical pattern and needs the identical coverage.
+  // Mirrors the deleted PainPicker.test.tsx's "roving tabIndex" / "arrow
+  // key navigation" suites for this control's own radiogroup — only two
+  // chips here (2k/6k), so "wraps" and "moves forward/back" collapse into
+  // the same transition, but the handler (selectByIndex/handleKeyDown,
+  // PaceRefInput.tsx:43-67) is the identical pattern and needs the
+  // identical coverage.
   describe("roving tabIndex", () => {
     it("makes only the checked chip tabbable", () => {
       setup({ base: "2k" });

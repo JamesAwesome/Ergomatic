@@ -143,7 +143,8 @@ describe("StepEditor", () => {
 
   // Coverage: an unparseable spm (only reachable via corrupted/legacy stored
   // data, since the stepper can never type free text) wakes at 20 the same
-  // as empty — same defensive convention as SpmInput.tsx's own parseSpm.
+  // as empty — same defensive convention as the deleted SpmInput.tsx's own
+  // parseSpm.
   it("treats an unparseable spm the same as empty — wakes at 20", async () => {
     const { onChange } = setup({ row: workRow({ spm: "abc" }) });
     await userEvent.click(

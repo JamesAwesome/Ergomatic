@@ -149,7 +149,7 @@ describe("EditWorkout", () => {
       screen.getByText("Starter workouts can't be edited yet."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Edit Workout" }),
+      screen.queryByRole("heading", { name: "Edit workout" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save" }),
@@ -165,7 +165,7 @@ describe("EditWorkout", () => {
     await renderEdit("/library/w2/edit");
 
     expect(
-      screen.queryByRole("heading", { name: "Edit Workout" }),
+      screen.queryByRole("heading", { name: "Edit workout" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save" }),
@@ -183,7 +183,7 @@ describe("EditWorkout", () => {
     await renderEdit("/library/w4/edit");
 
     expect(
-      screen.queryByRole("heading", { name: "Edit Workout" }),
+      screen.queryByRole("heading", { name: "Edit workout" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save" }),
@@ -202,7 +202,7 @@ describe("EditWorkout", () => {
     await renderEdit("/library/w1/edit");
 
     expect(
-      screen.getByRole("heading", { name: "Edit Workout" }),
+      screen.getByRole("heading", { name: "Edit workout" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Ladder Sets");
     // Edit mode opens with every row collapsed (Phase 5E Task 5's

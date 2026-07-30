@@ -328,11 +328,30 @@ describe("Builder", () => {
   });
 
   it("renders — MIN and no warm-up line while preferences are loading", async () => {
-    mockBaselines(BASELINES);
+    // TOTAL only ever renders the "— MIN" placeholder when `totals()`
+    // itself returns null (builderState.ts's own "totals" suite: the one
+    // documented null case is a distance-unit row with no baselines to
+    // resolve its pace against) — a blank/default minutes-unit row totals
+    // 0, not null, so a plain fresh builder can't exercise this branch.
+    // Baselines are unset here for exactly that reason.
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
     mockPreferencesLoading();
     mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
 
+    const distanceRow = newRow("w");
+    distanceRow.durValue = "2000";
+    distanceRow.durUnit = "m";
+    const initial: BuilderForm = {
+      title: "Ladder Sets",
+      type: "O2",
+      difficulty: "easy",
+      pain: 3,
+      rows: [distanceRow],
+      reps: 1,
+    };
+    await renderBuilder({ kind: "edit", id: "w1", initial });
+
+    expect(screen.getByText("— MIN")).toBeInTheDocument();
     expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
   });
 
@@ -553,6 +572,46 @@ describe("Builder", () => {
     expect(screen.getByText(/needs? attention/i)).toBeInTheDocument();
     const durInput = await screen.findByLabelText("Row 1 duration");
     expect(document.activeElement).toBe(durInput);
+  });
+
+  // The other half of the same trap: it's not enough to expand *a*
+  // collapsed row, it has to be the *right* one, and any row that was open
+  // instead must give way. Row 2 starts open (valid); Row 1 is the
+  // collapsed row actually holding the first invalid field.
+  it("collapses the wrong open row and expands the different collapsed row holding the first invalid field", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+
+    const badRow = newRow("w"); // Row 1 — invalid (blank duration).
+    badRow.durValue = "";
+    const goodRow = newRow("w"); // Row 2 — valid, and left open below.
+    goodRow.durValue = "5";
+    const initial: BuilderForm = {
+      title: "Ladder Sets",
+      type: "O2",
+      difficulty: "easy",
+      pain: 3,
+      rows: [badRow, goodRow],
+      reps: 1,
+    };
+    // Edit mode starts fully collapsed; open Row 2 specifically, not the
+    // invalid Row 1.
+    await renderBuilder({ kind: "edit", id: "w1", initial });
+    const editButtons = screen.getAllByRole("button", { name: "EDIT" });
+    await userEvent.click(editButtons[1]!);
+    expect(screen.getByLabelText("Row 2 duration")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Row 1 duration")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save to library" }),
+    );
+
+    expect(screen.getByText(/needs? attention/i)).toBeInTheDocument();
+    const durInput = await screen.findByLabelText("Row 1 duration");
+    expect(document.activeElement).toBe(durInput);
+    // The accordion invariant (at most one row open) still holds — Row 2
+    // collapsed back when Row 1 took its place, it didn't stay open too.
+    expect(screen.queryByLabelText("Row 2 duration")).not.toBeInTheDocument();
   });
 
   it("shows a needs-attention count and focuses the first invalid control when Save fails validation", async () => {

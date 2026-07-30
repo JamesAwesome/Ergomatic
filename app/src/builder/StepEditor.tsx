@@ -12,11 +12,11 @@ import Stepper from "./Stepper";
 
 type RowField = "dur" | "ref" | "spm" | "rest";
 
-// Mirrors SpmInput.tsx's own bounds/wake value (which in turn mirror
-// domain/validate.ts's `int(s.spm, 10, 60)` and James's rule for the wake
-// value) — kept local rather than imported because SpmInput.tsx bundles its
-// own free-text-plus-steppers UI, which the redesign's SPM row (a bare
-// Stepper, no typable field) no longer uses at all.
+// Mirrors the deleted SpmInput.tsx's own bounds/wake value (which in turn
+// mirrored domain/validate.ts's `int(s.spm, 10, 60)` and James's rule for
+// the wake value) — kept local rather than shared because SpmInput.tsx
+// bundled its own free-text-plus-steppers UI, which the redesign's SPM row
+// (a bare Stepper, no typable field) no longer uses at all.
 const SPM_MIN = 10;
 const SPM_MAX = 60;
 const SPM_WAKE = 20;

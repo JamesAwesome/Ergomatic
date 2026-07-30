@@ -245,7 +245,13 @@ export const PAIN_WORDS: readonly string[] = [
  *  added step rather than leaving it collapsed. The empty-list default (`5`
  *  MIN / `6k` ±0 / spm `22` / rest `1` minute = 60s) matches `newRow("w")`'s
  *  own pace-reference default (6k, no offset) plus the values design review
- *  settled on for a first step's duration/cadence/rest. */
+ *  settled on for a first step's duration/cadence/rest.
+ *
+ *  Always produces a `kind: "w"` row, even when the last row is a `wu` or
+ *  standalone `r` — "+ ADD STEP" only ever authors a work step (there's no
+ *  `+ WARM-UP`/`+ REST` control any more, see DEVIATIONS.md), so a workout
+ *  that happens to end in one of those bookend rows must not silently hand
+ *  back another wu/r instead of the work step the button promises. */
 export function addStepLike(f: BuilderForm): { form: BuilderForm; id: string } {
   if (f.rows.length === 0) {
     const row: BuilderRow = {
@@ -260,7 +266,11 @@ export function addStepLike(f: BuilderForm): { form: BuilderForm; id: string } {
     return { form: { ...f, rows: [row] }, id: row.id };
   }
 
-  const row: BuilderRow = { ...f.rows[f.rows.length - 1]!, id: nextRowId() };
+  const row: BuilderRow = {
+    ...f.rows[f.rows.length - 1]!,
+    id: nextRowId(),
+    kind: "w",
+  };
   return { form: { ...f, rows: [...f.rows, row] }, id: row.id };
 }
 
