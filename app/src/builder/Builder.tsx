@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
+import { usePreferences } from "../api/usePreferences";
 import { useWorkouts } from "../api/useWorkouts";
 import PainPicker from "../components/PainPicker";
 import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
@@ -102,6 +103,7 @@ function ColumnHeader() {
 export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const baselinesState = useBaselines();
   const workoutsState = useWorkouts();
+  const preferencesState = usePreferences();
   const navigate = useNavigate();
 
   const [form, setForm] = useState<BuilderForm>(mode?.initial ?? newForm());
@@ -448,6 +450,18 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       <p className="section-heading builder-total">
         TOTAL {totalsResult ? `${Math.round(totalsResult.total)} MIN` : "— MIN"}
       </p>
+      {preferencesState.state === "ready" && (
+        // Context only, never authored into the workout: `toSteps` never
+        // sees this value, so changing the preference later doesn't leave
+        // any saved workout stale (Phase 6's session flow prepends the
+        // actual warm-up when a workout is started). Rendered only once the
+        // preference has actually loaded — while loading or on error this
+        // renders nothing rather than a placeholder number, since a wrong
+        // warm-up figure is worse than none.
+        <p className="mono-status builder-warmup-readout">
+          {`+ ${preferencesState.preferences.warmupMinutes}′ warm-up (from your preferences)`}
+        </p>
+      )}
 
       {submitError && (
         <p className="field-error builder-submit-error" role="alert">
