@@ -4,7 +4,6 @@ import type { Difficulty, Step, WorkoutType } from "../../domain/types";
 
 export interface LibraryWorkout {
   id: string;
-  num: number;
   title: string;
   type: WorkoutType;
   difficulty: Difficulty;

@@ -7,7 +7,6 @@ import type { LibraryWorkout } from "../api/useWorkouts";
 const WORKOUTS: LibraryWorkout[] = [
   {
     id: "w-at",
-    num: 12,
     title: "Anaerobic Threshold Blitz",
     type: "AT",
     difficulty: "medium",
@@ -18,7 +17,6 @@ const WORKOUTS: LibraryWorkout[] = [
   },
   {
     id: "w-o2",
-    num: 3,
     title: "Steady State Cruise",
     type: "O2",
     difficulty: "easy",
@@ -29,7 +27,6 @@ const WORKOUTS: LibraryWorkout[] = [
   },
   {
     id: "w-an",
-    num: 44,
     title: "Sprint Ladder",
     type: "AN",
     difficulty: "hard",
@@ -72,15 +69,15 @@ beforeEach(() => {
 });
 
 describe("Library", () => {
-  it("renders every row's number, title, and estimated duration", async () => {
+  it("renders every row's bare title and estimated duration, with no numeric prefix", async () => {
     mockReady();
     await renderLibrary();
 
-    expect(
-      screen.getByText("12. Anaerobic Threshold Blitz"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("3. Steady State Cruise")).toBeInTheDocument();
-    expect(screen.getByText("44. Sprint Ladder")).toBeInTheDocument();
+    const title = screen.getByText("Anaerobic Threshold Blitz");
+    expect(title).toBeInTheDocument();
+    expect(title.textContent).not.toMatch(/^\d+\.\s/);
+    expect(screen.getByText("Steady State Cruise")).toBeInTheDocument();
+    expect(screen.getByText("Sprint Ladder")).toBeInTheDocument();
     expect(screen.getByText("30′")).toBeInTheDocument();
     expect(screen.getByText("20′")).toBeInTheDocument();
     expect(screen.getByText("60′")).toBeInTheDocument();

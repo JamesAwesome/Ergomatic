@@ -153,9 +153,7 @@ function WorkoutDetailView({
       </Link>
       <div className="workout-detail-meta">
         <TypeBadge type={workout.type} />
-        <span className="mono-status">
-          NO. {workout.num} · {workout.difficulty.toUpperCase()}
-        </span>
+        <span className="mono-status">{workout.difficulty.toUpperCase()}</span>
       </div>
       <h1 className="workout-detail-title">{workout.title}</h1>
       <p className="mono-status">
