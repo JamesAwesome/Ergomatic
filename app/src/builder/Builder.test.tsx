@@ -121,41 +121,47 @@ beforeEach(() => {
 });
 
 describe("Builder", () => {
-  // Phase 5D fix wave 1: the row grew to three lines (main line, SPM, pace)
-  // and the old single-line column header strip (DUR / REST (OPT) / SPLIT)
-  // no longer sits over the fields it named — see docs/screenshots/
-  // builder.png before this fix. The header was removed rather than
-  // reshaped ("no header" beats "wrong header"); every control is
-  // self-describing via its own aria-label or static marking instead. This
-  // test used to assert the header's text directly; it now asserts the
-  // guarantee that text was proving — that rest reads as minutes without
-  // focusing the field — via the row's own static "MIN" marking next to
-  // the REST input (StepRowEditor.tsx's `.field-rest-unit`).
-  it("has no column header, and marks REST as minutes on the row itself", async () => {
+  // Phase 5D fix wave 1 removed the old single-line column header strip
+  // (DUR / REST (OPT) / SPLIT) once the row grew to three lines (main line,
+  // SPM, pace) — a strip sitting above the rows couldn't span fields that no
+  // longer lived on one line beneath it. That pass removed the header
+  // without replacing it, which left the SET-replacement clone button, the
+  // SPM stepper and the DUR/REST distinction with no visible name at all
+  // (aria-labels covered screen readers, not the screen). Fix wave 2 adds a
+  // static, visible affix beside each field instead of a header strip: this
+  // test now asserts both halves — the strip stays gone, and its job is
+  // covered per-field.
+  it("has no column-header strip; DUR, REST and SPM each carry their own visible affix", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    expect(
-      screen.getByLabelText("Row 1 rest").closest(".field-rest-group"),
-    ).toHaveTextContent("MIN");
-
-    // The header strip itself, and every label it used to carry, are gone —
-    // DUR/SPLIT never had another on-screen source, so their absence alone
-    // proves the header is gone (REST's guarantee moved rather than
-    // vanished, hence the positive assertion above instead of "REST (OPT)"
-    // here). PACE REF, SPM and SET were already dropped from the header in
-    // earlier phases and stay dropped.
-    for (const label of [
-      "DUR",
-      "REST (OPT)",
-      "SPLIT",
-      "PACE REF",
-      "SPM",
-      "SET",
-    ]) {
+    // The header strip itself, and every label it named that has no other
+    // on-screen source, are gone — SET, PACE REF and SPLIT never had (and
+    // still don't have) a visible label anywhere on the row, so their
+    // absence alone proves there's no strip sitting above the rows any more.
+    for (const label of ["SET", "PACE REF", "SPLIT", "REST (OPT)"]) {
       expect(screen.queryByText(label)).not.toBeInTheDocument();
     }
+
+    // DUR and REST distinguish themselves on screen now, not just by chip
+    // weight — each carries its own short static affix, the same treatment
+    // REST's "MIN" unit marking already used.
+    expect(
+      screen.getByLabelText("Row 1 duration").closest(".field-dur-group"),
+    ).toHaveTextContent("DUR");
+    const restGroup = screen
+      .getByLabelText("Row 1 rest")
+      .closest(".field-rest-group");
+    expect(restGroup).toHaveTextContent("REST");
+    expect(restGroup).toHaveTextContent("MIN");
+
+    // The SPM stepper is no longer a bare "− 20 +" — "SPM" sits beside it.
+    expect(
+      screen
+        .getByLabelText("Row 1 stroke rate")
+        .closest(".step-row-editor-spm"),
+    ).toHaveTextContent("SPM");
   });
 
   // Requirement 1 of the Task 4 brief: no SET cell, and no readout naming
@@ -672,6 +678,20 @@ describe("Builder", () => {
     expect(
       screen.queryByRole("button", { name: /BULK IMPORT/i }),
     ).not.toBeInTheDocument();
+  });
+
+  // Fix wave, Task 1: the clone button used to be a bare "↻" glyph in the
+  // exact cell position James couldn't name on sight — the aria-label
+  // ("Duplicate Row N") was always correct, but that's not what he was
+  // looking at. It must now carry real visible text too, not just an icon.
+  it("labels the clone button with visible text, not a bare glyph", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(
+      screen.getByRole("button", { name: "Duplicate Row 1" }),
+    ).toHaveTextContent("COPY");
   });
 
   // Requirement 2 of the Task 4 brief: the clone button is the SET cell's
