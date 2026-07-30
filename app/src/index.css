@@ -718,23 +718,26 @@ button:disabled {
   color: var(--ink-4);
 }
 
-/* Widths match the row fields directly below (.field-dur / .field-spm /
-   .field-rest / .row-delete) so each label sits over its column — see the
-   comment on ColumnHeader in Builder.tsx. There is no PACE REF column any
-   more (.pace-ref-input, below, spans its own full-width line beneath the
-   row, not a slot in this header). */
+/* Widths match the row fields directly below (.row-clone / DurationInput's
+   value field / .field-rest / .row-delete) so each label sits over its
+   column — see the comment on ColumnHeader in Builder.tsx. There is no
+   PACE REF or SPM column any more (PaceRefInput and SpmInput both span
+   their own full-width line beneath the row, not a slot in this header). */
 .builder-columns span {
   text-align: center;
 }
 
-.col-dur {
-  width: 48px;
+/* Spacer matching .row-clone's width (var(--tap)) — no label of its own,
+   same idiom as .col-delete below it: "clone" needs no column header the
+   way "DUR"/"REST" do. */
+.col-clone {
+  width: var(--tap);
 }
 
-.col-spm {
-  /* Matches .field-spm's width (var(--tap)), not just its own label width,
-     so its center lines up with the actual input below — see .field-spm's
-     comment. */
+.col-dur {
+  /* Matches DurationInput's value field (var(--tap)), not just its own
+     label width, so its center lines up with the actual input below — same
+     idiom .col-rest below uses for .field-rest. */
   width: var(--tap);
 }
 
@@ -793,20 +796,43 @@ button:disabled {
   border-color: var(--accent);
 }
 
-.field-dur {
-  width: 48px;
-}
-
-.field-spm {
-  /* >= --tap (44px): this is a real <input>, in scope for the 44x44 tap-
-     target sweep (app/e2e/design.spec.ts). .col-spm above mirrors this
-     width too, but only so its label's center lines up with this field —
-     it's still purely decorative and not itself a tap target. */
-  width: var(--tap);
-}
-
 .field-rest {
   width: 44px;
+}
+
+/* Groups the REST input with its static "MIN" marking (Phase 5D Task 4 —
+   James couldn't tell what the old SET cell did, and a placeholder-only
+   unit had the same problem: it vanishes the moment the field is typed
+   into). Rest stays minutes-only — no unit toggle, ever (rest has no pace
+   ref, so meters could never convert to time for totals or the timer; see
+   docs/design/DEVIATIONS.md) — so this is static text, not a control. */
+.field-rest-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.field-rest-unit {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+}
+
+/* Same cell position the old SET toggle occupied (leftmost in line1) —
+   duplicates the row directly beneath itself rather than marking it into
+   the repeat span (Phase 5D Task 4; see docs/design/DEVIATIONS.md). Same
+   idiom as .row-delete below, just not pinned to the row's trailing edge. */
+.row-clone {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .row-delete {
@@ -825,9 +851,17 @@ button:disabled {
   margin: 6px 0 0;
 }
 
-/* PaceRefInput doesn't fit alongside DUR/SPM/REST in .step-row-editor-line1
-   at the 390px mobile viewport this app targets (two 44px radio chips plus
-   two 44px steppers alone exceed the space DUR/SPM/REST leave), so — unlike
+/* SPM doesn't fit alongside clone/DUR/REST/delete in .step-row-editor-line1
+   at the 390px mobile viewport this app targets either (Phase 5D Task 4) —
+   same reasoning as .step-row-editor-pace just below, which the pace
+   control needed for the same reason one phase earlier. */
+.step-row-editor-spm {
+  margin-top: 8px;
+}
+
+/* PaceRefInput doesn't fit alongside DUR/REST in .step-row-editor-line1 at
+   the 390px mobile viewport this app targets (two 44px radio chips plus
+   two 44px steppers alone exceed the space DUR/REST leave), so — unlike
    the old .field-ref text input it replaces — it gets its own full-width
    line beneath line1 instead of squeezing into that row's flex layout. */
 .step-row-editor-pace {
@@ -899,7 +933,7 @@ button:disabled {
 
 .duration-input-value {
   /* >= --tap (44px): a real <input>, in scope for the 44x44 tap-target
-     sweep (app/e2e/design.spec.ts), same idiom as .field-spm above. */
+     sweep (app/e2e/design.spec.ts), same idiom as .spm-input-value below. */
   width: var(--tap);
   min-height: var(--tap);
   padding: 0 4px;
@@ -909,6 +943,10 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 13px;
   text-align: center;
+}
+
+.duration-input-value[aria-invalid="true"] {
+  border-color: var(--accent);
 }
 
 .duration-input-units {
@@ -960,6 +998,10 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 13px;
   text-align: center;
+}
+
+.spm-input-value[aria-invalid="true"] {
+  border-color: var(--accent);
 }
 
 .spm-input-step {

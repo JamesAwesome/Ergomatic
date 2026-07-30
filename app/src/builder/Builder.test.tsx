@@ -27,19 +27,32 @@ function mockApi(handler: () => Response) {
   return fn;
 }
 
-// Defaults to an empty library — most tests don't care what 🎲 would
-// generate, they just need `useWorkouts` mocked so Builder's own call to it
-// doesn't fall through to the (also-mocked-but-generically-so) `api` module
-// and race a background state update against the test. Tests that DO care
-// (the 🎲 test) call this again, after the default from `beforeEach`, with
-// real titles — vi.doMock's last call before the dynamic import wins.
+// Backing store for the `useWorkouts` mock registered once in `beforeEach`
+// below. `mockWorkouts`/`mockWorkoutsLoading` just mutate this plain
+// variable rather than calling `vi.doMock` a second time for the same
+// module id — PRE-EXISTING FLAKE FIX (~1-in-8 CI runs, reproduced on
+// multiple commits before this phase, see docs/superpowers/sdd/
+// progress.md's "CARRY TO TASK 4" note): `vi.doMock` registers a mock by
+// sending it to the runner, and that registration isn't guaranteed to be
+// synchronous under real parallel load — calling it twice in one test (the
+// default in `beforeEach`, then an override in a test body, as this used to
+// do) risked the two registrations landing out of order, so a render
+// occasionally saw the STALE (empty) mock instead of the test's own data.
+// A single `vi.doMock` call per test, reading a mutable box at call time
+// instead of being re-registered, has no second registration to race.
+let workoutsMock:
+  | { state: "ready"; workouts: { id: string; title: string }[] }
+  | { state: "loading" } = { state: "ready", workouts: [] };
+
 function mockWorkouts(titles: readonly string[] = []) {
-  vi.doMock("../api/useWorkouts", () => ({
-    useWorkouts: () => ({
-      state: "ready",
-      workouts: titles.map((title, i) => ({ id: `w${i}`, title })),
-    }),
-  }));
+  workoutsMock = {
+    state: "ready",
+    workouts: titles.map((title, i) => ({ id: `w${i}`, title })),
+  };
+}
+
+function mockWorkoutsLoading() {
+  workoutsMock = { state: "loading" };
 }
 
 async function renderBuilder(mode?: BuilderEditMode) {
@@ -57,12 +70,11 @@ async function renderBuilder(mode?: BuilderEditMode) {
 async function fillValidForm() {
   await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
   await userEvent.click(screen.getByRole("radio", { name: "Pain 3" }));
-  // Bare number, no apostrophe: the DUR field is now the row's plain
-  // `durValue` (Phase 5D Task 2) — no grammar is parsed from it any more,
-  // so a typed `5'` would leave `durValue` as the literal unparseable
-  // string "5'". The unit toggle that will let this field mean meters
-  // lands in the next task; today it's always minutes.
-  await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5");
+  // Bare number, no apostrophe: DurationInput's value field is the row's
+  // plain `durValue` (Phase 5D Task 2) — no grammar is parsed from it, and
+  // its unit chip defaults to MIN (Phase 5D Task 4), so typing a bare "5"
+  // here means 5 minutes without touching the M chip at all.
+  await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
   // The row's pace ref starts at the default 6k/+0 (PaceRefInput.tsx) —
   // two clicks on the faster stepper reaches the 6k-2 ref every test here
   // expects.
@@ -74,6 +86,9 @@ async function fillValidForm() {
 beforeEach(() => {
   vi.resetModules();
   mockWorkouts();
+  vi.doMock("../api/useWorkouts", () => ({
+    useWorkouts: () => workoutsMock,
+  }));
 });
 
 describe("Builder", () => {
@@ -82,17 +97,35 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    for (const label of ["DUR", "SPM", "REST (OPT)", "SPLIT"]) {
+    for (const label of ["DUR", "REST (OPT)", "SPLIT"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     // PACE REF no longer has a column of its own (PaceRefInput.tsx renders
     // on its own full-width line beneath the row) — a header slot for it
     // would just be dead space pushing every other label out of alignment.
-    // Likewise no SET column any more: the per-row repeat toggle it labeled
-    // went away with the `marked` model (Phase 5D Task 2) — the repeat span
-    // is derived, not clicked.
+    // SPM moved off this row for the same reason (Phase 5D Task 4 —
+    // StepRowEditor.tsx's `.step-row-editor-spm`), so it drops out of this
+    // header too. Likewise no SET column any more: the per-row repeat
+    // toggle it labeled went away with the `marked` model (Phase 5D Task
+    // 2) — its cell position is now the clone button (Task 4), which needs
+    // no header the way "DUR"/"REST" do.
     expect(screen.queryByText("PACE REF")).not.toBeInTheDocument();
+    expect(screen.queryByText("SPM")).not.toBeInTheDocument();
     expect(screen.queryByText("SET")).not.toBeInTheDocument();
+  });
+
+  // Requirement 1 of the Task 4 brief: no SET cell, and no readout naming
+  // any row as "marked" — the repeat span is derived (Phase 5D Task 2), not
+  // clicked, so there's nothing left for either to describe.
+  it("has no SET cell and no readout naming a row as marked", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(
+      screen.queryByRole("button", { name: /^SET$/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/marked/i)).not.toBeInTheDocument();
   });
 
   it("live-resolves a work row's typed duration and pace ref into the tolerance range", async () => {
@@ -100,7 +133,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5");
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
     const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
     await userEvent.click(faster);
     await userEvent.click(faster);
@@ -140,9 +173,7 @@ describe("Builder", () => {
     await renderBuilder();
 
     await fillValidForm();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(api).toHaveBeenCalledWith("/api/workouts", {
       method: "POST",
@@ -168,9 +199,7 @@ describe("Builder", () => {
     mockBaselines(BASELINES);
     await renderBuilder();
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(api).not.toHaveBeenCalled();
     expect(
@@ -190,9 +219,7 @@ describe("Builder", () => {
     await renderBuilder();
 
     await fillValidForm();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Couldn't save this workout. Try again.",
@@ -246,29 +273,50 @@ describe("Builder", () => {
     expect(screen.getByText(/^TOTAL 25 MIN$/)).toBeInTheDocument();
   });
 
-  it("adds a warm-up row via + WARM-UP and includes it as a wu step in the saved payload (M3)", async () => {
-    const api = mockApi(
-      () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
-    );
+  // Phase 5D Task 4: "+ WARM-UP" is gone (warm-up moves to a preference
+  // read at session time, next task) — replaces the old M3 test, which
+  // drove that now-deleted button. `addRow(f, "wu")` and StepRowEditor's
+  // `kind === "wu"` render branch both stay, though, since a stored
+  // workout can still arrive with a `wu` row (bulk import, or opening an
+  // existing starter/personal workout for edit) and it has to stay
+  // editable — see the round-trip test right below.
+  it("no longer renders + WARM-UP", async () => {
     mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.click(screen.getByRole("button", { name: "+ WARM-UP" }));
-    // The warm-up row uses StepRowEditor's minutes-only branch (placeholder
-    // "10'") — otherwise unreachable in create mode before this fix. Bare
-    // number, no apostrophe: DUR is the row's plain `durValue` now, with no
-    // grammar (Phase 5D Task 2).
-    await userEvent.type(screen.getByPlaceholderText("10'"), "10");
+    expect(
+      screen.queryByRole("button", { name: "+ WARM-UP" }),
+    ).not.toBeInTheDocument();
+  });
 
-    await fillValidForm();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
+  it("a stored workout's wu row survives being opened for edit — not authorable any more, but still editable", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+
+    const wu = newRow("wu");
+    wu.durValue = "10";
+    const work = newRow("w");
+    work.durValue = "5";
+
+    const initial: BuilderForm = {
+      title: "Ladder Sets",
+      type: "O2",
+      difficulty: "easy",
+      pain: 3,
+      rows: [wu, work],
+      reps: 1,
+    };
+    await renderBuilder({ kind: "edit", id: "w1", initial });
+
+    // Row 1 is the bookend `wu` row (Row 2 is the `work` row that follows)
+    // — its duration field renders and carries the stored value even
+    // though there's no "+ WARM-UP" button in this screen any more to have
+    // authored it from scratch.
+    expect(screen.getByLabelText("Row 1 duration")).toHaveValue("10");
+    expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
+      2,
     );
-
-    expect(api).toHaveBeenCalledTimes(1);
-    const [, options] = api.mock.calls[0]!;
-    const body = JSON.parse((options as RequestInit).body as string);
-    expect(body.steps).toContainEqual({ k: "wu", minutes: 10 });
   });
 
   it("saves a non-default TYPE and DIFFICULTY, and renders the active TYPE chip in its own type color (L1)", async () => {
@@ -285,9 +333,7 @@ describe("Builder", () => {
     expect(anChip.getAttribute("style")).toContain("var(--type-an)");
 
     await fillValidForm();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const [, options] = api.mock.calls[0]!;
     const body = JSON.parse((options as RequestInit).body as string);
@@ -303,11 +349,9 @@ describe("Builder", () => {
     await renderBuilder();
 
     await fillValidForm();
-    await userEvent.type(screen.getByPlaceholderText("spm"), "24");
+    await userEvent.type(screen.getByLabelText("Row 1 stroke rate"), "24");
     await userEvent.type(screen.getByPlaceholderText("opt"), "2");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const [, options] = api.mock.calls[0]!;
     const body = JSON.parse((options as RequestInit).body as string);
@@ -331,12 +375,10 @@ describe("Builder", () => {
     // driven out of range from here at all — PaceRefInput.tsx's stepper
     // clamps to ±60 (see the out-of-range case below, which loads it a
     // different way) — so only spm and rest get out-of-range values.
-    await userEvent.type(screen.getByPlaceholderText("spm"), "99");
+    await userEvent.type(screen.getByLabelText("Row 1 stroke rate"), "99");
     await userEvent.type(screen.getByPlaceholderText("opt"), "0.3");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const expectations: [string, string][] = [
       ["Row 1 duration", "duration is required, e.g. 5"],
@@ -377,9 +419,7 @@ describe("Builder", () => {
     };
     await renderBuilder({ kind: "edit", id: "w1", initial });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(screen.getByText("invalid pace reference")).toBeInTheDocument();
 
@@ -401,9 +441,7 @@ describe("Builder", () => {
     await renderBuilder();
 
     await fillValidForm();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
     expect(
@@ -427,9 +465,7 @@ describe("Builder", () => {
     expect(screen.queryByLabelText(/^No\.?$/i)).not.toBeInTheDocument();
 
     await fillValidForm();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
     const [, options] = api.mock.calls[0]!;
@@ -437,7 +473,7 @@ describe("Builder", () => {
     expect(body).not.toHaveProperty("num");
   });
 
-  it("has no + REST button; + WARM-UP and + ADD ROW remain", async () => {
+  it("has no + REST and no + WARM-UP button; + ADD ROW remains", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -446,8 +482,8 @@ describe("Builder", () => {
       screen.queryByRole("button", { name: /\+ REST/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "+ WARM-UP" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "+ WARM-UP" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "+ ADD ROW" }),
     ).toBeInTheDocument();
@@ -476,7 +512,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByPlaceholderText("5' or 2500m"), "5");
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
     const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
     await userEvent.click(faster);
     await userEvent.click(faster);
@@ -506,9 +542,7 @@ describe("Builder", () => {
   it("still generates a name from 🎲 while the library is loading (empty existing-titles list)", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
-    vi.doMock("../api/useWorkouts", () => ({
-      useWorkouts: () => ({ state: "loading" }),
-    }));
+    mockWorkoutsLoading();
     await renderBuilder();
 
     await userEvent.click(
@@ -542,12 +576,10 @@ describe("Builder", () => {
     // SPM and REST are also out of range, so there are three row errors —
     // proving the count reflects however many there actually are, not just
     // whether there are any.
-    await userEvent.type(screen.getByPlaceholderText("spm"), "99");
+    await userEvent.type(screen.getByLabelText("Row 1 stroke rate"), "99");
     await userEvent.type(screen.getByPlaceholderText("opt"), "0.3");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(screen.getByText(/needs? attention/i)).toBeInTheDocument();
     const durInput = screen.getByLabelText("Row 1 duration");
@@ -573,9 +605,7 @@ describe("Builder", () => {
     // still blank/invalid, but pain comes first in `toSteps`'s errors.
     await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save to library" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(screen.getByText(/needs? attention/i)).toBeInTheDocument();
     const painGroup = screen.getByRole("radiogroup", {
@@ -598,5 +628,123 @@ describe("Builder", () => {
     expect(
       screen.queryByRole("button", { name: /BULK IMPORT/i }),
     ).not.toBeInTheDocument();
+  });
+
+  // Requirement 2 of the Task 4 brief: the clone button is the SET cell's
+  // replacement — it duplicates its row directly beneath itself and moves
+  // focus to the new row's duration field, the same way a failed Save
+  // focuses the first invalid field (both go through Builder's `fieldRefs`
+  // map).
+  it("clicking a row's clone button duplicates it directly beneath and focuses the new row's duration field", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
+    await userEvent.click(screen.getByRole("button", { name: "+ ADD ROW" }));
+    // A second row exists now (id "r2") — cloning Row 1 must insert directly
+    // beneath it (ahead of the pre-existing second row), not appended at the
+    // end, so the clone becomes the new Row 2 and the original second row
+    // becomes Row 3.
+    await userEvent.type(screen.getByLabelText("Row 2 duration"), "8");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Duplicate Row 1" }),
+    );
+
+    expect(screen.getAllByRole("button", { name: "Remove row" })).toHaveLength(
+      3,
+    );
+    // The clone copies Row 1's fields (durValue "5"), and lands directly
+    // beneath it as the new Row 2 — the old Row 2 ("8") is pushed to Row 3.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Row 2 duration")).toHaveValue("5"),
+    );
+    expect(screen.getByLabelText("Row 3 duration")).toHaveValue("8");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByLabelText("Row 2 duration"),
+      ),
+    );
+  });
+
+  // Requirement 3: REST is marked as minutes with static text, not a
+  // placeholder that vanishes once the rower types into the field —
+  // exactly James's complaint about the old SET cell, applied to REST's
+  // unit. Asserts the field still holds its typed value AND the "MIN" text
+  // is present at the same time, which a placeholder could never do.
+  it("marks REST as minutes with visible static MIN text, not a placeholder, and never focuses it", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    const restInput = screen.getByLabelText("Row 1 rest");
+    // The MIN marking renders on mount, before any interaction — it must
+    // not itself steal focus onto the rest field the way clicking clone
+    // deliberately does onto a new row's duration field (the test above).
+    expect(document.activeElement).not.toBe(restInput);
+
+    await userEvent.type(restInput, "2");
+
+    // Scoped by class (DurationInput's own MIN/M unit chip also renders the
+    // text "MIN" elsewhere on the row) — this is REST's static marking
+    // specifically, `.field-rest-unit`, not a DurationInput radio. Still
+    // present and still readable alongside the typed value — a placeholder
+    // would have vanished the moment "2" was typed.
+    expect(
+      screen.getByText("MIN", { selector: ".field-rest-unit" }),
+    ).toBeInTheDocument();
+    expect(restInput).toHaveValue("2");
+  });
+
+  // Requirement 4: the primary button reads exactly "Save" — the old
+  // "Save to library" wording is gone, not just relabeled with extra text
+  // around it.
+  it("the primary button reads exactly Save, not Save to library", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Save to library/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Requirement 7: with a repeat count above 1 and a single work row, the
+  // reps marker is spliced in ahead of that row — exact request-body
+  // equality (not just "contains a reps step"), preserving the strictness
+  // the existing POST test above already holds the rest of the payload to.
+  it("with ×3 and one work row, POSTs steps whose first element is the reps marker", async () => {
+    const api = mockApi(
+      () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
+    );
+    mockBaselines(BASELINES);
+    await renderBuilder();
+
+    await fillValidForm();
+    const moreReps = screen.getByRole("button", { name: "More reps" });
+    await userEvent.click(moreReps);
+    await userEvent.click(moreReps);
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(api).toHaveBeenCalledWith("/api/workouts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Ladder Sets",
+        type: "O2",
+        difficulty: "easy",
+        pain: 3,
+        steps: [
+          { k: "reps", count: 3 },
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 5 },
+            ref: { base: "6k", off: -2 },
+          },
+        ],
+      }),
+    });
   });
 });
