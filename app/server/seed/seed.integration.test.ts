@@ -8,9 +8,8 @@ import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
 import { workouts } from "../db/schema.js";
 import { createUserStore, type UserStore } from "../auth/users.js";
-import { StoreConflictError } from "../stores/errors.js";
 import { createWorkoutsStore, type WorkoutsStore } from "../stores/workouts.js";
-import { seedGlobalLibrary } from "./seed.js";
+import { seedGlobalLibrary, SEED_LOCK_KEY } from "./seed.js";
 import { STARTER_WORKOUTS } from "./starter.js";
 
 describe("seedGlobalLibrary against real Postgres", () => {
@@ -100,34 +99,49 @@ describe("seedGlobalLibrary against real Postgres", () => {
   // booters can both observe zero globals and both attempt the insert. Until
   // 2026-07-30 the two partial unique indexes on `num` stopped the loser's
   // write from landing; those went with the column, so the mutual exclusion
-  // is now a transaction-scoped advisory lock inside seedGlobalLibrary. This
-  // test drives that exact race against real Postgres — wiping to a
-  // genuinely unseeded state first so both calls race the gap for real, not
-  // short-circuiting on the idempotency guard the earlier tests in this file
-  // already exercised.
-  it("tolerates a genuine two-booter race: never duplicates, and any loser that does reject rejects with exactly StoreConflictError", async () => {
+  // is now a transaction-scoped advisory lock inside seedGlobalLibrary
+  // (SEED_LOCK_KEY, exported from seed.ts for exactly this test).
+  //
+  // A test that races two REAL seedGlobalLibrary() calls and only checks the
+  // final count is a coin flip: depending on scheduling, one call can fully
+  // commit before the other's SELECT even runs, in which case the assertion
+  // passes whether or not the lock exists at all — measured at ~50% pass
+  // rate with the `pg_advisory_xact_lock` call deleted outright. Instead,
+  // take the SAME lock first from an independent session-level connection.
+  // Postgres advisory locks share one key space regardless of whether
+  // they're taken with the session-scoped (`pg_advisory_lock`) or the
+  // transaction-scoped (`pg_advisory_xact_lock`) variant, so holding it here
+  // forces seedGlobalLibrary's own lock call to genuinely block — proved via
+  // a real timing assertion (it must NOT have finished after a generous
+  // delay), not a hope that the scheduler happened to interleave badly.
+  // Deleting the `pg_advisory_xact_lock` line from seed.ts makes this test
+  // fail every time: `settled` flips to `true` well inside the 300ms window
+  // because nothing blocks it any more (verified locally before writing
+  // this comment).
+  it("blocks on the advisory lock while another session holds it, and proceeds once released", async () => {
     await db.delete(workouts);
     expect(await wk.countGlobals()).toBe(0);
 
-    const results = await Promise.allSettled([
-      seedGlobalLibrary(db),
-      seedGlobalLibrary(db),
-    ]);
+    const lockClient = await pool.connect();
+    try {
+      await lockClient.query("select pg_advisory_lock($1)", [SEED_LOCK_KEY]);
 
-    // Whichever call(s) "won", the advisory lock guarantees the starter set
-    // landed exactly once — never doubled.
-    expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length);
+      let settled = false;
+      const seeding = seedGlobalLibrary(db).then(() => {
+        settled = true;
+      });
 
-    // The lock serialises the two calls, so the loser now no-ops rather than
-    // failing — both resolving is the expected outcome. index.ts still
-    // pattern-matches StoreConflictError at boot, so if a rejection ever
-    // does surface it must still be exactly that type and nothing else,
-    // or that catch would be swallowing something it shouldn't.
-    const rejected = results.filter(
-      (r): r is PromiseRejectedResult => r.status === "rejected",
-    );
-    for (const r of rejected) {
-      expect(r.reason).toBeInstanceOf(StoreConflictError);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(settled).toBe(false);
+      expect(await wk.countGlobals()).toBe(0);
+
+      await lockClient.query("select pg_advisory_unlock($1)", [SEED_LOCK_KEY]);
+      await seeding;
+
+      expect(settled).toBe(true);
+      expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length);
+    } finally {
+      lockClient.release();
     }
   });
 });

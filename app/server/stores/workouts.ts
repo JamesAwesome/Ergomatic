@@ -5,8 +5,9 @@ import type { WorkoutInput } from "../../domain/types.js";
 
 export type WorkoutSource = "starter" | "user";
 // `sortOrder` is the authored ordering key that replaced the retired `num`
-// column (Phase 5C). Only the seeded global library sets it; personal rows
-// leave it null and fall back to creation order — see list()'s orderBy.
+// column (Phase 5C). Only createMany(null, …) — the seed path — ever writes
+// it; create() ignores this field entirely (H1) since every row it inserts
+// is personal and falls back to creation order — see list()'s orderBy.
 export type NewWorkoutInput = WorkoutInput & {
   source: WorkoutSource;
   sortOrder?: number | null;
@@ -32,8 +33,14 @@ export function createWorkoutsStore(db: Db) {
         .where(or(isNull(workouts.userId), eq(workouts.userId, userId)))
         // Postgres sorts NULLs last for ASC, so the authored globals lead and
         // every row without a sort_order (all personal rows) follows in
-        // creation order.
-        .orderBy(asc(workouts.sortOrder), asc(workouts.createdAt));
+        // creation order. Trailing `id` makes ties (same-transaction
+        // `created_at`, e.g. a createMany batch) a total order instead of an
+        // unspecified one.
+        .orderBy(
+          asc(workouts.sortOrder),
+          asc(workouts.createdAt),
+          asc(workouts.id),
+        );
       return rows.map(withIsGlobal);
     },
 
@@ -53,13 +60,18 @@ export function createWorkoutsStore(db: Db) {
       return row ? withIsGlobal(row) : null;
     },
 
-    // Always personal: userId is never null here.
+    // Always personal: userId is never null here. `sortOrder` is deliberately
+    // NOT read off `input` — a client-supplied value on the request body
+    // (e.g. `POST /api/workouts {"sortOrder": -1}`) must never reach
+    // Postgres (H1). Only the seed path (createMany(null, …), below) ever
+    // authors a sort_order; every personal row hard-codes null and falls
+    // back to created_at ordering, per list()'s orderBy.
     async create(userId: string, input: NewWorkoutInput) {
       const [row] = await db
         .insert(workouts)
         .values({
           userId,
-          sortOrder: input.sortOrder ?? null,
+          sortOrder: null,
           title: input.title,
           type: input.type,
           difficulty: input.difficulty,
@@ -146,7 +158,11 @@ export function createWorkoutsStore(db: Db) {
         .select()
         .from(workouts)
         .where(isNull(workouts.userId))
-        .orderBy(asc(workouts.sortOrder), asc(workouts.createdAt));
+        .orderBy(
+          asc(workouts.sortOrder),
+          asc(workouts.createdAt),
+          asc(workouts.id),
+        );
       return rows.map(withIsGlobal);
     },
 
