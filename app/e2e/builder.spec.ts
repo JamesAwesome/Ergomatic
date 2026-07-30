@@ -79,7 +79,13 @@ test.describe("authoring loop", () => {
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 3" }).click();
     await page.getByLabel("Row 1 duration").fill("20'");
-    await page.getByLabel("Row 1 pace reference").fill("6k-2");
+    // Base defaults to 6k (builderState.ts's newRow) — two clicks on the
+    // faster stepper reaches the "-2" offset the exit criterion needs.
+    const fasterButton = page.getByRole("button", {
+      name: "Row 1 pace faster",
+    });
+    await fasterButton.click();
+    await fasterButton.click();
     await page.getByLabel("Row 1 stroke rate").fill("22");
 
     // With a 6k baseline of 122.0s: 122 - 2 = 120.0, tolerance +/-1s (the
@@ -163,7 +169,7 @@ test.describe("authoring loop", () => {
     await page.getByLabel("Title").fill(originalTitle);
     await page.getByRole("radio", { name: "Pain 2" }).click();
     await page.getByLabel("Row 1 duration").fill("10'");
-    await page.getByLabel("Row 1 pace reference").fill("2k");
+    await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -202,7 +208,7 @@ test.describe("authoring loop", () => {
     await page.getByLabel("Title").fill(title);
     await page.getByRole("radio", { name: "Pain 1" }).click();
     await page.getByLabel("Row 1 duration").fill("5'");
-    await page.getByLabel("Row 1 pace reference").fill("2k");
+    await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
