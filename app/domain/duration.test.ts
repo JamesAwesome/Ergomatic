@@ -29,6 +29,14 @@ describe("fmtDuration", () => {
     expect(fmtDuration(0.75)).toBe("0:45");
     expect(fmtDuration(65)).toBe("1:05:00");
   });
+
+  it("survives rounding: floor and round disagree on 123 seconds", () => {
+    // When minutes * 60 yields a value just below an integer (e.g., 122.99999…),
+    // Math.floor and Math.round produce different results. 2.05 * 60 ≈ 122.999…,
+    // so floor yields 2:02 (wrong) and round yields 2:03 (correct). This test dies
+    // if rounding is replaced with floor.
+    expect(fmtDuration(123 / 60)).toBe("2:03");
+  });
 });
 
 describe("parseClock", () => {
@@ -71,6 +79,16 @@ describe("parseClock", () => {
     ]) {
       expect(fmtDuration(parseClock(text)!)).toBe(text);
     }
+  });
+
+  it("round-trips values where floor and round disagree, catching rounding bugs", () => {
+    // 2:03 parses to 123 seconds. When reconstructing, 123/60 = 2.05, and
+    // 2.05 * 60 ≈ 122.999…, so floor would yield 122 (broken), round yields 123
+    // (correct). This test catches a regression to floor.
+    expect(fmtDuration(parseClock("2:03")!)).toBe("2:03");
+    // Similarly: 1:43 → 103 seconds → 103/60 ≈ 1.716666… → 1.716666… * 60
+    // ≈ 102.999…, floor → 102 (broken), round → 103 (correct).
+    expect(fmtDuration(parseClock("1:43")!)).toBe("1:43");
   });
 });
 
