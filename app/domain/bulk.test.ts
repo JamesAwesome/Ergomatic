@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseBulk } from "./bulk.js";
+import { parseDurationToken } from "./duration.js";
 
 describe("parseBulk", () => {
   it("parses one valid multi-block paste", () => {
@@ -368,5 +369,28 @@ w 1' 6k-2`);
     expect(result.errors[0].message).toMatch(
       /title \| TYPE \| difficulty \| pain/,
     );
+  });
+});
+
+describe("clock durations in bulk blocks", () => {
+  it("parses a 0:45 work line", () => {
+    const res = parseBulk("Sprints | AN | easy | 3\nw 0:45 6k+2\n");
+    expect(res.errors).toStrictEqual([]);
+    const step = res.workouts[0]!.steps.find((s) => s.k === "w");
+    expect(step).toMatchObject({ duration: { kind: "time", minutes: 0.75 } });
+  });
+
+  it("agrees with the builder on every duration form", () => {
+    // The two parsers were byte-identical regexes kept in lockstep by hand.
+    // They are now one function; this asserts the claim instead of commenting
+    // it.
+    for (const [token, expected] of [
+      ["0:45", { kind: "time", minutes: 0.75 }],
+      ["5", { kind: "time", minutes: 5 }],
+      ["10'", { kind: "time", minutes: 10 }],
+      ["2500m", { kind: "distance", meters: 2500 }],
+    ] as const) {
+      expect(parseDurationToken(token)).toStrictEqual(expected);
+    }
   });
 });

@@ -43,19 +43,19 @@ describe("validateSteps", () => {
       expect.arrayContaining([expect.stringContaining("not an object")]),
     );
   });
-  it("rejects a wu/r step with out-of-range or non-half-step minutes", () => {
+  it("rejects a wu/r step with out-of-range or non-whole-second minutes", () => {
     expect(validateSteps([{ k: "wu", minutes: 0 }, work()]).ok).toBe(false);
-    expect(validateSteps([{ k: "wu", minutes: 10.3 }, work()]).ok).toBe(false);
+    expect(validateSteps([{ k: "wu", minutes: 10.123456 }, work()]).ok).toBe(false);
     expect(validateSteps([work(), { k: "r", minutes: 200 }]).ok).toBe(false);
   });
   it("rejects out-of-bounds values with messages", () => {
     for (const bad of [
       [work({ duration: { kind: "time", minutes: 0 } })],
-      [work({ duration: { kind: "time", minutes: 10.3 } })],
+      [work({ duration: { kind: "time", minutes: 10.123456 } })],
       [work({ duration: { kind: "distance", meters: 50 } })],
       [work({ spm: 200 })],
       [work({ ref: { base: "5k", off: 0 } })],
-      [work({ restMinutes: 0.3 })],
+      [work({ restMinutes: 0.123456 })],
       [work({ restMinutes: 90 })],
       [{ k: "wu", minutes: 10 }], // no work/test step
       [work(), { k: "reps", count: 4 }], // marker last
@@ -130,5 +130,101 @@ describe("validateWorkoutInput", () => {
     // no longer part of WorkoutInput, so it must neither be required nor be
     // grounds for rejection — the store simply never writes it.
     expect(validateWorkoutInput({ ...base, num: 12 }).ok).toBe(true);
+  });
+});
+
+describe("whole-second durations", () => {
+  const workout = (steps: unknown[]) => ({
+    title: "T",
+    type: "O2",
+    difficulty: "easy",
+    pain: 3,
+    steps,
+  });
+
+  it("accepts a 45-second work step", () => {
+    const res = validateWorkoutInput(
+      workout([
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 0.75 },
+          ref: { base: "6k", off: 0 },
+        },
+      ]),
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("accepts 20 seconds, which is not exact in binary", () => {
+    // 20 / 60 * 60 === 19.999999999999996, so a naive Number.isInteger(n * 60)
+    // check rejects it. This test fails against that implementation.
+    const res = validateWorkoutInput(
+      workout([
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 20 / 60 },
+          ref: { base: "6k", off: 0 },
+        },
+      ]),
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("still accepts the half-step values that already exist in stored data", () => {
+    for (const minutes of [0.5, 1, 2.5, 20, 180]) {
+      const res = validateWorkoutInput(
+        workout([
+          {
+            k: "w",
+            duration: { kind: "time", minutes },
+            ref: { base: "6k", off: 0 },
+          },
+        ]),
+      );
+      expect(res.ok, `minutes ${minutes}`).toBe(true);
+    }
+  });
+
+  it("rejects a sub-second duration and one past the ceiling", () => {
+    for (const minutes of [0, 0.001, 180.5]) {
+      const res = validateWorkoutInput(
+        workout([
+          {
+            k: "w",
+            duration: { kind: "time", minutes },
+            ref: { base: "6k", off: 0 },
+          },
+        ]),
+      );
+      expect(res.ok, `minutes ${minutes}`).toBe(false);
+    }
+  });
+
+  it("applies the same rule to wu, r and restMinutes", () => {
+    const res = validateWorkoutInput(
+      workout([
+        { k: "wu", minutes: 0.75 },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "6k", off: 0 },
+          restMinutes: 0.75,
+        },
+        { k: "r", minutes: 0.25 },
+      ]),
+    );
+    expect(res.ok).toBe(true);
+
+    const tooLong = validateWorkoutInput(
+      workout([
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "6k", off: 0 },
+          restMinutes: 60.25,
+        },
+      ]),
+    );
+    expect(tooLong.ok).toBe(false);
   });
 });
