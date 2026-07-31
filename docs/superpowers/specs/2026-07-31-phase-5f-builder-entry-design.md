@@ -43,6 +43,8 @@ the shared field forces.
 | Question | Decision |
 |---|---|
 | Duration granularity | **Any whole second.** `0:45`, `0:20`, `0:10` all valid. |
+| Duration display | **Elastic positional** — seconds always shown, hour group only when nonzero, leading group unpadded (`0:45`, `20:00`, `1:05:00`). |
+| Totals display | **Stay labelled** — `TOTAL 302 MIN`, library row `302′`. |
 | Stepper increment | `:30` — where a stepper exists (REST). Typing overrides. |
 | DUR ± buttons | **No.** DUR stays typing-only; SPM and REST keep their steppers. |
 | MAX/MIN | Deferred to 5G. |
@@ -100,18 +102,63 @@ Extract to `app/domain/duration.ts`:
 
 ```ts
 export function parseDurationToken(token: string): WorkDuration | null;
-export function fmtDuration(minutes: number): string;   // 0.75 -> "0:45", 180 -> "180:00"
+export function fmtDuration(minutes: number): string;   // 0.75 -> "0:45", 65 -> "1:05:00"
 export function parseClock(text: string): number | null; // "1:30" -> 1.5 minutes
 ```
 
-`parseDurationToken` accepts, in order: `m:ss` (**new** — `0:45`, `1:30`,
-`20:00`), a bare decimal (minutes, unchanged), `N'` (minutes, unchanged), `Nm`
-(meters, unchanged). `bulk.ts` and `builderState.ts` both import it; neither
-keeps a private copy. A bulk block reading `0:45 6k+2` and a row typed as `0:45`
-now provably mean the same thing.
+`parseDurationToken` accepts, in order: clock form (**new** — `0:45`, `1:30`,
+`20:00`, `1:05:00`), a bare decimal (minutes, unchanged), `N'` (minutes,
+unchanged), `Nm` (meters, unchanged). `bulk.ts` and `builderState.ts` both
+import it; neither keeps a private copy. A bulk block reading `0:45 6k+2` and a
+row typed as `0:45` now provably mean the same thing.
 
-`fmtDuration` renders total seconds as `m:ss` with zero-padded seconds and no
-hour rollover (`180:00`, not `3:00:00`) — erg workouts are minutes.
+#### The house time format: elastic positional
+
+**Seconds are always present; the hour group appears only when nonzero; the
+leading group is not zero-padded.**
+
+| Minutes | Renders |
+|---|---|
+| `0.75` | `0:45` |
+| `20` | `20:00` |
+| `65` | `1:05:00` |
+| `180` | `3:00:00` |
+
+This is the researched convention, not a preference. ECMA-402's
+`Intl.DurationFormat` defines a `digital` style (`1:46:40`) and documents it as
+the right choice for durations under a day; Android's `DateUtils.formatElapsedTime`
+documents elapsed time as `MM:SS` or `H:MM:SS`, adding the hour group only when
+there is one; Apple's Music/Podcasts/Fitness convention drops the leading zero
+(`0:45`), and this app is iOS-first. Strictly padded `00:00:45` appears in
+reporting and backend contexts (Salesforce, Excel, Java formatters), not in
+interfaces read while moving.
+
+Because the rightmost pair is *always* seconds, a bare `1:30` can only mean 90
+seconds anywhere in the app. That invariant is what makes the format safe, and
+it is the reason totals do **not** adopt it (below).
+
+Whatever the Phase 6 timer renders inherits this function.
+
+#### Totals stay labelled
+
+`TOTAL 302 MIN` and the library row's `302′` keep their unit labels. The same
+research splits the styles by purpose: positional/digital for timings, labelled
+for summary values. Keeping totals labelled also removes the collision entirely
+— no reader has to decide whether a colon value counts minutes or hours.
+
+Totals round to the nearest minute for display (`3 × 0:45` must not render as
+`2.25 MIN`); the duration **filter buckets keep bucketing on the unrounded
+number**.
+
+#### Accessible names
+
+A positional duration is hostile to screen readers — `1:05:00` announces as
+"one oh five colon zero zero". Every rendered positional duration carries a
+spoken accessible name (`aria-label` or visually-hidden text): `0:45` → "45
+seconds", `20:00` → "20 minutes", `1:05:00` → "1 hour 5 minutes". Primer's
+guidance on compact time formats makes the same point about assistive tech and
+browser translation. A `fmtDurationSpoken(minutes)` helper sits beside
+`fmtDuration` so the two can never drift.
 
 ### 3. `ClockInput` — the masked time field
 
@@ -125,16 +172,18 @@ separator itself. Digits fill right-to-left:
 | `30` | `0:30` |
 | `130` | `1:30` |
 | `2000` | `20:00` |
-| `18000` | `180:00` |
+| `10500` | `1:05:00` |
+| `30000` | `3:00:00` |
 
-Backspace shifts back out the same way. Empty is a legal state (REST uses it for
-"no rest"; DUR shows the save-time "duration required" error already wired
-through `fieldError("dur")`).
+Digits fill seconds, then minutes, then hours — the same order the format
+renders in. Backspace shifts back out the same way. Empty is a legal state (REST
+uses it for "no rest"; DUR shows the save-time "duration required" error already
+wired through `fieldError("dur")`).
 
-Digits beyond five are ignored. Seconds above `59` are reachable transiently
-(`170` reads as `1:70`) and **normalise on blur** by total seconds — `1:70` →
-`130s` → `2:10`. Normalising beats rejecting: a rejected keystroke on a phone
-reads as a broken field.
+Digits beyond six are ignored (`3:00:00` is the domain's ceiling). Minutes and
+seconds above `59` are reachable transiently (`170` reads as `1:70`) and
+**normalise on blur** by total seconds — `1:70` → `130s` → `2:10`. Normalising
+beats rejecting: a rejected keystroke on a phone reads as a broken field.
 
 Canonical form in `BuilderRow`: when `durUnit === "min"`, `durValue` holds the
 formatted `m:ss` string; when `durUnit === "m"` it stays the plain integer meter
@@ -194,10 +243,12 @@ step-level duration render switches to `fmtDuration`:
 - `builderState.ts`'s `stepSummary` (collapsed accordion card, line 208)
 - The builder's TARGET/summary lines that echo a duration
 
-Workout **totals** stay in minutes and round for display — `3 × 0:45` must not
-render as `2.25 MIN`. That covers the builder's `TOTAL … MIN`, the library row's
-`${durationMinutes}′` (`WorkoutRow.tsx:23`), and the duration filter buckets,
-which keep bucketing on the unrounded number.
+Each of those also gains the spoken accessible name described above.
+
+Workout **totals** keep their labels and round to the nearest minute for display
+— the builder's `TOTAL … MIN` and the library row's `${durationMinutes}′`
+(`WorkoutRow.tsx:23`). The duration filter buckets keep bucketing on the
+unrounded number.
 
 ## Testing
 
@@ -205,7 +256,11 @@ Per `docs/TESTING.md`; the items below are the ones this phase's shape demands.
 
 **Domain (heaviest coverage, `app/domain/**` is pinned at 100%)**
 - Round trip: for a table spanning `0:01`, `0:20`, `0:45`, `1:00`, `1:30`,
-  `59:59`, `180:00`, `fmtDuration(parseClock(x)) === x`.
+  `59:59`, `1:00:00`, `1:05:00`, `3:00:00`, `fmtDuration(parseClock(x)) === x`.
+- The elastic rule at its boundary: `59:59` keeps two groups, `1:00:00` gains
+  the hour group, and neither pads its leading group.
+- `fmtDurationSpoken` beside every `fmtDuration` case — `0:45` → "45 seconds",
+  `1:05:00` → "1 hour 5 minutes", including the singular/plural boundaries.
 - The epsilon case explicitly: `parseClock("0:20")` must validate, and a test
   that fails against a naive `Number.isInteger(n * 60)` implementation.
 - Boundaries: `0:00` and `180:01` rejected; rest `60:01` rejected.
@@ -251,6 +306,8 @@ Per `docs/TESTING.md`; the items below are the ones this phase's shape demands.
 
 - A 45-second work step can be typed on a phone with a number pad, saved, seen
   on the detail screen as `0:45`, reopened for edit, and re-saved unchanged.
+- A 65-minute step renders `1:05:00`, and a screen reader announces it as
+  "1 hour 5 minutes"; totals still read `TOTAL 302 MIN`.
 - SPM can be cleared back to FREE by typing; rest can be typed as `3:00`.
 - The warm-up line renders above the step list.
 - `+ ADD STEP` yields an empty step; DUPLICATE still copies.
