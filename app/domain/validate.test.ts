@@ -45,7 +45,9 @@ describe("validateSteps", () => {
   });
   it("rejects a wu/r step with out-of-range or non-whole-second minutes", () => {
     expect(validateSteps([{ k: "wu", minutes: 0 }, work()]).ok).toBe(false);
-    expect(validateSteps([{ k: "wu", minutes: 10.123456 }, work()]).ok).toBe(false);
+    expect(validateSteps([{ k: "wu", minutes: 10.123456 }, work()]).ok).toBe(
+      false,
+    );
     expect(validateSteps([work(), { k: "r", minutes: 200 }]).ok).toBe(false);
   });
   it("rejects out-of-bounds values with messages", () => {
@@ -155,14 +157,16 @@ describe("whole-second durations", () => {
     expect(res.ok).toBe(true);
   });
 
-  it("accepts 20 seconds, which is not exact in binary", () => {
-    // 20 / 60 * 60 === 19.999999999999996, so a naive Number.isInteger(n * 60)
-    // check rejects it. This test fails against that implementation.
+  it("accepts 31 seconds, which does not survive the round trip exactly", () => {
+    // 31 / 60 * 60 === 31.000000000000004, so a naive Number.isInteger(n * 60)
+    // rejects it. 407 of the 10,800 whole seconds in range are like this (31,
+    // 62, 123, 124, 125, 245…) — a test built on a "clean" value such as 20s
+    // passes against the naive predicate and proves nothing.
     const res = validateWorkoutInput(
       workout([
         {
           k: "w",
-          duration: { kind: "time", minutes: 20 / 60 },
+          duration: { kind: "time", minutes: 31 / 60 },
           ref: { base: "6k", off: 0 },
         },
       ]),
