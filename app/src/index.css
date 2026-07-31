@@ -1294,6 +1294,21 @@ button:disabled {
   border-color: var(--accent);
 }
 
+/* Same metrics as .duration-input-value — the mask changes what the field
+   accepts, not how it sits in the row. 16px is deliberate: iOS Safari zooms
+   the page on focus for anything smaller. */
+.clock-input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  text-align: center;
+}
+
 /* Joined pair (docs/design/builder-redesign/README.md §4b: two 56×44
    segments), not two separate chips with a gap. */
 .duration-input-units {
