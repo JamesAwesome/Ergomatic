@@ -161,6 +161,52 @@ they go stale (this has burned us before). Concretely:
 
 **Follow-ups (not blockers, recorded at merge):** DUR field width clips long distances (`42195m`); the `×N` stepper keeps its value after the block is cleared; no unsaved-changes guard when leaving the builder; re-importing after a partial bulk failure re-submits the blocks that already landed; `design.spec` sweeps only the blank builder, not the bulk panel or the edit screen; the bulk endpoint inserts blocks sequentially without a transaction (now UI-reachable for the first time).
 
+## Phase 5C — Builder refinements & the number retirement
+
+**Status:** Done (2026-07-30, PR #25)
+**Goal:** Close the issues device testing exposed, and settle how workout identity works at scale.
+
+- [x] Structured pace-ref control (2K/6K select + offset stepper) replaces the free-text field that rejected `8k` with an inline error
+- [x] Bare minutes accepted everywhere — `5` no longer needs the apostrophe a phone keyboard buries (rows and bulk grammar both)
+- [x] On-theme name generator (🎲) for the creatively impaired
+- [x] Bulk import moved off the single-entry form onto its own screen
+- [x] Save focuses the first invalid field instead of failing silently below the fold
+- [x] **Workout `num` retired for `sort_order` + `created_at`** — one table with a nullable `user_id`, not a second table for customs: `session_logs.workout_id` carries an FK with `ON DELETE SET NULL`, and splitting the table would force a polymorphic reference the database cannot enforce (SQL Antipatterns ch. 7). `sortOrder` is server-assigned; the client cannot set it
+- [x] Double-seed protection preserved through the unique-index removal via `pg_advisory_xact_lock`
+
+**Exit:** MET. `DROP COLUMN num` is deliberately deferred to Phase 6 as two releases (see below).
+
+## Phase 5D — Builder simplification from device feedback
+
+**Status:** Done (2026-07-30, PR #26)
+**Goal:** Make the row authorable with a thumb, on a phone, without instructions.
+
+- [x] Repeat is implicit — every step but the warm-up repeats, set once at the bottom; the per-row `SET` cell (a bare ↻ nobody could identify) is gone
+- [x] Explicit clone button per row: how you build `5×1′`
+- [x] Duration takes a number plus a MIN/M unit toggle; rest gained the same treatment and stays minutes-only (rest carries no pace, so metres could never convert to time)
+- [x] SPM stays optional, with 44px steppers either side that wake at 20 from empty
+- [x] Selected states read as filled, not outlined — the red outline was easy to miss and caused frustration taps
+- [x] Warm-up comes from preferences and is never authored into a workout; a `BOOKEND_ROW_KINDS` seam is left for cooldowns
+- [x] `hasMidSpanReps` refuses to open workouts whose stored repeat marker the row model cannot place, rather than silently relocating it (a `[w 10', reps 3, w 2']` workout re-saved as 36 min instead of 16)
+- [x] Column header strip removed once the row went multi-line; per-field affixes label the controls instead
+
+**Exit:** MET.
+
+## Phase 5E — Builder redesign: the accordion
+
+**Status:** Done (2026-07-31, PR #27)
+**Goal:** Take the vertical cost out of the builder — the screen held two steps at a time.
+
+**Design authority:** `docs/design/builder-redesign/` (supersedes `docs/design/README.md` §11).
+
+- [x] Accordion step cards: at most one expanded (`editing: string | null`), collapsed cards ~86px with a one-line summary
+- [x] Classification card consolidates type / difficulty / pain; pain is numerals plus a level word (the faces are gone)
+- [x] Shared `Stepper` behind rest, SPM, reps and pace offset
+- [x] AUTO NAME, REPEAT ALL STEPS, the TARGET strip, and confirm-before-delete
+- [x] Safe-area insets survive the builder screen's own `.screen` override — `design.spec.ts` now asserts it
+
+**Exit:** MET — deployed and verified at `v0.1.0-137-gedbda77`.
+
 ## Phase 6 — Session flow
 
 **Status:** Not started

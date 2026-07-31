@@ -281,3 +281,79 @@ checking. `app/e2e/screenshots.spec.ts` capturing that screen into
 `docs/screenshots/` (embedded in the phase PR body) is part of the same
 requirement: **both together are part of each UI phase's definition of
 done**, not an optional nice-to-have tacked on afterward.
+
+## 9. Fixture realism
+
+A test's fixture is a claim about what production looks like. When that claim
+is wrong, the test passes and the bug ships. Both of the worst defects this
+codebase has shipped were fixture failures, not logic failures:
+
+- **The name generator returned the same name on every press.** Its tests
+  seeded an *empty* library, so four consecutive seeds produced four different
+  names. Against the real 35-workout library — whose titles occupy the front
+  of the generator's own word list — every seed collapsed onto the same
+  first-free slot. The fix's regression test imports `STARTER_WORKOUTS` and
+  asserts four seeds give four distinct names.
+- **A whole rendering branch shipped with a WCAG Level A violation** because
+  every unit test and every `design.spec.ts` sweep built `kind: "w"` rows. The
+  `wu`/`r` branch — which that phase existed to preserve — had no coverage at
+  all, and a collapsed warm-up card rendered a focusable button with no
+  accessible name on essentially every stored workout.
+
+**The rule:** prefer the real thing. Use `STARTER_WORKOUTS`, a workout produced
+by `fromWorkout` from stored steps, or a fully populated form — not a
+hand-built minimum. When a code path is reachable only by data you don't
+normally author (a warm-up row, a bulk-imported shape, an unset baseline),
+that path is *more* likely to be wrong, not less, because nothing else
+exercises it.
+
+Corollary for `design.spec.ts`: a sweep that only ever builds one variant only
+ever checks one variant. If a screen renders different row kinds or states,
+the sweep must visit them.
+
+## 10. Per-file coverage
+
+The 90×4 gate in `app/vitest.config.ts` is a **repo-wide aggregate**. A new
+file can ship with entire branches uncovered and the suite still passes,
+because a few thousand covered lines elsewhere absorb it. That has happened
+four times here — two hand-rolled keyboard handlers and two error branches,
+each needing a follow-up fix wave after a reviewer noticed.
+
+**When you add or substantially change a file, read its own line in the
+coverage table**, not just the exit code. `pnpm test:coverage` prints per-file
+numbers; new components should generally reach 100% because they are small and
+fully reachable. If a branch genuinely can't be reached, §4's documented-ignore
+rule applies — but "the aggregate passed" is not a reason.
+
+## 11. Verification is measured, not asserted
+
+Three habits, each learned the same way:
+
+- **Contrast is computed.** `--ink-4` shipped at 3.29:1 against a 4.5:1
+  requirement and survived a full review, because it was judged by looking.
+  Compute the ratio and put the number in the report. A design handoff's own
+  accessibility note is not authority either — one of ours labelled a
+  fill-vs-background ratio as fill-vs-text, off by half a point.
+- **Screenshots are opened and read.** They are the PR's visual record. Two
+  have shipped showing fallback dashes (no baselines seeded) or scrolled past
+  the very control the phase added. Seed real data, capture, then look at the
+  image.
+- **Behaviour is exercised, not existence-checked.** Covered by §3, but the
+  most common live instance is a retry/callback asserted with
+  `expect(typeof fn).toBe("function")`. Call it and assert what changed.
+
+## 12. What a reviewer is for
+
+Per-task reviews in this repo have repeatedly caught things no suite could,
+and the pattern is worth naming so reviews aim there:
+
+- **Mutation-test the guard, not the feature.** Reviewers here have deleted a
+  `key={}` prop, swapped positional bucketing for kind bucketing, and dropped
+  an `env()` rule, then re-run — proving the test either dies or doesn't. A
+  test that passes with the code removed is not a test.
+- **Re-derive the arithmetic independently.** Never recompute an expected pace
+  by calling the same function the component calls; hand-compute it, or read
+  it off a committed screenshot.
+- **Check the seams the diff doesn't show.** Client bounds against
+  `app/domain/validate.ts`; fake stores against real ones (§5); a deleted
+  component's CSS; whether `pnpm e2e` still passes.
