@@ -41,6 +41,13 @@ async function setBaselines(page: Page): Promise<void> {
 
 test("signin", async ({ page }) => {
   await page.goto("/");
+  // The only capture here that didn't wait for content, and it eventually
+  // bit: a run caught the page between load and first paint and committed a
+  // blank cream rectangle. Every other test in this file waits for a real
+  // element first — this one now does too.
+  await page
+    .getByRole("link", { name: /continue with google/i })
+    .waitFor({ state: "visible" });
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "signin.png"),
   });
