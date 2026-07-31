@@ -1,3 +1,8 @@
+import {
+  fmtDuration,
+  parseClock,
+  parseDurationToken,
+} from "../../domain/duration.js";
 import { resolveSplit } from "../../domain/pace.js";
 import type {
   Baselines,
@@ -139,9 +144,9 @@ export function cloneRow(
 }
 
 // The stepper's own grid: rest displays and edits in 30-second increments,
-// clamped 0..900s (15 minutes) — well inside the domain's 0.5..60-minute
-// half-step bound, so every value this grid can produce is a legal
-// `restMinutes`. The stored field is ALWAYS minutes (`BuilderRow.rest`,
+// clamped 0..900s (15 minutes) — well inside the domain's 0:01..60:00 bound,
+// so every value this grid can produce is a legal `restMinutes`. The stored
+// field is ALWAYS minutes (`BuilderRow.rest`,
 // `domain/validate.ts`'s `restMinutes`) — these two bridge functions are the
 // only place that ever multiplies/divides by 60, specifically so a future
 // caller can't accidentally read/write seconds into `row.rest` by hand.
@@ -205,7 +210,10 @@ function fmtSignedOffset(off: number): string {
  *  35 starters, anything bulk-imported), which genuinely contain `wu` and
  *  standalone `r` rows, so this can no longer assume `w`-only callers. */
 export function stepSummary(row: BuilderRow): string {
-  const dur = row.durUnit === "min" ? `${row.durValue}′` : `${row.durValue} m`;
+  const dur =
+    row.durUnit === "min"
+      ? fmtDuration(parseClock(row.durValue) ?? 0)
+      : `${row.durValue} m`;
   if (row.kind === "wu") return `${dur} warm-up`;
   if (row.kind === "r") return `${dur} rest`;
   return `${dur} @ ${row.refBase} ${fmtSignedOffset(row.refOff)}`;
@@ -250,10 +258,11 @@ export const PAIN_WORDS: readonly string[] = [
  *  behaviour: "appends a copy of the last step's values … or a default …
  *  when the list is empty") and returns the new row's id so the caller can
  *  open it for editing immediately — the accordion always opens a freshly
- *  added step rather than leaving it collapsed. The empty-list default (`5`
- *  MIN / `6k` ±0 / spm `22` / rest `1` minute = 60s) matches `newRow("w")`'s
- *  own pace-reference default (6k, no offset) plus the values design review
- *  settled on for a first step's duration/cadence/rest.
+ *  added step rather than leaving it collapsed. The empty-list default
+ *  (`5:00` MIN / `6k` ±0 / spm `22` / rest `1:00` = 60s) matches
+ *  `newRow("w")`'s own pace-reference default (6k, no offset) plus the
+ *  values design review settled on for a first step's duration/cadence/rest,
+ *  spelled in the clock form `durValue`/`rest` hold everywhere else now.
  *
  *  Always produces a `kind: "w"` row, even when the last row is a `wu` or
  *  standalone `r` — "+ ADD STEP" only ever authors a work step (there's no
@@ -264,12 +273,12 @@ export function addStepLike(f: BuilderForm): { form: BuilderForm; id: string } {
   if (f.rows.length === 0) {
     const row: BuilderRow = {
       ...newRow("w"),
-      durValue: "5",
+      durValue: "5:00",
       durUnit: "min",
       refBase: "6k",
       refOff: 0,
       spm: "22",
-      rest: "1",
+      rest: "1:00",
     };
     return { form: { ...f, rows: [row] }, id: row.id };
   }
@@ -286,50 +295,23 @@ export function setReps(f: BuilderForm, reps: number): BuilderForm {
   return { ...f, reps: Math.min(12, Math.max(1, reps)) };
 }
 
-/** Same grammar as `domain/bulk.ts`'s (unexported) `parseDuration`: a bare
- *  number is minutes, `10'` is also minutes (decimals allowed on both),
- *  `2500m` is meters (integers only). The bare-number regex is byte-identical
- *  to bulk.ts's — typing a duration in the builder and pasting the same text
- *  into a bulk-import block must never disagree on what it means. Kept in
- *  lockstep by hand since it isn't exported.
- *
- *  Only the `rest` field still uses this grammar (a single free-text field
- *  with an optional apostrophe). A row's own duration is now the structured
- *  `durValue`/`durUnit` pair — see `rowDurationNumber` below — with no
- *  grammar to parse at all. */
-export function parseDurationInput(text: string): WorkDuration | null {
-  const trimmed = text.trim();
-  const bare = /^(\d+(?:\.\d+)?)$/.exec(trimmed);
-  if (bare) return { kind: "time", minutes: Number(bare[1]) };
-  const time = /^(\d+(?:\.\d+)?)'$/.exec(trimmed);
-  if (time) return { kind: "time", minutes: Number(time[1]) };
-  const distance = /^(\d+)m$/.exec(trimmed);
-  if (distance) return { kind: "distance", meters: Number(distance[1]) };
-  return null;
-}
-
-// Bounds mirrored exactly from app/domain/validate.ts. Kept local (rather
-// than calling validateSteps) because that helper's errors are keyed by
-// step index, which can't be mapped back to a form row.
-const isHalfStep = (n: number, lo: number, hi: number): boolean =>
-  n >= lo && n <= hi && Number.isInteger(n * 2);
+// Bounds and predicate mirrored exactly from app/domain/validate.ts. Kept
+// local (rather than calling validateSteps) because that helper's errors are
+// keyed by step index, which can't be mapped back to a form row.
+const SECOND = 1 / 60;
+const isWholeSecond = (n: number, lo: number, hi: number): boolean =>
+  n >= lo && n <= hi && Math.abs(n * 60 - Math.round(n * 60)) < 1e-6;
 const isInt = (n: number, lo: number, hi: number): boolean =>
   Number.isInteger(n) && n >= lo && n <= hi;
 
-// A plain decimal number, nothing else — guards `rowDurationNumber` against
-// everything bare `Number()` would otherwise happily accept: hex literals
-// ("0x10" -> 16), scientific notation ("1e3" -> 1000), leading "+", etc.
-// Same shape as `parseDurationInput`'s own bare-number branch.
-const DUR_VALUE_PATTERN = /^\d+(\.\d+)?$/;
-
-/** Parses `row.durValue` as a plain number — `^\d+(\.\d+)?$` only, no
- *  grammar and no `Number()`-isms like hex or scientific notation — or
- *  `null` for blank/non-matching input. Shared by `toSteps` (which
- *  additionally enforces the domain's bounds) and `rowMinutes` (which is a
- *  lenient live preview and doesn't). */
+/** The row's duration as a number in its own unit — minutes for `min`
+ *  (parsed from the clock string the masked field produces), meters for `m`
+ *  — or null for blank/unparseable input. */
 function rowDurationNumber(row: BuilderRow): number | null {
   const trimmed = row.durValue.trim();
-  return DUR_VALUE_PATTERN.test(trimmed) ? Number(trimmed) : null;
+  if (trimmed === "") return null;
+  if (row.durUnit === "min") return parseClock(trimmed);
+  return /^\d+$/.test(trimmed) ? Number(trimmed) : null;
 }
 
 export function toSteps(
@@ -377,8 +359,8 @@ export function toSteps(
         errors[`row:${row.id}:dur`] = "duration must be minutes";
         return;
       }
-      if (!isHalfStep(n, 0.5, 180)) {
-        errors[`row:${row.id}:dur`] = "minutes must be 0.5..180 in 0.5 steps";
+      if (!isWholeSecond(n, SECOND, 180)) {
+        errors[`row:${row.id}:dur`] = "duration must be 0:01..3:00:00";
         return;
       }
       steps.push(
@@ -403,8 +385,8 @@ export function toSteps(
       } else {
         duration = { kind: "distance", meters: n };
       }
-    } else if (!isHalfStep(n, 0.5, 180)) {
-      errors[`row:${row.id}:dur`] = "minutes must be 0.5..180 in 0.5 steps";
+    } else if (!isWholeSecond(n, SECOND, 180)) {
+      errors[`row:${row.id}:dur`] = "duration must be 0:01..3:00:00";
       rowOk = false;
     } else {
       duration = { kind: "time", minutes: n };
@@ -434,15 +416,16 @@ export function toSteps(
 
     let restMinutes: number | undefined;
     if (row.rest.trim() !== "") {
-      // Same duration grammar as `parseDurationInput` (bare number or `5'`,
-      // both minutes) — rest is always time, so a `2500m`-shaped distance is
-      // rejected here rather than silently misread as a number.
-      const restDuration = parseDurationInput(row.rest.trim());
+      // Same duration grammar as `parseDurationToken` (clock form, bare
+      // number, or `5'`, all minutes) — rest is always time, so a
+      // `2500m`-shaped distance is rejected here rather than silently
+      // misread as a number.
+      const restDuration = parseDurationToken(row.rest.trim());
       if (!restDuration || restDuration.kind !== "time") {
         errors[`row:${row.id}:rest`] = "rest must be minutes, e.g. 5 or 5'";
         rowOk = false;
-      } else if (!isHalfStep(restDuration.minutes, 0.5, 60)) {
-        errors[`row:${row.id}:rest`] = "rest must be 0.5..60 in 0.5 steps";
+      } else if (!isWholeSecond(restDuration.minutes, SECOND, 60)) {
+        errors[`row:${row.id}:rest`] = "rest must be 0:01..60:00";
         rowOk = false;
       } else {
         restMinutes = restDuration.minutes;
@@ -494,7 +477,7 @@ function rowMinutes(
   // phase after a work step, so the builder's total must add it here too or
   // the two disagree on the same workout's length.
   if (row.kind === "w" && row.rest.trim() !== "") {
-    const restDuration = parseDurationInput(row.rest.trim());
+    const restDuration = parseDurationToken(row.rest.trim());
     if (restDuration && restDuration.kind === "time") {
       minutes += restDuration.minutes;
     }
@@ -530,14 +513,14 @@ function formatDurationValue(d: WorkDuration): {
   durUnit: "min" | "m";
 } {
   return d.kind === "time"
-    ? { durValue: String(d.minutes), durUnit: "min" }
+    ? { durValue: fmtDuration(d.minutes), durUnit: "min" }
     : { durValue: String(d.meters), durUnit: "m" };
 }
 
 function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
   const row = newRow(s.k);
   if (s.k === "wu" || s.k === "r") {
-    row.durValue = String(s.minutes);
+    row.durValue = fmtDuration(s.minutes);
     row.durUnit = "min";
   } else {
     const { durValue, durUnit } = formatDurationValue(s.duration);
@@ -546,14 +529,13 @@ function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
     row.refBase = s.ref.base;
     row.refOff = s.ref.off;
     row.spm = s.spm !== undefined ? String(s.spm) : "";
-    // `rest` uses the same duration grammar as before (parseDurationInput),
-    // restricted to `kind: "time"`. Writing the bare number form (no
-    // apostrophe) here is just this function's choice of round-trip
-    // spelling — toSteps accepts either, so this must keep producing
-    // something parseDurationInput reads back as the same minutes, or
-    // round-tripping a stored workout with restMinutes set produces an
-    // unparseable field and the edit can't be saved.
-    row.rest = s.restMinutes !== undefined ? String(s.restMinutes) : "";
+    // `rest` writes the clock form — toSteps reads it back via
+    // `parseDurationToken`, which accepts clock strings (and still accepts a
+    // bare number or `5'` for anything hand-typed into the free-text REST
+    // field), so this must keep producing something that reads back as the
+    // same minutes or round-tripping a stored workout with restMinutes set
+    // produces an unparseable field and the edit can't be saved.
+    row.rest = s.restMinutes !== undefined ? fmtDuration(s.restMinutes) : "";
   }
   return row;
 }

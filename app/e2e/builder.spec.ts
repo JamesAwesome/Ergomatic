@@ -92,7 +92,11 @@ test.describe("authoring loop", () => {
     await page.getByRole("button", { name: "Pain 3" }).click();
     // A fresh builder opens Row 1's editor immediately (Builder.tsx: nothing
     // to scan yet, only something to fill in) — no EDIT tap needed here.
-    await page.getByLabel("Row 1 duration", { exact: true }).fill("20");
+    // The duration field is a masked numeric-pad clock field now
+    // (ClockInput, Task 3/4): digits fill right to left into seconds then
+    // minutes, so "2000" produces "20:00" (20 minutes), not "20" (20
+    // seconds).
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
     // Base defaults to 6k (builderState.ts's newRow) — two clicks on the
     // faster stepper reaches the "-2" offset the exit criterion needs.
     const fasterButton = page.getByRole("button", {
@@ -191,7 +195,8 @@ test.describe("authoring loop", () => {
     const originalTitle = "Edit Target Row";
     await page.getByLabel("Title").fill(originalTitle);
     await page.getByRole("button", { name: "Pain 2" }).click();
-    await page.getByLabel("Row 1 duration", { exact: true }).fill("10");
+    // "1000" digits into the masked clock field renders as "10:00".
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("1000");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
@@ -230,7 +235,8 @@ test.describe("authoring loop", () => {
     const title = "Delete Me Row";
     await page.getByLabel("Title").fill(title);
     await page.getByRole("button", { name: "Pain 1" }).click();
-    await page.getByLabel("Row 1 duration", { exact: true }).fill("5");
+    // "500" digits into the masked clock field renders as "5:00".
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("500");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
@@ -275,7 +281,7 @@ test.describe("authoring loop", () => {
 });
 
 test.describe("new controls this phase introduced", () => {
-  test("authoring with a bare-number duration and no legacy number field saves and appears in the Library", async ({
+  test("authoring a duration through the masked numeric field saves and appears in the Library, with no legacy number field", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -288,10 +294,10 @@ test.describe("new controls this phase introduced", () => {
     const title = "Bare Duration Row";
     await page.getByLabel("Title").fill(title);
     await page.getByRole("button", { name: "Pain 2" }).click();
-    // "5" alone means 5 minutes (builderState.ts's parseDurationInput) — no
-    // trailing apostrophe needed, and there is no numeric "No." field
-    // anywhere on this screen to fill in the first place.
-    await page.getByLabel("Row 1 duration", { exact: true }).fill("5");
+    // "500" digits into the masked clock field renders as "5:00" (5
+    // minutes) — there is no numeric "No." field anywhere on this screen to
+    // fill in the first place.
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("500");
     await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
     await page.getByRole("button", { name: "Save to library" }).click();
 
@@ -300,6 +306,48 @@ test.describe("new controls this phase introduced", () => {
 
     await page.goto("/library");
     await expect(page.getByText(title, { exact: false })).toBeVisible();
+
+    await cleanupByTitle(page, title);
+  });
+
+  test("authoring a 0:45 step through the masked field saves and reappears in the edit form", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-clock-45@e2e.test",
+      name: "Builder Clock 45 Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    const title = "Clock 45 Row";
+    await page.getByLabel("Title").fill(title);
+    await page.getByRole("button", { name: "Pain 3" }).click();
+    // "45" digits into the masked clock field renders as "0:45" (45
+    // seconds) — a flow that only ever authors whole minutes would pass no
+    // matter how badly the mask worked, so this is the one flow that
+    // actually exercises sub-minute precision end to end.
+    const durationField = page.getByLabel("Row 1 duration", { exact: true });
+    await durationField.fill("45");
+    await expect(durationField).toHaveValue("0:45");
+    await page.getByRole("button", { name: "Save to library" }).click();
+
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    // Reappears: opening the saved workout for edit round-trips the same
+    // 45-second value back through `fromWorkout`/`stepToRow`, not just
+    // whatever the form happened to hold before the page navigated away.
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/edit$/);
+    await page
+      .locator(".builder-step-list > div")
+      .first()
+      .getByRole("button", { name: "EDIT" })
+      .click();
+    await expect(
+      page.getByLabel("Row 1 duration", { exact: true }),
+    ).toHaveValue("0:45");
 
     await cleanupByTitle(page, title);
   });
@@ -438,7 +486,8 @@ test.describe("new controls this phase introduced", () => {
     const title = "Clone Reps Row";
     await page.getByLabel("Title").fill(title);
     await page.getByRole("button", { name: "Pain 2" }).click();
-    await page.getByLabel("Row 1 duration", { exact: true }).fill("1");
+    // "100" digits into the masked clock field renders as "1:00".
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("100");
     const fasterButton = page.getByRole("button", {
       name: "Row 1 pace faster",
     });
@@ -462,7 +511,7 @@ test.describe("new controls this phase introduced", () => {
     await rows.nth(1).getByRole("button", { name: "EDIT" }).click();
     await expect(
       page.getByLabel("Row 2 duration", { exact: true }),
-    ).toHaveValue("1");
+    ).toHaveValue("1:00");
     await expect(page.locator(".step-editor .pace-ref-display")).toHaveText(
       "6k −2",
     );
@@ -545,10 +594,11 @@ test.describe("new controls this phase introduced", () => {
 
     // Row 1 is the stored `wu` row — StepEditor's non-work branch, so it
     // renders only a duration field (no pace/SPM/rest), still showing the
-    // 5 minutes bulk import stored.
+    // 5 minutes bulk import stored, spelled in the clock form `durValue`
+    // holds now (`fmtDuration(5)`).
     await expect(
       page.getByLabel("Row 1 duration", { exact: true }),
-    ).toHaveValue("5");
+    ).toHaveValue("5:00");
     await expect(
       page.getByRole("radio", { name: "Row 1 duration unit minutes" }),
     ).toHaveAttribute("aria-checked", "true");

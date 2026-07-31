@@ -13,7 +13,6 @@ import {
   hasUnsupportedSteps,
   newForm,
   newRow,
-  parseDurationInput,
   removeRow,
   restSecondsFromRow,
   rowWithRestSeconds,
@@ -26,6 +25,7 @@ import {
   type BuilderForm,
   type BuilderRow,
 } from "./builderState";
+import { fmtDuration } from "../../domain/duration.js";
 import { validateSteps } from "../../domain/validate.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import type { Step } from "../../domain/types.js";
@@ -40,7 +40,7 @@ function defaultValidRow(): BuilderRow {
   return {
     id: "default",
     kind: "w",
-    durValue: "5",
+    durValue: "5:00",
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -57,7 +57,7 @@ function workRow(id: string): BuilderRow {
   return {
     id,
     kind: "w",
-    durValue: "5",
+    durValue: "5:00",
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -66,11 +66,17 @@ function workRow(id: string): BuilderRow {
   };
 }
 
+// `minutes` is still a plain decimal-minutes string, same convention every
+// caller below already uses ("10", "5", "2") — this formats it into the
+// clock string `durValue` actually holds now, so none of those call sites
+// need to spell out `fmtDuration` themselves. `""` stays `""` (blank is a
+// distinct state from a zero duration — `fmtDuration(0)` would be "0:00", a
+// non-blank value the blank-duration tests must NOT get by accident).
 function wuRow(id: string, minutes: string): BuilderRow {
   return {
     id,
     kind: "wu",
-    durValue: minutes,
+    durValue: minutes === "" ? "" : fmtDuration(Number(minutes)),
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -83,7 +89,7 @@ function restRow(id: string, minutes: string): BuilderRow {
   return {
     id,
     kind: "r",
-    durValue: minutes,
+    durValue: minutes === "" ? "" : fmtDuration(Number(minutes)),
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -101,47 +107,6 @@ function formWith(over: Partial<BuilderForm> = {}): BuilderForm {
     ...over,
   };
 }
-
-describe("duration input", () => {
-  it("reads minutes and meters the same way the bulk parser does", () => {
-    expect(parseDurationInput("10'")).toStrictEqual({
-      kind: "time",
-      minutes: 10,
-    });
-    expect(parseDurationInput("2.5'")).toStrictEqual({
-      kind: "time",
-      minutes: 2.5,
-    });
-    expect(parseDurationInput("2500m")).toStrictEqual({
-      kind: "distance",
-      meters: 2500,
-    });
-  });
-
-  it("reads a bare number as minutes so no apostrophe is needed", () => {
-    expect(parseDurationInput("5")).toStrictEqual({ kind: "time", minutes: 5 });
-    expect(parseDurationInput("2.5")).toStrictEqual({
-      kind: "time",
-      minutes: 2.5,
-    });
-  });
-
-  it("still reads the apostrophe and meters forms", () => {
-    expect(parseDurationInput("5'")).toStrictEqual({
-      kind: "time",
-      minutes: 5,
-    });
-    expect(parseDurationInput("2500m")).toStrictEqual({
-      kind: "distance",
-      meters: 2500,
-    });
-  });
-
-  it("rejects fractional meters and junk", () => {
-    expect(parseDurationInput("250.5m")).toBeNull();
-    expect(parseDurationInput("soon")).toBeNull();
-  });
-});
 
 describe("rows", () => {
   it("adds a row of the requested kind", () => {
@@ -257,7 +222,7 @@ describe("toSteps", () => {
         {
           id: "a",
           kind: "w",
-          durValue: "5",
+          durValue: "5:00",
           durUnit: "min",
           refBase: "6k",
           refOff: -2,
@@ -286,7 +251,7 @@ describe("toSteps", () => {
         {
           id: "a",
           kind: "w",
-          durValue: "5",
+          durValue: "5:00",
           durUnit: "min",
           refBase: "6k",
           refOff: -2,
@@ -346,12 +311,18 @@ describe("toSteps", () => {
     expect(out.errors["row:a:dur"]).toMatch(/duration must be minutes/);
   });
 
-  it("rejects a warm-up/rest row's minutes off the domain's half-step grid", () => {
-    const f = formWith({ rows: [wuRow("a", "5.25"), workRow("b")] });
+  // A clock string can only ever produce a whole number of seconds (there's
+  // no way to type a fraction of a second), so the only way left to violate
+  // this bound is going past the ceiling — the old "off the half-step grid"
+  // shape (e.g. 5.25 minutes) isn't reachable through the field any more.
+  it("rejects a warm-up/rest row's duration past the domain's 3:00:00 ceiling", () => {
+    const f = formWith({
+      rows: [{ ...wuRow("a", "10"), durValue: "3:00:01" }, workRow("b")],
+    });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
-    expect(out.errors["row:a:dur"]).toMatch(/0\.5\.\.180 in 0\.5 steps/);
+    expect(out.errors["row:a:dur"]).toMatch(/0:01\.\.3:00:00/);
   });
 
   it("enforces the domain's spm bounds", () => {
@@ -369,14 +340,14 @@ describe("toSteps", () => {
     expect(out.errors["row:a:dur"]).toMatch(/100\.\.42195/);
   });
 
-  it("rejects a work row's minutes off the domain's half-step grid", () => {
+  it("rejects a work row's duration past the domain's 3:00:00 ceiling", () => {
     const f = formWith({
-      rows: [{ ...workRow("a"), durValue: "5.25", durUnit: "min" }],
+      rows: [{ ...workRow("a"), durValue: "3:00:01", durUnit: "min" }],
     });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
-    expect(out.errors["row:a:dur"]).toMatch(/0\.5\.\.180 in 0\.5 steps/);
+    expect(out.errors["row:a:dur"]).toMatch(/0:01\.\.3:00:00/);
   });
 
   it("omits spm entirely when the field is empty", () => {
@@ -387,7 +358,7 @@ describe("toSteps", () => {
   });
 
   // Final-review fix wave item 1: rest must accept the same optional-
-  // apostrophe grammar as before (parseDurationInput), not a bare Number() —
+  // apostrophe grammar as before (parseDurationToken), not a bare Number() —
   // otherwise the literal `5'` from James's device screenshot is rejected
   // by REST while DUR accepts it, 40px apart on the same row.
   it("accepts a bare number rest, matching dur's optional apostrophe", () => {
@@ -414,12 +385,23 @@ describe("toSteps", () => {
     expect(out.errors["row:default:rest"]).toMatch(/rest must be minutes/);
   });
 
-  it("still enforces the rest half-step bound", () => {
-    const f = formWith({ rows: [{ ...defaultValidRow(), rest: "0.25" }] });
+  // 0.25 minutes (15s) used to violate the old half-step grid but is a
+  // legal whole second under the widened bound — 61 (over the 60-minute
+  // ceiling) is the value that's actually still rejected.
+  it("still enforces the rest bound", () => {
+    const f = formWith({ rows: [{ ...defaultValidRow(), rest: "61" }] });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
-    expect(out.errors["row:default:rest"]).toMatch(/0\.5\.\.60 in 0\.5 steps/);
+    expect(out.errors["row:default:rest"]).toMatch(/0:01\.\.60:00/);
+  });
+
+  it("accepts a rest value that would have violated the old half-step grid, e.g. 0.25 minutes (15s)", () => {
+    const f = formWith({ rows: [{ ...defaultValidRow(), rest: "0.25" }] });
+    const out = toSteps(f);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    expect(out.steps[0]).toMatchObject({ restMinutes: 0.25 });
   });
 
   it("requires a title", () => {
@@ -443,7 +425,7 @@ describe("totals", () => {
       reps: 4,
       rows: [
         wuRow("wu", "10"),
-        { ...workRow("a"), durValue: "1", refOff: -2 },
+        { ...workRow("a"), durValue: "1:00", refOff: -2 },
         restRow("b", "5"),
       ],
     });
@@ -459,7 +441,7 @@ describe("totals", () => {
       reps: 4,
       rows: [
         wuRow("wu1", "10"),
-        { ...workRow("a"), durValue: "5", durUnit: "min" },
+        { ...workRow("a"), durValue: "5:00", durUnit: "min" },
       ],
     });
     expect(totals(f, baselines)).toStrictEqual({
@@ -514,7 +496,7 @@ describe("fromWorkout", () => {
     expect(f.reps).toBe(4);
     expect(f.rows.map((r) => r.kind)).toStrictEqual(["wu", "w"]);
     expect(f.rows[1]).toMatchObject({
-      durValue: "1",
+      durValue: "1:00",
       durUnit: "min",
       refBase: "6k",
       refOff: -2,
@@ -593,7 +575,7 @@ describe("fromWorkout", () => {
     };
 
     const form = fromWorkout(workout);
-    expect(form.rows[0].rest).toBe("2");
+    expect(form.rows[0].rest).toBe("2:00");
 
     const out = toSteps(form);
     expect(out.ok).toBe(true);
@@ -682,7 +664,7 @@ describe("totals vs. estimateMinutes agreement", () => {
       reps: 3,
       rows: [
         wuRow("wu", "10"),
-        { ...workRow("w"), durValue: "5", refBase: "2k" },
+        { ...workRow("w"), durValue: "5:00", refBase: "2k" },
         restRow("r", "2"),
       ],
     });
@@ -712,9 +694,9 @@ describe("totals vs. estimateMinutes agreement", () => {
     const f = formWith({
       reps: 3,
       rows: [
-        { ...workRow("a"), durValue: "5" },
+        { ...workRow("a"), durValue: "5:00" },
         wuRow("wu", "10"),
-        { ...workRow("b"), durValue: "5" },
+        { ...workRow("b"), durValue: "5:00" },
       ],
     });
     expect(spanStartIndex(f)).toBe(0);
@@ -823,7 +805,7 @@ describe("toSteps additional coverage", () => {
 
   it("tolerates surrounding whitespace in a duration field, like every other field (L1)", () => {
     const f = formWith({
-      rows: [{ ...workRow("a"), durValue: " 5 ", refBase: "2k" }],
+      rows: [{ ...workRow("a"), durValue: " 5:00 ", refBase: "2k" }],
     });
     const out = toSteps(f);
     expect(out.ok).toBe(true);
@@ -839,16 +821,91 @@ describe("toSteps additional coverage", () => {
   });
 });
 
-describe("duration input whitespace (L1)", () => {
-  it("trims surrounding whitespace, matching typed vs. pasted input", () => {
-    expect(parseDurationInput("5' ")).toStrictEqual({
-      kind: "time",
-      minutes: 5,
+describe("clock durations in rows", () => {
+  it("round-trips a 45-second stored step through the form and back", () => {
+    const form = fromWorkout({
+      title: "Sprints",
+      type: "AN",
+      difficulty: "hard",
+      pain: 4,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 0.75 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
     });
-    expect(parseDurationInput(" 2500m")).toStrictEqual({
-      kind: "distance",
-      meters: 2500,
+    expect(form.rows[0]!.durValue).toBe("0:45");
+    expect(form.rows[0]!.durUnit).toBe("min");
+
+    const res = toSteps(form);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.steps[0]).toMatchObject({
+      duration: { kind: "time", minutes: 0.75 },
     });
+  });
+
+  it("keeps meters as a plain integer string", () => {
+    const form = fromWorkout({
+      title: "Distance",
+      type: "O2",
+      difficulty: "easy",
+      pain: 2,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 2000 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
+    });
+    expect(form.rows[0]!.durValue).toBe("2000");
+    expect(form.rows[0]!.durUnit).toBe("m");
+  });
+
+  it("summarises a clock duration without inventing a prime mark", () => {
+    const row = { ...newRow("w"), durValue: "0:45", durUnit: "min" as const };
+    expect(stepSummary(row)).toBe("0:45 @ 6k ±0");
+    expect(stepSummary({ ...row, kind: "wu" })).toBe("0:45 warm-up");
+  });
+
+  it("rejects a duration past the ceiling and one below a second", () => {
+    for (const durValue of ["3:00:01", "0:00"]) {
+      const form = {
+        ...newForm(),
+        title: "T",
+        pain: 3,
+        rows: [{ ...newRow("w"), durValue, durUnit: "min" as const }],
+      };
+      expect(toSteps(form).ok, `${durValue}`).toBe(false);
+    }
+  });
+
+  it("round-trips every whole second the field can produce", () => {
+    for (const seconds of [1, 20, 45, 59, 60, 90, 3599, 3600, 10800]) {
+      const minutes = seconds / 60;
+      const form = fromWorkout({
+        title: "T",
+        type: "O2",
+        difficulty: "easy",
+        pain: 3,
+        steps: [
+          {
+            k: "w",
+            duration: { kind: "time", minutes },
+            ref: { base: "6k", off: 0 },
+          },
+        ],
+      });
+      const res = toSteps(form);
+      expect(res.ok, `${seconds}s`).toBe(true);
+      if (!res.ok) continue;
+      expect(res.steps[0]).toMatchObject({
+        duration: { kind: "time", minutes },
+      });
+    }
   });
 });
 
@@ -978,9 +1035,18 @@ describe("rowDurationNumber's Number()-isms guard (L-low10)", () => {
     expect(out.errors["row:a:dur"]).toMatch(/duration is required/);
   });
 
-  it("still accepts a plain decimal", () => {
-    const f = formWith({ rows: [{ ...workRow("a"), durValue: "5.5" }] });
-    expect(toSteps(f).ok).toBe(true);
+  // A bare decimal like "5.5" used to be accepted (the old grammar read any
+  // row's duration as a free-text number-or-apostrophe token). Now that a
+  // `min`-unit row's duration is a clock string, "5.5" isn't parseable at
+  // all — the equivalent half-minute value is spelled `5:30`.
+  it("still accepts a half-minute expressed as a clock string", () => {
+    const f = formWith({ rows: [{ ...workRow("a"), durValue: "5:30" }] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(true);
+    if (!out.ok) throw new Error("expected ok");
+    expect(out.steps[0]).toMatchObject({
+      duration: { kind: "time", minutes: 5.5 },
+    });
   });
 });
 
@@ -1048,12 +1114,12 @@ describe("summaries", () => {
     expect(
       stepSummary({
         ...workRow("a"),
-        durValue: "20",
+        durValue: "20:00",
         durUnit: "min",
         refBase: "6k",
         refOff: 10,
       }),
-    ).toBe("20′ @ 6k +10");
+    ).toBe("20:00 @ 6k +10");
   });
 
   it("summarises a metres step and renders a zero offset as ±0", () => {
@@ -1072,12 +1138,12 @@ describe("summaries", () => {
     expect(
       stepSummary({
         ...workRow("a"),
-        durValue: "5",
+        durValue: "5:00",
         durUnit: "min",
         refBase: "6k",
         refOff: -2,
       }),
-    ).toBe("5′ @ 6k −2");
+    ).toBe("5:00 @ 6k −2");
   });
 
   it("omits the spm term when spm is free", () => {
@@ -1099,7 +1165,7 @@ describe("summaries", () => {
   // anything bulk-imported genuinely contain `wu` and standalone `r` rows —
   // so this can't stay a `w`-only assumption.
   it("summarises a warm-up row by duration and kind, with no fabricated pace reference", () => {
-    expect(stepSummary(wuRow("wu1", "10"))).toBe("10′ warm-up");
+    expect(stepSummary(wuRow("wu1", "10"))).toBe("10:00 warm-up");
   });
 
   it("summarises a standalone rest row by duration and kind, with no fabricated pace reference", () => {
@@ -1107,7 +1173,7 @@ describe("summaries", () => {
     // off `row.kind`, not off whether the ref happens to still be blank.
     expect(
       stepSummary({ ...restRow("r1", "5"), refBase: "2k", refOff: 10 }),
-    ).toBe("5′ rest");
+    ).toBe("5:00 rest");
   });
 
   it("gives a wu/r row nothing to add on the sub-summary line — no fabricated spm/rest", () => {
@@ -1144,7 +1210,7 @@ describe("addStepLike", () => {
     const { form } = addStepLike(formWith({ rows: [] }));
     expect(form.rows[0]).toMatchObject({
       kind: "w",
-      durValue: "5",
+      durValue: "5:00",
       durUnit: "min",
       refBase: "6k",
       refOff: 0,
@@ -1160,13 +1226,13 @@ describe("addStepLike", () => {
     const base = formWith({ rows: [wuRow("wu1", "10")] });
     const { form } = addStepLike(base);
     expect(form.rows).toHaveLength(2);
-    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "10" });
+    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "10:00" });
   });
 
   it("always adds a work step, even when the last row is a standalone rest", () => {
     const base = formWith({ rows: [restRow("r1", "5")] });
     const { form } = addStepLike(base);
     expect(form.rows).toHaveLength(2);
-    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "5" });
+    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "5:00" });
   });
 });

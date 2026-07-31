@@ -86,7 +86,9 @@ async function renderBuilder(mode?: BuilderEditMode) {
 async function fillValidForm() {
   await userEvent.type(screen.getByLabelText("Title"), "Ladder Sets");
   await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
-  await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
+  // "500" digits into the masked clock field renders as "5:00" (5 minutes) —
+  // typing the bare digit "5" would mask to "0:05" (5 seconds) instead.
+  await userEvent.type(screen.getByLabelText("Row 1 duration"), "500");
   const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
   await userEvent.click(faster);
   await userEvent.click(faster);
@@ -181,10 +183,10 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByLabelText("Row 1 duration"), "7");
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "700");
     await userEvent.click(screen.getByRole("button", { name: "+ ADD STEP" }));
 
-    expect(screen.getByLabelText("Row 2 duration")).toHaveValue("7");
+    expect(screen.getByLabelText("Row 2 duration")).toHaveValue("7:00");
     expect(
       screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
     ).toHaveLength(2);
@@ -275,7 +277,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "500");
 
     expect(screen.getByText("REPEAT ALL STEPS")).toBeInTheDocument();
     expect(screen.getByText("×1")).toBeInTheDocument();
@@ -293,10 +295,13 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByLabelText("Row 1 duration"), "2000");
+    // Switching units first: the field clears on a unit switch (a clock
+    // string is meaningless as meters), so meters must be typed AFTER
+    // selecting the M chip, not before.
     await userEvent.click(
       screen.getByRole("radio", { name: "Row 1 duration unit meters" }),
     );
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "2000");
 
     expect(screen.getByText("1 step")).toBeInTheDocument();
   });
@@ -309,7 +314,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "500");
 
     expect(screen.getByText("TOTAL")).toBeInTheDocument();
     expect(screen.getByText("5 MIN")).toBeInTheDocument();
@@ -585,7 +590,7 @@ describe("Builder", () => {
     const badRow = newRow("w"); // Row 1 — invalid (blank duration).
     badRow.durValue = "";
     const goodRow = newRow("w"); // Row 2 — valid, and left open below.
-    goodRow.durValue = "5";
+    goodRow.durValue = "5:00";
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
@@ -634,7 +639,7 @@ describe("Builder", () => {
     const badRow = newRow("w");
     badRow.durValue = "";
     badRow.spm = "99";
-    badRow.rest = "0.3";
+    badRow.rest = "61";
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
@@ -664,7 +669,7 @@ describe("Builder", () => {
     const badRow = newRow("w");
     badRow.durValue = "";
     badRow.spm = "99";
-    badRow.rest = "0.3";
+    badRow.rest = "61";
     const initial: BuilderForm = {
       title: "Ladder Sets",
       type: "O2",
@@ -699,7 +704,7 @@ describe("Builder", () => {
     expect(restGroup).toHaveAttribute("aria-invalid", "true");
     const restDescribedBy = restGroup.getAttribute("aria-describedby");
     expect(document.getElementById(restDescribedBy!)).toHaveTextContent(
-      "rest must be 0.5..60 in 0.5 steps",
+      "rest must be 0:01..60:00",
     );
   });
 
@@ -708,7 +713,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
 
     const badRow = newRow("w");
-    badRow.durValue = "5";
+    badRow.durValue = "5:00";
     badRow.refOff = 999;
     const initial: BuilderForm = {
       title: "Ladder Sets",
@@ -823,7 +828,7 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
-    await userEvent.type(screen.getByLabelText("Row 1 duration"), "5");
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "500");
     const faster = screen.getByRole("button", { name: "Row 1 pace faster" });
     await userEvent.click(faster);
     await userEvent.click(faster);
@@ -896,9 +901,9 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
 
     const wu = newRow("wu");
-    wu.durValue = "10";
+    wu.durValue = "10:00";
     const work = newRow("w");
-    work.durValue = "5";
+    work.durValue = "5:00";
 
     const initial: BuilderForm = {
       title: "Ladder Sets",
@@ -913,7 +918,7 @@ describe("Builder", () => {
     // Edit mode starts collapsed; expand the wu row (Row 1).
     const editButtons = screen.getAllByRole("button", { name: "EDIT" });
     await userEvent.click(editButtons[0]!);
-    expect(screen.getByLabelText("Row 1 duration")).toHaveValue("10");
+    expect(screen.getByLabelText("Row 1 duration")).toHaveValue("10:00");
   });
 
   it("derives the repeat span from bookend rows: a leading warm-up stays loose, the rest repeats", async () => {
@@ -921,9 +926,9 @@ describe("Builder", () => {
     mockApi(() => new Response(null, { status: 201 }));
 
     const wu = newRow("wu");
-    wu.durValue = "10";
+    wu.durValue = "10:00";
     const work = newRow("w");
-    work.durValue = "5";
+    work.durValue = "5:00";
 
     const initial: BuilderForm = {
       title: "Ladder Sets",
