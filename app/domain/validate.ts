@@ -13,10 +13,12 @@ const DIFFS: Difficulty[] = ["easy", "medium", "hard"];
 const isRec = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
 /** Any whole number of seconds, expressed in minutes. The epsilon is
- *  load-bearing: 20 seconds is 1/3 of a minute, which is not exact in binary
- *  (`20 / 60 * 60 === 19.999999999999996`), so a bare
- *  `Number.isInteger(n * 60)` would reject two thirds of the values this
- *  phase exists to allow. Widened from a 0.5-step rule in Phase 5F —
+ *  load-bearing, though not for the obvious reason: most whole seconds do
+ *  survive the round trip exactly (`20 / 60 * 60 === 20`). 407 of the 10,800
+ *  in range do not — 31 (`31 / 60 * 60 === 31.000000000000004`), 62, 123,
+ *  124, 125, 245… — so a bare `Number.isInteger(n * 60)` would reject those
+ *  at random, and a user would find 30s and 32s save while 31s does not.
+ *  Widened from a 0.5-step rule in Phase 5F —
  *  everything that validated before still validates, so there is nothing to
  *  migrate. */
 const wholeSecond = (n: unknown, lo: number, hi: number): n is number =>
@@ -87,7 +89,10 @@ export function validateSteps(
         checkRef(s.ref, errors, i);
         if (s.spm !== undefined && !int(s.spm, 10, 60))
           errors.push(`step ${i}: spm 10..60`);
-        if (s.restMinutes !== undefined && !wholeSecond(s.restMinutes, SECOND, 60))
+        if (
+          s.restMinutes !== undefined &&
+          !wholeSecond(s.restMinutes, SECOND, 60)
+        )
           errors.push(`step ${i}: rest 0:01..60:00`);
         break;
       case "test":

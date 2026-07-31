@@ -1,12 +1,6 @@
 import { parsePaceRef } from "./pace.js";
 import { parseDurationToken } from "./duration.js";
-import type {
-  Difficulty,
-  Step,
-  WorkDuration,
-  WorkoutInput,
-  WorkoutType,
-} from "./types.js";
+import type { Difficulty, Step, WorkoutInput, WorkoutType } from "./types.js";
 
 export interface BulkError {
   block: number;
