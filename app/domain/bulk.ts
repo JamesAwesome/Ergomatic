@@ -1,4 +1,5 @@
 import { parsePaceRef } from "./pace.js";
+import { parseDurationToken } from "./duration.js";
 import type {
   Difficulty,
   Step,
@@ -110,20 +111,6 @@ function parseHeader(
   };
 }
 
-/** `5` -> 5 minutes (time, bare). `1'` -> 1 minute (time). `2500m` -> 2500
- *  meters (distance). Bare numbers are accepted because the apostrophe is
- *  awkward to type on a phone; the builder's duration field accepts the
- *  identical bare-number branch so typing and pasting never disagree. */
-function parseDuration(token: string): WorkDuration | null {
-  const bare = /^(\d+(?:\.\d+)?)$/.exec(token);
-  if (bare) return { kind: "time", minutes: Number(bare[1]) };
-  const time = /^(\d+(?:\.\d+)?)'$/.exec(token);
-  if (time) return { kind: "time", minutes: Number(time[1]) };
-  const distance = /^(\d+)m$/.exec(token);
-  if (distance) return { kind: "distance", meters: Number(distance[1]) };
-  return null;
-}
-
 function parseWorkStep(
   tokens: string[],
   line: RawLine,
@@ -139,7 +126,7 @@ function parseWorkStep(
     });
     return null;
   }
-  const duration = parseDuration(durationTok);
+  const duration = parseDurationToken(durationTok);
   if (!duration) {
     errors.push({
       block: blockIndex,

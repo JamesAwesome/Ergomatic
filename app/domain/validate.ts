@@ -12,8 +12,20 @@ const DIFFS: Difficulty[] = ["easy", "medium", "hard"];
 
 const isRec = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null;
-const halfStep = (n: unknown, lo: number, hi: number): n is number =>
-  typeof n === "number" && n >= lo && n <= hi && Number.isInteger(n * 2);
+/** Any whole number of seconds, expressed in minutes. The epsilon is
+ *  load-bearing: 20 seconds is 1/3 of a minute, which is not exact in binary
+ *  (`20 / 60 * 60 === 19.999999999999996`), so a bare
+ *  `Number.isInteger(n * 60)` would reject two thirds of the values this
+ *  phase exists to allow. Widened from a 0.5-step rule in Phase 5F —
+ *  everything that validated before still validates, so there is nothing to
+ *  migrate. */
+const wholeSecond = (n: unknown, lo: number, hi: number): n is number =>
+  typeof n === "number" &&
+  n >= lo &&
+  n <= hi &&
+  Math.abs(n * 60 - Math.round(n * 60)) < 1e-6;
+
+const SECOND = 1 / 60;
 const int = (n: unknown, lo: number, hi: number): n is number =>
   typeof n === "number" && Number.isInteger(n) && n >= lo && n <= hi;
 
@@ -35,7 +47,7 @@ function checkDuration(
   errs: string[],
   i: number,
 ): v is WorkDuration {
-  if (isRec(v) && v.kind === "time" && halfStep(v.minutes, 0.5, 180))
+  if (isRec(v) && v.kind === "time" && wholeSecond(v.minutes, SECOND, 180))
     return true;
   if (isRec(v) && v.kind === "distance" && int(v.meters, 100, 42195))
     return true;
@@ -60,7 +72,7 @@ export function validateSteps(
     switch (s.k) {
       case "wu":
       case "r":
-        if (!halfStep(s.minutes, 0.5, 180))
+        if (!wholeSecond(s.minutes, SECOND, 180))
           errors.push(`step ${i}: invalid minutes`);
         break;
       case "reps":
@@ -75,8 +87,8 @@ export function validateSteps(
         checkRef(s.ref, errors, i);
         if (s.spm !== undefined && !int(s.spm, 10, 60))
           errors.push(`step ${i}: spm 10..60`);
-        if (s.restMinutes !== undefined && !halfStep(s.restMinutes, 0.5, 60))
-          errors.push(`step ${i}: rest 0.5..60`);
+        if (s.restMinutes !== undefined && !wholeSecond(s.restMinutes, SECOND, 60))
+          errors.push(`step ${i}: rest 0:01..60:00`);
         break;
       case "test":
         hasWorkOrTest = true;
