@@ -239,6 +239,23 @@ test.describe("builder screen", () => {
     expect(o2ChipBg).toBe("rgb(42, 98, 117)"); // --type-o2
   });
 
+  // The pain level's word ("WORKING") only renders once a level is picked,
+  // and it sets in 11px against the label's 10px — so the label row grew
+  // taller on first selection and pushed the chips, and everything below
+  // them, down under the user's thumb. The label row now reserves its line
+  // box, so picking a level moves nothing.
+  test("picking a pain level does not shift the chips below it", async ({
+    page,
+  }) => {
+    const chip = page.getByRole("button", { name: "Pain 3" });
+    const before = await chip.boundingBox();
+    await chip.click();
+    await expect(page.getByText("WORKING")).toBeVisible();
+    const after = await chip.boundingBox();
+
+    expect(after?.y).toBe(before?.y);
+  });
+
   // A prior review (5B) only ever swept the builder blank — never after a
   // failed Save exposes its error-state markup (role=alert banners,
   // aria-invalid/aria-describedby on the first bad field, inline field-error

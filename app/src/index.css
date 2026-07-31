@@ -342,6 +342,13 @@ button:disabled {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  /* The level word renders only once a level is picked, and it sets 1px
+     larger than the label — so the row used to grow on first tap and push
+     the pain chips (and everything below them) down under the user's thumb.
+     Reserving more height than either state needs makes the row's height
+     constant, whether or not the word is there. Locked by design.spec.ts
+     ("picking a pain level does not shift the chips below it"). */
+  min-height: 18px;
 }
 
 .classification-pain-word {
