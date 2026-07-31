@@ -2,6 +2,34 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { signInViaBackdoor } from "./helpers";
 
+/** Deletes a signed-in user's own (non-global) workout by title, so a
+ *  design-sweep test that has to create real data via bulk import doesn't
+ *  accumulate stale rows across reruns against the same e2e email. Copied
+ *  from builder.spec.ts's own `cleanupByTitle` — duplicated rather than
+ *  shared across e2e files, same precedent as this codebase's other
+ *  intentionally-duplicated small helpers (e.g. EditWorkout.tsx's
+ *  loading/error states mirroring WorkoutDetail.tsx's). */
+async function cleanupByTitle(page: Page, title: string): Promise<void> {
+  const result = await page.evaluate(async (t) => {
+    const listRes = await fetch("/api/workouts");
+    if (!listRes.ok) return { ok: false, status: listRes.status };
+    const workouts = (await listRes.json()) as Array<{
+      id: string;
+      title: string;
+      isGlobal: boolean;
+    }>;
+    const match = workouts.find((w) => !w.isGlobal && w.title === t);
+    if (!match) return { ok: true, status: 200 };
+    const delRes = await fetch(`/api/workouts/${match.id}`, {
+      method: "DELETE",
+    });
+    return { ok: delRes.ok, status: delRes.status };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`cleanup failed for "${title}": ${result.status}`);
+  }
+}
+
 // Structural design rules, asserted against the real rendered app rather
 // than a mock — a failure here is a real finding about the shipped UI, not
 // a fixture drift. See docs/superpowers/specs/2026-07-28-testing-
@@ -295,6 +323,96 @@ test.describe("builder screen", () => {
         .locator(".step-editor")
         .evaluate((el) => getComputedStyle(el).borderLeftColor);
       expect(expandedMarker).toBe("rgb(42, 98, 117)"); // --type-o2
+    });
+  });
+
+  // This review's IMPORTANT 2: every prior accordion sweep only ever built
+  // its collapsed card via "+ ADD STEP", which can only ever produce a
+  // `kind: "w"` row (docs/design/DEVIATIONS.md: there's no "+ WARM-UP"
+  // control any more) — so no sweep's axe scan ever actually rendered a
+  // collapsed `wu`/`r` StepCard, the one shape whose sub-summary is empty
+  // and used to render a nameless, focusable button (axe button-name /
+  // WCAG 4.1.2). A `wu` row can only land in the builder via bulk import or
+  // an already-saved (edit-mode) workout — see builder.spec.ts's own
+  // "editing a workout with a stored warm-up" test, which this mirrors to
+  // get an edit-mode screen open, but for the axe/tap-target sweep instead
+  // of a save-round-trip assertion. Every one of the 35 starter workouts
+  // opens with a `wu`, so this is the realistic, common case the earlier
+  // sweep never touched.
+  test.describe("edit mode with a stored warm-up row (wu StepCard)", () => {
+    const title = "Design WU Sweep";
+
+    // Unlike this file's other describe blocks (which only ever read/
+    // navigate), every test here creates real data via bulk import under
+    // the same title — Playwright runs different tests in this file across
+    // several parallel workers, so a fixed shared email here raced two
+    // workers' concurrent sign-ins/imports into each other (a 500 from the
+    // backdoor route on a duplicate concurrent signup, and two "Design WU
+    // Sweep" workouts existing at once, breaking the row-filter locator).
+    // `parallelIndex` gives each worker its own account, matching
+    // builder.spec.ts's own "every test signs in as its own unique email"
+    // convention one level up (per-worker instead of per-test, since the
+    // three tests below share this describe's beforeEach/afterEach and run
+    // one at a time within a given worker).
+    test.beforeEach(async ({ page }, testInfo) => {
+      await signInViaBackdoor(page, {
+        email: `design-builder-wu-${testInfo.parallelIndex}@e2e.test`,
+        name: "Design Builder WU Tester",
+      });
+      // Bulk import is the only way to get a `wu` row into a personal
+      // (editable) workout — starter workouts are global and can't be
+      // edited (EditWorkout.tsx refuses isGlobal workouts), and the
+      // create-mode builder has no control that can author one.
+      await page.goto("/library/import");
+      const text = [`${title} | O2 | easy | 2`, "wu 5", "w 10' 6k @20"].join(
+        "\n",
+      );
+      await page.getByLabel("Bulk import text").fill(text);
+      await page.getByRole("button", { name: "Import", exact: true }).click();
+      await expect(page).toHaveURL(/\/library$/);
+
+      await page.locator(".workout-row").filter({ hasText: title }).click();
+      await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+      await page.getByRole("link", { name: "Edit" }).click();
+      await expect(page).toHaveURL(/\/library\/[^/]+\/edit$/);
+
+      // Edit mode opens with every row collapsed (Builder.tsx) — exactly
+      // the state this sweep needs: two collapsed StepCards, one of them
+      // the stored `wu` row, neither ever expanded.
+      await expect(page.locator(".step-card")).toHaveCount(2);
+      await expect(page.locator(".step-editor")).toHaveCount(0);
+    });
+
+    test.afterEach(async ({ page }) => {
+      await cleanupByTitle(page, title);
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations, including the collapsed wu card's sub-summary button", async ({
+      page,
+    }) => {
+      await assertNoA11yViolations(page);
+    });
+
+    // Structural pin, beyond the axe scan: the first card (the stored `wu`
+    // row) renders no `.step-card-sub` element at all — not an empty one —
+    // proving the fix is "don't render it" and not "render it with empty
+    // text" (which would still be a nameless focusable control). The second
+    // card (the `w` row) still renders its own populated sub-summary, so
+    // this also proves the fix is conditional per-row, not a blanket
+    // removal of the control.
+    test("the wu card renders no sub-summary button; the w card still does", async ({
+      page,
+    }) => {
+      const cards = page.locator(".step-card");
+      await expect(cards.nth(0).locator(".step-card-sub")).toHaveCount(0);
+      await expect(cards.nth(1).locator(".step-card-sub")).toHaveCount(1);
+      await expect(cards.nth(1).locator(".step-card-sub")).toContainText("spm");
     });
   });
 });

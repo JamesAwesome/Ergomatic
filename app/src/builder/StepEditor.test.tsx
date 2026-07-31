@@ -36,6 +36,25 @@ function wuRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   };
 }
 
+// Standalone `r` (rest) row — same minutes-only shape as wuRow, distinct
+// `kind` and id/durValue so a test can tell which fixture actually rendered.
+// Only `wu` was ever exercised against the real StepEditor before this task
+// (StepCard.test.tsx already covers both kinds; this file didn't) — the
+// final review's ledger carried this as a deferred minor.
+function restStandaloneRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
+  return {
+    id: "r-1",
+    kind: "r",
+    durValue: "5",
+    durUnit: "min",
+    refBase: "6k",
+    refOff: 0,
+    spm: "",
+    rest: "",
+    ...overrides,
+  };
+}
+
 type Handlers = {
   row: BuilderRow;
   index: number;
@@ -153,13 +172,87 @@ describe("StepEditor", () => {
     expect(onChange).toHaveBeenCalledWith({ spm: "20" });
   });
 
-  // 4. SPM − from 10 does not go below the domain's minimum.
-  it("does not step spm below the domain's 10 floor", async () => {
+  // 4. SPM − from 10 clears to FREE (empty), rather than sticking at 10 —
+  // the fix for this review's IMPORTANT 1: the old `clampSpm` floored at
+  // SPM_MIN instead of clearing, so a step with any spm could never become
+  // free-rate again (one accidental `+` on a new step was unrecoverable,
+  // and all 35 starter workouts carry spm on every work step, so no
+  // starter-shaped or bulk-imported workout could ever be made free-rate).
+  // The spec's own "SPM stays optional — empty round-trips as absent" line
+  // and the handoff's "`−` below 17 goes to 0 = FREE" both require this.
+  it("clears spm to FREE (empty) when − is pressed at the domain's 10 floor", async () => {
     const { onChange } = setup({ row: workRow({ spm: "10" }) });
     await userEvent.click(
       screen.getByRole("button", { name: "Row 1 stroke rate down" }),
     );
-    expect(onChange).toHaveBeenCalledWith({ spm: "10" });
+    expect(onChange).toHaveBeenCalledWith({ spm: "" });
+  });
+
+  // Coverage: the stepper still clamps at the ceiling (60), only the floor
+  // clears instead of sticking — proves the fix didn't just delete the
+  // upper bound along with the floor's old behaviour.
+  it("still clamps spm at the domain's 60 ceiling", async () => {
+    const { onChange } = setup({ row: workRow({ spm: "60" }) });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Row 1 stroke rate up" }),
+    );
+    expect(onChange).toHaveBeenCalledWith({ spm: "60" });
+  });
+
+  // Full round trip proving the fix survives Save, not just the stepper's
+  // own onChange call: clear an already-set spm all the way to FREE via
+  // repeated − presses, then Save, and confirm the POST body carries no
+  // `spm` key at all for that step — an absent key, not `spm: ""` or
+  // `spm: undefined` serialised in, is what "empty round-trips as absent"
+  // requires (`toSteps` in builderState.ts only ever sets `step.spm` inside
+  // its own `if (spm !== undefined)` guard).
+  it("round-trips a cleared spm through Save as an absent key, not a present empty one", async () => {
+    const onChange = vi.fn<(patch: Partial<BuilderRow>) => void>();
+    const { rerender } = render(
+      <MemoryRouter>
+        <StepEditor
+          row={workRow({ spm: "10" })}
+          index={0}
+          splitLabel={null}
+          onChange={onChange}
+          onDuplicate={vi.fn()}
+          onDelete={vi.fn()}
+          onDone={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Row 1 stroke rate down" }),
+    );
+    expect(onChange).toHaveBeenCalledWith({ spm: "" });
+
+    // Apply the patch the way Builder.tsx's own updateRow does, then re-run
+    // this cleared row through the actual toSteps used at Save time.
+    const clearedRow = { ...workRow({ spm: "10" }), spm: "" };
+    rerender(
+      <MemoryRouter>
+        <StepEditor
+          row={clearedRow}
+          index={0}
+          splitLabel={null}
+          onChange={onChange}
+          onDuplicate={vi.fn()}
+          onDelete={vi.fn()}
+          onDone={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("FREE")).toBeInTheDocument();
+
+    const { toSteps, newForm } = await import("./builderState");
+    const form = { ...newForm(), title: "t", pain: 3, rows: [clearedRow] };
+    const result = toSteps(form);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected toSteps to succeed");
+    const body = JSON.parse(JSON.stringify({ steps: result.steps })) as {
+      steps: Array<Record<string, unknown>>;
+    };
+    expect(Object.keys(body.steps[0]!)).not.toContain("spm");
   });
 
   // 5. REST shows NONE at zero and 1:30 after three + presses (30s steps).
@@ -222,6 +315,25 @@ describe("StepEditor", () => {
   // must stay editable, even though the handoff models only work steps.
   it("renders a wu row as a minutes-only editor: header, DUR, DONE — no PACE, SPM, REST or TARGET", () => {
     setup({ row: wuRow() });
+
+    expect(screen.getByText("STEP 1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row 1 duration")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "DONE" })).toBeInTheDocument();
+
+    expect(screen.queryByText("PACE")).not.toBeInTheDocument();
+    expect(screen.queryByText("SPM")).not.toBeInTheDocument();
+    expect(screen.queryByText("REST")).not.toBeInTheDocument();
+    expect(screen.queryByText("TARGET")).not.toBeInTheDocument();
+  });
+
+  // Coverage: a standalone `r` (rest) row gets the same minutes-only editor
+  // as `wu` — only `wu` was exercised against the real StepEditor before
+  // this task; this is the review's other named blind spot, same shape as
+  // test 8 above but for the sibling kind (`StepEditor.tsx`'s `isWork`
+  // branch treats `wu` and `r` identically, but nothing proved that for
+  // `r` specifically until now).
+  it("renders a standalone r row as a minutes-only editor: header, DUR, DONE — no PACE, SPM, REST or TARGET", () => {
+    setup({ row: restStandaloneRow() });
 
     expect(screen.getByText("STEP 1")).toBeInTheDocument();
     expect(screen.getByLabelText("Row 1 duration")).toBeInTheDocument();

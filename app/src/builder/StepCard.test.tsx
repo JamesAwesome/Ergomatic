@@ -55,7 +55,7 @@ function setup(overrides: Partial<Parameters<typeof StepCard>[0]> = {}) {
   const onExpand = vi.fn();
   const onDuplicate = vi.fn();
   const onDelete = vi.fn();
-  render(
+  const view = render(
     <StepCard
       index={0}
       row={workRow()}
@@ -67,7 +67,7 @@ function setup(overrides: Partial<Parameters<typeof StepCard>[0]> = {}) {
       {...overrides}
     />,
   );
-  return { onExpand, onDuplicate, onDelete };
+  return { onExpand, onDuplicate, onDelete, container: view.container };
 }
 
 describe("StepCard", () => {
@@ -160,5 +160,33 @@ describe("StepCard", () => {
     setup({ row: restRow() });
     expect(screen.getByText("5′ rest")).toBeInTheDocument();
     expect(screen.queryByText(/@/)).not.toBeInTheDocument();
+  });
+
+  // This review's IMPORTANT 2: stepSubSummary returns "" for a wu/standalone
+  // r row (no spm/rest fields of their own), but `.step-card-sub` used to
+  // render unconditionally regardless — a focusable button with no text
+  // content and no aria-label, which axe's button-name rule (WCAG 4.1.2)
+  // flags. Every starter workout opens with a `wu`, so this fired on the
+  // edit screen for essentially every workout a rower didn't hand-author.
+  // Assert the button is entirely absent, not just visually empty — an
+  // empty-but-present button would still fail the same audit.
+  it("renders no sub-summary button at all for a warm-up row (no accessible name to give it)", () => {
+    const { container } = setup({ row: wuRow() });
+    expect(container.querySelector(".step-card-sub")).not.toBeInTheDocument();
+  });
+
+  it("renders no sub-summary button at all for a standalone rest row (no accessible name to give it)", () => {
+    const { container } = setup({ row: restRow() });
+    expect(container.querySelector(".step-card-sub")).not.toBeInTheDocument();
+  });
+
+  // The action group (EDIT/⧉/×) must still be present and clickable when
+  // the sub-summary button is gone — proves the fix didn't just delete the
+  // button and leave the rest of line 2 broken.
+  it("still renders the EDIT/duplicate/delete action group when the sub-summary button is absent", async () => {
+    const { onExpand } = setup({ row: wuRow() });
+    expect(screen.getByRole("button", { name: "EDIT" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "EDIT" }));
+    expect(onExpand).toHaveBeenCalledTimes(1);
   });
 });

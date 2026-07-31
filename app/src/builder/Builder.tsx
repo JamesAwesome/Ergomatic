@@ -18,13 +18,12 @@ import {
   totals,
   type BuilderForm,
   type BuilderRow,
+  type RowField,
 } from "./builderState";
 import { generateName } from "./nameGenerator";
 import StepCard from "./StepCard";
 import StepEditor from "./StepEditor";
 import Stepper from "./Stepper";
-
-type RowField = "dur" | "ref" | "spm" | "rest";
 
 // Resolves a work row's live TARGET string, or null when baselines aren't
 // set yet — StepEditor.tsx/StepCard.tsx do no pace math of their own, so
