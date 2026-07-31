@@ -362,14 +362,16 @@ describe("whole-second durations", () => {
     expect(res.ok).toBe(true);
   });
 
-  it("accepts 20 seconds, which is not exact in binary", () => {
-    // 20 / 60 * 60 === 19.999999999999996, so a naive Number.isInteger(n * 60)
-    // check rejects it. This test fails against that implementation.
+  it("accepts 31 seconds, which does not survive the round trip exactly", () => {
+    // 31 / 60 * 60 === 31.000000000000004, so a naive Number.isInteger(n * 60)
+    // rejects it. 407 of the 10,800 whole seconds in range are like this (31,
+    // 62, 123, 124, 125, 245…) — a test built on a "clean" value such as 20s
+    // passes against the naive predicate and proves nothing.
     const res = validateWorkoutInput(
       workout([
         {
           k: "w",
-          duration: { kind: "time", minutes: 20 / 60 },
+          duration: { kind: "time", minutes: 31 / 60 },
           ref: { base: "6k", off: 0 },
         },
       ]),
@@ -481,10 +483,12 @@ In `app/domain/validate.ts`, replace the `halfStep` helper:
 
 ```ts
 /** Any whole number of seconds, expressed in minutes. The epsilon is
- *  load-bearing: 20 seconds is 1/3 of a minute, which is not exact in binary
- *  (`20 / 60 * 60 === 19.999999999999996`), so a bare
- *  `Number.isInteger(n * 60)` would reject two thirds of the values this
- *  phase exists to allow. Widened from a 0.5-step rule in Phase 5F —
+ *  load-bearing, though not for the obvious reason: most whole seconds do
+ *  survive the round trip exactly (`20 / 60 * 60 === 20`). 407 of the 10,800
+ *  in range do not — 31 (`31 / 60 * 60 === 31.000000000000004`), 62, 123,
+ *  124, 125, 245… — so a bare `Number.isInteger(n * 60)` would reject those
+ *  at random, and a user would find 30s and 32s save while 31s does not.
+ *  Widened from a 0.5-step rule in Phase 5F —
  *  everything that validated before still validates, so there is nothing to
  *  migrate. */
 const wholeSecond = (n: unknown, lo: number, hi: number): n is number =>

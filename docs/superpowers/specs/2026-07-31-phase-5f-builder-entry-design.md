@@ -67,10 +67,16 @@ const wholeSecond = (n: unknown, lo: number, hi: number): n is number =>
   Math.abs(n * 60 - Math.round(n * 60)) < 1e-6;
 ```
 
-The epsilon is load-bearing: 20 seconds is `1/3` of a minute, which is not exact
-in binary — `0.3333333333333333 * 60 === 19.999999999999996`. A bare
-`Number.isInteger(n * 60)` would reject two thirds of the values this phase
-exists to allow.
+The epsilon is load-bearing, but **not for the reason a first guess suggests**.
+Most whole seconds survive the round trip exactly — `20 / 60 * 60 === 20`. The
+ones that don't are scattered: of the 10,800 whole seconds in range, **407 fail
+`Number.isInteger(n * 60)`**, the first being 31 s
+(`31 / 60 * 60 === 31.000000000000004`), then 62, 123, 124, 125, 245… A bare
+integer check would reject those 407 durations at random, which is worse than a
+clean rule — the user would find that 30 s and 32 s save while 31 s does not.
+
+Any test for this must use one of the 407. A test built on 20 s passes against
+the naive predicate and proves nothing.
 
 Bounds, expressed in the new granularity:
 
