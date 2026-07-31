@@ -12,7 +12,7 @@ function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   return {
     id: "row-1",
     kind: "w",
-    durValue: "20",
+    durValue: "20:00",
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -26,7 +26,7 @@ function wuRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   return {
     id: "wu-1",
     kind: "wu",
-    durValue: "10",
+    durValue: "10:00",
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -45,7 +45,7 @@ function restStandaloneRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   return {
     id: "r-1",
     kind: "r",
-    durValue: "5",
+    durValue: "5:00",
     durUnit: "min",
     refBase: "6k",
     refOff: 0,

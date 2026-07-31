@@ -12,7 +12,7 @@ function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   return {
     id: "row-1",
     kind: "w",
-    durValue: "20",
+    durValue: "20:00",
     durUnit: "min",
     refBase: "6k",
     refOff: 10,
@@ -26,7 +26,7 @@ function wuRow(): BuilderRow {
   return {
     id: "wu-1",
     kind: "wu",
-    durValue: "10",
+    durValue: "10:00",
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -39,7 +39,7 @@ function restRow(): BuilderRow {
   return {
     id: "r-1",
     kind: "r",
-    durValue: "5",
+    durValue: "5:00",
     durUnit: "min",
     // Non-default ref, same trick as builderState.test.ts's guard test:
     // proves the card's honesty is keyed off row.kind, not off whether the
@@ -74,14 +74,14 @@ describe("StepCard", () => {
   it("renders the 1-based index, the summary, the split, and the sub-summary", () => {
     setup({ index: 2 });
     expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("20′ @ 6k +10")).toBeInTheDocument();
+    expect(screen.getByText("20:00 @ 6k +10")).toBeInTheDocument();
     expect(screen.getByText("2:11.0–2:13.0")).toBeInTheDocument();
     expect(screen.getByText("20 spm · rest 1:30")).toBeInTheDocument();
   });
 
   it("calls onExpand when the summary line is tapped", async () => {
     const { onExpand } = setup();
-    await userEvent.click(screen.getByText("20′ @ 6k +10"));
+    await userEvent.click(screen.getByText("20:00 @ 6k +10"));
     expect(onExpand).toHaveBeenCalledTimes(1);
   });
 
@@ -152,13 +152,13 @@ describe("StepCard", () => {
   // pace reference (see builderState.ts's stepSummary/stepSubSummary).
   it("summarises a warm-up row honestly, with no fabricated pace reference", () => {
     setup({ row: wuRow() });
-    expect(screen.getByText("10′ warm-up")).toBeInTheDocument();
+    expect(screen.getByText("10:00 warm-up")).toBeInTheDocument();
     expect(screen.queryByText(/@/)).not.toBeInTheDocument();
   });
 
   it("summarises a standalone rest row honestly, with no fabricated pace reference", () => {
     setup({ row: restRow() });
-    expect(screen.getByText("5′ rest")).toBeInTheDocument();
+    expect(screen.getByText("5:00 rest")).toBeInTheDocument();
     expect(screen.queryByText(/@/)).not.toBeInTheDocument();
   });
 

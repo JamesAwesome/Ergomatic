@@ -230,9 +230,10 @@ describe("EditWorkout", () => {
     await userEvent.click(screen.getAllByRole("button", { name: "EDIT" })[2]!);
     // Not a `w` row, so it gets none of StepEditor's isWork-only controls
     // (SPM/REST/pace) — only the shared duration field, pre-filled from
-    // `stepToRow`'s plain `durValue` (Phase 5D Task 2 dropped the
-    // `${minutes}'` grammar in favor of a bare numeric string).
-    expect(screen.getByLabelText("Row 3 duration")).toHaveValue("3");
+    // `stepToRow`'s clock-form `durValue` (Phase 5F Task 4: a `min`-unit
+    // row's duration is now the clock string the masked field produces,
+    // `fmtDuration(3)`, not a bare numeric string).
+    expect(screen.getByLabelText("Row 3 duration")).toHaveValue("3:00");
     // Distinguishes it from also being a `w` row rendered with blank
     // optional fields: a `w` row would additionally expose SPM/REST inputs
     // and a pace-ref radiogroup, none of which exist for this row.

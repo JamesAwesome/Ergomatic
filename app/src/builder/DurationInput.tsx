@@ -1,4 +1,5 @@
 import { useRef, type ChangeEvent, type KeyboardEvent } from "react";
+import ClockInput from "./ClockInput";
 
 // The only two units `BuilderRow.durUnit` (builderState.ts) ever carries —
 // this control can only ever produce one of these, mirroring how
@@ -47,8 +48,12 @@ export default function DurationInput({
 
   function selectByIndex(index: number) {
     const wrapped = (index + UNITS.length) % UNITS.length;
+    const u = UNITS[wrapped]!;
     chipRefs.current[wrapped]?.focus();
-    onChange({ value, unit: UNITS[wrapped]! });
+    // A clock string is meaningless as meters (and a bare meter count is
+    // meaningless as a clock) — the field clears on a unit switch rather
+    // than handing `toSteps` a value it can't parse in the new unit.
+    onChange({ value: u === unit ? value : "", unit: u });
   }
 
   function handleKeyDown(
@@ -72,22 +77,34 @@ export default function DurationInput({
   }
 
   function handleValueChange(event: ChangeEvent<HTMLInputElement>) {
-    onChange({ value: event.target.value, unit });
+    onChange({ value: event.target.value.replace(/\D/g, ""), unit });
   }
 
   return (
     <div className="duration-input">
-      <input
-        ref={registerRef}
-        type="text"
-        inputMode="decimal"
-        className="duration-input-value"
-        aria-label={`${rowLabel} duration`}
-        aria-invalid={Boolean(invalid)}
-        aria-describedby={errorId}
-        value={value}
-        onChange={handleValueChange}
-      />
+      {unit === "min" ? (
+        <ClockInput
+          value={value}
+          onChange={(next) => onChange({ value: next, unit })}
+          ariaLabel={`${rowLabel} duration`}
+          invalid={invalid}
+          errorId={errorId}
+          className="duration-input-value"
+          registerRef={registerRef}
+        />
+      ) : (
+        <input
+          ref={registerRef}
+          type="text"
+          inputMode="numeric"
+          className="clock-input duration-input-value"
+          aria-label={`${rowLabel} duration`}
+          aria-invalid={Boolean(invalid)}
+          aria-describedby={errorId}
+          value={value}
+          onChange={handleValueChange}
+        />
+      )}
       <div
         className="duration-input-units"
         role="radiogroup"
@@ -107,7 +124,9 @@ export default function DurationInput({
               aria-label={`${rowLabel} duration unit ${UNIT_LABEL[u]}`}
               className="duration-input-chip"
               tabIndex={checked ? 0 : -1}
-              onClick={() => onChange({ value, unit: u })}
+              onClick={() =>
+                onChange({ value: u === unit ? value : "", unit: u })
+              }
               onKeyDown={(event) => handleKeyDown(event, index)}
             >
               {UNIT_TEXT[u]}

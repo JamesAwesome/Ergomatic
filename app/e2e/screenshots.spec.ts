@@ -105,8 +105,8 @@ test("workout-detail", async ({ page }) => {
  *  open) could never show that, so this deliberately builds more than one
  *  step and explicitly collapses each one via DONE before moving on.
  *
- *  Step 1: a minutes row (bare number, builderState.ts's
- *  parseDurationInput), stroke rate raised off FREE via the SPM stepper
+ *  Step 1: a minutes row (typed through the masked numeric-pad clock
+ *  field, ClockInput.tsx), stroke rate raised off FREE via the SPM stepper
  *  (Stepper.tsx) — collapsed once configured.
  *  Steps 2-4: a distance row (2000m @ 2k, exercising DurationInput's M
  *  chip and the REST stepper's 30s increments) plus two collapsed-card ⧉
@@ -122,8 +122,9 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Pain 3" }).click();
 
   // Row 1: base defaults to 6k (builderState.ts's newRow) — ten clicks on
-  // the "slower" stepper reaches "6k +10".
-  await page.getByLabel("Row 1 duration", { exact: true }).fill("20");
+  // the "slower" stepper reaches "6k +10". "2000" digits into the masked
+  // clock field renders as "20:00" (20 minutes).
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
   const row1Slower = page.getByRole("button", { name: "Row 1 pace slower" });
   for (let i = 0; i < 10; i++) {
     await row1Slower.click();
@@ -135,10 +136,12 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await row1SpmUp.click();
   await page.getByRole("button", { name: "DONE" }).click();
 
-  // Row 2: a distance row (2000m against 2k).
+  // Row 2: a distance row (2000m against 2k). The unit switch clears the
+  // field (a clock string is meaningless as meters), so the M chip has to
+  // be selected BEFORE typing the meter count, not after.
   await page.getByRole("button", { name: "+ ADD STEP" }).click();
-  await page.getByLabel("Row 2 duration", { exact: true }).fill("2000");
   await page.getByRole("radio", { name: "Row 2 duration unit meters" }).click();
+  await page.getByLabel("Row 2 duration", { exact: true }).fill("2000");
   await page.getByRole("radio", { name: "Row 2 pace 2K" }).click();
   const row2SpmUp = page.getByRole("button", {
     name: "Row 2 stroke rate up",
@@ -162,12 +165,18 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   // Step 6: "+ ADD STEP" appends a copy of the last row's values and opens
   // it — nudge it to look deliberately different (minutes, not metres;
   // 6k, not 2k) so the screenshot doesn't read as four identical clones.
+  // It's copied a metres row, so the unit switch has to happen BEFORE
+  // typing (switching clears the field — a meter count is meaningless as a
+  // clock string); "800" digits into the now-masked clock field renders as
+  // "8:00".
   await page.getByRole("button", { name: "+ ADD STEP" }).click();
   const lastRowLabel = "Row 6";
-  await page.getByLabel(`${lastRowLabel} duration`, { exact: true }).fill("8");
   await page
     .getByRole("radio", { name: `${lastRowLabel} duration unit minutes` })
     .click();
+  await page
+    .getByLabel(`${lastRowLabel} duration`, { exact: true })
+    .fill("800");
   await page.getByRole("radio", { name: `${lastRowLabel} pace 6K` }).click();
   const lastFaster = page.getByRole("button", {
     name: `${lastRowLabel} pace faster`,
