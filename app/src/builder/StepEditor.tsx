@@ -5,12 +5,11 @@ import {
   rowWithRestSeconds,
   REST_STEP_SECONDS,
   type BuilderRow,
+  type RowField,
 } from "./builderState";
 import DurationInput from "./DurationInput";
 import PaceRefInput from "./PaceRefInput";
 import Stepper from "./Stepper";
-
-type RowField = "dur" | "ref" | "spm" | "rest";
 
 // Mirrors the deleted SpmInput.tsx's own bounds/wake value (which in turn
 // mirrored domain/validate.ts's `int(s.spm, 10, 60)` and James's rule for
@@ -28,8 +27,15 @@ function parseSpm(value: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function clampSpm(n: number): number {
-  return Math.min(SPM_MAX, Math.max(SPM_MIN, n));
+// Returns `undefined` (not clamped to SPM_MIN) when `n` falls below the
+// floor — a `−` press at the minimum must clear to FREE, not get stuck at
+// 10 forever (the defect this function used to have: `Math.max(SPM_MIN, n)`
+// floored instead of clearing, so once a step had spm it could never become
+// free-rate again, in direct contradiction of the spec's own "SPM stays
+// optional" line and the handoff's own "`−` below 17 goes to 0 = FREE").
+function clampSpm(n: number): number | undefined {
+  if (n < SPM_MIN) return undefined;
+  return Math.min(SPM_MAX, n);
 }
 
 /** The expanded step editor (docs/design/builder-redesign/README.md §4b):
@@ -92,8 +98,12 @@ export default function StepEditor({
 
   function stepSpm(delta: number) {
     const current = parseSpm(row.spm);
-    const next = current === undefined ? SPM_WAKE : clampSpm(current + delta);
-    onChange({ spm: String(next) });
+    if (current === undefined) {
+      onChange({ spm: String(SPM_WAKE) });
+      return;
+    }
+    const next = clampSpm(current + delta);
+    onChange({ spm: next === undefined ? "" : String(next) });
   }
 
   function stepRest(delta: number) {

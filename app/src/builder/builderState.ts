@@ -11,6 +11,14 @@ import type {
 
 export type RowKind = "wu" | "w" | "r";
 
+// The four fields `toSteps` ever keys a row-scoped error under
+// (`row:<id>:<field>`) — shared between Builder.tsx (which reads/wires
+// `errors`/`fieldRefs` by this key) and StepEditor.tsx (which exposes
+// `fieldError`/`registerRef` typed by it). Previously defined verbatim in
+// both files; exported once here since both already import from this
+// module.
+export type RowField = "dur" | "ref" | "spm" | "rest";
+
 export interface BuilderRow {
   id: string;
   kind: RowKind;

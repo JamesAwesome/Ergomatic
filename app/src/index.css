@@ -1481,6 +1481,13 @@ button:disabled {
   border: 1px solid var(--rule);
   border-radius: var(--radius);
   overflow: hidden;
+  /* Normally redundant — .step-card-sub's own flex:1 already pushes this
+     flush right. Load-bearing only for a wu/standalone-r row, whose
+     sub-summary is empty and no longer renders a button at all (see
+     StepCard.tsx): without a flex:1 sibling to absorb the row's width, this
+     group would otherwise sit flush left instead of staying aligned with
+     every other card's action group. */
+  margin-left: auto;
 }
 
 .step-card-action {
@@ -1543,6 +1550,10 @@ button:disabled {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   overflow: hidden;
+  /* Same reasoning as .step-card-actions' own margin-left: auto above — this
+     group replaces it inline when a delete is in progress, so it needs the
+     same flush-right fallback for a wu/standalone-r row's empty sub-summary. */
+  margin-left: auto;
 }
 
 .step-card-confirm-label {
