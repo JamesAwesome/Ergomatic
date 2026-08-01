@@ -346,7 +346,11 @@ describe("StepEditor", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Row 1 pace slower" }),
     );
-    expect(onChange).toHaveBeenCalledWith({ refBase: "6k", refOff: 60 });
+    expect(onChange).toHaveBeenCalledWith({
+      refBase: "6k",
+      refOff: 60,
+      refEffort: null,
+    });
   });
 
   it("clamps the pace offset at −60, not the handoff's −15", async () => {
@@ -354,7 +358,38 @@ describe("StepEditor", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Row 1 pace faster" }),
     );
-    expect(onChange).toHaveBeenCalledWith({ refBase: "6k", refOff: -60 });
+    expect(onChange).toHaveBeenCalledWith({
+      refBase: "6k",
+      refOff: -60,
+      refEffort: null,
+    });
+  });
+
+  // Task 4: selecting an effort chip reports refEffort through the same
+  // onChange patch shape, alongside the held refBase/refOff (Task 3's
+  // round-trip contract — refBase/refOff are left as-is, not cleared).
+  it("reports refEffort (and leaves refBase/refOff held) when the MAX chip is selected", async () => {
+    const { onChange } = setup({ row: workRow({ refBase: "6k", refOff: -3 }) });
+    await userEvent.click(
+      screen.getByRole("radio", { name: "Row 1 pace MAX" }),
+    );
+    expect(onChange).toHaveBeenCalledWith({
+      refBase: "6k",
+      refOff: -3,
+      refEffort: "max",
+    });
+  });
+
+  // Task 4: PACE hides the offset stepper while an effort is selected — the
+  // row's own refEffort drives PaceRefInput's `effort` prop.
+  it("hides the offset stepper while the row's refEffort is set", () => {
+    setup({ row: workRow({ refEffort: "max" }) });
+    expect(
+      screen.queryByRole("button", { name: "Row 1 pace faster" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Row 1 pace slower" }),
+    ).not.toBeInTheDocument();
   });
 
   // 7. DONE / DUPLICATE / × call their own handlers.
@@ -418,6 +453,28 @@ describe("StepEditor", () => {
     expect(
       screen.getByRole("link", { name: /set baselines/i }),
     ).toHaveAttribute("href", "/you");
+  });
+
+  // Task 4: an effort row's TARGET reads the effort word, in the SAME
+  // target-value element a resolved split range renders in — Builder's
+  // splitLabelFor is what actually resolves refEffort to effortWord(...)
+  // (deliberately without needing baselines, unlike the split branch above);
+  // this component does no pace math of its own and just renders whatever
+  // string it's handed, so passing "ALL OUT"/"EASY" here is exactly what a
+  // real MAX/MIN row's splitLabel prop looks like once it reaches this
+  // component.
+  it("shows ALL OUT in the TARGET strip's own value element for a MAX row", () => {
+    setup({ row: workRow({ refEffort: "max" }), splitLabel: "ALL OUT" });
+    const value = screen.getByText("ALL OUT");
+    expect(value).toHaveClass("step-editor-target-value");
+    expect(value.className).not.toMatch(/no-target/);
+  });
+
+  it("shows EASY in the TARGET strip's own value element for a MIN row", () => {
+    setup({ row: workRow({ refEffort: "min" }), splitLabel: "EASY" });
+    const value = screen.getByText("EASY");
+    expect(value).toHaveClass("step-editor-target-value");
+    expect(value.className).not.toMatch(/no-target/);
   });
 
   // Coverage: the optional typeColorVar left-marker prop (Task 2's StepCard

@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
 import { useWorkouts } from "../api/useWorkouts";
-import { resolveSplit, toleranceRange } from "../../domain/pace.js";
+import { effortWord, resolveSplit, toleranceRange } from "../../domain/pace.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
 import ClassificationCard from "./ClassificationCard";
 import {
@@ -28,11 +28,21 @@ import Stepper from "./Stepper";
 // Resolves a work row's live TARGET string, or null when baselines aren't
 // set yet — StepEditor.tsx/StepCard.tsx do no pace math of their own, so
 // this is the one place Builder computes it.
+//
+// An effort row (refEffort set) is a DELIBERATE exception to the
+// baselines-gate below: MAX/MIN's target is the word itself
+// (effortWord), which needs no resolution at all — there's no split to
+// look up, so there's nothing for missing baselines to block. This is why
+// the check comes first, ahead of `baselines === null`, rather than
+// falling through to the same null a split row gets when baselines are
+// unset (StepEditor/StepCard's "no target / Set baselines" state stays
+// exactly for the split case).
 function splitLabelFor(
   row: BuilderRow,
   baselines: Baselines | null,
   tolerance: number,
 ): string | null {
+  if (row.refEffort) return effortWord(row.refEffort);
   if (baselines === null) return null;
   const ref: PaceRef = { base: row.refBase, off: row.refOff };
   const resolved = resolveSplit(baselines, ref);

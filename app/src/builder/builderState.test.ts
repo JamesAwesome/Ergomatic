@@ -1331,6 +1331,58 @@ describe("effort refs in rows", () => {
     expect(res.steps[0]).toMatchObject({ ref: { base: "6k", off: -2 } });
   });
 
+  // Deferred from Task 3's review: pins the OTHER direction of the same
+  // round trip — a row that arrived via `fromWorkout` already holding an
+  // effort (so refBase/refOff are `stepToRow`'s unused 6k/±0 defaults,
+  // never a split this workout ever had), then the user taps 6K in the UI.
+  // There is no split to restore here (unlike the hand-built-row case
+  // above, which held a real offset before the chip was ever touched), so
+  // `toSteps` must emit the sane fallback — 6k ±0 — rather than anything
+  // fabricated from the discarded effort.
+  it("falls back to 6k ±0 when 6K is tapped on a row that arrived as an effort via fromWorkout", () => {
+    const form = fromWorkout({
+      title: "Sprints",
+      type: "AN",
+      difficulty: "hard",
+      pain: 5,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 0.5 },
+          ref: { effort: "max" },
+        },
+      ],
+    });
+    const loadedRow = form.rows[0]!;
+    expect(loadedRow.refEffort).toBe("max");
+    expect(loadedRow.refBase).toBe("6k");
+    expect(loadedRow.refOff).toBe(0);
+
+    const tapped = { ...loadedRow, refEffort: null }; // user taps 6K
+    const res = toSteps({
+      ...newForm(),
+      title: "T",
+      pain: 3,
+      rows: [tapped],
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.steps[0]).toMatchObject({ ref: { base: "6k", off: 0 } });
+  });
+
+  // Deferred from Task 3's review: `cloneRow` is a generic shallow-copy-plus-
+  // fresh-id (builderState.ts) that spreads every field of the source row —
+  // nothing in it is refEffort-aware, but nothing proved that an effort row
+  // survives the copy either, until now.
+  it("keeps refEffort when cloneRow duplicates an effort row", () => {
+    const f = formWith({
+      rows: [{ ...defaultValidRow(), refEffort: "min", refBase: "2k" }],
+    });
+    const { form: cloned, id } = cloneRow(f, "default");
+    const clone = cloned.rows.find((r) => r.id === id);
+    expect(clone).toMatchObject({ refEffort: "min", refBase: "2k" });
+  });
+
   it("summarises with the chip word", () => {
     const row = { ...newRow("w"), durValue: "0:30", refEffort: "max" as const };
     expect(stepSummary(row)).toBe("0:30 @ MAX");
