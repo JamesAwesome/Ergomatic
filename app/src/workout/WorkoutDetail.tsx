@@ -8,7 +8,7 @@ import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
-import { buildDraft, saveDraft } from "../session/draft";
+import { buildDraft, loadDraft, saveDraft } from "../session/draft";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 
@@ -119,6 +119,11 @@ function WorkoutDetailView({
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [tolerance] = useState(readPaceTolerance);
   const [startError, setStartError] = useState<string | null>(null);
+  // Staged-confirm idiom (src/you/BaselineEditor.tsx, also copied by this
+  // file's own OwnerActions delete flow): gates the one-shot replacement of
+  // an in-progress session behind an explicit second press rather than
+  // letting the first Start press silently overwrite it.
+  const [replaceConfirming, setReplaceConfirming] = useState(false);
   const navigate = useNavigate();
 
   // Builds and saves the session draft (session/draft.ts owns the shape and
@@ -126,13 +131,28 @@ function WorkoutDetailView({
   // hands off to the confirm screen. `saveDraft` can fail (quota, private-
   // mode Safari) without throwing; that's surfaced inline rather than
   // navigating to a confirm screen with nothing behind it.
-  function handleStart() {
+  function startSession() {
     const draft = buildDraft(workout);
     if (saveDraft(draft)) {
       navigate("/session/confirm");
     } else {
       setStartError("Couldn't start this session. Try again.");
     }
+  }
+
+  // A STARTED draft already sitting in storage means a session is in
+  // progress (ConfirmTargets.tsx's own re-entry guard sends a back-swipe on
+  // /session/confirm to /session/run for the same reason). Overwriting it
+  // here with no warning would silently drop whatever that session was
+  // doing, so the first Start press only stages the replacement; only the
+  // staged confirm's own button actually calls `startSession`.
+  function handleStart() {
+    const existing = loadDraft();
+    if (existing !== null && existing.startedAt !== null) {
+      setReplaceConfirming(true);
+      return;
+    }
+    startSession();
   }
 
   const minutesLabel = baselines
@@ -203,9 +223,37 @@ function WorkoutDetailView({
         )}
       </div>
       <div className="workout-detail-actions">
-        <button type="button" className="button-primary" onClick={handleStart}>
-          Start
-        </button>
+        {!replaceConfirming ? (
+          <button
+            type="button"
+            className="button-primary"
+            onClick={handleStart}
+          >
+            Start
+          </button>
+        ) : (
+          <div className="baseline-confirm">
+            <p className="baseline-confirm-line">
+              A session is in progress — replace it?
+            </p>
+            <div className="baseline-actions">
+              <button
+                type="button"
+                className="button-outline"
+                onClick={() => setReplaceConfirming(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button-primary"
+                onClick={startSession}
+              >
+                Replace session
+              </button>
+            </div>
+          </div>
+        )}
         {startError && <p className="baseline-error">{startError}</p>}
         <button
           type="button"

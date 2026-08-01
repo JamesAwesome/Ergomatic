@@ -1,6 +1,11 @@
 import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef } from "../../domain/pace.js";
-import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
+import type {
+  Baselines,
+  PaceRef,
+  Step,
+  WorkoutType,
+} from "../../domain/types.js";
 
 /** localStorage key for the session draft — the one artifact 6B's timer
  *  consumes. Exported so callers (and tests) never hardcode it twice. */
@@ -11,7 +16,17 @@ export const DRAFT_KEY = "ergomatic.sessionDraft";
  *  confirm time — never the library object — so later edits here can never
  *  reach back into the library. Index-keyed `nudges`/`spmOverrides` and the
  *  `removed` index list all key off positions in `steps`, not step identity;
- *  they are meaningless against any other steps array. */
+ *  they are meaningless against any other steps array.
+ *
+ *  These keys are ORIGINAL indices — positions in `d.steps` as authored —
+ *  FOREVER, not positions in any filtered/expanded view. `effectiveSteps`
+ *  below drops removed entries, which shifts every surviving element's
+ *  array position; a caller that re-keyed off that filtered position would
+ *  silently read another step's nudge/spm. And once 6B's `liveSteps()`
+ *  expands a "reps" block into its repeated instances, per-repetition
+ *  indexing is a 6B-owned layer on top of this one — this module never
+ *  produces or consumes it. Any future consumer (6B's timer included) must
+ *  key off `originalIndex`, never off position in a derived array. */
 export interface SessionDraft {
   v: 1;
   workoutId: string | null;
@@ -48,11 +63,28 @@ export function buildDraft(w: {
   };
 }
 
+// Loose on purpose (see loadDraft's own comment): not full domain
+// validation of every step, just "is this shaped enough to not crash the
+// screens that immediately read it" — a plain object, not an array.
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Checks `v` plus every field a screen reads unconditionally on load:
+// ConfirmTargets maps over `steps` and indexes into `nudges`/`spmOverrides`,
+// RunPlaceholder/ConfirmTargets both read `title`, and `removed.includes`
+// requires an array. A record with only `{"v":1}` used to satisfy this
+// check and then throw downstream the moment a screen touched any of those
+// fields — malformed now fails here instead, same as an unknown version.
 function isSessionDraft(value: unknown): value is SessionDraft {
+  if (!isPlainRecord(value)) return false;
   return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { v?: unknown }).v === 1
+    value.v === 1 &&
+    typeof value.title === "string" &&
+    Array.isArray(value.steps) &&
+    Array.isArray(value.removed) &&
+    isPlainRecord(value.nudges) &&
+    isPlainRecord(value.spmOverrides)
   );
 }
 
@@ -89,25 +121,57 @@ export function clearDraft(): void {
   localStorage.removeItem(DRAFT_KEY);
 }
 
-/** The effective steps: removed indices dropped, SPM overrides folded into
- *  their work step. The reps marker (and every other non-work step) passes
- *  through untouched unless its own index was removed, so `estimateMinutes`
- *  still expands it. */
-export function draftSteps(d: SessionDraft): Step[] {
+/** The effective steps, paired with the ORIGINAL index each came from (see
+ *  the module header: `nudges`/`spmOverrides`/`removed` all key off that
+ *  original position, never off a position in this filtered array). Removed
+ *  indices are dropped; SPM overrides are folded into their work step; and
+ *  a split-ref work step's nudge is folded into its `ref.off` — pace.ts's
+ *  `resolveSplit` computes `base + off + nudge`, so adding the nudge onto
+ *  `off` before resolution and never applying a nudge at all are the exact
+ *  same number for any consumer that resolves the ref, `estimateMinutes`
+ *  (via domain/expand.ts's `phases()`) included. Folding it here, once, is
+ *  what makes `draftMinutes` price a nudge instead of silently ignoring it
+ *  (the bug this fixes: nudging a distance step's split used to leave the
+ *  Confirm footer's minute recount unchanged). Effort refs have no `off` to
+ *  nudge and are passed through untouched (`withNudge` already refuses to
+ *  record a nudge against one). The reps marker (and every other non-work
+ *  step) passes through untouched unless its own index was removed, so
+ *  `estimateMinutes` still expands it. */
+export function effectiveSteps(
+  d: SessionDraft,
+): { step: Step; originalIndex: number }[] {
   return d.steps
     .map((s, i) => {
-      if (s.k !== "w") return s;
+      if (s.k !== "w") return { step: s, originalIndex: i };
+      let step = s;
       const spm = d.spmOverrides[i];
-      return spm === undefined ? s : { ...s, spm };
+      if (spm !== undefined) step = { ...step, spm };
+      const nudge = d.nudges[i];
+      if (nudge !== undefined && !isEffortRef(step.ref)) {
+        const ref: PaceRef = { ...step.ref, off: step.ref.off + nudge };
+        step = { ...step, ref };
+      }
+      return { step, originalIndex: i };
     })
     .filter((_, i) => !d.removed.includes(i));
+}
+
+/** The effective steps as a plain `Step[]` — `effectiveSteps` without the
+ *  original-index pairing, for callers that only need the resolved shape
+ *  (e.g. RunPlaceholder's step count). Keeping one implementation
+ *  (`effectiveSteps`) means the nudge-folding fix above applies here too. */
+export function draftSteps(d: SessionDraft): Step[] {
+  return effectiveSteps(d).map((e) => e.step);
 }
 
 /** Estimated minutes for the effective steps, via `estimateMinutes`. Every
  *  work step's pace ref — split or effort, time or distance duration alike —
  *  is resolved against `baselines` unconditionally by domain/expand.ts's
  *  `phases()`, so any work step present with no baselines would crash
- *  `estimateMinutes`; this returns null instead in that case. */
+ *  `estimateMinutes`; this returns null instead in that case. Uses
+ *  `draftSteps` (nudges already folded into `off`), not raw `d.steps` — see
+ *  `effectiveSteps`'s comment for why that's the same math as a "real"
+ *  nudge. */
 export function draftMinutes(
   d: SessionDraft,
   baselines: Baselines | null,

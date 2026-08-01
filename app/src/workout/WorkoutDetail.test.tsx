@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { api } from "../api";
-import { loadDraft } from "../session/draft";
+import { buildDraft, loadDraft, saveDraft, startDraft } from "../session/draft";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -295,6 +295,102 @@ describe("WorkoutDetail", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
     spy.mockRestore();
+  });
+
+  // F4 fix (final whole-branch review): a STARTED draft already sitting in
+  // storage (a session in progress somewhere — this workout or another)
+  // used to be overwritten silently the instant Start was pressed here.
+  // The staged-confirm idiom (src/you/BaselineEditor.tsx, also copied by
+  // this file's own OwnerActions delete flow) now gates the overwrite
+  // behind an explicit second press.
+  it("stages a replace confirmation instead of overwriting an in-progress draft on the first Start press", async () => {
+    mockHooks(BASELINES);
+    const inProgress = startDraft(
+      buildDraft({
+        id: "w-other",
+        title: "Other Session",
+        type: "AN",
+        steps: [{ k: "wu", minutes: 5 }],
+      }),
+    );
+    saveDraft(inProgress);
+    await renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(
+      screen.getByText("A session is in progress — replace it?"),
+    ).toBeInTheDocument();
+    // The first press must not have touched storage at all.
+    expect(loadDraft()).toStrictEqual(inProgress);
+  });
+
+  it("Cancel on the replace confirmation leaves the in-progress draft untouched and restores Start", async () => {
+    mockHooks(BASELINES);
+    const inProgress = startDraft(
+      buildDraft({
+        id: "w-other",
+        title: "Other Session",
+        type: "AN",
+        steps: [{ k: "wu", minutes: 5 }],
+      }),
+    );
+    saveDraft(inProgress);
+    await renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("A session is in progress — replace it?"),
+    ).not.toBeInTheDocument();
+    expect(loadDraft()).toStrictEqual(inProgress);
+  });
+
+  it("Replace session overwrites the in-progress draft and navigates to /session/confirm", async () => {
+    mockHooks(BASELINES);
+    const inProgress = startDraft(
+      buildDraft({
+        id: "w-other",
+        title: "Other Session",
+        type: "AN",
+        steps: [{ k: "wu", minutes: 5 }],
+      }),
+    );
+    saveDraft(inProgress);
+    await renderDetailWithConfirmRoute("/library/w1");
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Replace session" }),
+    );
+
+    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    const draft = loadDraft();
+    expect(draft).not.toBeNull();
+    expect(draft!.workoutId).toBe("w1");
+    expect(draft!.title).toBe("Ladder Sets");
+    expect(draft!.startedAt).toBeNull(); // the new, un-started draft — not the old one
+  });
+
+  it("does not stage a replace confirmation when the existing draft was never started", async () => {
+    mockHooks(BASELINES);
+    const notStarted = buildDraft({
+      id: "w-other",
+      title: "Other Session",
+      type: "AN",
+      steps: [{ k: "wu", minutes: 5 }],
+    });
+    saveDraft(notStarted);
+    await renderDetailWithConfirmRoute("/library/w1");
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(
+      screen.queryByText("A session is in progress — replace it?"),
+    ).not.toBeInTheDocument();
   });
 
   it("exposes nudge buttons with accessible names and the 44px hit-target class", async () => {
