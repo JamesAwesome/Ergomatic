@@ -162,9 +162,25 @@ test("workout-detail", async ({ page }) => {
   await page.getByLabel("Title").fill(title);
   await page.getByRole("button", { name: "Pain 3" }).click();
   await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "DONE" }).click();
+
+  // Row 2 (Phase 5G): a MAX-effort row, so the committed detail capture
+  // shows a real resolved effort word ("ALL OUT") next to an ordinary
+  // resolved split range, not just the latter — the visual record this
+  // phase's ledger calls for.
+  await page.getByRole("button", { name: "+ ADD STEP" }).click();
+  await page.getByLabel("Row 2 duration", { exact: true }).fill("30");
+  await page.getByRole("radio", { name: "Row 2 pace MAX" }).click();
+  const row2SpmUp = page.getByRole("button", {
+    name: "Row 2 stroke rate up",
+  });
+  await row2SpmUp.click();
+  await row2SpmUp.click();
+
   await page.getByRole("button", { name: "Save to library" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+$/);
   await page.locator(".workout-detail-title").waitFor();
+  await expect(page.getByText("ALL OUT")).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "workout-detail.png"),
   });
@@ -172,7 +188,7 @@ test("workout-detail", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
-/** Fills the top-level fields plus a six-step body so the committed
+/** Fills the top-level fields plus a seven-step body so the committed
  *  screenshot shows the whole point of the accordion redesign
  *  (docs/design/builder-redesign/README.md): only the LAST step ends up
  *  expanded — every other step folds down to its ~86px collapsed summary
@@ -191,7 +207,12 @@ test("workout-detail", async ({ page }) => {
  *  duplicates of it (docs/design/DEVIATIONS.md's SET-cell replacement) —
  *  the fast way to build a realistic multi-step ladder without opening
  *  three separate editors.
- *  Step 5: "+ ADD STEP" appends a sixth, deliberately different row (a
+ *  Step 5 (Phase 5G): a MAX effort row (`0:30 @ MAX`), collapsed like every
+ *  other step above it — this is the one the committed image exists to
+ *  show: the collapsed StepCard reads `0:30 @ MAX` on its summary line and
+ *  `ALL OUT` in its resolved-target slot, proving the effort-chip feature
+ *  reads correctly in the folded state, not just the open editor.
+ *  Step 6: "+ ADD STEP" appends a seventh, deliberately different row (a
  *  minutes row back at 6k, offset) and — being the freshly-added step —
  *  is the one left open when this function returns, since that's the
  *  state the screenshot needs to capture. */
@@ -243,14 +264,30 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await duplicateRow2.click();
   await duplicateRow2.click();
 
-  // Step 6: "+ ADD STEP" appends a blank work step and opens it (Task 6 —
-  // it no longer copies the last row's values) — give it distinct values
-  // (minutes, not metres; 6k, not 2k) so the screenshot doesn't read as
-  // four identical clones. A blank row already defaults to "min"
-  // (newRow(), builderState.ts), so no unit switch is needed before typing;
-  // "800" digits into the masked clock field renders as "8:00".
+  // Step 5 (Phase 5G): a fresh MAX-effort row, collapsed via DONE like every
+  // step above it — "30" into the masked clock field renders as "0:30".
+  // Row 1 + Row 2 + three ⧉ duplicates (Rows 3-5) already occupy the first
+  // five slots, so this freshly-added row lands as Row 6.
   await page.getByRole("button", { name: "+ ADD STEP" }).click();
-  const lastRowLabel = "Row 6";
+  await page.getByLabel("Row 6 duration", { exact: true }).fill("30");
+  await page.getByRole("radio", { name: "Row 6 pace MAX" }).click();
+  const maxRowSpmUp = page.getByRole("button", {
+    name: "Row 6 stroke rate up",
+  });
+  for (let i = 0; i < 13; i++) {
+    await maxRowSpmUp.click();
+  }
+  await page.getByRole("button", { name: "DONE" }).click();
+
+  // Step 6 (7th row overall): "+ ADD STEP" appends a blank work step and
+  // opens it (Task 6 — it no longer copies the last row's values) — give it
+  // distinct values (minutes, not metres; 6k, not 2k) so the screenshot
+  // doesn't read as clones of the earlier rows. A blank row already
+  // defaults to "min" (newRow(), builderState.ts), so no unit switch is
+  // needed before typing; "800" digits into the masked clock field renders
+  // as "8:00".
+  await page.getByRole("button", { name: "+ ADD STEP" }).click();
+  const lastRowLabel = "Row 7";
   await page
     .getByLabel(`${lastRowLabel} duration`, { exact: true })
     .fill("800");
@@ -261,7 +298,7 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   for (let i = 0; i < 5; i++) {
     await lastFaster.click();
   }
-  // Row 6 is left EXPANDED here (no DONE press) — this is the one card the
+  // Row 7 is left EXPANDED here (no DONE press) — this is the one card the
   // screenshot needs open.
 
   const repeatUp = page.getByRole("button", { name: "Repeat up" });
@@ -279,16 +316,23 @@ test("builder", async ({ page }) => {
   await page.goto("/library/new");
   await fillSampleWorkout(page);
 
-  // Six steps total: five collapsed cards (StepCard.tsx) and exactly one
-  // open editor (StepEditor.tsx) — the accordion invariant this whole
-  // redesign exists to prove, captured live before any save. Every
-  // collapsed row is a work step with baselines set, so each one resolves
-  // its own split (StepCard's `splitOnCollapsed`); the open row shows its
-  // resolved range in the TARGET strip instead.
-  await expect(page.locator(".step-card")).toHaveCount(5);
-  await expect(page.locator(".step-card-split")).toHaveCount(5);
+  // Seven steps total (Phase 5G added the MAX row): six collapsed cards
+  // (StepCard.tsx) and exactly one open editor (StepEditor.tsx) — the
+  // accordion invariant this whole redesign exists to prove, captured live
+  // before any save. Every collapsed row resolves a target (five splits
+  // against the set baselines, one effort word for the MAX row); the open
+  // row shows its own resolved range in the TARGET strip instead.
+  await expect(page.locator(".step-card")).toHaveCount(6);
+  await expect(page.locator(".step-card-split")).toHaveCount(6);
   await expect(page.locator(".step-editor")).toHaveCount(1);
   await expect(page.locator(".step-editor-target-value")).toHaveCount(1);
+  // The MAX row's own collapsed summary — this is the shot the phase's
+  // ledger note calls out: `0:30 @ MAX` visible in the folded list, not
+  // just inside an open editor.
+  await expect(page.getByText("0:30 @ MAX")).toBeVisible();
+  await expect(
+    page.locator(".step-card-split", { hasText: "ALL OUT" }),
+  ).toBeVisible();
   // Scoped to the REPEAT stepper's own value cell, not a page-wide text
   // search: StepCard.tsx's collapsed delete button is also the "×" glyph,
   // so an unscoped getByText("×4") can match across two adjacent rows'

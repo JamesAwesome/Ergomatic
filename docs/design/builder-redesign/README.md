@@ -52,7 +52,7 @@ Each group: column, `gap: 7px` — a mono label above a row of chips.
 Group label: IBM Plex Mono 10px, `letter-spacing: 0.16em`, `#6f6a5f`.
 Every chip: `flex: 1`, height **44px**, radius 2px, centred, `gap: 6px` between chips.
 
-**TYPE** — AN / O2 / AT / TR. Mono 12px, weight 500, `letter-spacing: 0.06em`.
+**TYPE** — AN / O2 / AT / TR. Mono 12px, weight 500, `letter-spacing: 0.06em`. The label row is `space-between`: `TYPE` on the left, a one-phrase summary word on the right in mono 11px / `letter-spacing: 0.06em` / `#3f3c35` (Phase 5G): AN `SPEED WORK`, O2 `LOW & SLOW`, AT `COMFORTABLY HARD`, TR `HARD INTERVALS`. Unlike EXPECTED PAIN's word below, TYPE always has a selection, so the word never actually disappears — the label row still reserves its line box (same fix as EXPECTED PAIN's) so a width change between words can't shift the chips beneath it.
 - Unselected: bg `#fffdf7`, border `1px solid #d8d3c4`, text `#3f3c35`.
 - Selected: bg + border = the type colour, text `#fffdf7`. AN `#5c4382`, O2 `#2a6275`, AT `#8a5f18`, TR `#b5341f`.
 
@@ -86,8 +86,8 @@ Only one card is expanded at a time (`editing = rowId | null`).
 
 **Line 1** (whole line tappable → expand), `align-items: baseline`, `gap: 10px`:
 - step index — 16px wide, mono 12px, `#8a8478`
-- summary — `flex: 1`, mono 14px, `#1b1a17`, `nowrap / overflow hidden / ellipsis`. Format: `20′ @ 6k +10` (minutes) or `2000 m @ 2k ±0` (metres). Offset sign: `+n`, `−n`, `±0`.
-- resolved split — mono 12px, `#57544c`, `nowrap`, e.g. `2:11.0–2:13.0`. Right-aligned at the line end.
+- summary — `flex: 1`, mono 14px, `#1b1a17`, `nowrap / overflow hidden / ellipsis`. Format: `20′ @ 6k +10` (minutes) or `2000 m @ 2k ±0` (metres); offset sign `+n`, `−n`, `±0`. A `MAX`/`MIN` row (Phase 5G) reads `0:30 @ MAX` instead — the chip word stands in for the base+offset, since an effort has neither.
+- resolved split — mono 12px, `#57544c`, `nowrap`, e.g. `2:11.0–2:13.0`, or the effort word `ALL OUT`/`EASY` for a `MAX`/`MIN` row (Phase 5G). Right-aligned at the line end.
 
 **Line 2**, `align-items: center`, `gap: 10px`:
 - sub-summary — `flex: 1`, `padding-left: 26px` (aligns under the summary), mono 11px, `#57544c`, ellipsis. Format: `20 spm · rest 1:30`. Omit the spm term when spm is free; rest reads `rest none` at zero. Tappable → expand.
@@ -104,10 +104,10 @@ Total action-group width 136px; the two text lines take the remaining ~190px and
 
 1. **Header** — `STEP n` (`flex: 1`, mono 10px, `0.16em`, `#6f6a5f`) + `DUPLICATE` button (44px tall, `padding: 0 12px`, bg `#fffdf7`, border `1px solid #d8d3c4`, mono 10px `0.1em`, `#3f3c35`; hover border `#8a8478`) + `×` (44×44, same border/bg, 17px, `#6f6a5f`; hover border+text `#b5341f`).
 2. **DUR** — field label 34px wide (mono 10px, `0.14em`, `#6f6a5f`) + numeric input (`flex: 1`, 44px, bg `#fffdf7`, border `1px solid #c9c3b2`, radius 2px, padding `0 10px`, mono 15px) + unit toggle: joined pair, border `1px solid #c9c3b2`, radius 2px, two 56×44 segments `MIN` / `M` (mono 11px, `0.06em`), divider `1px solid #c9c3b2`. Selected segment: bg `#b5341f`, text `#fffdf7`; unselected bg `#fffdf7`, text `#3f3c35`.
-3. **PACE** — label + baseline toggle (joined pair, two **48×44** segments `2K` / `6K`, same selected treatment) + offset stepper (`flex: 1`).
+3. **PACE** — label + a four-segment radiogroup, `2K` / `6K` / `MAX` / `MIN` (Phase 5G added the last two), same selected treatment + offset stepper (`flex: 1`). The offset stepper only renders for the two split chips (`2K`/`6K`) — checking `MAX` or `MIN` unmounts it entirely, since an effort has no offset concept at all.
 4. **SPM** — label + stepper (`flex: 1`). Value shows the number, or `FREE` in `#6f6a5f` when 0.
 5. **REST** — label + stepper (`flex: 1`). Value `m:ss` in `#1b1a17`, or `NONE` in `#6f6a5f` at zero.
-6. **TARGET strip** — height 44px, bg `#efeade`, border `1px solid #ded8c9`, radius 2px, `padding: 0 12px`, `space-between`: `TARGET` (mono 10px, `0.14em`, `#57544c`) and the resolved range (mono 15px, `#1b1a17`). Deliberately **ink, not accent red** — it is output, not a selected state.
+6. **TARGET strip** — height 44px, bg `#efeade`, border `1px solid #ded8c9`, radius 2px, `padding: 0 12px`, `space-between`: `TARGET` (mono 10px, `0.14em`, `#57544c`) and the resolved range (mono 15px, `#1b1a17`). Deliberately **ink, not accent red** — it is output, not a selected state. For a `MAX`/`MIN` row (Phase 5G) the right-hand slot shows the effort word (`ALL OUT`/`EASY`) instead of a resolved range, and shows it unconditionally — an effort word needs no baseline to resolve, unlike a split.
 7. **DONE** — full width, 44px, bg + border `#1b1a17`, text `#fffdf7`, mono 11px, `letter-spacing: 0.12em`; hover `#3f3c35`. Collapses the row.
 
 **Stepper pattern** (used by PACE offset, SPM, REST, and REPEAT): one container, `display: flex`, border `1px solid #c9c3b2`, radius 2px, bg `#fffdf7`, `overflow: hidden`. `−` and `+` cells are 44×44, mono 17px, `#1b1a17`, hover bg `#efeade`. The value cell sits between them with `border-left`/`border-right: 1px solid #ded8c9`, mono 15px, centred; it is `flex: 1` in-row and a fixed 52px in the REPEAT control.

@@ -1,5 +1,5 @@
 import type { Difficulty, WorkoutType } from "../../domain/types.js";
-import { PAIN_WORDS } from "./builderState";
+import { PAIN_WORDS, TYPE_WORDS } from "./builderState";
 
 // Chip order per docs/design/README.md §Screens -> "2. Library" (AN before
 // O2 — not alphabetical), matching src/library/FilterChips.tsx and
@@ -64,7 +64,18 @@ const PAIN_RAMP_VAR: Record<PainLevel, string> = {
  *    class from the pre-existing `.chip` (whose `[aria-pressed="true"]`
  *    rule fills accent), and the selected DIFFICULTY chip carries no inline
  *    style at all — the ink fill lives entirely in one CSS rule that never
- *    references --accent (see index.css). */
+ *    references --accent (see index.css).
+ *
+ *  A third addition, mid-phase (James's request, not the original handoff):
+ *  TYPE gets the same treatment as PAIN — a short summary word (TYPE_WORDS)
+ *  opposite its label. Unlike PAIN, a type is always selected (there's no
+ *  "nothing chosen yet" state for TYPE), so the word never toggles
+ *  in and out of existence the way the pain word does. It still reuses the
+ *  pain row's reserved-line-box fix (`.classification-type-label-row`'s
+ *  `min-height`, index.css) rather than relying on "the word is always
+ *  there so the height is already constant" — belt and suspenders against a
+ *  future change (e.g. a type gaining an unset state) reintroducing the
+ *  exact nudge bug 5F shipped on the pain row. */
 export default function ClassificationCard({
   type,
   difficulty,
@@ -81,11 +92,15 @@ export default function ClassificationCard({
   onPainChange: (pain: number) => void;
 }) {
   const painWord = pain !== null ? PAIN_WORDS[pain - 1] : undefined;
+  const typeWord = TYPE_WORDS[type];
 
   return (
     <div className="classification-card">
       <div className="classification-group">
-        <p className="classification-group-label">TYPE</p>
+        <div className="classification-type-label-row">
+          <p className="classification-group-label">TYPE</p>
+          <p className="classification-type-word">{typeWord}</p>
+        </div>
         <div className="classification-chip-row">
           {TYPE_CHIPS.map(({ type: t, label }) => {
             const selected = type === t;

@@ -365,6 +365,29 @@ button:disabled {
   color: var(--ink-2);
 }
 
+/* TYPE's label row (Task 7, mid-phase addition): same reserved-line-box fix
+   as `.classification-pain-label-row` above, and for the same reason — the
+   summary word (TYPE_WORDS) sets 1px larger than the label, so without a
+   reserved min-height the row's height would depend on whether the word is
+   there. A type is always selected (there's no "nothing picked" state the
+   way pain has), so the word never actually toggles in and out here — this
+   is the belt-and-suspenders half of that guarantee, not the load-bearing
+   half; see ClassificationCard.tsx's doc comment. */
+.classification-type-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  min-height: 18px;
+}
+
+.classification-type-word {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+
 .classification-chip-row {
   display: flex;
   gap: 6px;
