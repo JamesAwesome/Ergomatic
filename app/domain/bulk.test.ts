@@ -380,10 +380,15 @@ describe("clock durations in bulk blocks", () => {
     expect(step).toMatchObject({ duration: { kind: "time", minutes: 0.75 } });
   });
 
-  it("agrees with the builder on every duration form", () => {
-    // The two parsers were byte-identical regexes kept in lockstep by hand.
-    // They are now one function; this asserts the claim instead of commenting
-    // it.
+  it("covers every legal duration form (clock, bare number, apostrophe, distance)", () => {
+    // Named for what this actually checks: parseDurationToken's own grammar
+    // coverage. It doesn't touch the builder — importing src/builder/
+    // from a domain test would be a layering violation (domain must not
+    // depend on client code) — so it can't and doesn't prove the builder
+    // agrees with this. That comparison lives in
+    // src/builder/builderState.test.ts ("builder's REST field agrees with
+    // parseDurationToken on every duration form"), which is allowed to
+    // import domain code and does the actual cross-path comparison.
     for (const [token, expected] of [
       ["0:45", { kind: "time", minutes: 0.75 }],
       ["5", { kind: "time", minutes: 5 }],

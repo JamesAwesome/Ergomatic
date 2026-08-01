@@ -708,9 +708,11 @@ test.describe("new controls this phase introduced", () => {
     await page.goto("/library/new");
 
     // SPM is a typable Stepper now (Task 5) — the joined "− value +" group
-    // (Stepper.tsx) whose value cell is a numeric input, blank rather than
-    // reading the word "FREE" when empty (a field you can type into can't
-    // also render a word while holding "").
+    // (Stepper.tsx) whose value cell is a numeric input; its value stays ""
+    // when empty (a field you can type into can't also hold a literal word
+    // as its value). Task 9 added a "FREE" placeholder so the cell still
+    // reads that word visually — this asserts the underlying value, which
+    // the placeholder doesn't change.
     const spmValue = page.getByLabel("Row 1 stroke rate value");
     await expect(spmValue).toHaveValue("");
     await page.getByRole("button", { name: "Row 1 stroke rate up" }).click();

@@ -1009,7 +1009,11 @@ button:disabled {
   border-right: 1px solid var(--rule-2);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 15px;
+  /* 16px, not 15: PACE's plain span has no iOS-zoom constraint of its own,
+     but SPM/REST's inputs must stay at 16px (below that, iOS Safari zooms
+     the page on focus), so the span comes up to meet them rather than the
+     inputs shrinking down to it — all three read as one control. */
+  font-size: 16px;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1024,15 +1028,38 @@ button:disabled {
 /* The value cell is an input when its caller passes onValueChange (Task 5:
    SPM/REST are typable, not only steppable) — same metrics, no chrome of
    its own, since the joined stepper container already draws the borders.
-   Only applies to the plain-text variant (SPM); REST's ClockInput keeps its
-   own `.clock-input` box (it already sets the required 16px/44px). */
+   Only the top/bottom borders are zeroed here: `.stepper-value`'s own
+   border-left/border-right (above) still apply since nothing here touches
+   those properties, so SPM's input keeps the same side borders as PACE's
+   span and REST's ClockInput instead of losing them to a `border: 0`
+   shorthand reset (that regression shipped once already — see
+   docs/design/DEVIATIONS.md history). */
 .stepper-value-input {
   min-height: 44px;
-  border: 0;
+  border-top: 0;
+  border-bottom: 0;
   background: transparent;
   color: inherit;
-  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 16px;
   text-align: center;
+}
+
+/* REST's ClockInput renders inside a Stepper's value cell with both
+   `clock-input` and `stepper-value` on the same element. Two classes on one
+   element (specificity 0,2,0) beat either rule alone regardless of source
+   order, so this — not file position — is what makes the joined stepper's
+   own border/background win over `.clock-input`'s standalone box (used
+   elsewhere, e.g. DurationInput's DUR field, where that box is exactly what
+   we want and must stay untouched). Without this override REST nested a
+   second bordered, radius-cornered box inside the stepper's own box. */
+.stepper-value.clock-input {
+  width: auto;
+  border: 0;
+  border-left: 1px solid var(--rule-2);
+  border-right: 1px solid var(--rule-2);
+  border-radius: 0;
+  background: transparent;
 }
 
 /* Empty SPM/REST cells used to read "FREE"/"NONE" as literal text (a plain
@@ -1040,8 +1067,10 @@ button:disabled {
    placeholder just reads as broken. `::placeholder` restores the same
    reading without becoming the field's accessible name (`aria-label`
    already supplies that, and a placeholder drops out of the accessibility
-   tree once a name exists). ink-4 measures 5.29:1 against --surface — both
-   cells' background, .stepper's own and .clock-input's explicit one —
+   tree once a name exists). ink-4 measures 5.29:1 against --surface — every
+   cell's effective background resolves to --surface (the stepper's own,
+   inherited by both SPM's transparent input and REST's now-transparent
+   ClockInput; --surface directly for a standalone `.clock-input`) —
    clearing the 4.5:1 AA text requirement. `opacity: 1` overrides Firefox's
    default 54% placeholder fade, which would otherwise undercut that ratio. */
 .stepper-value-input::placeholder,
@@ -1304,7 +1333,10 @@ button:disabled {
   border-left: 1px solid var(--rule-2);
   border-right: 1px solid var(--rule-2);
   font-family: var(--font-mono);
-  font-size: 15px;
+  /* Matches `.stepper-value`'s 16px (below index.css's Stepper block) — a
+     plain span has no iOS-zoom constraint of its own, but it sits on the
+     same card as SPM/REST's 16px inputs and must read as one control. */
+  font-size: 16px;
   color: var(--ink);
   text-align: center;
   overflow: hidden;
