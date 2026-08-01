@@ -22,7 +22,12 @@ export default function WorkoutRow({
         <span className="workout-row-duration">
           {/* Rounded for display only — filters.ts calls estimateMinutes
               itself for bucketing, so the unrounded value still reaches the
-              duration-bucket filter. */}
+              duration-bucket filter. estimateMinutes (domain/expand.ts)
+              already rounds internally, so Library.tsx's own call site never
+              hands this a fraction today — but this prop is typed `number`,
+              and Phase 6's distance-based estimation may well produce one,
+              so this component must not print "2.25′" if a future caller
+              passes a fractional value. See WorkoutRow.test.tsx. */}
           {durationMinutes !== null ? `${Math.round(durationMinutes)}′` : "—"}
         </span>
       </div>
