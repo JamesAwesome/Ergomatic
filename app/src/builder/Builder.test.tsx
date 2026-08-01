@@ -861,14 +861,14 @@ describe("Builder", () => {
     await renderBuilder();
 
     const restUp = screen.getByRole("button", { name: "Row 1 rest up" });
-    expect(screen.getByText("NONE")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row 1 rest value")).toHaveValue("");
     expect(document.activeElement).not.toBe(restUp);
 
     await userEvent.click(restUp);
     await userEvent.click(restUp);
     await userEvent.click(restUp);
 
-    expect(screen.getByText("1:30")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row 1 rest value")).toHaveValue("1:30");
   });
 
   it("no longer mounts the bulk-import toggle — it moved to its own /library/import screen", async () => {

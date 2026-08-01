@@ -51,11 +51,19 @@ below, so the table only ever describes what's actually shipped:
   (§4b), not a workaround for a header that stopped fitting.
 - The free-text-plus-steppers `SpmInput.tsx` (and its own 40px-tap-target
   fix, since the free-text field it wrapped was narrower than the 44px
-  steppers beside it) is deleted; SPM is now a bare Stepper built directly
-  into `StepEditor.tsx`, uniformly 44px like every other control, per the
-  redesign's own SPM row spec (label + stepper, no typable field). Its
-  wake-value/bound departure from the redesign's own handoff is recorded in
-  its own row above now, rather than repeated here.
+  steppers beside it) is deleted; SPM is now a `Stepper` built directly into
+  `StepEditor.tsx`, uniformly 44px like every other control. Phase 5E first
+  shipped this as a bare stepper (no typable field at all, per the
+  redesign's own SPM row spec) — Phase 5F (Task 5) reverted that part: the
+  value cell became a typable numeric input again (`Stepper`'s optional
+  `onValueChange`/`valueInput` props, both undefined for REPEAT and PACE,
+  which stay bare spans), because a bare stepper could only reach a given
+  value or clear back to FREE one tap at a time — reaching `27` from empty,
+  or clearing an already-set value at all, took several presses (walking
+  all the way down to the 10 floor to clear it). REST got the same typable
+  treatment in the same task, via `ClockInput`.
+  Its wake-value/bound departure from the redesign's own handoff is recorded
+  in its own row above now, rather than repeated here.
 - The five-cell SVG-face pain picker (`--pain-1`…`--pain-5` and their
   `-fill` counterparts) is gone — `PainPicker.tsx` and those tokens were
   deleted this phase, replaced by `ClassificationCard.tsx`'s numerals-only

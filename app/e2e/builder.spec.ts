@@ -654,11 +654,11 @@ test.describe("new controls this phase introduced", () => {
 
     // One tap up: 5:00 -> 5:30 (a 30s step). Confirms the stepper reads the
     // stored clock-form rest correctly before this test relies on it also
-    // writing back something `toSteps` can still parse.
+    // writing back something `toSteps` can still parse. REST's value cell is
+    // a typable ClockInput now (Task 5), not a `<span>` — read its value,
+    // not its text content.
     await page.getByRole("button", { name: "Row 1 rest up" }).click();
-    await expect(page.getByRole("group", { name: "Row 1 rest" })).toContainText(
-      "5:30",
-    );
+    await expect(page.getByLabel("Row 1 rest value")).toHaveValue("5:30");
 
     await page.getByRole("button", { name: "Save to library" }).click();
 
@@ -706,11 +706,13 @@ test.describe("new controls this phase introduced", () => {
     await setBaselines(page);
     await page.goto("/library/new");
 
-    // SPM is a bare Stepper (StepEditor.tsx) — no typable field, just the
-    // joined "− value +" group (Stepper.tsx) reading FREE when empty.
-    const spmGroup = page.getByRole("group", { name: "Row 1 stroke rate" });
-    await expect(spmGroup.locator(".stepper-value")).toHaveText("FREE");
+    // SPM is a typable Stepper now (Task 5) — the joined "− value +" group
+    // (Stepper.tsx) whose value cell is a numeric input, blank rather than
+    // reading the word "FREE" when empty (a field you can type into can't
+    // also render a word while holding "").
+    const spmValue = page.getByLabel("Row 1 stroke rate value");
+    await expect(spmValue).toHaveValue("");
     await page.getByRole("button", { name: "Row 1 stroke rate up" }).click();
-    await expect(spmGroup.locator(".stepper-value")).toHaveText("20");
+    await expect(spmValue).toHaveValue("20");
   });
 });

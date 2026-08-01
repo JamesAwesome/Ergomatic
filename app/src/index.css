@@ -1003,6 +1003,20 @@ button:disabled {
   color: var(--ink-4);
 }
 
+/* The value cell is an input when its caller passes onValueChange (Task 5:
+   SPM/REST are typable, not only steppable) — same metrics, no chrome of
+   its own, since the joined stepper container already draws the borders.
+   Only applies to the plain-text variant (SPM); REST's ClockInput keeps its
+   own `.clock-input` box (it already sets the required 16px/44px). */
+.stepper-value-input {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+}
+
 /* -- StepEditor: the expanded step editor (Phase 5E Task 3) ------------ */
 /* docs/design/builder-redesign/README.md §4b. Replaces StepRowEditor.tsx —
    renders every row permanently expanded until Task 5's accordion assembly
