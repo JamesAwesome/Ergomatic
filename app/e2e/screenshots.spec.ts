@@ -213,18 +213,14 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await duplicateRow2.click();
   await duplicateRow2.click();
 
-  // Step 6: "+ ADD STEP" appends a copy of the last row's values and opens
-  // it — nudge it to look deliberately different (minutes, not metres;
-  // 6k, not 2k) so the screenshot doesn't read as four identical clones.
-  // It's copied a metres row, so the unit switch has to happen BEFORE
-  // typing (switching clears the field — a meter count is meaningless as a
-  // clock string); "800" digits into the now-masked clock field renders as
-  // "8:00".
+  // Step 6: "+ ADD STEP" appends a blank work step and opens it (Task 6 —
+  // it no longer copies the last row's values) — give it distinct values
+  // (minutes, not metres; 6k, not 2k) so the screenshot doesn't read as
+  // four identical clones. A blank row already defaults to "min"
+  // (newRow(), builderState.ts), so no unit switch is needed before typing;
+  // "800" digits into the masked clock field renders as "8:00".
   await page.getByRole("button", { name: "+ ADD STEP" }).click();
   const lastRowLabel = "Row 6";
-  await page
-    .getByRole("radio", { name: `${lastRowLabel} duration unit minutes` })
-    .click();
   await page
     .getByLabel(`${lastRowLabel} duration`, { exact: true })
     .fill("800");

@@ -537,11 +537,13 @@ function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
     row.refOff = s.ref.off;
     row.spm = s.spm !== undefined ? String(s.spm) : "";
     // `rest` writes the clock form — toSteps reads it back via
-    // `parseDurationToken`, which accepts clock strings (and still accepts a
-    // bare number or `5'` for anything hand-typed into the free-text REST
-    // field), so this must keep producing something that reads back as the
-    // same minutes or round-tripping a stored workout with restMinutes set
-    // produces an unparseable field and the edit can't be saved.
+    // `parseDurationToken`, which also accepts a bare number or `5'`, but
+    // REST is a typable ClockInput now (Task 5 replaced the old free-text
+    // field), so those two forms are only ever produced by bulk import's
+    // text blocks, never by this round trip. This must still keep producing
+    // something that reads back as the same minutes, or round-tripping a
+    // stored workout with restMinutes set produces an unparseable field and
+    // the edit can't be saved.
     row.rest = s.restMinutes !== undefined ? fmtDuration(s.restMinutes) : "";
   }
   return row;

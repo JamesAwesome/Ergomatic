@@ -25,7 +25,11 @@ import {
   type BuilderForm,
   type BuilderRow,
 } from "./builderState";
-import { fmtDuration, parseClock } from "../../domain/duration.js";
+import {
+  fmtDuration,
+  parseClock,
+  parseDurationToken,
+} from "../../domain/duration.js";
 import { validateSteps } from "../../domain/validate.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import type { Step } from "../../domain/types.js";
@@ -384,6 +388,35 @@ describe("toSteps", () => {
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
     expect(out.errors["row:default:rest"]).toMatch(/rest must be minutes/);
+  });
+
+  // Final review, fix wave 2: domain/bulk.test.ts had a test named "agrees
+  // with the builder on every duration form" that never touched the
+  // builder — it only called parseDurationToken directly, so it would still
+  // pass if a private, drifted regex ever replaced the shared call below.
+  // This is the actual cross-path comparison: it drives the same tokens
+  // through the builder's real REST round trip (formWith -> toSteps, the
+  // path a typed REST value takes to becoming `restMinutes`) and checks the
+  // result against calling parseDurationToken directly on the same token —
+  // proving the two agree because REST calls the shared function rather
+  // than a parser of its own.
+  it("builder's REST field agrees with parseDurationToken on every duration form", () => {
+    for (const token of ["0:45", "5", "10'"]) {
+      const expected = parseDurationToken(token);
+      if (expected === null || expected.kind !== "time") {
+        throw new Error(`fixture bug: ${token} should parse as a time`);
+      }
+      const f = formWith({ rows: [{ ...defaultValidRow(), rest: token }] });
+      const out = toSteps(f);
+      if (!out.ok) {
+        throw new Error(
+          `expected ok for rest "${token}", got ${JSON.stringify(out.errors)}`,
+        );
+      }
+      expect(out.steps[0], `${token}`).toMatchObject({
+        restMinutes: expected.minutes,
+      });
+    }
   });
 
   // 0.25 minutes (15s) used to violate the old half-step grid but is a
@@ -901,7 +934,13 @@ describe("clock durations in rows", () => {
   });
 
   it("round-trips every whole second the field can produce", () => {
-    for (const seconds of [1, 20, 45, 59, 60, 90, 3599, 3600, 10800]) {
+    // 31 is one of the 407 whole seconds (of 10,800 in range) that don't
+    // survive the round trip exactly — 31 / 60 * 60 === 31.000000000000004
+    // — so a naive `Number.isInteger(n * 60)` mirror of the domain's
+    // epsilon-based `wholeSecond` predicate would reject it while every
+    // other value in this table (all "clean" multiples) still passes. See
+    // domain/validate.test.ts's identical case for the domain side of this.
+    for (const seconds of [1, 20, 31, 45, 59, 60, 90, 3599, 3600, 10800]) {
       const minutes = seconds / 60;
       const form = fromWorkout({
         title: "T",

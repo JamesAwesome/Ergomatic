@@ -1,10 +1,14 @@
 import type { ChangeEvent } from "react";
 import { fmtDuration, parseClock } from "../../domain/duration.js";
 
-// Five digits reaches 3:00:00, the domain's ceiling for a single step: the
-// h:mm:ss branch below takes everything left of the last 4 digits as hours,
-// so a 6th digit would produce a two-digit hour group (e.g. "300000" ->
-// "30:00:00"), blowing past the ceiling instead of sitting at it.
+// Not a precise cap at the domain's 3:00:00 ceiling for a single step —
+// "99999" formats to "9:99:99", which read as h:mm:ss is 10:40:39, well past
+// it. Values that far out of range are rejected cleanly at save (toSteps's
+// bounds checks), so the field doesn't need to enforce the ceiling itself.
+// What 5 digits does prevent: the h:mm:ss branch below takes everything left
+// of the last 4 digits as hours, so a 6th digit would produce a two-digit
+// hour group (e.g. "300000" -> "30:00:00") — a value that reads as wildly
+// wrong before the user even reaches Save, rather than merely out of range.
 const MAX_DIGITS = 5;
 
 /** Digits, filled right to left into ss, then mm, then hh — the same order the
