@@ -101,6 +101,29 @@ describe("validateSteps", () => {
     }
   });
 
+  it("rejects a hybrid pace ref (split + effort keys together)", () => {
+    // Defensive against a hand-built hybrid payload that mistakenly
+    // combines both split and effort structure: {base:"2k", off:0, effort:"max"}
+    const r = validateSteps([
+      work({ ref: { base: "2k", off: 0, effort: "max" } }),
+    ]);
+    expect(r.ok).toBe(false);
+    const errors = r.ok ? [] : r.errors;
+    expect(errors).toStrictEqual(
+      expect.arrayContaining([expect.stringContaining("invalid pace ref")]),
+    );
+  });
+
+  it("rejects a split ref with missing off", () => {
+    // A split ref missing the required `off` key should fail
+    const r = validateSteps([work({ ref: { base: "2k" } })]);
+    expect(r.ok).toBe(false);
+    const errors = r.ok ? [] : r.errors;
+    expect(errors).toStrictEqual(
+      expect.arrayContaining([expect.stringContaining("invalid pace ref")]),
+    );
+  });
+
   it("accepts valid restMinutes", () => {
     const r = validateSteps([work({ restMinutes: 5 })]);
     expect(r.ok).toBe(true);
