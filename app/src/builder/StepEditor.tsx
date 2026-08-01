@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import {
-  fmtRestSeconds,
   restSecondsFromRow,
   rowWithRestSeconds,
   REST_STEP_SECONDS,
@@ -112,10 +111,13 @@ export default function StepEditor({
     onChange({ rest: updated.rest });
   }
 
+  // The displayed value is the raw field, not "FREE"/fmtRestSeconds's "NONE"
+  // (Task 5) — a field a user can type into can't also render a word while
+  // holding "", so the empty field itself communicates "free rate"/"no
+  // rest" now. The muted styling below still keys off the same
+  // trimmed/zero checks, so the empty state still reads visually distinct.
   const spmTrimmed = row.spm.trim();
-  const spmValue = spmTrimmed === "" ? "FREE" : spmTrimmed;
   const restSeconds = restSecondsFromRow(row);
-  const restValue = fmtRestSeconds(restSeconds);
 
   return (
     <div
@@ -200,12 +202,13 @@ export default function StepEditor({
           <span className="step-editor-row-label">SPM</span>
           <Stepper
             label={`${rowLabel} stroke rate`}
-            value={spmValue}
+            value={row.spm}
             valueClassName={
               spmTrimmed === "" ? "stepper-value-muted" : undefined
             }
             onDecrement={() => stepSpm(-1)}
             onIncrement={() => stepSpm(1)}
+            onValueChange={(next) => onChange({ spm: next })}
             invalid={Boolean(fieldError?.("spm"))}
             errorId={fieldError?.("spm") ? errorId("spm") : undefined}
             registerRef={(el) => registerRef?.("spm", el)}
@@ -223,12 +226,14 @@ export default function StepEditor({
           <span className="step-editor-row-label">REST</span>
           <Stepper
             label={`${rowLabel} rest`}
-            value={restValue}
+            value={row.rest}
+            valueInput="clock"
             valueClassName={
               restSeconds === 0 ? "stepper-value-muted" : undefined
             }
             onDecrement={() => stepRest(-REST_STEP_SECONDS)}
             onIncrement={() => stepRest(REST_STEP_SECONDS)}
+            onValueChange={(next) => onChange({ rest: next })}
             invalid={Boolean(fieldError?.("rest"))}
             errorId={fieldError?.("rest") ? errorId("rest") : undefined}
             registerRef={(el) => registerRef?.("rest", el)}

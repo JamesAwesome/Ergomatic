@@ -85,9 +85,21 @@ function setup(overrides: Partial<Handlers> = {}) {
 }
 
 // A stateful wrapper for the tests that need a stepper's value to actually
-// change across repeated presses (REST's "three presses reach 1:30"), as
+// change across repeated presses/keystrokes (REST's "three presses reach
+// 1:30", and typing a multi-digit clock value — ClockInput/the plain
+// numeric input both need their `value` prop to actually advance between
+// keystrokes, same reason ClockInput.test.tsx's own Harness exists), as
 // opposed to the single-press call-argument assertions everywhere else.
-function Harness({ initialRow }: { initialRow: BuilderRow }) {
+// `onChange` is optional and, when given, is called with every raw patch
+// IN ADDITION to updating `row` — lets a test assert on the exact final
+// call while still getting real accumulation leading up to it.
+function Harness({
+  initialRow,
+  onChange,
+}: {
+  initialRow: BuilderRow;
+  onChange?: (patch: Partial<BuilderRow>) => void;
+}) {
   const [row, setRow] = useState(initialRow);
   return (
     <MemoryRouter>
@@ -95,7 +107,10 @@ function Harness({ initialRow }: { initialRow: BuilderRow }) {
         row={row}
         index={0}
         splitLabel={null}
-        onChange={(patch) => setRow((r) => ({ ...r, ...patch }))}
+        onChange={(patch) => {
+          onChange?.(patch);
+          setRow((r) => ({ ...r, ...patch }));
+        }}
         onDuplicate={vi.fn()}
         onDelete={vi.fn()}
         onDone={vi.fn()}
@@ -152,7 +167,7 @@ describe("StepEditor", () => {
   // recorded departure from the handoff's 18.
   it("shows FREE for an empty spm, and pressing + from empty wakes at exactly 20 (not 18)", async () => {
     const { onChange } = setup({ row: workRow({ spm: "" }) });
-    expect(screen.getByText("FREE")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row 1 stroke rate value")).toHaveValue("");
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 1 stroke rate up" }),
@@ -199,6 +214,52 @@ describe("StepEditor", () => {
     expect(onChange).toHaveBeenCalledWith({ spm: "60" });
   });
 
+  // Task 5: the field itself is typable now, not just steppable — this is
+  // the affordance that lets a step return to FREE directly (5E's steppers
+  // only cleared via a `-` press at the floor) and lets a specific SPM/rest
+  // be reached without walking the grid one tap at a time.
+  it("returns SPM to FREE when the field is cleared", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    setup({ row: workRow({ spm: "27" }), onChange });
+
+    await user.clear(screen.getByLabelText("Row 1 stroke rate value"));
+    expect(onChange).toHaveBeenLastCalledWith({ spm: "" });
+  });
+
+  // Uses the stateful Harness, not the static `setup()` every single-press
+  // test above uses: ClockInput's masked field needs `value` to actually
+  // advance between keystrokes to accumulate "3", "30", "300" into "3:00" —
+  // a static mock leaves `value` at "" for every keystroke (the same
+  // controlled-input revert Stepper.test.tsx's own typing test hits), which
+  // would land each digit alone rather than accumulating.
+  it("takes a typed rest of 3:00", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness initialRow={workRow({ rest: "" })} onChange={onChange} />);
+
+    await user.type(screen.getByLabelText("Row 1 rest value"), "300");
+    expect(onChange).toHaveBeenLastCalledWith({ rest: "3:00" });
+  });
+
+  it("still steps rest by 30 seconds after a typed value", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    setup({ row: workRow({ rest: "3:00" }), onChange });
+
+    await user.click(screen.getByLabelText("Row 1 rest up"));
+    expect(onChange).toHaveBeenLastCalledWith({ rest: "3:30" });
+  });
+
+  it("wakes SPM at 20 from empty, as before", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    setup({ row: workRow({ spm: "" }), onChange });
+
+    await user.click(screen.getByLabelText("Row 1 stroke rate up"));
+    expect(onChange).toHaveBeenLastCalledWith({ spm: "20" });
+  });
+
   // Full round trip proving the fix survives Save, not just the stepper's
   // own onChange call: clear an already-set spm all the way to FREE via
   // repeated − presses, then Save, and confirm the POST body carries no
@@ -242,7 +303,7 @@ describe("StepEditor", () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByText("FREE")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row 1 stroke rate value")).toHaveValue("");
 
     const { toSteps, newForm } = await import("./builderState");
     const form = { ...newForm(), title: "t", pain: 3, rows: [clearedRow] };
@@ -258,14 +319,14 @@ describe("StepEditor", () => {
   // 5. REST shows NONE at zero and 1:30 after three + presses (30s steps).
   it("shows NONE at zero rest and reaches 1:30 after three + presses", async () => {
     render(<Harness initialRow={workRow({ rest: "" })} />);
-    expect(screen.getByText("NONE")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row 1 rest value")).toHaveValue("");
 
     const up = () => screen.getByRole("button", { name: "Row 1 rest up" });
     await userEvent.click(up());
     await userEvent.click(up());
     await userEvent.click(up());
 
-    expect(screen.getByText("1:30")).toBeInTheDocument();
+    expect(screen.getByLabelText("Row 1 rest value")).toHaveValue("1:30");
   });
 
   it("steps rest back down by 30s, clamped at 0 (NONE)", async () => {

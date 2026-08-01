@@ -1,3 +1,5 @@
+import ClockInput from "./ClockInput";
+
 // The shared "− value +" control (docs/design/builder-redesign/README.md,
 // the "Stepper pattern" paragraph): one joined container, 44×44 `−`/`+`
 // cells, and a value cell between them with side borders. Used by PACE
@@ -16,6 +18,8 @@ export default function Stepper({
   value,
   onDecrement,
   onIncrement,
+  onValueChange,
+  valueInput,
   valueWidth,
   valueClassName,
   invalid,
@@ -32,6 +36,20 @@ export default function Stepper({
   onDecrement: () => void;
   onIncrement: () => void;
   value: string;
+  // Optional (Task 5): when supplied, the value cell becomes a typable input
+  // instead of a plain `<span>` — the affordance that lets SPM return to
+  // FREE by clearing the field (steppers alone can only ever floor at 10,
+  // never clear) and lets REST be reached directly instead of thirty 30s
+  // taps from empty. Omitted entirely by REPEAT and PACE (via
+  // PaceRefInput), which keep the plain span — this control does no
+  // clamping or formatting of what it's given either way, so every digit
+  // this emits passes straight through to the caller's own rules.
+  onValueChange?: (next: string) => void;
+  // "text" (default): a bare numeric-pad `<input>`, digits only, capped at
+  // two characters — used by SPM. "clock": renders `ClockInput` instead —
+  // used by REST, whose value is a clock string, not a bare integer.
+  // Ignored when `onValueChange` is omitted.
+  valueInput?: "text" | "clock";
   // "flex" (default): the value cell fills the row, used by PACE/SPM/REST
   // where the stepper is the only thing on its line. A number: a fixed
   // pixel width, used by REPEAT's own value cell (Task 5), which sits
@@ -84,9 +102,30 @@ export default function Stepper({
       >
         −
       </button>
-      <span className={valueClass} style={valueStyle}>
-        {value}
-      </span>
+      {onValueChange === undefined ? (
+        <span className={valueClass} style={valueStyle}>
+          {value}
+        </span>
+      ) : valueInput === "clock" ? (
+        <ClockInput
+          value={value}
+          onChange={onValueChange}
+          ariaLabel={`${label} value`}
+          className={valueClass}
+        />
+      ) : (
+        <input
+          type="text"
+          inputMode="numeric"
+          className={`${valueClass} stepper-value-input`}
+          style={valueStyle}
+          aria-label={`${label} value`}
+          value={value}
+          onChange={(event) =>
+            onValueChange(event.target.value.replace(/\D/g, "").slice(0, 2))
+          }
+        />
+      )}
       <button
         type="button"
         className="stepper-btn"

@@ -29,6 +29,7 @@ import { fmtDuration, parseClock } from "../../domain/duration.js";
 import { validateSteps } from "../../domain/validate.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import type { Step } from "../../domain/types.js";
+import { STARTER_WORKOUTS } from "../../server/seed/starter";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -1132,6 +1133,44 @@ describe("rest seconds bridge", () => {
     expect(fmtRestSeconds(0)).toBe("NONE");
     expect(fmtRestSeconds(90)).toBe("1:30");
     expect(fmtRestSeconds(600)).toBe("10:00");
+  });
+
+  // Task 5 brief's own regression shape — kept verbatim even though the
+  // "rest seconds bridge" tests above already cover reading/writing/
+  // clearing individually, so a reviewer can see this exact case pinned.
+  it("reads and writes rest as a clock string", () => {
+    const row = { ...newRow("w"), rest: "1:30" };
+    expect(restSecondsFromRow(row)).toBe(90);
+    expect(rowWithRestSeconds(row, 210).rest).toBe("3:30");
+    expect(rowWithRestSeconds(row, 0).rest).toBe("");
+  });
+
+  // Realistic fixture (docs/TESTING.md's "test against production-shaped
+  // data" rule, and this task's own brief): a real starter workout pushed
+  // through fromWorkout, not a hand-built row — the exact shape (stepToRow
+  // writing restMinutes as a clock string) that hid the NaN bricking bug
+  // Task 4's fix wave found. "High Pressure" carries both spm and
+  // restMinutes on its one work step.
+  it("reads rest correctly off a real starter workout pushed through fromWorkout", () => {
+    const highPressure = STARTER_WORKOUTS.find(
+      (w) => w.title === "High Pressure",
+    );
+    if (!highPressure) throw new Error("fixture not found");
+    const form = fromWorkout(highPressure);
+    const workStep = form.rows.find((r) => r.kind === "w");
+    if (!workStep) throw new Error("expected a work row");
+
+    expect(workStep.rest).toBe("3:00");
+    expect(workStep.spm).toBe("22");
+    expect(restSecondsFromRow(workStep)).toBe(180);
+
+    // One tap of REST − still produces a valid, saveable clock string —
+    // the exact seam ("3:00" parsed with `Number()`) that used to write
+    // the literal string "NaN" into the row.
+    const stepped = rowWithRestSeconds(workStep, 180 - REST_STEP_SECONDS);
+    expect(stepped.rest).toBe("2:30");
+    const out = toSteps({ ...form, rows: [stepped] });
+    expect(out.ok).toBe(true);
   });
 });
 

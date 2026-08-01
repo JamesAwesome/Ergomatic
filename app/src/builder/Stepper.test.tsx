@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -163,5 +164,46 @@ describe("Stepper", () => {
     expect(group).toHaveAttribute("tabIndex", "-1");
     group.focus();
     expect(document.activeElement).toBe(group);
+  });
+
+  it("keeps a plain span when no onValueChange is supplied", () => {
+    render(
+      <Stepper
+        label="Repeat"
+        value="×4"
+        onDecrement={() => {}}
+        onIncrement={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  // A stateful wrapper, not the static mock every other test in this file
+  // uses: a controlled input that never echoes the new value back through
+  // `value` reverts on every keystroke (a real React/DOM behaviour, not a
+  // quirk of this component) — `user.type`'s "2" then "7" would otherwise
+  // land as two independent keystrokes against the same unchanged "" value
+  // and this assertion would see only the last one ("7"), not "27".
+  it("accepts typing when onValueChange is supplied", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    function Harness() {
+      const [value, setValue] = useState("");
+      return (
+        <Stepper
+          label="Step 1 stroke rate"
+          value={value}
+          onValueChange={(next) => {
+            onValueChange(next);
+            setValue(next);
+          }}
+          onDecrement={() => {}}
+          onIncrement={() => {}}
+        />
+      );
+    }
+    render(<Harness />);
+    await user.type(screen.getByLabelText("Step 1 stroke rate value"), "27");
+    expect(onValueChange).toHaveBeenLastCalledWith("27");
   });
 });
