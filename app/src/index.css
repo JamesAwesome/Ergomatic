@@ -1251,8 +1251,17 @@ button:disabled {
      same row layout as .duration-input's value+units line below. Without
      this the two children fall back to block layout — the joined pair on
      one line, the offset stepper dropping to a second, with no container
-     border around it — a regression caught only by rendering at 390px. */
+     border around it — a regression caught only by rendering at 390px.
+     `flex-wrap` (Task 4) is what lets that second line happen ON PURPOSE
+     now: the toggle grew from two chips to four (2K/6K/MAX/MIN), which no
+     longer leaves enough of the row's ~280px budget (at the 390px design
+     viewport, next to the 34px PACE label) for the offset stepper to read
+     legibly beside it — `.pace-ref-offset`'s own min-width below forces
+     the wrap rather than letting `.pace-ref-bases` get silently squeezed
+     by its own `overflow: hidden` (the four-chip screenshot regression
+     this fixes: the stepper's `+` button clipped clean off the row). */
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex: 1;
@@ -1260,10 +1269,18 @@ button:disabled {
 }
 
 .pace-ref-bases {
-  /* Joined pair (docs/design/builder-redesign/README.md §4b: two 48×44
-     segments), not two separate chips with a gap — one border around the
-     pair, an internal divider between the segments. */
+  /* Joined strip (docs/design/builder-redesign/README.md §4b: 48×44
+     segments — now four, Task 4's MAX/MIN chips), not separate chips with
+     a gap — one border around the whole strip, an internal divider between
+     segments. `flex: 0 0 auto` pins it to its own content width (4×48px
+     plus borders): without this it's a flex item like any other, and a
+     tight row would shrink the BOX (this container, not the fixed-width
+     chips inside it) below that content width, silently clipping the
+     rightmost chip(s) behind `overflow: hidden` instead of ever reflowing
+     — invisible in a DOM inspection, only caught by opening a real
+     screenshot at 390px. */
   display: flex;
+  flex: 0 0 auto;
   border: 1px solid var(--rule-3);
   border-radius: var(--radius);
   overflow: hidden;
@@ -1310,8 +1327,15 @@ button:disabled {
 .pace-ref-offset {
   display: flex;
   align-items: center;
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 160px;
+  /* 160px, not 0 (Task 4): the two ±44px step buttons alone are 88px, and
+     a real offset ("6k −60") needs real room either side of them — below
+     this the display text would be the thing silently truncated/squeezed
+     instead. `.pace-ref-input`'s own `flex-wrap` above is what this
+     min-width is FOR: once the four-chip strip plus this leave less than
+     160px on the shared line, this drops to its own full-width line
+     rather than shrinking past a legible size. */
+  min-width: 160px;
   background: var(--surface);
   border: 1px solid var(--rule-3);
   border-radius: var(--radius);

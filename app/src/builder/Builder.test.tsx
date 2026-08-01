@@ -4,7 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { api } from "../api";
 import type { BuilderEditMode } from "./Builder";
-import { newRow, type BuilderForm } from "./builderState";
+import { fromWorkout, newRow, type BuilderForm } from "./builderState";
+import type { Step } from "../../domain/types.js";
+import { STARTER_WORKOUTS } from "../../server/seed/starter";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -866,7 +868,7 @@ describe("Builder", () => {
     expect(screen.getByText("1:59.0–2:01.0")).toBeInTheDocument();
   });
 
-  it("renders a work row's pace as a structured control (two radios), not a free-text field", async () => {
+  it("renders a work row's pace as a structured control (four radios: 2K/6K/MAX/MIN), not a free-text field", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -874,13 +876,62 @@ describe("Builder", () => {
     const paceGroup = screen.getByRole("radiogroup", {
       name: "Row 1 pace base",
     });
-    expect(within(paceGroup).getAllByRole("radio")).toHaveLength(2);
+    expect(within(paceGroup).getAllByRole("radio")).toHaveLength(4);
     expect(
       within(paceGroup).getByRole("radio", { name: "Row 1 pace 2K" }),
     ).toBeInTheDocument();
     expect(
       within(paceGroup).getByRole("radio", { name: "Row 1 pace 6K" }),
     ).toBeInTheDocument();
+    expect(
+      within(paceGroup).getByRole("radio", { name: "Row 1 pace MAX" }),
+    ).toBeInTheDocument();
+    expect(
+      within(paceGroup).getByRole("radio", { name: "Row 1 pace MIN" }),
+    ).toBeInTheDocument();
+  });
+
+  // Task 4: an effort row's TARGET reads the effort word — and, unlike a
+  // split row, doesn't need baselines to do it (a word needs no resolution).
+  // Real starter workout (Zephyr: [wu 5', w 20' @ 6k+18]), not a hand-built
+  // fixture — its one work step's ref is patched to MAX before going through
+  // the real edit-mode load path (fromWorkout), matching the ledger's
+  // "test against a realistic fixture" rule.
+  it("shows ALL OUT and no offset stepper for a MAX row opened via the edit path, even with no baselines set", async () => {
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    mockApi(() => new Response(null, { status: 201 }));
+
+    const zephyr = STARTER_WORKOUTS.find((w) => w.title === "Zephyr");
+    if (!zephyr) throw new Error("fixture not found: Zephyr");
+    const steps: Step[] = zephyr.steps.map((s) =>
+      s.k === "w" ? { ...s, ref: { effort: "max" as const } } : s,
+    );
+    const initial = fromWorkout({
+      title: zephyr.title,
+      type: zephyr.type,
+      difficulty: zephyr.difficulty,
+      pain: zephyr.pain,
+      steps,
+    });
+    const maxRowIndex = initial.rows.findIndex((r) => r.refEffort === "max");
+    expect(maxRowIndex).toBeGreaterThanOrEqual(0);
+
+    await renderBuilder({ kind: "edit", id: "w1", initial });
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "EDIT" })[maxRowIndex]!,
+    );
+
+    const rowLabel = `Row ${maxRowIndex + 1}`;
+    expect(
+      screen.getByRole("radio", { name: `${rowLabel} pace MAX` }),
+    ).toBeChecked();
+    expect(screen.getByText("ALL OUT")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: `${rowLabel} pace faster` }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: `${rowLabel} pace slower` }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders REST as a stepper reading NONE by default, without stealing focus, and steps in 30s increments", async () => {
