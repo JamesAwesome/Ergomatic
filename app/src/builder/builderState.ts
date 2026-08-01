@@ -262,40 +262,36 @@ export const PAIN_WORDS: readonly string[] = [
   "BRUTAL",
 ];
 
-/** Appends a copy of the last row's values (design doc's "+ ADD STEP"
- *  behaviour: "appends a copy of the last step's values … or a default …
- *  when the list is empty") and returns the new row's id so the caller can
- *  open it for editing immediately — the accordion always opens a freshly
- *  added step rather than leaving it collapsed. The empty-list default
- *  (`5:00` MIN / `6k` ±0 / spm `22` / rest `1:00` = 60s) matches
- *  `newRow("w")`'s own pace-reference default (6k, no offset) plus the
- *  values design review settled on for a first step's duration/cadence/rest,
- *  spelled in the clock form `durValue`/`rest` hold everywhere else now.
+/** Appends an EMPTY work step and returns its id so the caller can open it for
+ *  editing immediately — the accordion always opens a freshly added step.
+ *
+ *  It used to append a copy of the last row's values (the design doc's original
+ *  "+ ADD STEP" behaviour). Device use rejected that: ADD STEP and DUPLICATE
+ *  did nearly the same thing, and a user who wanted a fresh step got a
+ *  filled-in one. DUPLICATE (`cloneRow`) is now the only control that copies.
+ *
+ *  The empty-list default (`5:00` / `6k` ±0 / spm `22` / rest `1:00`) stays —
+ *  a brand-new workout keeps its head start.
  *
  *  Always produces a `kind: "w"` row, even when the last row is a `wu` or
- *  standalone `r` — "+ ADD STEP" only ever authors a work step (there's no
- *  `+ WARM-UP`/`+ REST` control any more, see DEVIATIONS.md), so a workout
- *  that happens to end in one of those bookend rows must not silently hand
- *  back another wu/r instead of the work step the button promises. */
-export function addStepLike(f: BuilderForm): { form: BuilderForm; id: string } {
-  if (f.rows.length === 0) {
-    const row: BuilderRow = {
-      ...newRow("w"),
-      durValue: "5:00",
-      durUnit: "min",
-      refBase: "6k",
-      refOff: 0,
-      spm: "22",
-      rest: "1:00",
-    };
-    return { form: { ...f, rows: [row] }, id: row.id };
-  }
-
-  const row: BuilderRow = {
-    ...f.rows[f.rows.length - 1]!,
-    id: nextRowId(),
-    kind: "w",
-  };
+ *  standalone `r`: "+ ADD STEP" only ever authors a work step, so a workout
+ *  ending in a bookend row must not silently hand back another one. */
+export function addBlankStep(f: BuilderForm): {
+  form: BuilderForm;
+  id: string;
+} {
+  const row: BuilderRow =
+    f.rows.length === 0
+      ? {
+          ...newRow("w"),
+          durValue: "5:00",
+          durUnit: "min",
+          refBase: "6k",
+          refOff: 0,
+          spm: "22",
+          rest: "1:00",
+        }
+      : newRow("w");
   return { form: { ...f, rows: [...f.rows, row] }, id: row.id };
 }
 

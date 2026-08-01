@@ -8,7 +8,7 @@ import { resolveSplit, toleranceRange } from "../../domain/pace.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
 import ClassificationCard from "./ClassificationCard";
 import {
-  addStepLike,
+  addBlankStep,
   cloneRow,
   newForm,
   removeRow,
@@ -193,12 +193,13 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
     setEditing(null);
   }
 
-  // "+ ADD STEP" (design doc §4c): appends a copy of the last step's values
-  // (or a sensible default when the list is empty — see `addStepLike`) and
-  // opens it, same as any other newly-authored step needs immediate editing
-  // rather than a summary nothing has been entered for yet.
+  // "+ ADD STEP": appends an empty work step (or a sensible default when the
+  // list is empty — see `addBlankStep`) and opens it, same as any other
+  // newly-authored step needs immediate editing rather than a summary
+  // nothing has been entered for yet. DUPLICATE (`cloneRow`) is the control
+  // that copies a step's values — ADD STEP no longer does.
   function handleAddStep() {
-    const { form: next, id } = addStepLike(form);
+    const { form: next, id } = addBlankStep(form);
     setForm(next);
     setEditing(id);
   }

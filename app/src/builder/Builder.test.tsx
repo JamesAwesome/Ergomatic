@@ -178,7 +178,7 @@ describe("Builder", () => {
 
   // ---- + ADD STEP (task brief test 3) ------------------------------------
 
-  it("+ ADD STEP appends a copy of the last step's values and opens it", async () => {
+  it("+ ADD STEP appends an empty work step and opens it, leaving the filled row untouched", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -186,10 +186,23 @@ describe("Builder", () => {
     await userEvent.type(screen.getByLabelText("Row 1 duration"), "700");
     await userEvent.click(screen.getByRole("button", { name: "+ ADD STEP" }));
 
-    expect(screen.getByLabelText("Row 2 duration")).toHaveValue("7:00");
+    expect(screen.getByLabelText("Row 2 duration")).toHaveValue("");
+    expect(screen.queryByLabelText("Row 1 duration")).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
     ).toHaveLength(2);
+  });
+
+  it("opens a blank editor when a step is added after a filled one", async () => {
+    mockBaselines(BASELINES);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    await userEvent.type(screen.getByLabelText("Row 1 duration"), "2000");
+    await userEvent.click(screen.getByRole("button", { name: /done/i }));
+    await userEvent.click(screen.getByRole("button", { name: "+ ADD STEP" }));
+
+    expect(screen.getByLabelText("Row 2 duration")).toHaveValue("");
   });
 
   // ---- Duplicate: two entry points, different intent (task brief test 4) -

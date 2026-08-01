@@ -132,7 +132,7 @@ Copy changed from `REPEAT (OPTIONAL)` to `REPEAT ALL STEPS` — it states the da
 ## Interactions & behaviour
 
 - **Expand / collapse.** `editing` holds at most one step id. Tapping a collapsed card's index/summary/sub or its `EDIT` cell sets `editing = id`, which collapses whatever was open. `DONE` sets `editing = null`.
-- **Add step** appends a copy of the last step's values (or a default `5 MIN / 6k ±0 / 22 spm / 60s rest` when the list is empty) and opens it for editing.
+- **Add step** appends an empty work step (or a default `5 MIN / 6k ±0 / 22 spm / 60s rest` when the list is empty) and opens it for editing. It originally appended a copy of the last step's values, matching this handoff's original prototype; device use rejected that once `DUPLICATE` existed, since the two controls did nearly the same thing and a rower who wanted a fresh step got a filled-in one instead. Copying a step's values is now `DUPLICATE`'s job alone.
 - **Duplicate.** Two entry points, different intent: the collapsed `⧉` inserts a copy beneath and **leaves everything collapsed** (fast way to build `5×1′`); the expanded `DUPLICATE` inserts a copy beneath and **opens the copy** (duplicate-then-tweak).
 - **Delete** removes the step and sets `editing = null`. Available from both collapsed and expanded states.
 - **Rest stepper:** ±30s per tap (step size configurable — see props), clamped `0…900`. `0` renders `NONE`.

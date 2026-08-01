@@ -4,8 +4,8 @@ import {
   EMPTY_FORM,
   REST_MAX_SECONDS,
   REST_STEP_SECONDS,
+  addBlankStep,
   addRow,
-  addStepLike,
   cloneRow,
   fmtRestSeconds,
   fromWorkout,
@@ -1247,57 +1247,57 @@ describe("summaries", () => {
   });
 });
 
-describe("addStepLike", () => {
-  it("copies the last row's values and returns the new id", () => {
-    const base = formWith({
+describe("addBlankStep", () => {
+  it("adds an empty work step rather than a copy of the last one", () => {
+    const filled: BuilderForm = {
+      ...newForm(),
       rows: [
         {
-          ...workRow("a"),
-          durValue: "90",
-          durUnit: "m",
-          refOff: -4,
-          spm: "26",
+          ...newRow("w"),
+          durValue: "20:00",
+          durUnit: "min",
+          refBase: "2k",
+          refOff: 5,
+          spm: "27",
+          rest: "3:00",
         },
       ],
-    });
-    const { form, id } = addStepLike(base);
+    };
+
+    const { form, id } = addBlankStep(filled);
+    const added = form.rows.find((r) => r.id === id)!;
+
     expect(form.rows).toHaveLength(2);
-    expect(id).toBe(form.rows[1].id);
-    expect(form.rows[1]).toMatchObject({
-      durValue: "90",
-      durUnit: "m",
-      refOff: -4,
-      spm: "26",
+    expect(added).toMatchObject({
+      kind: "w",
+      durValue: "",
+      durUnit: "min",
+      refBase: "6k",
+      refOff: 0,
+      spm: "",
+      rest: "",
     });
+    // The previous row is untouched — this is an add, not a move.
+    expect(form.rows[0]).toMatchObject({ durValue: "20:00", spm: "27" });
   });
 
-  it("uses a sensible default when there are no rows", () => {
-    const { form } = addStepLike(formWith({ rows: [] }));
-    expect(form.rows[0]).toMatchObject({
-      kind: "w",
+  it("still gives the first step of an empty workout its head start", () => {
+    const { form, id } = addBlankStep({ ...newForm(), rows: [] });
+    expect(form.rows.find((r) => r.id === id)).toMatchObject({
       durValue: "5:00",
       durUnit: "min",
       refBase: "6k",
       refOff: 0,
       spm: "22",
+      rest: "1:00",
     });
   });
 
-  // "+ ADD STEP" only ever authors a work step (no `+ WARM-UP`/`+ REST`
-  // control exists to add anything else) — a workout that happens to end
-  // in a bookend `wu` or standalone `r` row must still get a `w` row back,
-  // not another copy of the bookend.
-  it("always adds a work step, even when the last row is a warm-up", () => {
-    const base = formWith({ rows: [wuRow("wu1", "10")] });
-    const { form } = addStepLike(base);
-    expect(form.rows).toHaveLength(2);
-    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "10:00" });
-  });
-
-  it("always adds a work step, even when the last row is a standalone rest", () => {
-    const base = formWith({ rows: [restRow("r1", "5")] });
-    const { form } = addStepLike(base);
-    expect(form.rows).toHaveLength(2);
-    expect(form.rows[1]).toMatchObject({ kind: "w", durValue: "5:00" });
+  it("adds a work step even when the last row is a warm-up", () => {
+    const { form, id } = addBlankStep({
+      ...newForm(),
+      rows: [{ ...newRow("wu"), durValue: "10:00" }],
+    });
+    expect(form.rows.find((r) => r.id === id)!.kind).toBe("w");
   });
 });
