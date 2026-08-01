@@ -104,8 +104,9 @@ test.describe("authoring loop", () => {
     });
     await fasterButton.click();
     await fasterButton.click();
-    // SPM is a bare stepper now (StepEditor.tsx), no typable field: from
-    // empty, "+" wakes at 20, then steps by 1 — three presses reaches 22.
+    // SPM is a Stepper (StepEditor.tsx) — typable since Phase 5F Task 5, but
+    // pressing the button still wakes at 20 from empty, then steps by 1, so
+    // three presses reaches 22.
     const spmUp = page.getByRole("button", { name: "Row 1 stroke rate up" });
     await spmUp.click();
     await spmUp.click();

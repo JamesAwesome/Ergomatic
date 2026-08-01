@@ -43,7 +43,12 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   approval** — green CI and a clean final review are necessary but not
   sufficient; present the review verdict and stop. Subagents never merge,
   close, or approve PRs and never remove worktrees; main is PR-only, no merge
-  commits.
+  commits. **After creating a worktree, run `pnpm install` at the worktree
+  root AND in `app/`, then verify hooks actually fire** (e.g. a deliberate
+  lint error gets blocked) before relying on them — a phase already lost a
+  review round when root-only install left `.husky/_` missing, `core.hooksPath`
+  pointed at nothing, and git silently skipped every hook, letting a commit
+  land that broke both typecheck and lint.
 - **Native-first:** the iOS app is the primary surface; design decisions
   favor it. The web build is the same code serving as test harness
   (Playwright/design/screenshots), dev loop, and fallback — never dropped,

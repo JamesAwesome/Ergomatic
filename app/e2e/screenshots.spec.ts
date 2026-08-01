@@ -82,18 +82,64 @@ test("library", async ({ page }) => {
   });
 });
 
+/** Test-only cleanup: finds the signed-in user's own workout with the given
+ *  title via the real API and deletes it. Duplicated from e2e/design.spec.ts
+ *  / e2e/builder.spec.ts's own `cleanupByTitle` rather than shared — same
+ *  precedent as this codebase's other intentionally-duplicated small
+ *  helpers — so the "workout-detail" capture below doesn't pile up a fresh
+ *  personal workout under the same fixed email every time `pnpm
+ *  screenshots` reruns against a database that isn't reset between runs. */
+async function cleanupByTitle(page: Page, title: string): Promise<void> {
+  const result = await page.evaluate(async (t) => {
+    const listRes = await fetch("/api/workouts");
+    if (!listRes.ok) return { ok: false, status: listRes.status };
+    const workouts = (await listRes.json()) as Array<{
+      id: string;
+      title: string;
+      isGlobal: boolean;
+    }>;
+    const match = workouts.find((w) => !w.isGlobal && w.title === t);
+    if (!match) return { ok: true, status: 200 };
+    const delRes = await fetch(`/api/workouts/${match.id}`, {
+      method: "DELETE",
+    });
+    return { ok: delRes.ok, status: delRes.status };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`cleanup failed for "${title}": ${result.status}`);
+  }
+}
+
 test("workout-detail", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-detail@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  await page.goto("/library");
-  await page.locator(".workout-row").first().click();
+
+  // A personal (non-global) workout, authored through the builder like the
+  // "builder" capture below — WorkoutDetail.tsx renders Edit/Delete only
+  // for `!workout.isGlobal`, and every seeded starter workout is global, so
+  // the previous version of this capture (the library's first row) never
+  // showed Task 8's owner-action styling fix at all. This replaces that
+  // capture rather than adding a second one: a screenshot of a *global*
+  // workout's detail screen (no Edit/Delete, no owner-actions block) records
+  // strictly less of this app's own surface than a personal one does, so
+  // keeping both would just be two similar images where one already
+  // subsumes the other.
+  const title = "Screenshot Personal Workout";
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill(title);
+  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "Save to library" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+$/);
   await page.locator(".workout-detail-title").waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "workout-detail.png"),
   });
+
+  await cleanupByTitle(page, title);
 });
 
 /** Fills the top-level fields plus a six-step body so the committed
@@ -105,9 +151,11 @@ test("workout-detail", async ({ page }) => {
  *  open) could never show that, so this deliberately builds more than one
  *  step and explicitly collapses each one via DONE before moving on.
  *
- *  Step 1: a minutes row (typed through the masked numeric-pad clock
- *  field, ClockInput.tsx), stroke rate raised off FREE via the SPM stepper
- *  (Stepper.tsx) — collapsed once configured.
+ *  Step 1: a sub-minute minutes row (`0:45`, typed through the masked
+ *  numeric-pad clock field, ClockInput.tsx — the Phase 5F feature this
+ *  screenshot exists to prove: before that phase the closest a rower could
+ *  get was `0.75` or a rejected `:` keystroke), stroke rate raised off FREE
+ *  via the SPM stepper (Stepper.tsx) — collapsed once configured.
  *  Steps 2-4: a distance row (2000m @ 2k, exercising DurationInput's M
  *  chip and the REST stepper's 30s increments) plus two collapsed-card ⧉
  *  duplicates of it (docs/design/DEVIATIONS.md's SET-cell replacement) —
@@ -122,9 +170,12 @@ async function fillSampleWorkout(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Pain 3" }).click();
 
   // Row 1: base defaults to 6k (builderState.ts's newRow) — ten clicks on
-  // the "slower" stepper reaches "6k +10". "2000" digits into the masked
-  // clock field renders as "20:00" (20 minutes).
-  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  // the "slower" stepper reaches "6k +10". "45" digits into the masked
+  // clock field renders as "0:45" (45 seconds) — a sub-minute duration,
+  // valid since this phase widened duration validation from half-steps to
+  // any whole second, and unrepresentable in the old free-text/decimal
+  // field this phase replaced.
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("45");
   const row1Slower = page.getByRole("button", { name: "Row 1 pace slower" });
   for (let i = 0; i < 10; i++) {
     await row1Slower.click();

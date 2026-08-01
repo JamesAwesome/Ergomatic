@@ -37,6 +37,7 @@ export default function ClockInput({
   invalid,
   errorId,
   className,
+  placeholder,
   registerRef,
 }: {
   value: string;
@@ -45,6 +46,12 @@ export default function ClockInput({
   invalid?: boolean;
   errorId?: string;
   className?: string;
+  // Shown only while the field is empty, e.g. REST's "NONE" — never the
+  // accessible name (`aria-label` already supplies that, and a placeholder
+  // is stripped from the accessibility tree the moment a name is present).
+  // The caller is responsible for its own contrast; see index.css's
+  // `::placeholder` rule for the ink-4-on-surface pairing this app uses.
+  placeholder?: string;
   registerRef?: (el: HTMLInputElement | null) => void;
 }) {
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
@@ -70,6 +77,7 @@ export default function ClockInput({
       aria-label={ariaLabel}
       aria-invalid={Boolean(invalid)}
       aria-describedby={errorId}
+      placeholder={placeholder}
       value={value}
       onChange={handleChange}
       onBlur={handleBlur}
