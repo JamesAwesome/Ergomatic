@@ -5,7 +5,13 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import { resolveSplit, toleranceRange } from "../../domain/pace.js";
 import type { WorkoutType } from "../../domain/types.js";
-import { buildDraft, loadDraft, saveDraft, type SessionDraft } from "./draft";
+import {
+  buildDraft,
+  loadDraft,
+  saveDraft,
+  startDraft,
+  type SessionDraft,
+} from "./draft";
 import {
   clampMeters,
   clampReps,
@@ -76,6 +82,29 @@ describe("ConfirmTargets", () => {
     await renderConfirm();
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  // F3 fix (final whole-branch review): a STARTED draft is re-enterable at
+  // this route via back-swipe (the browser history entry for
+  // /session/confirm still exists after START navigated away from it).
+  // Before this fix, landing back here re-rendered the full editable target
+  // list, and a second START press would re-stamp `startedAt` — silently
+  // restarting whatever 6B's real timer thought was in progress. Uses
+  // `startDraft` (not a hand-built `startedAt` string) so this exercises
+  // the exact shape the real START button produces.
+  it("redirects to /session/run instead of re-rendering when the draft is already STARTED", async () => {
+    mockBaselines();
+    const d = seedDraft("Doldrums");
+    saveDraft(startDraft(d));
+    await renderConfirm();
+
+    expect(await screen.findByText("RUN SCREEN")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Doldrums" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "START" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows LOADING… while baselines are still resolving", async () => {

@@ -133,6 +133,17 @@ export default function ConfirmTargets() {
     return <Navigate to="/today" replace />;
   }
 
+  // A STARTED draft (startedAt non-null) means a session is already in
+  // progress — this screen is re-enterable at this route via back-swipe
+  // after START already navigated to /session/run, and re-rendering the
+  // editable target list here would let a second START re-stamp
+  // `startedAt` and silently restart the clock on whatever 6B's real timer
+  // is doing. Redirect straight back to the in-progress session instead.
+  // 6A has no "abandon this session" flow yet — that's 6B's to add.
+  if (draft.startedAt !== null) {
+    return <Navigate to="/session/run" replace />;
+  }
+
   if (baselinesState.state === "loading") {
     return (
       <main className="screen">

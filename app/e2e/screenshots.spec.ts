@@ -55,9 +55,9 @@ async function setBaselines(page: Page): Promise<void> {
  *  scrolled content doesn't land underneath it; with the bar no longer
  *  fixed that padding would just leave a blank gap above it, so this drops
  *  it too. Call right before any `fullPage: true` screenshot whose content
- *  can exceed one viewport — currently only "builder" (see the other tests
- *  in this file: none else sets `fullPage`, so none else stitches, so none
- *  else is exposed to this). */
+ *  can exceed one viewport — "builder" and "confirm" (see the other tests
+ *  in this file: neither of the rest sets `fullPage`, so neither of those
+ *  is exposed to this). */
 async function neutralizeFixedTabBarForFullPageCapture(
   page: Page,
 ): Promise<void> {
@@ -374,8 +374,19 @@ test("confirm", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Restore Row 4" }),
   ).toBeVisible();
+
+  // Fix (final whole-branch review): four step-editor rows plus the header
+  // push `.confirm-footer` (the recount + START — the screen's one
+  // load-bearing control) below the 390×844 viewport, so a viewport-only
+  // capture used to cut it off entirely. Same fullPage + fixed-tabbar
+  // neutralizer as "builder" above, for the same reason: a fullPage
+  // capture on a document taller than the viewport stitches the fixed
+  // `.tabbar` into the middle of the image unless it's made non-fixed
+  // first.
+  await neutralizeFixedTabBarForFullPageCapture(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "confirm.png"),
+    fullPage: true,
   });
 
   await cleanupByTitle(page, title);

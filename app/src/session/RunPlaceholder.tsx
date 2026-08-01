@@ -17,11 +17,12 @@ export default function RunPlaceholder() {
   }
 
   // "Effective step count" is draftSteps(draft).length verbatim — draft.ts's
-  // own doc comment for draftSteps calls its output "the effective steps"
-  // (removed indices dropped, SPM overrides folded in), so this reuses that
-  // exact term rather than inventing a second, competing notion of "how
-  // many steps" a draft has (e.g. the reps marker's live-expanded count,
-  // which 6B's real timer will need but this placeholder does not).
+  // own doc comment for draftSteps/effectiveSteps calls its output "the
+  // effective steps" (removed indices dropped, SPM overrides and nudges
+  // folded in), so this reuses that exact term rather than inventing a
+  // second, competing notion of "how many steps" a draft has (e.g. the reps
+  // marker's live-expanded count, which 6B's real timer will need but this
+  // placeholder does not).
   const stepCount = draftSteps(draft).length;
 
   return (
