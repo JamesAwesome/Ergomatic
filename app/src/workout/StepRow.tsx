@@ -1,20 +1,13 @@
 import { Link } from "react-router-dom";
 import {
+  effortWord,
   isEffortRef,
+  refLabel,
   resolveSplit,
   toleranceRange,
 } from "../../domain/pace.js";
 import { fmtDuration, fmtDurationSpoken } from "../../domain/duration.js";
-import type { Baselines, PaceRef, Step, SplitRef } from "../../domain/types.js";
-
-// "6k" / "6k-2" / "6k+3" — the same shorthand the builder's bulk-paste
-// syntax accepts (domain/pace.ts's parsePaceRef), read back out.
-function refLabel(ref: PaceRef): string {
-  if (isEffortRef(ref)) return "";
-  const splitRef: SplitRef = ref;
-  if (splitRef.off === 0) return splitRef.base;
-  return `${splitRef.base}${splitRef.off > 0 ? "+" : ""}${splitRef.off}`;
-}
+import type { Baselines, Step } from "../../domain/types.js";
 
 // MINUS SIGN (U+2212) for negative, matching the tolerance range's EN DASH
 // convention of using real typographic characters rather than ASCII "-".
@@ -123,7 +116,13 @@ export default function StepRow({
         <span className="step-row-label" aria-label={leftSpoken}>
           {left}
         </span>
-        {baselines ? (
+        {isEffortRef(step.ref) ? (
+          // An effort word needs no baseline to resolve — "ALL OUT"/"EASY"
+          // is the target, not a computed split, so it renders even when
+          // baselines are unset (unlike the split branch's no-target
+          // fallback below).
+          <span className="step-row-range">{effortWord(step.ref.effort)}</span>
+        ) : baselines ? (
           <span className="step-row-range">
             {
               toleranceRange(
@@ -143,7 +142,7 @@ export default function StepRow({
           {subParts.join(" · ")}
         </p>
       )}
-      {baselines && (
+      {baselines && !isEffortRef(step.ref) && (
         <div className="step-row-nudges">
           <button
             type="button"
