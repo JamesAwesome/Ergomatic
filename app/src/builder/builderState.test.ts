@@ -1424,24 +1424,25 @@ describe("effort refs in rows", () => {
   });
 
   // Realistic fixture, per this task's brief: a real starter workout, not
-  // only hand-built rows. None of the 35 starters carry an effort ref yet
-  // (that's Task 6's seed audit) — "Zephyr"'s one work step is patched here
-  // to `{ effort: "max" }` before going through fromWorkout/toSteps, so this
-  // exercises the round trip against a full, production-shaped workout
-  // (real title/type/difficulty/pain/spm) rather than a fixture built just
-  // for this test.
-  it("round-trips an effort ref patched onto a real starter workout's step", () => {
-    const zephyr = STARTER_WORKOUTS.find((w) => w.title === "Zephyr");
-    if (!zephyr) throw new Error("fixture not found: Zephyr");
-    const steps: Step[] = zephyr.steps.map((s) =>
-      s.k === "w" ? { ...s, ref: { effort: "max" as const } } : s,
+  // only hand-built rows. This used to patch an effort ref onto "Zephyr"
+  // because no starter carried one; Task 6's seed audit converted
+  // "Microburst" for real, so the fixture is now the shipped workout
+  // UNPATCHED — a wu step, a reps marker and a work step with an effort ref,
+  // spm and rest together, which is the exact shape a rower opens when they
+  // edit a seeded workout.
+  it("round-trips a real starter workout's effort step (Microburst, unpatched)", () => {
+    const microburst = STARTER_WORKOUTS.find((w) => w.title === "Microburst");
+    if (!microburst) throw new Error("fixture not found: Microburst");
+    const steps: Step[] = microburst.steps;
+    expect(steps).toContainEqual(
+      expect.objectContaining({ ref: { effort: "max" } }),
     );
 
     const form = fromWorkout({
-      title: zephyr.title,
-      type: zephyr.type,
-      difficulty: zephyr.difficulty,
-      pain: zephyr.pain,
+      title: microburst.title,
+      type: microburst.type,
+      difficulty: microburst.difficulty,
+      pain: microburst.pain,
       steps,
     });
     const workRowOut = form.rows.find((r) => r.kind === "w");
@@ -1451,8 +1452,9 @@ describe("effort refs in rows", () => {
     const out = toSteps(form);
     if (!out.ok)
       throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
-    const wStep = out.steps.find((s) => s.k === "w");
-    expect(wStep).toMatchObject({ ref: { effort: "max" } });
+    // Lossless: the whole step list survives, effort ref and the independent
+    // spm/rest axes included — not just the ref field this task added.
+    expect(out.steps).toStrictEqual(microburst.steps);
     expect(validateSteps(out.steps)).toStrictEqual({
       ok: true,
       steps: out.steps,

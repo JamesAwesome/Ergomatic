@@ -14,7 +14,9 @@ export { PLANS } from "../../domain/plans.js";
 // Tempest) are the hardest sprint sessions.
 //
 // Structures come from standard, public rowing training methodology:
-// - AN (anaerobic): 30–90 s intervals at faster-than-2k pace, ~1:4–1:5 rest.
+// - AN (anaerobic): 30–90 s intervals at faster-than-2k pace, ~1:4–1:5 rest —
+//   except the shortest, hardest set (Microburst), which prescribes max
+//   effort outright instead of a stand-in offset.
 // - O2 (aerobic base): continuous steady state or long alternating pieces at
 //   6k+10..18 splits (UT2/UT1 intensity), low stroke rates.
 // - AT (anaerobic threshold): sustained intervals near 6k pace with rest
@@ -474,7 +476,13 @@ export const STARTER_WORKOUTS: Array<WorkoutInput & { sortOrder: number }> = [
     ],
   },
   {
-    // AN: 10×30 s at 2k-5 with 1:5 rest — maximal short bursts.
+    // AN: 10×30 s all out with 1:5 rest — maximal short bursts.
+    // The one entry in the library that prescribes effort rather than a
+    // split (Phase 5G seed audit): shortest rep, highest rate in the whole
+    // 18–32 range, and the most generous rest ratio here — the signature of
+    // a true maximal rep, where the old `2k-5` was only a stand-in for
+    // "empty the tank" (and a conservative one: 2k-5 is ~107 s/500 m at the
+    // reference baseline, slower than an honest all-out 30 s piece).
     sortOrder: 24,
     title: "Microburst",
     type: "AN",
@@ -486,7 +494,7 @@ export const STARTER_WORKOUTS: Array<WorkoutInput & { sortOrder: number }> = [
       {
         k: "w",
         duration: { kind: "time", minutes: 0.5 },
-        ref: { base: "2k", off: -5 },
+        ref: { effort: "max" },
         spm: 32,
         restMinutes: 2.5,
       },

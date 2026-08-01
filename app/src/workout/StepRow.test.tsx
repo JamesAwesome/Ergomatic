@@ -112,11 +112,11 @@ describe("StepRow durations (house clock format)", () => {
 });
 
 describe("StepRow effort refs (Phase 5G)", () => {
-  // Realistic fixture: "Microburst" (app/server/seed/starter.ts, AN, 10x30s)
-  // — its real work step (0.5 min, spm 32, 2.5 min rest) with the ref PATCHED
-  // from { base: "2k", off: -5 } to an effort ref. No starter workout carries
-  // an effort ref yet (Task 6 is the seed audit that may add one), so this is
-  // the closest thing to production data available for this branch.
+  // Realistic fixture: "Microburst" (app/server/seed/starter.ts, AN, 10x30s).
+  // This is now that workout's step verbatim — Task 6's seed audit converted
+  // its ref from the stand-in `{ base: "2k", off: -5 }` to `{ effort: "max" }`
+  // (it is the library's only effort step), so what a reader actually sees on
+  // the detail screen for a seeded workout is exactly what this asserts.
   it("renders an effort step's word where the range sits, with no nudges", () => {
     renderStep(
       <StepRow
