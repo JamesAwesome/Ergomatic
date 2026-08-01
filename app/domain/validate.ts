@@ -32,12 +32,16 @@ const int = (n: unknown, lo: number, hi: number): n is number =>
   typeof n === "number" && Number.isInteger(n) && n >= lo && n <= hi;
 
 function checkRef(v: unknown, errs: string[], i: number): v is PaceRef {
-  if (
-    !isRec(v) ||
-    (v.base !== "2k" && v.base !== "6k") ||
-    typeof v.off !== "number" ||
-    Math.abs(v.off) > 60
-  ) {
+  const isValidSplit =
+    isRec(v) &&
+    (v.base === "2k" || v.base === "6k") &&
+    typeof v.off === "number" &&
+    Math.abs(v.off) <= 60;
+  const isValidEffort =
+    isRec(v) &&
+    Object.keys(v).length === 1 &&
+    (v.effort === "max" || v.effort === "min");
+  if (!isValidSplit && !isValidEffort) {
     errs.push(`step ${i}: invalid pace ref`);
     return false;
   }

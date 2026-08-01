@@ -26,6 +26,25 @@ describe("STARTER_WORKOUTS", () => {
     }
   });
 
+  // Phase 5G Task 2's compatibility sweep: the seeded set is entirely
+  // split refs today (Task 6 is where effort refs get added to it), so this
+  // proves the new effort-ref branches in validate.ts/expand.ts left every
+  // existing workout's validation and phase-expansion behavior unchanged.
+  // Lives here (not domain/expand.test.ts) because app/domain/ is
+  // dependency-zero and must not import server/seed/starter — this file
+  // already imports both STARTER_WORKOUTS and the domain functions under
+  // test, same pattern src/builder/builderState.test.ts and
+  // src/builder/nameGenerator.test.ts use for the same reason.
+  it("every seeded starter workout validates and resolves byte-identically", () => {
+    for (const w of STARTER_WORKOUTS) {
+      const res = validateWorkoutInput(w);
+      expect(res.ok, `${w.title}`).toBe(true);
+      const { minutes, estimated } = estimateMinutes(w.steps, BASELINES);
+      expect(Number.isFinite(minutes), `${w.title}`).toBe(true);
+      expect(typeof estimated, `${w.title}`).toBe("boolean");
+    }
+  });
+
   it("sortOrders are exactly 1..N with no gaps or duplicates", () => {
     const order = STARTER_WORKOUTS.map((w) => w.sortOrder).sort(
       (a, b) => a - b,

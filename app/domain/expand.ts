@@ -1,4 +1,10 @@
-import { resolveSplit, toleranceRange } from "./pace.js";
+import {
+  effortWord,
+  estimationSplit,
+  isEffortRef,
+  resolveSplit,
+  toleranceRange,
+} from "./pace.js";
 import type { Baselines, Step } from "./types.js";
 
 export interface Phase {
@@ -6,8 +12,9 @@ export interface Phase {
   seconds?: number; // time-based phases
   meters?: number; // distance work phases
   targetSplit?: number; // work phases (resolved, nudge excluded — session nudges are applied by callers)
+  targetKind?: "split" | "effort"; // work phases only; set on every work phase
   spm?: number;
-  label: string; // 'Easy' | 'Rest' | 'All out' | fmtSplit-range label
+  label: string; // 'Easy' | 'Rest' | 'All out' | 'ALL OUT' | 'EASY' | fmtSplit-range label
   set?: { index: number; of: number };
 }
 
@@ -62,14 +69,27 @@ export function phases(
         out.push({ type: "test", label: "All out", set });
         break;
       case "w": {
-        const split = resolveSplit(baselines, s.ref);
-        const base: Phase = {
-          type: "work",
-          targetSplit: split,
-          spm: s.spm,
-          label: toleranceRange(split, tol).label,
-          set,
-        };
+        let base: Phase;
+        if (isEffortRef(s.ref)) {
+          base = {
+            type: "work",
+            targetKind: "effort",
+            targetSplit: estimationSplit(baselines, s.ref),
+            spm: s.spm,
+            label: effortWord(s.ref.effort),
+            set,
+          };
+        } else {
+          const split = resolveSplit(baselines, s.ref);
+          base = {
+            type: "work",
+            targetKind: "split",
+            targetSplit: split,
+            spm: s.spm,
+            label: toleranceRange(split, tol).label,
+            set,
+          };
+        }
         if (s.duration.kind === "time") base.seconds = s.duration.minutes * 60;
         else base.meters = s.duration.meters;
         out.push(base);
