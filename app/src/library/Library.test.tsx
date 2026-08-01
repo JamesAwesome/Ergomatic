@@ -37,6 +37,17 @@ const WORKOUTS: LibraryWorkout[] = [
   },
 ];
 
+const CUSTOM_WORKOUT: LibraryWorkout = {
+  id: "w-custom",
+  title: "My Interval Build",
+  type: "O2",
+  difficulty: "medium",
+  pain: 2,
+  steps: [{ k: "wu", minutes: 25 }],
+  isGlobal: false,
+  lastDoneDaysAgo: null,
+};
+
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 function mockReady(workouts: LibraryWorkout[] = WORKOUTS) {
@@ -241,5 +252,54 @@ describe("Library", () => {
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));
 
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  describe("CUSTOM filter", () => {
+    it("narrows to non-global rows when the CUSTOM chip is clicked, and ALL restores everything", async () => {
+      mockReady([...WORKOUTS, CUSTOM_WORKOUT]);
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+
+      expect(visibleHrefs()).toStrictEqual(["/library/w-custom"]);
+      expect(screen.getByText("1 ENTERED")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "ALL" }));
+
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+        "/library/w-custom",
+      ]);
+      expect(screen.getByText("4 ENTERED")).toBeInTheDocument();
+    });
+
+    it("keeps ALL's pressed state in sync with customOnly (isEmptyFilters)", async () => {
+      mockReady();
+      await renderLibrary();
+      const allChip = screen.getByRole("button", { name: "ALL" });
+      expect(allChip).toHaveAttribute("aria-pressed", "true");
+
+      const customChip = screen.getByRole("button", { name: "CUSTOM" });
+      await userEvent.click(customChip);
+      expect(allChip).toHaveAttribute("aria-pressed", "false");
+
+      await userEvent.click(customChip);
+      expect(allChip).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("shows the builder-link empty state when CUSTOM matches nothing", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+
+      expect(screen.getByText(/No custom workouts yet/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "build one" })).toHaveAttribute(
+        "href",
+        "/library/new",
+      );
+    });
   });
 });

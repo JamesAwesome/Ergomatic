@@ -68,4 +68,50 @@ describe("WorkoutRow", () => {
 
     expect(screen.getByText("—")).toBeInTheDocument();
   });
+
+  describe("custom badge", () => {
+    const CUSTOM: LibraryWorkout = {
+      ...DOLDRUMS,
+      id: "w-custom",
+      isGlobal: false,
+    };
+
+    it("renders the CUSTOM badge for a non-global workout", () => {
+      render(
+        <MemoryRouter>
+          <WorkoutRow workout={CUSTOM} durationMinutes={20} />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText("CUSTOM")).toBeInTheDocument();
+    });
+
+    it("omits the CUSTOM badge for a real seeded starter workout", () => {
+      render(
+        <MemoryRouter>
+          <WorkoutRow workout={DOLDRUMS} durationMinutes={20} />
+        </MemoryRouter>,
+      );
+
+      expect(screen.queryByText("CUSTOM")).not.toBeInTheDocument();
+    });
+
+    it("adds ', custom workout' to the row's accessible name only for customs", () => {
+      const { rerender } = render(
+        <MemoryRouter>
+          <WorkoutRow workout={DOLDRUMS} durationMinutes={20} />
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole("link")).not.toHaveAccessibleName(
+        /, custom workout/,
+      );
+
+      rerender(
+        <MemoryRouter>
+          <WorkoutRow workout={CUSTOM} durationMinutes={20} />
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole("link")).toHaveAccessibleName(/, custom workout/);
+    });
+  });
 });

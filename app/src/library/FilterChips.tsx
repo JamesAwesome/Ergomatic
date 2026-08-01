@@ -1,6 +1,7 @@
 import {
   clearFilters,
   setRecency,
+  toggleCustom,
   toggleDuration,
   togglePain,
   toggleType,
@@ -30,7 +31,8 @@ function isEmptyFilters(f: Filters): boolean {
     f.type === null &&
     f.durations.length === 0 &&
     !f.painMax3 &&
-    f.recency === null
+    f.recency === null &&
+    !f.customOnly
   );
 }
 
@@ -99,6 +101,11 @@ export default function FilterChips({
         label="NOT RECENT"
         active={filters.recency === "not-recent"}
         onClick={() => onChange(setRecency(filters, "not-recent"))}
+      />
+      <Chip
+        label="CUSTOM"
+        active={filters.customOnly}
+        onClick={() => onChange(toggleCustom(filters))}
       />
     </div>
   );

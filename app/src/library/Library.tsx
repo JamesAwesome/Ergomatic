@@ -96,6 +96,14 @@ export default function Library() {
       {visible.length === 0 ? (
         <div className="library-empty">
           <p>No workouts match these filters.</p>
+          {filters.customOnly && (
+            <p>
+              No custom workouts yet —{" "}
+              <Link to="/library/new" className="library-new">
+                build one
+              </Link>
+            </p>
+          )}
           <button
             type="button"
             className="button-outline"

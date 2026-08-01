@@ -10,6 +10,7 @@ export interface Filters {
   durations: DurationBucket[];
   painMax3: boolean;
   recency: "recent" | "not-recent" | null;
+  customOnly: boolean;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -17,6 +18,7 @@ export const EMPTY_FILTERS: Filters = {
   durations: [],
   painMax3: false,
   recency: null,
+  customOnly: false,
 };
 
 export function toggleType(f: Filters, t: WorkoutType): Filters {
@@ -32,6 +34,10 @@ export function toggleDuration(f: Filters, d: DurationBucket): Filters {
 
 export function togglePain(f: Filters): Filters {
   return { ...f, painMax3: !f.painMax3 };
+}
+
+export function toggleCustom(f: Filters): Filters {
+  return { ...f, customOnly: !f.customOnly };
 }
 
 export function setRecency(f: Filters, r: "recent" | "not-recent"): Filters {
@@ -65,6 +71,7 @@ export function applyFilters(
   return workouts.filter((w) => {
     if (f.type !== null && w.type !== f.type) return false;
     if (f.painMax3 && w.pain > 3) return false;
+    if (f.customOnly && w.isGlobal) return false;
     if (f.recency === "recent" && !isRecent(w.lastDoneDaysAgo)) return false;
     if (f.recency === "not-recent" && isRecent(w.lastDoneDaysAgo)) return false;
     // Baselines are required to estimate duration; when unknown, the
