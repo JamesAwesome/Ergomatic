@@ -321,7 +321,7 @@ describe("Builder", () => {
 
   // ---- TOTAL / warm-up / Save to library (task brief test 8) -------------
 
-  it("renders TOTAL with the warm-up line beneath it, and the primary button reads Save to library", async () => {
+  it("renders TOTAL and the primary button reads Save to library", async () => {
     mockBaselines(BASELINES);
     mockPreferences(10);
     mockApi(() => new Response(null, { status: 201 }));
@@ -331,18 +331,33 @@ describe("Builder", () => {
 
     expect(screen.getByText("TOTAL")).toBeInTheDocument();
     expect(screen.getByText("5 MIN")).toBeInTheDocument();
-    const totalLabel = screen.getByText("TOTAL");
-    const warmup = screen.getByText(/warm-up/i);
-    expect(warmup).toHaveTextContent("+ 10′ warm-up from your preferences");
-    // "beneath" is a DOM-order claim, not just "present somewhere".
     expect(
-      totalLabel.compareDocumentPosition(warmup) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.getByText("+ 10′ warm-up from your preferences"),
+    ).toBeInTheDocument();
 
     expect(
       screen.getByRole("button", { name: "Save to library" }),
     ).toBeInTheDocument();
+  });
+
+  // ---- Warm-up placement (Phase 5F task 7) --------------------------------
+  // The warm-up is prepended at session start, not authored last — it reads
+  // as an implicit step 0, so it must sit above the step list rather than
+  // down by the totals where it used to live.
+
+  it("shows the warm-up above the step list, not below the totals", async () => {
+    mockBaselines(BASELINES);
+    mockPreferences(10);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder(); // preferences default to "ready" (see beforeEach)
+
+    const warmup = await screen.findByText(/warm-up from your preferences/);
+    const steps = screen.getByText("STEPS");
+
+    // FOLLOWING means `steps` comes after `warmup` in document order.
+    expect(
+      warmup.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders — MIN and no warm-up line while preferences are loading", async () => {

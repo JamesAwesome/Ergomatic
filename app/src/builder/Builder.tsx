@@ -380,6 +380,21 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         {errors.pain && <p className="field-error">{errors.pain}</p>}
       </div>
 
+      {preferencesState.state === "ready" && (
+        // Context only, never authored into the workout: `toSteps` never
+        // sees this value, so changing the preference later doesn't leave
+        // any saved workout stale (Phase 6's session flow prepends the
+        // actual warm-up when a workout is started). Rendered only once the
+        // preference has actually loaded — while loading or on error this
+        // renders nothing rather than a placeholder number, since a wrong
+        // warm-up figure is worse than none. Placed above the step list
+        // rather than down by the totals: it reads as an implicit step 0,
+        // which is what actually happens at session start.
+        <p className="builder-warmup-line">
+          {`+ ${preferencesState.preferences.warmupMinutes}′ warm-up from your preferences`}
+        </p>
+      )}
+
       <div className="builder-steps">
         <div className="builder-steps-header">
           <span>STEPS</span>
@@ -455,18 +470,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
             {totalsResult ? `${Math.round(totalsResult.total)} MIN` : "— MIN"}
           </span>
         </div>
-        {preferencesState.state === "ready" && (
-          // Context only, never authored into the workout: `toSteps` never
-          // sees this value, so changing the preference later doesn't leave
-          // any saved workout stale (Phase 6's session flow prepends the
-          // actual warm-up when a workout is started). Rendered only once the
-          // preference has actually loaded — while loading or on error this
-          // renders nothing rather than a placeholder number, since a wrong
-          // warm-up figure is worse than none.
-          <p className="builder-warmup-line">
-            {`+ ${preferencesState.preferences.warmupMinutes}′ warm-up from your preferences`}
-          </p>
-        )}
       </div>
 
       {submitError && (

@@ -920,8 +920,15 @@ button:disabled {
   color: var(--ink);
 }
 
+/* Sits directly above `.builder-steps` (Builder.tsx) — the warm-up reads as
+   an implicit step 0, so it needs to sit close to the list it precedes
+   rather than floating at the page's standard 18px block rhythm (the gap
+   `.screen.builder-screen` already puts between every other pair of blocks).
+   Negative margin-bottom claws back 10px of that gap, leaving 8px — the same
+   distance `.builder-steps` uses internally between its own header and card
+   list — so the line reads as part of that group, not a block of its own. */
 .builder-warmup-line {
-  margin: 0;
+  margin: 0 0 -10px;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-4);
