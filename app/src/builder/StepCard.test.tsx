@@ -17,6 +17,7 @@ function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
     durUnit: "min",
     refBase: "6k",
     refOff: 10,
+    refEffort: null,
     spm: "20",
     rest: "1:30",
     ...overrides,
@@ -31,6 +32,7 @@ function wuRow(): BuilderRow {
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
+    refEffort: null,
     spm: "",
     rest: "",
   };
@@ -47,6 +49,7 @@ function restRow(): BuilderRow {
     // ref happens to still look blank.
     refBase: "2k",
     refOff: 10,
+    refEffort: null,
     spm: "",
     rest: "",
   };
