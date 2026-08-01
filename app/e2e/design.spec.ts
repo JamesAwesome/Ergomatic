@@ -343,6 +343,34 @@ test.describe("builder screen", () => {
     expect(after?.y).toBe(before?.y);
   });
 
+  // Same nudge-bug class, mid-phase addition (Task 7): TYPE's own summary
+  // word (TYPE_WORDS) sits opposite its label the same way PAIN's does.
+  // Unlike PAIN, a type is always selected — the word is present on first
+  // paint, so there's no "word appears" transition to reproduce here — but
+  // switching between chips swaps in a differently-*wide* word ("LOW & SLOW"
+  // vs "COMFORTABLY HARD"), and a width change alone must not shift
+  // anything below it either. Asserts both the TYPE chip row itself and the
+  // DIFFICULTY row beneath it hold their y position across the switch.
+  test("picking a different TYPE does not shift the TYPE chips or the DIFFICULTY row below them", async ({
+    page,
+  }) => {
+    // A fresh builder defaults to O2 ("LOW & SLOW") — switch to AT
+    // ("COMFORTABLY HARD"), the widest of the four words.
+    const typeChipRow = page.locator(".classification-chip-row").first();
+    const difficultyRow = page.locator(".classification-chip-row").nth(1);
+    const beforeType = await typeChipRow.boundingBox();
+    const beforeDifficulty = await difficultyRow.boundingBox();
+
+    await page.getByRole("button", { name: "AT", exact: true }).click();
+    await expect(page.getByText("COMFORTABLY HARD")).toBeVisible();
+
+    const afterType = await typeChipRow.boundingBox();
+    const afterDifficulty = await difficultyRow.boundingBox();
+
+    expect(afterType?.y).toBe(beforeType?.y);
+    expect(afterDifficulty?.y).toBe(beforeDifficulty?.y);
+  });
+
   // A prior review (5B) only ever swept the builder blank — never after a
   // failed Save exposes its error-state markup (role=alert banners,
   // aria-invalid/aria-describedby on the first bad field, inline field-error
@@ -536,6 +564,34 @@ test.describe("builder screen", () => {
       await page
         .getByLabel("Row 1 rest value", { exact: true })
         .pressSequentially("300");
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+  });
+
+  // Phase 5G (Task 4): tapping MAX/MIN hides the offset stepper entirely
+  // (PaceRefInput.tsx renders it only when `effort === null`) and swaps in
+  // the TARGET strip's word instead of a resolved range — a real structural
+  // change to what's on screen, not just a different value in an existing
+  // field. Every sweep above only ever exercises the default split-mode
+  // layout; this is the one sweep that runs with an effort chip checked, so
+  // the hidden-stepper state gets its own tap-target/axe coverage instead of
+  // inheriting a pass that never actually rendered it.
+  test.describe("effort chip selected (MAX) — hidden offset stepper", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole("radio", { name: "Row 1 pace MAX" }).click();
+      await expect(
+        page.getByRole("radio", { name: "Row 1 pace MAX" }),
+      ).toHaveAttribute("aria-checked", "true");
+      await expect(page.locator(".pace-ref-offset")).toHaveCount(0);
     });
 
     test("every visible interactive element has a >=44x44 tap target", async ({

@@ -719,3 +719,70 @@ test.describe("new controls this phase introduced", () => {
     await expect(spmValue).toHaveValue("20");
   });
 });
+
+test.describe("effort refs (Phase 5G)", () => {
+  test("authors 0:30 max @ 32, saves, reopens as ALL OUT with no nudges", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-effort-max@e2e.test",
+      name: "Builder Effort Max Tester",
+    });
+    await setBaselines(page);
+    await page.goto("/library/new");
+
+    const title = "Effort Max Row";
+    await page.getByLabel("Title").fill(title);
+    await page.getByRole("button", { name: "Pain 5" }).click();
+    // "30" digits into the masked clock field renders as "0:30".
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("30");
+    await page.getByRole("radio", { name: "Row 1 pace MAX" }).click();
+    // MAX/MIN have no offset of their own — the stepper unmounts entirely
+    // (PaceRefInput.tsx), not just visually hidden.
+    await expect(page.locator(".pace-ref-offset")).toHaveCount(0);
+    await page
+      .getByLabel("Row 1 stroke rate value", { exact: true })
+      .pressSequentially("32");
+
+    // The TARGET strip resolves live, before save — an effort word needs no
+    // baseline to resolve, so it renders unconditionally once an effort
+    // chip is checked (StepEditor.tsx).
+    await expect(page.locator(".step-editor-target-value")).toHaveText(
+      "ALL OUT",
+    );
+
+    await page.getByRole("button", { name: "Save to library" }).click();
+
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    // StepRow.tsx: the visible left label composes as "<duration> @ <chip
+    // word>" (refLabel), and the right-hand range slot renders the effort
+    // word instead of a resolved split.
+    await expect(page.locator(".step-row-label").first()).toHaveText(
+      "0:30 @ MAX",
+    );
+    await expect(page.locator(".step-row-range").first()).toHaveText("ALL OUT");
+    // No nudge buttons at all for an effort ref — StepRow.tsx only renders
+    // `.step-row-nudges` when baselines are set AND the ref is a split, and
+    // baselines ARE set here (setBaselines above), so the only thing that
+    // can be suppressing them is the effort branch itself.
+    await expect(page.locator(".nudge-btn")).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/edit$/);
+
+    // Edit mode opens with every row collapsed — expand Row 1 to read the
+    // round-tripped chip state back.
+    await page
+      .locator(".builder-step-list > div")
+      .first()
+      .getByRole("button", { name: "EDIT" })
+      .click();
+    await expect(
+      page.getByRole("radio", { name: "Row 1 pace MAX" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator(".pace-ref-offset")).toHaveCount(0);
+
+    await cleanupByTitle(page, title);
+  });
+});

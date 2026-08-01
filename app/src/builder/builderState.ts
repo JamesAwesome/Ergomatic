@@ -273,6 +273,20 @@ export const PAIN_WORDS: readonly string[] = [
   "BRUTAL",
 ];
 
+// One-word (well, one-phrase) summary per WorkoutType, mirroring PAIN_WORDS
+// above — the classification card's TYPE group shows this opposite its
+// label the same way EXPECTED PAIN shows its level word. James's mid-run
+// addition to this phase (see .superpowers/sdd/.../progress.md); words are
+// his suggestion, reviewable/vetoable at the PR, but centralized here
+// (rather than inlined in ClassificationCard.tsx) so a future wording pass
+// has one place to edit, same rationale as PAIN_WORDS.
+export const TYPE_WORDS: Record<WorkoutType, string> = {
+  AN: "SPEED WORK",
+  O2: "LOW & SLOW",
+  AT: "COMFORTABLY HARD",
+  TR: "HARD INTERVALS",
+};
+
 /** Appends an EMPTY work step and returns its id so the caller can open it for
  *  editing immediately — the accordion always opens a freshly added step.
  *

@@ -60,6 +60,55 @@ describe("ClassificationCard", () => {
       await userEvent.click(screen.getByRole("button", { name: "TR" }));
       expect(onTypeChange).toHaveBeenCalledWith("TR");
     });
+
+    // TYPE always has a selection (unlike PAIN, which starts at null), so
+    // the summary word is present from the very first render — there's no
+    // "nothing selected yet" state to assert here, only that it tracks the
+    // prop and updates when a different type is chosen (the parent owns
+    // `type`; this component is controlled, so re-rendering with a new prop
+    // is what a real chip click ultimately produces).
+    it.each([
+      ["AN", "SPEED WORK"],
+      ["O2", "LOW & SLOW"],
+      ["AT", "COMFORTABLY HARD"],
+      ["TR", "HARD INTERVALS"],
+    ] as const)("shows %s's summary word as %s", (type, word) => {
+      setup({ type });
+      expect(screen.getByText(word)).toBeInTheDocument();
+    });
+
+    it("updates the word when the type prop changes", () => {
+      const props = {
+        type: "O2" as WorkoutType,
+        difficulty: "easy" as Difficulty,
+        pain: null as number | null,
+        onTypeChange: vi.fn(),
+        onDifficultyChange: vi.fn(),
+        onPainChange: vi.fn(),
+      };
+      const { rerender } = render(<ClassificationCard {...props} />);
+      expect(screen.getByText("LOW & SLOW")).toBeInTheDocument();
+
+      rerender(<ClassificationCard {...props} type="AN" />);
+      expect(screen.queryByText("LOW & SLOW")).not.toBeInTheDocument();
+      expect(screen.getByText("SPEED WORK")).toBeInTheDocument();
+    });
+
+    // The word is a plain, non-interactive <p> — same convention as PAIN's
+    // level word (ClassificationCard.tsx's doc comment) — so it must not be
+    // reachable by Tab and must not get pulled into any button's accessible
+    // name via containment or aria-labelledby.
+    it("the word is not focusable and is not any chip's accessible name", () => {
+      setup({ type: "AT" });
+      const word = screen.getByText("COMFORTABLY HARD");
+      expect(word.tagName).toBe("P");
+      expect(word).not.toHaveAttribute("tabindex");
+      for (const label of ["AN", "O2", "AT", "TR"]) {
+        expect(
+          screen.getByRole("button", { name: label }),
+        ).not.toHaveAccessibleName("COMFORTABLY HARD");
+      }
+    });
   });
 
   describe("DIFFICULTY", () => {
