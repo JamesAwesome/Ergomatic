@@ -2106,6 +2106,19 @@ button:disabled {
   text-decoration: line-through;
 }
 
+/* Phase 6A Task 5 finding (design sweep's own struck-row axe scan): every
+   step row's DUR/SPM/REPS field label (.step-editor-row-label) is ink-4,
+   which measures 5.29:1 against the ordinary --surface a step row sits on
+   — but a struck row's background is --surface-sunken instead (see
+   .confirm-step-removed above), where ink-4 drops to 4.48:1 and fails
+   WCAG AA's 4.5:1 floor. No prior sweep ever rendered a struck row through
+   axe, so this shipped with Task 4 and went uncaught until this task's
+   dedicated struck-row coverage. Same ink-3 substitution as the header
+   label immediately above (6.3:1 on --surface-sunken). */
+.confirm-step-removed .step-editor-row-label {
+  color: var(--ink-3);
+}
+
 .confirm-toggle-btn.is-removed {
   color: var(--accent);
   border-color: var(--accent);

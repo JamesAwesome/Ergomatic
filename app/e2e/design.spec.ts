@@ -30,6 +30,135 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
   }
 }
 
+// Phase 6A (Task 5) fixtures — Today/Plan/Confirm all need real, non-empty
+// data to sweep the layouts that actually ship (an empty library/no-plan
+// state is a distinct, already-covered layout, not the one these three
+// screens spend most of their life in). Same in-page-fetch idiom as
+// screenshots.spec.ts/flows.spec.ts's own setBaselines: the api container's
+// session cookie is Set-Cookie'd `Secure` (NODE_ENV=production), which
+// Playwright's Node-side APIRequestContext doesn't get the loopback
+// exemption for even though an in-page `fetch` does.
+const DESIGN_BASELINES = { k2Seconds: 100, k6Seconds: 120 };
+
+async function setBaselines(page: Page): Promise<void> {
+  const result = await page.evaluate(async (patch) => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, DESIGN_BASELINES);
+  if (!result.ok) {
+    throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Activates a preset plan via the real `PUT /api/plan` route (Plan.tsx's
+ *  own `choose`) — this is what puts a genuine 84-row sequence behind
+ *  Today's plan-driven suggestion and the Plan screen's active view. */
+async function choosePlan(
+  page: Page,
+  planKey: "sprint" | "head",
+): Promise<void> {
+  const result = await page.evaluate(async (key) => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planKey: key }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, planKey);
+  if (!result.ok) {
+    throw new Error(`plan setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Zeroes `doneN` unconditionally via `PUT /api/plan {reset:true}`
+ *  (planState.ts's own `reset`: always sets doneN back to 0, leaving
+ *  whatever `planKey` is already set untouched). Needed alongside
+ *  `choosePlan` above because `choosePlan` only zeroes doneN when it
+ *  actually *changes* the plan key (server/routes/data.ts: "re-selecting
+ *  the SAME plan must be a no-op") — a per-worker email reused by every
+ *  test in a describe block (this file's own convention) would otherwise
+ *  leave doneN wherever a PRIOR test in the same worker left it, since
+ *  `stores/logs.ts`'s own `create` bumps `plan_state.done_n` on every
+ *  logged session (found while pinning "SESSION 1 OF 84" below — a design
+ *  sweep account that seeds 3 logs before this call landed on "SESSION 4"
+ *  the first time this was written). Calling this after `choosePlan` makes
+ *  the fixture's end state (planKey=sprint, doneN=0) deterministic no
+ *  matter how many times this email has run through this suite before. */
+async function resetPlanProgress(page: Page): Promise<void> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reset: true }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(`plan reset failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Seeds `count` real logs via `POST /api/logs` (the same route the 6C log
+ *  screen will eventually write to) so Today's LAST THREE renders its
+ *  populated layout rather than the "No sessions logged yet." empty state —
+ *  the exact fixture-emptier-than-production blind spot CLAUDE.md's
+ *  recurring-failures list warns about. */
+async function seedLogs(page: Page, count: number): Promise<void> {
+  const result = await page.evaluate(async (n) => {
+    for (let i = 0; i < n; i++) {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: `Design Sweep Session ${i + 1}`,
+          workoutType: "AT",
+          held: i % 2 === 0 ? "held" : "under",
+          pain: 2,
+          notes: null,
+          steps: [
+            {
+              label: "Work",
+              targetSplit: 120,
+              actualSplit: 121,
+              actualSource: "stopwatch",
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        return { ok: false, status: res.status, body: await res.text() };
+      }
+    }
+    return { ok: true, status: 200, body: "" };
+  }, count);
+  if (!result.ok) {
+    throw new Error(`log seed failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Navigates to a workout's detail screen by title via the real API list —
+ *  used to reach Microburst (server/seed/starter.ts), the one starter
+ *  workout with an effort-ref work step, without hardcoding its seeded id. */
+async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
+  const workout = await page.evaluate(async (t) => {
+    const res = await fetch("/api/workouts");
+    const workouts = (await res.json()) as Array<{
+      id: string;
+      title: string;
+    }>;
+    return workouts.find((w) => w.title === t) ?? null;
+  }, title);
+  if (!workout) {
+    throw new Error(`workout not found: ${title}`);
+  }
+  await page.goto(`/library/${workout.id}`);
+}
+
 // Structural design rules, asserted against the real rendered app rather
 // than a mock — a failure here is a real finding about the shipped UI, not
 // a fixture drift. See docs/superpowers/specs/2026-07-28-testing-
@@ -274,6 +403,282 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
     });
     expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink
     expect(styles.decoration).toBe("none");
+  });
+});
+
+// Phase 6A (Task 5): Today, Plan, and Confirm targets each get their own
+// sweep run against real data — a plan active, logs present — rather than
+// the empty/no-plan/no-baselines state every one of these screens also
+// renders. That fallback state is a real, distinct layout (and is already
+// exercised structurally by "signed-in home" above, which signs in fresh
+// with no setup at all), but the plan-driven suggestion, the 84-row
+// sequence, and the effort-step confirm row only ever render once there's
+// something behind them — sweeping only the empty state would repeat
+// exactly the fixture blind spot CLAUDE.md's recurring-failures list warns
+// about (#3: "every test used an empty library").
+test.describe("today screen (plan active, logs present)", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    // Per-worker email: this describe mutates real per-user state (baselines,
+    // plan, logs) via the API, and Playwright's fullyParallel config can run
+    // this file's tests across several workers at once — same reasoning as
+    // the "workout detail screen (personal workout, owner actions)" describe
+    // above.
+    await signInViaBackdoor(page, {
+      email: `design-today-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Today Tester",
+    });
+    await setBaselines(page);
+    await seedLogs(page, 3);
+    await choosePlan(page, "sprint");
+    // Deterministic doneN: see resetPlanProgress's own comment — logs.create
+    // bumps doneN on every seeded log, and a per-worker email reused across
+    // this describe's tests would otherwise carry doneN forward from
+    // whatever a prior test in the same worker left it at.
+    await resetPlanProgress(page);
+    await page.goto("/today");
+    // Today races five concurrent data hooks (workouts/baselines/plan/
+    // preferences/recentLogs) and renders "LOADING…" until all five
+    // resolve — wait for the suggested-workout card itself, not just
+    // navigation, before sweeping (the same LOADING race that caught the
+    // committed `signed-in-home.png`/`today.png` screenshot — see this
+    // task's handoff).
+    await expect(page.locator(".today-card")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the suggested card, session line, and LAST THREE meta match the token palette", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+
+    // Plan-driven (sprint, doneN 0 -> "O2"): the header names the real
+    // session number rather than the freestyle FREESTYLE line.
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "SESSION 1 OF 84",
+    );
+
+    const cardBorder = await page
+      .locator(".today-card")
+      .evaluate((el) => getComputedStyle(el).borderColor);
+    expect(cardBorder).toBe("rgb(27, 26, 23)"); // --ink
+
+    // LAST THREE's own mono meta line ("JUL 25 · HELD · 2/5" shape) —
+    // docs/design/DEVIATIONS.md's ink-4 substitution row.
+    const logMetaColor = await page
+      .locator(".today-log-meta")
+      .first()
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(logMetaColor).toBe("rgb(111, 106, 95)"); // --ink-4
+  });
+});
+
+test.describe("plan screen (a plan active)", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-plan-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Plan Tester",
+    });
+    await choosePlan(page, "sprint");
+    await page.goto("/plan");
+    // With no plan, /plan renders two preset cards — a different, already-
+    // reachable layout. Wait for the real 84-row sequence (the layout this
+    // sweep exists to cover) rather than just the route settling.
+    await expect(page.locator(".plan-sequence")).toBeVisible();
+    await expect(page.locator(".plan-row")).toHaveCount(84);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the active header and today's row match the token palette", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+
+    const todayRow = page.locator(".plan-row-today");
+    await expect(todayRow).toHaveCount(1);
+    const styles = await todayRow.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, borderLeft: s.borderLeftColor };
+    });
+    expect(styles.background).toBe("rgb(239, 234, 222)"); // --surface-sunken
+    expect(styles.borderLeft).toBe("rgb(181, 52, 31)"); // --accent
+  });
+
+  // Reset/Switch: the staged-confirm idiom copied from BaselineEditor.tsx —
+  // structurally proving the confirm panel itself (not just the header
+  // buttons) clears the tap-target/axe bars, since it renders a different
+  // subtree than the plain active-header state above.
+  test.describe("Reset staged confirm", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole("button", { name: "Reset", exact: true }).click();
+      await expect(page.locator(".baseline-confirm")).toBeVisible();
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+  });
+});
+
+// The confirm sweep's own fixture: Microburst (server/seed/starter.ts) is
+// the one starter workout with an effort-ref work step (`{effort:"max"}`)
+// AND a reps marker — the no-nudge, no-remove-on-the-marker layout that a
+// split-only workout (e.g. any other starter) never renders at all. Sweeping
+// only a split-ref confirm screen would repeat exactly the "every test built
+// the same shape" blind spot this task's brief calls out.
+test.describe("confirm targets screen (effort step present — Microburst)", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-confirm-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Confirm Tester",
+    });
+    await setBaselines(page);
+    await gotoWorkoutByTitle(page, "Microburst");
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(
+      "Microburst",
+    );
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page).toHaveURL(/\/session\/confirm$/);
+    await expect(page.locator(".confirm-recount")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the effort word, recount, and reps marker (no remove control) match the token palette", async ({
+    page,
+  }) => {
+    const bodyBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+
+    // The effort-ref row's TARGET strip shows the word, not a resolved
+    // range (docs/design/DEVIATIONS.md's PACE REF/effort row).
+    // Scoped to the TARGET strip's own value cell, not a page-wide text
+    // search: the row's header label also reads "ROW 3 · ALL OUT"
+    // (kindLabel), so an unscoped getByText("ALL OUT") matches both.
+    const effortWord = page.locator(".step-editor-target-value", {
+      hasText: "ALL OUT",
+    });
+    await expect(effortWord).toBeVisible();
+    const effortColor = await effortWord.evaluate(
+      (el) => getComputedStyle(el).color,
+    );
+    expect(effortColor).toBe("rgb(27, 26, 23)"); // --ink
+
+    const recountColor = await page
+      .locator(".confirm-recount")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(recountColor).toBe("rgb(27, 26, 23)"); // --ink
+
+    // Binding decision (ConfirmTargets.tsx's toggleRemoved comment, Task 1's
+    // review handoff): the reps marker (REPEAT x10) never gets a
+    // remove/restore control, unlike every other row here — removing it
+    // would silently reshape the whole repeated workout. Structural proof
+    // it's the marker row's own kind label rendering, not a coincidence of
+    // row order.
+    const markerRow = page.locator(".step-editor", { hasText: "REPEAT" });
+    await expect(markerRow).toBeVisible();
+    await expect(
+      markerRow.getByRole("button", { name: /remove|restore/i }),
+    ).toHaveCount(0);
+  });
+
+  // Task 5 brief: "the confirm sweep runs with an effort step present ...
+  // also sweep Confirm's struck-row state (a removed step's styling must
+  // survive contrast checks)". Strikes the warm-up row (guaranteed present,
+  // and NOT the effort/marker rows so this is testing the ordinary case).
+  test.describe("a removed step (struck-row state)", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole("button", { name: "Remove Row 1" }).click();
+      await expect(
+        page.getByRole("button", { name: "Restore Row 1" }),
+      ).toBeVisible();
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations, including the struck row's strikethrough label", async ({
+      page,
+    }) => {
+      await assertNoA11yViolations(page);
+    });
+
+    // docs/index.css's own comment: "ink-3 on --surface-sunken measures
+    // 6.3:1" — pin the resolved colors structurally, not just "axe found no
+    // violation" (a struck row's whole background AND text color changed
+    // together, so the axe scan alone can't tell this from an accidental
+    // regression to some other still-passing pair).
+    test("the struck row's sunken background and struck label match the token palette", async ({
+      page,
+    }) => {
+      const row = page.locator(".confirm-step-removed");
+      await expect(row).toHaveCount(1);
+      const rowBg = await row.evaluate(
+        (el) => getComputedStyle(el).backgroundColor,
+      );
+      expect(rowBg).toBe("rgb(239, 234, 222)"); // --surface-sunken
+
+      const label = row.locator(".step-editor-header-label");
+      const labelStyles = await label.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { color: s.color, decoration: s.textDecorationLine };
+      });
+      expect(labelStyles.color).toBe("rgb(87, 84, 76)"); // --ink-3
+      expect(labelStyles.decoration).toBe("line-through");
+
+      // Pins the fix for a real finding this sweep caught: the DUR field
+      // label is ink-4 (5.29:1) on the row's ordinary --surface, but the
+      // SAME class sat at only 4.48:1 on --surface-sunken before index.css
+      // gained a `.confirm-step-removed .step-editor-row-label` override —
+      // failing axe's color-contrast rule the first time this test ran.
+      const durLabelColor = await row
+        .locator(".step-editor-row-label")
+        .first()
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(durLabelColor).toBe("rgb(87, 84, 76)"); // --ink-3
+    });
   });
 });
 
