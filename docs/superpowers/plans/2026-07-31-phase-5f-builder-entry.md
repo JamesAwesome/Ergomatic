@@ -1232,7 +1232,14 @@ button names and the `invalid`/`errorId`/`registerRef` wiring are unchanged —
 the input inherits the group's error association rather than growing a second
 one.
 
-- [ ] **Step 4: Move the rest bridges onto clock strings**
+- [ ] **Step 4: (MOVED TO TASK 4 — skip)** The rest bridges migrated to clock
+      strings in Task 4's fix round. Leaving them here was a sequencing defect
+      in this plan: Task 4 changes what `row.rest` *holds*, so a Task 5 that
+      migrated the readers left `stepToRow`'s output being parsed with
+      `Number("3:00")` in between — every stored workout with rest rendered
+      `rest NaN:NaN`, and one tap of REST ± made it unsavable. Verify the
+      functions below already read `parseClock` before you start; if they do,
+      this step is done.
 
 ```ts
 /** `row.rest` (a clock string, e.g. "1:30") as whole seconds for the stepper —
