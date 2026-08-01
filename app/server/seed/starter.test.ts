@@ -26,10 +26,13 @@ describe("STARTER_WORKOUTS", () => {
     }
   });
 
-  // Phase 5G Task 2's compatibility sweep: the seeded set is entirely
-  // split refs today (Task 6 is where effort refs get added to it), so this
-  // proves the new effort-ref branches in validate.ts/expand.ts left every
-  // existing workout's validation and phase-expansion behavior unchanged.
+  // Phase 5G Task 2's compatibility sweep: it proves the effort-ref branches
+  // in validate.ts/expand.ts left every split-ref workout's validation and
+  // phase-expansion behavior unchanged. Task 6's seed audit then converted
+  // exactly one step in the library — Microburst's — to `{ effort: "max" }`,
+  // so the sweep now also covers a real effort ref end to end (validation,
+  // phase expansion, estimation) against production seed data rather than a
+  // hand-built fixture.
   // Lives here (not domain/expand.test.ts) because app/domain/ is
   // dependency-zero and must not import server/seed/starter — this file
   // already imports both STARTER_WORKOUTS and the domain functions under
@@ -56,6 +59,21 @@ describe("STARTER_WORKOUTS", () => {
   //   Dust Devil — wu 5' + 6×(0.5' work + 2' rest), all time-based:
   //     5 + 6×(0.5 + 2) = 5 + 6×2.5 = 5 + 15 = 20 minutes exactly
   //     (estimated: false).
+  //
+  //   Microburst — the library's only effort step, recomputed by hand for
+  //   Task 6. wu 5' + 10×(0:30 work at max + 2:30 rest), all time-based:
+  //     work seconds/rep = 0.5 × 60 = 30s; rest seconds/rep = 2.5 × 60 = 150s
+  //     total = 300 (wu) + 10×(30 + 150) = 300 + 1800 = 2100s
+  //     2100 / 60 = 35 minutes exactly (estimated: false).
+  //   The pin is unmoved by the audit, and that is the correct arithmetic,
+  //   not a coincidence to paper over: estimateMinutes sums `p.seconds`
+  //   whenever a phase has one and only falls back to
+  //   (meters/500)×targetSplit when it does not. An effort step with a TIME
+  //   duration still carries seconds, so `estimationSplit`'s max→2k-baseline
+  //   rule never gets consulted here. It would move the number only for a
+  //   DISTANCE step at an effort, which this library has none of — that path
+  //   is pinned in domain/expand.test.ts instead ("estimates a
+  //   distance-at-max step's minutes from the 2k baseline").
   //
   //   Storm Front — wu 5' + 4×(3000 m work @ 6k+2 + 6' rest), distance work:
   //     split = k6Seconds(122) + off(2) = 124 s/500m
@@ -138,6 +156,36 @@ describe("STARTER_WORKOUTS", () => {
       { ...rest, set: { index: 3, of: 4 } },
       { ...work, set: { index: 4, of: 4 } },
       { ...rest, set: { index: 4, of: 4 } },
+    ]);
+  });
+
+  // The estimate pin above cannot see this change: Microburst is entirely
+  // time-based, so reverting its ref to `2k-5` would leave 35/false intact
+  // and the sweep green. This pins what the audit actually decided — the
+  // step prescribes effort, expands to the ALL OUT word with no tolerance
+  // range even at tol=1, prices from the 2k baseline for scheduling only,
+  // and keeps its spm and rest untouched (independent axes).
+  it("pins Microburst's effort step expansion (max → ALL OUT, spm and rest intact)", () => {
+    const microburst = STARTER_WORKOUTS.find((w) => w.title === "Microburst");
+    expect(microburst).toBeDefined();
+    expect(microburst!.steps).toContainEqual(
+      expect.objectContaining({ ref: { effort: "max" } }),
+    );
+    const work = {
+      type: "work",
+      targetKind: "effort",
+      targetSplit: 112, // estimationSplit(max) = k2Seconds; never displayed
+      spm: 32,
+      label: "ALL OUT",
+      seconds: 30,
+    };
+    const rest = { type: "rest", seconds: 150, label: "Rest" };
+    expect(phases(microburst!.steps, BASELINES, 1)).toStrictEqual([
+      { type: "warmup", seconds: 300, label: "Easy", set: undefined },
+      ...Array.from({ length: 10 }, (_, i) => [
+        { ...work, set: { index: i + 1, of: 10 } },
+        { ...rest, set: { index: i + 1, of: 10 } },
+      ]).flat(),
     ]);
   });
 
