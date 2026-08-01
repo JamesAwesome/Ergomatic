@@ -1454,7 +1454,11 @@ button:disabled {
   color: var(--ink-4);
 }
 
-.step-editor-duplicate {
+/* .confirm-toggle-btn (ConfirmTargets.tsx's REMOVE/RESTORE control) shares
+   this exact pill styling rather than duplicating it — same visual
+   language (a secondary text-pill button), different screen. */
+.step-editor-duplicate,
+.confirm-toggle-btn {
   min-height: var(--tap);
   padding: 0 12px;
   background: var(--surface);
@@ -1469,7 +1473,8 @@ button:disabled {
   cursor: pointer;
 }
 
-.step-editor-duplicate:hover {
+.step-editor-duplicate:hover,
+.confirm-toggle-btn:hover {
   border-color: var(--ink-4);
 }
 
@@ -2068,4 +2073,65 @@ button:disabled {
 
 .step-card-confirm-no:hover {
   background: var(--surface-sunken);
+}
+
+/* -- Confirm targets (Phase 6A Task 4) -----------------------------------
+   Reuses the builder-redesign's own `.step-editor`/`.step-editor-row`/
+   `.step-editor-target`/`.step-row-nudges`/`.nudge-btn` families wholesale
+   (ConfirmTargets.tsx) — every one of those is already contrast-audited and
+   tap-target-sized; only the pieces with no existing analog (the removed-
+   row treatment, the sticky recount+START footer) get new rules here. */
+
+.confirm-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* Struck rows stay visible rather than disappearing (binding decision,
+   ConfirmTargets.tsx's toggleRemoved comment: only removal has to be
+   reversible without surprise, not undiscoverable) — sunken background plus
+   a struck, ink-3 label reads as "excluded" without relying on opacity
+   (which would otherwise put every child's own already-audited contrast
+   pairing back in question at some fractional value). ink-3 on
+   --surface-sunken measures 6.3:1, comfortably past the header label's
+   already-passing ink-4 (5.29:1 on plain --surface). */
+.confirm-step-removed {
+  background: var(--surface-sunken);
+}
+
+.confirm-step-removed .step-editor-header-label {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+.confirm-toggle-btn.is-removed {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.confirm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+/* ink on --surface measures 17.11:1 — the house "totals keep unit labels"
+   convention (domain/duration.ts's own house-format comment), matching
+   WorkoutDetail's "43 MIN" reading exactly, including its "— MIN" (U+2014
+   EM DASH) at null. */
+.confirm-recount {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.confirm-start {
+  flex: none;
+  padding: 0 32px;
 }

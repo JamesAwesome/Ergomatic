@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { signInViaBackdoor } from "./helpers";
 
 test.describe("health", () => {
@@ -61,5 +61,150 @@ test.describe("unauthenticated api", () => {
   test("/api/workouts 401s without a session", async ({ request }) => {
     const res = await request.get("/api/workouts");
     expect(res.status()).toBe(401);
+  });
+});
+
+const FLOW_BASELINES = { k2Seconds: 100, k6Seconds: 120 };
+
+/** Sets baselines via an in-page `fetch`, not Playwright's `page.request` —
+ *  copied from builder.spec.ts's own `setBaselines`: the api container runs
+ *  with NODE_ENV=production, so the session cookie is Set-Cookie'd with
+ *  `Secure`, which Playwright's Node-side APIRequestContext doesn't get the
+ *  loopback exemption for even though the in-page fetch does. */
+async function setBaselines(page: Page): Promise<void> {
+  const result = await page.evaluate(async (patch) => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, FLOW_BASELINES);
+  if (!result.ok) {
+    throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Raises the freestyle suggestion's time-cap filter to its max (300 min,
+ *  data.ts's own ceiling) so a real, non-trivial workout's estimated
+ *  duration can never accidentally exclude it from the pool — this spec
+ *  doesn't pin which starter workout gets suggested (see the test's own
+ *  comment), so nothing here should be able to make that pool empty. */
+async function setGenerousTimeCap(page: Page): Promise<void> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timeCapMinutes: 300 }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(`prefs setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+test.describe("Phase 6A: today -> detail -> confirm -> run", () => {
+  // The phase's proof, end to end, against the real compose stack: Today's
+  // suggestion -> a workout's detail screen -> Start builds+saves the
+  // session draft -> confirm targets (adjust a duration, an SPM, strike a
+  // step; the recount reacts each time) -> START stamps startedAt and
+  // navigates -> the run placeholder shows the draft's title -> a real
+  // browser reload proves the draft round-tripped through localStorage
+  // rather than router state. Design sweeps + screenshots for the two new
+  // screens land in Task 5; this is the flow spec only.
+  test("suggestion through confirm to the run placeholder, surviving a reload", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "phase6a-flow@e2e.test",
+      name: "Flow Tester",
+    });
+    await setBaselines(page);
+    await setGenerousTimeCap(page);
+    await page.goto("/today");
+
+    // Today's freestyle suggestion is deterministic for a fresh user (every
+    // seeded workout ties on "never done", so the stable sort falls back to
+    // the library's own authored order — server/seed/starter.ts's
+    // `sortOrder`) but which TITLE that resolves to is a seed-data detail
+    // this spec has no business pinning. Read whatever the card actually
+    // shows and follow it, the way a rower would.
+    const card = page.locator(".today-card");
+    await expect(card).toBeVisible();
+    const title = (
+      await card.locator(".today-card-title").textContent()
+    )?.trim();
+    expect(title).toBeTruthy();
+
+    await card.click();
+    await expect(page.getByRole("heading", { name: title! })).toBeVisible();
+
+    // Start (WorkoutDetail.tsx): builds + saves the session draft, then
+    // navigates — no longer the Phase 5 disabled stub.
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page).toHaveURL(/\/session\/confirm$/);
+    await expect(page.getByRole("heading", { name: title! })).toBeVisible();
+
+    const recount = page.locator(".confirm-recount");
+    await expect(recount).toBeVisible();
+    const recountAfterLoad = await recount.textContent();
+
+    // Adjust one duration: every starter workout opens with a warm-up
+    // (docs/design comment, builderState.ts), so "Row 1 duration" always
+    // exists regardless of which workout got suggested. Two 30s presses (=
+    // exactly 60s = 1 minute) rather than one: round(x + 1 minute) always
+    // equals round(x) + 1 for any starting fractional value, so the
+    // recount is GUARANTEED to shift by exactly one minute — a single 30s
+    // press can, for some starting totals, land on the same rounded minute
+    // it started from (e.g. 9.8 -> round 10, +0.5 -> 10.3 -> round 10
+    // again), which would make this assertion flaky against an
+    // unpredictable suggested workout.
+    const durationGroup = page.getByRole("group", { name: "Row 1 duration" });
+    const durationBefore = await durationGroup
+      .locator(".stepper-value")
+      .textContent();
+    const durationUp = durationGroup.getByRole("button", {
+      name: /duration up$/,
+    });
+    await durationUp.click();
+    await durationUp.click();
+    await expect(durationGroup.locator(".stepper-value")).not.toHaveText(
+      durationBefore ?? "",
+    );
+    const recountAfterDuration = await recount.textContent();
+    expect(recountAfterDuration).not.toBe(recountAfterLoad);
+
+    // Adjust one SPM: every starter workout has at least one work step
+    // (validateSteps requires it), so some "stroke rate" stepper always
+    // exists somewhere on the page, but not at a fixed row index — a reps
+    // marker ahead of it shifts the row number per workout.
+    const spmGroup = page.getByRole("group", { name: /stroke rate$/ }).first();
+    const spmBefore = await spmGroup.locator(".stepper-value").textContent();
+    await spmGroup.getByRole("button", { name: /stroke rate up$/ }).click();
+    await expect(spmGroup.locator(".stepper-value")).not.toHaveText(
+      spmBefore ?? "",
+    );
+
+    // Strike one step — reuse Row 1 (the warm-up): guaranteed present, and
+    // striking it removes real minutes from the recount, unlike the earlier
+    // 30s duration nudge.
+    await page.getByRole("button", { name: "Remove Row 1" }).click();
+    await expect(
+      page.getByRole("button", { name: "Restore Row 1" }),
+    ).toBeVisible();
+    const recountAfterStrike = await recount.textContent();
+    expect(recountAfterStrike).not.toBe(recountAfterDuration);
+
+    // START stamps startedAt and navigates to the 6B placeholder.
+    await page.getByRole("button", { name: "START" }).click();
+    await expect(page).toHaveURL(/\/session\/run$/);
+    await expect(page.getByRole("heading", { name: title! })).toBeVisible();
+    await expect(page.getByText("6B builds the timer here.")).toBeVisible();
+
+    // Reload: the draft round-trips through localStorage, not router state.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: title! })).toBeVisible();
+    await expect(page.getByText("6B builds the timer here.")).toBeVisible();
   });
 });
