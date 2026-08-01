@@ -17,7 +17,7 @@ function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
     refBase: "6k",
     refOff: 0,
     spm: "20",
-    rest: "1.5",
+    rest: "1:30",
     ...overrides,
   };
 }
@@ -269,7 +269,7 @@ describe("StepEditor", () => {
   });
 
   it("steps rest back down by 30s, clamped at 0 (NONE)", async () => {
-    const { onChange } = setup({ row: workRow({ rest: "0.5" }) }); // 30s
+    const { onChange } = setup({ row: workRow({ rest: "0:30" }) }); // 30s
     await userEvent.click(
       screen.getByRole("button", { name: "Row 1 rest down" }),
     );

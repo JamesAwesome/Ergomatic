@@ -25,7 +25,7 @@ import {
   type BuilderForm,
   type BuilderRow,
 } from "./builderState";
-import { fmtDuration } from "../../domain/duration.js";
+import { fmtDuration, parseClock } from "../../domain/duration.js";
 import { validateSteps } from "../../domain/validate.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import type { Step } from "../../domain/types.js";
@@ -847,6 +847,22 @@ describe("clock durations in rows", () => {
     });
   });
 
+  // The masked field can never produce a bare number for a `min`-unit row
+  // (ClockInput always supplies the colon) — a mutant that let
+  // `rowDurationNumber` read "20" as 20 minutes still passed every other
+  // test in this file, because nothing pinned the rejection directly. If a
+  // bare number were readable as minutes, it would be ambiguous with the
+  // old pre-Task-4 grammar, exactly the ambiguity this phase exists to kill.
+  it("rejects a bare number on a min-unit row — the mask can never produce one, so it must not be silently readable as minutes", () => {
+    const f = formWith({
+      rows: [{ ...workRow("a"), durValue: "20", durUnit: "min" }],
+    });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors["row:a:dur"]).toBe("duration is required, e.g. 5");
+  });
+
   it("keeps meters as a plain integer string", () => {
     const form = fromWorkout({
       title: "Distance",
@@ -1074,31 +1090,41 @@ describe("rest seconds bridge", () => {
     expect(restSecondsFromRow({ ...workRow("a"), rest: "" })).toBe(0);
   });
 
-  it("reads minutes as seconds", () => {
-    expect(restSecondsFromRow({ ...workRow("a"), rest: "1.5" })).toBe(90);
+  it("reads a clock-form rest as seconds", () => {
+    expect(restSecondsFromRow({ ...workRow("a"), rest: "1:30" })).toBe(90);
   });
 
-  it("writes seconds back as minutes, snapped to the 30s step", () => {
+  // A bare decimal ("1.5") isn't a clock string any more — reading it would
+  // silently reintroduce the pre-Task-4 ambiguity this bridge exists to
+  // remove, so it must read as no rest (0), not 90s.
+  it("reads a non-clock rest as zero seconds rather than misreading it as minutes", () => {
+    expect(restSecondsFromRow({ ...workRow("a"), rest: "1.5" })).toBe(0);
+  });
+
+  it("writes seconds back as a clock string, snapped to the 30s step", () => {
     const row = rowWithRestSeconds(workRow("a"), 90);
-    expect(row.rest).toBe("1.5");
-    expect(rowWithRestSeconds(workRow("a"), 100).rest).toBe("1.5");
+    expect(row.rest).toBe("1:30");
+    expect(rowWithRestSeconds(workRow("a"), 100).rest).toBe("1:30");
   });
 
-  it("clears rest at zero rather than storing 0", () => {
-    expect(rowWithRestSeconds({ ...workRow("a"), rest: "2" }, 0).rest).toBe("");
+  it("clears rest at zero rather than storing 0:00", () => {
+    expect(rowWithRestSeconds({ ...workRow("a"), rest: "2:00" }, 0).rest).toBe(
+      "",
+    );
   });
 
   it("clamps at the 15-minute ceiling", () => {
-    expect(rowWithRestSeconds(workRow("a"), 99999).rest).toBe("15");
+    expect(rowWithRestSeconds(workRow("a"), 99999).rest).toBe("15:00");
   });
 
-  it("every reachable rest value is a legal domain half-step", () => {
+  it("every reachable rest value is a legal domain duration, round-tripping through the stored clock string", () => {
     for (let s = 0; s <= REST_MAX_SECONDS; s += REST_STEP_SECONDS) {
       const rest = rowWithRestSeconds(workRow("a"), s).rest;
       if (rest === "") continue;
-      const minutes = Number(rest);
-      expect(minutes * 2).toBe(Math.round(minutes * 2)); // 0.5 steps
-      expect(minutes).toBeLessThanOrEqual(60);
+      const minutes = parseClock(rest);
+      expect(minutes).not.toBeNull();
+      expect(restSecondsFromRow({ ...workRow("a"), rest })).toBe(s);
+      expect(minutes!).toBeLessThanOrEqual(60);
     }
   });
 
@@ -1147,7 +1173,7 @@ describe("summaries", () => {
   });
 
   it("omits the spm term when spm is free", () => {
-    expect(stepSubSummary({ ...workRow("a"), spm: "", rest: "1.5" })).toBe(
+    expect(stepSubSummary({ ...workRow("a"), spm: "", rest: "1:30" })).toBe(
       "rest 1:30",
     );
   });
