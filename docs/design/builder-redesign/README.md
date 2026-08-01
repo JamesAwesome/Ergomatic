@@ -24,7 +24,7 @@ Also new: **rest is a stepper in 30-second increments** (was a free-typed minute
 **Purpose:** author a workout: title, type, difficulty, expected pain, ordered steps, repeat count; save to library.
 **Frame:** 390 × 844. Page background `#f4f1e8`. Single vertical scroll column, `padding: 14px 20px 24px`, `gap: 18px` between blocks. Usable content width **350px**.
 
-The screen reads as four blocks: **identity** (back + title + name field) → **classification card** → **steps** → **totals + Save**.
+The screen reads as five blocks: **identity** (back + title + name field) → **classification card** → **warm-up line** → **steps** → **totals + Save**.
 
 ### 1. Header
 
@@ -65,6 +65,8 @@ Every chip: `flex: 1`, height **44px**, radius 2px, centred, `gap: 6px` between 
 - Note: the ink-stroke faces from the previous version were dropped. If the face illustrations are re-added, keep the numeral and the same fills — the faces at ~20px were the weakest contrast element on the screen.
 
 ### 4. Steps
+
+Immediately above the section header: `+ 10′ warm-up from your preferences` — mono 11px, `#6f6a5f`. Informational only, never authored into the workout (the warm-up is applied at session start, not saved as a step). Rendered only once the preference has loaded — nothing shown while loading or on error, since a wrong warm-up figure is worse than none. Placed here rather than beside the totals so it reads as an implicit step 0: it's what actually happens first when a session starts.
 
 Section header row, `space-between`, both mono 10px / `0.16em` / `#6f6a5f`: `STEPS` and `2 STEPS` (singular `1 STEP`). Column gap 8px between cards.
 
@@ -126,7 +128,6 @@ Copy changed from `REPEAT (OPTIONAL)` to `REPEAT ALL STEPS` — it states the da
 
 - Block: `border-top: 1px solid #ded8c9`, `padding-top: 12px`, column `gap: 6px`.
 - Row `space-between`, baseline-aligned: `TOTAL` (mono 10px, `0.16em`, `#6f6a5f`) and `122 MIN` (mono **19px**, `#1b1a17`).
-- Below: `+ 10′ warm-up from your preferences` — mono 11px, `#6f6a5f`. Informational only; the warm-up is not part of the workout.
 - **Save to library** — full width, height **62px**, bg `#b5341f`, radius 2px, Archivo 16px weight 600, `#fffdf7`. Hover bg `#9c2c19`. `flex: none` so it never compresses.
 
 ## Interactions & behaviour
