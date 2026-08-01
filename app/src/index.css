@@ -941,6 +941,119 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* -- Plan (Phase 6A Task 3) ---------------------------------------------
+   Tokens only — reuses --ink/--ink-3/--accent/--surface/--rule and the
+   BaselineEditor confirm classes (.baseline-confirm/.baseline-actions/
+   .baseline-error), same as WorkoutDetail.tsx's delete confirm. */
+
+.plan-intro {
+  color: var(--ink-3);
+  margin: 4px 0 16px;
+}
+
+.plan-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-preset-card {
+  display: block;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.plan-preset-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.plan-preset-blurb {
+  font-size: 14px;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+}
+
+.plan-preset-count {
+  margin: 0;
+}
+
+.plan-active-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.plan-active-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+
+.plan-active-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 84 rows: a fixed viewport with its own scroll, rather than letting the
+   whole screen grow to 84 rows tall (spec: "the list scrolls"). */
+.plan-sequence {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  border: 1px solid var(--rule);
+}
+
+.plan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.plan-row:last-of-type {
+  border-bottom: none;
+}
+
+.plan-row-index {
+  width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.plan-row-status {
+  flex: 1;
+  text-align: right;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Today's row is the one visually distinct entry in an 84-row list
+   (spec: "today row visually distinct") — sunken fill plus an accent
+   left-border, same fill BaselineEditor's own confirm block uses. */
+.plan-row-today {
+  background: var(--surface-sunken);
+  border-left: 3px solid var(--accent);
+  font-weight: 600;
+}
+
 /* -- Builder (New/Edit workout) ---------------------------------------- */
 
 .field-error {

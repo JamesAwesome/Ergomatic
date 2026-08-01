@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor, act } from "@testing-library/react";
 
 beforeEach(() => {
   vi.resetModules();
@@ -69,9 +69,8 @@ describe("usePlan", () => {
     const errorState = result.current as { state: "error"; retry: () => void };
     errorState.retry();
     await waitFor(() => expect(result.current.state).toBe("ready"));
-    expect(
-      (result.current as { state: "ready"; plan: typeof plan }).plan,
-    ).toStrictEqual(plan);
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    expect(result.current.plan).toStrictEqual(plan);
   });
 
   it("enters error state, rather than throwing, when the fetch itself rejects", async () => {
@@ -84,5 +83,113 @@ describe("usePlan", () => {
     await waitFor(() => expect(result.current.state).toBe("error"));
     if (result.current.state !== "error") throw new Error("expected error");
     expect(typeof result.current.retry).toBe("function");
+  });
+
+  it("choose() PUTs {planKey} to /api/plan, then refetches the updated plan", async () => {
+    const before = { planKey: null, doneN: 0, sequence: [] };
+    const after = { planKey: "sprint", doneN: 0, sequence: [] };
+    let getCount = 0;
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return new Response(null, { status: 200 });
+      getCount += 1;
+      return new Response(JSON.stringify(getCount === 1 ? before : after), {
+        status: 200,
+      });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { usePlan } = await import("./usePlan");
+    const { result } = renderHook(() => usePlan());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { choose } = result.current;
+
+    await act(async () => {
+      await choose("sprint");
+    });
+
+    const putCall = apiMock.mock.calls.find(
+      ([, init]) => init?.method === "PUT",
+    );
+    expect(putCall).toBeDefined();
+    const [url, init] = putCall as [string, RequestInit];
+    expect(url).toBe("/api/plan");
+    expect(JSON.parse(init.body as string)).toStrictEqual({
+      planKey: "sprint",
+    });
+    await waitFor(() => {
+      if (result.current.state !== "ready") throw new Error("expected ready");
+      expect(result.current.plan).toStrictEqual(after);
+    });
+  });
+
+  it("reset() PUTs {reset:true} to /api/plan, then refetches the updated plan", async () => {
+    const before = { planKey: "sprint", doneN: 11, sequence: [] };
+    const after = { planKey: "sprint", doneN: 0, sequence: [] };
+    let getCount = 0;
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return new Response(null, { status: 200 });
+      getCount += 1;
+      return new Response(JSON.stringify(getCount === 1 ? before : after), {
+        status: 200,
+      });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { usePlan } = await import("./usePlan");
+    const { result } = renderHook(() => usePlan());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { reset } = result.current;
+
+    await act(async () => {
+      await reset();
+    });
+
+    const putCall = apiMock.mock.calls.find(
+      ([, init]) => init?.method === "PUT",
+    );
+    expect(putCall).toBeDefined();
+    const [url, init] = putCall as [string, RequestInit];
+    expect(url).toBe("/api/plan");
+    expect(JSON.parse(init.body as string)).toStrictEqual({ reset: true });
+    await waitFor(() => {
+      if (result.current.state !== "ready") throw new Error("expected ready");
+      expect(result.current.plan).toStrictEqual(after);
+    });
+  });
+
+  it("choose() rejects, without refetching, when the PUT response is not ok", async () => {
+    const plan = { planKey: null, doneN: 0, sequence: [] };
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return new Response("nope", { status: 500 });
+      return new Response(JSON.stringify(plan), { status: 200 });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { usePlan } = await import("./usePlan");
+    const { result } = renderHook(() => usePlan());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+
+    await expect(result.current.choose("sprint")).rejects.toThrow(
+      "failed to update plan",
+    );
+    // Only the initial GET happened — the failed PUT triggers no refetch.
+    expect(apiMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reset() rejects when the PUT response is not ok", async () => {
+    const plan = { planKey: "sprint", doneN: 11, sequence: [] };
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return new Response("nope", { status: 500 });
+      return new Response(JSON.stringify(plan), { status: 200 });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { usePlan } = await import("./usePlan");
+    const { result } = renderHook(() => usePlan());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+
+    await expect(result.current.reset()).rejects.toThrow(
+      "failed to update plan",
+    );
   });
 });
