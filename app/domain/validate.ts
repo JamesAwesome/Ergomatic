@@ -34,6 +34,7 @@ const int = (n: unknown, lo: number, hi: number): n is number =>
 function checkRef(v: unknown, errs: string[], i: number): v is PaceRef {
   const isValidSplit =
     isRec(v) &&
+    Object.keys(v).length === 2 &&
     (v.base === "2k" || v.base === "6k") &&
     typeof v.off === "number" &&
     Math.abs(v.off) <= 60;

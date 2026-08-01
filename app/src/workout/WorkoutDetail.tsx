@@ -5,7 +5,7 @@ import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
-import { resolveSplit } from "../../domain/pace.js";
+import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import TypeBadge from "../components/TypeBadge";
@@ -137,6 +137,14 @@ function WorkoutDetailView({
       const current = prev[index] ?? 0;
       const step = workout.steps[index];
       if (!baselines || step.k !== "w") {
+        return { ...prev, [index]: current + delta };
+      }
+      // Effort refs do not have a resolved split; guard against accidentally
+      // calling resolveSplit with them. (Review finding L2: structural
+      // defense-in-depth to prevent future nudge paths from introducing an
+      // unguarded call; StepRow.tsx:155 already prevents nudge buttons from
+      // rendering for efforts, but Phase 6's timer may add other nudge paths.)
+      if (isEffortRef(step.ref)) {
         return { ...prev, [index]: current + delta };
       }
       const base = resolveSplit(baselines, step.ref, 0);
