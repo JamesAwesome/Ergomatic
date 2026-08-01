@@ -102,14 +102,38 @@ test("library", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
+
+  // Phase 5H: personal (non-global) workouts now wear a CUSTOM badge on
+  // the library row's second line. Every seeded starter workout is
+  // global, so without authoring one of its own first, this capture would
+  // never show the badge at all — same reasoning as "workout-detail"'s
+  // own builder-authored personal workout below. Simplest valid form:
+  // title + pain + one row's duration.
+  const customTitle = "Screenshot Custom Workout";
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill(customTitle);
+  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "Save to library" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+
   await page.goto("/library");
   // Library shows "LOADING…" until the workouts/baselines fetches resolve;
   // page.goto only waits for the navigation's load event, not that — wait
   // for a real row so the screenshot isn't just the loading state.
   await page.locator(".workout-row").first().waitFor();
+  // The library sorts the 36 global starter workouts ahead of a single
+  // freshly-authored personal one, so it lands well past the first
+  // viewport-height screen — the CUSTOM filter chip (Phase 5H) isolates it
+  // so the committed capture actually shows the badge, not just a taller
+  // "N ENTERED" count.
+  await page.getByRole("button", { name: "CUSTOM", exact: true }).click();
+  await expect(page.locator(".workout-row-custom").first()).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library.png"),
   });
+
+  await cleanupByTitle(page, customTitle);
 });
 
 /** Test-only cleanup: finds the signed-in user's own workout with the given
