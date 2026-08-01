@@ -39,6 +39,36 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
+/** Neutralises `.tabbar`'s `position: fixed` for a `fullPage: true` capture.
+ *  A full-page screenshot on a document taller than the viewport stitches
+ *  it together from scrolled segments; a fixed-position element gets
+ *  redrawn at its *viewport-relative* spot in every segment, so on a page
+ *  well past the 390×844 viewport (six steps plus an expanded editor) the
+ *  tab bar ends up composited into the middle of the stitched image,
+ *  overlapping whatever content happened to be in that segment — a capture
+ *  artifact, not a product bug (the bar being fixed is correct behaviour,
+ *  so this is not a fix to `src/`). `position: static` makes it render
+ *  exactly once, in its real DOM position — `AppRoutes.tsx` renders
+ *  `<TabBar />` right after the routed screen inside `.app-shell`, so
+ *  static positioning puts it at the true end of the document. `.app-shell`
+ *  only carries `padding-bottom` to reserve room for the fixed bar so
+ *  scrolled content doesn't land underneath it; with the bar no longer
+ *  fixed that padding would just leave a blank gap above it, so this drops
+ *  it too. Call right before any `fullPage: true` screenshot whose content
+ *  can exceed one viewport — currently only "builder" (see the other tests
+ *  in this file: none else sets `fullPage`, so none else stitches, so none
+ *  else is exposed to this). */
+async function neutralizeFixedTabBarForFullPageCapture(
+  page: Page,
+): Promise<void> {
+  await page.addStyleTag({
+    content: `
+      .tabbar { position: static !important; }
+      .app-shell { padding-bottom: 0 !important; }
+    `,
+  });
+}
+
 test("signin", async ({ page }) => {
   await page.goto("/");
   // The only capture here that didn't wait for content, and it eventually
@@ -273,6 +303,7 @@ test("builder", async ({ page }) => {
   // the classification card and never show `← BACK`, the "New workout"
   // heading, the Title field, or ↻ AUTO NAME. fullPage captures the whole
   // scrollable form regardless of current scroll position.
+  await neutralizeFixedTabBarForFullPageCapture(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "builder.png"),
     fullPage: true,
