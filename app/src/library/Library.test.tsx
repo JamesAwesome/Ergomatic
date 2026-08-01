@@ -97,6 +97,45 @@ describe("Library", () => {
     expect(screen.getByText("60′")).toBeInTheDocument();
   });
 
+  it("rounds a fractional estimated total rather than printing 2.25′", async () => {
+    // Three 45-second work steps: 2.25 minutes total. Rounding must happen
+    // only at display time here — filters.ts calls estimateMinutes itself
+    // (see filters.test.ts / filters.ts), so this test does not touch the
+    // duration-bucket filter at all.
+    mockReady([
+      {
+        id: "w-shorts",
+        title: "Shorts",
+        type: "AN",
+        difficulty: "hard",
+        pain: 4,
+        steps: [
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 0.75 },
+            ref: { base: "6k", off: 0 },
+          },
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 0.75 },
+            ref: { base: "6k", off: 0 },
+          },
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 0.75 },
+            ref: { base: "6k", off: 0 },
+          },
+        ],
+        isGlobal: true,
+        lastDoneDaysAgo: null,
+      },
+    ]);
+    await renderLibrary();
+
+    expect(screen.getByText("2′")).toBeInTheDocument();
+    expect(screen.queryByText("2.25′")).not.toBeInTheDocument();
+  });
+
   it("shows a plain count in the header, never the book's fixed denominator", async () => {
     mockReady();
     await renderLibrary();

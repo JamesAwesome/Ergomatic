@@ -68,6 +68,12 @@ main {
   padding: 0 16px;
   background: transparent;
   border: 1px solid var(--ink);
+  color: var(--ink);
+  text-decoration: none;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   cursor: pointer;
 }

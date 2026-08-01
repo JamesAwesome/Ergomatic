@@ -20,7 +20,10 @@ export default function WorkoutRow({
       <div className="workout-row-line1">
         <span className="workout-row-title">{workout.title}</span>
         <span className="workout-row-duration">
-          {durationMinutes !== null ? `${durationMinutes}′` : "—"}
+          {/* Rounded for display only — filters.ts calls estimateMinutes
+              itself for bucketing, so the unrounded value still reaches the
+              duration-bucket filter. */}
+          {durationMinutes !== null ? `${Math.round(durationMinutes)}′` : "—"}
         </span>
       </div>
       <div className="workout-row-line2">

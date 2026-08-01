@@ -246,11 +246,12 @@ describe("WorkoutDetail", () => {
     expect(slower).toHaveClass("nudge-btn");
   });
 
-  it("shows a work step's between-sets rest duration in the sub-line", async () => {
+  it("shows a work step's between-sets rest duration in the sub-line, in house clock format", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    expect(screen.getByText(/2′ rest/)).toBeInTheDocument();
+    expect(screen.getByText(/2:00 rest/)).toBeInTheDocument();
+    expect(screen.queryByText(/2′ rest/)).not.toBeInTheDocument();
   });
 
   it("renders a rest step's label and duration with no target range or nudge controls", async () => {
@@ -259,7 +260,9 @@ describe("WorkoutDetail", () => {
 
     const restRow = screen.getByText("Rest").closest(".step-row");
     expect(restRow).not.toBeNull();
-    expect(within(restRow as HTMLElement).getByText("3′")).toBeInTheDocument();
+    expect(
+      within(restRow as HTMLElement).getByText("3:00"),
+    ).toBeInTheDocument();
     expect(
       within(restRow as HTMLElement).queryByRole("button"),
     ).not.toBeInTheDocument();
