@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import {
+  effortSpoken,
   effortWord,
   isEffortRef,
   refLabel,
@@ -89,7 +90,16 @@ export default function StepRow({
   // Composed left-hand label ("20:00 @ 6k+10") would otherwise announce as
   // digits ("twenty colon zero zero at six k plus ten") — build the
   // accessible name from the spoken duration plus the same pace text.
-  const leftSpoken = `${durationSpoken} at ${pace}`;
+  //
+  // An effort ref is the one exception: its VISIBLE chip word ("MAX"/"MIN")
+  // still drives `left` above, but the chip word is ambiguous spoken aloud
+  // ("MIN" reads identically to "minutes") — domain/pace.ts's
+  // `effortSpoken` substitutes real effort language instead ("at max
+  // effort" / "easy"), so the spoken and visible forms diverge here on
+  // purpose.
+  const leftSpoken = isEffortRef(step.ref)
+    ? `${durationSpoken} ${effortSpoken(step.ref.effort)}`
+    : `${durationSpoken} at ${pace}`;
 
   // Parallel visible/spoken sub-line parts — the rest duration is a
   // positional duration too ("2:30 rest" would otherwise announce as
