@@ -178,11 +178,14 @@ export function rowWithRestSeconds(
   return { ...row, rest: snapped === 0 ? "" : fmtDuration(snapped / 60) };
 }
 
-/** `m:ss` for a seconds value, or `"NONE"` at zero — the accordion's REST
- *  stepper value cell and the expanded editor's REST row both read this
- *  directly (design doc §4b row 5). Delegates to `fmtDuration` so this
- *  and `row.rest` never drift into two different spellings of the same
- *  clock form. */
+/** `m:ss` for a seconds value, or `"NONE"` at zero — `stepSubSummary`'s
+ *  collapsed-card reading of a row's rest (design doc §4b row 5). The
+ *  expanded editor's own REST row stopped reading this directly once its
+ *  value cell became typable (Task 5): it renders `row.rest` through
+ *  `ClockInput` instead, with a "NONE" placeholder (Task 9) standing in for
+ *  the same zero case without becoming the field's accessible name.
+ *  Delegates to `fmtDuration` so this and `row.rest` never drift into two
+ *  different spellings of the same clock form. */
 export function fmtRestSeconds(seconds: number): string {
   return seconds === 0 ? "NONE" : fmtDuration(seconds / 60);
 }

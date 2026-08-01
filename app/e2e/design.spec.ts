@@ -204,6 +204,59 @@ test.describe("workout detail screen", () => {
   });
 });
 
+// Task 8's `.button-outline` fix (color/text-decoration/inline-flex, so the
+// Edit link stops falling through to the browser's default blue underline)
+// has no visual home in jsdom at all — CSS never applies there — so this is
+// its only real-browser proof. It needs its own describe rather than a test
+// added to "workout detail screen" above: OwnerActions (WorkoutDetail.tsx)
+// renders Edit/Delete only for `!workout.isGlobal`, and that describe's own
+// beforeEach opens the first `.workout-row`, which is always one of the
+// seeded (global, read-only) starter workouts — Edit/Delete never render
+// there at all. Author a personal workout through the builder instead, the
+// only way to land on a workout this signed-in user actually owns.
+test.describe("workout detail screen (personal workout, owner actions)", () => {
+  const title = "Design Owner Actions Sweep";
+
+  // Per-worker email, same reasoning as the "edit mode with a stored
+  // warm-up row" describe below: this test creates real data (a saved
+  // workout) rather than only reading, and Playwright's fullyParallel
+  // config can run this file's tests across several workers at once — a
+  // fixed shared email raced two workers' concurrent sign-ins into a 500
+  // from the backdoor route in that describe, so this one avoids the same
+  // failure mode up front rather than waiting to hit it.
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-detail-owner-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Detail Owner Tester",
+    });
+    await page.goto("/library/new");
+    await page.getByLabel("Title").fill(title);
+    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+    await page.getByRole("button", { name: "Save to library" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("Edit and Delete are on-palette, not default browser link blue", async ({
+    page,
+  }) => {
+    const edit = page.getByRole("link", { name: "Edit" });
+    await expect(edit).toBeVisible();
+
+    const styles = await edit.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { color: s.color, decoration: s.textDecorationLine };
+    });
+    expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink
+    expect(styles.decoration).toBe("none");
+  });
+});
+
 test.describe("builder screen", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
@@ -237,6 +290,40 @@ test.describe("builder screen", () => {
       .getByRole("button", { name: "O2", exact: true })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(o2ChipBg).toBe("rgb(42, 98, 117)"); // --type-o2
+  });
+
+  // Phase 5F Task 7: the warm-up line moved above the step list, reading as
+  // an implicit step 0 rather than a footnote down by the totals — a
+  // real-browser structural pin, since jsdom has no layout and can't tell
+  // "above" from "below".
+  test("the warm-up line precedes the step list", async ({ page }) => {
+    const warmup = page.locator(".builder-warmup-line");
+    const steps = page.locator(".builder-steps");
+    await expect(warmup).toBeVisible();
+
+    const warmupBox = await warmup.boundingBox();
+    const stepsBox = await steps.boundingBox();
+    expect(warmupBox!.y).toBeLessThan(stepsBox!.y);
+  });
+
+  // Phase 5F Tasks 3/4: the DUR field used to open a decimal number pad
+  // (`inputMode="decimal"`) that had no way to type a colon — a rower
+  // guessing "0:30" could not enter it. `ClockInput` now masks a digit-only
+  // numeric-pad field instead; `inputmode="numeric"` is the one attribute
+  // that actually changes which keyboard iOS/Android show, so it's the
+  // real-browser-relevant thing to assert (jsdom renders no keyboard at
+  // all). The task brief that seeded this test named the field "Step 1
+  // duration" — DurationInput/ClockInput actually carry `Row N duration`
+  // (StepEditor.tsx builds `rowLabel` as `Row ${index + 1}`; "Step N" is
+  // only the expanded editor's own header/DUPLICATE/DELETE labels), and
+  // `{ exact: true }` is required or the substring also matches the
+  // duration-unit radio buttons ("Row 1 duration unit minutes"/"meters").
+  test("the masked duration field opens a digit-only keypad", async ({
+    page,
+  }) => {
+    await expect(
+      page.getByLabel("Row 1 duration", { exact: true }),
+    ).toHaveAttribute("inputmode", "numeric");
   });
 
   // The pain level's word ("WORKING") only renders once a level is picked,
@@ -430,6 +517,35 @@ test.describe("builder screen", () => {
       await expect(cards.nth(0).locator(".step-card-sub")).toHaveCount(0);
       await expect(cards.nth(1).locator(".step-card-sub")).toHaveCount(1);
       await expect(cards.nth(1).locator(".step-card-sub")).toContainText("spm");
+    });
+  });
+
+  // Every sweep above only ever scans a blank builder (a fresh row 1's
+  // fields are all empty) — Phase 5F's typable DUR/SPM/REST fields, and
+  // their new "FREE"/"NONE" placeholders, only actually render once
+  // something is typed into them. Fill all three via the same masked
+  // fields a rower would use, then re-run the sweep against that state.
+  test.describe("expanded editor with typed values", () => {
+    test.beforeEach(async ({ page }) => {
+      await page
+        .getByLabel("Row 1 duration", { exact: true })
+        .pressSequentially("45");
+      await page
+        .getByLabel("Row 1 stroke rate value", { exact: true })
+        .pressSequentially("27");
+      await page
+        .getByLabel("Row 1 rest value", { exact: true })
+        .pressSequentially("300");
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
     });
   });
 });

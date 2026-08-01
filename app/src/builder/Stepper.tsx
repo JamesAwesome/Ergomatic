@@ -22,6 +22,7 @@ export default function Stepper({
   valueInput,
   valueWidth,
   valueClassName,
+  placeholder,
   invalid,
   errorId,
   registerRef,
@@ -60,6 +61,16 @@ export default function Stepper({
   // that's a display-state distinction this generic control has no opinion
   // of its own about.
   valueClassName?: string;
+  // Shown only while the value cell is empty (e.g. SPM's "FREE", REST's
+  // "NONE") — restores the pre-Task-5 literal reading now that an empty
+  // cell is a typable input rather than a `<span>` rendering that word.
+  // Never the accessible name: `aria-label` above already supplies that,
+  // and a placeholder drops out of the accessibility tree once a name is
+  // present. Ignored entirely when `onValueChange` is omitted (REPEAT/PACE
+  // keep the plain span, which has no notion of a placeholder). Callers
+  // rely on index.css's `::placeholder` rule for AA-contrast styling
+  // (ink-4 on the shared --surface background), not on anything here.
+  placeholder?: string;
   // Optional error wiring (Phase 5E Task 5, fix-wave item 4): SPM/REST used
   // to anchor their save-time error to a role-less wrapping <div
   // aria-invalid> in StepEditor.tsx — a failed Save's `.focus()` landed on a
@@ -112,6 +123,7 @@ export default function Stepper({
           onChange={onValueChange}
           ariaLabel={`${label} value`}
           className={valueClass}
+          placeholder={placeholder}
         />
       ) : (
         <input
@@ -120,6 +132,7 @@ export default function Stepper({
           className={`${valueClass} stepper-value-input`}
           style={valueStyle}
           aria-label={`${label} value`}
+          placeholder={placeholder}
           value={value}
           onChange={(event) =>
             onValueChange(event.target.value.replace(/\D/g, "").slice(0, 2))

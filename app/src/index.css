@@ -927,14 +927,19 @@ button:disabled {
 }
 
 /* Sits directly above `.builder-steps` (Builder.tsx) — the warm-up reads as
-   an implicit step 0, so it needs to sit close to the list it precedes
-   rather than floating at the page's standard 18px block rhythm (the gap
-   `.screen.builder-screen` already puts between every other pair of blocks).
-   Negative margin-bottom claws back 10px of that gap, leaving 8px — the same
-   distance `.builder-steps` uses internally between its own header and card
-   list — so the line reads as part of that group, not a block of its own. */
+   an implicit step 0. Task 7 first tried clawing 10px back off the page's
+   standard 18px block rhythm (the gap `.screen.builder-screen` already puts
+   between every other pair of blocks) with a negative margin-bottom, on the
+   idea that matching `.builder-steps`'s own internal 8px header-to-list gap
+   would read the line into that group. In review it read the other way: 8px
+   pulled the line tight against the STEPS header immediately below it, so
+   it looked like a caption of that header rather than a step of its own.
+   The standard 18px on both sides (the plain block rhythm every other pair
+   of blocks on this screen already gets) is what actually reads as "its
+   own line, directly above the list it precedes" — no closer to STEPS than
+   it is to whatever card sits above it. */
 .builder-warmup-line {
-  margin: 0 0 -10px;
+  margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-4);
@@ -1028,6 +1033,21 @@ button:disabled {
   color: inherit;
   font: inherit;
   text-align: center;
+}
+
+/* Empty SPM/REST cells used to read "FREE"/"NONE" as literal text (a plain
+   `<span>`); now that the value cell is typable, an empty box with no
+   placeholder just reads as broken. `::placeholder` restores the same
+   reading without becoming the field's accessible name (`aria-label`
+   already supplies that, and a placeholder drops out of the accessibility
+   tree once a name exists). ink-4 measures 5.29:1 against --surface — both
+   cells' background, .stepper's own and .clock-input's explicit one —
+   clearing the 4.5:1 AA text requirement. `opacity: 1` overrides Firefox's
+   default 54% placeholder fade, which would otherwise undercut that ratio. */
+.stepper-value-input::placeholder,
+.clock-input::placeholder {
+  color: var(--ink-4);
+  opacity: 1;
 }
 
 /* -- StepEditor: the expanded step editor (Phase 5E Task 3) ------------ */

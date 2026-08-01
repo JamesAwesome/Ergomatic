@@ -14,7 +14,8 @@ import Stepper from "./Stepper";
 // mirrored domain/validate.ts's `int(s.spm, 10, 60)` and James's rule for
 // the wake value) — kept local rather than shared because SpmInput.tsx
 // bundled its own free-text-plus-steppers UI, which the redesign's SPM row
-// (a bare Stepper, no typable field) no longer uses at all.
+// (a Stepper built directly into this file — typable again since Task 5,
+// see below) no longer uses at all.
 const SPM_MIN = 10;
 const SPM_MAX = 60;
 const SPM_WAKE = 20;
@@ -51,8 +52,11 @@ function clampSpm(n: number): number | undefined {
  *  handle their own clamping/formatting correctly, including the ±60 pace
  *  offset bound this task's brief calls out as a recorded departure from
  *  the handoff's −15..+30); SPM and REST are built directly on the new
- *  shared `Stepper` control instead, since the redesign turns both into
- *  bare steppers with no typable field at all. */
+ *  shared `Stepper` control instead. The redesign first turned both into
+ *  bare steppers with no typable field at all; Phase 5F (Task 5) gave the
+ *  value cell back its typable input (with a "FREE"/"NONE" placeholder for
+ *  the empty state, Task 9), so reaching a value or clearing one doesn't
+ *  take several presses each way any more. */
 export default function StepEditor({
   row,
   index,
@@ -113,9 +117,13 @@ export default function StepEditor({
 
   // The displayed value is the raw field, not "FREE"/fmtRestSeconds's "NONE"
   // (Task 5) — a field a user can type into can't also render a word while
-  // holding "", so the empty field itself communicates "free rate"/"no
-  // rest" now. The muted styling below still keys off the same
-  // trimmed/zero checks, so the empty state still reads visually distinct.
+  // holding "", so an empty field falls back to the Stepper's own
+  // `placeholder` prop ("FREE"/"NONE", Task 9) instead: same reading, but
+  // as a `::placeholder` the browser clears the instant a digit lands, and
+  // one that never becomes the accessible name (`aria-label` already is
+  // one). The muted styling below still keys off the same trimmed/zero
+  // checks, so the empty state still reads visually distinct even before
+  // any placeholder renders.
   const spmTrimmed = row.spm.trim();
   const restSeconds = restSecondsFromRow(row);
 
@@ -206,6 +214,7 @@ export default function StepEditor({
             valueClassName={
               spmTrimmed === "" ? "stepper-value-muted" : undefined
             }
+            placeholder="FREE"
             onDecrement={() => stepSpm(-1)}
             onIncrement={() => stepSpm(1)}
             onValueChange={(next) => onChange({ spm: next })}
@@ -231,6 +240,7 @@ export default function StepEditor({
             valueClassName={
               restSeconds === 0 ? "stepper-value-muted" : undefined
             }
+            placeholder="NONE"
             onDecrement={() => stepRest(-REST_STEP_SECONDS)}
             onIncrement={() => stepRest(REST_STEP_SECONDS)}
             onValueChange={(next) => onChange({ rest: next })}
