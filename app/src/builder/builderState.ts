@@ -144,49 +144,47 @@ export function cloneRow(
 }
 
 // The stepper's own grid: rest displays and edits in 30-second increments,
-// clamped 0..900s (15 minutes) — well inside the domain's 0:01..60:00 bound,
-// so every value this grid can produce is a legal `restMinutes`. The stored
-// field is ALWAYS minutes (`BuilderRow.rest`,
-// `domain/validate.ts`'s `restMinutes`) — these two bridge functions are the
-// only place that ever multiplies/divides by 60, specifically so a future
-// caller can't accidentally read/write seconds into `row.rest` by hand.
+// clamped 0..900s (15 minutes) — the stepper's own reach, not the domain's
+// bound (a typed rest may legally run up to 60:00; `toSteps` enforces that
+// real ceiling). The stored field is a clock string (`BuilderRow.rest`,
+// mirroring `domain/validate.ts`'s `restMinutes` once parsed) — these two
+// bridge functions are the only place that ever converts to/from seconds,
+// specifically so a future caller can't accidentally read/write seconds
+// into `row.rest` by hand.
 export const REST_STEP_SECONDS = 30;
 export const REST_MAX_SECONDS = 900;
 
-/** `row.rest` (minutes, e.g. "1.5") as whole seconds for the stepper —
+/** `row.rest` (a clock string, e.g. "1:30") as whole seconds for the stepper —
  *  `""` reads as 0 ("no rest"), matching how `toSteps` treats a blank rest
- *  field. Rounds rather than truncates so a hand-edited or imported minutes
- *  value that isn't an exact half-step (e.g. from a future looser import
- *  path) still lands on the nearest whole second instead of drifting down. */
+ *  field. */
 export function restSecondsFromRow(row: BuilderRow): number {
   const trimmed = row.rest.trim();
-  return trimmed === "" ? 0 : Math.round(Number(trimmed) * 60);
+  if (trimmed === "") return 0;
+  const minutes = parseClock(trimmed);
+  return minutes === null ? 0 : Math.round(minutes * 60);
 }
 
-/** Writes a stepper-produced seconds value back into `row.rest` as MINUTES
- *  — never seconds. Clamps to `0..REST_MAX_SECONDS` and snaps to the
- *  nearest `REST_STEP_SECONDS` multiple first, so every value this can ever
- *  write lands exactly on the domain's 0.5-minute half-step grid (see the
- *  property test in builderState.test.ts that walks the whole reachable
- *  range and asserts this). Zero seconds clears the field to `""` rather
- *  than storing the literal string "0", matching how a blank rest field
- *  already means "no rest" everywhere else in this module. */
+/** Writes a stepper-produced seconds value back into `row.rest` as a clock
+ *  string. Clamps to `0..REST_MAX_SECONDS` and snaps to the nearest
+ *  `REST_STEP_SECONDS` multiple first. Zero clears the field to `""` rather
+ *  than storing "0:00", matching how a blank rest field already means "no
+ *  rest" everywhere else in this module. */
 export function rowWithRestSeconds(
   row: BuilderRow,
   seconds: number,
 ): BuilderRow {
   const clamped = Math.min(REST_MAX_SECONDS, Math.max(0, seconds));
   const snapped = Math.round(clamped / REST_STEP_SECONDS) * REST_STEP_SECONDS;
-  return { ...row, rest: snapped === 0 ? "" : String(snapped / 60) };
+  return { ...row, rest: snapped === 0 ? "" : fmtDuration(snapped / 60) };
 }
 
 /** `m:ss` for a seconds value, or `"NONE"` at zero — the accordion's REST
  *  stepper value cell and the expanded editor's REST row both read this
- *  directly (design doc §4b row 5). */
+ *  directly (design doc §4b row 5). Delegates to `fmtDuration` so this
+ *  and `row.rest` never drift into two different spellings of the same
+ *  clock form. */
 export function fmtRestSeconds(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return seconds === 0 ? "NONE" : `${m}:${String(s).padStart(2, "0")}`;
+  return seconds === 0 ? "NONE" : fmtDuration(seconds / 60);
 }
 
 // U+2212 MINUS SIGN (not the ASCII hyphen) for a negative offset, matching
@@ -197,6 +195,19 @@ export function fmtRestSeconds(seconds: number): string {
 function fmtSignedOffset(off: number): string {
   if (off === 0) return "±0";
   return off > 0 ? `+${off}` : `−${Math.abs(off)}`;
+}
+
+// An em dash for a duration `stepSummary` can't read — either a blank field
+// or (defensively) something that isn't a parseable clock/integer. Rendering
+// `fmtDuration(0)` ("0:00") here would read as a real zero-length step
+// rather than a half-filled row; the dash makes "unfilled" visually distinct
+// from "filled with zero".
+function fmtRowDuration(row: BuilderRow): string {
+  if (row.durUnit === "min") {
+    const minutes = parseClock(row.durValue);
+    return minutes === null ? "—" : fmtDuration(minutes);
+  }
+  return row.durValue.trim() === "" ? "—" : `${row.durValue} m`;
 }
 
 /** Line 1 of the collapsed accordion card (design doc §4a): `20′ @ 6k +10`
@@ -210,10 +221,7 @@ function fmtSignedOffset(off: number): string {
  *  35 starters, anything bulk-imported), which genuinely contain `wu` and
  *  standalone `r` rows, so this can no longer assume `w`-only callers. */
 export function stepSummary(row: BuilderRow): string {
-  const dur =
-    row.durUnit === "min"
-      ? fmtDuration(parseClock(row.durValue) ?? 0)
-      : `${row.durValue} m`;
+  const dur = fmtRowDuration(row);
   if (row.kind === "wu") return `${dur} warm-up`;
   if (row.kind === "r") return `${dur} rest`;
   return `${dur} @ ${row.refBase} ${fmtSignedOffset(row.refOff)}`;

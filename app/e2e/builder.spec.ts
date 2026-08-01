@@ -617,6 +617,60 @@ test.describe("new controls this phase introduced", () => {
     await cleanupByTitle(page, title);
   });
 
+  test("editing a stored workout's rest, then tapping REST once, still saves — the seam that used to write NaN", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "builder-rest-roundtrip@e2e.test",
+      name: "Builder Rest Roundtrip Tester",
+    });
+    await setBaselines(page);
+    // Bulk import a work step carrying rest (domain/bulk.ts's inline `r5`
+    // token) — the same shape a real starter workout (Doldrums,
+    // server/seed/starter.ts) carries. `stepToRow` writes the stored
+    // `restMinutes` into `row.rest` as a clock string ("5:00"); before this
+    // fix `restSecondsFromRow` still read that with a bare `Number(...)`
+    // (NaN), so one tap of REST wrote the literal string "NaN" back into
+    // the row and `toSteps` refused to save it.
+    await page.goto("/library/import");
+    const title = "Rest Roundtrip Row";
+    const text = [`${title} | O2 | easy | 2`, "w 10' 6k @20 r5"].join("\n");
+    await page.getByLabel("Bulk import text").fill(text);
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    await expect(page).toHaveURL(/\/library$/);
+
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("link", { name: "Edit" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/edit$/);
+
+    // Edit mode starts collapsed — expand Row 1 (the only, stored `w` row)
+    // before touching its REST stepper.
+    await page
+      .locator(".builder-step-list > div")
+      .first()
+      .getByRole("button", { name: "EDIT" })
+      .click();
+
+    // One tap up: 5:00 -> 5:30 (a 30s step). Confirms the stepper reads the
+    // stored clock-form rest correctly before this test relies on it also
+    // writing back something `toSteps` can still parse.
+    await page.getByRole("button", { name: "Row 1 rest up" }).click();
+    await expect(page.getByRole("group", { name: "Row 1 rest" })).toContainText(
+      "5:30",
+    );
+
+    await page.getByRole("button", { name: "Save to library" }).click();
+
+    // The bug's symptom: Save silently no-ops (an inline validation error
+    // appears, not a navigation) because `toSteps` can't parse "NaN" as a
+    // rest duration. A successful save navigates back to the detail screen.
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    await cleanupByTitle(page, title);
+  });
+
   test("pressing AUTO NAME twice yields two different suggested titles", async ({
     page,
   }) => {

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { BuilderRow } from "./builderState";
+import { fromWorkout, type BuilderRow } from "./builderState";
 import StepCard from "./StepCard";
+import { STARTER_WORKOUTS } from "../../server/seed/starter";
 
 // Local row-shape helpers, same convention as builderState.test.ts's own
 // workRow/wuRow/restRow — this file can't import those (not exported), and
@@ -17,7 +18,7 @@ function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
     refBase: "6k",
     refOff: 10,
     spm: "20",
-    rest: "1.5",
+    rest: "1:30",
     ...overrides,
   };
 }
@@ -188,5 +189,24 @@ describe("StepCard", () => {
     expect(screen.getByRole("button", { name: "EDIT" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "EDIT" }));
     expect(onExpand).toHaveBeenCalledTimes(1);
+  });
+
+  // Review fix wave: `stepToRow` writes `row.rest` in the clock form, but
+  // `restSecondsFromRow` used to still parse it with a bare `Number(...)` —
+  // `Number("3:00")` is NaN, so a real stored workout's rest sub-summary
+  // rendered "18 spm · rest NaN:NaN". A fixture built by hand (bare-decimal
+  // "1.5") never exercised this path; a real starter workout does. Doldrums
+  // (server/seed/starter.ts) is the exact shape the reviewer rendered to
+  // find the bug: a `w` step with `restMinutes: 3`.
+  it("renders a real stored workout's rest sub-summary as a real value, not NaN:NaN (Doldrums)", () => {
+    const doldrums = STARTER_WORKOUTS.find((w) => w.title === "Doldrums");
+    if (!doldrums) throw new Error("fixture workout 'Doldrums' not found");
+    const form = fromWorkout(doldrums);
+    const workRowFromStore = form.rows.find((r) => r.kind === "w");
+    if (!workRowFromStore) throw new Error("expected a work row");
+
+    setup({ row: workRowFromStore });
+    expect(screen.getByText("18 spm · rest 3:00")).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 });
