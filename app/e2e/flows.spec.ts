@@ -40,11 +40,11 @@ test.describe("backdoor sign-in", () => {
       email: "flows@e2e.test",
       name: "Flows Tester",
     });
-    // AppRoutes redirects "/" -> "/library" (Phase 5A) — the "Ergomatic"
-    // heading only exists on the signed-out SignIn screen (SignIn.tsx), and
-    // the account block + sign-out control now live on /you (You.tsx), not
-    // on the landing route.
-    await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
+    // AppRoutes redirects "/" -> "/today" (Phase 6A Task 2; was "/library"
+    // in Phase 5A) — the "Ergomatic" heading only exists on the signed-out
+    // SignIn screen (SignIn.tsx), and the account block + sign-out control
+    // live on /you (You.tsx), not on the landing route.
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
     await expect(page.getByRole("link", { name: "YOU" })).toBeVisible();
 
     await page.getByRole("link", { name: "YOU" }).click();

@@ -88,9 +88,12 @@ test("signed-in-home", async ({ page }) => {
     email: "screenshots@e2e.test",
     name: "Screenshot Tester",
   });
-  // "/" redirects to /library (AppRoutes) — same load race as the
-  // dedicated "library" screenshot below.
-  await page.locator(".workout-row").first().waitFor();
+  // "/" redirects to /today (AppRoutes, Phase 6A Task 2 — was /library) —
+  // same load race as the dedicated "library" screenshot below. This
+  // capture's own layout still moves once Task 3 (Plan) and Task 5
+  // (screenshot close-out) land; recapturing with real plan/log data is
+  // Task 5's job, not this one's.
+  await page.getByRole("heading", { name: "Today" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "signed-in-home.png"),
   });
