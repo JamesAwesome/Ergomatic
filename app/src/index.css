@@ -1256,10 +1256,11 @@ button:disabled {
      now: the toggle grew from two chips to four (2K/6K/MAX/MIN), which no
      longer leaves enough of the row's ~280px budget (at the 390px design
      viewport, next to the 34px PACE label) for the offset stepper to read
-     legibly beside it — `.pace-ref-offset`'s own min-width below forces
-     the wrap rather than letting `.pace-ref-bases` get silently squeezed
-     by its own `overflow: hidden` (the four-chip screenshot regression
-     this fixes: the stepper's `+` button clipped clean off the row). */
+     legibly beside it. `.pace-ref-bases`'s own `flex-basis: 100%` below is
+     what forces the wrap now (Task 6) — deterministic regardless of chip
+     count or available width, rather than the earlier arithmetic-overflow
+     wrap (the four-chip screenshot regression this originally fixed: the
+     stepper's `+` button clipped clean off the row). */
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1272,15 +1273,15 @@ button:disabled {
   /* Joined strip (docs/design/builder-redesign/README.md §4b: 48×44
      segments — now four, Task 4's MAX/MIN chips), not separate chips with
      a gap — one border around the whole strip, an internal divider between
-     segments. `flex: 0 0 auto` pins it to its own content width (4×48px
-     plus borders): without this it's a flex item like any other, and a
-     tight row would shrink the BOX (this container, not the fixed-width
-     chips inside it) below that content width, silently clipping the
-     rightmost chip(s) behind `overflow: hidden` instead of ever reflowing
-     — invisible in a DOM inspection, only caught by opening a real
-     screenshot at 390px. */
+     segments. `flex: 1 1 100%` (Task 6, James's screenshot catch — was
+     `0 0 auto`) always takes its own full-width line under
+     `.pace-ref-input`'s `flex-wrap` and stretches to the SAME 282px span as
+     `.pace-ref-offset`/SPM/REST's steppers below, instead of shrinking to
+     its own 4×48px content width (194px) and leaving the rest of the row's
+     budget empty — the PACE row visibly reading shorter than every other
+     row in the card. */
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 100%;
   border: 1px solid var(--rule-3);
   border-radius: var(--radius);
   overflow: hidden;
@@ -1288,11 +1289,13 @@ button:disabled {
 
 /* Toggled via aria-checked (the same radio pattern the deleted
    PainPicker.tsx used) since these are mutually-exclusive radios, not
-   independent pressed toggles. Fixed 48px width per the handoff's
-   pace-ref segment spec. */
+   independent pressed toggles. `flex: 1` (Task 6 — was a fixed 48px per
+   the handoff's original two-chip spec) so the four segments share
+   `.pace-ref-bases`'s full stretched width evenly; `min-width: 44px` keeps
+   each segment at least tap-target width if the strip were ever narrower. */
 .pace-ref-chip {
-  flex: 0 0 48px;
-  width: 48px;
+  flex: 1;
+  min-width: 44px;
   min-height: var(--tap);
   background: var(--surface);
   border: none;

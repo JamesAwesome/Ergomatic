@@ -143,7 +143,32 @@ describe("StepRow effort refs (Phase 5G)", () => {
     expect(screen.queryByText(/–/)).not.toBeInTheDocument();
   });
 
-  it("speaks the effort word, not a computed split's digits", () => {
+  it("speaks 'at max effort', not the ambiguous MAX chip word", () => {
+    renderStep(
+      <StepRow
+        step={{
+          k: "w",
+          duration: { kind: "time", minutes: 0.5 },
+          ref: { effort: "max" },
+        }}
+        baselines={BASELINES}
+        tolerance={1}
+        nudge={0}
+        onNudge={() => {}}
+      />,
+    );
+
+    // The VISIBLE label still reads the chip word ("MAX") — only the
+    // accessible name substitutes effort language (domain/pace.ts's
+    // effortSpoken), matching the spec's own example verbatim.
+    const label = screen.getByText("0:30 @ MAX");
+    expect(label).toHaveAccessibleName("30 seconds at max effort");
+    // The effort word itself ("ALL OUT") is plain visible text needing no
+    // aria-label override — it is already words, not digits.
+    expect(screen.getByText("ALL OUT")).toBeInTheDocument();
+  });
+
+  it("speaks 'easy', not 'at MIN' or the clumsy 'at easy'", () => {
     renderStep(
       <StepRow
         step={{
@@ -158,13 +183,13 @@ describe("StepRow effort refs (Phase 5G)", () => {
       />,
     );
 
-    // The composed left label's accessible name is built from the spoken
-    // duration plus the chip word ("MIN") — a real word a screen reader
-    // pronounces normally, never a digit-reading of a computed split.
+    // "MIN" spoken aloud is indistinguishable from "minutes" — the exact
+    // confusion the display-word pair exists to prevent — so the
+    // accessible name drops the chip word entirely for the natural rowing
+    // idiom ("30 seconds easy"), not "30 seconds at MIN" nor the
+    // grammatically symmetric but clumsier "30 seconds at easy".
     const label = screen.getByText("0:30 @ MIN");
-    expect(label).toHaveAccessibleName("30 seconds at MIN");
-    // The effort word itself ("EASY") is plain visible text needing no
-    // aria-label override — it is already words, not digits.
+    expect(label).toHaveAccessibleName("30 seconds easy");
     expect(screen.getByText("EASY")).toBeInTheDocument();
   });
 

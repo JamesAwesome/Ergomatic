@@ -5,6 +5,7 @@ import {
   toleranceRange,
   isEffortRef,
   effortWord,
+  effortSpoken,
   refLabel,
   estimationSplit,
 } from "./pace.js";
@@ -87,6 +88,15 @@ describe("effort refs", () => {
   it("maps efforts to the display pair", () => {
     expect(effortWord("max")).toBe("ALL OUT");
     expect(effortWord("min")).toBe("EASY");
+  });
+
+  // The spoken pair a screen reader gets instead of the chip word — "MIN"
+  // read aloud is indistinguishable from "minutes", the exact confusion the
+  // display-word pair (effortWord) exists to prevent visually, so the
+  // spoken form needs its own vocabulary rather than reusing the chip text.
+  it("maps efforts to the spoken pair, not the chip word", () => {
+    expect(effortSpoken("max")).toBe("at max effort");
+    expect(effortSpoken("min")).toBe("easy");
   });
 
   it("labels refs with the chip word", () => {
