@@ -5,6 +5,7 @@ import {
   bucketFor,
   clearFilters,
   setRecency,
+  toggleCustom,
   toggleDuration,
   togglePain,
   toggleType,
@@ -66,6 +67,7 @@ describe("chip state transitions", () => {
       durations: ["<30"],
       painMax3: true,
       recency: "recent",
+      customOnly: true,
     };
     expect(clearFilters()).toStrictEqual(EMPTY_FILTERS);
     expect(busy).not.toStrictEqual(EMPTY_FILTERS);
@@ -147,5 +149,37 @@ describe("applyFilters", () => {
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
       "match",
     ]);
+  });
+});
+
+describe("customOnly", () => {
+  it("keeps only non-global workouts when set", () => {
+    const ws = [
+      w({ id: "mine", title: "Mine", isGlobal: false }),
+      w({ id: "seeded", title: "Seeded", isGlobal: true }),
+    ];
+    const out = applyFilters(ws, { ...EMPTY_FILTERS, customOnly: true }, null);
+    expect(out.map((r) => r.title)).toStrictEqual(["Mine"]);
+  });
+
+  it("ANDs with the type filter", () => {
+    const ws = [
+      w({ id: "mine-an", title: "Mine-AN", type: "AN", isGlobal: false }),
+      w({ id: "mine-o2", title: "Mine-O2", type: "O2", isGlobal: false }),
+      w({ id: "seeded-an", title: "Seeded-AN", type: "AN", isGlobal: true }),
+    ];
+    const out = applyFilters(
+      ws,
+      { ...EMPTY_FILTERS, customOnly: true, type: "AN" },
+      null,
+    );
+    expect(out.map((r) => r.title)).toStrictEqual(["Mine-AN"]);
+  });
+
+  it("toggleCustom flips and clearFilters resets", () => {
+    const on = toggleCustom(EMPTY_FILTERS);
+    expect(on.customOnly).toBe(true);
+    expect(toggleCustom(on).customOnly).toBe(false);
+    expect(clearFilters().customOnly).toBe(false);
   });
 });

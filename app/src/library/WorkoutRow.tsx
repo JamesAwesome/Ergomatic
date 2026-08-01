@@ -33,11 +33,17 @@ export default function WorkoutRow({
       </div>
       <div className="workout-row-line2">
         <TypeBadge type={workout.type} />
+        {!workout.isGlobal && (
+          <span className="workout-row-custom">CUSTOM</span>
+        )}
         <span className="workout-row-meta">
           {workout.difficulty.toUpperCase()} · {daysLabel}
         </span>
         <PainBar pain={workout.pain} type={workout.type} />
       </div>
+      {!workout.isGlobal && (
+        <span className="visually-hidden">, custom workout</span>
+      )}
     </Link>
   );
 }

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { signInViaBackdoor } from "./helpers";
 
 // Golden flows through Library -> detail -> You, against the real compose
@@ -165,5 +165,69 @@ test.describe("baseline changes propagate to a workout's detail targets", () => 
     await expect(page.locator(".step-row-range").first()).not.toHaveText(
       before,
     );
+  });
+});
+
+/** Same in-page-`fetch` idiom as builder.spec.ts's `cleanupByTitle` (Secure
+ *  cookie makes `page.request` unusable here — see that file's comment). A
+ *  no-op if the title isn't found, so a test that already asserted a delete
+ *  happened can still call this defensively. */
+async function cleanupByTitle(page: Page, title: string): Promise<void> {
+  const result = await page.evaluate(async (t) => {
+    const listRes = await fetch("/api/workouts");
+    if (!listRes.ok) return { ok: false, status: listRes.status };
+    const workouts = (await listRes.json()) as Array<{
+      id: string;
+      title: string;
+      isGlobal: boolean;
+    }>;
+    const match = workouts.find((w) => !w.isGlobal && w.title === t);
+    if (!match) return { ok: true, status: 200 };
+    const delRes = await fetch(`/api/workouts/${match.id}`, {
+      method: "DELETE",
+    });
+    return { ok: delRes.ok, status: delRes.status };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`cleanup failed for "${title}": ${result.status}`);
+  }
+}
+
+test.describe("CUSTOM filter", () => {
+  test("tapping CUSTOM narrows to an authored workout, and ALL restores the full library", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "library-custom@e2e.test",
+      name: "Custom Filter Tester",
+    });
+    const title = "E2E Custom Filter Workout";
+
+    // Author a workout through the builder (same minimal single-row flow as
+    // builder.spec.ts's exit-criterion test) — it lands in the library as
+    // `isGlobal: false`, the only kind CUSTOM should surface.
+    await page.goto("/library/new");
+    await page.getByLabel("Title").fill(title);
+    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+    await page.getByRole("button", { name: "Save to library" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+
+    await page.goto("/library");
+    const rows = page.locator(".workout-row");
+    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT + 1);
+
+    await page.getByRole("button", { name: "CUSTOM", exact: true }).click();
+
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first().locator(".workout-row-title")).toHaveText(title);
+    await expect(rows.first().locator(".workout-row-custom")).toHaveText(
+      "CUSTOM",
+    );
+
+    await page.getByRole("button", { name: "ALL", exact: true }).click();
+    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT + 1);
+
+    await cleanupByTitle(page, title);
   });
 });
