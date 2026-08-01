@@ -1,10 +1,18 @@
 export type WorkoutType = "AN" | "O2" | "AT" | "TR";
 export type Difficulty = "easy" | "medium" | "hard";
 export type PaceBase = "2k" | "6k";
-export interface PaceRef {
+export type Effort = "max" | "min";
+export interface SplitRef {
   base: PaceBase;
   off: number; // off: seconds per 500m, negative = faster
 }
+// "30 seconds max" / "20 minutes easy" — a real effort prescription, not a
+// stand-in offset. Key-presence union: every stored {base, off} ref is
+// already a valid SplitRef, so nothing migrates (Phase 5G spec, "Decisions").
+export interface EffortRef {
+  effort: Effort;
+}
+export type PaceRef = SplitRef | EffortRef;
 export type WorkDuration =
   | { kind: "time"; minutes: number } // 0.5 steps allowed, > 0
   | { kind: "distance"; meters: number }; // integer, 100..42195

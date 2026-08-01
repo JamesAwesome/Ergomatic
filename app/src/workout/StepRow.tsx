@@ -1,13 +1,19 @@
 import { Link } from "react-router-dom";
-import { resolveSplit, toleranceRange } from "../../domain/pace.js";
+import {
+  isEffortRef,
+  resolveSplit,
+  toleranceRange,
+} from "../../domain/pace.js";
 import { fmtDuration, fmtDurationSpoken } from "../../domain/duration.js";
-import type { Baselines, PaceRef, Step } from "../../domain/types.js";
+import type { Baselines, PaceRef, Step, SplitRef } from "../../domain/types.js";
 
 // "6k" / "6k-2" / "6k+3" — the same shorthand the builder's bulk-paste
 // syntax accepts (domain/pace.ts's parsePaceRef), read back out.
 function refLabel(ref: PaceRef): string {
-  if (ref.off === 0) return ref.base;
-  return `${ref.base}${ref.off > 0 ? "+" : ""}${ref.off}`;
+  if (isEffortRef(ref)) return "";
+  const splitRef: SplitRef = ref;
+  if (splitRef.off === 0) return splitRef.base;
+  return `${splitRef.base}${splitRef.off > 0 ? "+" : ""}${splitRef.off}`;
 }
 
 // MINUS SIGN (U+2212) for negative, matching the tolerance range's EN DASH

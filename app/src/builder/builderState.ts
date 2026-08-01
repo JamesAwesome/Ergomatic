@@ -3,7 +3,7 @@ import {
   parseClock,
   parseDurationToken,
 } from "../../domain/duration.js";
-import { resolveSplit } from "../../domain/pace.js";
+import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type {
   Baselines,
   Difficulty,
@@ -533,8 +533,10 @@ function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
     const { durValue, durUnit } = formatDurationValue(s.duration);
     row.durValue = durValue;
     row.durUnit = durUnit;
-    row.refBase = s.ref.base;
-    row.refOff = s.ref.off;
+    if (!isEffortRef(s.ref)) {
+      row.refBase = s.ref.base;
+      row.refOff = s.ref.off;
+    }
     row.spm = s.spm !== undefined ? String(s.spm) : "";
     // `rest` writes the clock form — toSteps reads it back via
     // `parseDurationToken`, which also accepts a bare number or `5'`, but
