@@ -4,6 +4,8 @@ import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
 import Library from "../library/Library";
 import Plan from "../plan/Plan";
+import ConfirmTargets from "../session/ConfirmTargets";
+import RunPlaceholder from "../session/RunPlaceholder";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
@@ -56,6 +58,8 @@ export default function AppRoutes({
         <Route path="/library/:id" element={<WorkoutDetail />} />
         <Route path="/library/:id/edit" element={<EditWorkout />} />
         <Route path="/plan" element={<Plan />} />
+        <Route path="/session/confirm" element={<ConfirmTargets />} />
+        <Route path="/session/run" element={<RunPlaceholder />} />
         <Route
           path="/trend"
           element={<Placeholder title="Trend" phase="Phase 8" />}

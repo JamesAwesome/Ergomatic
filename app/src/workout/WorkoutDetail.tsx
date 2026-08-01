@@ -8,6 +8,7 @@ import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
+import { buildDraft, saveDraft } from "../session/draft";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 
@@ -117,7 +118,22 @@ function WorkoutDetailView({
   // never persisted (Phase 6 will pass them per-request).
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [tolerance] = useState(readPaceTolerance);
+  const [startError, setStartError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Builds and saves the session draft (session/draft.ts owns the shape and
+  // the storage key — this screen never touches localStorage itself), then
+  // hands off to the confirm screen. `saveDraft` can fail (quota, private-
+  // mode Safari) without throwing; that's surfaced inline rather than
+  // navigating to a confirm screen with nothing behind it.
+  function handleStart() {
+    const draft = buildDraft(workout);
+    if (saveDraft(draft)) {
+      navigate("/session/confirm");
+    } else {
+      setStartError("Couldn't start this session. Try again.");
+    }
+  }
 
   const minutesLabel = baselines
     ? `${estimateMinutes(workout.steps, baselines).minutes} MIN`
@@ -187,19 +203,15 @@ function WorkoutDetailView({
         )}
       </div>
       <div className="workout-detail-actions">
-        <button
-          type="button"
-          className="button-primary"
-          disabled
-          title="Arrives in Phase 6"
-        >
+        <button type="button" className="button-primary" onClick={handleStart}>
           Start
         </button>
+        {startError && <p className="baseline-error">{startError}</p>}
         <button
           type="button"
           className="button-outline"
           disabled
-          title="Arrives in Phase 6"
+          title="Arrives in Phase 6C"
         >
           Log it after
         </button>

@@ -120,6 +120,16 @@ export function draftMinutes(
   return estimateMinutes(steps, baselines).minutes;
 }
 
+/** Stamps `startedAt` — the one field 6B requires non-null before it will
+ *  consume a draft (spec: "Session draft"). Pure, like `withNudge`: the
+ *  caller still owns calling `saveDraft` with the result, so the module
+ *  stays the only thing that ever writes the storage key while every
+ *  mutation shape (this, `withNudge`) lives here rather than in a
+ *  component. */
+export function startDraft(d: SessionDraft): SessionDraft {
+  return { ...d, startedAt: new Date().toISOString() };
+}
+
 /** Nudges a split step's target by `delta` seconds (cumulative). No-ops
  *  (returns `d` unchanged) when the step at `i` isn't a split-ref work step
  *  — effort steps ("ALL OUT"/"EASY") have nothing to nudge, the same rule

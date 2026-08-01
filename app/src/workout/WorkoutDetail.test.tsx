@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { api } from "../api";
+import { loadDraft } from "../session/draft";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -153,8 +154,25 @@ async function renderDetailWithLibraryRoute(initialPath: string) {
   );
 }
 
+// Renders WorkoutDetail alongside a real /session/confirm route (rather
+// than just asserting a navigate() call), so the Start test proves the
+// actual route change — and that a real draft is sitting in localStorage
+// when it lands — rather than a mocked useNavigate call.
+async function renderDetailWithConfirmRoute(initialPath: string) {
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/session/confirm" element={<p>CONFIRM SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   vi.resetModules();
+  localStorage.clear();
 });
 
 describe("WorkoutDetail", () => {
@@ -227,12 +245,56 @@ describe("WorkoutDetail", () => {
     ).toHaveAttribute("href", "/you");
   });
 
-  it("renders Start and Log it after, both disabled ahead of Phase 6", async () => {
+  it("renders Log it after disabled — logging arrives in Phase 6C — but Start enabled", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Log it after" })).toBeDisabled();
+  });
+
+  it("Start builds and saves the session draft, then navigates to /session/confirm", async () => {
+    mockHooks(BASELINES);
+    await renderDetailWithConfirmRoute("/library/w1");
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    const draft = loadDraft();
+    expect(draft).not.toBeNull();
+    expect(draft!.workoutId).toBe("w1");
+    expect(draft!.title).toBe("Ladder Sets");
+    expect(draft!.type).toBe("AT");
+    expect(draft!.steps).toStrictEqual(WORKOUT.steps);
+    expect(draft!.startedAt).toBeNull();
+  });
+
+  it("deep-copies the workout's steps into the draft — mutating one never touches the other", async () => {
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    const draft = loadDraft();
+    expect(draft!.steps).not.toBe(WORKOUT.steps);
+  });
+
+  it("shows an inline error and does not navigate when saving the draft fails (quota)", async () => {
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    mockHooks(BASELINES);
+    await renderDetailWithConfirmRoute("/library/w1");
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(
+      screen.getByText("Couldn't start this session. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
+    spy.mockRestore();
   });
 
   it("exposes nudge buttons with accessible names and the 44px hit-target class", async () => {
