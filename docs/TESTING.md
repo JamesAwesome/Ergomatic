@@ -357,3 +357,31 @@ and the pattern is worth naming so reviews aim there:
 - **Check the seams the diff doesn't show.** Client bounds against
   `app/domain/validate.ts`; fake stores against real ones (§5); a deleted
   component's CSS; whether `pnpm e2e` still passes.
+
+## 13. Self-mutation is part of writing the test
+
+**For every behavioural test you add: break the code path it guards, run the
+covering tests, watch them fail, restore, watch them pass.** Document the
+mutation and both results in your task report. This is the implementer's
+definition of done, not a review step.
+
+Why it moved upstream: §11's rule ("verification is measured") was written
+after reviewers kept catching tests that passed against broken code — and
+then reviewers kept catching them anyway. In one phase, four of nine tasks
+looped on exactly this: an epsilon suite that survived a floor-for-round
+swap, a rounding guard whose removal failed zero tests, a compatibility
+sweep that asserted `Number.isFinite` and stayed green while every resolved
+split was corrupted by +1000. The next phase made the mutation the
+implementer's job before commit: five of seven tasks cleared review with no
+fix round at all, with ~30 self-mutations run before any reviewer looked.
+
+Two rules of craft:
+
+- **Target the mutant at the logic, not the vicinity.** A rounding predicate
+  gets a value where round and floor *disagree* (31 s: `31/60*60 ===
+  31.000000000000004`), not a clean value that passes either way. A pinned
+  table gets a gross corruption (+1000) that must fail on real value diffs.
+- **The reviewer no longer re-runs your documented mutations** — it spends
+  its effort on the seams you didn't look at. That only works if your report
+  states each mutation precisely enough to be trusted: what you broke, which
+  tests died, that the restore is clean.
