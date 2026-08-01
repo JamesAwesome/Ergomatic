@@ -3,6 +3,7 @@ import Builder from "../builder/Builder";
 import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
 import Library from "../library/Library";
+import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
 import type { Me } from "../useMe";
@@ -39,11 +40,8 @@ export default function AppRoutes({
   return (
     <div className="app-shell">
       <Routes>
-        <Route path="/" element={<Navigate to="/library" replace />} />
-        <Route
-          path="/today"
-          element={<Placeholder title="Today" phase="Phase 6" />}
-        />
+        <Route path="/" element={<Navigate to="/today" replace />} />
+        <Route path="/today" element={<Today />} />
         <Route path="/library" element={<Library />} />
         <Route path="/library/new" element={<Builder />} />
         {/* React Router ranks a static segment ("new") over a dynamic one
@@ -70,7 +68,7 @@ export default function AppRoutes({
             element={<You user={user} onSignedOut={onSignedOut} />}
           />
         )}
-        <Route path="*" element={<Navigate to="/library" replace />} />
+        <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
       <TabBar />
     </div>

@@ -6,6 +6,9 @@ import AppRoutes from "./AppRoutes";
 vi.mock("../library/Library", () => ({
   default: () => <h1>Library</h1>,
 }));
+vi.mock("../today/Today", () => ({
+  default: () => <h1>Today</h1>,
+}));
 vi.mock("../builder/BulkImport", () => ({
   default: () => <h1>Import</h1>,
 }));
@@ -44,15 +47,22 @@ describe("AppRoutes", () => {
     ).toBeVisible();
   });
 
-  it("redirects / to the library", async () => {
+  it("redirects / to today", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(
-      await screen.findByRole("heading", { name: "Library" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+  });
+
+  it("redirects an unmatched route to today", async () => {
+    render(
+      <MemoryRouter initialEntries={["/nonsense"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
   });
 
   it("names the phase that will fill a placeholder tab", () => {

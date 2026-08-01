@@ -807,6 +807,140 @@ button:disabled {
   cursor: pointer;
 }
 
+/* -- Today (Phase 6A Task 2) --------------------------------------------
+   Tokens only — no new hex values. Reuses the existing --ink/--ink-3/
+   --ink-4/--accent/--rule/--surface family, already contrast-audited
+   elsewhere (docs/design/DEVIATIONS.md's --ink-4 row). */
+
+.today-plan-line {
+  margin: 4px 0 16px;
+}
+
+.today-plan-line-freestyle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Mirrors .library-new/.library-import: min-height 44px keeps this a real
+   tap target (e2e/design.spec.ts's sweep) even though the visible label is
+   small mono text, not a filled button. */
+.today-plan-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.today-suggestion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.today-shuffle {
+  flex-shrink: 0;
+}
+
+.today-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 16px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.today-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.today-card-duration {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.today-card-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 26px;
+  margin: 10px 0 4px;
+}
+
+.today-card-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: 0 0 8px;
+}
+
+.today-card-reason {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.today-card-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.today-last-three {
+  margin-top: 24px;
+}
+
+.today-log-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.today-log-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  border-top: 1px solid var(--rule-2);
+}
+
+.today-log-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today-log-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
 /* -- Builder (New/Edit workout) ---------------------------------------- */
 
 .field-error {
