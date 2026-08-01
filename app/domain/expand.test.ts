@@ -55,6 +55,44 @@ describe("phases", () => {
       set: undefined,
     });
   });
+
+  it("marks an effort work phase and labels it with the effort word", () => {
+    const phases_ = phases(
+      [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 0.5 },
+          ref: { effort: "max" },
+          spm: 32,
+        },
+      ],
+      { k2Seconds: 112, k6Seconds: 122 },
+      1,
+    );
+    expect(phases_[0]).toMatchObject({
+      type: "work",
+      targetKind: "effort",
+      targetSplit: 112, // estimationSplit(max) — scheduling only, never shown
+      label: "ALL OUT",
+      spm: 32,
+    });
+  });
+
+  it("marks split work phases targetKind split and behaves as before", () => {
+    const phases_ = phases(
+      [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "6k", off: -2 },
+        },
+      ],
+      { k2Seconds: 112, k6Seconds: 122 },
+      1,
+    );
+    expect(phases_[0]).toMatchObject({ targetKind: "split", targetSplit: 120 });
+    expect(phases_[0]!.label).toContain("–"); // still a range label
+  });
 });
 
 describe("estimateMinutes", () => {
@@ -79,5 +117,19 @@ describe("estimateMinutes", () => {
       minutes: 5,
       estimated: false,
     });
+  });
+
+  it("estimates a distance-at-max step's minutes from the 2k baseline", () => {
+    const mins = estimateMinutes(
+      [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 500 },
+          ref: { effort: "max" },
+        },
+      ],
+      { k2Seconds: 112, k6Seconds: 122 },
+    );
+    expect(mins.minutes).toBe(Math.round(((500 / 500) * 112) / 60));
   });
 });

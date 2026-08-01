@@ -399,3 +399,36 @@ describe("clock durations in bulk blocks", () => {
     }
   });
 });
+
+describe("effort refs in bulk blocks", () => {
+  it("parses effort lines", () => {
+    const text = "Sprints | AN | hard | 5\nw 0:30 max @32\nw 500m min\n";
+    const result = parseBulk(text);
+    expect(result.errors).toStrictEqual([]);
+    const [a, b] = result.workouts[0]!.steps.filter((s) => s.k === "w");
+    expect(a).toStrictEqual({
+      k: "w",
+      duration: { kind: "time", minutes: 0.5 },
+      ref: { effort: "max" },
+      spm: 32,
+    });
+    expect(b).toStrictEqual({
+      k: "w",
+      duration: { kind: "distance", meters: 500 },
+      ref: { effort: "min" },
+    });
+  });
+
+  it("errors max+2 per line", () => {
+    const text = "Sprints | AN | hard | 5\nw 0:30 max+2\n";
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      {
+        block: 0,
+        line: 2,
+        message: expect.stringContaining("effort refs take no offset"),
+      },
+    ]);
+  });
+});

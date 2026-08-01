@@ -134,7 +134,9 @@ function parseWorkStep(
     errors.push({
       block: blockIndex,
       line: line.lineNumber,
-      message: `bad pace ref: ${refTok}`,
+      message: /^(max|min)[+-]/i.test(refTok)
+        ? "effort refs take no offset"
+        : `bad pace ref: ${refTok}`,
     });
     return null;
   }

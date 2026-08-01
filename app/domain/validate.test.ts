@@ -71,6 +71,36 @@ describe("validateSteps", () => {
       expect(errorCount).toBeGreaterThan(0);
     }
   });
+  it("accepts an effort ref with any duration kind, spm and rest", () => {
+    const steps = [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 500 },
+        ref: { effort: "min" },
+      },
+    ];
+    const r = validateSteps(steps);
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects an effort ref with extra keys or a bad effort", () => {
+    for (const ref of [
+      { effort: "max", off: 2 },
+      { effort: "hard" },
+      { effort: "" },
+    ]) {
+      const r = validateSteps([work({ ref })]);
+      expect(r.ok, `${JSON.stringify(ref)}`).toBe(false);
+    }
+  });
+
   it("accepts valid restMinutes", () => {
     const r = validateSteps([work({ restMinutes: 5 })]);
     expect(r.ok).toBe(true);
@@ -127,6 +157,30 @@ describe("validateWorkoutInput", () => {
     // enforced rather than just the numeric range.
     expect(validateWorkoutInput({ ...base, pain: 2.5 }).ok).toBe(false);
   });
+  it("accepts a workout with effort-ref work steps end to end", () => {
+    const res = validateWorkoutInput({
+      title: "T",
+      type: "AN",
+      difficulty: "hard",
+      pain: 5,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 0.5 },
+          ref: { effort: "max" },
+          spm: 32,
+          restMinutes: 1,
+        },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 500 },
+          ref: { effort: "min" },
+        },
+      ],
+    });
+    expect(res.ok).toBe(true);
+  });
+
   it("ignores a leftover `num` field rather than rejecting it (2026-07-30: num retired)", () => {
     // Old clients (and the pre-5C bulk grammar) still send a number. It is
     // no longer part of WorkoutInput, so it must neither be required nor be
