@@ -1033,11 +1033,20 @@ button:disabled {
    those properties, so SPM's input keeps the same side borders as PACE's
    span and REST's ClockInput instead of losing them to a `border: 0`
    shorthand reset (that regression shipped once already — see
-   docs/design/DEVIATIONS.md history). */
+   docs/design/DEVIATIONS.md history). `border-radius: 0` squares off the
+   corners the global `button, input { border-radius: var(--radius); }`
+   rule (top of this file) would otherwise put on every `<input>`,
+   including this one — the joined stepper container owns the outer
+   rounding, so its inner cells (this one, PACE's plain span, and REST's
+   `.clock-input` override below) all stay square. Found by measuring
+   computed styles live, not by reading the CSS: the first pass of this fix
+   matched font/border on all three cells but missed this property, so SPM
+   alone still measured a 2px radius. */
 .stepper-value-input {
   min-height: 44px;
   border-top: 0;
   border-bottom: 0;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   font-family: var(--font-mono);
