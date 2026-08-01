@@ -10,10 +10,25 @@ export interface LibraryEntry {
   lastDoneDaysAgo: number | null;
 }
 
+export interface SuggestPrefs {
+  difficulties: Difficulty[];
+  timeCapMinutes: number;
+  // Set when the caller could not compute a real `estMinutes` for any
+  // library entry (no baselines yet — the standing convention is every
+  // entry gets `estMinutes: 0` in that case, purely so the time-cap filter
+  // below never rejects an entry over an unknowable duration). That
+  // workaround keeps the FILTER honest but not the REASON text: without
+  // this flag, the standard/fellback reasons below claim a cap was
+  // actually checked ("within your N min cap", "difficulty/time filters")
+  // when every duration was a placeholder. Set true and both reasons drop
+  // any mention of time/cap instead of asserting something never verified.
+  durationsUnknown?: boolean;
+}
+
 export interface SuggestInput {
   todayCode: PlanCode;
   library: LibraryEntry[];
-  prefs: { difficulties: Difficulty[]; timeCapMinutes: number };
+  prefs: SuggestPrefs;
   todayPickId?: string;
 }
 
@@ -38,6 +53,31 @@ function byLeastRecentlyDone(a: LibraryEntry, b: LibraryEntry): number {
 
 function recencyPhrase(days: number | null): string {
   return days === null ? "never done" : `${days} days ago`;
+}
+
+/** Shared by `suggest`/`suggestFreestyle` — the two were textually
+ *  identical here before `durationsUnknown` existed, and duplicating the
+ *  new branch a second time was the exact way this class of "the reason
+ *  says something no caller checked" bug would recur. */
+function buildReason(
+  picked: LibraryEntry,
+  pickOverride: LibraryEntry | undefined,
+  fellBack: boolean,
+  prefs: SuggestPrefs,
+): string {
+  if (pickOverride) {
+    return `YOUR PICK — last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+  }
+  if (fellBack) {
+    const filterWord = prefs.durationsUnknown
+      ? "difficulty"
+      : "difficulty/time";
+    return `Nothing fit your ${filterWord} filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+  }
+  if (prefs.durationsUnknown) {
+    return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
+  }
+  return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}) within your ${prefs.timeCapMinutes} min cap.`;
 }
 
 export function suggest(input: SuggestInput): Suggestion {
@@ -69,15 +109,7 @@ export function suggest(input: SuggestInput): Suggestion {
     ? sorted.find((e) => e.id === todayPickId)
     : undefined;
   const picked = pickOverride ?? sorted[0];
-
-  let reason: string;
-  if (pickOverride) {
-    reason = `YOUR PICK — last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
-  } else if (fellBack) {
-    reason = `Nothing fit your difficulty/time filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
-  } else {
-    reason = `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}) within your ${prefs.timeCapMinutes} min cap.`;
-  }
+  const reason = buildReason(picked, pickOverride, fellBack, prefs);
 
   return { recommendationId: picked.id, reason, poolIds, fellBack };
 }
@@ -87,7 +119,7 @@ export function suggest(input: SuggestInput): Suggestion {
  *  fellBack semantics otherwise mirror `suggest` exactly (see `:54`). */
 export function suggestFreestyle(
   library: LibraryEntry[],
-  prefs: { difficulties: Difficulty[]; timeCapMinutes: number },
+  prefs: SuggestPrefs,
   todayPickId?: string,
 ): Suggestion {
   const filtered = library.filter(
@@ -114,15 +146,7 @@ export function suggestFreestyle(
     ? sorted.find((e) => e.id === todayPickId)
     : undefined;
   const picked = pickOverride ?? sorted[0];
-
-  let reason: string;
-  if (pickOverride) {
-    reason = `YOUR PICK — last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
-  } else if (fellBack) {
-    reason = `Nothing fit your difficulty/time filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
-  } else {
-    reason = `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}) within your ${prefs.timeCapMinutes} min cap.`;
-  }
+  const reason = buildReason(picked, pickOverride, fellBack, prefs);
 
   return { recommendationId: picked.id, reason, poolIds, fellBack };
 }

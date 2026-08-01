@@ -7,36 +7,43 @@ import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
 import { usePreferences } from "../api/usePreferences";
 import { useRecentLogs } from "../api/useRecentLogs";
-import type { HeldResult, RecentLog } from "../api/useRecentLogs";
+import type { RecentLog } from "../api/useRecentLogs";
 import { estimateMinutes } from "../../domain/expand.js";
 import { suggest, suggestFreestyle } from "../../domain/suggest.js";
-import type { LibraryEntry } from "../../domain/suggest.js";
-import type { Baselines, Difficulty } from "../../domain/types.js";
+import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
+import type { Baselines } from "../../domain/types.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import TypeBadge from "../components/TypeBadge";
 
 const STALE_DRAFT_MS = 24 * 60 * 60 * 1000;
 
-// docs/design/README.md's glyph set (↻ ▲ ▼ ◀ ▶ − + × ✓ →). No prior screen
-// renders a held/under/over result (6C — logging — hasn't shipped a UI yet),
-// so this mapping is this task's own judgement call, not a reconciled
-// design decision: ✓ held the target, ▲ came in over it (slower — a higher
-// split number), ▼ came in under it (faster). UNVERIFIED — flag for design
-// review alongside the rest of the log-result UI in 6C.
-const HELD_GLYPH: Record<HeldResult, string> = {
-  held: "✓",
-  under: "▼",
-  over: "▲",
-};
+// docs/design/README.md:185's LAST THREE row format, literally: type badge +
+// title + "JUL 25 · HELD · 2/10" — a date (not days-ago), the plain word,
+// and the pain figure. The handoff's own "2/10" is its unmodified 1-10
+// scale; docs/design/DEVIATIONS.md's first row establishes Ergomatic's is
+// 1-5 everywhere else (PainBar, WorkoutDetail's "PAIN n/5", the library's
+// "PAIN ≤3" chip) — matching the handoff's literal "/10" here would
+// contradict that already-decided, already-documented scale, so this uses
+// "/5" like every other pain display in the app.
+const MONTH_ABBREV = [
+  "JAN",
+  "FEB",
+  "MAR",
+  "APR",
+  "MAY",
+  "JUN",
+  "JUL",
+  "AUG",
+  "SEP",
+  "OCT",
+  "NOV",
+  "DEC",
+];
 
-function daysAgoLabel(loggedAt: string): string {
-  const days = Math.max(
-    0,
-    Math.floor((Date.now() - new Date(loggedAt).getTime()) / 86_400_000),
-  );
-  // House phrasing (WorkoutRow.tsx's daysLabel): "ND AGO", uppercase mono.
-  return `${days}D AGO`;
+function formatLogDate(loggedAt: string): string {
+  const d = new Date(loggedAt);
+  return `${MONTH_ABBREV[d.getMonth()]} ${d.getDate()}`;
 }
 
 // Baselines unset (a brand-new account) means estimateMinutes cannot
@@ -45,10 +52,12 @@ function daysAgoLabel(loggedAt: string): string {
 // without a target preview), and suggest()/suggestFreestyle()'s time-cap
 // filter needs *some* estMinutes number per entry. Building estMinutes as 0
 // here means the cap filter never excludes an entry for having an
-// "unknowable" duration — 0 is <= any positive cap — which is the same
-// outcome as skipping the filter, without giving suggest.ts a second,
-// baselines-shaped code path. UNVERIFIED: a judgement call, not something
-// the brief or an existing caller pins down; flagged for review.
+// "unknowable" duration — 0 is <= any positive cap. The FILTER being
+// harmless this way isn't enough on its own, though: suggest.ts's default
+// reason text used to claim "within your N min cap" unconditionally, which
+// is untrue when every duration fed into it was a placeholder — fixed by
+// passing `durationsUnknown: true` in prefs below, which is domain/suggest.ts's
+// own job to honor (SuggestPrefs' own doc comment explains why).
 function toLibraryEntry(
   w: LibraryWorkout,
   baselines: Baselines | null,
@@ -149,9 +158,13 @@ export default function Today() {
         }
       : null;
 
-  const prefs: { difficulties: Difficulty[]; timeCapMinutes: number } = {
+  const prefs: SuggestPrefs = {
     difficulties: preferencesState.preferences.difficulties,
     timeCapMinutes: preferencesState.preferences.timeCapMinutes,
+    // See toLibraryEntry's comment: with no baselines, every entry's
+    // estMinutes is a 0 placeholder, so the reason text must not claim a
+    // cap was actually checked against a real duration.
+    durationsUnknown: baselines === null,
   };
 
   // key={} forces a fresh TodayView (and thus fresh pickOverride/shuffle
@@ -196,7 +209,7 @@ function TodayView({
 }: {
   library: LibraryWorkout[];
   baselines: Baselines | null;
-  prefs: { difficulties: Difficulty[]; timeCapMinutes: number };
+  prefs: SuggestPrefs;
   plan: PlanData;
   logs: RecentLog[];
 }) {
@@ -231,6 +244,11 @@ function TodayView({
       : suggestFreestyle(entries, prefs, pickOverride ?? undefined);
   const usesPlan = todayCode !== null;
 
+  // The `?? null` is defensive, not reachable from this call site: `entries`
+  // (fed to `suggest`/`suggestFreestyle`) is `library.map(toLibraryEntry)`,
+  // a 1:1 id-preserving mapping, so any `recommendationId` those functions
+  // return is provably one of `library`'s own ids. Kept rather than
+  // asserted away in case that invariant ever changes.
   const recommended = suggestion.recommendationId
     ? (library.find((w) => w.id === suggestion.recommendationId) ?? null)
     : null;
@@ -239,9 +257,17 @@ function TodayView({
 
   function handleShuffle() {
     const pool = suggestion.poolIds;
+    // Defensive, not reachable via the UI: SHUFFLE's own `disabled={!canShuffle}`
+    // (canShuffle = poolIds.length > 1) already keeps a click from firing
+    // this at all when the pool has 0 or 1 members.
     if (pool.length === 0) return;
+    // Defensive: suggest.ts's own invariant is poolIds.length > 0 iff
+    // recommendationId !== null (see `recommended`'s comment above), so
+    // past the guard above `recommendationId` is never actually null here.
     const currentId = suggestion.recommendationId ?? pool[0];
     const currentIndex = pool.indexOf(currentId);
+    // Defensive: the same invariant means `currentId` is always one of
+    // `pool`'s own members, so `indexOf` never actually returns -1 here.
     const nextIndex =
       currentIndex === -1 ? 0 : (currentIndex + 1) % pool.length;
     const nextId = pool[nextIndex];
@@ -328,8 +354,8 @@ function TodayView({
                 <TypeBadge type={log.workoutType} />
                 <span className="today-log-title">{log.workoutTitle}</span>
                 <span className="today-log-meta">
-                  {daysAgoLabel(log.loggedAt)} · {HELD_GLYPH[log.held]}{" "}
-                  {log.held.toUpperCase()}
+                  {formatLogDate(log.loggedAt)} · {log.held.toUpperCase()} ·{" "}
+                  {log.pain}/5
                 </span>
               </li>
             ))}

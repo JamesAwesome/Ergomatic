@@ -48,10 +48,6 @@ const DEFAULT_PREFS = {
   warmupMinutes: 10,
 };
 
-function daysAgoIso(days: number): string {
-  return new Date(Date.now() - days * 86_400_000).toISOString();
-}
-
 // 84-entry sequence with `code` at `doneN` and a filler code ("O2")
 // elsewhere — mirrors GET /api/plan's shape (server/routes/data.ts's
 // planResponse), just built by hand since this is a client-side fixture.
@@ -71,13 +67,18 @@ const PLAN_AT: PlanData = {
 
 const FREESTYLE_PLAN: PlanData = { planKey: null, doneN: 0, sequence: [] };
 
+// Fixed, absolute timestamps (noon UTC — comfortably clear of any local
+// timezone's date-rollover boundary) rather than "N days ago from now": the
+// row format under test is a literal calendar date ("JUL 25"), which has to
+// stay the same string on every run regardless of what day the suite
+// happens to execute.
 const LOGS: RecentLog[] = [
   {
     id: "log-1",
     workoutId: "w-isobar",
     workoutTitle: "Isobar",
     workoutType: "AT",
-    loggedAt: daysAgoIso(5),
+    loggedAt: "2026-07-25T12:00:00.000Z",
     held: "held",
     pain: 2,
   },
@@ -86,7 +87,7 @@ const LOGS: RecentLog[] = [
     workoutId: "w-zephyr",
     workoutTitle: "Zephyr",
     workoutType: "O2",
-    loggedAt: daysAgoIso(10),
+    loggedAt: "2026-07-20T12:00:00.000Z",
     held: "under",
     pain: 1,
   },
@@ -95,7 +96,7 @@ const LOGS: RecentLog[] = [
     workoutId: null,
     workoutTitle: "Deleted Workout",
     workoutType: "AN",
-    loggedAt: daysAgoIso(20),
+    loggedAt: "2026-07-10T12:00:00.000Z",
     held: "over",
     pain: 4,
   },
@@ -183,12 +184,20 @@ describe("Today (plan mode)", () => {
     expect(screen.getByText("34′")).toBeVisible();
   });
 
-  it("still renders the card, without a duration preview, when baselines are unset", async () => {
+  it("still renders the card, without a duration preview, when baselines are unset — and the reason never claims a cap that was never checked", async () => {
     mockReady({ baselines: NO_BASELINES });
     await renderToday();
     expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
     expect(screen.getByText("—")).toBeVisible();
-    expect(screen.getByText(/Least recently done/)).toBeVisible();
+    const reason = screen.getByText(/Least recently done/);
+    expect(reason).toBeVisible();
+    // Regression guard: every entry's estMinutes is a 0 placeholder with
+    // no baselines (toLibraryEntry), so no real duration was ever checked
+    // against the 60-min cap — the reason must not claim otherwise
+    // (domain/suggest.ts's `durationsUnknown` prefs flag, passed here via
+    // `baselines === null`).
+    expect(reason.textContent).not.toMatch(/cap/i);
+    expect(reason.textContent).not.toMatch(/60/);
   });
 
   it("links the suggestion card to the workout's detail page", async () => {
@@ -310,25 +319,32 @@ describe("Today (SHUFFLE)", () => {
 });
 
 describe("Today (LAST THREE)", () => {
-  it("renders title, days-ago, and a held/under/over glyph per log", async () => {
+  // docs/design/README.md:185's row format, literally: date (not
+  // days-ago) · the plain word (not a glyph) · pain, e.g. "JUL 25 · HELD ·
+  // 2/10" — "/5" here, not the handoff's literal "/10", because
+  // docs/design/DEVIATIONS.md's first row already establishes Ergomatic's
+  // pain scale is 1-5 everywhere else in the app (PainBar, WorkoutDetail,
+  // the library's "PAIN ≤3" chip); matching the handoff's "/10" verbatim
+  // would contradict that already-decided, already-documented deviation.
+  it("renders title, calendar date, the held/under/over word, and pain /5 per log", async () => {
     mockReady();
     await renderToday();
 
     const section = screen.getByText("LAST THREE").closest("section")!;
     expect(within(section).getByText("Isobar")).toBeVisible();
-    expect(within(section).getByText(/5D AGO/)).toBeVisible();
-    expect(within(section).getByText(/✓/)).toBeVisible();
+    expect(within(section).getByText(/JUL 25/)).toBeVisible();
     expect(within(section).getByText(/HELD/)).toBeVisible();
+    expect(within(section).getByText(/2\/5/)).toBeVisible();
 
     expect(within(section).getByText("Zephyr")).toBeVisible();
-    expect(within(section).getByText(/10D AGO/)).toBeVisible();
-    expect(within(section).getByText(/▼/)).toBeVisible();
+    expect(within(section).getByText(/JUL 20/)).toBeVisible();
     expect(within(section).getByText(/UNDER/)).toBeVisible();
+    expect(within(section).getByText(/1\/5/)).toBeVisible();
 
     expect(within(section).getByText("Deleted Workout")).toBeVisible();
-    expect(within(section).getByText(/20D AGO/)).toBeVisible();
-    expect(within(section).getByText(/▲/)).toBeVisible();
+    expect(within(section).getByText(/JUL 10/)).toBeVisible();
     expect(within(section).getByText(/OVER/)).toBeVisible();
+    expect(within(section).getByText(/4\/5/)).toBeVisible();
   });
 
   it("shows an empty message when nothing has been logged yet", async () => {
