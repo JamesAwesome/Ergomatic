@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { suggest } from "./suggest.js";
+import { suggest, suggestFreestyle } from "./suggest.js";
 
 const w = (id: string, over: object = {}) => ({
   id,
@@ -88,5 +88,83 @@ describe("suggest", () => {
       library: [w("at")],
     });
     expect(r.recommendationId).toBeNull();
+  });
+});
+
+describe("suggestFreestyle", () => {
+  it("picks the least recently done across the whole library, types mixed; never-done outranks all", () => {
+    const r = suggestFreestyle(
+      [
+        w("a", { type: "AT", lastDoneDaysAgo: 3 }),
+        w("b", { type: "O2", lastDoneDaysAgo: 40 }),
+        w("c", { type: "TR", lastDoneDaysAgo: null }),
+      ],
+      { ...prefs, difficulties: [...prefs.difficulties] },
+    );
+    expect(r.recommendationId).toBe("c");
+    expect(r.poolIds).toStrictEqual(["c", "b", "a"]);
+    expect(r.fellBack).toBe(false);
+  });
+
+  it("filters by difficulty prefs and time cap, independent of type", () => {
+    const r = suggestFreestyle(
+      [
+        w("slow", { estMinutes: 90, difficulty: "easy" }),
+        w("hard", { difficulty: "hard" }),
+        w("fit", { difficulty: "easy", estMinutes: 30 }),
+      ],
+      { difficulties: ["easy"], timeCapMinutes: 40 },
+    );
+    expect(r.poolIds).toStrictEqual(["fit"]);
+  });
+
+  it("falls back to the unfiltered library when filters match nothing", () => {
+    const r = suggestFreestyle(
+      [w("only", { difficulty: "hard", estMinutes: 55, lastDoneDaysAgo: 33 })],
+      { difficulties: ["easy"], timeCapMinutes: 20 },
+    );
+    expect(r.fellBack).toBe(true);
+    expect(r.recommendationId).toBe("only");
+    expect(r.reason).toMatch(/closest match/i);
+  });
+
+  it("honors todayPick when present in the pool, with YOUR PICK reason", () => {
+    const r = suggestFreestyle(
+      [w("a", { lastDoneDaysAgo: null }), w("b")],
+      { ...prefs, difficulties: [...prefs.difficulties] },
+      "b",
+    );
+    expect(r.recommendationId).toBe("b");
+    expect(r.reason).toMatch(/your pick/i);
+  });
+
+  it("ignores todayPick when absent from the pool", () => {
+    const r = suggestFreestyle(
+      [w("a", { lastDoneDaysAgo: null }), w("b", { lastDoneDaysAgo: 5 })],
+      { ...prefs, difficulties: [...prefs.difficulties] },
+      "not-in-pool",
+    );
+    expect(r.recommendationId).toBe("a");
+    expect(r.reason).not.toMatch(/your pick/i);
+  });
+
+  it("includes recency and cap in the standard reason", () => {
+    const r = suggestFreestyle([w("a", { lastDoneDaysAgo: 33 })], {
+      ...prefs,
+      difficulties: [...prefs.difficulties],
+    });
+    expect(r.reason).toMatch(/33 days ago/);
+    expect(r.reason).toMatch(/60/);
+  });
+
+  it("returns null recommendation with a showable reason for an empty library", () => {
+    const r = suggestFreestyle([], {
+      ...prefs,
+      difficulties: [...prefs.difficulties],
+    });
+    expect(r.recommendationId).toBeNull();
+    expect(r.poolIds).toStrictEqual([]);
+    expect(r.fellBack).toBe(false);
+    expect(r.reason.length).toBeGreaterThan(0);
   });
 });

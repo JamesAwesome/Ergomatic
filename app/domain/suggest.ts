@@ -81,3 +81,48 @@ export function suggest(input: SuggestInput): Suggestion {
 
   return { recommendationId: picked.id, reason, poolIds, fellBack };
 }
+
+/** Freestyle mode: no plan is active, so the pool is the whole library
+ *  (no type filter) rather than a single plan-code type. Ordering and
+ *  fellBack semantics otherwise mirror `suggest` exactly (see `:54`). */
+export function suggestFreestyle(
+  library: LibraryEntry[],
+  prefs: { difficulties: Difficulty[]; timeCapMinutes: number },
+  todayPickId?: string,
+): Suggestion {
+  const filtered = library.filter(
+    (e) =>
+      prefs.difficulties.includes(e.difficulty) &&
+      e.estMinutes <= prefs.timeCapMinutes,
+  );
+
+  const fellBack = library.length > 0 && filtered.length === 0;
+  const pool = fellBack ? library : filtered;
+  const sorted = [...pool].sort(byLeastRecentlyDone);
+  const poolIds = sorted.map((e) => e.id);
+
+  if (sorted.length === 0) {
+    return {
+      recommendationId: null,
+      reason: "Your library is empty — add a workout to get suggestions.",
+      poolIds: [],
+      fellBack: false,
+    };
+  }
+
+  const pickOverride = todayPickId
+    ? sorted.find((e) => e.id === todayPickId)
+    : undefined;
+  const picked = pickOverride ?? sorted[0];
+
+  let reason: string;
+  if (pickOverride) {
+    reason = `YOUR PICK — last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+  } else if (fellBack) {
+    reason = `Nothing fit your difficulty/time filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+  } else {
+    reason = `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}) within your ${prefs.timeCapMinutes} min cap.`;
+  }
+
+  return { recommendationId: picked.id, reason, poolIds, fellBack };
+}
