@@ -89,6 +89,39 @@ describe("suggest", () => {
     });
     expect(r.recommendationId).toBeNull();
   });
+
+  it("omits any cap claim from the standard reason when durationsUnknown is set", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        durationsUnknown: true,
+      },
+      library: [w("a", { lastDoneDaysAgo: 33 })],
+    });
+    expect(r.reason).toMatch(/33 days ago/);
+    expect(r.reason).not.toMatch(/cap/i);
+    expect(r.reason).not.toMatch(/60/);
+  });
+
+  it("omits 'time' from the fellback reason when durationsUnknown is set (only difficulty was actually checked)", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: {
+        difficulties: ["easy"],
+        timeCapMinutes: 20,
+        durationsUnknown: true,
+      },
+      library: [
+        w("only", { difficulty: "hard", estMinutes: 0, lastDoneDaysAgo: 33 }),
+      ],
+    });
+    expect(r.fellBack).toBe(true);
+    expect(r.reason).toMatch(/closest match/i);
+    expect(r.reason).toMatch(/difficulty filters/i);
+    expect(r.reason).not.toMatch(/time/i);
+  });
 });
 
 describe("suggestFreestyle", () => {
@@ -166,5 +199,27 @@ describe("suggestFreestyle", () => {
     expect(r.poolIds).toStrictEqual([]);
     expect(r.fellBack).toBe(false);
     expect(r.reason.length).toBeGreaterThan(0);
+  });
+
+  it("omits any cap claim from the standard reason when durationsUnknown is set", () => {
+    const r = suggestFreestyle([w("a", { lastDoneDaysAgo: 33 })], {
+      ...prefs,
+      difficulties: [...prefs.difficulties],
+      durationsUnknown: true,
+    });
+    expect(r.reason).toMatch(/33 days ago/);
+    expect(r.reason).not.toMatch(/cap/i);
+    expect(r.reason).not.toMatch(/60/);
+  });
+
+  it("omits 'time' from the fellback reason when durationsUnknown is set (only difficulty was actually checked)", () => {
+    const r = suggestFreestyle(
+      [w("only", { difficulty: "hard", estMinutes: 0, lastDoneDaysAgo: 33 })],
+      { difficulties: ["easy"], timeCapMinutes: 20, durationsUnknown: true },
+    );
+    expect(r.fellBack).toBe(true);
+    expect(r.reason).toMatch(/closest match/i);
+    expect(r.reason).toMatch(/difficulty filters/i);
+    expect(r.reason).not.toMatch(/time/i);
   });
 });
