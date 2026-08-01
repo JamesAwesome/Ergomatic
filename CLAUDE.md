@@ -48,7 +48,27 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   lint error gets blocked) before relying on them — a phase already lost a
   review round when root-only install left `.husky/_` missing, `core.hooksPath`
   pointed at nothing, and git silently skipped every hook, letting a commit
-  land that broke both typecheck and lint.
+  land that broke both typecheck and lint. **Every subagent reads
+  `.claude/agent-briefing.md` before its task brief** — the standing rules
+  live there, not in per-dispatch boilerplate. **Phase teardown checks
+  `git status` on the main checkout** before removing the worktree; stray
+  writes there have happened four times and are only cheap to fix while the
+  branch still exists.
+- **Fast path (James-approved, 2026-08-01):** a change may skip the
+  subagent implement/review cycle when ALL hold: no `app/domain/` or
+  `app/server/` code, no stored-data shape, no auth; roughly one file of
+  product code (tests/CSS/docs don't count against it); and the failure
+  mode if wrong is cosmetic or test-only. Fast-path changes still get a
+  worktree, failing-test-first, self-mutation, the scoped gates, and a PR —
+  Claude implements inline and **James is the reviewer**, with the PR
+  carrying screenshots and a one-paragraph risk note ("what I'd have asked
+  a reviewer to probe"). Anything that surprises mid-change escalates to
+  the full cycle, stated in the PR. A fast-path change that ships a bug
+  sends the next change of its kind back to the full cycle.
+- **Mid-phase requests batch to the phase's close-out task** (or the fast
+  path after merge) instead of resuming a live agent — one review instead
+  of several resumed contexts. Exception: anything that invalidates
+  in-flight work interrupts immediately.
 - **Native-first:** the iOS app is the primary surface; design decisions
   favor it. The web build is the same code serving as test harness
   (Playwright/design/screenshots), dev loop, and fallback — never dropped,
