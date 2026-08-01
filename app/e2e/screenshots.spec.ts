@@ -69,6 +69,86 @@ async function neutralizeFixedTabBarForFullPageCapture(
   });
 }
 
+/** Activates a preset plan via the real `PUT /api/plan` route — same
+ *  in-page-fetch idiom as `setBaselines` above, duplicated from
+ *  `e2e/design.spec.ts`'s own `choosePlan` rather than shared (this
+ *  codebase's established precedent for small per-file e2e helpers). */
+async function choosePlan(
+  page: Page,
+  planKey: "sprint" | "head",
+): Promise<void> {
+  const result = await page.evaluate(async (key) => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planKey: key }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, planKey);
+  if (!result.ok) {
+    throw new Error(`plan setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Zeroes `doneN` via `PUT /api/plan {reset:true}` (keeps the already-set
+ *  planKey — see planState.ts's own `reset`). Needed because `stores/
+ *  logs.ts`'s `create` bumps `plan_state.done_n` on every logged session,
+ *  and this file's screenshot accounts are fixed emails re-used on every
+ *  `pnpm screenshots` run — without this, "SESSION N OF 84" would drift a
+ *  little further every time the script reruns instead of landing on a
+ *  stable, reviewable "SESSION 1 OF 84". Duplicated from `e2e/
+ *  design.spec.ts`'s identical helper, added there for the same reason. */
+async function resetPlanProgress(page: Page): Promise<void> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reset: true }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(`plan reset failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Seeds `count` real logs via `POST /api/logs` so Today's LAST THREE
+ *  renders its populated layout, not the "No sessions logged yet." empty
+ *  state — duplicated from `e2e/design.spec.ts`'s identical helper. */
+async function seedLogs(page: Page, count: number): Promise<void> {
+  const result = await page.evaluate(async (n) => {
+    for (let i = 0; i < n; i++) {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: `Screenshot Session ${i + 1}`,
+          workoutType: "AT",
+          held: i % 2 === 0 ? "held" : "under",
+          pain: 2,
+          notes: null,
+          steps: [
+            {
+              label: "Work",
+              targetSplit: 120,
+              actualSplit: 121,
+              actualSource: "stopwatch",
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        return { ok: false, status: res.status, body: await res.text() };
+      }
+    }
+    return { ok: true, status: 200, body: "" };
+  }, count);
+  if (!result.ok) {
+    throw new Error(`log seed failed: ${result.status} ${result.body}`);
+  }
+}
+
 test("signin", async ({ page }) => {
   await page.goto("/");
   // The only capture here that didn't wait for content, and it eventually
@@ -83,19 +163,54 @@ test("signin", async ({ page }) => {
   });
 });
 
-test("signed-in-home", async ({ page }) => {
+// Replaces the old "signed-in-home" capture (Phase 6A Task 5): "/" has
+// redirected to "/today" since Task 2, so a bare post-sign-in screenshot and
+// a dedicated Today screenshot were always going to be the same route —
+// keeping both would just be two images of one screen, one of them a stale,
+// undersetup duplicate of the other (the same "one capture already subsumes
+// the other" reasoning "workout-detail" used to retire its own predecessor
+// below). The committed `signed-in-home.png` was additionally already stale
+// two ways by the time this task started: it pre-dated the "/" -> "/today"
+// flip entirely (still showed the old Library screen), and the one time it
+// was regenerated (Task 4, sanity-checking an unrelated change) it raced
+// Today's five concurrent data hooks and caught a bare "LOADING…" frame —
+// the exact "wait for a real element, not just navigation" lesson `signin`
+// above already carries a scar for. This capture seeds a plan and real
+// history first specifically so it never reduces to that empty/loading
+// state again.
+test("today", async ({ page }) => {
   await signInViaBackdoor(page, {
-    email: "screenshots@e2e.test",
+    email: "screenshots-today@e2e.test",
     name: "Screenshot Tester",
   });
-  // "/" redirects to /today (AppRoutes, Phase 6A Task 2 — was /library) —
-  // same load race as the dedicated "library" screenshot below. This
-  // capture's own layout still moves once Task 3 (Plan) and Task 5
-  // (screenshot close-out) land; recapturing with real plan/log data is
-  // Task 5's job, not this one's.
-  await page.getByRole("heading", { name: "Today" }).waitFor();
+  await setBaselines(page);
+  await seedLogs(page, 3);
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await page.goto("/today");
+  // Today shows "LOADING…" until all five of its data hooks resolve — wait
+  // for the suggested-workout card itself before shooting.
+  await page.locator(".today-card").waitFor();
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "signed-in-home.png"),
+    path: path.join(SCREENSHOTS_DIR, "today.png"),
+  });
+});
+
+test("plan", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-plan@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await page.goto("/plan");
+  // With no plan chosen, /plan renders two preset cards instead — a
+  // different, already-reachable layout. Wait for the real 84-row sequence,
+  // the state this capture exists to show.
+  await page.locator(".plan-sequence").waitFor();
+  await expect(page.locator(".plan-row")).toHaveCount(84);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "plan.png"),
   });
 });
 
@@ -210,6 +325,57 @@ test("workout-detail", async ({ page }) => {
   await expect(page.getByText("ALL OUT")).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "workout-detail.png"),
+  });
+
+  await cleanupByTitle(page, title);
+});
+
+// Confirm targets (Phase 6A Task 4/5): a personal workout authored via bulk
+// import (the only way to land a standalone REST row and a reps marker in
+// the same workout — `+ REST`/`+ WARM-UP` aren't authorable from a blank
+// create-mode builder, per docs/design/DEVIATIONS.md's "+ ADD ROW" row) so
+// the committed capture shows every step-row shape Confirm targets renders:
+// WARM-UP (DUR only), REPEAT xN (REPS stepper, no remove/restore — the
+// binding decision from Task 1's review), a work row (DUR + SPM + resolved
+// TARGET + nudges), and a standalone REST row (DUR only) — plus one row
+// struck, so the removed-row treatment (sunken background, struck label)
+// is part of the visual record too, not just the "everything present"
+// state "confirm" would otherwise only ever show.
+test("confirm", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-confirm@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+
+  const title = "Screenshot Confirm Workout";
+  await page.goto("/library/import");
+  const text = [
+    `${title} | AT | medium | 3`,
+    "wu 5",
+    "x3",
+    "w 1' 6k @22",
+    "r 2",
+  ].join("\n");
+  await page.getByLabel("Bulk import text").fill(text);
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/session\/confirm$/);
+  await page.locator(".confirm-recount").waitFor();
+
+  // Strike the REST row (Row 4: wu, reps marker, w, r) — the ordinary
+  // removed-row case, distinct from the marker row's own no-remove-control
+  // treatment covered by the design sweep instead of a screenshot.
+  await page.getByRole("button", { name: "Remove Row 4" }).click();
+  await expect(
+    page.getByRole("button", { name: "Restore Row 4" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "confirm.png"),
   });
 
   await cleanupByTitle(page, title);
