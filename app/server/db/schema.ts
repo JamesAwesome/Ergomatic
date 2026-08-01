@@ -66,8 +66,6 @@ export const workouts = pgTable(
     // boot and shared read-only across every user (Task 9's global-library
     // amendment). A non-null value is an ordinary personal row.
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
-    // Retired 2026-07-30 (Phase 5C): superseded by sortOrder. Nullable and no longer written; DROP COLUMN lands in Phase 6 so the deploy rollback path keeps working.
-    num: integer("num"),
     sortOrder: integer("sort_order"),
     title: text("title").notNull(),
     type: workoutTypeEnum("type").notNull(),

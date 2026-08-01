@@ -58,7 +58,6 @@ describe("domain schema against real Postgres", () => {
     await expect(
       db.insert(workouts).values({
         userId: u.id,
-        num: 1,
         title: "Bad pain",
         type: "AN",
         difficulty: "easy",
@@ -151,7 +150,6 @@ describe("domain schema against real Postgres", () => {
       .insert(workouts)
       .values({
         userId: u.id,
-        num: 1,
         title: "Cascade workout",
         type: "AN",
         difficulty: "easy",
@@ -214,7 +212,6 @@ describe("domain schema against real Postgres", () => {
       .insert(workouts)
       .values({
         userId: u.id,
-        num: 1,
         title: "To be deleted",
         type: "O2",
         difficulty: "medium",
