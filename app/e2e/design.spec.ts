@@ -166,6 +166,26 @@ test.describe("library screen", () => {
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(allChipBg).toBe("rgb(181, 52, 31)"); // --accent
   });
+
+  // iOS device report, 2026-08-01: long-pressing a filter chip or a
+  // workout row popped the text-selection callout (Copy/Look Up/
+  // Translate) — WKWebView treats button/link text as selectable unless
+  // told otherwise. Chromium can only assert the computed style; the
+  // callout behaviour itself is verified on device (see index.css).
+  test("the filter chip and workout row resist the iOS text-selection callout", async ({
+    page,
+  }) => {
+    const chipSelect = await page
+      .getByRole("button", { name: "ALL", exact: true })
+      .evaluate((el) => getComputedStyle(el).userSelect);
+    expect(chipSelect).toBe("none");
+
+    const rowSelect = await page
+      .locator(".workout-row")
+      .first()
+      .evaluate((el) => getComputedStyle(el).userSelect);
+    expect(rowSelect).toBe("none");
+  });
 });
 
 test.describe("workout detail screen", () => {
@@ -371,6 +391,25 @@ test.describe("builder screen", () => {
     expect(afterDifficulty?.y).toBe(beforeDifficulty?.y);
   });
 
+  // Same iOS device report as the library screen's callout test: a typed
+  // field must stay selectable (copy/paste a workout title) even though
+  // the surrounding chips and steppers must not pop the callout.
+  test("the Title field stays text-selectable while a stepper button resists the iOS callout", async ({
+    page,
+  }) => {
+    const titleSelect = await page
+      .getByLabel("Title")
+      .evaluate((el) => getComputedStyle(el).userSelect);
+    expect(titleSelect).not.toBe("none");
+
+    // REPEAT's stepper is present on every fresh builder screen (Builder.tsx's
+    // builder-repeat-card), no extra setup needed.
+    const stepperSelect = await page
+      .getByRole("button", { name: "Repeat up" })
+      .evaluate((el) => getComputedStyle(el).userSelect);
+    expect(stepperSelect).toBe("none");
+  });
+
   // A prior review (5B) only ever swept the builder blank — never after a
   // failed Save exposes its error-state markup (role=alert banners,
   // aria-invalid/aria-describedby on the first bad field, inline field-error
@@ -455,6 +494,26 @@ test.describe("builder screen", () => {
         .locator(".step-editor")
         .evaluate((el) => getComputedStyle(el).borderLeftColor);
       expect(expandedMarker).toBe("rgb(42, 98, 117)"); // --type-o2
+    });
+
+    // Same iOS device report: the collapsed card's EDIT control is a
+    // frequent long-press target (it's the whole card's stated affordance),
+    // while the still-expanded row's typed SPM field must not lose text
+    // selection to the same rule (`.stepper-value` only ever targets the
+    // non-editable `<span>` variant — `.stepper-value-input` stays out of
+    // the selector list on purpose).
+    test("the collapsed card's EDIT control resists the callout; the expanded row's SPM field stays selectable", async ({
+      page,
+    }) => {
+      const editSelect = await page
+        .locator(".step-card-edit")
+        .evaluate((el) => getComputedStyle(el).userSelect);
+      expect(editSelect).toBe("none");
+
+      const spmSelect = await page
+        .getByLabel("Row 2 stroke rate value")
+        .evaluate((el) => getComputedStyle(el).userSelect);
+      expect(spmSelect).not.toBe("none");
     });
   });
 

@@ -17,6 +17,42 @@
   border: 0;
 }
 
+/* iOS: long-pressing a control must not pop the text-selection callout
+   (Copy/Look Up/Translate) — WKWebView otherwise treats button/link text
+   as selectable (device report, 2026-08-01). Inputs/textareas are
+   deliberately NOT covered: typed text must stay selectable — this is why
+   `.stepper-value` is qualified as `span.stepper-value` below rather than
+   left bare: Stepper.tsx's typable value cell carries BOTH
+   "stepper-value" and "stepper-value-input"/ClockInput's "clock-input" on
+   the same <input>, so an unqualified `.stepper-value` would have caught
+   the typed variant too. Chromium can only assert the computed style; the
+   callout behaviour itself is verified on device by James, post-merge.
+   `.workout-row`/`.back-link`/`.library-import`/`.library-new`/`.tab` are
+   `<Link>`/`<NavLink>` anchors, not <button>s, so the bare `button`
+   selector below doesn't reach them; `.button-primary`/`.button-outline`
+   are shared between real <button>s (already covered) and the anchor-
+   styled sign-in/Edit links (auth.tsx, WorkoutDetail.tsx), which aren't.
+   Left deliberately selectable: plain inline text hyperlinks (e.g.
+   StepEditor.tsx/StepRow.tsx's "Set baselines") — those read as ordinary
+   body-copy links, not chrome controls, and a copy/look-up callout on
+   link text is normal iOS behaviour there. */
+button,
+[role="radio"],
+.chip,
+.workout-row,
+span.stepper-value,
+.pace-ref-display,
+.back-link,
+.library-import,
+.library-new,
+.button-primary,
+.button-outline,
+.tab {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 body {
   background: var(--page);
   color: var(--ink);
