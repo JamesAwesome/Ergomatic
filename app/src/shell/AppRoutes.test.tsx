@@ -15,6 +15,9 @@ vi.mock("../builder/BulkImport", () => ({
 vi.mock("../workout/WorkoutDetail", () => ({
   default: () => <h1>Detail</h1>,
 }));
+vi.mock("../plan/Plan", () => ({
+  default: () => <h1>Plan</h1>,
+}));
 
 describe("AppRoutes", () => {
   // NOT a proof of declaration order: react-router-dom 7.18.2 ranks a
@@ -67,10 +70,23 @@ describe("AppRoutes", () => {
 
   it("names the phase that will fill a placeholder tab", () => {
     render(
-      <MemoryRouter initialEntries={["/plan"]}>
+      <MemoryRouter initialEntries={["/trend"]}>
         <AppRoutes />
       </MemoryRouter>,
     );
     expect(screen.getByText(/Phase 8/)).toBeVisible();
+  });
+
+  // Task 3 (6A) replaces the /plan placeholder with the real Plan screen —
+  // regression guard that the route wiring still points there (Today's own
+  // "choose a plan" link, from Task 2, targets the same path).
+  it("routes /plan to the real Plan screen, not a placeholder", async () => {
+    render(
+      <MemoryRouter initialEntries={["/plan"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Plan" })).toBeVisible();
+    expect(screen.queryByText(/Phase 8/)).not.toBeInTheDocument();
   });
 });

@@ -1,0 +1,286 @@
+import { useState } from "react";
+import { PLANS } from "../../domain/plans.js";
+import type { PlanCode } from "../../domain/plans.js";
+import { usePlan } from "../api/usePlan";
+import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
+
+const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
+
+// One-liners: not in domain/plans.ts (that file only carries title/sessions),
+// so these paraphrase each preset's own philosophy comment block there
+// (sprint: "O2-forward ... speed is sharpened on top of it"; head: "O2
+// alone is nearly half the plan").
+const PLAN_BLURBS: Record<PlanKey, string> = {
+  sprint: "2k prep — an O2 base with speed sharpened on top.",
+  head: "Long-course prep — the biggest aerobic engine wins.",
+};
+
+// TypeBadge (src/components/TypeBadge.tsx) only maps WorkoutType, not the
+// "TEST" checkpoint code plans.ts also emits (PlanCode = WorkoutType |
+// "TEST") — a local map + tiny badge reusing the same `.type-badge` class
+// avoids widening that shared component's prop type for one screen.
+const CODE_COLOR_VAR: Record<PlanCode, string> = {
+  O2: "--type-o2",
+  AT: "--type-at",
+  AN: "--type-an",
+  TR: "--type-tr",
+  TEST: "--type-test",
+};
+
+function CodeBadge({ code }: { code: PlanCode }) {
+  return (
+    <span
+      className="type-badge"
+      style={{ background: `var(${CODE_COLOR_VAR[code]})` }}
+    >
+      {code}
+    </span>
+  );
+}
+
+const STATUS_GLYPH: Record<PlanSequenceItem["status"], string> = {
+  done: "✓", // ✓
+  today: "▶", // ▶
+  upcoming: "",
+};
+
+export default function Plan() {
+  const planState = usePlan();
+
+  if (planState.state === "loading") {
+    return (
+      <main className="screen">
+        <h1 className="screen-title">Plan</h1>
+        <p className="mono-status">LOADING…</p>
+      </main>
+    );
+  }
+
+  if (planState.state === "error") {
+    return (
+      <main className="screen">
+        <h1 className="screen-title">Plan</h1>
+        <p className="mono-status">Couldn't load your plan.</p>
+        <button
+          type="button"
+          className="button-outline"
+          onClick={planState.retry}
+        >
+          Retry
+        </button>
+      </main>
+    );
+  }
+
+  return (
+    <PlanView
+      plan={planState.plan}
+      choose={planState.choose}
+      reset={planState.reset}
+    />
+  );
+}
+
+type PendingAction = "reset" | "switch" | null;
+
+function PlanView({
+  plan,
+  choose,
+  reset,
+}: {
+  plan: PlanData;
+  choose: (planKey: PlanKey) => Promise<void>;
+  reset: () => Promise<void>;
+}) {
+  const [pending, setPending] = useState<PendingAction>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function cancel() {
+    setPending(null);
+    setError(null);
+  }
+
+  // No active plan: choosing a preset is a single tap — no staged confirm,
+  // since there is no existing progress to lose (spec: "choosing with no
+  // active plan = single tap"). Returns whether it succeeded so handleSwitch
+  // (below) can decide whether the confirm panel should close.
+  async function handleChoose(key: PlanKey): Promise<boolean> {
+    setError(null);
+    setBusy(true);
+    try {
+      await choose(key);
+      return true;
+    } catch {
+      setError("Couldn't start that plan. Try again.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReset() {
+    setError(null);
+    setBusy(true);
+    try {
+      await reset();
+      setPending(null);
+    } catch {
+      setError("Couldn't reset your plan. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Switching is a destructive choose (it zeroes doneN, same as reset) —
+  // only close the confirm panel on success, so a failed switch leaves the
+  // panel (and its error) up rather than silently reverting to the header.
+  async function handleSwitch(key: PlanKey) {
+    const ok = await handleChoose(key);
+    if (ok) setPending(null);
+  }
+
+  if (plan.planKey === null) {
+    return (
+      <main className="screen">
+        <h1 className="screen-title">Plan</h1>
+        <p className="plan-intro">
+          Pick a plan and Today will suggest from it every day.
+        </p>
+        <div className="plan-presets">
+          {PLAN_KEYS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              className="plan-preset-card"
+              onClick={() => handleChoose(key)}
+              disabled={busy}
+            >
+              <h2 className="plan-preset-title">{PLANS[key].title}</h2>
+              <p className="plan-preset-blurb">{PLAN_BLURBS[key]}</p>
+              <p className="plan-preset-count mono-status">
+                {PLANS[key].sessions.length} SESSIONS
+              </p>
+            </button>
+          ))}
+        </div>
+        {error && (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        )}
+      </main>
+    );
+  }
+
+  const activePreset = PLANS[plan.planKey];
+  const otherKey: PlanKey = plan.planKey === "sprint" ? "head" : "sprint";
+  const otherPreset = PLANS[otherKey];
+
+  return (
+    <main className="screen">
+      <h1 className="screen-title">Plan</h1>
+      <div className="plan-active-header">
+        <div>
+          <p className="plan-active-title">{activePreset.title}</p>
+          <p className="mono-status">
+            SESSION {plan.doneN + 1} OF {plan.sequence.length}
+          </p>
+        </div>
+        {pending === null && (
+          <div className="plan-active-actions">
+            <button
+              type="button"
+              className="button-outline"
+              onClick={() => setPending("reset")}
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              className="button-outline"
+              onClick={() => setPending("switch")}
+            >
+              Switch
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Staged-confirm idiom (src/you/BaselineEditor.tsx, also
+          WorkoutDetail.tsx's delete): the destructive action never fires on
+          the first press, and the copy names the exact consequence. */}
+      {pending === "reset" && (
+        <div className="baseline-confirm">
+          <p className="baseline-confirm-line">
+            This resets your progress — session 1 becomes today.
+          </p>
+          {error && <p className="baseline-error">{error}</p>}
+          <div className="baseline-actions">
+            <button
+              type="button"
+              className="button-outline"
+              onClick={cancel}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button-primary"
+              onClick={handleReset}
+              disabled={busy}
+            >
+              Reset progress
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pending === "switch" && (
+        <div className="baseline-confirm">
+          <p className="baseline-confirm-line">
+            Switching to {otherPreset.title} resets your progress — session 1
+            becomes today.
+          </p>
+          {error && <p className="baseline-error">{error}</p>}
+          <div className="baseline-actions">
+            <button
+              type="button"
+              className="button-outline"
+              onClick={cancel}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="button-primary"
+              onClick={() => handleSwitch(otherKey)}
+              disabled={busy}
+            >
+              Switch to {otherPreset.title}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ul className="plan-sequence">
+        {plan.sequence.map((item) => (
+          <li
+            key={item.index}
+            className={`plan-row plan-row-${item.status}`}
+            aria-current={item.status === "today" ? "step" : undefined}
+          >
+            <span className="plan-row-index mono-status">{item.index + 1}</span>
+            <CodeBadge code={item.code} />
+            <span className="plan-row-status" aria-hidden="true">
+              {STATUS_GLYPH[item.status]}
+            </span>
+            <span className="visually-hidden">{item.status}</span>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
