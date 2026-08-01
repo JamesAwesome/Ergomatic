@@ -49,6 +49,7 @@ function defaultValidRow(): BuilderRow {
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
+    refEffort: null,
     spm: "",
     rest: "",
   };
@@ -66,6 +67,7 @@ function workRow(id: string): BuilderRow {
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
+    refEffort: null,
     spm: "",
     rest: "",
   };
@@ -85,6 +87,7 @@ function wuRow(id: string, minutes: string): BuilderRow {
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
+    refEffort: null,
     spm: "",
     rest: "",
   };
@@ -98,6 +101,7 @@ function restRow(id: string, minutes: string): BuilderRow {
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
+    refEffort: null,
     spm: "",
     rest: "",
   };
@@ -231,6 +235,7 @@ describe("toSteps", () => {
           durUnit: "min",
           refBase: "6k",
           refOff: -2,
+          refEffort: null,
           spm: "22",
           rest: "",
         },
@@ -260,6 +265,7 @@ describe("toSteps", () => {
           durUnit: "min",
           refBase: "6k",
           refOff: -2,
+          refEffort: null,
           spm: "22",
           rest: "",
         },
@@ -1283,6 +1289,122 @@ describe("summaries", () => {
   it("gives a wu/r row nothing to add on the sub-summary line — no fabricated spm/rest", () => {
     expect(stepSubSummary(wuRow("wu1", "10"))).toBe("");
     expect(stepSubSummary(restRow("r1", "5"))).toBe("");
+  });
+});
+
+describe("effort refs in rows", () => {
+  it("round-trips an effort step", () => {
+    const form = fromWorkout({
+      title: "Sprints",
+      type: "AN",
+      difficulty: "hard",
+      pain: 5,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 0.5 },
+          ref: { effort: "max" },
+          spm: 32,
+        },
+      ],
+    });
+    expect(form.rows[0]).toMatchObject({ refEffort: "max" });
+    const res = toSteps(form);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.steps[0]).toMatchObject({ ref: { effort: "max" }, spm: 32 });
+  });
+
+  it("preserves the split offset across a chip round trip", () => {
+    let row = {
+      ...newRow("w"),
+      durValue: "1:00",
+      refBase: "6k" as const,
+      refOff: -2,
+    };
+    row = { ...row, refEffort: "max" }; // user taps MAX
+    expect(row.refOff).toBe(-2); // still held
+    row = { ...row, refEffort: null }; // user taps 6K again
+    const res = toSteps({ ...newForm(), title: "T", pain: 3, rows: [row] });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.steps[0]).toMatchObject({ ref: { base: "6k", off: -2 } });
+  });
+
+  it("summarises with the chip word", () => {
+    const row = { ...newRow("w"), durValue: "0:30", refEffort: "max" as const };
+    expect(stepSummary(row)).toBe("0:30 @ MAX");
+  });
+
+  it("emits no offset key for an effort", () => {
+    const row = {
+      ...newRow("w"),
+      durValue: "0:30",
+      refEffort: "min" as const,
+      refOff: 7,
+    };
+    const res = toSteps({ ...newForm(), title: "T", pain: 3, rows: [row] });
+    if (!res.ok) throw new Error("expected ok");
+    expect(res.steps[0]).toMatchObject({ ref: { effort: "min" } });
+    expect((res.steps[0] as { ref: object }).ref).not.toHaveProperty("off");
+  });
+
+  // A distance row pinned to MAX/MIN still needs to contribute a number to
+  // the live total — rowMinutes' distance branch used to call
+  // `resolveSplit`, which THROWS on an effort ref (Task 1's contract: it's
+  // split-only). `estimationSplit` is the non-throwing stand-in Task 1 built
+  // for exactly this "preview a number, not a real prescription" case.
+  it("still totals a distance-at-MAX row instead of throwing (rowMinutes' resolveSplit -> estimationSplit switch)", () => {
+    const f = formWith({
+      rows: [
+        {
+          ...defaultValidRow(),
+          durValue: "2000",
+          durUnit: "m",
+          refEffort: "max",
+        },
+      ],
+    });
+    // 2000m at MAX (k2Seconds=112s/500m) -> 4 * 112s = 448s = 7.4667 min.
+    const t = totals(f, baselines);
+    expect(t).not.toBeNull();
+    expect(t!.total).toBeCloseTo(7.4667, 3);
+  });
+
+  // Realistic fixture, per this task's brief: a real starter workout, not
+  // only hand-built rows. None of the 35 starters carry an effort ref yet
+  // (that's Task 6's seed audit) — "Zephyr"'s one work step is patched here
+  // to `{ effort: "max" }` before going through fromWorkout/toSteps, so this
+  // exercises the round trip against a full, production-shaped workout
+  // (real title/type/difficulty/pain/spm) rather than a fixture built just
+  // for this test.
+  it("round-trips an effort ref patched onto a real starter workout's step", () => {
+    const zephyr = STARTER_WORKOUTS.find((w) => w.title === "Zephyr");
+    if (!zephyr) throw new Error("fixture not found: Zephyr");
+    const steps: Step[] = zephyr.steps.map((s) =>
+      s.k === "w" ? { ...s, ref: { effort: "max" as const } } : s,
+    );
+
+    const form = fromWorkout({
+      title: zephyr.title,
+      type: zephyr.type,
+      difficulty: zephyr.difficulty,
+      pain: zephyr.pain,
+      steps,
+    });
+    const workRowOut = form.rows.find((r) => r.kind === "w");
+    if (!workRowOut) throw new Error("expected a work row");
+    expect(workRowOut.refEffort).toBe("max");
+
+    const out = toSteps(form);
+    if (!out.ok)
+      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
+    const wStep = out.steps.find((s) => s.k === "w");
+    expect(wStep).toMatchObject({ ref: { effort: "max" } });
+    expect(validateSteps(out.steps)).toStrictEqual({
+      ok: true,
+      steps: out.steps,
+    });
   });
 });
 

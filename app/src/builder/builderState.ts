@@ -3,10 +3,11 @@ import {
   parseClock,
   parseDurationToken,
 } from "../../domain/duration.js";
-import { isEffortRef, resolveSplit } from "../../domain/pace.js";
+import { estimationSplit, isEffortRef, refLabel } from "../../domain/pace.js";
 import type {
   Baselines,
   Difficulty,
+  Effort,
   PaceBase,
   PaceRef,
   Step,
@@ -31,6 +32,11 @@ export interface BuilderRow {
   durUnit: "min" | "m";
   refBase: PaceBase;
   refOff: number;
+  // null = split mode (refBase/refOff are live). Set to an Effort when the
+  // user taps the MAX/MIN chip — refBase/refOff are left as-is rather than
+  // cleared, which is what lets a chip round trip (MAX -> 6K again) restore
+  // whatever offset was showing before the effort was selected.
+  refEffort: Effort | null;
   spm: string;
   rest: string;
 }
@@ -68,6 +74,7 @@ export function newRow(kind: RowKind): BuilderRow {
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
+    refEffort: null,
     spm: "",
     rest: "",
   };
@@ -227,6 +234,7 @@ export function stepSummary(row: BuilderRow): string {
   const dur = fmtRowDuration(row);
   if (row.kind === "wu") return `${dur} warm-up`;
   if (row.kind === "r") return `${dur} rest`;
+  if (row.refEffort) return `${dur} @ ${refLabel({ effort: row.refEffort })}`;
   return `${dur} @ ${row.refBase} ${fmtSignedOffset(row.refOff)}`;
 }
 
@@ -403,11 +411,18 @@ export function toSteps(
     // chip and offset stepper the client control offers can't produce
     // anything else) — the only thing left to check here is the domain's
     // ±60 offset bound, which the control clamps but a hand-built form must
-    // still be rejected for.
-    const ref: PaceRef = { base: row.refBase, off: row.refOff };
-    if (Math.abs(ref.off) > 60) {
-      errors[`row:${row.id}:ref`] = "invalid pace reference";
-      rowOk = false;
+    // still be rejected for. An effort ref (refEffort set) has no offset to
+    // bound — MAX/MIN are always structurally valid — so the check is
+    // skipped entirely in that branch.
+    let ref: PaceRef;
+    if (row.refEffort) {
+      ref = { effort: row.refEffort };
+    } else {
+      ref = { base: row.refBase, off: row.refOff };
+      if (Math.abs(ref.off) > 60) {
+        errors[`row:${row.id}:ref`] = "invalid pace reference";
+        rowOk = false;
+      }
     }
 
     let spm: number | undefined;
@@ -476,8 +491,10 @@ function rowMinutes(
     minutes = n;
   } else {
     if (!baselines) return null;
-    const ref: PaceRef = { base: row.refBase, off: row.refOff };
-    minutes = (resolveSplit(baselines, ref) * n) / 500 / 60;
+    const ref: PaceRef = row.refEffort
+      ? { effort: row.refEffort }
+      : { base: row.refBase, off: row.refOff };
+    minutes = (estimationSplit(baselines, ref) * n) / 500 / 60;
   }
 
   // The domain's phases()/estimateMinutes() emit restMinutes as its own
@@ -533,7 +550,17 @@ function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
     const { durValue, durUnit } = formatDurationValue(s.duration);
     row.durValue = durValue;
     row.durUnit = durUnit;
-    if (!isEffortRef(s.ref)) {
+    // refEffort carries the real effort word; refBase/refOff stay at
+    // newRow's defaults (6k ±0) rather than being fabricated from the
+    // effort — there is no split to read one off, and the defaults are
+    // exactly what a user switching the chip back to a split base expects
+    // to see (see the "preserves the split offset across a chip round
+    // trip" test — the inverse of this: a split's own refBase/refOff must
+    // survive a round trip THROUGH an effort selection, which is a builder
+    // state transition, not this load path).
+    if (isEffortRef(s.ref)) {
+      row.refEffort = s.ref.effort;
+    } else {
       row.refBase = s.ref.base;
       row.refOff = s.ref.off;
     }
