@@ -1645,6 +1645,12 @@ test.describe("timer screen: END staged (abandon confirm)", () => {
   test("the panel copy and Abandon button match the token palette", async ({
     page,
   }) => {
+    // Neutralize the pointer before any computed-style read (CI hazard,
+    // whole-branch review follow-up): the beforeEach's own staging click
+    // (END →) can leave the mouse resting somewhere `:hover` styling
+    // reaches once the panel reflows the page under it — a neutral corner
+    // with nothing interactive there can never apply a hover rule.
+    await page.mouse.move(0, 0);
     const copyColor = await page
       .locator(".timer-end-copy")
       .evaluate((el) => getComputedStyle(el).color);
@@ -1702,6 +1708,14 @@ test.describe("timer screen: finish staged (▶ on the last phase)", () => {
   test("the Finish session button matches the token palette", async ({
     page,
   }) => {
+    // Neutralize the pointer before the read (CI hazard, whole-branch
+    // review follow-up): the beforeEach's own staging click (▶, the
+    // control row's rightmost slot) lands almost exactly where "Finish
+    // session" — the finish panel's own rightmost/primary button — renders
+    // once the panel replaces that same control row, so CI's pointer can
+    // still be resting on it when this reads `:hover` styling instead of
+    // the resting state.
+    await page.mouse.move(0, 0);
     const finishBg = await page
       .getByRole("button", { name: "Finish session" })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -1753,6 +1767,14 @@ test.describe("timer screen: suspect actual staged (NEXT tapped far off the esti
   test("the suspect copy and Keep split button match the token palette", async ({
     page,
   }) => {
+    // Neutralize the pointer before the read (CI-only failure, whole-branch
+    // review follow-up: this is the exact test CI reported —
+    // `.timer-suspect-keep` reading `--accent-hover` — since the
+    // beforeEach's own staging click (NEXT →, the control row's rightmost
+    // slot) lands almost exactly where "Keep split" renders once the
+    // suspect panel replaces that same control row, leaving CI's pointer
+    // resting on it for this read.
+    await page.mouse.move(0, 0);
     const copyColor = await page
       .locator(".timer-suspect-copy")
       .evaluate((el) => getComputedStyle(el).color);
