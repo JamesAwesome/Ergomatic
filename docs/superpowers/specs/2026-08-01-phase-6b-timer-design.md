@@ -120,3 +120,20 @@ screens.
 - Effort phases read `ALL OUT`/`EASY`, never a number, never a dash.
 - All gates green; screenshots of all three screens in portrait + the timer
   in landscape, opened and checked.
+
+## Build vs buy (researched 2026-08-01, James asked)
+
+No timer or state-machine library. The timer-library ecosystem exists to
+fight tick drift and background-tab throttling — problems the wall-clock
+design removes by construction (a late tick repaints late but shows the
+CORRECT value; recompute-from-`Date.now()` is the ecosystem's own documented
+best practice). Web-Worker timers solve tab throttling; our hostile case is
+iOS suspending the whole WKWebView process, which suspends workers too —
+only wall-clock reconstruction survives it. XState's transition guarantees
+are real but the machine is small, and the hard parts (catch-up walk,
+distance-blocking, pause accounting, the versioned persistence contract)
+are domain logic no library supplies.
+
+**Revisit trigger:** Phase 7's PM5 transport adds
+connecting/connected/degraded states — if the machine sprawls there,
+reconsider XState then.
