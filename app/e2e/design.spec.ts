@@ -159,6 +159,62 @@ async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
   await page.goto(`/library/${workout.id}`);
 }
 
+// Phase 6B (Task 5): the session-route sweeps below (countdown, timer,
+// session complete) all need a tiny bulk-imported workout driven through
+// the real START -> countdown -> timer flow, not a starter workout — same
+// three-step idiom as e2e/session.spec.ts's own identical helpers,
+// duplicated here per this file's own stated precedent (see
+// `cleanupByTitle`'s own comment above) rather than shared across files.
+
+/** Bulk-imports `text` and waits for the redirect back to /library. */
+async function importBulk(page: Page, text: string): Promise<void> {
+  await page.goto("/library/import");
+  await page.getByLabel("Bulk import text").fill(text);
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+}
+
+/** Opens `title`'s detail page from the library list and presses Start,
+ *  landing on Confirm. */
+async function startFromLibrary(page: Page, title: string): Promise<void> {
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/session\/confirm$/);
+}
+
+/** START on Confirm, then SKIP the countdown, landing on the live timer. */
+async function startAndSkipCountdown(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+}
+
+/** Same in-page-fetch idiom as `setBaselines` above, but with the caller's
+ *  own values — needed by the session-complete sweep below, which (like
+ *  e2e/session.spec.ts's own identical fixture) prices its distance phase's
+ *  estimate off `k2Seconds` specifically, tuned to land NEXT inside a safe,
+ *  non-suspect timing window, rather than the fixed `DESIGN_BASELINES` pair
+ *  every other describe in this file uses. */
+async function setCustomBaselines(
+  page: Page,
+  baselines: { k2Seconds: number; k6Seconds: number },
+): Promise<void> {
+  const result = await page.evaluate(async (patch) => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, baselines);
+  if (!result.ok) {
+    throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+  }
+}
+
 // Structural design rules, asserted against the real rendered app rather
 // than a mock — a failure here is a real finding about the shipped UI, not
 // a fixture drift. See docs/superpowers/specs/2026-07-28-testing-
@@ -1136,6 +1192,576 @@ test.describe("you screen", () => {
       .first()
       .evaluate((el) => getComputedStyle(el).color);
     expect(baselineValueColor).toBe("rgb(181, 52, 31)"); // --accent
+  });
+});
+
+// Phase 6B (Task 5): the pre-workout countdown (handoff §5). A single
+// 2-minute work step gets a rower to /session/confirm fast; pressing START
+// lands here without ever pressing SKIP — SKIP/CANCEL's own behavior is
+// e2e/session.spec.ts's job, this sweep only needs the screen on-render.
+test.describe("countdown screen", () => {
+  const title = "Design Countdown Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-countdown-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Countdown Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 2:00 6k @20"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await page.getByRole("button", { name: "START" }).click();
+    await expect(page).toHaveURL(/\/session\/countdown$/);
+    await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("no tab bar on this session route", async ({ page }) => {
+    await expect(page.locator(".tabbar")).toHaveCount(0);
+  });
+
+  test("the label, numeral, and SKIP button match the token palette", async ({
+    page,
+  }) => {
+    const labelColor = await page
+      .locator(".countdown-label")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(labelColor).toBe("rgb(111, 106, 95)"); // --ink-4
+
+    const numeralColor = await page
+      .locator(".countdown-number")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(numeralColor).toBe("rgb(181, 52, 31)"); // --accent
+
+    const skipStyles = await page.locator(".countdown-skip").evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(skipStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(skipStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+  });
+
+  // Final-review triage item (carried from Task 4's own flag): F3
+  // (index.css) fixed `.timer-screen`'s landscape min-height formula but
+  // never accounted for `.countdown-screen`/`.session-complete-screen`
+  // sharing the identical pre-fix formula. Task 5 measured this screen live
+  // at 844×420 BEFORE its own fix: scrollHeight 438 vs clientHeight 420 —
+  // the exact same 18px `.timer-screen` itself carried. Same fix (subtract
+  // `var(--tap)` in a landscape media query), same durable guard as Timer's
+  // own landscape e2e test (session.spec.ts): a real scrollHeight check,
+  // not a bounding-box inference. Re-measured after the fix: scrollHeight
+  // 414, clientHeight 420 (this is the guard, not the measurement itself —
+  // see index.css's own comment on `.countdown-screen`'s landscape rule for
+  // the full before/after numbers).
+  test("no dead vertical scroll at 844x420 (the same fix Timer's own landscape layout needed)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 844, height: 420 });
+    const overflow = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+  });
+});
+
+// Phase 6B (Task 5): the live timer (handoff §6) in a plain TIME-based work
+// phase — the ▶ control, a resolved SPLIT target (not an effort word), no
+// distance meters in the STEP line. A 5-minute first step (far longer than
+// any single test in this describe takes to run) keeps the engine's own
+// auto-advance from firing mid-sweep. Two steps (not one) so STEP 1 OF 2 /
+// UP NEXT both resolve to something real.
+test.describe("timer screen (portrait, TIME phase)", () => {
+  const title = "Design Timer Time Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-time-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Time Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 2`, "w 5:00 6k @20", "w 3:00 6k @20"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("no tab bar on this session route", async ({ page }) => {
+    await expect(page.locator(".tabbar")).toHaveCount(0);
+  });
+
+  test("the state pill, TARGET SPLIT value, and ▶ control match the token palette", async ({
+    page,
+  }) => {
+    const stateColor = await page
+      .locator(".timer-state")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(stateColor).toBe("rgb(181, 52, 31)"); // --accent
+
+    // A resolved SPLIT target, not an effort word — this TIME sweep's own
+    // distinguishing case from the EFFORT sweep below.
+    await expect(page.locator(".timer-card-value-accent")).not.toHaveText(
+      "ALL OUT",
+    );
+    const targetColor = await page
+      .locator(".timer-card-value-accent")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(targetColor).toBe("rgb(181, 52, 31)"); // --accent
+
+    const controlColor = await page
+      .locator(".timer-control")
+      .first()
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(controlColor).toBe("rgb(63, 60, 53)"); // --ink-2
+
+    // The ▶ control (never "NEXT →") — this TIME phase's own control-row
+    // shape, distinct from the DISTANCE sweep below.
+    await expect(
+      page.getByRole("button", { name: "Next phase" }),
+    ).toBeVisible();
+  });
+});
+
+// Phase 6B (Task 5): the live timer in a DISTANCE work phase (meters
+// defined, a resolved SPLIT target — not an effort ref, that's its own
+// sweep below) — the brief's own "the NEXT layout is distinct" case.
+// Task 3's fix round restored the SAME 3-column ◀/Pause/[control] grid for
+// every phase kind; what's actually distinct is the rightmost control
+// itself (NEXT → replacing ▶), proven structurally below rather than
+// assumed from the class name alone.
+test.describe("timer screen (portrait, DISTANCE phase)", () => {
+  const title = "Design Timer Distance Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-distance-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Distance Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 2`, "w 500m 6k @20", "w 3:00 6k @20"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText("STEP 1 OF 2 · WORK · 500M")).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the NEXT control (not ▶) is what renders, on-palette", async ({
+    page,
+  }) => {
+    const next = page.getByRole("button", { name: "NEXT →" });
+    await expect(next).toBeVisible();
+    await expect(page.getByRole("button", { name: "Next phase" })).toHaveCount(
+      0,
+    );
+    const styles = await next.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(styles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
+  });
+});
+
+// Phase 6B (Task 5): the live timer with an effort-ref TARGET (`ref:
+// {effort:"max"}`) — TimerTargets.tsx's own binding rule: the numeric
+// estimate behind an effort ref is NEVER shown, only the resolved word
+// ("ALL OUT"/"EASY"), with no range line underneath it (unlike a split-ref
+// target's tolerance range). Time-based (not distance) so the ▶ control
+// shows, distinct from the DISTANCE sweep above.
+test.describe("timer screen (portrait, effort target visible)", () => {
+  const title = "Design Timer Effort Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-effort-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Effort Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | hard | 4`, "w 5:00 max @28"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
+    await expect(page.locator(".timer-card-value-accent")).toHaveText(
+      "ALL OUT",
+    );
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the effort word renders with no numeric range underneath, on-palette", async ({
+    page,
+  }) => {
+    const card = page.locator(".timer-card").first();
+    await expect(card.locator(".timer-card-caption")).toHaveCount(0);
+    const color = await card
+      .locator(".timer-card-value-accent")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(color).toBe("rgb(181, 52, 31)"); // --accent
+  });
+});
+
+// Phase 6B (Task 5): the live timer's landscape reflow (handoff §6) at the
+// handoff's own 844×420 reference frame (docs/design/README.md). Two steps,
+// like e2e/session.spec.ts's own landscape test, so the landscape-only
+// "then …" UP NEXT line has something real to resolve to. The geometry/
+// column-order proof and the dead-scroll regression guard both already
+// live in session.spec.ts; this sweep's own job is tap-targets/axe/tokens
+// at the same frame, not a second copy of that structural proof.
+test.describe("timer screen (landscape, 844x420)", () => {
+  const title = "Design Timer Landscape Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-landscape-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Landscape Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 2`, "w 3:00 6k @20", "w 1:00 6k @20"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+    await page.setViewportSize({ width: 844, height: 420 });
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the 128px numeral and the landscape-only 'then' line match the token palette", async ({
+    page,
+  }) => {
+    const fontSize = await page
+      .locator(".timer-time")
+      .evaluate((el) => getComputedStyle(el).fontSize);
+    expect(fontSize).toBe("128px");
+
+    const then = page.locator(".timer-upnext-then");
+    await expect(then).toBeVisible();
+    await expect(then).toContainText("then");
+  });
+});
+
+// Phase 6B (Task 5): SessionComplete with a recorded actual — the "never a
+// bare dash" case, not the empty-actuals early return. Same tiny two-step
+// fixture, k2Seconds floor, and non-suspect timing window as
+// e2e/session.spec.ts's own completion test — see that file's comment for
+// why k2Seconds is 60 (the server's own PUT /api/baselines floor) and why
+// the wait lands at ~10.5s (safely inside the 6s/24s non-suspect window on
+// a 12s estimate).
+test.describe("session complete screen (with a recorded actual)", () => {
+  const title = "Design Session Complete Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-complete-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Complete Tester",
+    });
+    await setCustomBaselines(page, { k2Seconds: 60, k6Seconds: 120 });
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+
+    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+    await expect(page.getByText("STEP 2 OF 2 · WORK · 100M")).toBeVisible({
+      timeout: 6000,
+    });
+    await page.waitForTimeout(10_500);
+    await page.getByRole("button", { name: "NEXT →" }).click();
+    await expect(page.getByText("Finish this session?")).toBeVisible();
+    await page.getByRole("button", { name: "Finish session" }).click();
+    await expect(page).toHaveURL(/\/session\/complete$/);
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("no tab bar on this session route", async ({ page }) => {
+    await expect(page.locator(".tabbar")).toHaveCount(0);
+  });
+
+  test("TOTAL and the recorded actual split match the token palette", async ({
+    page,
+  }) => {
+    const totalLabelColor = await page
+      .locator(".complete-total-label")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(totalLabelColor).toBe("rgb(111, 106, 95)"); // --ink-4
+
+    await expect(page.locator(".complete-actual-row")).toHaveCount(1);
+    const actualColor = await page
+      .locator(".complete-actual-value")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(actualColor).toBe("rgb(181, 52, 31)"); // --accent
+  });
+
+  // Final-review triage item (see the countdown describe's identical test
+  // above for the full derivation): `.session-complete-screen` shared
+  // `.countdown-screen`'s own pre-fix landscape min-height formula.
+  test("no dead vertical scroll at 844x420 (the same fix Timer's own landscape layout needed)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 844, height: 420 });
+    const overflow = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+  });
+});
+
+// Phase 6B (Task 5): the three mutually-exclusive staged-confirm panels
+// (END's abandon confirm, ▶/NEXT's finish confirm, NEXT's suspect-actual
+// choice) each get their own sweep, one staged open at a time — the
+// brief's own "sweep with one staged open" instruction. All three reuse
+// token pairings already computed in index.css's own comment; these sweeps
+// prove the LIVE rendered panel, not just the pairing on paper.
+test.describe("timer screen: END staged (abandon confirm)", () => {
+  const title = "Design Timer End Confirm Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-end-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer End Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 2`, "w 5:00 6k @20", "w 3:00 6k @20"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+    await page.getByRole("button", { name: "END →" }).click();
+    await expect(page.locator(".timer-end-confirm")).toBeVisible();
+    await expect(page.getByText("Abandon this session?")).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the panel copy and Abandon button match the token palette", async ({
+    page,
+  }) => {
+    const copyColor = await page
+      .locator(".timer-end-copy")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(copyColor).toBe("rgb(63, 60, 53)"); // --ink-2
+
+    const panelBg = await page
+      .locator(".timer-end-confirm")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(panelBg).toBe("rgb(239, 234, 222)"); // --surface-sunken
+
+    const abandonBg = await page
+      .locator(".timer-confirm-primary")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(abandonBg).toBe("rgb(181, 52, 31)"); // --accent
+  });
+});
+
+test.describe("timer screen: finish staged (▶ on the last phase)", () => {
+  const title = "Design Timer Finish Confirm Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-finish-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Finish Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 5:00 6k @20"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
+    // Completion is a documented one-way door (Timer.tsx's own comment) —
+    // ▶ on the ONLY (therefore last) phase stages a finish confirm instead
+    // of completing outright.
+    await page.getByRole("button", { name: "Next phase" }).click();
+    await expect(page.getByText("Finish this session?")).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the Finish session button matches the token palette", async ({
+    page,
+  }) => {
+    const finishBg = await page
+      .getByRole("button", { name: "Finish session" })
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(finishBg).toBe("rgb(181, 52, 31)"); // --accent
+  });
+});
+
+test.describe("timer screen: suspect actual staged (NEXT tapped far off the estimate)", () => {
+  const title = "Design Timer Suspect Confirm Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-timer-suspect-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Timer Suspect Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 2`, "w 500m 6k @20", "w 3:00 6k @20"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText("STEP 1 OF 2 · WORK · 500M")).toBeVisible();
+    // 500m @6k prices this phase's estimate at 120s (DESIGN_BASELINES' own
+    // k6Seconds: 120; domain/expand.js's own phaseSeconds formula) —
+    // tapping NEXT within a couple of seconds of the phase starting is far
+    // under half that (60s), well inside Timer.tsx's own isSuspectActual
+    // lower bound, so this reliably stages the choice rather than racing a
+    // timing window (contrast the session-complete describe above, which
+    // deliberately lands INSIDE the safe window instead).
+    await page.getByRole("button", { name: "NEXT →" }).click();
+    await expect(page.locator(".timer-suspect")).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("the suspect copy and Keep split button match the token palette", async ({
+    page,
+  }) => {
+    const copyColor = await page
+      .locator(".timer-suspect-copy")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(copyColor).toBe("rgb(63, 60, 53)"); // --ink-2
+
+    const keepBg = await page
+      .locator(".timer-suspect-keep")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(keepBg).toBe("rgb(181, 52, 31)"); // --accent
   });
 });
 

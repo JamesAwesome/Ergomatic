@@ -2184,6 +2184,31 @@ button:disabled {
   );
 }
 
+/* Task 5 (final-review triage item, carried from Task 4's own flag):
+   `.countdown-screen`'s base `min-height` above shares `.timer-screen`'s
+   PRE-Task-4-fix formula — it never accounts for `.app-shell`'s own
+   `padding-bottom: calc(var(--tap) + safe-area-bottom)`, reserved for the
+   fixed tab bar's height on every route even though `hidesTabBar`
+   (AppRoutes.tsx) never renders one here. Measured live at 844×420 (the
+   handoff's own landscape reference frame): `document.documentElement`
+   scrollHeight 438 vs clientHeight 420 — the identical 18px `.timer-screen`
+   itself carried before Task 4's F3 fix. Same fix: subtract `var(--tap)`
+   too, landscape-only, using the SAME token `.app-shell` itself reserves.
+   This is the overflow fix only, not the two-column reflow the phase's own
+   spec marks out of scope ("Landscape for non-timer screens") — the
+   countdown's centered single-column layout is unchanged, just no longer
+   taller than the frame. Re-measured after: scrollHeight 414, clientHeight
+   420 (6px slack, zero scroll) — the identical after-numbers `.timer-screen`
+   itself landed on. */
+@media (orientation: landscape) {
+  .countdown-screen {
+    min-height: calc(
+      100dvh - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
+    );
+  }
+}
+
 .countdown-label {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -2712,10 +2737,11 @@ button:disabled {
        ~344px content height, so the content's natural size — not this
        formula — is what actually renders now, same principle as portrait).
        This same formula (sans this landscape subtraction) is shared by
-       `.countdown-screen`/`.session-complete-screen`; whether either of
-       those needs the identical fix on a short landscape viewport wasn't
-       measured this round — flagging for the final review's triage rather
-       than broadening this fix round's diff past what F3 asked for. */
+       `.countdown-screen`/`.session-complete-screen` — Task 5 measured both
+       at the same 844×420 frame (identical numbers: scrollHeight 438 vs
+       clientHeight 420, the same 18px) and applied the identical
+       `var(--tap)` subtraction to each, in their own landscape media
+       queries below (see those rules' own comments). */
     min-height: calc(
       100dvh - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
@@ -2812,6 +2838,20 @@ button:disabled {
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
       26px
   );
+}
+
+/* Task 5: the identical fix as `.countdown-screen`'s own landscape rule
+   above, for the identical reason — same base formula, same missing
+   `.app-shell` tab-bar padding, same 844×420 measurement (438 vs 420
+   before, 414 vs 420 after). See that rule's comment for the full
+   derivation; not repeated verbatim here. */
+@media (orientation: landscape) {
+  .session-complete-screen {
+    min-height: calc(
+      100dvh - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
+    );
+  }
 }
 
 .complete-total {
