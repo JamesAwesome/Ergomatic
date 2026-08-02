@@ -284,7 +284,12 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("2:15.0–2:17.0")).toBeInTheDocument();
     expect(screen.getByText("18")).toBeInTheDocument();
     expect(screen.getByText("spm")).toBeInTheDocument();
-    expect(screen.getByText("REST · Rest")).toBeInTheDocument();
+    // Fix round (whole-branch review, F4): a rest phase's own resolved
+    // `label` is literally "Rest" (domain/expand.ts), which used to render
+    // as the redundant "REST · Rest" here — deduped to the kind word alone
+    // now that it collides with `phaseKindWord`.
+    expect(screen.getByText("REST")).toBeInTheDocument();
+    expect(screen.queryByText("REST · Rest")).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -385,7 +390,10 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       await renderTimer();
 
       expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument(); // UP NEXT's own value, unchanged
-      expect(screen.getByText("then REST · Rest")).toBeInTheDocument();
+      // Same F4 dedupe as upNextText's own rest-phase case above, applied
+      // here via the shared `phaseAnnouncement` helper.
+      expect(screen.getByText("then REST")).toBeInTheDocument();
+      expect(screen.queryByText("then REST · Rest")).not.toBeInTheDocument();
     });
 
     it("reads 'then FINISH' when the phase after next is the last one", async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -6,8 +6,11 @@ import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanSequenceItem } from "../api/usePlan";
 import type { RecentLog } from "../api/useRecentLogs";
-import { DRAFT_KEY, type SessionDraft } from "../session/draft";
+import type { WorkoutType } from "../../domain/types.js";
+import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
+import { buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
+import { elapsedSinceStart } from "./Today";
 import { TODAY_PICK_KEY } from "./todayPick";
 
 // Realistic fixtures, per repo convention: real starter workouts
@@ -426,6 +429,8 @@ describe("Today (stale draft discard on mount)", () => {
   function makeRun(overrides: Partial<SessionRun>): SessionRun {
     return {
       v: 1,
+      workoutId: "w-warmfront",
+      title: "Warm Front",
       phases: [],
       index: 1,
       phaseStartedAt: new Date().toISOString(),
@@ -552,5 +557,119 @@ describe("Today (loading/error states)", () => {
     }));
     await renderToday();
     expect(screen.getByText("LOADING…")).toBeVisible();
+  });
+});
+
+// F2/F3a (whole-branch review): a cold start (the OS killed the app
+// mid-session — real on iOS) has to surface a way back into a live or
+// completed-but-unlogged run right from Today, since Start on the
+// suggestion card only ever REPLACES it. A real starter workout distinct
+// from every fixture `mockReady`'s own library uses (Cold Front never
+// appears there) — so a resume-card assertion can never coincidentally
+// match the suggestion card's own text, and the fixture proves F3a's own
+// point in passing: the resume card renders straight off `run.title`, with
+// no need for Cold Front to be a real library entry OR for a matching
+// draft to exist in storage.
+const RESUME_BASELINES = { k2Seconds: 100, k6Seconds: 120 };
+
+function liveRunFor(startedAt: Date): SessionRun {
+  const w = STARTER_WORKOUTS.find((s) => s.title === "Cold Front");
+  if (!w) throw new Error("missing starter fixture: Cold Front");
+  const draft = buildDraft({
+    id: "w-coldfront",
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  return buildRun(draft, RESUME_BASELINES, 1, startedAt);
+}
+
+describe("Today (F2: session resume / unlogged)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("renders a resume card above the suggestion card, naming the live run's workout and its elapsed time, with a Resume session link to the live timer", async () => {
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    // 753.6s ago (12:34 once rounded) — pins Math.round, not Math.floor: a
+    // floor-based implementation would read 753s, i.e. "12:33 elapsed".
+    const startedAt = new Date(now.getTime() - 753.6 * 1000);
+    localStorage.setItem(RUN_KEY, JSON.stringify(liveRunFor(startedAt)));
+    mockReady();
+    await renderToday();
+
+    expect(screen.getByText("SESSION IN PROGRESS")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Cold Front" })).toBeVisible();
+    expect(screen.getByText("12:34 elapsed")).toBeVisible();
+    const resumeLink = screen.getByRole("link", { name: "Resume session" });
+    expect(resumeLink).toBeVisible();
+    expect(resumeLink).toHaveAttribute("href", "/session/run");
+
+    // Above the suggestion card, not merely present somewhere on the page —
+    // the brief's own "most prominent element" placement.
+    const main = document.querySelector("main")!;
+    expect(main.textContent!.indexOf("SESSION IN PROGRESS")).toBeLessThan(
+      main.textContent!.indexOf("SUGGESTED FOR TODAY"),
+    );
+  });
+
+  it("shows a quieter, button-less line naming the workout when the run is already complete (completed-but-unlogged)", async () => {
+    const built = liveRunFor(new Date("2026-08-01T11:00:00.000Z"));
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: new Date("2026-08-01T11:40:00.000Z").toISOString(),
+    };
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    await renderToday();
+
+    expect(screen.getByText("Cold Front")).toBeVisible();
+    expect(screen.getByText(/unlogged session/i)).toBeVisible();
+    expect(screen.getByText(/6C will log it here/i)).toBeVisible();
+    // Quieter than the resume card, per the brief: no "SESSION IN PROGRESS"
+    // banner, no Resume/log button — 6C is what actually builds that flow.
+    expect(screen.queryByText("SESSION IN PROGRESS")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Resume session" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /log/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders neither the resume card nor the unlogged line when there is no run record at all", async () => {
+    mockReady();
+    await renderToday();
+
+    expect(screen.queryByText("SESSION IN PROGRESS")).not.toBeInTheDocument();
+    expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Resume session" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("elapsedSinceStart", () => {
+  it("computes whole seconds since startedAt, rounded (not floored)", () => {
+    const run = {
+      startedAt: new Date("2026-08-01T12:00:00.000Z").toISOString(),
+    } as SessionRun;
+    // 45.6s: Math.round -> 46, Math.floor -> 45 — a value chosen so the two
+    // disagree, pinning which one this function actually uses.
+    expect(elapsedSinceStart(run, new Date("2026-08-01T12:00:45.600Z"))).toBe(
+      46,
+    );
+  });
+
+  it("floors at 0 rather than going negative when now precedes startedAt", () => {
+    const run = {
+      startedAt: new Date("2026-08-01T12:00:00.000Z").toISOString(),
+    } as SessionRun;
+    expect(elapsedSinceStart(run, new Date("2026-08-01T11:59:00.000Z"))).toBe(
+      0,
+    );
   });
 });

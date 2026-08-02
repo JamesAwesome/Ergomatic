@@ -184,6 +184,29 @@ describe("saveRun / loadRun / clearRun", () => {
     expect(localStorage.getItem(RUN_KEY)).toBeNull();
   });
 
+  // F3a (whole-branch review): title/workoutId are new required fields on
+  // SessionRun, stamped by buildRun — validated here the same way every
+  // other load-bearing field above already is.
+  it("returns null for v:1 with title as the wrong shape (missing/non-string)", () => {
+    const run = freshRun();
+    localStorage.setItem(RUN_KEY, JSON.stringify({ ...run, title: 5 }));
+    expect(loadRun()).toBeNull();
+    expect(localStorage.getItem(RUN_KEY)).toBeNull();
+  });
+
+  it("returns null for v:1 with workoutId as the wrong shape (a number — neither null nor a string)", () => {
+    const run = freshRun();
+    localStorage.setItem(RUN_KEY, JSON.stringify({ ...run, workoutId: 5 }));
+    expect(loadRun()).toBeNull();
+    expect(localStorage.getItem(RUN_KEY)).toBeNull();
+  });
+
+  it("round-trips workoutId: null (a hand-built draft, not a library workout) same as a real id", () => {
+    const run = { ...freshRun(), workoutId: null };
+    expect(saveRun(run)).toBe(true);
+    expect(loadRun()).toStrictEqual(viaJson(run));
+  });
+
   it("clearRun removes the stored run", () => {
     saveRun(freshRun());
     clearRun();

@@ -8,12 +8,13 @@ import type { PlanData } from "../api/usePlan";
 import { usePreferences } from "../api/usePreferences";
 import { useRecentLogs } from "../api/useRecentLogs";
 import type { RecentLog } from "../api/useRecentLogs";
+import { fmtDuration } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { suggest, suggestFreestyle } from "../../domain/suggest.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
 import type { Baselines } from "../../domain/types.js";
 import { clearDraft, loadDraft } from "../session/draft";
-import { loadRun } from "../session/run";
+import { loadRun, type SessionRun } from "../session/run";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import TypeBadge from "../components/TypeBadge";
 
@@ -45,6 +46,21 @@ const MONTH_ABBREV = [
 function formatLogDate(loggedAt: string): string {
   const d = new Date(loggedAt);
   return `${MONTH_ABBREV[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** Wall-clock time since a LIVE run started (F2, whole-branch review: the
+ *  resume card's own elapsed-so-far reading) — `now - startedAt`, the same
+ *  "real time, including any pauses" convention SessionComplete.tsx's own
+ *  `totalElapsedSeconds` documents for a FINISHED run's `completedAt -
+ *  startedAt`. That one can't be reused here: `completedAt` is null by
+ *  construction of every caller (this only ever runs against a run
+ *  `TodayView` already confirmed is still live, never a completed one).
+ *  Never negative (defensive floor, same discipline as `engine.ts`'s own
+ *  `phaseElapsedMs`). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function elapsedSinceStart(run: SessionRun, now: Date): number {
+  const ms = now.getTime() - new Date(run.startedAt).getTime();
+  return Math.max(0, Math.round(ms / 1000));
 }
 
 // Baselines unset (a brand-new account) means estimateMinutes cannot
@@ -79,6 +95,15 @@ export default function Today() {
   const planState = usePlan();
   const preferencesState = usePreferences();
   const recentLogsState = useRecentLogs(3);
+
+  // Lazy initializer, same read-once-at-mount idiom every session screen
+  // uses (Countdown.tsx/Timer.tsx's own comment on this): F2's cold-start
+  // resume card (below, via `TodayView`) needs whatever run record already
+  // exists — live (`completedAt === null`) or completed-but-unlogged — the
+  // instant this screen mounts, which is exactly the moment a cold start
+  // (the OS killed the app mid-session; nothing else in the client ever
+  // surfaces this) lands the rower here with no other path back in.
+  const [run] = useState<SessionRun | null>(() => loadRun());
 
   // A draft older than 24h with startedAt still null was abandoned mid-
   // confirm and never started — discard it with no ceremony (spec: "Deep-
@@ -200,6 +225,7 @@ export default function Today() {
       prefs={prefs}
       plan={planState.plan}
       logs={recentLogsState.logs}
+      run={run}
     />
   );
 }
@@ -228,14 +254,20 @@ function TodayView({
   prefs,
   plan,
   logs,
+  run,
 }: {
   library: LibraryWorkout[];
   baselines: Baselines | null;
   prefs: SuggestPrefs;
   plan: PlanData;
   logs: RecentLog[];
+  run: SessionRun | null;
 }) {
   const today = todayDateString();
+  // Read once per render — this screen has no ticking display (unlike
+  // Timer.tsx's own repaint interval); F2's resume card only needs a single
+  // "elapsed so far" reading, not a live-updating stopwatch.
+  const now = new Date();
   // plan.sequence always has 84 entries while a plan is active; doneN can
   // only reach 84 once every session is logged (out of scope this phase —
   // 6C is what advances it) — treated the same as freestyle rather than
@@ -316,6 +348,38 @@ function TodayView({
             choose a plan →
           </Link>
         </div>
+      )}
+
+      {/* F2 (whole-branch review, spec Resilience #6): a cold start (the OS
+          killed the app mid-session — real on iOS) lands here with nothing
+          else surfacing the live/unlogged run otherwise; Start on the
+          suggestion card below only ever REPLACES it (WorkoutDetail.tsx's
+          own staged "in progress"/"unlogged" confirm already guards that —
+          verified, not re-implemented here). Keyed off `run` alone, not the
+          draft: F3a stamped `title` straight onto the run record for
+          exactly this card, so it never needs to also read `SessionDraft`.
+          Rendered ABOVE the suggestion card — the screen's most prominent
+          element when a live run exists, per the brief. */}
+      {run !== null && run.completedAt === null && (
+        <div className="today-resume-card">
+          <span className="today-resume-label">SESSION IN PROGRESS</span>
+          <h2 className="today-resume-title">{run.title}</h2>
+          <span className="today-resume-elapsed">
+            {fmtDuration(elapsedSinceStart(run, now) / 60)} elapsed
+          </span>
+          <Link to="/session/run" className="today-resume-button">
+            Resume session
+          </Link>
+        </div>
+      )}
+      {run !== null && run.completedAt !== null && (
+        // Quieter than the resume card, deliberately (the brief's own
+        // call): no fake "Log it" button — 6C is what actually builds that
+        // screen. Naming the workout is the one honest thing this can do
+        // today.
+        <p className="today-unlogged-line">
+          <strong>{run.title}</strong> — unlogged session. 6C will log it here.
+        </p>
       )}
 
       <div className="today-suggestion-header">

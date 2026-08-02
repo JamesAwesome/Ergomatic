@@ -24,9 +24,19 @@ export interface PhaseActual {
  *  mutates as the engine's pure transition functions (`tick`/`pause`/
  *  `resume`/`advance`/`rewind`/`nextDistance`) run. `actuals` is keyed by
  *  POSITION in `phases` (see `nextDistance`'s own comment for why that's
- *  not `originalIndex`). */
+ *  not `originalIndex`).
+ *
+ *  `workoutId`/`title` (whole-branch review, F3a): stamped by `buildRun`
+ *  straight from the draft it was built from, so a screen that only has the
+ *  RUN record (Today's resume card, F2 — a cold start has no reason to also
+ *  read the draft once the run itself names the workout) never needs to
+ *  reach into `SessionDraft` just to say whose session this is. Additive to
+ *  the `v:1` shape, same "expand-only allows adding fields" rule the
+ *  module's own header already establishes for the draft side. */
 export interface SessionRun {
   v: 1;
+  workoutId: string | null;
+  title: string;
   phases: EnginePhase[];
   index: number;
   phaseStartedAt: string;
@@ -48,10 +58,25 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 // on load — mirrors draft.ts's isSessionDraft exactly (same discipline, same
 // reasoning: a shape that satisfies only `v === 1` used to pass and then
 // throw the moment something touched `.phases`/`.actuals`).
+//
+// `title`/`workoutId` (F3a): `title` is REQUIRED (a non-empty check isn't
+// needed — an empty string still renders fine on Today's resume card, same
+// tolerance draft.ts's own `typeof value.title === "string"` check already
+// gives the draft side) — this is the "match how run.ts validates title on
+// the draft side" the review asked for, applied here rather than loosened to
+// match draft.ts's OWN gap: draft.ts never validates `workoutId` at all (a
+// pre-existing hole in that module, not a pattern worth replicating). This
+// module already validates every nullable field as "null or the real type"
+// (`pausedAt`/`completedAt` above) — `workoutId` gets the identical
+// treatment for the identical reason: a shape with the wrong type there
+// would otherwise pass and then hand Today's resume card (F2) a value it
+// can't safely render or key off.
 function isSessionRun(value: unknown): value is SessionRun {
   if (!isPlainRecord(value)) return false;
   return (
     value.v === 1 &&
+    (value.workoutId === null || typeof value.workoutId === "string") &&
+    typeof value.title === "string" &&
     Array.isArray(value.phases) &&
     typeof value.index === "number" &&
     typeof value.phaseStartedAt === "string" &&
