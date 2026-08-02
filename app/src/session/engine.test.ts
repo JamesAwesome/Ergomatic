@@ -163,6 +163,45 @@ describe("buildRun", () => {
     expect(run.phases[1]!.seconds).toBeUndefined();
     expect(run.phases[1]!.meters).toBeUndefined();
   });
+
+  it("does not shift originalIndex when a hand-edited draft carries restMinutes: 0 (Phase 6B Task 1 review, F1)", () => {
+    // restMinutes: 0 is unreachable via validateSteps but SessionDraft's own
+    // load-time validation is loose by design (draft.ts's isSessionDraft
+    // comment) — a stale/hand-edited draft can still carry it. domain's
+    // phases() treats it as falsy (no auto-inserted rest phase), and
+    // buildRun's originalIndex lookup must agree — not reserve a slot for a
+    // rest phase that was never emitted, which would silently misattribute
+    // every phase after it.
+    const d: SessionDraft = {
+      v: 1,
+      workoutId: null,
+      title: "hand-edited",
+      type: "TR",
+      steps: [
+        { k: "wu", minutes: 5 },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 2 },
+          ref: { base: "6k", off: 0 },
+          restMinutes: 0,
+        },
+        { k: "r", minutes: 3 },
+      ],
+      nudges: {},
+      spmOverrides: {},
+      removed: [],
+      createdAt: t0.toISOString(),
+      startedAt: null,
+    };
+    const run = buildRun(d, baselines, tol, t0);
+    expect(run.phases.map((p) => p.type)).toStrictEqual([
+      "warmup",
+      "work",
+      "rest",
+    ]);
+    expect(run.phases[1]!.originalIndex).toBe(1); // the work step
+    expect(run.phases[2]!.originalIndex).toBe(2); // the authored "r" step — NOT shifted
+  });
 });
 
 describe("remainingSeconds", () => {
@@ -234,13 +273,20 @@ describe("tick — the catch-up walk", () => {
     expect(remainingSeconds(result, now)).toBe(800); // 900 - 100
   });
 
-  it("completing the last time phase during a walk sets completedAt", () => {
+  it("completing the last time phase during a walk sets completedAt to the TRUE finish boundary, not the (much later) wake-up time", () => {
+    // Phase 6B Task 1 review, F2: workout actually finishes at t0+3000s
+    // (12:02-ish); the phone doesn't wake to recompute until an hour
+    // later. completedAt must log the finish boundary, not the wake time —
+    // a version that stamps `now` here would silently misreport when the
+    // session actually ended.
     const run = mackerelRun();
-    const now = addSeconds(t0, 300 + 900 + 900 + 900); // exact end boundary
-    const result = tick(run, now);
+    const finishBoundary = addSeconds(t0, 300 + 900 + 900 + 900); // 3000s
+    const wakesUpMuchLater = addSeconds(finishBoundary, 3600); // +1h suspend
+    const result = tick(run, wakesUpMuchLater);
     expect(result.index).toBe(run.phases.length);
-    expect(result.completedAt).toBe(now.toISOString());
-    expect(result.phaseStartedAt).toBe(now.toISOString());
+    expect(result.completedAt).toBe(finishBoundary.toISOString());
+    expect(result.phaseStartedAt).toBe(finishBoundary.toISOString());
+    expect(result.completedAt).not.toBe(wakesUpMuchLater.toISOString());
   });
 
   it("halts at a distance phase reached mid-walk, seeding its stopwatch baseline at the walk's arrival boundary (resilience 3, Cold Front wu -> 2000m)", () => {
@@ -413,6 +459,14 @@ describe("nextDistance", () => {
     const run = mackerelRun(); // index 0: wu, a time phase
     const result = nextDistance(run, addSeconds(t0, 50));
     expect(result).toBe(run);
+  });
+
+  it("implicitly resumes a paused run — NEXT is a deliberate act (Phase 6B Task 1 review, F4, documented decision)", () => {
+    const run = { ...coldFrontRun(), index: 1 }; // the first 2000m work phase
+    const paused = pause(run, addSeconds(t0, 100));
+    const result = nextDistance(paused, addSeconds(t0, 452));
+    expect(result.pausedAt).toBeNull();
+    expect(result.pausedTotalMs).toBe(0);
   });
 });
 
