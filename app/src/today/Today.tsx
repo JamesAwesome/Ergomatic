@@ -13,6 +13,7 @@ import { suggest, suggestFreestyle } from "../../domain/suggest.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
 import type { Baselines } from "../../domain/types.js";
 import { clearDraft, loadDraft } from "../session/draft";
+import { loadRun } from "../session/run";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import TypeBadge from "../components/TypeBadge";
 
@@ -83,12 +84,33 @@ export default function Today() {
   // confirm and never started — discard it with no ceremony (spec: "Deep-
   // link/reload rules"). A started draft (startedAt set) is left alone even
   // if old; 6B owns what happens to an in-progress session.
+  //
+  // Phase 6B Task 4 amendment: a completed-but-unlogged run record (`run.ts`
+  // — Timer/SessionComplete both deliberately keep it, for 6C's still-
+  // unbuilt "log this session" screen) protects its draft from this discard
+  // regardless of age, one further exception layered onto the same rule.
+  // In the normal single-session-at-a-time flow this exception is inert (a
+  // draft that reached completion always has `startedAt` set, so the
+  // `startedAt === null` check above already excludes it on its own) — it
+  // only bites for the edge case the rule is actually guarding: the rower
+  // completes session A (leaving draft A + run A both in storage on
+  // purpose), then opens a DIFFERENT workout and taps Start before ever
+  // logging A, which overwrites the draft key with a fresh, unstarted
+  // draft B while run A's own completedAt is still sitting there. This
+  // doesn't try to verify the run actually belongs to the CURRENT draft
+  // (6B has no id linking the two) — same "simplicity over precision" call
+  // ConfirmTargets.tsx's own footer comment makes for the identical reason.
   useEffect(() => {
     const draft = loadDraft();
     if (
       draft &&
       draft.startedAt === null &&
-      Date.now() - new Date(draft.createdAt).getTime() > STALE_DRAFT_MS
+      Date.now() - new Date(draft.createdAt).getTime() > STALE_DRAFT_MS &&
+      // `?? null`, not a bare `?.completedAt === null`: no run record at
+      // all (the ordinary never-started-draft case this rule has always
+      // covered) must still discard — only an ACTUAL completed run should
+      // protect, not the absence of one coalescing to a false negative.
+      (loadRun()?.completedAt ?? null) === null
     ) {
       clearDraft();
     }

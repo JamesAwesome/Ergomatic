@@ -371,6 +371,45 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
+  // Landscape's own "then …" UP NEXT second line (handoff §6) — rendered
+  // unconditionally (hidden by CSS in portrait, index.css's own base rule
+  // for `.timer-upnext-then`; jsdom never applies that rule, so these
+  // assertions check the same markup a landscape viewport would actually
+  // show). All three of `thenNextText`'s own branches, against the SAME
+  // kindMatrixDraft fixture the rest of this describe block already uses.
+  describe("the landscape UP NEXT 'then …' line", () => {
+    it("names the phase AFTER the one UP NEXT already shows, when both exist", async () => {
+      mockKeepAwake();
+      const run = buildAndSaveRun(kindMatrixDraft());
+      runAtIndex(run, 0); // next=work(split), afterNext=rest
+      await renderTimer();
+
+      expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument(); // UP NEXT's own value, unchanged
+      expect(screen.getByText("then REST · Rest")).toBeInTheDocument();
+    });
+
+    it("reads 'then FINISH' when the phase after next is the last one", async () => {
+      mockKeepAwake();
+      const run = buildAndSaveRun(kindMatrixDraft());
+      runAtIndex(run, 3); // next=effort work (the last phase), afterNext=none
+      await renderTimer();
+
+      expect(screen.getByText("then FINISH")).toBeInTheDocument();
+    });
+
+    it("renders no 'then' line at all on the last phase — UP NEXT itself already reads FINISH there", async () => {
+      mockKeepAwake();
+      const run = buildAndSaveRun(kindMatrixDraft());
+      runAtIndex(run, 4); // the last phase
+      await renderTimer();
+
+      expect(screen.getByText("FINISH")).toBeInTheDocument(); // upNextText's own value
+      expect(
+        document.querySelector(".timer-upnext-then"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'rate free', count-UP, empty phase bar, standard controls", async () => {
     mockKeepAwake();
     const run = buildAndSaveRun(testKindDraft());
