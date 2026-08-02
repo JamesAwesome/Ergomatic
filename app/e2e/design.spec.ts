@@ -1678,11 +1678,10 @@ test.describe("log session screen (session door)", () => {
   }) => {
     // DESIGN_BASELINES' k6Seconds (120.0) -> "2:00.0", recovered exactly
     // regardless of this step's own -2 offset — the baseline, not the
-    // per-step split. No step here references "2k" at all, so that half
-    // stays "—" honestly (not fabricated from a baseline never used).
-    await expect(page.locator(".log-paces-value")).toHaveText(
-      "2K — · 6K 2:00.0",
-    );
+    // per-step split. F1 (whole-branch review): no step here references
+    // "2k" at all, so that half is OMITTED entirely (not a "2K —" dash —
+    // 0 of the 35 seeded starters reference both bases in one workout).
+    await expect(page.locator(".log-paces-value")).toHaveText("6K 2:00.0");
     await expect(page.locator(".log-step-row")).toHaveCount(1);
     // 118.0s target (120 - 2), shown as the frozen split this step was
     // logged at.

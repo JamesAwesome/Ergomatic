@@ -67,9 +67,14 @@ const PAIN_RAMP_VAR: Record<(typeof PAIN_LEVELS)[number], string> = {
  *  A workout with no step referencing a given base at all (e.g. built
  *  entirely from "6k" steps, or a Microburst-style all-effort workout with
  *  no split-ref step whatsoever) has nothing to reconstruct — this returns
- *  null and the panel renders "—" rather than fabricating a number from the
- *  rower's current baseline, which would have nothing to do with what this
- *  particular run actually locked. `draft` should be the caller's
+ *  null, and `pacesLockedText` (below, F1 fix round) OMITS that base's slot
+ *  entirely rather than fabricating a number from the rower's current
+ *  baseline, which would have nothing to do with what this particular run
+ *  actually locked (an earlier version of this panel rendered a literal
+ *  "—" for the missing half instead — found, in review, to be what EVERY
+ *  real session would show, since no starter workout references both
+ *  bases; see `pacesLockedText`'s own doc comment). `draft` should be the
+ *  caller's
  *  match-checked draft (null when missing or foreign — see LogSession's own
  *  `matchedDraft`), never a draft this run wasn't built from: `rawOff`/
  *  `nudge` from the WRONG workout's steps would silently reconstruct a
@@ -98,6 +103,27 @@ function lockedBaseline(
     return phase.targetSplit! - step.ref.off - nudge;
   }
   return null;
+}
+
+/** F1 (whole-branch review, Task 2 fix round): renders ONLY the bases the
+ *  workout's own steps actually reference — never a bare dash. The
+ *  original two-slot "2K … · 6K …" layout (matching README.md §7's own
+ *  literal mock) was checked against all 35 seeded starters and found to
+ *  be unconditionally wrong in production: not one references both "2k"
+ *  and "6k" in the same workout (16 are 2k-only, 18 are 6k-only, and
+ *  Microburst references neither at all) — so the two-slot layout would
+ *  show a permanent dash for one half of EVERY real session logged,
+ *  violating the house "never a bare dash" rule this screen's own per-step
+ *  list already honors. `null` (both bases absent — an all-effort workout,
+ *  or a mismatched/missing draft with nothing to reconstruct) means there
+ *  is nothing honest to show at all; the caller omits the whole panel
+ *  rather than rendering an empty "PACES LOCKED AT" label with no value.
+ *  Recorded in docs/design/DEVIATIONS.md as a departure from §7's mock. */
+function pacesLockedText(k2: number | null, k6: number | null): string | null {
+  const parts: string[] = [];
+  if (k2 !== null) parts.push(`2K ${fmtSplit(k2)}`);
+  if (k6 !== null) parts.push(`6K ${fmtSplit(k6)}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 /** Resolves the POST body's `workoutType` — `SessionRun` itself doesn't
@@ -187,6 +213,7 @@ export default function LogSession() {
   const { dateLabel, totalMinutes } = logTotals(run);
   const k2 = lockedBaseline("2k", run, matchedDraft);
   const k6 = lockedBaseline("6k", run, matchedDraft);
+  const pacesText = pacesLockedText(k2, k6);
   // TS narrowing from the `run === null` guard above doesn't survive into a
   // function DECLARED later in this component (handleSave, below) — a
   // separately-typed `const` alias is the standard fix, not a non-null
@@ -271,13 +298,12 @@ export default function LogSession() {
         </span>
       </div>
 
-      <div className="log-paces-panel">
-        <span className="log-paces-label">PACES LOCKED AT</span>
-        <span className="log-paces-value">
-          2K {k2 !== null ? fmtSplit(k2) : "—"} · 6K{" "}
-          {k6 !== null ? fmtSplit(k6) : "—"}
-        </span>
-      </div>
+      {pacesText !== null && (
+        <div className="log-paces-panel">
+          <span className="log-paces-label">PACES LOCKED AT</span>
+          <span className="log-paces-value">{pacesText}</span>
+        </div>
+      )}
 
       <ul className="log-step-list">
         {logSteps.map((step, i) => (

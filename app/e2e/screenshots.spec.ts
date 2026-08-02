@@ -789,32 +789,39 @@ test("session-complete", async ({ page }) => {
 });
 
 test("log-session", async ({ page }) => {
+  test.setTimeout(90_000); // a real 60s step, not this file's usual ~3s ones
   const title = "Screenshot Log Session Workout";
   await signInViaBackdoor(page, {
     email: "screenshots-log-session@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  // Two short split-ref TIME steps, one per baseline (2k, 6k, both off 0) —
-  // each auto-advances in ~3s with no NEXT/finish-stage click needed (a
-  // TIME phase completes the run automatically once it's the last one,
-  // same fact e2e/session.spec.ts's own "two browser BACKs..." test
-  // relies on). SCREENSHOT_BASELINES' own values (112.0/122.0) are the
-  // design handoff's own literal reference numbers (README.md §7: "PACES
-  // LOCKED AT 2K 1:52.0 · 6K 2:02.0"), so this capture shows the PACES
-  // LOCKED panel with that EXACT text, recovered for real rather than
-  // hand-typed into a mock.
+  // F1 (whole-branch review): the FIRST capture used two split-ref steps
+  // (one "2k", one "6k") to show the PACES LOCKED panel's own two-slot
+  // form — but 0 of the 35 seeded starters ever reference both bases in
+  // one workout (16 are 2k-only, 18 are 6k-only, and Microburst references
+  // neither), so that shape can't happen in production and the panel
+  // NEVER actually renders both. This capture uses a REAL single-base
+  // shape instead — one 60-SECOND (not an artificially tiny 3s) split-ref
+  // TIME step at "6k" (off 0) — so the TOTAL reads as a genuine non-zero
+  // "1 MIN" rather than the earlier capture's misleading "0 MIN", and the
+  // PACES LOCKED panel shows only the 6K half, matching what an actual
+  // rower would see. SCREENSHOT_BASELINES' own k6Seconds (122.0) is the
+  // design handoff's own literal reference split (README.md §7: "…6K
+  // 2:02.0"). A single TIME phase completes the run automatically once
+  // it's the last one — no NEXT/finish-stage click needed (the same fact
+  // e2e/session.spec.ts's own "two browser BACKs…" test relies on).
   await importBulk(
     page,
-    [`${title} | AT | medium | 3`, "w 0:03 2k", "w 0:03 6k"].join("\n"),
+    [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
   );
   await startFromLibrary(page, title);
   await page.getByRole("button", { name: "START" }).click();
   await expect(page).toHaveURL(/\/session\/countdown$/);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
-  await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
-  await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 8000 });
+  await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
+  await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 70_000 });
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 
   await page.getByRole("link", { name: "Log this session" }).click();
@@ -822,13 +829,17 @@ test("log-session", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: `Log ${title}` }),
   ).toBeVisible();
+  // Only 6K renders (F1) — this workout's one step never references "2k".
+  await expect(page.locator(".log-paces-value")).toHaveText("6K 2:02.0");
+  // A real, non-zero total — the exact defect F1 found in the prior capture.
+  await expect(page.locator(".log-meta")).not.toContainText("0 MIN");
 
   // Realistic, non-empty state (CLAUDE.md's own "screenshots that capture
   // empty states" rule): a real Held answer, pain level, and note, not the
   // screen's own just-opened blank form.
   await page.getByRole("button", { name: "HELD" }).click();
   await page.getByRole("button", { name: "Pain 2" }).click();
-  await page.getByLabel("NOTES").fill("Felt strong through both pieces.");
+  await page.getByLabel("NOTES").fill("Felt strong for the full minute.");
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-session.png"),
