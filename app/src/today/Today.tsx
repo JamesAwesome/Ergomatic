@@ -373,13 +373,19 @@ function TodayView({
         </div>
       )}
       {run !== null && run.completedAt !== null && (
-        // Quieter than the resume card, deliberately (the brief's own
-        // call): no fake "Log it" button — 6C is what actually builds that
-        // screen. Naming the workout is the one honest thing this can do
-        // today.
-        <p className="today-unlogged-line">
-          <strong>{run.title}</strong> — unlogged session. 6C will log it here.
-        </p>
+        // Quieter than the resume card, deliberately (F2's own call): no
+        // accent banner, just the workout's name plus a real "Log it"
+        // action now that Phase 6C Task 2 has built the screen it points
+        // to — the run record is the source LogSession.tsx itself reads,
+        // so this link carries no state/params of its own.
+        <div className="today-unlogged-line">
+          <p className="today-unlogged-text">
+            <strong>{run.title}</strong> — unlogged session.
+          </p>
+          <Link to="/session/log" className="today-unlogged-link">
+            Log it
+          </Link>
+        </div>
       )}
 
       <div className="today-suggestion-header">

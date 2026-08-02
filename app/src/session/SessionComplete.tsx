@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { keepAwakeOff } from "../adapters/keepAwake";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
@@ -52,11 +52,13 @@ export function actualRows(
  *  totals format `duration.ts`'s own header reserves for estimates: this is
  *  a real elapsed clock reading, the same convention `TimerRuler.tsx`'s own
  *  TOTAL LEFT already established), each distance phase's recorded actual
- *  split, and Back to Today. Deliberately does NOT clear the run record —
- *  6C's own "Log session" screen still needs it (a completed-but-unlogged
- *  run persisting is the whole point of Today's amended stale-discard rule);
- *  only an explicit abandon (Timer's own END→Abandon) or a future 6C save
- *  ever clears it. Keep-awake: ON since Countdown's own mount, carried
+ *  split, and two actions: Log this session (primary, `/session/log` — the
+ *  session door, Phase 6C Task 2) and Back to Today (outline). Deliberately
+ *  does NOT clear the run record itself — LogSession.tsx's own save/discard
+ *  are the only things that do (a completed-but-unlogged run persisting is
+ *  the whole point of Today's amended stale-discard rule); Timer's own
+ *  END→Abandon is the only other path that clears it. Keep-awake: ON since
+ *  Countdown's own mount, carried
  *  through Timer — this screen's only job is to turn it back OFF, once, on
  *  mount (not spanning its own lifetime the way Countdown/Timer's effects
  *  do): `keepAwakeOff` is idempotent (its own doc comment), so this is safe
@@ -112,13 +114,18 @@ export default function SessionComplete() {
           ))}
         </ul>
       )}
-      <button
-        type="button"
-        className="button-primary complete-back"
-        onClick={handleBack}
-      >
-        Back to Today
-      </button>
+      <div className="complete-actions">
+        <Link to="/session/log" className="button-primary complete-log">
+          Log this session
+        </Link>
+        <button
+          type="button"
+          className="button-outline complete-back"
+          onClick={handleBack}
+        >
+          Back to Today
+        </button>
+      </div>
     </main>
   );
 }

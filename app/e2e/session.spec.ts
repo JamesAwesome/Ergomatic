@@ -61,6 +61,52 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
   }
 }
 
+/** Activates a preset plan via the real `PUT /api/plan` route — the same
+ *  in-page-fetch idiom as `setBaselines` above. Copied from design.spec.ts's
+ *  own `choosePlan` (duplicated per this file's own stated precedent on
+ *  `cleanupByTitle`, above) — Task 2's own e2e extension is the first thing
+ *  in THIS file that needs a plan active, to prove the plan's session
+ *  counter advances on save. */
+async function choosePlan(
+  page: Page,
+  planKey: "sprint" | "head",
+): Promise<void> {
+  const result = await page.evaluate(async (key) => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planKey: key }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, planKey);
+  if (!result.ok) {
+    throw new Error(`plan setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Zeroes `doneN` unconditionally via `PUT /api/plan {reset:true}` — copied
+ *  from design.spec.ts's own `resetPlanProgress` (same duplication
+ *  precedent as `cleanupByTitle` above). Needed alongside `choosePlan`: a
+ *  per-worker email reused across CI runs (this file's own convention)
+ *  would otherwise start from whatever `doneN` a PRIOR run against the same
+ *  email left behind, since `choosePlan` only resets `doneN` when it
+ *  actually CHANGES the plan key (server/routes/data.ts: "re-selecting the
+ *  SAME plan must be a no-op") — a real bug this test tripped over the
+ *  first time it was run twice in a row locally. */
+async function resetPlanProgress(page: Page): Promise<void> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/plan", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reset: true }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(`plan reset failed: ${result.status} ${result.body}`);
+  }
+}
+
 /** Bulk-imports `text` (domain/bulk.ts's own grammar — BulkImport.tsx's own
  *  GRAMMAR_HELP) and waits for the clean-import redirect back to /library
  *  (BulkImportRoute's `onImported` in AppRoutes.tsx). */
@@ -367,6 +413,128 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
       clientHeight: document.documentElement.clientHeight,
     }));
     expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+
+    await cleanupByTitle(page, title);
+  });
+});
+
+test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
+  test("the full loop: Today → confirm → countdown → tiny timer session → complete → Log → Held + pain + notes → Save → Today shows it in LAST THREE and the plan's session counter advanced", async ({
+    page,
+  }) => {
+    const title = "Tiny E2E Log Session";
+    await signInViaBackdoor(page, {
+      email: "session-log@e2e.test",
+      name: "Session Log Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+    // A single short time step — the last (and only) phase auto-advances
+    // straight to /session/complete with no NEXT/finish-stage click needed
+    // (same "single time phase auto-advances straight to completion" fact
+    // the whole-branch-review F1 describe block below relies on).
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 0:03 6k"].join("\n"),
+    );
+
+    await page.goto("/today");
+    await expect(page.getByText(/^SESSION 1 OF 84/)).toBeVisible();
+
+    // startFromLibrary's own `.workout-row` click assumes /library is
+    // already the current page (true right after importBulk, not after the
+    // /today detour above).
+    await page.goto("/library");
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+    await page.getByRole("link", { name: "Log this session" }).click();
+    await expect(page).toHaveURL(/\/session\/log$/);
+    await expect(
+      page.getByRole("heading", { name: `Log ${title}` }),
+    ).toBeVisible();
+    // The dashed PACES LOCKED panel and the per-step list both render real
+    // content (the "never a bare dash" house rule) — this workout's one
+    // step references "6k" plainly (off 0), so the 6K half resolves.
+    await expect(page.locator(".log-paces-value")).toContainText("6K 2:00.0");
+    await expect(page.locator(".log-step-row")).toHaveCount(1);
+
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByLabel("NOTES").fill("Felt strong.");
+    await page.getByRole("button", { name: "Save session" }).click();
+
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+    // The plan's session counter advanced (server-side done_n, bumped by
+    // stores/logs.ts's own `create` — Task 1.5's own report on this).
+    await expect(page.getByText(/^SESSION 2 OF 84/)).toBeVisible();
+    // LAST THREE shows the just-logged session for real.
+    const row = page.locator(".today-log-row").filter({ hasText: title });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("HELD");
+    await expect(row).toContainText("2/5");
+
+    // Both session records cleared — nothing left to accidentally resurface
+    // the Log screen or Today's resume/unlogged treatment on a later visit.
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).toBeNull();
+    const draftAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    expect(draftAfter).toBeNull();
+
+    await cleanupByTitle(page, title);
+  });
+
+  test("discard without logging clears both records and never posts a log", async ({
+    page,
+  }) => {
+    const title = "Tiny E2E Discard Session";
+    await signInViaBackdoor(page, {
+      email: "session-log-discard@e2e.test",
+      name: "Session Log Discard Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 0:03 6k"].join("\n"),
+    );
+
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    await page.getByRole("link", { name: "Log this session" }).click();
+    await expect(page).toHaveURL(/\/session\/log$/);
+
+    // Staged — the first press only reveals the confirm, nothing clears yet.
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    const runMidStage = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runMidStage).not.toBeNull();
+
+    await page.getByRole("button", { name: "Discard session" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).toBeNull();
+    const draftAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    expect(draftAfter).toBeNull();
+    // LAST THREE never shows this workout — discarding never POSTs a log.
+    await expect(
+      page.locator(".today-log-row").filter({ hasText: title }),
+    ).toHaveCount(0);
 
     await cleanupByTitle(page, title);
   });

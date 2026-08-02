@@ -21,6 +21,9 @@ vi.mock("../plan/Plan", () => ({
 vi.mock("../session/Countdown", () => ({
   default: () => <h1>Countdown</h1>,
 }));
+vi.mock("../session/LogSession", () => ({
+  default: () => <h1>Log Session</h1>,
+}));
 
 describe("AppRoutes", () => {
   // NOT a proof of declaration order: react-router-dom 7.18.2 ranks a
@@ -112,6 +115,22 @@ describe("AppRoutes", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Phase 6C Task 2: the Log screen (session door) is the same full-bleed
+  // holder pattern's own next step past /session/complete.
+  it("hides the tab bar on /session/log", async () => {
+    render(
+      <MemoryRouter initialEntries={["/session/log"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Log Session" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("navigation", { name: "Main" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the tab bar on an ordinary route (today)", async () => {
     render(
       <MemoryRouter initialEntries={["/today"]}>
@@ -130,6 +149,7 @@ describe("hidesTabBar", () => {
     "/session/countdown",
     "/session/run",
     "/session/complete",
+    "/session/log",
     // Sub-paths of a hidden prefix stay hidden too (a future param/query
     // string on any of these routes never needs its own opt-out).
     "/session/run/foo",

@@ -12,6 +12,7 @@ import Library from "../library/Library";
 import Plan from "../plan/Plan";
 import ConfirmTargets from "../session/ConfirmTargets";
 import Countdown from "../session/Countdown";
+import LogSession from "../session/LogSession";
 import SessionComplete from "../session/SessionComplete";
 import Timer from "../session/Timer";
 import Today from "../today/Today";
@@ -29,6 +30,10 @@ const HIDDEN_TABBAR_PREFIXES = [
   "/session/countdown",
   "/session/run",
   "/session/complete",
+  // Phase 6C Task 2: the Log screen is the same full-bleed holder pattern's
+  // natural continuation past /session/complete, not an ordinary tabbed
+  // screen a rower would navigate to directly.
+  "/session/log",
 ];
 
 // Pure and exported for direct testing, same pattern as ClockInput.tsx's
@@ -89,6 +94,7 @@ export default function AppRoutes({
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<Timer />} />
         <Route path="/session/complete" element={<SessionComplete />} />
+        <Route path="/session/log" element={<LogSession />} />
         <Route
           path="/trend"
           element={<Placeholder title="Trend" phase="Phase 8" />}

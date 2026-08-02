@@ -1623,6 +1623,101 @@ test.describe("session complete screen (with a recorded actual)", () => {
   });
 });
 
+// Phase 6C (Task 2): the Log screen (session door). Reaches it through the
+// real complete -> "Log this session" hand-off, same as e2e/session.spec.ts's
+// own full-loop test, rather than navigating to /session/log directly — a
+// direct nav with no run record would just redirect to /today, the exact
+// deep-link guard this screen has.
+test.describe("log session screen (session door)", () => {
+  const title = "Design Log Session Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-log-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Log Tester",
+    });
+    await setBaselines(page);
+    // A single short 6k-based split step: the time phase auto-advances
+    // straight to /session/complete with no NEXT/finish-stage click needed,
+    // and its "6k" reference is exactly what the PACES LOCKED panel's own
+    // baseline-reconstruction reads (Task 2's own `lockedBaseline`).
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 0:03 6k-2"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    await page.getByRole("link", { name: "Log this session" }).click();
+    await expect(page).toHaveURL(/\/session\/log$/);
+    await expect(
+      page.getByRole("heading", { name: `Log ${title}` }),
+    ).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("no tab bar on this session route", async ({ page }) => {
+    await expect(page.locator(".tabbar")).toHaveCount(0);
+  });
+
+  test("renders real content, never a bare dash: the PACES LOCKED 6K value, the per-step list, and EXPECTED N/5", async ({
+    page,
+  }) => {
+    // DESIGN_BASELINES' k6Seconds (120.0) -> "2:00.0", recovered exactly
+    // regardless of this step's own -2 offset — the baseline, not the
+    // per-step split. No step here references "2k" at all, so that half
+    // stays "—" honestly (not fabricated from a baseline never used).
+    await expect(page.locator(".log-paces-value")).toHaveText(
+      "2K — · 6K 2:00.0",
+    );
+    await expect(page.locator(".log-step-row")).toHaveCount(1);
+    // 118.0s target (120 - 2), shown as the frozen split this step was
+    // logged at.
+    await expect(page.locator(".log-step-target")).toHaveText("1:58.0");
+    // The bulk-import header's own pain field ("| AT | medium | 3").
+    await expect(page.locator(".classification-pain-word")).toHaveText(
+      "EXPECTED 3/5",
+    );
+  });
+
+  // The staged Discard idiom (BaselineEditor.tsx's own `.baseline-confirm`/
+  // `.baseline-actions`) gets its own sweep with the panel open, same
+  // pattern as the timer screen's three staged-confirm describes below.
+  test.describe("Discard staged", () => {
+    test.beforeEach(async ({ page }) => {
+      await page
+        .getByRole("button", { name: "Discard without logging" })
+        .click();
+      await expect(
+        page.getByRole("button", { name: "Discard session" }),
+      ).toBeVisible();
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+  });
+});
+
 // Phase 6B (Task 5): the three mutually-exclusive staged-confirm panels
 // (END's abandon confirm, ▶/NEXT's finish confirm, NEXT's suspect-actual
 // choice) each get their own sweep, one staged open at a time — the

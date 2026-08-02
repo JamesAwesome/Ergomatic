@@ -326,6 +326,19 @@ describe("SessionComplete", () => {
     expect(keepAwakeOff).toHaveBeenCalledTimes(1);
   });
 
+  it("renders a Log this session link to /session/log, beside Back to Today", async () => {
+    mockKeepAwake();
+    completeDraftAndRun();
+    await renderComplete();
+    await screen.findByText("TOTAL");
+
+    const logLink = screen.getByRole("link", { name: "Log this session" });
+    expect(logLink).toHaveAttribute("href", "/session/log");
+    expect(
+      screen.getByRole("button", { name: "Back to Today" }),
+    ).toBeInTheDocument();
+  });
+
   it("Back to Today navigates to /today and leaves the run record and draft in storage — 6C's own log-save is what eventually clears them, not this screen", async () => {
     mockKeepAwake();
     const user = userEvent.setup();

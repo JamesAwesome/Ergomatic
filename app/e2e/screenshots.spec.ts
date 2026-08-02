@@ -787,3 +787,51 @@ test("session-complete", async ({ page }) => {
   });
   await cleanupByTitle(page, title);
 });
+
+test("log-session", async ({ page }) => {
+  const title = "Screenshot Log Session Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-session@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // Two short split-ref TIME steps, one per baseline (2k, 6k, both off 0) —
+  // each auto-advances in ~3s with no NEXT/finish-stage click needed (a
+  // TIME phase completes the run automatically once it's the last one,
+  // same fact e2e/session.spec.ts's own "two browser BACKs..." test
+  // relies on). SCREENSHOT_BASELINES' own values (112.0/122.0) are the
+  // design handoff's own literal reference numbers (README.md §7: "PACES
+  // LOCKED AT 2K 1:52.0 · 6K 2:02.0"), so this capture shows the PACES
+  // LOCKED panel with that EXACT text, recovered for real rather than
+  // hand-typed into a mock.
+  await importBulk(
+    page,
+    [`${title} | AT | medium | 3`, "w 0:03 2k", "w 0:03 6k"].join("\n"),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+  await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 8000 });
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+  await page.getByRole("link", { name: "Log this session" }).click();
+  await expect(page).toHaveURL(/\/session\/log$/);
+  await expect(
+    page.getByRole("heading", { name: `Log ${title}` }),
+  ).toBeVisible();
+
+  // Realistic, non-empty state (CLAUDE.md's own "screenshots that capture
+  // empty states" rule): a real Held answer, pain level, and note, not the
+  // screen's own just-opened blank form.
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByLabel("NOTES").fill("Felt strong through both pieces.");
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-session.png"),
+  });
+  await cleanupByTitle(page, title);
+});
