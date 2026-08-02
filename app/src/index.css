@@ -1018,15 +1018,14 @@ button:disabled {
   flex-shrink: 0;
 }
 
-/* 84 rows: a fixed viewport with its own scroll, rather than letting the
-   whole screen grow to 84 rows tall (spec: "the list scrolls"). */
+/* The sequence flows with the page, Library-style — the inner scroll box
+   read as a widget-within-a-screen and the owner asked for it gone (device
+   report, 2026-08-01). Losing the overflow also retires the
+   scrollable-region-focusable tabIndex the box needed. */
 .plan-sequence {
   list-style: none;
   margin: 12px 0 0;
   padding: 0;
-  max-height: 50vh;
-  overflow-y: auto;
-  border: 1px solid var(--rule);
 }
 
 .plan-row {
