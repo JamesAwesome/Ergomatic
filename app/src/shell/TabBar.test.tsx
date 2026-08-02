@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import TabBar, { TABS } from "./TabBar";
+import { LIBRARY_SCROLL_KEY } from "../library/libraryScroll";
 
 function renderAt(path: string) {
   return render(
@@ -43,5 +45,27 @@ describe("TabBar", () => {
       "aria-current",
       "page",
     );
+  });
+
+  describe("Library tab tap clears the saved scroll position", () => {
+    beforeEach(() => sessionStorage.clear());
+
+    it("removes a previously saved position, so Library's own restore effect has nothing left to restore", async () => {
+      sessionStorage.setItem(LIBRARY_SCROLL_KEY, "999");
+      renderAt("/you");
+
+      await userEvent.click(screen.getByRole("link", { name: "LIBRARY" }));
+
+      expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBeNull();
+    });
+
+    it("leaves other tabs' clicks alone (no accidental clear from an unrelated tab)", async () => {
+      sessionStorage.setItem(LIBRARY_SCROLL_KEY, "999");
+      renderAt("/library");
+
+      await userEvent.click(screen.getByRole("link", { name: "TODAY" }));
+
+      expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("999");
+    });
   });
 });
