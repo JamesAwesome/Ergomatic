@@ -419,10 +419,24 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
 });
 
 test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
+  // F3 (whole-branch review, Task 2 fix round): each test used to call
+  // `cleanupByTitle` only at the END of its own body — a test that failed
+  // (or was interrupted) partway through never reached it, leaking its
+  // workout into the next run against the SAME persisted dev/CI database.
+  // A proper `test.afterEach` (design.spec.ts's own idiom for every one of
+  // its describe blocks) runs regardless of pass/fail. `title` moves to
+  // describe scope, set at the top of each test, so this one hook covers
+  // both.
+  let title = "";
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
   test("the full loop: Today → confirm → countdown → tiny timer session → complete → Log → Held + pain + notes → Save → Today shows it in LAST THREE and the plan's session counter advanced", async ({
     page,
   }) => {
-    const title = "Tiny E2E Log Session";
+    title = "Tiny E2E Log Session";
     await signInViaBackdoor(page, {
       email: "session-log@e2e.test",
       name: "Session Log Tester",
@@ -473,8 +487,19 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     // The plan's session counter advanced (server-side done_n, bumped by
     // stores/logs.ts's own `create` — Task 1.5's own report on this).
     await expect(page.getByText(/^SESSION 2 OF 84/)).toBeVisible();
-    // LAST THREE shows the just-logged session for real.
-    const row = page.locator(".today-log-row").filter({ hasText: title });
+    // LAST THREE shows the just-logged session for real. `.first()`: a
+    // log row is never deleted by `cleanupByTitle` (that only removes the
+    // WORKOUT — `session_logs.workout_id` goes NULL on delete, per
+    // WorkoutDetail.tsx's own comment on that FK behavior, and each log
+    // keeps its own frozen title/type regardless), so a re-run against a
+    // persisted (not freshly reset) database can find more than one row
+    // with this exact title — `.first()` asserts against the just-created
+    // one (LAST THREE's own newest-first order) without strict-mode
+    // failing on the older one(s).
+    const row = page
+      .locator(".today-log-row")
+      .filter({ hasText: title })
+      .first();
     await expect(row).toBeVisible();
     await expect(row).toContainText("HELD");
     await expect(row).toContainText("2/5");
@@ -489,14 +514,12 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
       localStorage.getItem("ergomatic.sessionDraft"),
     );
     expect(draftAfter).toBeNull();
-
-    await cleanupByTitle(page, title);
   });
 
   test("discard without logging clears both records and never posts a log", async ({
     page,
   }) => {
-    const title = "Tiny E2E Discard Session";
+    title = "Tiny E2E Discard Session";
     await signInViaBackdoor(page, {
       email: "session-log-discard@e2e.test",
       name: "Session Log Discard Tester",
@@ -532,11 +555,13 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     );
     expect(draftAfter).toBeNull();
     // LAST THREE never shows this workout — discarding never POSTs a log.
+    // (Unlike the full-loop test's own row assertion above, `toHaveCount(0)`
+    // needs no `.first()` — asserting ABSENCE is unaffected by how many
+    // duplicate rows a re-run might otherwise accumulate, since discarding
+    // is specifically what must never create even one.)
     await expect(
       page.locator(".today-log-row").filter({ hasText: title }),
     ).toHaveCount(0);
-
-    await cleanupByTitle(page, title);
   });
 });
 

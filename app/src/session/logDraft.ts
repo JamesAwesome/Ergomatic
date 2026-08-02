@@ -52,6 +52,15 @@ import type { SessionRun } from "./run";
  *  (Microburst: split + effort + distance steps) in the test file, plus a
  *  removed-step fixture proving the lookup survives a mid-workout removal.
  *
+ *  NUDGE FOLD (F2, whole-branch review, Task 2 fix round): the draft's raw
+ *  ref's own `off` is NOT what the label uses verbatim when a confirm-time
+ *  nudge was applied — `withEffectiveOff` folds `draft.nudges[originalIndex]`
+ *  into it first, so the label always names the prescription this step was
+ *  ACTUALLY rowed against (matching `phase.targetSplit`'s own nudge-inclusive
+ *  math), never the pre-nudge authored value alone. The manual door never
+ *  has nudges (no draft, no confirm step for an off-app row), so this is
+ *  inert there by construction, not a special case.
+ *
  *  FALLBACK (draft `null`, or a mismatched/stale draft whose
  *  `originalIndex` doesn't resolve to a real `"w"` step): 6B's own
  *  protections mean this shouldn't happen for a real session — the draft
@@ -116,6 +125,26 @@ function durationText(phase: { seconds?: number; meters?: number }): string {
 // in the file left to drift out of sync with it.
 function refPaceLabel(duration: string, ref: PaceRef): string {
   return `${duration} @ ${refLabel(ref)}`;
+}
+
+// F2 (whole-branch review, Task 2 fix round): the label's own offset must
+// be the EFFECTIVE one this step was actually rowed against — base + off +
+// nudge — not the raw authored off alone. `phase.targetSplit` already
+// bakes the nudge in (`engine.ts`'s `buildRun`, via `effectiveSteps`
+// folding a nudge into `ref.off` before resolving), so composing the label
+// from the RAW ref left a nudged session with an irreconcilable trio
+// forever once logged: label "2k +5", stored `targetSplit` reflecting
+// off+nudge (e.g. baselines[2k]=112.3, off=5, nudge=2 -> 119.3) — 112.3+5
+// (117.3) never reconciles against the persisted 119.3. Folding the nudge
+// into the label's own off ("2k +7") keeps label, the PACES LOCKED
+// reconstruction, and the stored split mutually consistent (112.3+7=119.3).
+// Effort refs have no offset to nudge (`withNudge` already refuses to
+// record one against an effort step — draft.ts's own rule), so this is a
+// no-op for them; `nudge === 0` (the manual door's own case — off-app rows
+// have no draft, hence no nudges) short-circuits to the identical ref.
+function withEffectiveOff(ref: PaceRef, nudge: number): PaceRef {
+  if (isEffortRef(ref) || nudge === 0) return ref;
+  return { ...ref, off: ref.off + nudge };
 }
 
 // Looks up the REAL authored step a work phase came from, in the draft it
@@ -202,7 +231,14 @@ export function buildLogSteps(
     // the phase's own resolved label verbatim instead.
     let label: string;
     if (draftStep !== undefined) {
-      label = refPaceLabel(durationText(phase), draftStep.ref);
+      // `draft` is guaranteed non-null here: `draftWorkStep` (above) can
+      // only return non-undefined when its own `draft` argument was
+      // non-null (it short-circuits via `draft?.steps[...]` otherwise).
+      const nudge = draft!.nudges[phase.originalIndex] ?? 0;
+      label = refPaceLabel(
+        durationText(phase),
+        withEffectiveOff(draftStep.ref, nudge),
+      );
     } else if (isEffort) {
       label = refPaceLabel(durationText(phase), {
         effort: effortFromWord(phase.label as "ALL OUT" | "EASY"),

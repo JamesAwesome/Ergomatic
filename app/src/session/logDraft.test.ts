@@ -3,7 +3,7 @@ import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
-import { buildDraft } from "./draft";
+import { buildDraft, withNudge } from "./draft";
 import type { SessionDraft } from "./draft";
 import { buildRun } from "./engine";
 import type { SessionRun } from "./run";
@@ -184,6 +184,76 @@ describe("buildLogSteps", () => {
       "750 m @ 2k +2", // w1 (index 1) — untouched by w2's removal
       "500 m @ 2k −2", // w3 (index 3) — NOT w2's "750 m @ 2k" (index 2)
     ]);
+  });
+
+  it("F2: a nudged step's label folds the nudge into its offset, so label + targetSplit + the PACES LOCKED reconstruction all agree — the reviewer's own fractional-baseline fixture", () => {
+    // Fractional baseline (112.3) deliberately, not a round number — proves
+    // this is real floating-point arithmetic being reconciled, not two
+    // integers that happen to agree by coincidence.
+    const baselines: Baselines = { k2Seconds: 112.3, k6Seconds: 120 };
+    const draft = buildDraft({
+      id: "id-nudge-fixture",
+      title: "Nudge Fixture",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "2k", off: 5 },
+        },
+      ],
+    });
+    const nudged = withNudge(draft, 0, 2); // +2s confirm-time nudge
+    const built = buildRun(nudged, baselines, 0, NOW);
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: NOW.toISOString(),
+    };
+    // targetSplit = baselines.k2Seconds + off + nudge = 112.3 + 5 + 2 =
+    // 119.3 (engine.ts's own math, via effectiveSteps folding the nudge
+    // into ref.off before resolving) — the label's own offset (+7, not the
+    // raw authored +5) is what makes 112.3 + 7 = 119.3 reconcile; the
+    // pre-fix label ("2k +5") would have implied 112.3 + 5 = 117.3,
+    // permanently disagreeing with the stored split once logged.
+    const steps = buildLogSteps(run, nudged);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.label).toBe("3:00 @ 2k +7");
+    expect(steps[0]!.targetSplit).toBeCloseTo(119.3, 9);
+  });
+
+  it("F2: the both-doors equality fixture itself stays nudge-free — buildManualLogSteps has no nudges to fold, by construction (no draft, no confirm step, for an off-app row)", () => {
+    // Regression guard for the fix round's own scope note: F2 only touches
+    // buildLogSteps' draft-matched path. Re-runs the existing Microburst
+    // mixed-kind equality straight from this file's own MIXED_STEPS fixture
+    // (see the "F1b: a mixed split+effort+distance workout" test below) to
+    // confirm it's untouched by this fix round — asserted again here,
+    // colocated with F2's own tests, rather than only trusting the older
+    // test not to have silently started disagreeing.
+    const doldrums = starter("Doldrums");
+    const splitWork = doldrums.steps.find((s) => s.k === "w") as Extract<
+      Step,
+      { k: "w" }
+    >;
+    const draft = buildDraft({
+      id: "id-f2-manual-equality",
+      title: doldrums.title,
+      type: doldrums.type as WorkoutType,
+      steps: [splitWork],
+    });
+    // No withNudge call at all — draft.nudges stays `{}`.
+    const built = buildRun(draft, BASELINES, 0, NOW);
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: NOW.toISOString(),
+    };
+    const runDoorLabel = buildLogSteps(run, draft)[0]!.label;
+    const manualDoorLabel = buildManualLogSteps(
+      { steps: [splitWork] },
+      BASELINES,
+    )[0]!.label;
+    expect(runDoorLabel).toBe(manualDoorLabel);
   });
 
   it("Jet Stream: a kept stopwatch actual passes through unchanged, keeping meters (not seconds)", () => {

@@ -170,12 +170,14 @@ describe("LogSession: prefill from a real completed run", () => {
     // completedAt = FIXED_NOW + 30 minutes -> "AUG 1"; totalMinutes = 30.
     expect(screen.getByText("AUG 1 · 30 MIN")).toBeInTheDocument();
 
-    // PACES LOCKED: no step in this fixture references "2k" at all (both
-    // work steps are 6k-based) -> "—"; the 6k value is recovered EXACTLY
-    // from the time phase's own frozen targetSplit (136 - 16 - 0 = 120,
-    // BASELINES.k6Seconds itself) -> fmtSplit(120) = "2:00.0".
+    // PACES LOCKED (F1: only the bases actually referenced render — no
+    // step in this fixture references "2k" at all, both work steps are
+    // 6k-based, so the panel shows 6K alone, never "2K —"). The 6k value
+    // is recovered EXACTLY from the time phase's own frozen targetSplit
+    // (136 - 16 - 0 = 120, BASELINES.k6Seconds itself) -> fmtSplit(120) =
+    // "2:00.0".
     expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "2K — · 6K 2:00.0",
+      "6K 2:00.0",
     );
 
     const rows = Array.from(document.querySelectorAll(".log-step-row"));
@@ -302,11 +304,18 @@ describe("LogSession: prefill from a real completed run", () => {
     expect(document.querySelector(".log-step-target")?.textContent).toBe(
       "2:05.0",
     );
-    // PACES LOCKED recovers the TRUE baseline (120), not the nudged split —
+    // F2: the label folds the nudge into its own offset ("6k +5", not the
+    // raw authored "6k") — 120 (baseline) + 5 (folded offset) = 125,
+    // reconciling with the target split above.
+    expect(document.querySelector(".log-step-label")?.textContent).toBe(
+      "3:00 @ 6k +5",
+    );
+    // PACES LOCKED recovers the TRUE baseline (120), not the nudged split
+    // (F1: only 6K renders at all — this fixture's only step is 6k-based) —
     // proves the reconstruction subtracts BOTH the off and the nudge, not
     // just one of them.
     expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "2K — · 6K 2:00.0",
+      "6K 2:00.0",
     );
   });
 
@@ -341,6 +350,9 @@ describe("LogSession: prefill from a real completed run", () => {
     expect(rows[0]).toHaveTextContent("0:30 @ MAX");
     expect(document.querySelector(".log-step-target")?.textContent).toBe("—");
     expect(rows[0]).not.toHaveTextContent("ACTUAL");
+    // F1: an all-effort workout references neither base at all — the whole
+    // PACES LOCKED panel is omitted, not a doubly-dashed one.
+    expect(document.querySelector(".log-paces-panel")).not.toBeInTheDocument();
   });
 
   it("a null run.workoutId (a malformed/legacy record) skips the library lookup and falls back honestly, with no EXPECTED line", async () => {
@@ -374,7 +386,7 @@ describe("LogSession: prefill from a real completed run", () => {
 // reconstruction, or the workoutType fallback — all three read `run` and
 // `draft`'s matching `workoutId` as one gate (`matchedDraft`).
 describe("LogSession: the ledger residual (workoutId mismatch)", () => {
-  it("ignores a foreign draft — fallback labels render and the PACES LOCKED panel shows both dashes", async () => {
+  it("ignores a foreign draft — fallback labels render and the PACES LOCKED panel is omitted entirely (F1: no bare dash)", async () => {
     const { workout } = buildSessionFixture();
     // A real, validly-shaped draft — just for a DIFFERENT workout than the
     // one this run was built from.
@@ -395,10 +407,9 @@ describe("LogSession: the ledger residual (workoutId mismatch)", () => {
     await renderLog();
     await screen.findByRole("heading", { name: "Log Doldrums" });
 
-    // Neither base is recoverable without a matching draft.
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "2K — · 6K —",
-    );
+    // Neither base is recoverable without a matching draft — F1: the whole
+    // panel is omitted, not a dashed "2K — · 6K —".
+    expect(document.querySelector(".log-paces-panel")).not.toBeInTheDocument();
 
     const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows).toHaveLength(2);
