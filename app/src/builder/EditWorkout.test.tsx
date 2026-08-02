@@ -116,6 +116,23 @@ async function renderEdit(initialPath: string) {
   );
 }
 
+// Same as `renderEdit`, but the initial history entry carries `state` — the
+// shape a real `<Link state={...}>` produces — so the not-found screen's
+// now-BackLink-backed "← BACK" can be proven to honor a real origin, not
+// just its hardcoded-/library default (the only thing `renderEdit` above
+// can exercise).
+async function renderEditWithState(pathname: string, state: unknown) {
+  const { default: EditWorkout } = await import("./EditWorkout");
+  render(
+    <MemoryRouter initialEntries={[{ pathname, state }]}>
+      <Routes>
+        <Route path="/library/:id/edit" element={<EditWorkout />} />
+        <Route path="/library/:id" element={<p>WORKOUT DETAIL SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   vi.resetModules();
 });
@@ -138,6 +155,22 @@ describe("EditWorkout", () => {
     expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
       "href",
       "/library",
+    );
+  });
+
+  // This screen's not-found BACK is now BackLink-backed (Builder.tsx's own
+  // edit-mode back link, by contrast, deliberately stays fixed to a
+  // specific id — there's no workout to point at here at all, so the
+  // general "return to origin" mechanism is the only sensible one).
+  it("honors a real origin on the not-found screen's ← BACK, not just the /library default", async () => {
+    mockHooks([PERSONAL_WORKOUT]);
+    await renderEditWithState("/library/does-not-exist/edit", {
+      from: "/today",
+    });
+
+    expect(screen.getByRole("link", { name: /back/i })).toHaveAttribute(
+      "href",
+      "/today",
     );
   });
 

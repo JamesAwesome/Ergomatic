@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import WorkoutRow from "./WorkoutRow";
 
@@ -113,5 +114,30 @@ describe("WorkoutRow", () => {
       );
       expect(screen.getByRole("link")).toHaveAccessibleName(/, custom workout/);
     });
+  });
+
+  // Same "prove the navigation, not the prop" idiom Today/Library's own
+  // probe-route tests use — the fix this task round is for depends on this
+  // Link carrying an origin the detail screen's own BackLink can read back.
+  it("stamps state={from:'/library'} onto the row link", async () => {
+    function LocationProbe() {
+      const location = useLocation();
+      const from = (location.state as { from?: unknown } | null)?.from;
+      return <p>PROBE from={String(from)}</p>;
+    }
+    render(
+      <MemoryRouter initialEntries={["/library"]}>
+        <Routes>
+          <Route
+            path="/library"
+            element={<WorkoutRow workout={DOLDRUMS} durationMinutes={20} />}
+          />
+          <Route path="/library/:id" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole("link"));
+    expect(await screen.findByText("PROBE from=/library")).toBeVisible();
   });
 });

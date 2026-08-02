@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 
 const WORKOUTS: LibraryWorkout[] = [
@@ -64,6 +64,31 @@ async function renderLibrary() {
   render(
     <MemoryRouter>
       <Library />
+    </MemoryRouter>,
+  );
+}
+
+// Renders `location.state.from` as plain text, the same "prove the
+// navigation, not the prop" idiom Today.test.tsx's own probe uses — every
+// link this screen makes into a detail-ish route now carries
+// `state={{from:"/library"}}`, and RTL can't read a `<Link>`'s `state`
+// prop directly.
+function LocationProbe() {
+  const location = useLocation();
+  const from = (location.state as { from?: unknown } | null)?.from;
+  return <p>PROBE from={String(from)}</p>;
+}
+
+async function renderLibraryWithProbes() {
+  const { default: Library } = await import("./Library");
+  render(
+    <MemoryRouter initialEntries={["/library"]}>
+      <Routes>
+        <Route path="/library" element={<Library />} />
+        <Route path="/library/new" element={<LocationProbe />} />
+        <Route path="/library/import" element={<LocationProbe />} />
+        <Route path="/library/:id" element={<LocationProbe />} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -300,6 +325,47 @@ describe("Library", () => {
         "href",
         "/library/new",
       );
+    });
+  });
+
+  describe("back-nav origin state", () => {
+    // Every link Library makes into a detail-ish screen must stamp its own
+    // pathname so that screen's own BackLink can return here (the fix this
+    // task round is for) — hrefs above already pin the routes; this pins
+    // the state riding alongside them.
+    it("stamps state={from:'/library'} onto IMPORT, + NEW, and a row link", async () => {
+      mockReady();
+      await renderLibraryWithProbes();
+
+      await userEvent.click(screen.getByRole("link", { name: "IMPORT" }));
+      expect(await screen.findByText("PROBE from=/library")).toBeVisible();
+    });
+
+    it("stamps state={from:'/library'} onto + NEW", async () => {
+      mockReady();
+      await renderLibraryWithProbes();
+
+      await userEvent.click(screen.getByRole("link", { name: "+ NEW" }));
+      expect(await screen.findByText("PROBE from=/library")).toBeVisible();
+    });
+
+    it("stamps state={from:'/library'} onto a workout row", async () => {
+      mockReady();
+      await renderLibraryWithProbes();
+
+      await userEvent.click(
+        screen.getByText("Anaerobic Threshold Blitz").closest("a")!,
+      );
+      expect(await screen.findByText("PROBE from=/library")).toBeVisible();
+    });
+
+    it("stamps state={from:'/library'} onto the CUSTOM-empty 'build one' link", async () => {
+      mockReady();
+      await renderLibraryWithProbes();
+
+      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      await userEvent.click(screen.getByRole("link", { name: "build one" }));
+      expect(await screen.findByText("PROBE from=/library")).toBeVisible();
     });
   });
 });

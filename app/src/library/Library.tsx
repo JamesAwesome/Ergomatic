@@ -18,10 +18,18 @@ function Header() {
     <div className="library-header">
       <h1 className="screen-title">Library</h1>
       <div className="library-header-actions">
-        <Link to="/library/import" className="library-import">
+        <Link
+          to="/library/import"
+          state={{ from: "/library" }}
+          className="library-import"
+        >
           IMPORT
         </Link>
-        <Link to="/library/new" className="library-new">
+        <Link
+          to="/library/new"
+          state={{ from: "/library" }}
+          className="library-new"
+        >
           + NEW
         </Link>
       </div>
@@ -99,7 +107,11 @@ export default function Library() {
           {filters.customOnly && (
             <p>
               No custom workouts yet —{" "}
-              <Link to="/library/new" className="library-new">
+              <Link
+                to="/library/new"
+                state={{ from: "/library" }}
+                className="library-new"
+              >
                 build one
               </Link>
             </p>
