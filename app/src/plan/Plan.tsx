@@ -267,15 +267,7 @@ function PlanView({
         </div>
       )}
 
-      {/* tabIndex=0: the 84-row list scrolls in its own fixed-height
-          container (see .plan-sequence, index.css) rather than growing the
-          page — axe's scrollable-region-focusable rule (WCAG 2.1.1/2.1.3)
-          flags any such region that a keyboard-only user can't reach, since
-          native `<ul>`/overflow alone gives it no focus stop. Caught by
-          Phase 6A Task 5's design sweep, the first one to run axe against
-          an ACTIVE plan's real 84-row layout — no prior sweep (client tests
-          only) ever rendered this scroll container. */}
-      <ul className="plan-sequence" tabIndex={0} aria-label="Plan sequence">
+      <ul className="plan-sequence" aria-label="Plan sequence">
         {plan.sequence.map((item) => (
           <li
             key={item.index}
