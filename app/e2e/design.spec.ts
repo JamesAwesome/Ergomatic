@@ -1692,6 +1692,25 @@ test.describe("log session screen (session door)", () => {
     );
   });
 
+  // Phase 6C Task 2's own F4 fix round found `.log-save` rendering at 60px
+  // against a 54px spec — neither `button` nor `.button-primary` resets the
+  // browser's UA button chrome (a ~2px outset border plus ~1px vertical
+  // padding), which `min-height`/`line-height` alone can't clamp below. The
+  // fix (`border: none; padding: 0;`, scoped to `.log-save` only — see
+  // index.css's own comment on this and DEVIATIONS.md's sibling gap on
+  // `.button-primary` app-wide) was never pinned by a computed-style
+  // assertion — a deferred obligation from that round's review, closed here
+  // (Phase 6C Task 4) so a future edit to `.log-save`/`.button-primary`
+  // can't silently regress the height back to the UA default.
+  test("Save session renders at the specced 54px height, not the browser's default button chrome", async ({
+    page,
+  }) => {
+    const height = await page
+      .locator(".log-save")
+      .evaluate((el) => getComputedStyle(el).height);
+    expect(height).toBe("54px");
+  });
+
   // The staged Discard idiom (BaselineEditor.tsx's own `.baseline-confirm`/
   // `.baseline-actions`) gets its own sweep with the panel open, same
   // pattern as the timer screen's three staged-confirm describes below.
