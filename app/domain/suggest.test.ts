@@ -122,6 +122,195 @@ describe("suggest", () => {
     expect(r.reason).toMatch(/difficulty filters/i);
     expect(r.reason).not.toMatch(/time/i);
   });
+
+  it("keeps a pain-3 entry and excludes a pain-4 entry when painMax3 is set", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        painMax3: true,
+      },
+      library: [
+        w("ok", { pain: 3, lastDoneDaysAgo: 5 }),
+        w("hurts", { pain: 4, lastDoneDaysAgo: 50 }),
+      ],
+    });
+    expect(r.poolIds).toStrictEqual(["ok"]);
+    expect(r.recommendationId).toBe("ok");
+  });
+
+  it("falls back when painMax3 excludes everything in a non-empty type pool; pool is the unfiltered type list", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        painMax3: true,
+      },
+      library: [w("hurts", { pain: 5, lastDoneDaysAgo: 12 })],
+    });
+    expect(r.fellBack).toBe(true);
+    expect(r.poolIds).toStrictEqual(["hurts"]);
+    expect(r.recommendationId).toBe("hurts");
+    expect(r.reason).toMatch(/closest match/i);
+    expect(r.reason).toMatch(/pain/i);
+  });
+
+  it("keeps a 200-min entry when timeCapMinutes is null (capless)", () => {
+    const r = suggest({
+      todayCode: "AT",
+      prefs: {
+        difficulties: [...prefs.difficulties],
+        timeCapMinutes: null,
+      },
+      library: [w("long", { estMinutes: 200, lastDoneDaysAgo: 7 })],
+    });
+    expect(r.fellBack).toBe(false);
+    expect(r.poolIds).toStrictEqual(["long"]);
+    expect(r.recommendationId).toBe("long");
+  });
+
+  describe("standard-reason wording across cap x durationsUnknown x painMax3", () => {
+    const base = {
+      todayCode: "AT" as const,
+      library: [w("a", { lastDoneDaysAgo: 33 })],
+    };
+
+    it("cap set, durations known, no pain filter -> cap clause present", () => {
+      const r = suggest({
+        ...base,
+        prefs: { difficulties: [...prefs.difficulties], timeCapMinutes: 60 },
+      });
+      expect(r.reason).toBe(
+        "Least recently done (33 days ago) within your 60 min cap.",
+      );
+    });
+
+    it("cap set, durationsUnknown true -> cap clause dropped", () => {
+      const r = suggest({
+        ...base,
+        prefs: {
+          difficulties: [...prefs.difficulties],
+          timeCapMinutes: 60,
+          durationsUnknown: true,
+        },
+      });
+      expect(r.reason).toBe("Least recently done (33 days ago).");
+    });
+
+    it("cap null (capless), durations known -> cap clause dropped", () => {
+      const r = suggest({
+        ...base,
+        prefs: { difficulties: [...prefs.difficulties], timeCapMinutes: null },
+      });
+      expect(r.reason).toBe("Least recently done (33 days ago).");
+    });
+
+    it("cap null and durationsUnknown true -> cap clause still dropped", () => {
+      const r = suggest({
+        ...base,
+        prefs: {
+          difficulties: [...prefs.difficulties],
+          timeCapMinutes: null,
+          durationsUnknown: true,
+        },
+      });
+      expect(r.reason).toBe("Least recently done (33 days ago).");
+    });
+
+    it("painMax3 does not appear in the standard-reason sentence (only fellback names it)", () => {
+      const r = suggest({
+        ...base,
+        prefs: {
+          difficulties: [...prefs.difficulties],
+          timeCapMinutes: 60,
+          painMax3: true,
+        },
+      });
+      expect(r.reason).toBe(
+        "Least recently done (33 days ago) within your 60 min cap.",
+      );
+    });
+  });
+
+  describe("fellback-reason wording across cap x durationsUnknown x painMax3", () => {
+    const fellbackLib = [
+      w("only", {
+        difficulty: "hard",
+        estMinutes: 55,
+        pain: 5,
+        lastDoneDaysAgo: 33,
+      }),
+    ];
+
+    it("cap checked, no pain filter -> difficulty/time", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["easy"], timeCapMinutes: 20 },
+        library: fellbackLib,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/time filters — closest match, last done 33 days ago.",
+      );
+    });
+
+    it("cap not checked (durationsUnknown), no pain filter -> difficulty only", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          difficulties: ["easy"],
+          timeCapMinutes: 20,
+          durationsUnknown: true,
+        },
+        library: fellbackLib,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty filters — closest match, last done 33 days ago.",
+      );
+    });
+
+    it("cap not checked (capless), no pain filter -> difficulty only", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["easy"], timeCapMinutes: null },
+        library: fellbackLib,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty filters — closest match, last done 33 days ago.",
+      );
+    });
+
+    it("cap checked, pain filter set -> difficulty/time/pain", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          difficulties: ["easy"],
+          timeCapMinutes: 20,
+          painMax3: true,
+        },
+        library: fellbackLib,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/time/pain filters — closest match, last done 33 days ago.",
+      );
+    });
+
+    it("cap not checked, pain filter set -> difficulty/pain", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          difficulties: ["easy"],
+          timeCapMinutes: null,
+          painMax3: true,
+        },
+        library: fellbackLib,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/pain filters — closest match, last done 33 days ago.",
+      );
+    });
+  });
 });
 
 describe("suggestFreestyle", () => {
@@ -221,5 +410,116 @@ describe("suggestFreestyle", () => {
     expect(r.reason).toMatch(/closest match/i);
     expect(r.reason).toMatch(/difficulty filters/i);
     expect(r.reason).not.toMatch(/time/i);
+  });
+
+  it("keeps a pain-3 entry and excludes a pain-4 entry when painMax3 is set", () => {
+    const r = suggestFreestyle(
+      [
+        w("ok", { pain: 3, lastDoneDaysAgo: 5 }),
+        w("hurts", { pain: 4, lastDoneDaysAgo: 50 }),
+      ],
+      { ...prefs, difficulties: [...prefs.difficulties], painMax3: true },
+    );
+    expect(r.poolIds).toStrictEqual(["ok"]);
+    expect(r.recommendationId).toBe("ok");
+  });
+
+  it("falls back when painMax3 excludes everything; pool is the unfiltered library", () => {
+    const r = suggestFreestyle([w("hurts", { pain: 5, lastDoneDaysAgo: 12 })], {
+      ...prefs,
+      difficulties: [...prefs.difficulties],
+      painMax3: true,
+    });
+    expect(r.fellBack).toBe(true);
+    expect(r.poolIds).toStrictEqual(["hurts"]);
+    expect(r.recommendationId).toBe("hurts");
+    expect(r.reason).toMatch(/closest match/i);
+    expect(r.reason).toMatch(/pain/i);
+  });
+
+  it("keeps a 200-min entry when timeCapMinutes is null (capless)", () => {
+    const r = suggestFreestyle(
+      [w("long", { estMinutes: 200, lastDoneDaysAgo: 7 })],
+      {
+        difficulties: [...prefs.difficulties],
+        timeCapMinutes: null,
+      },
+    );
+    expect(r.fellBack).toBe(false);
+    expect(r.poolIds).toStrictEqual(["long"]);
+    expect(r.recommendationId).toBe("long");
+  });
+
+  describe("standard-reason wording across cap x durationsUnknown x painMax3 (freestyle parity)", () => {
+    const lib = [w("a", { lastDoneDaysAgo: 33 })];
+
+    it("cap set, durations known, no pain filter -> cap clause present", () => {
+      const r = suggestFreestyle(lib, {
+        difficulties: [...prefs.difficulties],
+        timeCapMinutes: 60,
+      });
+      expect(r.reason).toBe(
+        "Least recently done (33 days ago) within your 60 min cap.",
+      );
+    });
+
+    it("cap set, durationsUnknown true -> cap clause dropped", () => {
+      const r = suggestFreestyle(lib, {
+        difficulties: [...prefs.difficulties],
+        timeCapMinutes: 60,
+        durationsUnknown: true,
+      });
+      expect(r.reason).toBe("Least recently done (33 days ago).");
+    });
+
+    it("cap null (capless), durations known -> cap clause dropped", () => {
+      const r = suggestFreestyle(lib, {
+        difficulties: [...prefs.difficulties],
+        timeCapMinutes: null,
+      });
+      expect(r.reason).toBe("Least recently done (33 days ago).");
+    });
+
+    it("cap null and durationsUnknown true -> cap clause still dropped", () => {
+      const r = suggestFreestyle(lib, {
+        difficulties: [...prefs.difficulties],
+        timeCapMinutes: null,
+        durationsUnknown: true,
+      });
+      expect(r.reason).toBe("Least recently done (33 days ago).");
+    });
+  });
+
+  describe("fellback-reason wording across cap x durationsUnknown x painMax3 (freestyle parity)", () => {
+    const fellbackLib = [
+      w("only", {
+        difficulty: "hard",
+        estMinutes: 55,
+        pain: 5,
+        lastDoneDaysAgo: 33,
+      }),
+    ];
+
+    it("cap checked, pain filter set -> difficulty/time/pain", () => {
+      const r = suggestFreestyle(fellbackLib, {
+        difficulties: ["easy"],
+        timeCapMinutes: 20,
+        painMax3: true,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/time/pain filters — closest match, last done 33 days ago.",
+      );
+    });
+
+    it("cap not checked (capless), pain filter set -> difficulty/pain", () => {
+      const r = suggestFreestyle(fellbackLib, {
+        difficulties: ["easy"],
+        timeCapMinutes: null,
+        painMax3: true,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/pain filters — closest match, last done 33 days ago.",
+      );
+    });
   });
 });

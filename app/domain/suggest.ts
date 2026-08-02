@@ -12,7 +12,9 @@ export interface LibraryEntry {
 
 export interface SuggestPrefs {
   difficulties: Difficulty[];
-  timeCapMinutes: number;
+  // `null` means capless — no cap was set, so the cap clause is skipped
+  // entirely rather than compared against a sentinel value.
+  timeCapMinutes: number | null;
   // Set when the caller could not compute a real `estMinutes` for any
   // library entry (no baselines yet — the standing convention is every
   // entry gets `estMinutes: 0` in that case, purely so the time-cap filter
@@ -22,7 +24,12 @@ export interface SuggestPrefs {
   // actually checked ("within your N min cap", "difficulty/time filters")
   // when every duration was a placeholder. Set true and both reasons drop
   // any mention of time/cap instead of asserting something never verified.
+  // `timeCapMinutes: null` takes the same no-cap-claim branch for the same
+  // reason: nothing was actually checked either way.
   durationsUnknown?: boolean;
+  // When true, entries with `pain > 3` are filtered out and the reason
+  // text says so.
+  painMax3?: boolean;
 }
 
 export interface SuggestInput {
@@ -65,16 +72,17 @@ function buildReason(
   fellBack: boolean,
   prefs: SuggestPrefs,
 ): string {
+  const capChecked = prefs.timeCapMinutes !== null && !prefs.durationsUnknown;
   if (pickOverride) {
     return `YOUR PICK — last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   if (fellBack) {
-    const filterWord = prefs.durationsUnknown
-      ? "difficulty"
-      : "difficulty/time";
-    return `Nothing fit your ${filterWord} filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+    const parts = ["difficulty"];
+    if (capChecked) parts.push("time");
+    if (prefs.painMax3) parts.push("pain");
+    return `Nothing fit your ${parts.join("/")} filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
-  if (prefs.durationsUnknown) {
+  if (!capChecked) {
     return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
   }
   return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}) within your ${prefs.timeCapMinutes} min cap.`;
@@ -88,7 +96,8 @@ export function suggest(input: SuggestInput): Suggestion {
   const filtered = typeMatched.filter(
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
-      e.estMinutes <= prefs.timeCapMinutes,
+      (prefs.timeCapMinutes === null || e.estMinutes <= prefs.timeCapMinutes) &&
+      (!prefs.painMax3 || e.pain <= 3),
   );
 
   const fellBack = typeMatched.length > 0 && filtered.length === 0;
@@ -116,7 +125,8 @@ export function suggest(input: SuggestInput): Suggestion {
 
 /** Freestyle mode: no plan is active, so the pool is the whole library
  *  (no type filter) rather than a single plan-code type. Ordering and
- *  fellBack semantics otherwise mirror `suggest` exactly (see `:54`). */
+ *  fellBack semantics otherwise mirror `suggest` exactly (see
+ *  `byLeastRecentlyDone`). */
 export function suggestFreestyle(
   library: LibraryEntry[],
   prefs: SuggestPrefs,
@@ -125,7 +135,8 @@ export function suggestFreestyle(
   const filtered = library.filter(
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
-      e.estMinutes <= prefs.timeCapMinutes,
+      (prefs.timeCapMinutes === null || e.estMinutes <= prefs.timeCapMinutes) &&
+      (!prefs.painMax3 || e.pain <= 3),
   );
 
   const fellBack = library.length > 0 && filtered.length === 0;
