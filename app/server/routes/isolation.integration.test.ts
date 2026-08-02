@@ -512,7 +512,18 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
         held: "held",
         pain: 1,
         notes: null,
-        steps: [{ label: "Steady", targetSplit: 150, actualSource: "assumed" }],
+        // actualSplit paired with actualSource, per the Task 1.5 amendment
+        // (server/routes/data.ts's validateLogStepEntry) and matching
+        // logDraft.ts's own "assumed = held the target" convention
+        // (actualSplit === targetSplit).
+        steps: [
+          {
+            label: "Steady",
+            targetSplit: 150,
+            actualSplit: 150,
+            actualSource: "assumed",
+          },
+        ],
       });
     expect(logRes.status).toBe(201);
 

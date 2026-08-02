@@ -661,7 +661,14 @@ describe("GET/POST /api/logs", () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {
         ...validLogBody(),
-        steps: [{ label: "Work", targetSplit: 120, actualSource: "radar" }],
+        steps: [
+          {
+            label: "Work",
+            targetSplit: 120,
+            actualSplit: 120,
+            actualSource: "radar",
+          },
+        ],
       },
     );
     expect(res.status).toBe(400);
@@ -751,19 +758,53 @@ describe("GET/POST /api/logs", () => {
     ],
     [
       "spm not an integer",
-      { label: "W", targetSplit: 120, actualSource: "assumed", spm: 20.5 },
+      {
+        label: "W",
+        targetSplit: 120,
+        actualSplit: 120,
+        actualSource: "assumed",
+        spm: 20.5,
+      },
     ],
     [
       "spm out of range",
-      { label: "W", targetSplit: 120, actualSource: "assumed", spm: 5 },
+      {
+        label: "W",
+        targetSplit: 120,
+        actualSplit: 120,
+        actualSource: "assumed",
+        spm: 5,
+      },
     ],
     [
       "meters out of range",
-      { label: "W", targetSplit: 120, actualSource: "assumed", meters: 50 },
+      {
+        label: "W",
+        targetSplit: 120,
+        actualSplit: 120,
+        actualSource: "assumed",
+        meters: 50,
+      },
     ],
     [
       "seconds out of range",
-      { label: "W", targetSplit: 120, actualSource: "assumed", seconds: 99999 },
+      {
+        label: "W",
+        targetSplit: 120,
+        actualSplit: 120,
+        actualSource: "assumed",
+        seconds: 99999,
+      },
+    ],
+    // Amendment (Task 1.5): actualSplit/actualSource are a paired unit —
+    // one present without the other is rejected in BOTH directions.
+    [
+      "actualSource present without actualSplit",
+      { label: "W", targetSplit: 120, actualSource: "assumed" },
+    ],
+    [
+      "actualSplit present without actualSource",
+      { label: "W", targetSplit: 120, actualSplit: 120 },
     ],
   ])(
     "rejects a step with %s: 400 + field steps, index in the message",
@@ -780,23 +821,93 @@ describe("GET/POST /api/logs", () => {
     },
   );
 
+  // Amendment (Task 1.5): targetSplit is now optional (an effort step's
+  // frozen split is an estimate, never a prescription — the 5G rule), and
+  // actualSplit/actualSource are a paired unit. These pin the new arms the
+  // it.each rejection block above doesn't cover: the ACCEPT side, and the
+  // 400 message actually naming the pairing (not just its status/field).
+  it("accepts a step with no targetSplit and no actuals at all (effort-shaped, matching logDraft.ts's 5G-rule step)", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      steps: [{ label: "0:30 @ ALL OUT" }],
+    });
+    expect(created.status).toBe(201);
+    const list = await asA(request(app).get("/api/logs"));
+    expect(list.body[0].steps[0]).toStrictEqual({ label: "0:30 @ ALL OUT" });
+  });
+
+  it("accepts a step with no targetSplit but a paired actual", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      steps: [{ label: "Effort", actualSplit: 140, actualSource: "assumed" }],
+    });
+    expect(created.status).toBe(201);
+    const list = await asA(request(app).get("/api/logs"));
+    expect(list.body[0].steps[0]).toStrictEqual({
+      label: "Effort",
+      actualSplit: 140,
+      actualSource: "assumed",
+    });
+  });
+
+  it("400 names the pairing when actualSource is sent without actualSplit", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        steps: [{ label: "W", targetSplit: 120, actualSource: "assumed" }],
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("steps");
+    expect(res.body.error).toContain("actualSplit");
+    expect(res.body.error).toContain("actualSource");
+  });
+
+  it("400 names the pairing when actualSplit is sent without actualSource", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        steps: [{ label: "W", targetSplit: 120, actualSplit: 120 }],
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("steps");
+    expect(res.body.error).toContain("actualSplit");
+    expect(res.body.error).toContain("actualSource");
+  });
+
+  // Compatibility pin: the amendment only loosens required -> optional, so
+  // the full pre-amendment step shape (every field present, as every
+  // previously-valid payload sent it) must still 201 completely unchanged.
+  it("compatibility pin: the full pre-amendment step shape still 201s unchanged", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      validLogBody(),
+    );
+    expect(res.status).toBe(201);
+  });
+
   it("strips unknown keys from a step rather than persisting them", async () => {
     const app = appFor(makeStores());
-    await asA(request(app).post("/api/logs")).send({
+    const created = await asA(request(app).post("/api/logs")).send({
       ...validLogBody(),
       steps: [
         {
           label: "Work",
           targetSplit: 120,
+          actualSplit: 120,
           actualSource: "assumed",
           notAStepField: "should be dropped",
         },
       ],
     });
+    expect(created.status).toBe(201);
     const list = await asA(request(app).get("/api/logs"));
     expect(list.body[0].steps[0]).toStrictEqual({
       label: "Work",
       targetSplit: 120,
+      actualSplit: 120,
       actualSource: "assumed",
     });
   });
@@ -868,7 +979,14 @@ describe("GET/PUT /api/plan", () => {
       held: "held",
       pain: 1,
       notes: null,
-      steps: [{ label: "W", targetSplit: 100, actualSource: "assumed" }],
+      steps: [
+        {
+          label: "W",
+          targetSplit: 100,
+          actualSplit: 100,
+          actualSource: "assumed",
+        },
+      ],
     });
     vi.mocked(stores.planState.set).mockClear();
 
@@ -891,7 +1009,14 @@ describe("GET/PUT /api/plan", () => {
       held: "held",
       pain: 1,
       notes: null,
-      steps: [{ label: "W", targetSplit: 100, actualSource: "assumed" }],
+      steps: [
+        {
+          label: "W",
+          targetSplit: 100,
+          actualSplit: 100,
+          actualSource: "assumed",
+        },
+      ],
     });
 
     const res = await asA(request(app).put("/api/plan")).send({
@@ -913,7 +1038,14 @@ describe("GET/PUT /api/plan", () => {
       held: "held",
       pain: 1,
       notes: null,
-      steps: [{ label: "W", targetSplit: 100, actualSource: "assumed" }],
+      steps: [
+        {
+          label: "W",
+          targetSplit: 100,
+          actualSplit: 100,
+          actualSource: "assumed",
+        },
+      ],
     });
     const res = await asA(request(app).put("/api/plan")).send({ reset: true });
     expect(res.body).toMatchObject({ planKey: "sprint", doneN: 0 });

@@ -5,11 +5,21 @@ import { planState, sessionLogs } from "../db/schema.js";
 export type ActualSource = "assumed" | "stopwatch" | "pm5";
 export type HeldResult = "held" | "under" | "over";
 
+// Amendment (2026-08-02, Phase 6C Task 1.5): targetSplit is now OPTIONAL (an
+// effort step's frozen split is an estimate, never a prescription — the 5G
+// rule — so it's omitted rather than logged as a fake target), and
+// actualSplit/actualSource are now a PAIRED unit, both optional together
+// (both present, or both absent — never one without the other). Enforced in
+// `routes/data.ts`'s `validateLogStepEntry`; see that function's comment for
+// the full rationale. `steps` is stored as a plain jsonb column (`db/
+// schema.ts`, untyped — no `.$type<LogStep[]>()` binding), so this is a
+// type-level change only: the column already accepts any JSON shape,
+// including one with these keys omitted, with no migration required.
 export interface LogStep {
   label: string;
-  targetSplit: number;
+  targetSplit?: number;
   actualSplit?: number;
-  actualSource: ActualSource;
+  actualSource?: ActualSource;
   spm?: number;
   meters?: number;
   seconds?: number;

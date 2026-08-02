@@ -77,6 +77,26 @@ function isRec(v: unknown): v is Record<string, unknown> {
 // Bounds for a logged step: 30-600s/500m spans "sprinting" to "recovery
 // paddle"; spm 10..60 covers rest to a max-rate finish sprint; meters
 // mirrors validateSteps' distance-step bound; seconds caps at 4 hours.
+//
+// Amendment (2026-08-02, Phase 6C Task 1.5): Task 1's `logDraft.ts` proved
+// this validation predates effort refs — `targetSplit` was required
+// unconditionally, but an effort step's frozen split is `estimationSplit`'s
+// internal guess, never a real prescription (the 5G rule: never present an
+// estimate as a target), so an effort step could never be logged as
+// designed. Resolution: `targetSplit` is now OPTIONAL. `actualSplit` and
+// `actualSource` are now a PAIRED unit — both present (existing bounds/enum
+// apply) or both absent; one without the other is a 400 naming the pairing.
+// An effort step in practice omits all three (no target to hold, so no
+// actual to attribute to one — see `logDraft.ts`'s "neither key" rule for a
+// discarded/effort phase).
+//
+// This is additive-compatible: loosening required -> optional only ever
+// ACCEPTS payloads the old code rejected, so every payload that used to be
+// valid (which always sent targetSplit, and always sent actualSplit paired
+// with actualSource per the client's own "assumed"/"stopwatch" rules) is
+// still valid unchanged — the between-tags API discipline holds. See
+// docs/superpowers/specs/2026-08-02-phase-6c-log-session-design.md's
+// Amendment section.
 function validateLogStepEntry(
   raw: unknown,
   index: number,
@@ -98,16 +118,17 @@ function validateLogStepEntry(
     return { ok: false, message: at("label must be a string, 1..80 chars") };
   }
   if (
-    typeof targetSplit !== "number" ||
-    targetSplit < 30 ||
-    targetSplit > 600
+    targetSplit !== undefined &&
+    (typeof targetSplit !== "number" || targetSplit < 30 || targetSplit > 600)
   ) {
     return { ok: false, message: at("targetSplit must be a number, 30..600") };
   }
-  if (!ACTUAL_SOURCES.includes(actualSource as ActualSource)) {
+  if ((actualSplit === undefined) !== (actualSource === undefined)) {
     return {
       ok: false,
-      message: at("actualSource must be one of assumed|stopwatch|pm5"),
+      message: at(
+        "actualSplit and actualSource must both be present or both be absent",
+      ),
     };
   }
   if (
@@ -115,6 +136,15 @@ function validateLogStepEntry(
     (typeof actualSplit !== "number" || actualSplit < 30 || actualSplit > 600)
   ) {
     return { ok: false, message: at("actualSplit must be a number, 30..600") };
+  }
+  if (
+    actualSource !== undefined &&
+    !ACTUAL_SOURCES.includes(actualSource as ActualSource)
+  ) {
+    return {
+      ok: false,
+      message: at("actualSource must be one of assumed|stopwatch|pm5"),
+    };
   }
   if (
     spm !== undefined &&
@@ -140,12 +170,11 @@ function validateLogStepEntry(
 
   // Built from an explicit field list (never spread/cast the raw input) so
   // any extra keys the client sent are silently dropped, not persisted.
-  const step: LogStep = {
-    label,
-    targetSplit,
-    actualSource: actualSource as ActualSource,
-  };
+  const step: LogStep = { label };
+  if (targetSplit !== undefined) step.targetSplit = targetSplit;
   if (actualSplit !== undefined) step.actualSplit = actualSplit;
+  if (actualSource !== undefined)
+    step.actualSource = actualSource as ActualSource;
   if (spm !== undefined) step.spm = spm;
   if (meters !== undefined) step.meters = meters;
   if (seconds !== undefined) step.seconds = seconds;
