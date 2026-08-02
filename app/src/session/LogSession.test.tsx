@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import type { api } from "../api";
@@ -43,12 +43,21 @@ function starter(title: string) {
  *  the LAST phase gets a real recorded (stopwatch) actual; the time phase
  *  never does (the engine only ever records one for a distance phase), so
  *  this fixture covers BOTH of `buildLogSteps`' actual rules in one run. */
-function buildSessionFixture(): {
+// IMP-3 (whole-branch review): `type` defaults to Doldrums' own real type
+// ("O2") for every caller that doesn't care about workoutType resolution
+// specifically — but that default is ALSO `resolveWorkoutType`'s
+// (`LogSession.tsx`) last-resort fallback value, so the "workoutType
+// sourcing" describe block below overrides it to a non-"O2" type. Without
+// the override, a `resolveWorkoutType` regressed to a bare `() => "O2"`
+// would still pass every one of those tests — the fixture's own real type
+// and the fallback's placeholder were indistinguishable.
+function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
   draft: SessionDraft;
   run: SessionRun;
   workout: LibraryWorkout;
 } {
   const doldrums = starter("Doldrums");
+  const type = overrides.type ?? (doldrums.type as WorkoutType);
   const timeWork = doldrums.steps.find((s) => s.k === "w") as Extract<
     Step,
     { k: "w" }
@@ -62,7 +71,7 @@ function buildSessionFixture(): {
   const draft = buildDraft({
     id: "id-doldrums-fixture",
     title: doldrums.title,
-    type: doldrums.type as WorkoutType,
+    type,
     steps: [{ k: "wu", minutes: 4 }, timeWork, distanceWork],
   });
   const started = startDraft(draft);
@@ -91,7 +100,7 @@ function buildSessionFixture(): {
   const workout: LibraryWorkout = {
     id: "id-doldrums-fixture",
     title: doldrums.title,
-    type: doldrums.type as WorkoutType,
+    type,
     difficulty: doldrums.difficulty,
     pain: doldrums.pain,
     steps: started.steps,
@@ -190,6 +199,49 @@ async function renderManualLog(workoutId: string) {
       <Routes>
         <Route path="/library/:id/log" element={<LogSession />} />
         <Route path="/today" element={<p>TODAY SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// Must-fix minor (whole-branch review): a button that fires the exact same
+// history transition a real browser BACK press does (`navigate(-1)`) — RTL
+// has no way to trigger the actual browser back button, so this is the
+// established way to prove a `replace: true` navigation's effect on the
+// history STACK itself, not just the string it navigated to.
+function BackTrigger() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      SIMULATE BROWSER BACK
+    </button>
+  );
+}
+
+// Renders the manual door with a REAL entry beneath it in history (the
+// workout's own detail screen, standing in for wherever "Log it after" was
+// clicked from) rather than `renderManualLog`'s single-entry stack — needed
+// to prove what a browser BACK press after a successful save actually lands
+// on, which a single-entry history can't distinguish from a fresh reload.
+async function renderManualLogWithHistory(workoutId: string) {
+  const { default: LogSession } = await import("./LogSession");
+  return render(
+    <MemoryRouter
+      initialEntries={[`/library/${workoutId}`, `/library/${workoutId}/log`]}
+      initialIndex={1}
+    >
+      <Routes>
+        <Route path="/library/:id" element={<p>WORKOUT DETAIL SCREEN</p>} />
+        <Route path="/library/:id/log" element={<LogSession />} />
+        <Route
+          path="/today"
+          element={
+            <>
+              <p>TODAY SCREEN</p>
+              <BackTrigger />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -426,16 +478,40 @@ describe("LogSession: prefill from a real completed run", () => {
     expect(screen.queryByText(/EXPECTED/)).not.toBeInTheDocument();
   });
 
-  it("treats a still-loading workouts hook as 'no fallback available yet' rather than blocking the screen", async () => {
-    buildSessionFixture();
+  // Must-fix minor (whole-branch review): this used to render the full form
+  // immediately, using the "O2" fallback default because `library` reads as
+  // `[]` while `useWorkouts()` is loading — a fast Save in that window
+  // would have POSTed "O2" as the session's real type even though the
+  // library lookup (once it resolved) would have found something else. The
+  // fixture's own real type ("AT") is deliberately not "O2" for the same
+  // IMP-3 reason as the "workoutType sourcing" block above.
+  it("shows LOADING… (not the O2 fallback) when there is no matched draft and workouts are still resolving", async () => {
+    buildSessionFixture({ type: "AT" });
     clearDraft();
     vi.doMock("../api/useWorkouts", () => ({
       useWorkouts: () => ({ state: "loading" }),
     }));
     await renderLog();
 
+    expect(await screen.findByText("LOADING…")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Log Doldrums" }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".type-badge")).not.toBeInTheDocument();
+  });
+
+  it("does not gate on a still-loading workouts hook when a matched draft already supplies the type", async () => {
+    // Draft kept (not cleared) — `resolveWorkoutType`'s first, preferred
+    // branch reads `matchedDraft.type` directly and never touches the
+    // library at all, so there is nothing to wait for here.
+    buildSessionFixture({ type: "AT" });
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({ state: "loading" }),
+    }));
+    await renderLog();
+
     await screen.findByRole("heading", { name: "Log Doldrums" });
-    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
+    expect(document.querySelector(".type-badge")?.textContent).toBe("AT");
   });
 });
 
@@ -480,20 +556,62 @@ describe("LogSession: the ledger residual (workoutId mismatch)", () => {
   });
 });
 
+// IMP-2 (whole-branch review): before this fix, the session door had NO
+// non-destructive way to leave this screen at all (tab bar hidden, no back
+// link — only Save or a destructive staged Discard); the manual door's
+// OTHER states (workout-not-found, baselines-unset) already had a BackLink,
+// but its own main, ready-to-save state didn't (a Must-fix minor from Task
+// 3's own deferred review list: "BackLink on the manual door's main state =
+// strictly-better exit"). Both now render one via `LogScreen`'s shared
+// `backFallback` prop.
+describe("LogSession: BackLink exit (IMP-2)", () => {
+  it("the session door's main state renders a BackLink falling back to /today (neither of its two real entry points carries a `from` today)", async () => {
+    buildSessionFixture();
+    mockWorkouts([]);
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+      "href",
+      "/today",
+    );
+  });
+
+  it("the manual door's main, ready-to-save state renders a BackLink falling back to /library", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+
+    expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+      "href",
+      "/library",
+    );
+  });
+});
+
 describe("LogSession: workoutType sourcing", () => {
+  // IMP-3 (whole-branch review): every fixture below overrides `type` away
+  // from Doldrums' real "O2" — the SAME value `resolveWorkoutType`'s own
+  // last-resort fallback returns. Before this fix all three tests expected
+  // "O2" throughout, so a `resolveWorkoutType` regressed to a bare
+  // `() => "O2"` (ignoring the draft AND the library entirely) would have
+  // passed every one of them.
   it("sources workoutType from the library when there is no usable draft, not the last-resort default", async () => {
-    const { workout } = buildSessionFixture();
+    const { workout } = buildSessionFixture({ type: "AT" });
     clearDraft(); // simulate a missing draft — the run alone survives.
     mockWorkouts([workout]);
     await renderLog();
     await screen.findByRole("heading", { name: "Log Doldrums" });
-    expect(document.querySelector(".type-badge")?.textContent).toBe(
-      workout.type,
-    );
+    expect(document.querySelector(".type-badge")?.textContent).toBe("AT");
   });
 
   it("falls back to O2 only when both the draft AND the library lookup fail", async () => {
-    buildSessionFixture();
+    // The fixture's own real type is "AT", not "O2" — proves the fallback
+    // is genuinely engaged (an "O2" result can't be coming from anywhere
+    // else on this path) rather than happening to match a real value.
+    buildSessionFixture({ type: "AT" });
     clearDraft();
     mockWorkouts([]); // the workout is gone from the library too.
     await renderLog();
@@ -502,11 +620,13 @@ describe("LogSession: workoutType sourcing", () => {
   });
 
   it("prefers matchedDraft.type over the library lookup when both exist but disagree", async () => {
-    const { workout } = buildSessionFixture(); // draft.type is "O2" (Doldrums)
+    const { workout } = buildSessionFixture({ type: "AT" }); // draft.type is "AT"
     mockWorkouts([{ ...workout, type: "AN" }]); // the library disagrees
     await renderLog();
     await screen.findByRole("heading", { name: "Log Doldrums" });
-    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
+    // Neither "AN" (the library's disagreeing value) nor "O2" (the
+    // fallback default) — only a real draft-preference read produces "AT".
+    expect(document.querySelector(".type-badge")?.textContent).toBe("AT");
   });
 });
 
@@ -550,6 +670,132 @@ describe("LogSession: save", () => {
     expect(Array.isArray(body.steps)).toBe(true);
     expect((body.steps as unknown[]).length).toBe(2);
 
+    expect(loadDraft()).toBeNull();
+    expect(loadRun()).toBeNull();
+  });
+
+  // IMP-5 (whole-branch review): a wire-shape test, through an actual Save
+  // click and the real posted JSON — not just `buildLogSteps`'s own return
+  // value (already unit-pinned in logDraft.test.ts) — proving the 5G
+  // omission rules survive all the way to the bytes on the wire, not just
+  // to an in-memory object a later step might still widen. Real starters'
+  // own step OBJECTS (Microburst's effort step, Jet Stream's distance
+  // step), assembled directly (no reps marker, no wu) — same "real step
+  // objects, synthetic combination" idiom `buildSessionFixture`'s own doc
+  // comment establishes — with `actuals: {}` so the distance phase reads as
+  // a DISCARDED suspect split (no stopwatch reading was ever recorded for
+  // it), not a kept one.
+  it("posts an effort step with no targetSplit and a discarded distance step with no actualSplit/actualSource — the exact keys, not just their values", async () => {
+    const microburst = starter("Microburst");
+    const effortWork = microburst.steps.find((s) => s.k === "w") as Extract<
+      Step,
+      { k: "w" }
+    >;
+    const jetStream = starter("Jet Stream");
+    const distanceWork = jetStream.steps.find((s) => s.k === "w") as Extract<
+      Step,
+      { k: "w" }
+    >;
+    const draft = buildDraft({
+      id: "id-wire-shape-fixture",
+      title: "Wire Shape Fixture",
+      type: "AN",
+      steps: [effortWork, distanceWork],
+    });
+    const started = startDraft(draft);
+    saveDraft(started);
+    const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: new Date(FIXED_NOW.getTime() + 5 * 60 * 1000).toISOString(),
+      actuals: {}, // no recorded actual anywhere -> the distance phase reads as discarded.
+    };
+    saveRun(run);
+    mockWorkouts([]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-wire-shape" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Log Wire Shape Fixture" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    const steps = body.steps as Record<string, unknown>[];
+    expect(steps).toHaveLength(2);
+
+    // Effort step (5G rule): label/spm/seconds only. `targetSplit` would be
+    // `estimationSplit`'s internal guess, never a real prescription, and
+    // there is no actual to attribute to a target that was never set.
+    expect(Object.keys(steps[0]!).sort()).toStrictEqual(
+      ["label", "seconds", "spm"].sort(),
+    );
+    expect(steps[0]).not.toHaveProperty("targetSplit");
+    expect(steps[0]).not.toHaveProperty("actualSplit");
+    expect(steps[0]).not.toHaveProperty("actualSource");
+
+    // Discarded distance step: `targetSplit`/`spm`/`meters` (the
+    // prescription) but neither `actualSplit` nor `actualSource` — absence
+    // here is deliberate (a suspect split the rower discarded), not a
+    // logged zero.
+    expect(steps[1]).not.toHaveProperty("actualSplit");
+    expect(steps[1]).not.toHaveProperty("actualSource");
+    expect(Object.keys(steps[1]!).sort()).toStrictEqual(
+      ["label", "targetSplit", "spm", "meters"].sort(),
+    );
+  });
+
+  // IMP-1 (whole-branch review): the dead end this fixes is WORST on the
+  // session door specifically — before the fix, a completed run whose only
+  // qualifying step was a test piece built `steps: []`, Save would have
+  // hard-400ed at the server, and the ONLY other control on this screen was
+  // the destructive staged Discard (no BackLink existed yet either, see
+  // IMP-2). Proves the real fix end to end: a non-empty steps array, and a
+  // genuine successful save that clears the records like any other.
+  it("IMP-1: a completed run whose only qualifying step is a test piece still saves — no dead end, no empty steps array", async () => {
+    const draft = buildDraft({
+      id: "id-test-only-session",
+      title: "2k Test Day",
+      type: "AN",
+      steps: [{ k: "test", label: "2k test" }],
+    });
+    const started = startDraft(draft);
+    saveDraft(started);
+    const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: new Date(FIXED_NOW.getTime() + 60 * 1000).toISOString(),
+      actuals: {},
+    };
+    saveRun(run);
+    mockWorkouts([]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-test-only-session" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Log 2k Test Day" });
+    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("2k test");
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.steps).toStrictEqual([{ label: "2k test" }]);
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
   });
@@ -667,8 +913,61 @@ describe("LogSession: save", () => {
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(run.workoutId);
     expect(bodies[1]!.workoutId).toBeNull();
+    // IMP-4 (whole-branch review): the retry must be the SAME body with
+    // ONLY `workoutId` swapped to `null` — not, say, a body missing
+    // `steps`/`held`/`pain`/`notes` because the retry accidentally
+    // reconstructed a fresh (and incomplete) payload instead of spreading
+    // the original one. `bodies[0]!.workoutId` is real (not null), so this
+    // also proves the two bodies genuinely differ on that one field, not
+    // that the equality check is vacuous.
+    expect(bodies[0]!.workoutId).not.toBeNull();
+    expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
+  });
+
+  // IMP-4 (whole-branch review): the sibling test above only proves the
+  // retry-then-SUCCEED path; this proves retry-then-FAIL still surfaces a
+  // genuine error (not a silent swallow) and leaves the draft/run records
+  // untouched, the same guarantee every other failure test in this
+  // describe block already pins for a first-attempt failure.
+  it("surfaces a genuine failure when the workoutId retry ALSO fails, records intact", async () => {
+    buildSessionFixture();
+    mockWorkouts([]);
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "workoutId does not exist",
+              field: "workoutId",
+            }),
+            { status: 400 },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      );
+    });
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+    const bodies = parsedBodies(apiFn);
+    expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
+    expect(loadDraft()).not.toBeNull();
+    expect(loadRun()).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Save session" }),
+    ).not.toBeDisabled();
   });
 
   it("does not retry when the 400 names a different field — surfaces the failure instead of silently stripping workoutId", async () => {
@@ -908,6 +1207,54 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect((body.steps as unknown[]).length).toBe(2);
   });
 
+  // Must-fix minor (whole-branch review): a browser BACK press after a
+  // successful save used to re-mount this exact route with a fresh, still-
+  // fillable form (this door touches no draft/run records to clear, unlike
+  // the session door) — a second Save click would post a genuine duplicate
+  // log and advance `doneN` a second time for the same real session. The
+  // fix (`navigate("/today", { replace: true })`) swaps this history entry
+  // out instead of pushing a new one, so BACK from `/today` lands on
+  // whatever came before this screen instead of remounting it.
+  it("a browser BACK press after a successful save lands on the prior screen, not a re-submittable form (replace-navigation)", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-back" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLogWithHistory(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "SIMULATE BROWSER BACK" }),
+    );
+
+    // Lands on the workout's own detail screen (what was ACTUALLY beneath
+    // the log route in history) — not the log form again. Without
+    // `replace: true`, this would instead re-show "Log Doldrums" with an
+    // empty, clickable "Save session" button.
+    expect(
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Log Doldrums" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Save session" }),
+    ).not.toBeInTheDocument();
+    // Still exactly one POST — a second Save was never even reachable.
+    expect(apiFn).toHaveBeenCalledTimes(1);
+  });
+
   // THE hard constraint (task brief's own words): "must NOT touch the
   // draft/run records — an in-progress session elsewhere survives logging
   // an off-app row." Seeds a REAL completed-but-unlogged run (the same
@@ -965,6 +1312,54 @@ describe("LogSession: the manual door (Task 3)", () => {
     ).not.toBeDisabled();
   });
 
+  // IMP-1 (whole-branch review): the dead end this fixes, proved at the full
+  // component level (not just `buildManualLogSteps`' own unit tests in
+  // logDraft.test.ts) — before the fix, a workout authored with a test step
+  // as its ONLY qualifying step built `steps: []` here, and Save would have
+  // hard-400ed at the server ("steps must be a non-empty array") with
+  // nothing on this door to recover with (the manual door has no Discard at
+  // all, per the brief). Proves both the non-empty step list AND a genuine
+  // successful save.
+  it("IMP-1: a workout whose only qualifying step is a test piece still saves — no dead end, no empty steps array", async () => {
+    const workout: LibraryWorkout = {
+      id: "id-test-only-manual",
+      title: "2k Test Day",
+      type: "AN",
+      difficulty: "hard",
+      pain: 4,
+      steps: [
+        { k: "wu", minutes: 5 },
+        { k: "test", label: "2k test" },
+      ],
+      isGlobal: true,
+      lastDoneDaysAgo: null,
+    };
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-test-only" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Log 2k Test Day" });
+    // The wu never becomes a row; the test step does, as a bare label.
+    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("2k test");
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    const body = parsedBodies(apiFn)[0]!;
+    // The exact shape that used to hard-400: now a real, non-empty array.
+    expect(body.steps).toStrictEqual([{ label: "2k test" }]);
+  });
+
   it("retries once with workoutId:null when the 400 names workoutId specifically, and saves on the retry", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
@@ -997,6 +1392,11 @@ describe("LogSession: the manual door (Task 3)", () => {
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(workout.id);
     expect(bodies[1]!.workoutId).toBeNull();
+    // IMP-4 (whole-branch review): the SAME full-body-minus-workoutId
+    // assertion the session door's own retry test now carries — the shared
+    // `useLogForm` retry policy (`LogSession.tsx`) must behave identically
+    // on both doors.
+    expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
   });
 
   it("does not retry when the 400 names a different field — surfaces the failure instead of silently stripping workoutId", async () => {

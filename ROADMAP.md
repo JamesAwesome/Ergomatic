@@ -513,7 +513,7 @@ is exactly what 6C's own save flow is for.
 **Goal:** A finished session becomes history the same day it happened.
 **Design authority:** `docs/superpowers/specs/2026-08-02-phase-6c-log-session-design.md`.
 
-- [x] `logDraft.ts`'s two pure builders (`buildLogSteps(run, draft)`,
+- [x] `logDraft.ts`'s three pure builders (`buildLogSteps(run, draft)`,
       `buildManualLogSteps(workout, baselines)`, `logTotals(run)`): both
       doors' step labels compose through one shared `refPaceLabel`
       function, fed the draft's real, un-resolved `PaceRef` whenever a
@@ -535,9 +535,13 @@ is exactly what 6C's own save flow is for.
       session door hides the tab bar and offers a staged `Discard without
       logging`; the manual door has neither — nothing staged to discard,
       so the tab bar stays visible there as the only way out
-- [x] Save posts to the already-existing `POST /api/logs` route (zero
-      server changes needed this phase, per Task 1.5's same-day amendment
-      making `targetSplit` optional for an effort step): a 201 clears the
+- [x] Save posts to the already-existing `POST /api/logs` route (no NEW
+      route or store needed this phase — the one server change was Task
+      1.5's same-day amendment loosening `validateLogStepEntry`,
+      `server/routes/data.ts`, to make `targetSplit` optional and pair
+      `actualSplit`/`actualSource`, once `logDraft.ts` proved the old
+      validation predated effort refs; additive-only, so every previously-
+      valid payload stays valid): a 201 clears the
       draft/run records (session door only — the manual door never reads
       or writes either) and returns to Today; a `workoutId`-specific 400
       retries once with `workoutId: null`; any other failure surfaces
@@ -557,18 +561,23 @@ route, not new plan-advancement plumbing (found while seeding e2e fixtures
 for Phase 6A Task 5 — seeding 3 logs against a freshly-chosen plan advanced
 `doneN` to 3, not 0, the first time it was tried).
 
-**Exit:** MET — **the core loop closes end to end**: Today → suggestion/
-Library → Confirm → Countdown → Timer → complete → Log → Today, proved
-against the real compose stack with the plan's session counter read both
-before and after (advanced by exactly one) and Today's LAST THREE showing
-the logged session dated today; a mid-workout reload survives (6B); frozen
-log paces stay unchanged after a later baseline edit (reconstructed from the
-draft's own frozen ref, not re-read live); the manual door proves the same
-save path from a workout's own detail screen for an off-app row, without
-ever touching the draft/run records an in-progress session elsewhere might
-be using. Next: Today enhancements (suggestion filters visible on Today,
-type-swap for the plan's assigned workout — queued, not started) and
-Phase 7's PM5 integration.
+**Exit:** MET — **every arrow in the core loop closes**: Today → suggestion/
+Library → Confirm → Countdown → Timer → complete → Log → Today, each hand-off
+proved against the real compose stack (extending the existing loop specs
+rather than adding a third parallel one) with the plan's session counter read
+both before and after (advanced by exactly one) and Today's LAST THREE
+showing the logged session dated today; a mid-workout reload survives (6B);
+frozen log paces stay unchanged after a later baseline edit (reconstructed
+from the draft's own frozen ref, not re-read live); the manual door proves
+the same save path from a workout's own detail screen for an off-app row,
+without ever touching the draft/run records an in-progress session elsewhere
+might be using. One seam stays unspanned by design, not oversight: no single
+browser session runs the WHOLE arc card→log in one continuous test — each
+hand-off is its own proof. Recorded here rather than closed, since it becomes
+a real (not just theoretical) gap once the queued type-swap makes Confirm
+entry-dependent on an earlier screen's choice. Next: Today enhancements
+(suggestion filters visible on Today, type-swap for the plan's assigned
+workout — queued, not started) and Phase 7's PM5 integration.
 
 ## Phase 7 — PM5 over Bluetooth
 

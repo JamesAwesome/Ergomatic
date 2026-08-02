@@ -3199,8 +3199,9 @@ button:disabled {
    60px, not 54 (measured via a live computed-style check, fix round F4) —
    the SAME latent gap every `.button-primary` `<button>` in the app has
    (confirmed on WorkoutDetail's own "Start": speced 52px, renders 58px),
-   flagged in this task's report as a pre-existing, wider issue rather than
-   silently fixed here for every button at once. */
+   recorded in docs/design/DEVIATIONS.md (whole-branch review, IMP-6) as a
+   pre-existing, wider issue rather than silently fixed here for every
+   button at once. */
 .log-save {
   min-height: 54px;
   line-height: 54px;
