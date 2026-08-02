@@ -487,5 +487,43 @@ describe("Library", () => {
         vi.useRealTimers();
       }
     });
+
+    it("flushes the CURRENT position on unmount even mid-throttle-window, instead of dropping it", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockReady();
+        const { default: Library } = await import("./Library");
+        const { unmount } = render(
+          <MemoryRouter>
+            <Library />
+          </MemoryRouter>,
+        );
+
+        Object.defineProperty(window, "scrollY", {
+          value: 500,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        // Leading edge already wrote 500 — now scroll again, still well
+        // inside the 100ms window, so this second position is only
+        // QUEUED (trailing), not written yet.
+        Object.defineProperty(window, "scrollY", {
+          value: 777,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        expect(sessionStorage.getItem("ergomatic.libraryScroll")).toBe("500");
+
+        // Navigating away now (e.g. tapping a row) unmounts Library before
+        // the trailing timer ever fires. Without an unmount-time flush, 777
+        // would be lost forever and a later BACK would restore the stale
+        // 500 instead of where the rower actually was.
+        unmount();
+
+        expect(sessionStorage.getItem("ergomatic.libraryScroll")).toBe("777");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
