@@ -1,5 +1,15 @@
 import { NavLink } from "react-router-dom";
+import { clearLibraryFilters } from "../library/libraryFilters";
 import { clearLibraryScroll } from "../library/libraryScroll";
+
+// A fresh Library visit forgets BOTH halves of "where you were" — the
+// scroll position and the filters it was measured against. Clearing one
+// without the other would restore a position against the wrong list (the
+// filter-BACK bug) or silently keep filters the rower thought they left.
+function clearLibraryReturnState() {
+  clearLibraryScroll();
+  clearLibraryFilters();
+}
 
 // TABS is a fixed, non-component export alongside the TabBar component.
 // react-refresh's allowConstantExport only recognizes literal/unary/
@@ -26,8 +36,11 @@ export default function TabBar() {
           // a BACK return from a fresh tab visit apart (see libraryScroll.ts).
           // Clearing right here, at the one link that IS unambiguously a
           // fresh visit, is the distinction: a tab tap always starts at the
-          // top; a BACK return (never through this link) still restores.
-          onClick={tab.path === "/library" ? clearLibraryScroll : undefined}
+          // top with no filters; a BACK return (never through this link)
+          // still restores both.
+          onClick={
+            tab.path === "/library" ? clearLibraryReturnState : undefined
+          }
           className={({ isActive }) => (isActive ? "tab tab-active" : "tab")}
         >
           {({ isActive }) => (
