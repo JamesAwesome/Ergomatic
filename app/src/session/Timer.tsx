@@ -120,20 +120,31 @@ export function upNextText(run: SessionRun): string {
 }
 
 /** The suspect-actual seam (Phase 6B Task 1 review, product; routed into
- *  this task's ledger). After a long suspend, a distance phase's honest
- *  stopwatch can be huge — recording it as-is on NEXT would silently log an
- *  absurd split (the review's own example: a 2000m piece "finished" at a
- *  7:30/500m pace after a long suspend). `estimate` is `domain/expand.js`'s
- *  own `phaseSeconds` — the exact formula `totalRemainingSeconds` already
- *  uses to price a distance phase's full duration. More than double it and
- *  the timer stages a choice instead of recording silently. */
+ *  this task's ledger; made two-sided in the spec review's F6 fix round).
+ *  After a long suspend, a distance phase's honest stopwatch can be huge —
+ *  recording it as-is on NEXT would silently log an absurd split (the
+ *  review's own example: a 2000m piece "finished" at a 7:30/500m pace after
+ *  a long suspend). The LOWER bound catches the opposite mistake: NEXT
+ *  mis-tapped moments after starting a piece (the F6 live probe's own
+ *  example — 1s elapsed on a 100s-estimate piece — would otherwise record
+ *  `splitSeconds ≈ 1.0`, a physically absurd 500m-in-one-second split, with
+ *  no staging at all). `estimate` is `domain/expand.js`'s own
+ *  `phaseSeconds` — the exact formula `totalRemainingSeconds` already uses
+ *  to price a distance phase's full duration. More than double it, or
+ *  under half it, and the timer stages a choice instead of recording
+ *  silently — the boundaries themselves (exactly half, exactly double)
+ *  are NOT suspect, symmetric with the original upper-bound-only version's
+ *  own "the boundary itself is not suspect" rule. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function isSuspectActual(
   phase: EnginePhase,
   elapsedSecondsValue: number,
 ): boolean {
   const estimate = phaseSeconds(phase);
-  return estimate !== null && elapsedSecondsValue > estimate * 2;
+  if (estimate === null) return false;
+  return (
+    elapsedSecondsValue > estimate * 2 || elapsedSecondsValue < estimate / 2
+  );
 }
 
 /** The live timer (handoff §6). Portrait only — landscape is Task 4's own
@@ -320,55 +331,105 @@ export default function Timer() {
 
   function handleCancelFinish() {
     setFinishStaged(false);
+    // Hygiene: only ever meaningful on the distance path (see
+    // `handleDistanceNext`'s own last-phase branch below); harmless no-op
+    // otherwise.
+    setStagedElapsed(null);
   }
 
   function handleConfirmFinish() {
-    apply(advance);
+    // Shared by BOTH ▶'s own last-phase staging (non-distance — plain
+    // `advance`, nothing to record) AND NEXT's last-phase staging (fix
+    // round, spec review F6 — distance, records the FROZEN elapsed exactly
+    // like `handleKeepSplit` does, for the identical F3 reason: deliberating
+    // over "Finish this session?" must not inflate the recorded split).
+    if (isDistance) {
+      if (stagedElapsed !== null) applyDistanceActual(stagedElapsed);
+    } else {
+      apply(advance);
+    }
     setFinishStaged(false);
+    setStagedElapsed(null);
+  }
+
+  // Records a distance phase's actual from an ALREADY-FROZEN elapsed value,
+  // then advances with a FRESH timestamp — shared by `handleKeepSplit` (the
+  // suspect-actual path) and `handleConfirmFinish` (the last-phase-NEXT
+  // path, F6), since both need the exact same "freeze the measurement,
+  // don't re-read the stopwatch at confirm time" shape. Not `nextDistance`
+  // (which would re-measure elapsed against a fresh `now`) — this
+  // replicates its actual-recording step with the frozen value, then calls
+  // `advance` with `apply`'s own fresh timestamp (the NEXT phase's clock —
+  // or the run's `completedAt`, if this was the last phase — must start
+  // now, not back-dated to whenever the choice was first staged).
+  function applyDistanceActual(elapsedValue: number) {
+    const meters = phase.meters;
+    // Defensive: only ever called from the two distance-staged paths above,
+    // both gated on `isDistance` (so `meters` is always defined here).
+    if (meters === undefined) return;
+    const splitSeconds = (elapsedValue / meters) * 500;
+    const actual: PhaseActual = {
+      elapsedSeconds: elapsedValue,
+      splitSeconds,
+      actualSource: "stopwatch",
+    };
+    apply((r, at) =>
+      advance({ ...r, actuals: { ...r.actuals, [r.index]: actual } }, at),
+    );
   }
 
   function handleDistanceNext() {
+    // Same defensive reasoning as `handleNext`'s own guard.
+    if (endStaged) return;
     const at = new Date();
     const currentElapsed = elapsedSeconds(currentRun, at);
     if (isSuspectActual(phase, currentElapsed)) {
       // Freeze the measurement NOW (fix round, spec review F3) — Keep
       // split records THIS value, not whatever the stopwatch reads by the
-      // time the rower finishes deliberating.
+      // time the rower finishes deliberating. This branch is ALSO the
+      // combined flow for F6's "suspect actual on the last phase" case
+      // (spec review, decided below): the suspect dialog is shown, full
+      // stop — no SEPARATE finish confirm stacks on top of it. Its own
+      // Keep/Discard actions already call `advance`-family engine
+      // functions, which set `completedAt` themselves the moment they
+      // walk past the final phase (engine.ts's own contract) — a rower on
+      // the last piece resolving a suspect split ends the session AND
+      // resolves the split with the SAME single tap, never two.
       setStagedElapsed(currentElapsed);
       setSuspect(true);
+      return;
+    }
+    if (isLastPhase) {
+      // F6: NEXT ending the session on the final phase is exactly the same
+      // one-way-door risk ▶ already had (fixed as F5) — a single tap
+      // shouldn't complete the run, suspect or not. Reuses the SAME
+      // `finishStaged` panel/copy ▶ stages ("Finish this session?"), not a
+      // distance-specific one; only `handleConfirmFinish`'s OWN behavior
+      // differs by phase kind. Elapsed is frozen here for the identical
+      // F3 reason the suspect path freezes it — the split is fine now, but
+      // isn't guaranteed to still be fine after however long "Finish this
+      // session?" sits on screen.
+      setStagedElapsed(currentElapsed);
+      setFinishStaged(true);
       return;
     }
     apply(nextDistance);
   }
 
   function handleKeepSplit() {
-    const meters = phase.meters;
     // Defensive: `suspect`/`stagedElapsed` are only ever set together, by
-    // `handleDistanceNext` above, which only runs when `isDistance` (so
-    // `meters` is always defined here in practice).
-    if (stagedElapsed === null || meters === undefined) return;
-    const splitSeconds = (stagedElapsed / meters) * 500;
-    const actual: PhaseActual = {
-      elapsedSeconds: stagedElapsed,
-      splitSeconds,
-      actualSource: "stopwatch",
-    };
-    // Not `nextDistance` (which would re-measure elapsed against `apply`'s
-    // own fresh `now`) — this replicates its actual-recording step with
-    // the FROZEN `stagedElapsed`, then advances with a FRESH timestamp (the
-    // next phase's own clock must start now, not back-dated to when the
-    // suspect prompt first appeared, which would falsely count the
-    // deliberation time against the phase that follows).
-    apply((r, at) =>
-      advance({ ...r, actuals: { ...r.actuals, [r.index]: actual } }, at),
-    );
+    // `handleDistanceNext` above, which only runs when `isDistance`.
+    if (stagedElapsed === null) return;
+    applyDistanceActual(stagedElapsed);
     setSuspect(false);
     setStagedElapsed(null);
   }
 
   function handleDiscardSplit() {
     // Discard records NO actual (advance, not nextDistance) but still
-    // moves the rower on — the ledger's own wording for this path.
+    // moves the rower on — the ledger's own wording for this path. Still
+    // completes the run via `advance`'s own contract if this was the last
+    // phase (the same "one combined stage" reasoning as Keep split above).
     apply(advance);
     setSuspect(false);
     setStagedElapsed(null);
@@ -460,11 +521,16 @@ export default function Timer() {
         // Distance-only (only `handleDistanceNext` ever sets `suspect`):
         // the deliberation choice fully replaces the control row — Pause
         // alongside it would invite pausing mid-decision for no reason,
-        // since `tick()` never auto-advances a distance phase anyway.
+        // since `tick()` never auto-advances a distance phase anyway. Also
+        // the combined stage for F6's "suspect actual on the last phase"
+        // case (see `handleDistanceNext`'s own comment) — no separate
+        // finish confirm ever stacks on top of this one. Generic wording
+        // (fix round, spec review F6): `isSuspectActual` is two-sided now
+        // (unbelievably fast is exactly as suspect as unbelievably slow),
+        // so the copy can't say "longer than expected" any more.
         <div className="timer-suspect">
           <p className="timer-suspect-copy">
-            That took a lot longer than expected — keep the split, or discard it
-            and move on?
+            This split looks off — keep it, or discard it and move on?
           </p>
           <div className="timer-suspect-actions">
             <button

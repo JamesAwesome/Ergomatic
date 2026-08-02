@@ -152,25 +152,59 @@ function phase(overrides: Partial<EnginePhase>): EnginePhase {
   return { type: "work", label: "", originalIndex: 0, ...overrides };
 }
 
+// Fix round (spec review F6): isSuspectActual is now two-sided — elapsed
+// under HALF the estimate is exactly as suspect as elapsed over DOUBLE it
+// (the review's own live probe: NEXT at 1s elapsed on a 100s-estimate piece
+// used to record splitSeconds ≈ 1.0, no staging at all). Both boundaries
+// are exercised at just-under/at/just-over, matching the "boundary itself
+// is not suspect" rule the upper bound already established.
 describe("isSuspectActual", () => {
-  // 500m @ 2k+0 (baselines k2=100) -> estimate = (500/500)*100 = 100s.
+  // 500m @ 2k+0 (baselines k2=100) -> estimate = (500/500)*100 = 100s;
+  // half = 50s, double = 200s.
   const distancePhase = phase({ meters: 500, targetSplit: 100 });
 
-  it("is false EXACTLY at 2x the estimate — the boundary itself is not suspect", () => {
-    expect(isSuspectActual(distancePhase, 200)).toBe(false);
-  });
-
-  it("is true one second past 2x the estimate", () => {
-    expect(isSuspectActual(distancePhase, 201)).toBe(true);
-  });
-
-  it("is false well within the estimate", () => {
-    expect(isSuspectActual(distancePhase, 50)).toBe(false);
+  it("is false well within both bounds", () => {
+    expect(isSuspectActual(distancePhase, 75)).toBe(false);
   });
 
   it("is false for a phase with no estimate at all (phaseSeconds returns null)", () => {
     const openEnded = phase({ type: "test", label: "All out" }); // no seconds, no meters
     expect(isSuspectActual(openEnded, 999_999)).toBe(false);
+  });
+
+  describe("the upper bound (2x the estimate)", () => {
+    it("is false EXACTLY at 2x — the boundary itself is not suspect", () => {
+      expect(isSuspectActual(distancePhase, 200)).toBe(false);
+    });
+
+    it("is true one second past 2x", () => {
+      expect(isSuspectActual(distancePhase, 201)).toBe(true);
+    });
+
+    it("is false one second under 2x", () => {
+      expect(isSuspectActual(distancePhase, 199)).toBe(false);
+    });
+  });
+
+  describe("the lower bound (half the estimate) — F6", () => {
+    it("is false EXACTLY at half — the boundary itself is not suspect", () => {
+      expect(isSuspectActual(distancePhase, 50)).toBe(false);
+    });
+
+    it("is true one second under half", () => {
+      expect(isSuspectActual(distancePhase, 49)).toBe(true);
+    });
+
+    it("is false one second over half", () => {
+      expect(isSuspectActual(distancePhase, 51)).toBe(false);
+    });
+
+    // The review's own live-probe example, pinned directly: 1s elapsed on
+    // a 100s-estimate piece — a physically absurd 500m-in-one-second split
+    // that used to record with NO staging at all.
+    it("is true for the review's own 1s-on-a-100s-estimate mistap", () => {
+      expect(isSuspectActual(distancePhase, 1)).toBe(true);
+    });
   });
 });
 
@@ -686,9 +720,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
 
-    expect(
-      screen.getByText(/took a lot longer than expected/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/looks off/)).toBeInTheDocument();
     // Not advanced yet — still on the distance phase.
     expect(screen.getByText("STEP 4 OF 5 · WORK · 500M")).toBeInTheDocument();
     expect(loadRun()!.actuals[3]).toBeUndefined();
@@ -714,7 +746,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
 
     await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
-    screen.getByText(/took a lot longer than expected/);
+    screen.getByText(/looks off/);
 
     // 30s of deliberation pass BEFORE confirming.
     vi.setSystemTime(new Date(FIXED_NOW.getTime() + 30_000));
@@ -736,7 +768,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
 
     await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
-    screen.getByText(/took a lot longer than expected/);
+    screen.getByText(/looks off/);
 
     await userEvent.click(
       screen.getByRole("button", { name: "Discard split" }),
@@ -745,6 +777,150 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     const saved = loadRun()!;
     expect(saved.actuals[3]).toBeUndefined();
+  });
+
+  // Defensive (mirrors handleNext's own guard): END staging doesn't hide
+  // the control row, so NEXT on a distance phase while the abandon confirm
+  // is already showing must not stack a second staged dialog on top.
+  it("NEXT no-ops while END is already staged", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(kindMatrixDraft());
+    runAtIndex(run, 3);
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
+
+    expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
+    expect(screen.queryByText(/looks off/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
+  });
+});
+
+// Fix round (spec review F6): NEXT ending the session on the FINAL distance
+// phase carried the exact same one-way-door risk ▶ already had (fixed as
+// F5) — a live probe found NEXT at 1s elapsed on a 100s-estimate final
+// piece recorded a physically absurd split AND completed the run,
+// unrecoverable, with zero staging. `lastPhaseDistanceDraft`'s only work
+// step (500m @ 2k+0, baselines k2=100 -> estimate 100s) is also the LAST
+// phase, unlike `kindMatrixDraft`'s own distance phase (deliberately not
+// last, so the ordinary suspect-actual tests above stay about resolving a
+// split, not also about ending the run).
+describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  function lastPhaseDistanceDraft(): SessionDraft {
+    return buildDraft({
+      id: "id-last-distance",
+      title: "Final Piece",
+      type: "TR",
+      steps: [
+        { k: "wu", minutes: 2 },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 500 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
+    });
+  }
+
+  it("NEXT on the last phase (non-suspect actual) stages a Finish confirm rather than completing immediately", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(lastPhaseDistanceDraft());
+    runAtIndex(run, 1, new Date(FIXED_NOW.getTime() - 80_000)); // 80s: within 50-200
+    await renderTimer();
+    screen.getByText("STEP 2 OF 2 · WORK · 500M");
+
+    await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
+
+    // Staged, not completed yet — no suspect dialog either (not suspect).
+    expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
+    expect(screen.queryByText(/looks off/)).not.toBeInTheDocument();
+    expect(screen.getByText("STEP 2 OF 2 · WORK · 500M")).toBeInTheDocument();
+    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+
+    // Deliberation passes before confirming — the frozen elapsed (80s) must
+    // still be what's recorded, not 80 + 30 = 110 (the same F3 reasoning,
+    // now also covering the finish-confirm path).
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 30_000));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish session" }),
+    );
+
+    expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
+    const saved = loadRun()!;
+    expect(saved.actuals[1]!.elapsedSeconds).toBe(80);
+    expect(saved.actuals[1]!.splitSeconds).toBe(80); // (80/500)*500
+    expect(saved.completedAt).not.toBeNull();
+  });
+
+  it("NEXT on the last phase: Keep going cancels the staged finish, no completion, no actual recorded", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(lastPhaseDistanceDraft());
+    runAtIndex(run, 1, new Date(FIXED_NOW.getTime() - 80_000));
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
+    expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+
+    expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
+    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+    expect(loadRun()!.actuals[1]).toBeUndefined();
+    expect(screen.getByRole("button", { name: "NEXT →" })).toBeInTheDocument();
+  });
+
+  // The combined-stage decision (spec review F6, point 1): when the actual
+  // is ALSO suspect on the last phase, only the SUSPECT dialog shows — no
+  // separate finish confirm stacks on top of it. Its own Keep/Discard
+  // actions already complete the run (advance/nextDistance set
+  // `completedAt` themselves once index walks past the final phase, per
+  // engine.ts's own contract), so a rower resolves the split and ends the
+  // session with the SAME single tap, never two in sequence.
+  it("combined stage: a SUSPECT actual on the last phase shows only the suspect dialog; Keep split both records and completes", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(lastPhaseDistanceDraft());
+    runAtIndex(run, 1, new Date(FIXED_NOW.getTime() - 250_000)); // 250s > 200s
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
+
+    expect(screen.getByText(/looks off/)).toBeInTheDocument();
+    expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep split" }));
+
+    expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
+    const saved = loadRun()!;
+    expect(saved.actuals[1]!.elapsedSeconds).toBe(250);
+    expect(saved.completedAt).not.toBeNull();
+  });
+
+  it("combined stage: Discard on a suspect last-phase actual completes with NO actual recorded", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(lastPhaseDistanceDraft());
+    runAtIndex(run, 1, new Date(FIXED_NOW.getTime() - 10_000)); // 10s < 50s (lower bound)
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
+    expect(screen.getByText(/looks off/)).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard split" }),
+    );
+
+    expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
+    const saved = loadRun()!;
+    expect(saved.actuals[1]).toBeUndefined();
+    expect(saved.completedAt).not.toBeNull();
   });
 });
 
