@@ -2157,3 +2157,99 @@ button:disabled {
   flex: none;
   padding: 0 32px;
 }
+
+/* -- Countdown (Phase 6B Task 2) -----------------------------------------
+   handoff §5, verbatim geometry (docs/design/Erg Log.dc.html's own `isCount`
+   block: gap 14px, numeral 140px, label/next/button sizes below) — colors
+   and fonts via tokens, never the prototype's literal hex. Computed text
+   contrast (task-2 report): countdown-label (--ink-4 on --page) 4.76:1,
+   countdown-next/-cancel (--ink-3 on --page) 6.69:1, the numeral (--accent
+   on --page) 5.35:1, countdown-skip (--on-color on --accent) 5.94:1 — all
+   clear the 4.5:1 AA floor. */
+.countdown-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  /* "Fills the frame... no fixed min-height" (handoff): a relative height,
+     not one of this app's other screens' literal PX figures (those are
+     phone-frame-specific prototype numbers). The tab bar is hidden on this
+     route (AppRoutes.tsx's hidesTabBar), so the viewport minus this
+     screen's own safe-area padding is genuinely all there is to fill. */
+  min-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+      26px
+  );
+}
+
+.countdown-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--ink-4);
+  margin: 0;
+}
+
+/* tabular-nums pins digit width so each second's change (e.g. "10" -> "9")
+   can't shift the numeral horizontally in the mono face — flagged as
+   UNVERIFIED/worth adding deliberately by the phase's own plan notes since
+   nothing else in this file does it yet at timer scale; added here first. */
+.countdown-number {
+  font-family: var(--font-mono);
+  font-size: 140px;
+  font-weight: 500;
+  color: var(--accent);
+  line-height: 1;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.countdown-next {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 20px;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.countdown-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.countdown-cancel,
+.countdown-skip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.countdown-cancel {
+  color: var(--ink-3);
+  background: transparent;
+  border: 1px solid var(--rule);
+}
+
+.countdown-cancel:hover {
+  border-color: var(--ink-4);
+}
+
+.countdown-skip {
+  border: none;
+  background: var(--accent);
+  color: var(--on-color);
+}
+
+.countdown-skip:hover {
+  background: var(--accent-hover);
+}
