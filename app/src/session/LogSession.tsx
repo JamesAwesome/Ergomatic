@@ -5,7 +5,7 @@ import { useWorkouts, type LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import type { HeldResult } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
-import { liveSteps, estimateMinutes } from "../../domain/expand.js";
+import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef } from "../../domain/pace.js";
 import type {
   Baselines,
@@ -157,17 +157,25 @@ function pacesLockedText(k2: number | null, k6: number | null): string | null {
  *  only" filter `pacesLockedText`'s caller applies for the session door
  *  (F1, above): a base no step in this workout ever references has nothing
  *  honest to show, so it's omitted rather than showing a value that has
- *  nothing to do with this workout. `liveSteps` — not the raw
- *  `workout.steps` — does the reps-block expansion (the same reason
- *  `buildManualLogSteps` uses it): a reference buried inside a repeated
- *  block is still a real reference even though the raw array only lists it
- *  once. */
+ *  nothing to do with this workout.
+ *
+ *  Must-fix minor (whole-branch review): this used to run the referenced-
+ *  base check over `liveSteps(steps)` rather than the raw `steps` array,
+ *  with a comment claiming the reps-block EXPANSION was needed because "a
+ *  reference buried inside a repeated block is still a real reference even
+ *  though the raw array only lists it once" — that reasoning doesn't hold
+ *  for a plain existence check: a step authored inside a reps block is
+ *  already present, once, in the RAW `steps` array (`liveSteps` only
+ *  changes how many times it appears, repeating it `count` times), and
+ *  `.some()` only cares whether at least one match exists, not how many.
+ *  Expanding first was a no-op that happened to read as thorough. Reading
+ *  `steps` directly is both simpler and correct. */
 function manualLockedBaseline(
   base: PaceBase,
   steps: Step[],
   baselines: Baselines,
 ): number | null {
-  const referenced = liveSteps(steps).some(
+  const referenced = steps.some(
     (step) =>
       step.k === "w" && !isEffortRef(step.ref) && step.ref.base === base,
   );
@@ -363,7 +371,30 @@ export default function LogSession() {
  *  copy is what makes it structurally impossible for the two doors to
  *  silently diverge on layout, the same reasoning `logDraft.ts`'s own
  *  `refPaceLabel` helper documents for why both doors' step labels share
- *  one function. */
+ *  one function.
+ *
+ *  `backFallback` (whole-branch review, IMP-2 fix): a `BackLink`, the same
+ *  idiom every other full-screen destination in the app uses
+ *  (`WorkoutDetail.tsx`/`Builder.tsx`/`EditWorkout.tsx`), leading. Before
+ *  this fix neither door had a non-destructive way to leave this screen at
+ *  all whenever the tab bar is hidden (the session door: Save or a
+ *  destructive staged Discard were the ONLY two exits; the manual door's
+ *  other early-return states already had one, but not this — its main,
+ *  ready-to-save state) — a rower who opened this screen and changed their
+ *  mind about logging anything had no honest way back. `BackLink` costs
+ *  nothing destructive: it navigates away without touching the draft/run
+ *  records or posting anything, same as simply not pressing Save ever did,
+ *  it just gives that inaction a real affordance. Each door passes its own
+ *  fallback (`BackLink`'s own default, `/library`, makes no sense for the
+ *  session door — nothing session-related lives there): the manual door
+ *  passes none (its `from` state, now forwarded by `WorkoutDetail.tsx`'s
+ *  "Log it after" link, resolves to the workout it came from; `/library` is
+ *  still the right fallback for a from-less deep link); the session door
+ *  passes `/today`, since neither of ITS own entry points
+ *  (`SessionComplete.tsx`'s "Log this session", `Today.tsx`'s own "Log it"
+ *  unlogged-session line) carries a `from` today, and `/today` is where a
+ *  rower abandoning this screen without logging or discarding actually
+ *  wants to land. */
 function LogScreen({
   title,
   workoutType,
@@ -382,6 +413,7 @@ function LogScreen({
   saveError,
   onSave,
   discardSlot,
+  backFallback,
 }: {
   title: string;
   workoutType: WorkoutType;
@@ -400,9 +432,11 @@ function LogScreen({
   saveError: string | null;
   onSave: () => void;
   discardSlot: ReactNode;
+  backFallback?: string;
 }) {
   return (
     <main className="screen">
+      <BackLink fallback={backFallback} />
       <h1 className="screen-title">Log {title}</h1>
       <div className="log-meta">
         <TypeBadge type={workoutType} />
@@ -580,6 +614,25 @@ function SessionDoorLog() {
 
   const matchedDraft =
     draft !== null && draft.workoutId === run.workoutId ? draft : null;
+
+  // Must-fix minor (whole-branch review): `resolveWorkoutType`'s fallback
+  // chain only needs a library lookup when there's no matched draft to read
+  // `type` from directly (see its own doc comment's numbered priority
+  // list) — while `useWorkouts()` is still loading, `library` below reads
+  // as `[]` regardless of what's actually in it, so a Save pressed in that
+  // window would silently post the "O2" placeholder as this session's real
+  // type. Gated ONLY on that combination (no matched draft AND still
+  // loading): a matched draft already has an authoritative type with
+  // nothing to wait for, so this never flashes a loading screen in the
+  // common case where nothing is actually unresolved.
+  if (matchedDraft === null && workoutsState.state === "loading") {
+    return (
+      <main className="screen">
+        <p className="mono-status">LOADING…</p>
+      </main>
+    );
+  }
+
   const library = workoutsState.state === "ready" ? workoutsState.workouts : [];
   const libraryWorkout =
     run.workoutId !== null
@@ -636,6 +689,7 @@ function SessionDoorLog() {
       saving={saving}
       saveError={saveError}
       onSave={handleSave}
+      backFallback="/today"
       discardSlot={
         !confirmingDiscard ? (
           <button
@@ -702,6 +756,21 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // This door never read the draft/run records in the first place (the
   // hard constraint below), so `onSaved` here is just the navigation —
   // unlike the session door's `onSaved`, there is nothing to clear.
+  //
+  // Must-fix minor (whole-branch review): a browser BACK press after a
+  // successful save used to leave this exact route mounted fresh again
+  // (React Router simply re-renders whatever route a popped history entry
+  // points at), with an untouched, still-fillable form — a second Save
+  // click would POST a genuine duplicate log and advance `doneN` a second
+  // time for one real session. The session door doesn't need a guard of
+  // its own: a successful save clears the draft/run records, so revisiting
+  // `/session/log` afterward hits the `run === null` redirect above instead
+  // of a re-fillable form. This door has no records to clear (the hard
+  // constraint above), so it needs its OWN guard — `replace: true` swaps
+  // OUT this history entry for `/today` instead of pushing a new one on
+  // top, so a subsequent BACK skips straight past this route entirely
+  // (landing on whatever came before it, e.g. the workout's detail screen)
+  // rather than re-mounting this form.
   const {
     held,
     setHeld,
@@ -712,7 +781,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     saving,
     saveError,
     submit,
-  } = useLogForm(() => navigate("/today"));
+  } = useLogForm(() => navigate("/today", { replace: true }));
 
   if (workoutsState.state === "loading" || baselinesState.state === "loading") {
     return (

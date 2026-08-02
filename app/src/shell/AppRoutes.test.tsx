@@ -146,10 +146,14 @@ describe("AppRoutes", () => {
     ).toBeVisible();
   });
 
-  // Unlike the session door, the manual door has no Discard button to back
-  // out with (nothing to discard) — the tab bar stays visible here as the
-  // only way to leave without saving (AppRoutes.tsx's own comment on this
-  // route registration).
+  // Unlike the session door, this route's tab bar stays visible — corrected
+  // by the whole-branch review (IMP-2), same as AppRoutes.tsx's own comment
+  // on this route registration: this used to be justified by "the manual
+  // door has no Discard button to back out with," which stopped being the
+  // real reason once a `BackLink` was added to this door's main state too.
+  // The tab bar staying visible here is independent of that — this route
+  // touches no storage at all, so there's nothing dangling for an early
+  // exit to leave behind either way.
   it("shows the tab bar on /library/:id/log (the manual door), unlike the session door", async () => {
     render(
       <MemoryRouter initialEntries={["/library/w1/log"]}>

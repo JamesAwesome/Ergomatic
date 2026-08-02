@@ -18,15 +18,34 @@ import type { SessionRun } from "./run";
  *  IS the lock moment for an off-app row," per the spec). Both are pure:
  *  no clock reads, no storage access, same input in -> same output out.
  *
- *  PINNED READING — work steps only (spec's own Design section: "walks
- *  `run.phases`: work phases -> {...}"; `docs/design/README.md` §7: "listing
- *  each work step"). Neither warm-up nor rest phases ever become a
- *  `LogStep`, and neither does an open-ended "test" phase (`type: "test"`,
- *  e.g. a 2k/6k test piece) — §7 never mentions one, and structurally a
- *  "test" `Phase` (`domain/expand.ts`'s `case "test"`) carries no
- *  `targetSplit`/`seconds`/`meters` at all, so there is nothing to build a
- *  `LogStep` out of even if it were included. This was verified against
- *  `domain/expand.ts` directly, not assumed from the brief's prose alone.
+ *  PINNED READING — work steps only, PLUS a bare-label entry for a test
+ *  step (spec's own Design section: "walks `run.phases`: work phases ->
+ *  {...}"; `docs/design/README.md` §7: "listing each work step"). Warm-up
+ *  and rest phases never become a `LogStep` — §7 never mentions either, and
+ *  neither carries anything a rower would recognize as a step of their own
+ *  workout. An open-ended "test" phase (`type: "test"`, e.g. a 2k/6k test
+ *  piece) is DIFFERENT (whole-branch review, IMP-1 — this module's own
+ *  header used to say it was skipped identically to wu/rest, on the theory
+ *  that §7 never mentions one and a "test" `Phase`, `domain/expand.ts`'s
+ *  `case "test"`, carries no `targetSplit`/`seconds`/`meters` to build a
+ *  fuller `LogStep` out of): a workout can be AUTHORED with a test step as
+ *  its ONLY qualifying step (nothing stops one — `validate.ts` never
+ *  requires at least one `"w"` step), and skipping it left that workout
+ *  producing `steps: []`, a hard 400 at POST time
+ *  (`server/routes/data.ts`'s own "steps must be a non-empty array" rule)
+ *  with no recovery on the session door but its destructive Discard. A
+ *  test-only session still deserves a log — the honest fix is a `LogStep`
+ *  carrying ONLY its `label`, every numeric field absent (nothing to hold a
+ *  target or actual against, unlike a work step): `validateLogStepEntry`
+ *  requires just `label`, so this shape posts cleanly with no server
+ *  change needed. The label itself prefers the ORIGINAL authored text
+ *  (`domain/bulk.ts`'s test-step parser: `test 2k test` -> `label: "2k
+ *  test"`) over the phase's own frozen "All out" (`domain/expand.ts`'s
+ *  `case "test"` always overwrites the label with that generic word, since
+ *  that's what §6's live-timer target slot needs to show, not what a log
+ *  entry should call the step) whenever a matching draft can recover it —
+ *  the same "prefer the real draft, fall back to the frozen phase" idiom
+ *  the work-step branch below already uses for its own label.
  *
  *  LABEL IDIOM (Task 1 F1 -> F1b review): a step's LABEL is its identity and
  *  must match every other step-text surface — the chip idiom (`refLabel`'s
@@ -174,7 +193,17 @@ function draftWorkStep(
  *  FALLBACK paragraph); passing the real draft whenever it's on hand is
  *  what lets this door's labels match `buildManualLogSteps`'s.
  *
- *  Per work phase (module header: wu/rest/test never produce one):
+ *  A "test" phase (IMP-1, module header) produces a `LogStep` carrying ONLY
+ *  `label` — no `targetSplit`/`actualSplit`/`actualSource`/`spm`/`meters`/
+ *  `seconds` at all, since a test phase has none of those to report. The
+ *  label prefers `draft.steps[phase.originalIndex]`'s own text when that
+ *  draft step is genuinely a `"test"` step (the ORIGINAL authored label);
+ *  falls back to the phase's own frozen `label` ("All out") otherwise —
+ *  same "prefer draft, fall back to phase" shape as the work-step branch
+ *  below, just with a much smaller result.
+ *
+ *  Per work phase (module header: wu/rest never produce one; test is
+ *  handled separately, immediately above):
  *  - `label`: `refPaceLabel(duration, draftStep.ref)` when
  *    `draftWorkStep(draft, phase.originalIndex)` finds the real authored
  *    step (module header's LABEL IDIOM paragraph — byte-identical to
@@ -212,6 +241,17 @@ export function buildLogSteps(
 ): LogStep[] {
   const out: LogStep[] = [];
   run.phases.forEach((phase: EnginePhase, i: number) => {
+    if (phase.type === "test") {
+      // IMP-1 (module header, this function's own doc comment): a bare
+      // label, nothing else — the draft's own original text when a
+      // matching `"test"` step is on hand, else the phase's frozen "All
+      // out".
+      const draftStep = draft?.steps[phase.originalIndex];
+      out.push({
+        label: draftStep?.k === "test" ? draftStep.label : phase.label,
+      });
+      return;
+    }
     if (phase.type !== "work") return;
     const isEffort = phase.targetKind === "effort";
     const draftStep = draftWorkStep(draft, phase.originalIndex);
@@ -298,13 +338,22 @@ export function buildLogSteps(
  *  (an off-app row is recorded as "held the target", identical to
  *  `buildLogSteps`'s completed-time-phase rule). Effort steps omit
  *  `targetSplit`/`actualSplit`/`actualSource` entirely, same 5G rule as
- *  `buildLogSteps` (module header's SERVER CONTRACT paragraph). */
+ *  `buildLogSteps` (module header's SERVER CONTRACT paragraph).
+ *
+ *  A `"test"` step (IMP-1, module header) produces a bare-label `LogStep`
+ *  the same way `buildLogSteps` does — here it's simpler still, since this
+ *  builder always has the step's own ORIGINAL authored `label` straight
+ *  from `Step` with no phase/draft indirection to reach through at all. */
 export function buildManualLogSteps(
   workout: { steps: Step[] },
   baselines: Baselines,
 ): LogStep[] {
   const out: LogStep[] = [];
   for (const step of liveSteps(workout.steps)) {
+    if (step.k === "test") {
+      out.push({ label: step.label });
+      continue;
+    }
     if (step.k !== "w") continue;
     const isEffort = isEffortRef(step.ref);
     const durationLabel =
@@ -338,8 +387,15 @@ export function buildManualLogSteps(
 // framework-free session builder with no reason to depend on a screen —
 // pulling in Today.tsx's whole import chain to reuse six lines would be
 // backwards (screens depend on session/, not the other way around). A future
-// DRY pass could hoist this into `domain/format.js` now that there are two
-// independent copies — flagged, not fixed, in Task 1's own report.
+// DRY pass could hoist this into `domain/format.js` — flagged, not fixed, in
+// Task 1's own report. Corrected count (whole-branch review; this comment
+// used to say "two independent copies"): THREE independent copies exist —
+// this one, Today.tsx's, and `e2e/session.spec.ts`'s own browser-context
+// copy (Task 4, `todayDateLabel`) — though only the first two are the DRY
+// pass's actual candidates. The e2e copy is a different, unavoidable kind of
+// duplication (an e2e spec can't `import` a client module into the page it
+// evaluates code inside of), not a third instance of the same oversight a
+// hoist would fix.
 //
 // EXPORTED (Task 3, the manual door): `LogSession.tsx` already sits
 // downstream of this module (imports `buildLogSteps`/`logTotals`/

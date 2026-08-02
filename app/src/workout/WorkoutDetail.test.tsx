@@ -206,9 +206,11 @@ function LocationProbe() {
 
 // Renders WorkoutDetail with an initial history entry carrying `state` —
 // the same `{pathname, state}` shape a real `<Link state={...}>` produces —
-// alongside a `/library` route (BackLink's fallback/CTA target) and a
-// `/library/:id/edit` PROBE route, so both BackLink's own target AND
-// whatever the Edit link forwards can be asserted against the ACTUAL
+// alongside a `/library` route (BackLink's fallback/CTA target), a
+// `/library/:id/edit` PROBE route, and a `/library/:id/log` PROBE route
+// (must-fix minor, whole-branch review: "Log it after" forwards
+// `state={{from}}` like the Edit link beside it), so BackLink's own target
+// AND whatever either link forwards can be asserted against the ACTUAL
 // origin received, not a bare pathname a plain string entry can't carry.
 async function renderDetailWithState(pathname: string, state: unknown) {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
@@ -217,6 +219,7 @@ async function renderDetailWithState(pathname: string, state: unknown) {
       <Routes>
         <Route path="/library/:id" element={<WorkoutDetail />} />
         <Route path="/library/:id/edit" element={<LocationProbe />} />
+        <Route path="/library/:id/log" element={<LocationProbe />} />
         <Route path="/library" element={<p>LIBRARY SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
@@ -820,6 +823,30 @@ describe("WorkoutDetail", () => {
     await renderDetailWithState("/library/w3", undefined);
 
     await userEvent.click(screen.getByRole("link", { name: "Edit" }));
+
+    expect(await screen.findByText("PROBE from=undefined")).toBeVisible();
+  });
+
+  // Must-fix minor (whole-branch review): "Log it after" used to be a bare
+  // `<Link to={...}>` with no `state` at all — unlike the Edit link right
+  // beside it, which has always forwarded `from` (the pair above). Without
+  // this, the manual door's own new `BackLink` (IMP-2) would fall all the
+  // way back to its `/library` default instead of returning to wherever the
+  // rower actually came from before this detail screen.
+  it("forwards its own received `from` onto the 'Log it after' link, same as the Edit link beside it", async () => {
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetailWithState("/library/w3", { from: "/today" });
+
+    await userEvent.click(screen.getByRole("link", { name: "Log it after" }));
+
+    expect(await screen.findByText("PROBE from=/today")).toBeVisible();
+  });
+
+  it("forwards undefined (no state to forward) onto the 'Log it after' link when detail itself has none", async () => {
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetailWithState("/library/w3", undefined);
+
+    await userEvent.click(screen.getByRole("link", { name: "Log it after" }));
 
     expect(await screen.findByText("PROBE from=undefined")).toBeVisible();
   });

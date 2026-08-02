@@ -93,13 +93,19 @@ export default function AppRoutes({
             LogSession component as /session/log below, distinguishing the
             two by whether a route `:id` param is present (LogSession's own
             door-detection comment). Deliberately NOT added to
-            HIDDEN_TABBAR_PREFIXES: unlike the session door (which always has
-            a Discard button as its own way out), the manual door has no
-            button to back out with (nothing to discard) — the tab bar stays
-            visible here as the only escape hatch, and navigating away
-            touches no storage at all (the manual door never reads or writes
-            a draft/run record), so there's nothing for an early exit to
-            leave dangling. */}
+            HIDDEN_TABBAR_PREFIXES — corrected by the whole-branch review
+            (IMP-2): this comment used to justify that by saying the session
+            door "always has a Discard button as its own way out" — WRONG,
+            Discard is destructive (it wipes the run/draft), not a real exit,
+            so the session door actually had none before that review's own
+            fix round added a `BackLink` there too (`LogSession.tsx`'s
+            `LogScreen`/`backFallback`). Both doors now carry an equivalent
+            `BackLink` on their main state, independent of whichever way the
+            tab bar renders. The real, still-valid reason this route's tab
+            bar stays visible: navigating away from it touches no storage at
+            all (the manual door never reads or writes a draft/run record),
+            so there's nothing an early exit could leave dangling — showing
+            the tab bar costs this route nothing extra. */}
         <Route path="/library/:id/log" element={<LogSession />} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/session/confirm" element={<ConfirmTargets />} />

@@ -222,6 +222,59 @@ describe("buildLogSteps", () => {
     expect(steps[0]!.targetSplit).toBeCloseTo(119.3, 9);
   });
 
+  // Must-fix minor (whole-branch review): the F2 fixture above nudges the
+  // ONLY work step in its workout (`originalIndex` 0), which is also
+  // `run.phases`' own POSITION 0 for that phase — arithmetically correct
+  // (hand-verified by the reviewer), but a fixture where `originalIndex`
+  // and position always coincide can't distinguish "keyed by originalIndex"
+  // from "keyed by position" — a regression that swapped `phase
+  // .originalIndex` for the loop's own `i` in `withEffectiveOff`'s caller
+  // would still pass it. This fixture puts a phase BEFORE the nudged one:
+  // the first work step's own `restMinutes` auto-inserts a rest phase
+  // straight after it (`domain/expand.ts`'s "case w"), so the nudged
+  // SECOND step sits at `run.phases` POSITION 2 while its `originalIndex`
+  // (a position in `draft.steps`, which has no rest entries at all) is
+  // still 1 — a genuine, asserted misalignment, not just a comment's claim.
+  it("F2: the nudge lookup keys by originalIndex, not run.phases position — a preceding phase (plus its own auto-inserted rest) shifts them apart", () => {
+    const baselines: Baselines = { k2Seconds: 112.3, k6Seconds: 120 };
+    const draft = buildDraft({
+      id: "id-nudge-fixture-preceded",
+      title: "Nudge Fixture (preceded)",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 2 },
+          ref: { base: "6k", off: 3 },
+          restMinutes: 1,
+        },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "2k", off: 5 },
+        },
+      ],
+    });
+    const nudged = withNudge(draft, 1, 2); // +2s confirm-time nudge on originalIndex 1
+    const built = buildRun(nudged, baselines, 0, NOW);
+    // The misalignment this fixture depends on, asserted directly: the
+    // nudged step is `run.phases[2]` (after the first work phase and its
+    // auto-inserted rest at positions 0/1) but `draft.steps[1]`.
+    expect(built.phases).toHaveLength(3);
+    expect(built.phases[2]!.originalIndex).toBe(1);
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: NOW.toISOString(),
+    };
+    const steps = buildLogSteps(run, nudged);
+    expect(steps).toHaveLength(2); // the rest phase never becomes a LogStep
+    // Same reconciliation as the F2 fixture above: 112.3 + 5 + 2 = 119.3,
+    // and the label's own offset (+7) is what makes that number honest.
+    expect(steps[1]!.label).toBe("3:00 @ 2k +7");
+    expect(steps[1]!.targetSplit).toBeCloseTo(119.3, 9);
+  });
+
   it("F2: the both-doors equality fixture itself stays nudge-free — buildManualLogSteps has no nudges to fold, by construction (no draft, no confirm step, for an off-app row)", () => {
     // Regression guard for the fix round's own scope note: F2 only touches
     // buildLogSteps' draft-matched path. Re-runs the existing Microburst
@@ -465,6 +518,77 @@ describe("buildLogSteps", () => {
     });
   });
 
+  // IMP-1 (whole-branch review): the dead end this fixes — a workout whose
+  // ONLY qualifying step is a `{k:"test"}` piece used to produce
+  // `buildLogSteps(...) === []`, which the server hard-400s on ("steps must
+  // be a non-empty array"), with no recovery on the session door but its
+  // destructive Discard. These tests prove the fix directly: a test phase
+  // now always contributes a bare-label `LogStep`.
+  describe("IMP-1: a test step now becomes a bare-label LogStep instead of being skipped", () => {
+    it("a workout whose ONLY qualifying step is a test piece no longer builds steps: [] — it builds exactly one bare-label LogStep", () => {
+      const draft = buildDraft({
+        id: "id-test-only",
+        title: "Test Only",
+        type: "O2",
+        steps: [{ k: "test", label: "2k test" }],
+      });
+      const built = buildRun(draft, BASELINES, 1, NOW);
+      const run: SessionRun = {
+        ...built,
+        index: built.phases.length,
+        completedAt: NOW.toISOString(),
+      };
+      // This is the exact shape that used to hard-400 at the server
+      // (server/routes/data.ts's "steps must be a non-empty array" rule).
+      expect(buildLogSteps(run, draft)).toStrictEqual([{ label: "2k test" }]);
+    });
+
+    it("a test step mixed with a real work step keeps the draft's own ORIGINAL label ('6k test'), not the phase's frozen generic 'All out'", () => {
+      const jetStream = starter("Jet Stream");
+      const distanceWork = jetStream.steps.find((s) => s.k === "w") as Extract<
+        Step,
+        { k: "w" }
+      >;
+      const draft = buildDraft({
+        id: "id-test-mixed",
+        title: "Test Mixed",
+        type: "O2",
+        steps: [{ k: "test", label: "6k test" }, distanceWork],
+      });
+      const built = buildRun(draft, BASELINES, 0, NOW);
+      const run: SessionRun = {
+        ...built,
+        index: built.phases.length,
+        completedAt: NOW.toISOString(),
+        actuals: {},
+      };
+      const steps = buildLogSteps(run, draft);
+      expect(steps).toHaveLength(2);
+      expect(steps[0]).toStrictEqual({ label: "6k test" });
+      // The real work step is unaffected by the test step's presence —
+      // same chip-idiom label ("6k +8") this file's other draft-based tests
+      // already pin.
+      expect(steps[1]!.label).toBe("10000 m @ 6k +8");
+      expect(steps[1]!.targetSplit).toBe(128);
+    });
+
+    it("with no draft at all, a test phase falls back to its own frozen 'All out' label rather than crashing", () => {
+      const draft = buildDraft({
+        id: "id-test-only-fallback",
+        title: "Test Only",
+        type: "O2",
+        steps: [{ k: "test", label: "2k test" }],
+      });
+      const built = buildRun(draft, BASELINES, 1, NOW);
+      const run: SessionRun = {
+        ...built,
+        index: built.phases.length,
+        completedAt: NOW.toISOString(),
+      };
+      expect(buildLogSteps(run, null)).toStrictEqual([{ label: "All out" }]);
+    });
+  });
+
   it("longest realistic composed label stays well under the server's 80-char bound", () => {
     // Duration text tops out at 7 chars either way: a distance phase's cap
     // is 42195m ("42195 m", domain/validate.ts's checkDuration int bound)
@@ -571,6 +695,38 @@ describe("buildManualLogSteps", () => {
       { k: "r", minutes: 2 },
     ];
     expect(buildManualLogSteps({ steps }, BASELINES)).toHaveLength(1);
+  });
+
+  // IMP-1 (whole-branch review): same dead end as `buildLogSteps`' own IMP-1
+  // block above, for the manual door — a workout whose only qualifying step
+  // is a test piece used to post `steps: []`, hard-400ing at the server.
+  describe("IMP-1: a test step now becomes a bare-label LogStep instead of being skipped", () => {
+    it("a workout whose ONLY qualifying step is a test piece no longer builds steps: [] — it builds exactly one bare-label LogStep", () => {
+      const steps: Step[] = [{ k: "test", label: "2k test" }];
+      expect(buildManualLogSteps({ steps }, BASELINES)).toStrictEqual([
+        { label: "2k test" },
+      ]);
+    });
+
+    it("a test step keeps its own ORIGINAL authored label alongside a real work step — simpler than the session door's own version, since this builder always has the real Step object in hand, no phase/draft indirection", () => {
+      const jetStream = starter("Jet Stream");
+      const distanceWork = jetStream.steps.find((s) => s.k === "w") as Extract<
+        Step,
+        { k: "w" }
+      >;
+      const steps: Step[] = [{ k: "test", label: "6k test" }, distanceWork];
+      const built = buildManualLogSteps({ steps }, BASELINES);
+      expect(built).toHaveLength(2);
+      expect(built[0]).toStrictEqual({ label: "6k test" });
+      expect(built[1]).toStrictEqual({
+        label: "10000 m @ 6k +8",
+        targetSplit: 128,
+        actualSplit: 128,
+        actualSource: "assumed",
+        spm: 21,
+        meters: 10000,
+      });
+    });
   });
 });
 

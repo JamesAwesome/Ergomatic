@@ -1697,11 +1697,12 @@ test.describe("log session screen (session door)", () => {
   // browser's UA button chrome (a ~2px outset border plus ~1px vertical
   // padding), which `min-height`/`line-height` alone can't clamp below. The
   // fix (`border: none; padding: 0;`, scoped to `.log-save` only — see
-  // index.css's own comment on this and DEVIATIONS.md's sibling gap on
-  // `.button-primary` app-wide) was never pinned by a computed-style
-  // assertion — a deferred obligation from that round's review, closed here
-  // (Phase 6C Task 4) so a future edit to `.log-save`/`.button-primary`
-  // can't silently regress the height back to the UA default.
+  // index.css's own comment on this, and the app-wide `.button-primary` gap
+  // now recorded in docs/design/DEVIATIONS.md, whole-branch review IMP-6)
+  // was never pinned by a computed-style assertion — a deferred obligation
+  // from that round's review, closed here (Phase 6C Task 4) so a future
+  // edit to `.log-save`/`.button-primary` can't silently regress the height
+  // back to the UA default.
   test("Save session renders at the specced 54px height, not the browser's default button chrome", async ({
     page,
   }) => {
@@ -1780,9 +1781,15 @@ test.describe("log session screen (manual door)", () => {
   });
 
   // Unlike the session door (which hides the tab bar as the same full-bleed
-  // holder family as /session/complete), the manual door has no Discard/
-  // Back button to leave with — the tab bar stays visible here as the only
-  // way out (AppRoutes.tsx's own comment on this route registration).
+  // holder family as /session/complete), this route keeps its tab bar
+  // visible — corrected by the whole-branch review (IMP-2): this comment
+  // used to say that was because the manual door "has no Discard/Back
+  // button to leave with," which stopped being true once that same review
+  // added a `BackLink` to this door's main state too (it just never needed
+  // the tab bar hidden to have a non-destructive exit). The real reason
+  // (still valid, AppRoutes.tsx's own comment on this route registration):
+  // this door touches no storage at all, so there's nothing an early exit
+  // could leave dangling, and showing the tab bar costs it nothing.
   test("the tab bar stays visible on this route, unlike the session door", async ({
     page,
   }) => {

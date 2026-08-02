@@ -308,7 +308,11 @@ function WorkoutDetailView({
             (not a `navigate()` button): this is a one-way hand-off to a new
             route, the same idiom `OwnerActions`' own Edit link below uses. */}
         {baselines ? (
-          <Link to={`/library/${workout.id}/log`} className="button-outline">
+          <Link
+            to={`/library/${workout.id}/log`}
+            state={{ from }}
+            className="button-outline"
+          >
             Log it after
           </Link>
         ) : (
