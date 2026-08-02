@@ -60,6 +60,16 @@ body {
   margin: 0;
 }
 
+/* iOS zoom guard: Safari/WKWebView zooms the page when a focused field's
+   font-size is under 16px (device report, 2026-08-01 — the builder title
+   zoomed on focus). Element-level floor; class rules may go bigger, never
+   smaller. Locked by design.spec.ts ("iOS input zoom guard"). */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
 h1 {
   font-family: var(--font-serif);
   font-weight: 500;
@@ -1117,6 +1127,7 @@ button:disabled {
   border: 1px solid var(--rule-3);
   border-radius: var(--radius);
   font: inherit;
+  font-size: 16px; /* after `font: inherit` — the zoom guard, see body rule */
   font-family: var(--font-sans);
   font-size: 15px;
   color: var(--ink);
@@ -1816,7 +1827,7 @@ button:disabled {
   border-radius: var(--radius);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 16px; /* was 13px — iOS zoom guard, see body rule */
   resize: vertical;
 }
 

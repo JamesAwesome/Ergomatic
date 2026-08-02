@@ -10,9 +10,11 @@ const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 // so these paraphrase each preset's own philosophy comment block there
 // (sprint: "O2-forward ... speed is sharpened on top of it"; head: "O2
 // alone is nearly half the plan").
+// Both name their reference distance (owner report, 2026-08-01: head said
+// "long-course" while sprint said "2k" — the pair should read in parallel).
 const PLAN_BLURBS: Record<PlanKey, string> = {
   sprint: "2k prep — an O2 base with speed sharpened on top.",
-  head: "Long-course prep — the biggest aerobic engine wins.",
+  head: "6k prep — the biggest aerobic engine wins.",
 };
 
 // TypeBadge (src/components/TypeBadge.tsx) only maps WorkoutType, not the
