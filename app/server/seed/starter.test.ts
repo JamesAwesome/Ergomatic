@@ -144,10 +144,22 @@ describe("STARTER_WORKOUTS", () => {
       spm: 26,
       label: "2:03.0–2:05.0", // toleranceRange(124, 1)
       meters: 3000,
+      originalStepIndex: 2, // Storm Front: wu(0), reps(1), w(2)
     };
-    const rest = { type: "rest", seconds: 360, label: "Rest" };
+    const rest = {
+      type: "rest",
+      seconds: 360,
+      label: "Rest",
+      originalStepIndex: 2,
+    };
     expect(phases(stormFront!.steps, BASELINES, 1)).toStrictEqual([
-      { type: "warmup", seconds: 300, label: "Easy", set: undefined },
+      {
+        type: "warmup",
+        seconds: 300,
+        label: "Easy",
+        set: undefined,
+        originalStepIndex: 0,
+      },
       { ...work, set: { index: 1, of: 4 } },
       { ...rest, set: { index: 1, of: 4 } },
       { ...work, set: { index: 2, of: 4 } },
@@ -178,10 +190,22 @@ describe("STARTER_WORKOUTS", () => {
       spm: 32,
       label: "ALL OUT",
       seconds: 30,
+      originalStepIndex: 2, // Microburst: wu(0), reps(1), w(2)
     };
-    const rest = { type: "rest", seconds: 150, label: "Rest" };
+    const rest = {
+      type: "rest",
+      seconds: 150,
+      label: "Rest",
+      originalStepIndex: 2,
+    };
     expect(phases(microburst!.steps, BASELINES, 1)).toStrictEqual([
-      { type: "warmup", seconds: 300, label: "Easy", set: undefined },
+      {
+        type: "warmup",
+        seconds: 300,
+        label: "Easy",
+        set: undefined,
+        originalStepIndex: 0,
+      },
       ...Array.from({ length: 10 }, (_, i) => [
         { ...work, set: { index: i + 1, of: 10 } },
         { ...rest, set: { index: i + 1, of: 10 } },

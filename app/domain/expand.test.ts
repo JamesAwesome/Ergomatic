@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { estimateMinutes, liveSteps, phases } from "./expand.js";
+import { estimateMinutes, liveSteps, phases, phaseSeconds } from "./expand.js";
 import { distanceRepeats, intervalLadder } from "./fixtures.js";
+import type { Step } from "./types.js";
 
 const B = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -53,7 +54,52 @@ describe("phases", () => {
       type: "test",
       label: "All out",
       set: undefined,
+      originalStepIndex: 1,
     });
+  });
+
+  it("attributes the same originalStepIndex to every repeated occurrence of a reps block (interval ladder: 5 work + 1 rest, x4)", () => {
+    const p = phases(intervalLadder.steps, B, 1);
+    expect(p[0]!.originalStepIndex).toBe(0); // the warmup, index 0
+    // Steps 2..7 (5 w's + 1 r) form the repeated block; every one of the 4
+    // cycles must attribute back to those SAME original indices, not to
+    // four distinct sets of indices.
+    const cycle1 = p.slice(1, 7).map((ph) => ph.originalStepIndex);
+    const cycle4 = p.slice(19, 25).map((ph) => ph.originalStepIndex);
+    expect(cycle1).toStrictEqual([2, 3, 4, 5, 6, 7]);
+    expect(cycle4).toStrictEqual([2, 3, 4, 5, 6, 7]);
+  });
+
+  it("shares one originalStepIndex between a work phase and its auto-inserted rest (distance repeats)", () => {
+    const p = phases(distanceRepeats.steps, B, 1);
+    expect(p[1]!.originalStepIndex).toBe(2); // the "w" step, index 2
+    expect(p[2]!.originalStepIndex).toBe(2); // its auto-inserted rest — SAME step
+  });
+
+  // Phase 6B Task 1 review, F1: a caller-side reimplementation of this same
+  // reps-expansion (6B's session engine, before this fix) tested
+  // `restMinutes !== undefined` while this function tests truthiness
+  // (`if (s.restMinutes)` below) — a stale/hand-edited draft with
+  // `restMinutes: 0` (unreachable via validateSteps, but `SessionDraft`'s
+  // own loose load-time validation admits it) made the two expansions
+  // disagree on phase COUNT, silently shifting every later
+  // `originalStepIndex`. Fixed by having ONLY this function decide phase
+  // count and stamp attribution in the same pass — this pins the exact
+  // `restMinutes: 0` case at the source of truth instead of in a caller.
+  it("does not insert a rest phase for restMinutes: 0 (falsy, not just absent) and does not shift later attribution", () => {
+    const steps: Step[] = [
+      { k: "wu", minutes: 5 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1 },
+        ref: { base: "6k", off: 0 },
+        restMinutes: 0,
+      },
+      { k: "r", minutes: 2 },
+    ];
+    const p = phases(steps, B, 1);
+    expect(p.map((ph) => ph.type)).toStrictEqual(["warmup", "work", "rest"]);
+    expect(p[2]!.originalStepIndex).toBe(2); // the authored "r" step, not shifted
   });
 
   it("marks an effort work phase and labels it with the effort word", () => {
@@ -131,5 +177,25 @@ describe("estimateMinutes", () => {
       { k2Seconds: 112, k6Seconds: 122 },
     );
     expect(mins.minutes).toBe(Math.round(((500 / 500) * 112) / 60));
+  });
+});
+
+describe("phaseSeconds", () => {
+  it("returns a time phase's fixed seconds", () => {
+    expect(phaseSeconds({ seconds: 300 })).toBe(300);
+  });
+
+  it("estimates a distance phase's seconds from meters and targetSplit — (meters / 500) * targetSplit", () => {
+    expect(phaseSeconds({ meters: 2000, targetSplit: 120 })).toBe(480); // (2000 / 500) * 120
+  });
+
+  it("returns null for a phase with neither seconds nor a resolved meters/targetSplit pair (an open-ended test phase)", () => {
+    expect(phaseSeconds({})).toBeNull();
+  });
+
+  it("also works against a real phases() output, not just a hand-built shape (real-fixture parity)", () => {
+    const p = phases(distanceRepeats.steps, B, 1);
+    expect(phaseSeconds(p[0]!)).toBe(600); // the 10' warmup
+    expect(phaseSeconds(p[1]!)).toBe(540); // 2500m @ 108 s/500m -> 5*108
   });
 });
