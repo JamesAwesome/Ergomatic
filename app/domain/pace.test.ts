@@ -5,6 +5,7 @@ import {
   toleranceRange,
   isEffortRef,
   effortWord,
+  effortFromWord,
   effortSpoken,
   refLabel,
   estimationSplit,
@@ -88,6 +89,19 @@ describe("effort refs", () => {
   it("maps efforts to the display pair", () => {
     expect(effortWord("max")).toBe("ALL OUT");
     expect(effortWord("min")).toBe("EASY");
+  });
+
+  // effortFromWord is effortWord's inverse — round-tripping every real
+  // Effort through both directions proves it's actually bijective, not just
+  // individually correct on each hand-picked input (Phase 6C Task 1 F1: a
+  // caller holding only a frozen display word, like an EnginePhase's
+  // `label`, needs to recover the chip word via refLabel({effort: ...})).
+  it("effortFromWord inverts effortWord", () => {
+    expect(effortFromWord("ALL OUT")).toBe("max");
+    expect(effortFromWord("EASY")).toBe("min");
+    for (const effort of ["max", "min"] as const) {
+      expect(effortFromWord(effortWord(effort))).toBe(effort);
+    }
   });
 
   // The spoken pair a screen reader gets instead of the chip word — "MIN"

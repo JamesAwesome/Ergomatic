@@ -13,7 +13,7 @@ import { buildLogSteps, buildManualLogSteps, logTotals } from "./logDraft";
 // not a hand-built minimum.
 //   - Microburst (AN): the effort-ref fixture (ref: {effort: "max"}), 10 reps
 //     of a 0.5-minute piece — the task brief's own `0:30 @ MAX` example is
-//     this exact step.
+//     this exact step, and (F1 review) both doors must render it identically.
 //   - Jet Stream (O2): a single, non-repeated DISTANCE work step (10000m) —
 //     the kept-vs-discarded stopwatch-actual fixture.
 //   - Cold Front (AT): wu + a reps-marker block of 4x2000m @ 6k+1 with 5'
@@ -52,23 +52,37 @@ function runFor(
 }
 
 describe("buildLogSteps", () => {
-  it("Microburst: 10 effort work phases each omit targetSplit/actualSplit/actualSource entirely (5G rule) and label carries the effort word, not the ref chip", () => {
+  it("Microburst: 10 effort work phases each omit targetSplit/actualSplit/actualSource entirely (5G rule) and label carries the chip word (F1: effortFromWord inverts the frozen 'ALL OUT' back to 'MAX')", () => {
     // wu(5') + reps(10) x [w{0.5min, effort:max, spm:32, rest 2.5'}] ->
     // 1 warmup + 10*(work+rest) = 21 phases; work at positions
     // 1,3,5,7,9,11,13,15,17,19. estimationSplit(max) = baselines.k2Seconds
-    // = 100 (irrelevant here — never surfaced), label = effortWord("max")
-    // = "ALL OUT" (domain/expand.ts), duration = fmtDuration(0.5) = "0:30".
+    // = 100 (irrelevant here — never surfaced). domain/expand.ts freezes
+    // this phase's `label` as effortWord("max") = "ALL OUT";
+    // effortFromWord("ALL OUT") = "max", refLabel({effort:"max"}) = "MAX".
+    // duration = fmtDuration(0.5) = "0:30".
     const run = runFor("Microburst", 3, { completedAt: NOW.toISOString() });
     expect(run.phases).toHaveLength(21);
+    expect(run.phases[1]).toMatchObject({ label: "ALL OUT" });
     const steps = buildLogSteps(run);
     expect(steps).toHaveLength(10);
     for (const step of steps) {
       expect(step).toStrictEqual({
-        label: "0:30 @ ALL OUT",
+        label: "0:30 @ MAX",
         spm: 32,
         seconds: 30,
       });
     }
+  });
+
+  it("F1: Microburst's effort step logs the IDENTICAL label through either door — the session door (frozen 'ALL OUT' inverted back to the chip) and the manual door (the real ref's chip directly) must never disagree about the same workout's step text", () => {
+    const run = runFor("Microburst", 3, { completedAt: NOW.toISOString() });
+    const runDoorLabels = buildLogSteps(run).map((s) => s.label);
+    const manualDoorLabels = buildManualLogSteps(
+      { steps: starter("Microburst").steps },
+      BASELINES,
+    ).map((s) => s.label);
+    expect(runDoorLabels).toStrictEqual(manualDoorLabels);
+    expect(runDoorLabels[0]).toBe("0:30 @ MAX");
   });
 
   it("Jet Stream: a kept stopwatch actual passes through unchanged, keeping meters (not seconds)", () => {
@@ -243,7 +257,7 @@ describe("buildLogSteps", () => {
 });
 
 describe("buildManualLogSteps", () => {
-  it("Microburst: an authored effort step resolves to the ref chip 'MAX' (unlike the session door's 'ALL OUT'), omitting targetSplit/actualSplit/actualSource", () => {
+  it("Microburst: an authored effort step resolves to the ref chip 'MAX' (F1: now identical to the session door's label — see the both-doors equality test above), omitting targetSplit/actualSplit/actualSource", () => {
     const w = starter("Microburst");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
     expect(steps).toHaveLength(10);
