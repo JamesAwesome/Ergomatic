@@ -72,7 +72,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 // Checks `v` plus every field a screen reads unconditionally on load:
 // ConfirmTargets maps over `steps` and indexes into `nudges`/`spmOverrides`,
-// RunPlaceholder/ConfirmTargets both read `title`, and `removed.includes`
+// Timer/ConfirmTargets both read `title`, and `removed.includes`
 // requires an array. A record with only `{"v":1}` used to satisfy this
 // check and then throw downstream the moment a screen touched any of those
 // fields — malformed now fails here instead, same as an unknown version.
@@ -158,7 +158,7 @@ export function effectiveSteps(
 
 /** The effective steps as a plain `Step[]` — `effectiveSteps` without the
  *  original-index pairing, for callers that only need the resolved shape
- *  (e.g. RunPlaceholder's step count). Keeping one implementation
+ *  (e.g. `draftMinutes` below). Keeping one implementation
  *  (`effectiveSteps`) means the nudge-folding fix above applies here too. */
 export function draftSteps(d: SessionDraft): Step[] {
   return effectiveSteps(d).map((e) => e.step);
@@ -192,6 +192,22 @@ export function draftMinutes(
  *  component. */
 export function startDraft(d: SessionDraft): SessionDraft {
   return { ...d, startedAt: new Date().toISOString() };
+}
+
+/** Reverses `startDraft` — clears `startedAt`, returning the draft to its
+ *  pre-start, editable state. This is what makes the countdown screen's
+ *  CANCEL button coherent (Phase 6B Task 2's report flagged the loop this
+ *  closes): `ConfirmTargets` redirects a STARTED draft straight to the live
+ *  timer (so a back-swipe mid-session resumes the action instead of
+ *  re-showing stale editable targets), so CANCEL navigating to
+ *  `/session/confirm` with `startedAt` still set would immediately bounce
+ *  the rower right back to the timer instead of letting them re-edit. The
+ *  caller (`Countdown.tsx`) pairs this with `run.ts`'s `clearRun()` — an
+ *  un-started draft coexisting with a live run record would leave the two
+ *  keys disagreeing about whether a session is in progress. Pure, like
+ *  `startDraft`/`withNudge`: the caller still owns `saveDraft`. */
+export function cancelStart(d: SessionDraft): SessionDraft {
+  return { ...d, startedAt: null };
 }
 
 /** Nudges a split step's target by `delta` seconds (cumulative). No-ops

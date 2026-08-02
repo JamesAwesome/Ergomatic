@@ -12,7 +12,7 @@ import Library from "../library/Library";
 import Plan from "../plan/Plan";
 import ConfirmTargets from "../session/ConfirmTargets";
 import Countdown from "../session/Countdown";
-import RunPlaceholder from "../session/RunPlaceholder";
+import Timer from "../session/Timer";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
@@ -88,7 +88,7 @@ export default function AppRoutes({
         <Route path="/plan" element={<Plan />} />
         <Route path="/session/confirm" element={<ConfirmTargets />} />
         <Route path="/session/countdown" element={<Countdown />} />
-        <Route path="/session/run" element={<RunPlaceholder />} />
+        <Route path="/session/run" element={<Timer />} />
         <Route
           path="/trend"
           element={<Placeholder title="Trend" phase="Phase 8" />}

@@ -104,16 +104,20 @@ async function setGenerousTimeCap(page: Page): Promise<void> {
   }
 }
 
-test.describe("Phase 6A: today -> detail -> confirm -> run", () => {
+test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", () => {
   // The phase's proof, end to end, against the real compose stack: Today's
   // suggestion -> a workout's detail screen -> Start builds+saves the
   // session draft -> confirm targets (adjust a duration, an SPM, strike a
   // step; the recount reacts each time) -> START stamps startedAt and
-  // navigates -> the run placeholder shows the draft's title -> a real
-  // browser reload proves the draft round-tripped through localStorage
-  // rather than router state. Design sweeps + screenshots for the two new
-  // screens land in Task 5; this is the flow spec only.
-  test("suggestion through confirm to the run placeholder, surviving a reload", async ({
+  // navigates to the countdown (Phase 6B Task 3 rewired this from the old
+  // 6A placeholder route) -> SKIP straight to the real live timer -> a real
+  // browser reload proves the run/draft round-tripped through localStorage
+  // rather than router state. Design sweeps + screenshots for the timer
+  // land in Task 5; this is the flow spec only. The timer's own controls
+  // (pause/resume, rewind/advance, END, distance mode) are covered by
+  // Timer.test.tsx at the client level — this e2e only proves the real
+  // browser stack wires the hand-off correctly.
+  test("suggestion through confirm, countdown, and into the real live timer, surviving a reload", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -196,15 +200,30 @@ test.describe("Phase 6A: today -> detail -> confirm -> run", () => {
     const recountAfterStrike = await recount.textContent();
     expect(recountAfterStrike).not.toBe(recountAfterDuration);
 
-    // START stamps startedAt and navigates to the 6B placeholder.
+    // START stamps startedAt and navigates to the countdown (Phase 6B Task
+    // 3 rewired this: it used to go straight to the 6B placeholder at
+    // /session/run — Countdown existed since Task 2 but nothing sent a
+    // rower there until this task closed that gap).
     await page.getByRole("button", { name: "START" }).click();
-    await expect(page).toHaveURL(/\/session\/run$/);
-    await expect(page.getByRole("heading", { name: title! })).toBeVisible();
-    await expect(page.getByText("6B builds the timer here.")).toBeVisible();
+    await expect(page).toHaveURL(/\/session\/countdown$/);
+    await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
 
-    // Reload: the draft round-trips through localStorage, not router state.
+    // SKIP straight to the timer — the real Timer (Task 3), not the 6B
+    // placeholder it replaced.
+    await page.getByRole("button", { name: "SKIP ›" }).click();
+    await expect(page).toHaveURL(/\/session\/run$/);
+    await expect(page.locator(".timer-name")).toHaveText(title!);
+    await expect(page.getByRole("button", { name: "END →" })).toBeVisible();
+    // Every starter workout opens with a warm-up (this file's own earlier
+    // comment, "Adjust one duration"), so the first phase is always step 1
+    // of however many — not pinning the total, which varies per workout.
+    await expect(page.getByText(/^STEP 1 OF \d+/)).toBeVisible();
+
+    // Reload: the run/draft round-trip through localStorage, not router
+    // state — the same proof the old placeholder-era test made, now against
+    // the real timer.
     await page.reload();
-    await expect(page.getByRole("heading", { name: title! })).toBeVisible();
-    await expect(page.getByText("6B builds the timer here.")).toBeVisible();
+    await expect(page.locator(".timer-name")).toHaveText(title!);
+    await expect(page.getByText(/^STEP 1 OF \d+/)).toBeVisible();
   });
 });

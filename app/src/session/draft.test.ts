@@ -10,6 +10,8 @@ import {
   draftMinutes,
   effectiveSteps,
   withNudge,
+  startDraft,
+  cancelStart,
   DRAFT_KEY,
   type SessionDraft,
 } from "./draft";
@@ -239,6 +241,31 @@ describe("withNudge", () => {
   });
 });
 
+describe("startDraft / cancelStart", () => {
+  it("startDraft stamps a real ISO startedAt", () => {
+    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-start"));
+    expect(d.startedAt).toBeNull();
+    const started = startDraft(d);
+    expect(started.startedAt).not.toBeNull();
+    expect(new Date(started.startedAt!).toISOString()).toBe(started.startedAt);
+  });
+
+  it("cancelStart reverses startDraft, returning startedAt to null", () => {
+    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-cancel"));
+    const started = startDraft(d);
+    const cancelled = cancelStart(started);
+    expect(cancelled.startedAt).toBeNull();
+    // Every other field survives untouched — this only ever touches
+    // startedAt, the same "one field" discipline startDraft itself follows.
+    expect(cancelled).toStrictEqual({ ...started, startedAt: null });
+  });
+
+  it("cancelStart on an already-unstarted draft is a no-op value (still null)", () => {
+    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-cancel-2"));
+    expect(cancelStart(d).startedAt).toBeNull();
+  });
+});
+
 describe("saveDraft / loadDraft / clearDraft", () => {
   beforeEach(() => localStorage.clear());
 
@@ -311,7 +338,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   // `v === 1`, so this exact reviewer probe — a lone `{"v":1}` with none of
   // the fields every screen reads unconditionally — used to satisfy the
   // guard and load "successfully", then throw the moment ConfirmTargets (or
-  // RunPlaceholder) touched `.steps`/`.nudges`/`.removed`/`.title`.
+  // Timer) touched `.steps`/`.nudges`/`.removed`/`.title`.
   // Malformed now fails the same guard an unknown version already did:
   // null back, key cleared, no downstream crash.
   it("returns null and clears the key for a bare {v:1} with none of the load-bearing fields", () => {
