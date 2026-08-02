@@ -119,6 +119,23 @@ export function upNextText(run: SessionRun): string {
   return `${phaseKindWord(next.type)} · ${next.label}`;
 }
 
+/** Landscape's UP NEXT panel gets a second "then …" line (handoff §6:
+ *  "UP NEXT panel with a 'then …' second line" — landscape only, portrait's
+ *  UP NEXT never grows one); this is the phase AFTER the one `upNextText`
+ *  already names. `null` when there's nothing meaningful to say: once the
+ *  CURRENT phase is already the last one, `upNextText` itself reads
+ *  "FINISH" and a second "then FINISH" underneath it would be redundant,
+ *  not informative — mirrors `upNextText`'s own "FINISH past the last
+ *  phase" contract one phase further out. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function thenNextText(run: SessionRun): string | null {
+  const next = run.phases[run.index + 1];
+  if (next === undefined) return null;
+  const afterNext = run.phases[run.index + 2];
+  if (afterNext === undefined) return "FINISH";
+  return `${phaseKindWord(afterNext.type)} · ${afterNext.label}`;
+}
+
 /** The suspect-actual seam (Phase 6B Task 1 review, product; routed into
  *  this task's ledger; made two-sided in the spec review's F6 fix round).
  *  After a long suspend, a distance phase's honest stopwatch can be huge —
@@ -147,8 +164,16 @@ export function isSuspectActual(
   );
 }
 
-/** The live timer (handoff §6). Portrait only — landscape is Task 4's own
- *  `@media (orientation: landscape)` layer over this exact component.
+/** The live timer (handoff §6). One component for both orientations — Task
+ *  4's own `@media (orientation: landscape)` layer (index.css) reflows this
+ *  exact markup into the handoff's two-column layout via CSS Grid explicit
+ *  placement (every top-level element gets its own `grid-column`/
+ *  `grid-row`); portrait stays the plain flex column it always was, and
+ *  neither layout reorders or duplicates a single DOM node. `thenNextText`
+ *  above is the one piece of genuinely NEW content landscape's own UP NEXT
+ *  panel needs (a "then …" line portrait never shows) — rendered
+ *  unconditionally here and hidden by CSS in portrait, since this component
+ *  has no JS notion of the device's current orientation.
  *
  *  One 1s interval repaints; every displayed number is computed fresh from
  *  engine functions against `new Date()`, never accumulated — the same
@@ -229,12 +254,10 @@ export default function Timer() {
     };
   }, [hasRun]);
 
-  // Past the last phase: hand off to Task 4's session-complete screen. That
-  // route doesn't exist yet in this task (Task 4 builds it); until it
-  // lands, AppRoutes' own catch-all redirects an unregistered path to
-  // /today, which is a harmless intermediate state — this task's own e2e
-  // deliberately doesn't drive a workout to completion (brief: "your task's
-  // e2e covers the timer through phases, not completion").
+  // Past the last phase: hand off to SessionComplete (AppRoutes.tsx,
+  // Phase 6B Task 4) — this component's own run-guard clause below renders
+  // one harmless "Finishing…" frame between this effect committing and the
+  // navigate actually landing.
   useEffect(() => {
     if (run !== null && isComplete(run)) {
       navigate("/session/complete");
@@ -269,6 +292,7 @@ export default function Timer() {
   const isLastPhase = currentRun.index === currentRun.phases.length - 1;
   const elapsed = elapsedSeconds(currentRun, now);
   const pausedAt = currentRun.pausedAt;
+  const thenText = thenNextText(currentRun);
 
   function handleEndTap() {
     // Pausing before staging the confirm means the phase clock can't
@@ -508,8 +532,19 @@ export default function Timer() {
       <TimerTargets phase={phase} />
 
       <div className="timer-upnext">
-        <span className="timer-upnext-label">UP NEXT</span>
-        <span className="timer-upnext-value">{upNextText(currentRun)}</span>
+        <div className="timer-upnext-main">
+          <span className="timer-upnext-label">UP NEXT</span>
+          <span className="timer-upnext-value">{upNextText(currentRun)}</span>
+        </div>
+        {/* Landscape-only second line (handoff §6) — hidden in portrait via
+            CSS (`.timer-upnext-then`'s own base rule), not a conditional
+            render keyed off orientation: this component has no JS notion of
+            the device's current orientation, and CSS's own media query is
+            the one thing that actually knows it. `thenText` itself is
+            data-driven (null past the last phase), independent of layout. */}
+        {thenText !== null && (
+          <span className="timer-upnext-then">then {thenText}</span>
+        )}
       </div>
 
       <TimerRuler

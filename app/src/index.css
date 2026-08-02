@@ -2495,13 +2495,19 @@ button:disabled {
 
 .timer-upnext {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
+  flex-direction: column;
+  gap: 4px;
   background: var(--surface-sunken);
   border: 1px solid var(--rule-2);
   border-radius: var(--radius);
   padding: 13px 14px;
+}
+
+.timer-upnext-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .timer-upnext-label {
@@ -2515,6 +2521,20 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-2);
+  text-align: right;
+}
+
+/* Landscape-only second line (handoff §6: "UP NEXT panel with a 'then …'
+   second line") — hidden in portrait, where the handoff's own static markup
+   never grows one. --ink-3 (NOT --ink-4) on --surface-sunken, same already-
+   verified 6.30:1 pair `.timer-upnext-label` uses on this same background —
+   --ink-4 measures only 4.48:1 here (this file's own Live Timer comment
+   block), so reusing --ink-3 rather than introducing an untested pairing. */
+.timer-upnext-then {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
   text-align: right;
 }
 
@@ -2643,4 +2663,184 @@ button:disabled {
 
 .timer-suspect-actions button {
   flex: 1;
+}
+
+/* -- Live timer: landscape (Phase 6B Task 4) --------------------------------
+   handoff §6: "two columns — left = phase label, time left mono 128px, phase
+   bar, TOTAL LEFT + ruler, controls; right = name/END, dots, TARGET SPLIT +
+   RATE cards, UP NEXT panel with a 'then …' second line." Reference frame
+   844×420 (docs/design/README.md's own landscape swap size).
+
+   Every top-level child of `.timer-screen` gets an EXPLICIT `grid-column`/
+   `grid-row` here — not left to CSS Grid's auto-placement algorithm, whose
+   sparse-packing order depends on DOM position (Timer.tsx's own children are
+   NOT in left/right-grouped DOM order — `.timer-header` precedes
+   `.timer-phase`, `.timer-total` precedes `.timer-controls` by several
+   siblings — so auto-placement would interleave rows unpredictably).
+   Explicit placement means Timer.tsx's own markup needed no reordering: same
+   component, same DOM, this file is the only diff. `.timer-end-confirm`
+   (shared by the abandon AND finish-session panels) and `.timer-suspect`
+   both get the full-width bottom row regardless of which of the three ever
+   mutually-exclusive control-row states (README §6 gives none of them a
+   distance/landscape carve-out) is active — a staged confirm reads better
+   spanning the whole frame than being squeezed into one 422px-wide column. */
+@media (orientation: landscape) {
+  .timer-screen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 20px;
+    row-gap: 8px;
+    align-content: start;
+    /* Overrides `main`/`.screen`'s own 480px cap (index.css's global rule,
+       sized for a PORTRAIT phone column) — a two-column layout squeezed
+       into that width on an 844px-wide landscape frame (the handoff's own
+       reference size) would leave each column under 220px, cramped for a
+       30px card value or the 128px numeral beside it. 800px leaves margin
+       within the 844px frame for the safe-area padding `.screen` already
+       applies on each side. */
+    max-width: 800px;
+  }
+
+  .timer-phase {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    justify-content: center;
+    padding-top: 0;
+  }
+
+  .timer-total {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .timer-controls {
+    grid-column: 1;
+    grid-row: 4;
+    margin-top: 0;
+    align-self: end;
+  }
+
+  .timer-header {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .timer-dots {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+  }
+
+  .timer-cards {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .timer-upnext {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .timer-end-confirm,
+  .timer-suspect {
+    grid-column: 1 / -1;
+    grid-row: 5;
+    margin-top: 0;
+  }
+
+  /* 128px per the handoff (portrait stays 96px, `.timer-time`'s own base
+     rule above). */
+  .timer-time {
+    font-size: 128px;
+  }
+
+  .timer-upnext-then {
+    display: block;
+  }
+}
+
+/* -- Session complete (Phase 6B Task 4) ------------------------------------
+   Not a handoff-specified screen (README §7 "Log session" is 6C's own, much
+   richer post-workout review — HELD/UNDER/OVER, pain, notes; this is 6B's
+   interim hand-off between the live timer and it) — so no mock to match
+   pixel-for-pixel. Reuses `.screen`/`.screen-title`/`.button-primary`
+   verbatim (already AA-verified elsewhere in this file) and every new color
+   pairing below is one of THIS file's own already-computed combinations,
+   not a new one: complete-total-label (--ink-4/--page) 4.76:1, matching
+   timer-name/-phase-label above; complete-total-value (--ink/--page) far
+   exceeds AA, matching the 96/128px numeral; complete-actual-label
+   (--ink-4/--surface) 5.29:1 and complete-actual-value (--accent/--surface)
+   5.94:1, both matching timer-card-label/-value-accent's own cards. */
+.session-complete-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  /* Same full-bleed sizing as `.timer-screen` above (this route is in
+     AppRoutes.tsx's HIDDEN_TABBAR_PREFIXES, so there's no tab bar height to
+     subtract for either) — pins `.complete-back`'s `margin-top: auto` to
+     the bottom of the viewport rather than right under the actuals list. */
+  min-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+      26px
+  );
+}
+
+.complete-total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 0;
+}
+
+.complete-total-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+}
+
+.complete-total-value {
+  font-family: var(--font-mono);
+  font-size: 48px;
+  font-weight: 500;
+  color: var(--ink);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.complete-actuals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.complete-actual-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.complete-actual-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+.complete-actual-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.complete-back {
+  margin-top: auto;
 }

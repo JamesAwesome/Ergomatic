@@ -7,6 +7,7 @@ import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanSequenceItem } from "../api/usePlan";
 import type { RecentLog } from "../api/useRecentLogs";
 import { DRAFT_KEY, type SessionDraft } from "../session/draft";
+import { RUN_KEY, type SessionRun } from "../session/run";
 import { TODAY_PICK_KEY } from "./todayPick";
 
 // Realistic fixtures, per repo convention: real starter workouts
@@ -415,6 +416,57 @@ describe("Today (stale draft discard on mount)", () => {
     await renderToday();
     await screen.findByRole("heading", { name: "Today" });
     expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
+  });
+
+  // Phase 6B Task 4 amendment: a completed-but-unlogged run record protects
+  // its draft from the stale discard regardless of age — tested both
+  // directions, per the task brief, against the SAME stale/never-started
+  // draft shape the first test above already proves gets discarded without
+  // one.
+  function makeRun(overrides: Partial<SessionRun>): SessionRun {
+    return {
+      v: 1,
+      phases: [],
+      index: 1,
+      phaseStartedAt: new Date().toISOString(),
+      pausedAt: null,
+      pausedTotalMs: 0,
+      actuals: {},
+      startedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      completedAt: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  it("keeps a stale, never-started-looking draft when its run record shows a completed session", async () => {
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+    localStorage.setItem(RUN_KEY, JSON.stringify(makeRun({})));
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+    expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
+  });
+
+  it("still discards a stale, never-started draft when the run record isn't a completed one", async () => {
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+    // An in-progress (not yet completed) run must NOT protect — only an
+    // actually-finished session earns the exception.
+    localStorage.setItem(
+      RUN_KEY,
+      JSON.stringify(makeRun({ completedAt: null })),
+    );
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
   });
 });
 

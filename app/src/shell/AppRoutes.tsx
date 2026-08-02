@@ -12,6 +12,7 @@ import Library from "../library/Library";
 import Plan from "../plan/Plan";
 import ConfirmTargets from "../session/ConfirmTargets";
 import Countdown from "../session/Countdown";
+import SessionComplete from "../session/SessionComplete";
 import Timer from "../session/Timer";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
@@ -24,8 +25,6 @@ import TabBar from "./TabBar";
 // /session/complete by the 6B plan since it's the same full-bleed holder
 // pattern) — checked by PREFIX, not exact match, so a future param/query
 // string on any of these routes never needs to remember to opt back in.
-// /session/complete has no route yet (Task 4 adds SessionComplete); it's
-// listed now so this list is only ever written once.
 const HIDDEN_TABBAR_PREFIXES = [
   "/session/countdown",
   "/session/run",
@@ -89,6 +88,7 @@ export default function AppRoutes({
         <Route path="/session/confirm" element={<ConfirmTargets />} />
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<Timer />} />
+        <Route path="/session/complete" element={<SessionComplete />} />
         <Route
           path="/trend"
           element={<Placeholder title="Trend" phase="Phase 8" />}
