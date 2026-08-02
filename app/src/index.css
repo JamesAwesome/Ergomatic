@@ -2268,15 +2268,26 @@ button:disabled {
    ConfirmTargets.tsx's own no-target row hit against the identical
    background (docs/design/DEVIATIONS.md); timer-upnext-value (--ink-2 on
    --surface-sunken) 9.16:1; timer-control (--ink-2 on --surface) 10.81:1;
-   timer-control-pause/timer-next-distance (--on-color on --accent) 5.94:1;
+   timer-control-pause/timer-control-next (--on-color on --accent) 5.94:1;
    timer-end-copy (--ink-2 on --surface-sunken, the BaselineEditor-idiom
-   panel's own bg) 9.16:1; timer-suspect-copy (--ink-2 on --page) 9.74:1.
-   All clear the 4.5:1 AA floor. The ruler labels are a NEW deviation, recorded in
-   DEVIATIONS.md: the handoff's own `#a09a8c` token (--ink-5) measures only
-   2.48:1 against --page — nowhere close to AA even at large text, since
-   --ink-5 is reserved everywhere else in this file for `:disabled` controls
+   panel's own bg, shared by the abandon AND finish confirms) 9.16:1;
+   timer-suspect-copy (--ink-2 on --page) 9.74:1. All clear the 4.5:1 AA
+   floor. The ruler labels are a NEW deviation, recorded in DEVIATIONS.md:
+   the handoff's own `#a09a8c` token (--ink-5) measures only 2.48:1 against
+   --page — nowhere close to AA even at large text, since --ink-5 is
+   reserved everywhere else in this file for `:disabled` controls
    (WCAG-exempt), not live informational text — substituted --ink-4 (4.76:1)
-   instead. */
+   instead.
+
+   Fix round (spec review): F1/F2 restored ◀/Pause to distance mode — the
+   control row is now the SAME 3-column grid for every phase kind, only the
+   rightmost slot's control changes (▶ vs NEXT →, `.timer-control-next`
+   replacing the old full-width `.timer-next-distance`, now deleted). F4
+   fixed `.timer-end`'s tap target (was 36px wide, no min-width — see its
+   own comment). F5 added a staged finish confirm for ▶ on the last phase,
+   reusing `.timer-end-confirm`/`.timer-end-actions` (renamed
+   `.timer-end-abandon` to `.timer-confirm-primary`, since that class now
+   backs two different panels' confirm buttons, not just Abandon's). */
 .timer-screen {
   display: flex;
   flex-direction: column;
@@ -2304,7 +2315,12 @@ button:disabled {
 .timer-end {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: var(--tap);
+  /* Fix round (spec review F4): 44px height alone isn't a 44×44 target —
+     this measured 36px wide with no min-width, the text's own natural
+     width at 12px mono. */
+  min-width: var(--tap);
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-4);
@@ -2317,7 +2333,10 @@ button:disabled {
 /* BaselineEditor.tsx's own `.baseline-confirm`/`.baseline-actions` idiom,
    reused verbatim (a panel appended below, not a modal): surface-sunken
    background, the two-button row split 1:2 the same way Discard/Apply
-   baselines is. */
+   baselines is. Shared by BOTH staged-confirm panels this screen has (END's
+   abandon confirm AND the last-phase finish confirm, fix round F5) — same
+   shape, different copy/handlers, so one rule set covers both rather than
+   two near-identical ones. */
 .timer-end-confirm {
   background: var(--surface-sunken);
   border-radius: var(--radius);
@@ -2335,7 +2354,10 @@ button:disabled {
   text-align: center;
 }
 
-.timer-end-abandon {
+/* The confirm action of either staged panel (Abandon session / Finish
+   session) — named for its ROLE (the panel's primary, destructive-or-final
+   action), not the specific copy, since both panels share it. */
+.timer-confirm-primary {
   flex: 2;
   border: none;
   font: inherit;
@@ -2586,27 +2608,23 @@ button:disabled {
   background: var(--accent-hover);
 }
 
-/* Distance phases: NEXT → replaces the whole ◀ Pause ▶ row (the phase
-   isn't "skipped," it's finished-and-recorded — see engine.ts's own
-   `nextDistance`) rather than sharing the 3-column grid, per the brief's
-   own "full-width NEXT →" wording. ≥44px is the house floor; 56px matches
-   the time-phase control row's own height for a consistent rhythm. */
-.timer-next-distance {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 56px;
+/* Distance phases: fix round (spec review F1/F2) — a distance phase now
+   shares the SAME ◀ / Pause / [NEXT] 3-column grid every other phase kind
+   uses (README §6 gives the control row no distance carve-out, and a
+   distance phase with no Pause has no recourse for a broken foot strap);
+   only the rightmost slot's control/label changes, from ▶ to NEXT →. Same
+   visual treatment as `.timer-control-pause` (accent, on-color) since NEXT
+   is this phase kind's own primary forward action, just now living in the
+   grid's fixed 56px column instead of full-width. */
+.timer-control-next {
   background: var(--accent);
   border: none;
-  border-radius: var(--radius);
   color: var(--on-color);
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
-  cursor: pointer;
-  margin-top: auto;
 }
 
-.timer-next-distance:hover {
+.timer-control-next:hover {
   background: var(--accent-hover);
 }
 

@@ -17,7 +17,13 @@ import {
   type EnginePhase,
 } from "./engine";
 import { clearDraft, loadDraft, type SessionDraft } from "./draft";
-import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
+import {
+  clearRun,
+  loadRun,
+  saveRun,
+  type PhaseActual,
+  type SessionRun,
+} from "./run";
 import TimerTargets from "./TimerTargets";
 import TimerRuler from "./TimerRuler";
 
@@ -148,7 +154,25 @@ export default function Timer() {
   const [run, setRun] = useState<SessionRun | null>(() => loadRun());
   const [now, setNow] = useState<Date>(() => new Date());
   const [endStaged, setEndStaged] = useState(false);
+  // Whether tapping END was the thing that paused the run (vs. the rower
+  // having already paused it themselves beforehand) — see `handleEndTap`/
+  // `handleKeepGoing`'s own comments (fix round, spec review F1): the two
+  // must be exact inverses, and that requires remembering which case this
+  // was.
+  const [pausedByEndTap, setPausedByEndTap] = useState(false);
   const [suspect, setSuspect] = useState(false);
+  // The distance phase's elapsed seconds AT THE MOMENT NEXT was tapped and
+  // judged suspect — frozen here, not re-read at Keep-split time (fix
+  // round, spec review F3): the whole POINT of staging the choice is a
+  // deliberation window, and re-measuring after that window inflates the
+  // recorded split by however long the rower spent deciding.
+  const [stagedElapsed, setStagedElapsed] = useState<number | null>(null);
+  // A staged confirm before ▶ ends the run on the FINAL phase (fix round,
+  // spec review F5): completion is a documented one-way door (engine.ts's
+  // own `isComplete` comment), so the affordance that triggers it must be
+  // deliberate, not a single stray tap under an unassuming "Next phase"
+  // aria-label.
+  const [finishStaged, setFinishStaged] = useState(false);
 
   // Keep-awake spans the screen's whole lifetime (spec: "on during
   // countdown + timer + complete, released on exit"). Countdown already
@@ -231,6 +255,7 @@ export default function Timer() {
   const currentRun: SessionRun = run;
   const phase = currentRun.phases[currentRun.index]!;
   const isDistance = phase.meters !== undefined;
+  const isLastPhase = currentRun.index === currentRun.phases.length - 1;
   const elapsed = elapsedSeconds(currentRun, now);
   const pausedAt = currentRun.pausedAt;
 
@@ -239,16 +264,26 @@ export default function Timer() {
     // silently auto-advance (or complete the run) while the rower is still
     // deciding — `tick()` still fires every second in the background
     // regardless of `endStaged`, since this component has no idea a
-    // decision is pending.
+    // decision is pending. `pause` is idempotent (engine.ts's own
+    // contract), so calling it when ALREADY paused is a harmless no-op —
+    // but `handleKeepGoing` needs to know which case this was (fix round,
+    // spec review F1): if the rower had already paused themselves before
+    // tapping END, "Keep going" must leave that alone, not resume a state
+    // the rower chose on their own.
+    setPausedByEndTap(pausedAt === null);
     apply(pause);
     setEndStaged(true);
   }
 
   function handleKeepGoing() {
-    // Deliberately does NOT resume — same rule Pause/Resume already
-    // follows everywhere else: pausing is explicit, so is resuming. The
-    // rower presses ▶ Resume same as if they'd paused for any other
-    // reason.
+    // The exact inverse of what `handleEndTap` did, regardless of phase
+    // kind (fix round, spec review F1): resume ONLY if tapping END was
+    // what paused the run in the first place. Previously this deliberately
+    // never resumed — on a distance phase (no Resume control existed at
+    // all before this fix round) that soft-bricked the stopwatch at
+    // whatever elapsed END was tapped at, forever.
+    if (pausedByEndTap) apply(resume);
+    setPausedByEndTap(false);
     setEndStaged(false);
   }
 
@@ -267,12 +302,39 @@ export default function Timer() {
   }
 
   function handleNext() {
+    // Defensive: END staging already pauses and takes over the header;
+    // stacking a SECOND staged confirm on top of it (by advancing to a new
+    // phase, or opening the finish confirm) is confusing state this button
+    // shouldn't be able to reach mid-decision.
+    if (endStaged) return;
+    if (isLastPhase) {
+      // Completion is a documented one-way door (engine.ts's own
+      // `isComplete` comment) — the control that triggers it must be a
+      // deliberate act, not a single tap under an unassuming "Next phase"
+      // label (fix round, spec review F5).
+      setFinishStaged(true);
+      return;
+    }
     apply(advance);
+  }
+
+  function handleCancelFinish() {
+    setFinishStaged(false);
+  }
+
+  function handleConfirmFinish() {
+    apply(advance);
+    setFinishStaged(false);
   }
 
   function handleDistanceNext() {
     const at = new Date();
-    if (isSuspectActual(phase, elapsedSeconds(currentRun, at))) {
+    const currentElapsed = elapsedSeconds(currentRun, at);
+    if (isSuspectActual(phase, currentElapsed)) {
+      // Freeze the measurement NOW (fix round, spec review F3) — Keep
+      // split records THIS value, not whatever the stopwatch reads by the
+      // time the rower finishes deliberating.
+      setStagedElapsed(currentElapsed);
       setSuspect(true);
       return;
     }
@@ -280,8 +342,28 @@ export default function Timer() {
   }
 
   function handleKeepSplit() {
-    apply(nextDistance);
+    const meters = phase.meters;
+    // Defensive: `suspect`/`stagedElapsed` are only ever set together, by
+    // `handleDistanceNext` above, which only runs when `isDistance` (so
+    // `meters` is always defined here in practice).
+    if (stagedElapsed === null || meters === undefined) return;
+    const splitSeconds = (stagedElapsed / meters) * 500;
+    const actual: PhaseActual = {
+      elapsedSeconds: stagedElapsed,
+      splitSeconds,
+      actualSource: "stopwatch",
+    };
+    // Not `nextDistance` (which would re-measure elapsed against `apply`'s
+    // own fresh `now`) — this replicates its actual-recording step with
+    // the FROZEN `stagedElapsed`, then advances with a FRESH timestamp (the
+    // next phase's own clock must start now, not back-dated to when the
+    // suspect prompt first appeared, which would falsely count the
+    // deliberation time against the phase that follows).
+    apply((r, at) =>
+      advance({ ...r, actuals: { ...r.actuals, [r.index]: actual } }, at),
+    );
     setSuspect(false);
+    setStagedElapsed(null);
   }
 
   function handleDiscardSplit() {
@@ -289,6 +371,7 @@ export default function Timer() {
     // moves the rower on — the ledger's own wording for this path.
     apply(advance);
     setSuspect(false);
+    setStagedElapsed(null);
   }
 
   return (
@@ -320,7 +403,7 @@ export default function Timer() {
             </button>
             <button
               type="button"
-              className="button-primary timer-end-abandon"
+              className="button-primary timer-confirm-primary"
               onClick={handleAbandon}
             >
               Abandon session
@@ -373,40 +456,63 @@ export default function Timer() {
         totalSeconds={totalSessionSeconds(currentRun)}
       />
 
-      {isDistance ? (
-        suspect ? (
-          <div className="timer-suspect">
-            <p className="timer-suspect-copy">
-              That took a lot longer than expected — keep the split, or discard
-              it and move on?
-            </p>
-            <div className="timer-suspect-actions">
-              <button
-                type="button"
-                className="button-outline timer-suspect-discard"
-                onClick={handleDiscardSplit}
-              >
-                Discard split
-              </button>
-              <button
-                type="button"
-                className="button-primary timer-suspect-keep"
-                onClick={handleKeepSplit}
-              >
-                Keep split
-              </button>
-            </div>
+      {suspect ? (
+        // Distance-only (only `handleDistanceNext` ever sets `suspect`):
+        // the deliberation choice fully replaces the control row — Pause
+        // alongside it would invite pausing mid-decision for no reason,
+        // since `tick()` never auto-advances a distance phase anyway.
+        <div className="timer-suspect">
+          <p className="timer-suspect-copy">
+            That took a lot longer than expected — keep the split, or discard it
+            and move on?
+          </p>
+          <div className="timer-suspect-actions">
+            <button
+              type="button"
+              className="button-outline timer-suspect-discard"
+              onClick={handleDiscardSplit}
+            >
+              Discard split
+            </button>
+            <button
+              type="button"
+              className="button-primary timer-suspect-keep"
+              onClick={handleKeepSplit}
+            >
+              Keep split
+            </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            className="timer-next-distance"
-            onClick={handleDistanceNext}
-          >
-            NEXT →
-          </button>
-        )
+        </div>
+      ) : finishStaged ? (
+        // Non-distance only (only the ▶ control, absent in distance mode,
+        // ever sets `finishStaged`). Same BaselineEditor-idiom panel END's
+        // own confirm uses — a staged confirm, not a modal — with its own
+        // copy/handlers (fix round, spec review F5).
+        <div className="timer-end-confirm">
+          <p className="timer-end-copy">Finish this session?</p>
+          <div className="timer-end-actions">
+            <button
+              type="button"
+              className="button-outline"
+              onClick={handleCancelFinish}
+            >
+              Keep going
+            </button>
+            <button
+              type="button"
+              className="button-primary timer-confirm-primary"
+              onClick={handleConfirmFinish}
+            >
+              Finish session
+            </button>
+          </div>
+        </div>
       ) : (
+        // Fix round (spec review F1/F2): every phase kind — distance
+        // included — shares this SAME ◀ / Pause / [▶ or NEXT] grid now.
+        // README §6 gives the control row no distance carve-out, and a
+        // distance phase with no Pause had no recourse for a broken foot
+        // strap. Only the rightmost slot's control changes.
         <div className="timer-controls">
           <button
             type="button"
@@ -423,14 +529,24 @@ export default function Timer() {
           >
             {pausedAt !== null ? "Resume" : "Pause"}
           </button>
-          <button
-            type="button"
-            className="timer-control"
-            aria-label="Next phase"
-            onClick={handleNext}
-          >
-            ▶
-          </button>
+          {isDistance ? (
+            <button
+              type="button"
+              className="timer-control timer-control-next"
+              onClick={handleDistanceNext}
+            >
+              NEXT →
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="timer-control"
+              aria-label="Next phase"
+              onClick={handleNext}
+            >
+              ▶
+            </button>
+          )}
         </div>
       )}
     </main>

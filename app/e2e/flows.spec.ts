@@ -213,7 +213,15 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
     await page.getByRole("button", { name: "SKIP ›" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);
     await expect(page.locator(".timer-name")).toHaveText(title!);
-    await expect(page.getByRole("button", { name: "END →" })).toBeVisible();
+    const endButton = page.getByRole("button", { name: "END →" });
+    await expect(endButton).toBeVisible();
+    // Fix round (spec review F4): 44×44 is a jsdom-invisible fact — CSS box
+    // layout only exists in a real browser, so this is the one place that
+    // can actually prove `.timer-end`'s tap target (previously 36px wide,
+    // no min-width) is fixed, not just reasoned about from the stylesheet.
+    const endBox = await endButton.boundingBox();
+    expect(endBox!.width).toBeGreaterThanOrEqual(44);
+    expect(endBox!.height).toBeGreaterThanOrEqual(44);
     // Every starter workout opens with a warm-up (this file's own earlier
     // comment, "Adjust one duration"), so the first phase is always step 1
     // of however many — not pinning the total, which varies per workout.
