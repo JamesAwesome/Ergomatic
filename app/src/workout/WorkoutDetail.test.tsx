@@ -4,7 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { api } from "../api";
-import { buildDraft, loadDraft, saveDraft, startDraft } from "../session/draft";
+import {
+  buildDraft,
+  loadDraft,
+  saveDraft,
+  startDraft,
+  type SessionDraft,
+} from "../session/draft";
+import { buildRun } from "../session/engine";
+import { loadRun, saveRun, type SessionRun } from "../session/run";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -83,6 +91,34 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
 };
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
+
+// A completed-but-unlogged run record for `draft` — the exact shape
+// SessionComplete.tsx's own fixture builds (Phase 6B Task 4), constructed
+// directly rather than driven through tick/advance (engine.test.ts and
+// Timer.test.tsx already own proving that walk); this file's own job is
+// WorkoutDetail's reaction to finding one sitting in storage, not deriving
+// one. `startDraft`'s own timestamp doubles as the run's startedAt so the
+// two agree, matching how a real session actually reaches this state (a
+// run is only ever built from an already-started draft).
+function completedRunFor(draft: SessionDraft): SessionRun {
+  const now = new Date("2026-08-01T12:00:00.000Z");
+  const built = buildRun(draft, BASELINES, 1, now);
+  const run: SessionRun = {
+    ...built,
+    index: built.phases.length,
+    completedAt: new Date("2026-08-01T12:20:00.000Z").toISOString(),
+  };
+  // A JSON round-trip, not the raw object: `buildRun`'s own phases carry an
+  // explicit `set: undefined` on every non-repeated phase (domain/expand.ts
+  // stamps it unconditionally) — `JSON.stringify` drops undefined-valued
+  // keys entirely, which is exactly what `saveRun`/`loadRun` do to this
+  // object on every real round trip through localStorage. Comparing the
+  // RAW built object against what `loadRun()` returns later would fail on
+  // that key's mere presence, not on any actual data difference — same
+  // "compare what storage will actually hand back" discipline as this
+  // file's other fixtures.
+  return JSON.parse(JSON.stringify(run)) as SessionRun;
+}
 
 // Typed against the real `api` signature (matching Builder.test.tsx's
 // helper) so `.mock.calls` carry the real `[path, RequestInit]` shape.
@@ -391,6 +427,89 @@ describe("WorkoutDetail", () => {
     expect(
       screen.queryByText("A session is in progress — replace it?"),
     ).not.toBeInTheDocument();
+  });
+
+  // Fix round (whole-branch review, F5) — the actual finding: a rower
+  // finishes session A (SessionComplete.tsx deliberately KEEPS its draft
+  // and run record for 6C), doesn't log it, then opens a different
+  // workout and taps Start. `handleStart`'s original F4 fix only ever
+  // gated on the DRAFT's own `startedAt` — a completed draft still has
+  // that set (nothing resets it), so the check technically fired, but with
+  // the wrong copy ("in progress") for a session that's actually already
+  // OVER; the real bug was one level down, in `startSession` silently
+  // overwriting DRAFT_KEY with no warning that RUN_KEY still held a
+  // finished, unlogged session about to become permanently unreachable.
+  describe("a completed-but-unlogged run record from a PREVIOUS session", () => {
+    function saveCompletedSessionA(): {
+      draftA: SessionDraft;
+      runA: SessionRun;
+    } {
+      const draftA = startDraft(
+        buildDraft({
+          id: "w-other",
+          title: "Session A",
+          type: "AN",
+          steps: [{ k: "wu", minutes: 5 }],
+        }),
+      );
+      const runA = completedRunFor(draftA);
+      saveDraft(draftA);
+      saveRun(runA);
+      return { draftA, runA };
+    }
+
+    it("stages a replace confirmation naming the unlogged session, not 'in progress'", async () => {
+      mockHooks(BASELINES);
+      const { draftA, runA } = saveCompletedSessionA();
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+      expect(
+        screen.getByText(
+          "You have an unlogged session — starting a new one discards it.",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("A session is in progress — replace it?"),
+      ).not.toBeInTheDocument();
+      // The first press must not have touched storage at all.
+      expect(loadDraft()).toStrictEqual(draftA);
+      expect(loadRun()).toStrictEqual(runA);
+    });
+
+    it("Cancel leaves both the draft and run record intact, byte-identical", async () => {
+      mockHooks(BASELINES);
+      const { draftA, runA } = saveCompletedSessionA();
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+      expect(loadDraft()).toStrictEqual(draftA);
+      expect(loadRun()).toStrictEqual(runA);
+    });
+
+    it("Replace clears the stale run record, builds a fresh draft, and proceeds to Confirm", async () => {
+      mockHooks(BASELINES);
+      saveCompletedSessionA();
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Replace session" }),
+      );
+
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      // No half-state: the OLD run is gone, not just the old draft.
+      expect(loadRun()).toBeNull();
+      const draft = loadDraft();
+      expect(draft).not.toBeNull();
+      expect(draft!.workoutId).toBe("w1");
+      expect(draft!.title).toBe("Ladder Sets");
+      expect(draft!.startedAt).toBeNull();
+    });
   });
 
   it("exposes nudge buttons with accessible names and the 44px hit-target class", async () => {

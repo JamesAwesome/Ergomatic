@@ -78,6 +78,57 @@ function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   return { draft: started, run };
 }
 
+// A real-shaped two-piece workout (warm-up + TWO distance work steps,
+// TR-type race pace — the community-canon "two pieces" shape, not a
+// hand-built minimum) with a recorded actual on BOTH distance phases —
+// fix round (whole-branch review, F2): the render-level list was only ever
+// exercised with exactly one actual, which can't tell "renders the list"
+// apart from "renders the list correctly when it has more than one row."
+function multiActualDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
+  const draft = buildDraft({
+    id: "id-two-pieces",
+    title: "Two Pieces",
+    type: "TR",
+    steps: [
+      { k: "wu", minutes: 4 },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 2000 },
+        ref: { base: "2k", off: 0 },
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 6000 },
+        ref: { base: "6k", off: 0 },
+      },
+    ],
+  });
+  const started = startDraft(draft);
+  saveDraft(started);
+  const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+  // Phases: 0 warmup, 1 work (2000m), 2 work (6000m).
+  const completedAt = new Date(
+    FIXED_NOW.getTime() + 40 * 60 * 1000,
+  ).toISOString();
+  const run: SessionRun = {
+    ...built,
+    index: built.phases.length,
+    completedAt,
+    actuals: {
+      // 452/2000*500 = 113.0 exactly (engine.ts's own hand-pinned example).
+      1: { elapsedSeconds: 452, splitSeconds: 113, actualSource: "stopwatch" },
+      // 1464/6000*500 = 122.0 exactly.
+      2: {
+        elapsedSeconds: 1464,
+        splitSeconds: 122,
+        actualSource: "stopwatch",
+      },
+    },
+  };
+  saveRun(run);
+  return { draft: started, run };
+}
+
 function mockKeepAwake() {
   const keepAwakeOn = vi.fn(async () => {});
   const keepAwakeOff = vi.fn(async () => {});
@@ -220,6 +271,20 @@ describe("SessionComplete", () => {
     expect(screen.getByText("20:00")).toBeInTheDocument();
     // 452s / 2000m * 500 = 113.0s -> fmtSplit "1:53.0".
     expect(screen.getByText("1:53.0")).toBeInTheDocument();
+  });
+
+  it("renders every recorded actual, in phase order, when a run has more than one (fix round F2)", async () => {
+    mockKeepAwake();
+    multiActualDraftAndRun();
+    await renderComplete();
+    await screen.findByText("TOTAL");
+
+    const rows = Array.from(document.querySelectorAll(".complete-actual-row"));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("WORK · 2000M");
+    expect(rows[0]).toHaveTextContent("1:53.0");
+    expect(rows[1]).toHaveTextContent("WORK · 6000M");
+    expect(rows[1]).toHaveTextContent("2:02.0");
   });
 
   it("omits the meters suffix for a recorded actual on a phase with no meters (defensive — the engine's own contract only ever keys `actuals` off a distance phase, but the label's ternary still has both branches)", async () => {
