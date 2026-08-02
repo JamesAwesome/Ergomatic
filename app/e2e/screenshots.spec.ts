@@ -623,3 +623,167 @@ test("you-staged", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "you-staged.png"),
   });
 });
+
+// Phase 6B (Task 5): the pre-workout countdown, live timer (portrait +
+// 844×420 landscape), and session-complete screens. Every capture drives a
+// bulk-imported, non-empty workout through the real START -> countdown ->
+// timer flow (never a hand-built minimum) — same three-step idiom as e2e/
+// design.spec.ts's/e2e/session.spec.ts's own identical helpers, duplicated
+// here per this file's own stated precedent (see `cleanupByTitle`'s own
+// comment above) rather than shared across files.
+
+/** Bulk-imports `text` and waits for the redirect back to /library. */
+async function importBulk(page: Page, text: string): Promise<void> {
+  await page.goto("/library/import");
+  await page.getByLabel("Bulk import text").fill(text);
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+}
+
+/** Opens `title`'s detail page from the library list and presses Start,
+ *  landing on Confirm. */
+async function startFromLibrary(page: Page, title: string): Promise<void> {
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/session\/confirm$/);
+}
+
+test("countdown", async ({ page }) => {
+  const title = "Screenshot Countdown Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-countdown@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // A warm-up-first, three-step ladder — the realistic shape the seeded
+  // starter library itself uses (CLAUDE.md's own "test against a realistic
+  // fixture" rule), not a single bare work step. The countdown's own
+  // next-phase line reads the CURRENT (warm-up) phase's resolved label —
+  // "Easy" — the same never-a-dash word every warm-up phase resolves to.
+  await importBulk(
+    page,
+    [
+      `${title} | AT | medium | 3`,
+      "wu 5",
+      "w 4:00 6k @20 r1",
+      "w 3:00 6k @18",
+    ].join("\n"),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "countdown.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("timer", async ({ page }) => {
+  const title = "Screenshot Timer Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-timer@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // Two work steps with a rest between them (the `r1.5` suffix expands to
+  // its own REST phase — domain/expand.js) — three phases total, so the
+  // committed capture shows a real, populated dots row, STEP line, resolved
+  // TARGET SPLIT/RATE cards, and a meaningful UP NEXT (the rest phase),
+  // landing on the WORK phase itself (phase 0) — the brief's own "work
+  // phase, targets visible" case, not the warm-up "countdown.png" already
+  // shows.
+  await importBulk(
+    page,
+    [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1.5", "w 4:00 6k @20"].join(
+      "\n",
+    ),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText(/^STEP 1 OF 3/)).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "timer.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("timer-landscape", async ({ page }) => {
+  const title = "Screenshot Timer Landscape Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-timer-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // Same fixture as "timer" above — three phases, so the landscape-only
+  // "then …" UP NEXT line (Timer.tsx's `thenNextText`) has something real
+  // to resolve to (the second work phase, past the rest phase UP NEXT
+  // already names).
+  await importBulk(
+    page,
+    [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1.5", "w 4:00 6k @20"].join(
+      "\n",
+    ),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText(/^STEP 1 OF 3/)).toBeVisible();
+  // The handoff's own landscape reference frame (docs/design/README.md).
+  await page.setViewportSize({ width: 844, height: 420 });
+  await expect(page.locator(".timer-upnext-then")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "timer-landscape.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("session-complete", async ({ page }) => {
+  const title = "Screenshot Session Complete Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-session-complete@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // Same tiny time-phase-then-distance-phase shape as e2e/session.spec.ts's
+  // own completion test: the time phase auto-advances in ~3s, then the
+  // distance phase's actual gets recorded on NEXT, producing the committed
+  // capture's one real, non-dash split.
+  await importBulk(
+    page,
+    [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+  await expect(page.getByText("STEP 2 OF 2 · WORK · 100M")).toBeVisible({
+    timeout: 6000,
+  });
+  // SCREENSHOT_BASELINES' own k2Seconds (112.0) prices this 100m/max
+  // phase's estimate at ~22.4s (domain/expand.js's own phaseSeconds
+  // formula, via estimationSplit's own max-effort branch) — landing NEXT
+  // around 20s in sits safely inside Timer.tsx's own non-suspect window
+  // (11.2s-44.8s), the same "land centered, not at either edge" reasoning
+  // e2e/session.spec.ts's own completion test documents for its own
+  // (smaller) baseline pair.
+  await page.waitForTimeout(20_000);
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await expect(page.getByText("Finish this session?")).toBeVisible();
+  await page.getByRole("button", { name: "Finish session" }).click();
+  await expect(page).toHaveURL(/\/session\/complete$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.locator(".complete-actual-row")).toHaveCount(1);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "session-complete.png"),
+  });
+  await cleanupByTitle(page, title);
+});
