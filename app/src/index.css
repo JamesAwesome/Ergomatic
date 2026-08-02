@@ -1126,9 +1126,8 @@ button:disabled {
   border: 1px solid var(--rule-3);
   border-radius: var(--radius);
   font: inherit;
-  font-size: 16px; /* after `font: inherit` — the zoom guard, see body rule */
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 16px; /* was 15px — iOS zoom guard, see body rule */
   color: var(--ink);
 }
 
