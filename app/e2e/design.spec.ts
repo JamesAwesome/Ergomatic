@@ -1717,6 +1717,84 @@ test.describe("log session screen (session door)", () => {
   });
 });
 
+// Phase 6C (Task 3): the Log screen's manual door — the same LogSession
+// component and CSS classes as the session door above, reached instead via
+// a workout's own detail screen ("Log it after"), not a completed timer
+// run. Deliberately does NOT re-sweep every assertion the session-door
+// block above already covers on the shared `LogScreen` markup — only what
+// actually differs for this door: no tab-bar hiding, no Discard button, and
+// a workout-detail entry point instead of the complete-screen hand-off.
+test.describe("log session screen (manual door)", () => {
+  const title = "Design Manual Log Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-manual-log-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Manual Log Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 1:00 6k-2"].join("\n"),
+    );
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+    await expect(
+      page.getByRole("heading", { name: `Log ${title}` }),
+    ).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // Unlike the session door (which hides the tab bar as the same full-bleed
+  // holder family as /session/complete), the manual door has no Discard/
+  // Back button to leave with — the tab bar stays visible here as the only
+  // way out (AppRoutes.tsx's own comment on this route registration).
+  test("the tab bar stays visible on this route, unlike the session door", async ({
+    page,
+  }) => {
+    await expect(page.locator(".tabbar")).toHaveCount(1);
+  });
+
+  test("no Discard button at all — there is nothing staged to discard", async ({
+    page,
+  }) => {
+    await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+  });
+
+  test("renders real content, never a bare dash: the PACES LOCKED 6K value, the per-step list, and EXPECTED N/5", async ({
+    page,
+  }) => {
+    // The manual door's lock moment IS save time (task brief) — PACES
+    // LOCKED shows the CURRENT baseline directly (DESIGN_BASELINES'
+    // k6Seconds, 120.0 -> "2:00.0"), while the step row shows the
+    // RESOLVED split this step's own -2 offset produces (120 - 2 = 118.0
+    // -> "1:58.0") — two different, both-honest numbers, not a
+    // discrepancy. Only "6K" renders (no step here references "2k" at
+    // all).
+    await expect(page.locator(".log-paces-value")).toHaveText("6K 2:00.0");
+    await expect(page.locator(".log-step-row")).toHaveCount(1);
+    await expect(page.locator(".log-step-target")).toHaveText("1:58.0");
+    await expect(page.locator(".classification-pain-word")).toHaveText(
+      "EXPECTED 3/5",
+    );
+  });
+});
+
 // Phase 6B (Task 5): the three mutually-exclusive staged-confirm panels
 // (END's abandon confirm, ▶/NEXT's finish confirm, NEXT's suspect-actual
 // choice) each get their own sweep, one staged open at a time — the

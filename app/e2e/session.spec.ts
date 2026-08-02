@@ -565,6 +565,170 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
   });
 });
 
+test.describe("Phase 6C Task 3: the manual door", () => {
+  // Two of these tests each create TWO workouts (a live sibling plus the
+  // one actually logged), so cleanup tracks a list rather than the single
+  // `title` variable Task 2's own describe block above uses.
+  let titles: string[] = [];
+
+  test.afterEach(async ({ page }) => {
+    for (const t of titles) {
+      await cleanupByTitle(page, t);
+    }
+    titles = [];
+  });
+
+  test("the full loop: Library → detail → Log it after → Held + pain + notes → Save → Today shows it in LAST THREE, with no draft/run record ever created", async ({
+    page,
+  }) => {
+    const title = "Tiny E2E Manual Log";
+    titles.push(title);
+    await signInViaBackdoor(page, {
+      email: "manual-log@e2e.test",
+      name: "Manual Log Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
+    );
+
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    const logItAfter = page.getByRole("link", { name: "Log it after" });
+    await expect(logItAfter).toBeVisible();
+    await logItAfter.click();
+
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+    await expect(
+      page.getByRole("heading", { name: `Log ${title}` }),
+    ).toBeVisible();
+    // No Discard button on this door at all — nothing to discard (the task
+    // brief's own words), unlike the session door's own staged confirm.
+    await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+    // Real content, never a bare dash: this workout's one step references
+    // "6k" plainly (off 0), and it's the only step in the list.
+    await expect(page.locator(".log-paces-value")).toContainText("6K 2:00.0");
+    await expect(page.locator(".log-step-row")).toHaveCount(1);
+
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page
+      .getByLabel("NOTES")
+      .fill("Rowed at the gym, logging it after the fact.");
+    await page.getByRole("button", { name: "Save session" }).click();
+
+    await expect(page).toHaveURL(/\/today$/);
+    const row = page
+      .locator(".today-log-row")
+      .filter({ hasText: title })
+      .first();
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("HELD");
+    await expect(row).toContainText("2/5");
+
+    // This door never reads OR writes either record — both stay absent the
+    // whole way through, not merely "cleared at the end" (there was nothing
+    // to clear in the first place).
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).toBeNull();
+    const draftAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    expect(draftAfter).toBeNull();
+  });
+
+  // THE hard constraint (task brief's own words): "must NOT touch the
+  // draft/run records — an in-progress session elsewhere survives logging
+  // an off-app row." A REAL live (not completed) session for one workout
+  // sits in storage while a completely different workout is logged
+  // manually — both localStorage records come out byte-identical (raw
+  // string equality), not merely "still present."
+  test("the hard constraint: a live in-progress session elsewhere is byte-identical in storage after logging an off-app row", async ({
+    page,
+  }) => {
+    const liveTitle = "Manual Door Live Sibling";
+    const manualTitle = "Manual Door Off-App Row";
+    titles.push(liveTitle, manualTitle);
+    await signInViaBackdoor(page, {
+      email: "manual-log-constraint@e2e.test",
+      name: "Manual Log Constraint Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // Two 30s time phases — long enough that the first is still running
+    // (not auto-advanced) for the whole rest of this test, which never
+    // returns to /session/run to let its own 1s tick interval keep ticking.
+    await importBulk(
+      page,
+      [`${liveTitle} | AN | easy | 1`, "w 0:30 6k", "w 0:30 6k"].join("\n"),
+    );
+    await startFromLibrary(page, liveTitle);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+
+    const draftBefore = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    const runBefore = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(draftBefore).not.toBeNull();
+    expect(runBefore).not.toBeNull();
+
+    // A completely separate workout, logged manually while the live one
+    // above sits untouched in the same storage.
+    await importBulk(
+      page,
+      [`${manualTitle} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
+    );
+    await page.locator(".workout-row").filter({ hasText: manualTitle }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(
+      manualTitle,
+    );
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByRole("button", { name: "Save session" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+
+    const draftAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(draftAfter).toBe(draftBefore);
+    expect(runAfter).toBe(runBefore);
+  });
+
+  test("Log it after is absent (replaced by the no-target/Set baselines idiom) when baselines are unset", async ({
+    page,
+  }) => {
+    const title = "Manual Door No Baselines";
+    titles.push(title);
+    // A brand-new account — deliberately no `setBaselines` call.
+    await signInViaBackdoor(page, {
+      email: "manual-log-no-baselines@e2e.test",
+      name: "Manual Log No Baselines Tester",
+    });
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
+    );
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    await expect(page.getByRole("link", { name: "Log it after" })).toHaveCount(
+      0,
+    );
+    await expect(page.getByText("no target").last()).toBeVisible();
+  });
+});
+
 test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a progressed or completed run", () => {
   // Before this fix round: Countdown.tsx rebuilt + saved a fresh SessionRun
   // unconditionally on every mount, and both SKIP (Countdown.tsx) and

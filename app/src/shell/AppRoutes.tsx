@@ -89,6 +89,18 @@ export default function AppRoutes({
         <Route path="/library/import" element={<BulkImportRoute />} />
         <Route path="/library/:id" element={<WorkoutDetail />} />
         <Route path="/library/:id/edit" element={<EditWorkout />} />
+        {/* Phase 6C Task 3: the manual door ("Log it after") — the SAME
+            LogSession component as /session/log below, distinguishing the
+            two by whether a route `:id` param is present (LogSession's own
+            door-detection comment). Deliberately NOT added to
+            HIDDEN_TABBAR_PREFIXES: unlike the session door (which always has
+            a Discard button as its own way out), the manual door has no
+            button to back out with (nothing to discard) — the tab bar stays
+            visible here as the only escape hatch, and navigating away
+            touches no storage at all (the manual door never reads or writes
+            a draft/run record), so there's nothing for an early exit to
+            leave dangling. */}
+        <Route path="/library/:id/log" element={<LogSession />} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/session/confirm" element={<ConfirmTargets />} />
         <Route path="/session/countdown" element={<Countdown />} />

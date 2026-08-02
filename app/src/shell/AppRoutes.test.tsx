@@ -131,6 +131,39 @@ describe("AppRoutes", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Task 3: the manual door reuses the SAME LogSession component as
+  // /session/log, distinguished by AppRoutes' own registration of a second
+  // route (`/library/:id/log`) rather than a separate screen module — this
+  // is a regression guard that the route wiring actually points there.
+  it("routes /library/:id/log to LogSession (the manual door)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/library/w1/log"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Log Session" }),
+    ).toBeVisible();
+  });
+
+  // Unlike the session door, the manual door has no Discard button to back
+  // out with (nothing to discard) — the tab bar stays visible here as the
+  // only way to leave without saving (AppRoutes.tsx's own comment on this
+  // route registration).
+  it("shows the tab bar on /library/:id/log (the manual door), unlike the session door", async () => {
+    render(
+      <MemoryRouter initialEntries={["/library/w1/log"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Log Session" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Main" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows the tab bar on an ordinary route (today)", async () => {
     render(
       <MemoryRouter initialEntries={["/today"]}>
@@ -169,6 +202,10 @@ describe("hidesTabBar", () => {
     // `.includes()` (instead of `.startsWith()`) would wrongly hide the tab
     // bar here too.
     "/library/session/countdown",
+    // Task 3: the manual door — deliberately NOT added to
+    // HIDDEN_TABBAR_PREFIXES (see AppRoutes.tsx's own comment on this
+    // route), unlike its session-door sibling "/session/log" above.
+    "/library/w1/log",
   ])("shows the tab bar for %s", (pathname) => {
     expect(hidesTabBar(pathname)).toBe(false);
   });

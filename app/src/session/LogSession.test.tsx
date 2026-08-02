@@ -9,6 +9,7 @@ import type { LibraryWorkout } from "../api/useWorkouts";
 import {
   buildDraft,
   clearDraft,
+  DRAFT_KEY,
   loadDraft,
   saveDraft,
   startDraft,
@@ -16,7 +17,8 @@ import {
   type SessionDraft,
 } from "./draft";
 import { buildRun } from "./engine";
-import { loadRun, saveRun, type SessionRun } from "./run";
+import { formatLogDate } from "./logDraft";
+import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const TOL = 1;
@@ -105,6 +107,47 @@ function mockWorkouts(workouts: LibraryWorkout[]) {
   }));
 }
 
+// Task 3 (the manual door): same `vi.doMock` idiom as `mockWorkouts` above,
+// for the second hook the manual door reads (`useBaselines`) that the
+// session door never needed.
+function mockBaselines(
+  baselines: { k2Seconds: number | null; k6Seconds: number | null } = BASELINES,
+) {
+  vi.doMock("../api/useBaselines", () => ({
+    useBaselines: () => ({ state: "ready", baselines }),
+  }));
+}
+
+// A real, mixed-kind fixture for the manual door — the SAME two starters'
+// own work steps `buildSessionFixture` above assembles (Doldrums' time/
+// split step, restMinutes 3; Jet Stream's distance/split step), reused here
+// rather than a hand-built minimum (this file's own established "no single
+// starter has this shape" idiom). Unlike `buildSessionFixture`, this never
+// touches the draft/run stores at all — the manual door has no draft or run
+// to build, just a `LibraryWorkout` fetched by id.
+function manualWorkoutFixture(id = "id-manual-fixture"): LibraryWorkout {
+  const doldrums = starter("Doldrums");
+  const timeWork = doldrums.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const jetStream = starter("Jet Stream");
+  const distanceWork = jetStream.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  return {
+    id,
+    title: doldrums.title,
+    type: doldrums.type as WorkoutType,
+    difficulty: doldrums.difficulty,
+    pain: doldrums.pain,
+    steps: [{ k: "wu", minutes: 4 }, timeWork, distanceWork],
+    isGlobal: true,
+    lastDoneDaysAgo: 2,
+  };
+}
+
 // Same `vi.doMock` + returned-spy idiom as WorkoutDetail.test.tsx's own
 // `mockApi` — a real `Response`, not a bare object, so `.ok`/`.status`/
 // `.json()` all behave exactly like the real fetch this replaces.
@@ -130,6 +173,22 @@ async function renderLog(initialPath = "/session/log") {
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/session/log" element={<LogSession />} />
+        <Route path="/today" element={<p>TODAY SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// Task 3: the manual door's own render helper, registering `:id/log`
+// instead of the session door's fixed `/session/log` — `workoutId`'s
+// presence in the URL is the door-detection signal LogSession's own default
+// export reads via `useParams`.
+async function renderManualLog(workoutId: string) {
+  const { default: LogSession } = await import("./LogSession");
+  return render(
+    <MemoryRouter initialEntries={[`/library/${workoutId}/log`]}>
+      <Routes>
+        <Route path="/library/:id/log" element={<LogSession />} />
         <Route path="/today" element={<p>TODAY SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
@@ -680,5 +739,371 @@ describe("LogSession: staged discard", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
+  });
+});
+
+// Task 3: the manual door (`/library/:id/log`) — logging an off-app row
+// straight from a workout's own detail screen ("Log it after"). Its header
+// date is real "today" (`new Date()`, computed at render — there's no
+// `now` param to inject, unlike the session door's pure `logTotals`), so
+// `MANUAL_TOTAL_LABEL` composes the expected header text from the SAME
+// `formatLogDate` LogSession.tsx itself calls, applied to the real clock at
+// module-load time, rather than a hardcoded date string that would go
+// stale (and silently pass for the wrong reason) the next time this suite
+// runs. `vi.useFakeTimers()` was tried and reverted: it hangs every
+// `userEvent` interaction in this describe block (RTL's async `findBy*`/
+// user-event's own internal delays both need real timers to resolve) — not
+// worth it for a header line whose wall-clock risk (a run straddling
+// midnight) is negligible for a test suite that completes in well under a
+// second.
+const MANUAL_TOTAL_LABEL = `${formatLogDate(new Date().toISOString())} · 70 MIN`;
+
+describe("LogSession: the manual door (Task 3)", () => {
+  it("shows the title, type badge, TODAY's date + the estimated total, the PACES LOCKED panel (referenced bases only), the per-step list with every actual 'assumed', and EXPECTED N/5 — with no Discard button at all", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+
+    expect(
+      await screen.findByRole("heading", { name: "Log Doldrums" }),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
+    // estimateMinutes over wu(4') + work(20') + auto rest(3') +
+    // distance(10000m @ 128s/500m = 2560s) = 4180s -> 69.67' rounds to 70
+    // (verified independently against domain/expand.ts's own
+    // estimateMinutes before writing this number in).
+    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
+
+    // Only "6k" renders — neither step references "2k" at all (F1's own
+    // "never a bare dash" rule, shared with the session door via the same
+    // `pacesLockedText` join).
+    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
+      "6K 2:00.0",
+    );
+
+    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    expect(rows).toHaveLength(2);
+    // Row 1: Doldrums' own time/split step — current baselines resolve the
+    // target directly (120 + 16 = 136 -> "2:16.0"), same label idiom the
+    // session door's draft-based branch produces for the identical step.
+    expect(rows[0]).toHaveTextContent("20:00 @ 6k +16");
+    expect(rows[0]).toHaveTextContent("2:16.0");
+    // Manual-door actuals are ALWAYS "assumed" (buildManualLogSteps' own
+    // rule) — never a second ACTUAL line, unlike a real stopwatch reading.
+    expect(rows[0]).not.toHaveTextContent("ACTUAL");
+    // Row 2: Jet Stream's own distance/split step (120 + 8 = 128 ->
+    // "2:08.0") — also "assumed", also no ACTUAL line.
+    expect(rows[1]).toHaveTextContent("10000 m @ 6k +8");
+    expect(rows[1]).toHaveTextContent("2:08.0");
+    expect(rows[1]).not.toHaveTextContent("ACTUAL");
+
+    // EXPECTED N/5 — Doldrums' own `pain` (1), read straight off the
+    // fetched `LibraryWorkout`, no fallback chain needed (unlike the
+    // session door's `resolveWorkoutType`/`expectedPain`).
+    expect(screen.getByText("EXPECTED 1/5")).toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "Save session" })).toBeDisabled();
+    // The brief's own words: "no Discard button (nothing to discard)."
+    expect(
+      screen.queryByRole("button", { name: /discard/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows LOADING… while workouts or baselines are still resolving", async () => {
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({ state: "loading" }),
+    }));
+    mockBaselines();
+    await renderManualLog("w1");
+
+    expect(screen.getByText("LOADING…")).toBeInTheDocument();
+  });
+
+  it("shows a retry control when the library fails to load", async () => {
+    const retry = vi.fn();
+    vi.doMock("../api/useWorkouts", () => ({
+      useWorkouts: () => ({ state: "error", retry }),
+    }));
+    mockBaselines();
+    await renderManualLog("w1");
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a retry control when baselines fail to load", async () => {
+    mockWorkouts([manualWorkoutFixture()]);
+    const retry = vi.fn();
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({ state: "error", retry }),
+    }));
+    await renderManualLog("id-manual-fixture");
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows 'not in your library' with a way back when the route id doesn't resolve", async () => {
+    mockWorkouts([]);
+    mockBaselines();
+    await renderManualLog("missing-id");
+
+    expect(
+      await screen.findByText("That workout isn't in your library."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "← BACK" })).toBeInTheDocument();
+  });
+
+  it("degrades to the no-target/Set baselines idiom instead of crashing when baselines are unset (a stale bookmark)", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    await renderManualLog(workout.id);
+
+    expect(
+      await screen.findByRole("heading", { name: "Log Doldrums" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("no target")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /set baselines/i }),
+    ).toHaveAttribute("href", "/you");
+    // Nothing to save against — no form at all in this degraded state.
+    expect(
+      screen.queryByRole("button", { name: "Save session" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("POSTs workoutId/title/type straight from the fetched workout plus held/pain/notes, and navigates to /today", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-1" }), { status: 201 }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+
+    await chooseHeldAndPain();
+    await userEvent.type(
+      screen.getByLabelText("NOTES"),
+      "Rowed it on the erg at home.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).toMatchObject({
+      workoutId: workout.id,
+      workoutTitle: "Doldrums",
+      workoutType: "O2",
+      held: "held",
+      pain: 2,
+      notes: "Rowed it on the erg at home.",
+    });
+    expect(Array.isArray(body.steps)).toBe(true);
+    expect((body.steps as unknown[]).length).toBe(2);
+  });
+
+  // THE hard constraint (task brief's own words): "must NOT touch the
+  // draft/run records — an in-progress session elsewhere survives logging
+  // an off-app row." Seeds a REAL completed-but-unlogged run (the same
+  // fixture the session-door describe block above uses) for a DIFFERENT
+  // workout than the one this test logs manually, then proves both storage
+  // keys come out BYTE-IDENTICAL (raw string equality, not just deep-equal)
+  // — not merely "still present," which a buggy re-serialize-and-rewrite
+  // could satisfy while still being a real (silent) mutation.
+  it("leaves an unrelated live run/draft byte-identical in storage after a manual log saves", async () => {
+    buildSessionFixture();
+    const draftBefore = localStorage.getItem(DRAFT_KEY);
+    const runBefore = localStorage.getItem(RUN_KEY);
+    expect(draftBefore).not.toBeNull();
+    expect(runBefore).not.toBeNull();
+
+    const workout = manualWorkoutFixture("id-manual-other");
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-2" }), { status: 201 }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(draftBefore);
+    expect(localStorage.getItem(RUN_KEY)).toBe(runBefore);
+  });
+
+  it("keeps the form intact and shows an inline error on a genuine save failure — retry stays possible", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "Save session" }),
+    ).not.toBeDisabled();
+  });
+
+  it("retries once with workoutId:null when the 400 names workoutId specifically, and saves on the retry", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "workoutId does not exist",
+              field: "workoutId",
+            }),
+            { status: 400 },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-3" }), { status: 201 }),
+      );
+    });
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+    const bodies = parsedBodies(apiFn);
+    expect(bodies[0]!.workoutId).toBe(workout.id);
+    expect(bodies[1]!.workoutId).toBeNull();
+  });
+
+  it("does not retry when the 400 names a different field — surfaces the failure instead of silently stripping workoutId", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: "pain must be an integer 1..5",
+            field: "pain",
+          }),
+          { status: 400 },
+        ),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an unparseable 400 body as 'no field named' — no retry, a genuine failure surfaces", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    // A 400 whose body isn't valid JSON at all — `res.json()` itself
+    // rejects, exercising the inner catch that falls back to `field:
+    // undefined` (never "workoutId", so no retry fires) — same edge case
+    // the session door's own identical test covers.
+    const apiFn = mockApi(() =>
+      Promise.resolve(new Response("not json", { status: 400 })),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("catches a thrown network error and surfaces the same inline failure", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() => {
+      throw new Error("network down");
+    });
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+  });
+
+  // Boundary case for `manualLockedBaseline`'s own `base === "2k"` branch:
+  // every other manual-door test's fixture references "6k" only, which
+  // would pass vacuously even if that branch silently returned k6Seconds
+  // for BOTH bases (a real bug the ternary's structure makes easy to get
+  // wrong). A workout referencing both bases at once, each off=0, is the
+  // same shape the session door's own "shows both PACES LOCKED bases" test
+  // uses, adapted to a `LibraryWorkout` (no draft/run needed here at all).
+  it("resolves each PACES LOCKED base from its OWN matching baseline when a workout references both", async () => {
+    const workout: LibraryWorkout = {
+      id: "id-manual-both-bases",
+      title: "Manual Both Bases",
+      type: "AT",
+      difficulty: "medium",
+      pain: 3,
+      steps: [
+        { k: "wu", minutes: 4 },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "2k", off: 0 },
+        },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+      isGlobal: true,
+      lastDoneDaysAgo: null,
+    };
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+
+    await screen.findByRole("heading", { name: "Log Manual Both Bases" });
+    // BASELINES.k2Seconds (100) -> "1:40.0"; BASELINES.k6Seconds (120) ->
+    // "2:00.0" — each read straight off its OWN base, off=0 on each.
+    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
+      "2K 1:40.0 · 6K 2:00.0",
+    );
   });
 });

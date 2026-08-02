@@ -239,6 +239,22 @@ async function renderDetailWithConfirmRoute(initialPath: string) {
   );
 }
 
+// Task 3: same "render alongside the real destination route" idiom as
+// `renderDetailWithConfirmRoute` above, proving the Log it after link
+// actually lands on `/library/:id/log`, not just that it carries the right
+// `href`.
+async function renderDetailWithLogRoute(initialPath: string) {
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/library/:id/log" element={<p>LOG SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
@@ -314,12 +330,42 @@ describe("WorkoutDetail", () => {
     ).toHaveAttribute("href", "/you");
   });
 
-  it("renders Log it after disabled — logging arrives in Phase 6C — but Start enabled", async () => {
+  it("renders Log it after as a real, enabled link to /library/:id/log when baselines are set", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
     expect(screen.getByRole("button", { name: "Start" })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "Log it after" })).toBeDisabled();
+    const logItAfter = screen.getByRole("link", { name: "Log it after" });
+    expect(logItAfter).toHaveAttribute("href", "/library/w1/log");
+  });
+
+  it("Log it after actually navigates to /library/:id/log", async () => {
+    mockHooks(BASELINES);
+    await renderDetailWithLogRoute("/library/w1");
+
+    await userEvent.click(screen.getByRole("link", { name: "Log it after" }));
+
+    expect(await screen.findByText("LOG SCREEN")).toBeInTheDocument();
+  });
+
+  it("Task 3 (the manual door): replaces Log it after with the no-target/Set baselines idiom when baselines are unset", async () => {
+    mockHooks({ k2Seconds: null, k6Seconds: null });
+    await renderDetail();
+
+    // There is no "Log it after" control at all in this state — it's
+    // replaced by the same no-target idiom the step rows use, not merely
+    // disabled (buildManualLogSteps requires a concrete Baselines, so there
+    // is nothing honest for this link to lead to yet).
+    expect(
+      screen.queryByRole("link", { name: "Log it after" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Log it after" }),
+    ).not.toBeInTheDocument();
+    // At least one extra "no target" appears beyond the step rows' own —
+    // the actions row's copy of the idiom.
+    const noTargets = screen.getAllByText("no target");
+    expect(noTargets.length).toBeGreaterThan(1);
   });
 
   it("Start builds and saves the session draft, then navigates to /session/confirm", async () => {

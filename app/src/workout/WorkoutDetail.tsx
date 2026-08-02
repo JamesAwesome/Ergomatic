@@ -299,14 +299,23 @@ function WorkoutDetailView({
           </div>
         )}
         {startError && <p className="baseline-error">{startError}</p>}
-        <button
-          type="button"
-          className="button-outline"
-          disabled
-          title="Arrives in Phase 6C"
-        >
-          Log it after
-        </button>
+        {/* Task 3 (the manual door): gated on baselines with the exact same
+            "no target" idiom Start's own footer uses at ConfirmTargets.tsx
+            (`baselines ? <button> : <span className="step-row-no-target">`)
+            — `buildManualLogSteps` (LogSession.tsx's manual door) takes a
+            concrete `Baselines`, never a nullable one, so there is nothing
+            honest to resolve a split against without them. A plain `Link`
+            (not a `navigate()` button): this is a one-way hand-off to a new
+            route, the same idiom `OwnerActions`' own Edit link below uses. */}
+        {baselines ? (
+          <Link to={`/library/${workout.id}/log`} className="button-outline">
+            Log it after
+          </Link>
+        ) : (
+          <span className="step-row-no-target">
+            <em>no target</em> <Link to="/you">Set baselines</Link>
+          </span>
+        )}
       </div>
       {/* Globals are read-only server-side (a 403 on any mutation) — the UI
           must never present controls whose only outcome is that rejection,
