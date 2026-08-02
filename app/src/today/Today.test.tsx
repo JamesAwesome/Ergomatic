@@ -665,7 +665,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     );
   });
 
-  it("shows a quieter, button-less line naming the workout when the run is already complete (completed-but-unlogged)", async () => {
+  it("shows a quieter line naming the workout, with a real Log it action, when the run is already complete (completed-but-unlogged)", async () => {
     const built = liveRunFor(new Date("2026-08-01T11:00:00.000Z"));
     const run: SessionRun = {
       ...built,
@@ -678,15 +678,16 @@ describe("Today (F2: session resume / unlogged)", () => {
 
     expect(screen.getByText("Cold Front")).toBeVisible();
     expect(screen.getByText(/unlogged session/i)).toBeVisible();
-    expect(screen.getByText(/6C will log it here/i)).toBeVisible();
+    // Phase 6C Task 2: the placeholder copy ("6C will log it here") is
+    // replaced by a real link to the screen that now exists.
+    const logLink = screen.getByRole("link", { name: "Log it" });
+    expect(logLink).toBeVisible();
+    expect(logLink).toHaveAttribute("href", "/session/log");
     // Quieter than the resume card, per the brief: no "SESSION IN PROGRESS"
-    // banner, no Resume/log button — 6C is what actually builds that flow.
+    // banner, no Resume-session link.
     expect(screen.queryByText("SESSION IN PROGRESS")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Resume session" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /log/i }),
     ).not.toBeInTheDocument();
   });
 
