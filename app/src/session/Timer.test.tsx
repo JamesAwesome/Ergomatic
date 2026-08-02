@@ -304,12 +304,15 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("1:39.0–1:41.0")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
     expect(screen.getByText("WORK · ALL OUT")).toBeInTheDocument();
+    // Fix round (spec review F1/F2): distance mode keeps ◀/Pause — only the
+    // rightmost control becomes NEXT → instead of ▶.
     expect(screen.getByRole("button", { name: "NEXT →" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Previous phase" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Previous phase" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Pause" }),
+      screen.queryByRole("button", { name: "Next phase" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
@@ -457,7 +460,11 @@ describe("Timer — controls", () => {
     expect(screen.getByText("3:00")).toBeInTheDocument();
   });
 
-  it("navigates to /session/complete once ▶ advances past the final phase", async () => {
+  // Fix round (spec review F5): completion is a documented one-way door
+  // (engine.ts's own `isComplete` comment), so ▶ on the LAST phase must
+  // stage a confirm rather than end the session on a single tap under the
+  // unassuming "Next phase" aria-label.
+  it("▶ on the last phase stages a finish confirm rather than completing immediately; Finish session then completes", async () => {
     mockKeepAwake();
     const draft = buildDraft({
       id: "id-one-phase",
@@ -472,10 +479,80 @@ describe("Timer — controls", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
 
+    // Not complete yet — still on the last phase, still shows the run.
+    expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
+    expect(screen.getByText("STEP 1 OF 1 · WARM-UP")).toBeInTheDocument();
+    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Finish session" }),
+    );
+
     expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
   });
 
-  it("END stages an abandon confirm (BaselineEditor idiom) and pauses meanwhile; Keep going stays paused; Abandon clears the draft + run and returns to Today", async () => {
+  it("▶ on the last phase: Keep going cancels the staged finish, no completion", async () => {
+    mockKeepAwake();
+    const draft = buildDraft({
+      id: "id-one-phase-2",
+      title: "One And Done Too",
+      type: "AN",
+      steps: [{ k: "wu", minutes: 1 }],
+    });
+    const run = buildAndSaveRun(draft);
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
+    expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+
+    expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
+    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Next phase" }),
+    ).toBeInTheDocument();
+    // Nothing was paused/resumed by staging a finish (unlike END) — it was
+    // running before, still running now.
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+  });
+
+  // Defensive (fix round): ▶ must not stack a SECOND staged confirm on top
+  // of END's own — reaching the last phase's ▶ while the abandon confirm is
+  // already showing is a corner a rower could genuinely hit (nothing hides
+  // the control row while END is staged).
+  it("▶ on the last phase no-ops while END is already staged", async () => {
+    mockKeepAwake();
+    const draft = buildDraft({
+      id: "id-one-phase-3",
+      title: "One And Done Three",
+      type: "AN",
+      steps: [{ k: "wu", minutes: 1 }],
+    });
+    const run = buildAndSaveRun(draft);
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
+
+    // Still just the abandon confirm — no finish confirm stacked on top,
+    // and definitely not completed.
+    expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
+    expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
+    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+  });
+
+  // Fix round (spec review F1): `handleEndTap`/`handleKeepGoing` must be
+  // exact inverses regardless of phase kind — tapping END while RUNNING
+  // pauses (so the phase clock can't move while the rower decides); Keep
+  // going must undo exactly that, back to RUNNING, not leave the rower
+  // stuck paused with an extra manual step. Abandon still clears + returns
+  // to Today.
+  it("END stages an abandon confirm (BaselineEditor idiom) and pauses meanwhile; Keep going resumes back to RUNNING; Abandon clears the draft + run and returns to Today", async () => {
     mockKeepAwake();
     const run = buildAndSaveRun(kindMatrixDraft());
     runAtIndex(run, 1);
@@ -492,9 +569,9 @@ describe("Timer — controls", () => {
     expect(
       screen.queryByText(/Abandon this session\?/),
     ).not.toBeInTheDocument();
-    // Deliberately stays paused — Keep going is not an implicit resume,
-    // same rule Pause/Resume already follows everywhere else.
-    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+    // The exact inverse of what tapping END did: it was running, END
+    // paused it, Keep going resumes it — not stuck paused.
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "END →" })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "END →" }));
@@ -505,6 +582,56 @@ describe("Timer — controls", () => {
     expect(screen.getByText("TODAY SCREEN")).toBeInTheDocument();
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
+  });
+
+  // The other half of the inverse-operations rule: if the rower had
+  // ALREADY paused the run themselves before ever tapping END, Keep going
+  // must NOT resume it out from under them — `handleEndTap`'s own `pause`
+  // call was a no-op in that case (already paused), so nothing needs
+  // undoing.
+  it("END on an already-paused run: Keep going leaves it paused (does not resume a pause the rower chose themselves)", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(kindMatrixDraft());
+    runAtIndex(run, 1);
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+
+    // Still paused — END's own pause call was a no-op here, so Keep going
+    // has nothing of ITS OWN to undo.
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+  });
+
+  // F1's own reported bug, reproduced then fixed: on a DISTANCE phase
+  // (which had NO Resume control at all before this fix round), tapping
+  // END then Keep going used to soft-brick the stopwatch, frozen forever.
+  it("END on a DISTANCE phase: Keep going resumes the stopwatch (F1's own reported bug)", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(kindMatrixDraft());
+    runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 2_000)); // 2s in
+    await renderTimer();
+    screen.getByText("STEP 4 OF 5 · WORK · 500M");
+    expect(document.querySelector(".timer-time")).toHaveTextContent("0:02");
+
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(screen.getByText("PAUSED")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+
+    // The stopwatch keeps counting up again — not frozen at 0:02 forever.
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 3_000));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(document.querySelector(".timer-time")).toHaveTextContent("0:05");
   });
 
   it("turns keep-awake on while mounted and off on unmount", async () => {
@@ -571,6 +698,32 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
     expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
     const saved = loadRun()!;
     expect(saved.actuals[3]).toBeDefined();
+    expect(saved.actuals[3]!.elapsedSeconds).toBe(250);
+    expect(saved.actuals[3]!.splitSeconds).toBe(250);
+  });
+
+  // Fix round (spec review F3): staging the choice must FREEZE the
+  // measurement at that instant — re-reading the stopwatch at Keep-split
+  // time would let the deliberation window itself inflate the recorded
+  // split, unbounded.
+  it("Keep split records the elapsed AT STAGE TIME, not a re-measurement at confirm time", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(kindMatrixDraft());
+    runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 250_000)); // 250s > 200s
+    await renderTimer();
+    screen.getByText("STEP 4 OF 5 · WORK · 500M");
+
+    await userEvent.click(screen.getByRole("button", { name: "NEXT →" }));
+    screen.getByText(/took a lot longer than expected/);
+
+    // 30s of deliberation pass BEFORE confirming.
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 30_000));
+
+    await userEvent.click(screen.getByRole("button", { name: "Keep split" }));
+
+    expect(screen.getByText("STEP 5 OF 5 · WORK")).toBeInTheDocument();
+    const saved = loadRun()!;
+    // The staged value (250s), NOT 250 + 30 = 280s.
     expect(saved.actuals[3]!.elapsedSeconds).toBe(250);
     expect(saved.actuals[3]!.splitSeconds).toBe(250);
   });
