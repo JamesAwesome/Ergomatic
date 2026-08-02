@@ -849,6 +849,78 @@ button:disabled {
   text-decoration: none;
 }
 
+/* F2 (whole-branch review, spec Resilience #6): the cold-start resume card
+   — the screen's most prominent element whenever a live run exists, hence
+   the accent fill (not --surface) rather than another --surface card like
+   .today-card below it. --on-color on --accent throughout is the same
+   pairing .type-badge/.button-primary already use — computed 5.94:1
+   (tokens.css's own --pain-ramp-5 comment; identical hex value), clearing
+   the 4.5:1 AA floor. */
+.today-resume-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  background: var(--accent);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.today-resume-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--on-color);
+}
+
+.today-resume-title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--on-color);
+  margin: 0;
+}
+
+.today-resume-elapsed {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--on-color);
+}
+
+/* Inverted from .button-primary (on-color fill, accent text): sitting on
+   this card's OWN accent background, a same-color .button-primary would
+   visually vanish into it. 52px min-height mirrors .button-primary's own
+   figure (well past the 44px hit-target floor) — the brief's own call for
+   this to read as the screen's most prominent control. */
+.today-resume-button {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  line-height: 52px;
+  text-align: center;
+  background: var(--on-color);
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.today-resume-button:hover {
+  background: var(--surface);
+}
+
+/* Quieter than the resume card, deliberately (F2's own decision): a
+   completed-but-unlogged session gets one honest line naming the workout —
+   no accent fill, no button, since 6C (not this phase) is what builds the
+   real "log it" flow. Same treatment as .today-card-reason. */
+.today-unlogged-line {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin: 0 0 16px;
+}
+
 .today-suggestion-header {
   display: flex;
   align-items: center;

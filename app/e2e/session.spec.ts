@@ -371,3 +371,121 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     await cleanupByTitle(page, title);
   });
 });
+
+test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a progressed or completed run", () => {
+  // Before this fix round: Countdown.tsx rebuilt + saved a fresh SessionRun
+  // unconditionally on every mount, and both SKIP (Countdown.tsx) and
+  // Timer's own past-the-last-phase hand-off pushed their next route rather
+  // than replacing it — leaving the countdown screen (or a since-finished
+  // Timer) reachable via the browser's own BACK button, which re-mounted
+  // whichever screen and silently destroyed real progress/actuals, or a
+  // completed-but-unlogged record 6C still needs. The fix: `replace` on
+  // both those navigations, plus a mount guard in Countdown.tsx
+  // (`hasRunProgress`) that redirects straight back to the live timer
+  // instead of rebuilding whenever the existing run already shows real
+  // progress. These two tests drive the real browser's own history stack
+  // (`page.goBack()`), not a simulated one.
+
+  test("BACK mid-session (after real progress) never lands on the countdown and never resets the run", async ({
+    page,
+  }) => {
+    const title = "Back Mid Session";
+    await signInViaBackdoor(page, {
+      email: "session-back-mid@e2e.test",
+      name: "Back Mid Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // Two short time phases — real time only has to pass once (the first
+    // phase's own 3s), not per assertion.
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 0:03 6k", "w 0:03 6k"].join("\n"),
+    );
+
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+
+    // Real progress: the engine's own 1s repaint interval auto-advances
+    // past phase 1 (a plain time phase, no click needed) — `index` is now
+    // 1, the exact condition `hasRunProgress` treats as real progress.
+    await expect(page.getByText(/^STEP 2 OF 2/)).toBeVisible({
+      timeout: 6000,
+    });
+    const runBefore = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(JSON.parse(runBefore ?? "null").index).toBe(1);
+
+    await page.goBack();
+
+    // Never the countdown screen — the whole point of the fix.
+    await expect(page.getByText("GET ON THE HANDLE")).not.toBeVisible();
+    // Settles back on the live timer, same progressed phase — not reset to
+    // phase 1, not bounced anywhere that lost the run.
+    await expect(page).toHaveURL(/\/session\/run$/);
+    await expect(page.getByText(/^STEP 2 OF 2/)).toBeVisible();
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(JSON.parse(runAfter ?? "null").index).toBe(1);
+    expect(JSON.parse(runAfter ?? "null").startedAt).toBe(
+      JSON.parse(runBefore ?? "null").startedAt,
+    );
+
+    await cleanupByTitle(page, title);
+  });
+
+  test("two browser BACKs after session completion never resurrect the countdown or wipe completedAt", async ({
+    page,
+  }) => {
+    const title = "Back Twice From Complete";
+    await signInViaBackdoor(page, {
+      email: "session-back-complete@e2e.test",
+      name: "Back Complete Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 0:03 6k"].join("\n"),
+    );
+
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible({
+      timeout: 6000,
+    });
+    // The single time phase auto-advances straight to completion.
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+
+    const completedAtBefore = await page.evaluate(() => {
+      const raw = localStorage.getItem("ergomatic.sessionRun");
+      return raw === null
+        ? null
+        : (JSON.parse(raw) as { completedAt: string | null }).completedAt;
+    });
+    expect(completedAtBefore).not.toBeNull();
+
+    await page.goBack();
+    await expect(page.getByText("GET ON THE HANDLE")).not.toBeVisible();
+    const completedAtAfterFirstBack = await page.evaluate(() => {
+      const raw = localStorage.getItem("ergomatic.sessionRun");
+      return raw === null
+        ? null
+        : (JSON.parse(raw) as { completedAt: string | null }).completedAt;
+    });
+    expect(completedAtAfterFirstBack).toBe(completedAtBefore);
+
+    await page.goBack();
+    await expect(page.getByText("GET ON THE HANDLE")).not.toBeVisible();
+    const completedAtAfterSecondBack = await page.evaluate(() => {
+      const raw = localStorage.getItem("ergomatic.sessionRun");
+      return raw === null
+        ? null
+        : (JSON.parse(raw) as { completedAt: string | null }).completedAt;
+    });
+    expect(completedAtAfterSecondBack).toBe(completedAtBefore);
+
+    await cleanupByTitle(page, title);
+  });
+});

@@ -107,6 +107,16 @@ describe("buildRun", () => {
     expect(run.phaseStartedAt).toBe(t0.toISOString());
   });
 
+  // F3a (whole-branch review): workoutId/title are stamped straight from
+  // the draft — proven against a real id/title pair, not a null/empty one,
+  // so a stray `?? null`/`?? ""` fallback couldn't pass this by accident.
+  it("stamps workoutId and title straight from the draft (F3a)", () => {
+    const d = buildDraft(draftInputFor("Cold Front", "cf-titled"));
+    const run = buildRun(d, baselines, tol, t0);
+    expect(run.workoutId).toBe("cf-titled");
+    expect(run.title).toBe("Cold Front");
+  });
+
   it("is byte-stable across two calls with identical inputs", () => {
     const d = buildDraft(draftInputFor("Cold Front", "cf-stable"));
     const a = buildRun(d, baselines, tol, t0);

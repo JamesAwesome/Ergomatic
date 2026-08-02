@@ -40,7 +40,12 @@ export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
  *  the exact truthiness-vs-`!== undefined` distinction of `restMinutes: 0`
  *  (F1) — moving the one algorithm that decides phase count into
  *  `domain/expand.ts` itself makes that class of drift structurally
- *  impossible, since there is only one place left to get it wrong. */
+ *  impossible, since there is only one place left to get it wrong.
+ *
+ *  `workoutId`/`title` (whole-branch review, F3a) are stamped straight from
+ *  `draft` — the run's own copy, not a live reference back to it — so any
+ *  screen that only has the run record (Today's resume card, F2) can name
+ *  the session without also touching `SessionDraft`. */
 export function buildRun(
   draft: SessionDraft,
   baselines: Baselines,
@@ -61,6 +66,8 @@ export function buildRun(
   const nowIso = now.toISOString();
   return {
     v: 1,
+    workoutId: draft.workoutId,
+    title: draft.title,
     phases: enginePhases,
     index: 0,
     phaseStartedAt: nowIso,

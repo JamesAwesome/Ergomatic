@@ -230,6 +230,8 @@ describe("SessionComplete", () => {
     mockKeepAwake();
     saveRun({
       v: 1,
+      workoutId: null,
+      title: "orphaned run, no draft",
       phases: [],
       index: 0,
       phaseStartedAt: FIXED_NOW.toISOString(),

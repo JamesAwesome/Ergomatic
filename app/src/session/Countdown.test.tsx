@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  Routes,
+  RouterProvider,
+} from "react-router-dom";
 import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import type { WorkoutType } from "../../domain/types.js";
 import {
@@ -12,7 +18,9 @@ import {
   startDraft,
   type SessionDraft,
 } from "./draft";
-import { loadRun } from "./run";
+import { buildRun } from "./engine";
+import { hasRunProgress } from "./Countdown";
+import { loadRun, saveRun, type SessionRun } from "./run";
 
 // Realistic fixture, matching Timer.test.tsx/ConfirmTargets.test.tsx:
 // Doldrums (O2) — wu 4' + reps×2 marker + one split-ref work step. Its
@@ -219,9 +227,12 @@ describe("Countdown", () => {
     // naturally re-trigger the effect on their own. `./run`'s `saveRun` is
     // mocked here (not the usual `loadRun` check) specifically so this test
     // can count invocations directly rather than infer them from storage.
+    // `loadRun` still has to return something (F1's own mount guard reads
+    // it too, now) — `null`, the ordinary "nothing sitting in storage yet"
+    // case this test's own fixture actually is.
     mockAdapters();
     const saveRunSpy = vi.fn(() => true);
-    vi.doMock("./run", () => ({ saveRun: saveRunSpy }));
+    vi.doMock("./run", () => ({ saveRun: saveRunSpy, loadRun: () => null }));
     saveDraft(doldrumsDraft());
     const { default: Countdown } = await import("./Countdown");
 
@@ -271,6 +282,39 @@ describe("Countdown", () => {
     await userEvent.click(screen.getByRole("button", { name: "SKIP ›" }));
 
     expect(await screen.findByText("RUN SCREEN")).toBeInTheDocument();
+  });
+
+  // Whole-branch review, F1: SKIP used to PUSH /session/run, leaving this
+  // countdown mount reachable via browser BACK — re-mounting it silently
+  // rebuilt/overwrote whatever progress the live timer had already made.
+  // `createMemoryRouter` (not the plain `<MemoryRouter>` the rest of this
+  // file uses), so the test can drive a REAL browser-style back navigation
+  // via `router.navigate(-1)` and read the router's own settled location —
+  // proving `replace`, not merely that SKIP still lands on /session/run.
+  it("SKIP replaces this screen in history — browser BACK from the live timer does not return to the countdown", async () => {
+    saveDraft(doldrumsDraft());
+    mockAdapters();
+    const { default: Countdown } = await import("./Countdown");
+    const router = createMemoryRouter(
+      [
+        { path: "/today", Component: () => <p>TODAY SCREEN</p> },
+        { path: "/session/countdown", Component: Countdown },
+        { path: "/session/run", Component: () => <p>RUN SCREEN</p> },
+      ],
+      { initialEntries: ["/today", "/session/countdown"], initialIndex: 1 },
+    );
+    render(<RouterProvider router={router} />);
+    await screen.findByText("GET ON THE HANDLE");
+
+    await userEvent.click(screen.getByRole("button", { name: "SKIP ›" }));
+    await screen.findByText("RUN SCREEN");
+
+    router.navigate(-1);
+    // The countdown entry no longer exists to go back TO — replaced, not
+    // pushed — so one BACK from the (now former) countdown position lands
+    // on /today, the entry that was there before it.
+    await screen.findByText("TODAY SCREEN");
+    expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
   });
 
   it("turns keep-awake on while mounted and off on unmount", async () => {
@@ -361,5 +405,114 @@ describe("Countdown", () => {
 
     await act(() => vi.advanceTimersByTimeAsync(1000));
     expect(screen.getByText("RUN SCREEN")).toBeInTheDocument();
+  });
+});
+
+// Whole-branch review, F1: pure-function coverage for the mount guard's own
+// predicate, direct and mutation-friendly — the integration tests below
+// cover the component's REACTION to it.
+describe("hasRunProgress", () => {
+  const BASE_RUN = buildRun(
+    doldrumsDraft(),
+    BASELINES,
+    1,
+    new Date("2026-08-01T12:00:00.000Z"),
+  );
+
+  it("is false for a freshly built run — index 0, no actuals, not complete", () => {
+    expect(hasRunProgress(BASE_RUN)).toBe(false);
+  });
+
+  it("is true once index has advanced past 0", () => {
+    expect(hasRunProgress({ ...BASE_RUN, index: 1 })).toBe(true);
+  });
+
+  it("is true once completedAt is set", () => {
+    expect(
+      hasRunProgress({
+        ...BASE_RUN,
+        completedAt: "2026-08-01T12:10:00.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("is true once any actual has been recorded, even at index 0", () => {
+    expect(
+      hasRunProgress({
+        ...BASE_RUN,
+        actuals: {
+          0: {
+            elapsedSeconds: 10,
+            splitSeconds: 100,
+            actualSource: "stopwatch",
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+});
+
+// Whole-branch review, F1: the mount guard's REACTION — a BACK-button
+// re-mount (simulated directly here by seeding an existing run before the
+// component ever mounts, the same shape a real BACK produces) must bounce
+// straight to the live timer instead of silently rebuilding over real
+// progress or a completed-but-unlogged record.
+describe("Countdown — F1 mount guard against rebuilding a progressed run", () => {
+  it("redirects to /session/run without rebuilding when the existing run already shows progress (index > 0)", async () => {
+    const draft = doldrumsDraft();
+    saveDraft(draft);
+    const progressed: SessionRun = {
+      ...buildRun(draft, BASELINES, 1, new Date()),
+      index: 1,
+    };
+    const saveRunSpy = vi.fn(() => true);
+    vi.doMock("./run", () => ({
+      loadRun: () => progressed,
+      saveRun: saveRunSpy,
+      clearRun: vi.fn(),
+    }));
+    mockAdapters();
+    await renderCountdown();
+
+    expect(await screen.findByText("RUN SCREEN")).toBeInTheDocument();
+    expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
+    expect(saveRunSpy).not.toHaveBeenCalled();
+  });
+
+  it("redirects to /session/run without rebuilding when the existing run is already complete", async () => {
+    const draft = doldrumsDraft();
+    saveDraft(draft);
+    const built = buildRun(draft, BASELINES, 1, new Date());
+    const completed: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: new Date().toISOString(),
+    };
+    const saveRunSpy = vi.fn(() => true);
+    vi.doMock("./run", () => ({
+      loadRun: () => completed,
+      saveRun: saveRunSpy,
+      clearRun: vi.fn(),
+    }));
+    mockAdapters();
+    await renderCountdown();
+
+    expect(await screen.findByText("RUN SCREEN")).toBeInTheDocument();
+    expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
+    expect(saveRunSpy).not.toHaveBeenCalled();
+  });
+
+  it("still rebuilds — the ordinary reload-during-countdown case — when an existing run has no progress yet", async () => {
+    const draft = doldrumsDraft();
+    saveDraft(draft);
+    // Real run.ts (not mocked): a run already sitting in storage with none
+    // of hasRunProgress's three signals — exactly what Countdown's OWN
+    // first mount leaves behind, and what a reload immediately afterward
+    // would see. Resilience 4 still requires this to rebuild, not redirect.
+    saveRun(buildRun(draft, BASELINES, 1, new Date()));
+    mockAdapters();
+    await renderCountdown();
+
+    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
   });
 });

@@ -6,7 +6,7 @@ import { usePreferences } from "../api/usePreferences";
 import type { Baselines } from "../../domain/types.js";
 import { buildRun } from "./engine";
 import { cancelStart, loadDraft, saveDraft, type SessionDraft } from "./draft";
-import { clearRun, saveRun, type SessionRun } from "./run";
+import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
 
 // Copied a THIRD time from WorkoutDetail.tsx's own readPaceTolerance
 // (ConfirmTargets.tsx already carries the second copy, with the same
@@ -44,6 +44,24 @@ function remainingSeconds(clock: CountdownClock, nowMs: number): number {
   );
 }
 
+/** Whether `run` already carries real progress a fresh `buildRun` would
+ *  silently destroy (whole-branch review, F1): past phase 0, a recorded
+ *  distance actual, or already complete (awaiting 6C's log screen). A run
+ *  that's merely SITTING there with none of these (index 0, no actuals, not
+ *  complete) is the ordinary "reload during the countdown" case this
+ *  screen's own mount effect has always handled by rebuilding — see the
+ *  component doc comment below (spec Resilience 4) — so this deliberately
+ *  does NOT treat "a run record exists" alone as progress. Exported for
+ *  direct testing, same pattern as `remainingSeconds` above. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function hasRunProgress(run: SessionRun): boolean {
+  return (
+    run.index > 0 ||
+    run.completedAt !== null ||
+    Object.keys(run.actuals).length > 0
+  );
+}
+
 // The three pieces of state the build effect produces together (the run
 // record, the count's own clock, and the render-time clock reading) live in
 // ONE state slice updated by ONE setState call — react-hooks' own
@@ -63,13 +81,27 @@ interface Built {
  *  while counting down re-mounts this component, which rebuilds and re-
  *  saves the run and restarts the count from `preferences.countdownSeconds`
  *  — this is deliberate (spec Resilience 4: "reload on countdown ->
- *  countdown restarts"), not a bug to fix later. */
+ *  countdown restarts"), not a bug to fix later — PROVIDED the existing run
+ *  has no real progress yet (see `hasRunProgress` above). Whole-branch
+ *  review, F1: this component used to rebuild unconditionally regardless of
+ *  how it was reached, which made a browser BACK from the live timer (or
+ *  twice back from Session Complete) silently overwrite an in-progress or
+ *  completed run with a fresh `index: 0, completedAt: null` one — real
+ *  progress/actuals, or a completed-but-unlogged record 6C still needs,
+ *  thrown away by nothing more than a back-swipe. The guard below bounces
+ *  straight back to the live timer instead whenever that's the case. */
 export default function Countdown() {
   const navigate = useNavigate();
   // Lazy initializer: read the draft fresh from storage exactly once, the
   // same idiom ConfirmTargets.tsx/Timer.tsx already use, so a real browser
   // reload lands here exactly as if this were the first render.
   const [draft] = useState<SessionDraft | null>(() => loadDraft());
+  // Same lazy-read-once idiom, for the F1 guard: whatever run record (if
+  // any) was ALREADY sitting in storage the instant this component mounted
+  // — never re-read later, since the whole point is to judge how this
+  // mount was reached, not to react to the build effect's own `saveRun`
+  // moments later overwriting the same key.
+  const [existingRun] = useState<SessionRun | null>(() => loadRun());
   const baselinesState = useBaselines();
   const preferencesState = usePreferences();
   // Resolved once baselines are READY — `null` covers both "not ready yet"
@@ -137,6 +169,11 @@ export default function Countdown() {
   // own retry succeeds and this effect finally sees two READY states.
   useEffect(() => {
     if (draft === null || builtRef.current) return;
+    // F1 guard: an existing run with real progress must never be rebuilt —
+    // the render below redirects to the live timer instead (its own
+    // `<Navigate replace>` covers this exact case), so this effect has
+    // nothing to build here regardless of how baselines/preferences settle.
+    if (existingRun !== null && hasRunProgress(existingRun)) return;
     if (baselinesState.state !== "ready") return;
     if (preferencesState.state !== "ready") return;
     // Ready but unset: never build here (see `resolvedBaselines`'s own
@@ -176,7 +213,7 @@ export default function Countdown() {
         nowMs: startedAtMs,
       });
     });
-  }, [draft, baselinesState, preferencesState, resolvedBaselines]);
+  }, [draft, existingRun, baselinesState, preferencesState, resolvedBaselines]);
 
   // The tick: a plain 1s interval that only ever repaints (refreshing
   // `nowMs`), never decrements a counter itself — `remainingSeconds` above
@@ -200,6 +237,15 @@ export default function Countdown() {
 
   if (draft === null) {
     return <Navigate to="/today" replace />;
+  }
+
+  // F1 guard's render half (see `hasRunProgress`'s own comment and the
+  // build effect's identical check above): bounce straight to the live
+  // timer BEFORE any of the loading/error branches below get a chance to
+  // render — this doesn't need baselines/preferences to settle first, since
+  // nothing here is going to build anything.
+  if (existingRun !== null && hasRunProgress(existingRun)) {
+    return <Navigate to="/session/run" replace />;
   }
 
   if (
@@ -324,7 +370,15 @@ export default function Countdown() {
         <button
           type="button"
           className="countdown-skip"
-          onClick={() => navigate("/session/run")}
+          onClick={() =>
+            // `replace`, not push (whole-branch review, F1): SKIP hands off
+            // to the live timer exactly like the auto-advance-at-zero branch
+            // below already does (`<Navigate replace>`) — a plain push would
+            // leave THIS countdown mount reachable via browser BACK, and
+            // re-mounting it is exactly what used to rebuild/overwrite the
+            // run Timer had already started progressing.
+            navigate("/session/run", { replace: true })
+          }
         >
           SKIP ›
         </button>

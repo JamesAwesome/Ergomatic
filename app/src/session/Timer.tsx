@@ -106,6 +106,27 @@ export function totalSessionSeconds(run: SessionRun): number {
   return run.phases.reduce((sum, p) => sum + (phaseSeconds(p) ?? 0), 0);
 }
 
+/** "KIND · label", except when the phase's own resolved `label` IS its kind
+ *  word — a rest phase's label is literally `"Rest"` (domain/expand.ts's
+ *  own `phases()`), which collides with `phaseKindWord("rest")`'s `"REST"`
+ *  (case-insensitive: the two vocabularies capitalize differently) — in
+ *  which case this renders the word once, not "REST · Rest" (whole-branch
+ *  review, F4: exactly this duplication was visible in the committed
+ *  timer.png). No other phase kind's label ever matches its own kind word
+ *  (a warm-up's "Easy", a work phase's resolved split range or "ALL
+ *  OUT"/"EASY", a test phase's "All out" — none of them equal "WARM-UP"/
+ *  "WORK"/"TEST"), so this only ever actually collapses the rest case, but
+ *  the check is general rather than hardcoded to "rest" specifically.
+ *  Shared by `upNextText`/`thenNextText` below — both build the identical
+ *  "kind + resolved target" phrase for a different phase, one algorithm
+ *  rather than two copies of the same dedupe rule. */
+function phaseAnnouncement(phase: EnginePhase): string {
+  const kind = phaseKindWord(phase.type);
+  return kind.toLowerCase() === phase.label.toLowerCase()
+    ? kind
+    : `${kind} · ${phase.label}`;
+}
+
 /** UP NEXT's text: the next phase's kind + resolved target, or `FINISH`
  *  past the last phase. `EnginePhase` carries no `desc`/duration phrase (an
  *  implementation detail of the domain's `Phase`, not something 6B adds) —
@@ -116,7 +137,7 @@ export function totalSessionSeconds(run: SessionRun): number {
 export function upNextText(run: SessionRun): string {
   const next = run.phases[run.index + 1];
   if (next === undefined) return "FINISH";
-  return `${phaseKindWord(next.type)} · ${next.label}`;
+  return phaseAnnouncement(next);
 }
 
 /** Landscape's UP NEXT panel gets a second "then …" line (handoff §6:
@@ -133,7 +154,7 @@ export function thenNextText(run: SessionRun): string | null {
   if (next === undefined) return null;
   const afterNext = run.phases[run.index + 2];
   if (afterNext === undefined) return "FINISH";
-  return `${phaseKindWord(afterNext.type)} · ${afterNext.label}`;
+  return phaseAnnouncement(afterNext);
 }
 
 /** The suspect-actual seam (Phase 6B Task 1 review, product; routed into
@@ -257,10 +278,20 @@ export default function Timer() {
   // Past the last phase: hand off to SessionComplete (AppRoutes.tsx,
   // Phase 6B Task 4) — this component's own run-guard clause below renders
   // one harmless "Finishing…" frame between this effect committing and the
-  // navigate actually landing.
+  // navigate actually landing. `replace`, not push (whole-branch review,
+  // F1): a plain push left THIS Timer mount (already showing a completed
+  // run) reachable via browser BACK from Session Complete — landing back
+  // here re-triggers this exact effect, which used to push ANOTHER
+  // /session/complete entry, and a second BACK from there could reach
+  // Countdown, whose own unconditional rebuild (fixed separately, see
+  // Countdown.tsx's `hasRunProgress`) would then overwrite the completed
+  // record with a fresh `completedAt: null` one. Replacing here means BACK
+  // from Session Complete lands one level further out (Confirm, which
+  // itself redirects a started draft straight back to this same completed
+  // Timer) instead of resurrecting a stale live-timer frame.
   useEffect(() => {
     if (run !== null && isComplete(run)) {
-      navigate("/session/complete");
+      navigate("/session/complete", { replace: true });
     }
   }, [run, navigate]);
 
