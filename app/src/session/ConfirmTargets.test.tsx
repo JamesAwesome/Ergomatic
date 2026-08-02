@@ -64,6 +64,7 @@ async function renderConfirm(initialPath = "/session/confirm") {
       <Routes>
         <Route path="/session/confirm" element={<ConfirmTargets />} />
         <Route path="/today" element={<p>TODAY SCREEN</p>} />
+        <Route path="/session/countdown" element={<p>COUNTDOWN SCREEN</p>} />
         <Route path="/session/run" element={<p>RUN SCREEN</p>} />
         <Route path="/you" element={<p>YOU SCREEN</p>} />
       </Routes>
@@ -149,10 +150,34 @@ describe("ConfirmTargets", () => {
     await renderConfirm();
 
     expect(screen.getByText("— MIN")).toBeInTheDocument();
-    expect(screen.getByText("no target")).toBeInTheDocument();
+    // Two "no target" idioms now render with no baselines: the row-level
+    // one (Doldrums' split-ref work step) and the footer's own (below) —
+    // both the same idiom, different scope.
+    expect(screen.getAllByText("no target")).toHaveLength(2);
     expect(
       screen.queryByRole("button", { name: /nudge/i }),
     ).not.toBeInTheDocument();
+  });
+
+  // Ledger item 2 (routed from Task 2's review): buildRun needs a concrete
+  // Baselines always, so START is blocked entirely — not just per-row —
+  // whenever baselines are unset, via the same no-target/`/you` idiom
+  // rather than letting a rower reach Countdown with nothing to build a
+  // real run from.
+  it("blocks START and shows the no-target idiom with a /you link when baselines are unset", async () => {
+    mockBaselines(NO_BASELINES);
+    seedDraft("Doldrums");
+    await renderConfirm();
+
+    expect(
+      screen.queryByRole("button", { name: "START" }),
+    ).not.toBeInTheDocument();
+    const footer = screen.getByText("— MIN").closest("footer")!;
+    const link = within(footer).getByRole("link", { name: "Set baselines" });
+    expect(link).toHaveAttribute("href", "/you");
+
+    await userEvent.click(link);
+    expect(await screen.findByText("YOU SCREEN")).toBeInTheDocument();
   });
 
   it("the work step's duration stepper snaps by 30s and moves the footer recount", async () => {
@@ -430,14 +455,14 @@ describe("ConfirmTargets", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("START stamps startedAt, saves the draft, and navigates to /session/run", async () => {
+  it("START stamps startedAt, saves the draft, and navigates to /session/countdown", async () => {
     mockBaselines();
     seedDraft("Doldrums");
     await renderConfirm();
 
     await userEvent.click(screen.getByRole("button", { name: "START" }));
 
-    expect(await screen.findByText("RUN SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const saved = loadDraft();
     expect(saved).not.toBeNull();
     expect(saved!.startedAt).not.toBeNull();

@@ -320,11 +320,19 @@ export default function ConfirmTargets() {
     // narrowing doesn't propagate a const's narrowed type into a nested
     // function body across closures, so this both satisfies the compiler
     // and guards a hypothetical future caller of this closure outside its
-    // originating render.
-    if (draft === null) return;
+    // originating render. `baselines === null` is also re-checked here
+    // (not just in the render below, which swaps the whole button out) —
+    // belt-and-suspenders against a future caller of this closure that
+    // doesn't go through the render's own conditional.
+    if (draft === null || baselines === null) return;
     const started = startDraft(draft);
     saveDraft(started);
-    navigate("/session/run");
+    // Phase 6B Task 2's own gap report: Countdown existed, routed, and
+    // tested from the moment it shipped, but nothing sent a rower there —
+    // this was still navigating straight to the (now-replaced) /session/run
+    // placeholder. Task 3 is the file's natural owner (it already rewrites
+    // /session/run's content) and is the one wiring this handoff.
+    navigate("/session/countdown");
   }
 
   const tolerance = readPaceTolerance();
@@ -362,13 +370,35 @@ export default function ConfirmTargets() {
       </div>
       <footer className="confirm-footer">
         <span className="confirm-recount">{minutesLabel}</span>
-        <button
-          type="button"
-          className="button-primary confirm-start"
-          onClick={handleStart}
-        >
-          START
-        </button>
+        {baselines ? (
+          <button
+            type="button"
+            className="button-primary confirm-start"
+            onClick={handleStart}
+          >
+            START
+          </button>
+        ) : (
+          // Controller decision (Phase 6B Task 2's own flagged gap):
+          // `buildRun` requires a concrete `Baselines` — always, even for a
+          // workout with no split-ref step, since it's a fixed 4-arg
+          // contract, not a per-workout one. Rather than have Countdown
+          // silently freeze a near-zero split for the one starter/authored
+          // workout that DOES have a split-ref step (the {0,0} dummy this
+          // replaces), START is blocked here, at the one place a rower can
+          // still act on it — the row-level "no target" idiom already
+          // covers this per split-ref row (see step-row-no-target above);
+          // this is that same idiom at the footer, covering the SESSION as
+          // a whole rather than one row. Flagged for James: this blocks
+          // START unconditionally when baselines are unset, even for a
+          // workout with no split-ref work step at all (e.g. warm-up +
+          // effort-only), which technically wouldn't need baselines to
+          // resolve. Simplicity over precision, deliberately — see the
+          // task-3 report.
+          <span className="step-row-no-target">
+            <em>no target</em> <Link to="/you">Set baselines</Link>
+          </span>
+        )}
       </footer>
     </main>
   );

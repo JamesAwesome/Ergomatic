@@ -5,10 +5,16 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import type { WorkoutType } from "../../domain/types.js";
-import { buildDraft, saveDraft, type SessionDraft } from "./draft";
+import {
+  buildDraft,
+  loadDraft,
+  saveDraft,
+  startDraft,
+  type SessionDraft,
+} from "./draft";
 import { loadRun } from "./run";
 
-// Realistic fixture, matching RunPlaceholder.test.tsx/ConfirmTargets.test.tsx:
+// Realistic fixture, matching Timer.test.tsx/ConfirmTargets.test.tsx:
 // Doldrums (O2) — wu 4' + reps×2 marker + one split-ref work step. Its
 // FIRST phase is always the warm-up ("Easy"), which is what makes it a good
 // fixture for pinning the next-phase line: the assertion doesn't depend on
@@ -154,7 +160,14 @@ describe("Countdown", () => {
     expect(loadRun()).not.toBeNull();
   });
 
-  it("falls back to {0,0} baselines rather than crashing when none are set", async () => {
+  // Phase 6B Task 3 superseded the old `{0,0}` fallback (Task 2's own review
+  // flagged it): ConfirmTargets.tsx now blocks START whenever baselines are
+  // unset, so the only way to reach Countdown with `resolvedBaselines ===
+  // null` is a direct/deep navigation that skipped Confirm's own guard.
+  // Rather than build a run against a dummy pair, Countdown bounces back to
+  // Confirm — the same place a rower trying to START without baselines
+  // lands anyway.
+  it("redirects to /session/confirm without building a run when baselines are ready but unset", async () => {
     saveDraft(doldrumsDraft());
     mockAdapters({
       baselinesState: {
@@ -164,16 +177,9 @@ describe("Countdown", () => {
     });
     await renderCountdown();
 
-    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
-    const run = loadRun();
-    expect(run).not.toBeNull();
-    // Not just "didn't crash": Doldrums' work phase (phases[1]) is a
-    // split-ref step at 6k+16 — with real baselines (k6Seconds 120) this
-    // resolves to "2:15.0–2:17.0" (draft.test.ts's own pinned number for
-    // this exact fixture); with the {0,0} dummy it MUST resolve to
-    // "0:15.0–0:17.0" instead, proving the fallback pair was actually used
-    // to build the frozen phases, not just accepted without crashing.
-    expect(run!.phases[1]!.label).toBe("0:15.0–0:17.0");
+    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
+    expect(loadRun()).toBeNull();
   });
 
   it("does not build or save a run while baselines are in an error state", async () => {
@@ -233,15 +239,27 @@ describe("Countdown", () => {
     expect(saveRunSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("CANCEL navigates back to /session/confirm", async () => {
-    saveDraft(doldrumsDraft());
+  // Ledger item 1 (routed from Task 2's own report): CANCEL must not just
+  // navigate — it has to un-start the draft AND clear the run it already
+  // built, or ConfirmTargets' own `startedAt !== null` guard would bounce
+  // the rower straight back to the timer instead of letting them re-edit.
+  it("CANCEL un-starts the draft, clears the run, and navigates back to /session/confirm", async () => {
+    // startDraft first — the real flow (ConfirmTargets' handleStart) always
+    // stamps startedAt BEFORE navigating here; a never-started draft
+    // wouldn't distinguish "CANCEL un-starts it" from "it was never
+    // started."
+    saveDraft(startDraft(doldrumsDraft()));
     mockAdapters();
     await renderCountdown();
     await screen.findByText("GET ON THE HANDLE");
+    expect(loadDraft()!.startedAt).not.toBeNull();
+    expect(loadRun()).not.toBeNull(); // built on mount
 
     await userEvent.click(screen.getByRole("button", { name: "CANCEL" }));
 
     expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(loadDraft()!.startedAt).toBeNull();
+    expect(loadRun()).toBeNull();
   });
 
   it("SKIP navigates straight to /session/run", async () => {

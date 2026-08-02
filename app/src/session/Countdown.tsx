@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { keepAwakeOff, keepAwakeOn } from "../adapters/keepAwake";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
 import type { Baselines } from "../../domain/types.js";
 import { buildRun } from "./engine";
-import { loadDraft, type SessionDraft } from "./draft";
-import { saveRun, type SessionRun } from "./run";
+import { cancelStart, loadDraft, saveDraft, type SessionDraft } from "./draft";
+import { clearRun, saveRun, type SessionRun } from "./run";
 
 // Copied a THIRD time from WorkoutDetail.tsx's own readPaceTolerance
 // (ConfirmTargets.tsx already carries the second copy, with the same
@@ -67,11 +67,43 @@ interface Built {
 export default function Countdown() {
   const navigate = useNavigate();
   // Lazy initializer: read the draft fresh from storage exactly once, the
-  // same idiom ConfirmTargets.tsx/RunPlaceholder.tsx already use, so a real
-  // browser reload lands here exactly as if this were the first render.
+  // same idiom ConfirmTargets.tsx/Timer.tsx already use, so a real browser
+  // reload lands here exactly as if this were the first render.
   const [draft] = useState<SessionDraft | null>(() => loadDraft());
   const baselinesState = useBaselines();
   const preferencesState = usePreferences();
+  // Resolved once baselines are READY — `null` covers both "not ready yet"
+  // (loading/error; the render below returns before this matters) and the
+  // genuine case this exists to catch: ready, but the rower has never set
+  // baselines. ConfirmTargets.tsx now blocks START entirely in that case
+  // (Phase 6B Task 3: the footer shows the "no target" idiom instead of a
+  // clickable START), so reaching this screen with `resolvedBaselines ===
+  // null` should only happen via a direct/deep navigation that skipped
+  // Confirm's own guard — handled below by bouncing back to Confirm rather
+  // than building a run with a dummy pair (the `{0,0}` fallback this
+  // superseded: Task 2's review flagged it as the wrong place to paper over
+  // a gap Confirm itself now closes).
+  // useMemo, not a plain `const`: `baselinesState` itself is a STABLE
+  // reference across renders that don't touch it (the countdown's own 1s
+  // repaint interval re-renders this component every second once running),
+  // but a bare object-literal computation here would still allocate a NEW
+  // object on every one of those unrelated re-renders — which would then
+  // needlessly re-run the build effect below on every tick (harmlessly,
+  // since `builtRef`/the unset-baselines branch both already no-op, but
+  // there's no reason to ask react-hooks/exhaustive-deps to choose between
+  // a stale-closure warning and that churn when memoizing costs nothing).
+  const resolvedBaselines: Baselines | null = useMemo(
+    () =>
+      baselinesState.state === "ready" &&
+      baselinesState.baselines.k2Seconds !== null &&
+      baselinesState.baselines.k6Seconds !== null
+        ? {
+            k2Seconds: baselinesState.baselines.k2Seconds,
+            k6Seconds: baselinesState.baselines.k6Seconds,
+          }
+        : null,
+    [baselinesState],
+  );
   const [built, setBuilt] = useState<Built | null>(null);
   // A ref, not a `built !== null` check, guards the build effect: both fire
   // from the SAME dependency change (baselines/preferences settling), and a
@@ -107,30 +139,16 @@ export default function Countdown() {
     if (draft === null || builtRef.current) return;
     if (baselinesState.state !== "ready") return;
     if (preferencesState.state !== "ready") return;
+    // Ready but unset: never build here (see `resolvedBaselines`'s own
+    // comment) — the render below redirects to Confirm instead. `builtRef`
+    // is deliberately NOT flipped in this branch: this isn't "built once,
+    // never rebuild," it's "nothing to build yet," so a hypothetical future
+    // render with real baselines (there isn't one today; nothing here
+    // re-fetches) wouldn't be wrongly blocked by a stale guard.
+    if (resolvedBaselines === null) return;
     builtRef.current = true;
 
-    // No baselines on file yet (a fresh rower who never visited You): {0,
-    // 0} is the same dummy pair draft.ts's own draftMinutes() falls back to
-    // when a workout has no split-ref work step to resolve — NOT a safe
-    // stand-in for a workout that DOES have one (a split-ref target would
-    // freeze as a nonsense near-zero split for the whole run). draftMinutes
-    // sidesteps that by returning `null` instead of ever resolving against
-    // the dummy; buildRun has no such escape hatch (its contract is a
-    // concrete Baselines, always). Flagged in the task report as a genuine
-    // gap between ConfirmTargets' existing "start without baselines"
-    // tolerance (it shows "no target" per split-ref row rather than
-    // refusing to start) and buildRun's contract — out of this task's scope
-    // to close (it isn't named in any 6B task's file list), but real for a
-    // rower who reaches this screen before ever setting baselines.
-    const baselines: Baselines =
-      baselinesState.baselines.k2Seconds !== null &&
-      baselinesState.baselines.k6Seconds !== null
-        ? {
-            k2Seconds: baselinesState.baselines.k2Seconds,
-            k6Seconds: baselinesState.baselines.k6Seconds,
-          }
-        : { k2Seconds: 0, k6Seconds: 0 };
-
+    const baselines = resolvedBaselines;
     const countdownSeconds = preferencesState.preferences.countdownSeconds;
 
     const now = new Date();
@@ -158,7 +176,7 @@ export default function Countdown() {
         nowMs: startedAtMs,
       });
     });
-  }, [draft, baselinesState, preferencesState]);
+  }, [draft, baselinesState, preferencesState, resolvedBaselines]);
 
   // The tick: a plain 1s interval that only ever repaints (refreshing
   // `nowMs`), never decrements a counter itself — `remainingSeconds` above
@@ -225,11 +243,25 @@ export default function Countdown() {
     );
   }
 
+  if (resolvedBaselines === null) {
+    // Both hooks are READY by this point (every loading/error branch above
+    // already returned), so this means baselines resolved to genuinely
+    // unset — ConfirmTargets.tsx now blocks START in that exact case (its
+    // footer shows the no-target/`/you` idiom instead of a clickable
+    // START), so the only way to land here with this true is a direct/deep
+    // navigation to /session/countdown that skipped Confirm entirely.
+    // Bouncing back to Confirm (rather than building a run against a dummy
+    // pair, the removed `{0,0}` fallback) puts the rower exactly where
+    // they'd land had they tried to START from Confirm in the first place.
+    return <Navigate to="/session/confirm" replace />;
+  }
+
   if (built === null) {
-    // Both hooks above are "ready"/"error"-settled by this point (the two
-    // branches above already returned otherwise), so this is only the
-    // single render between that settling and the build effect above
-    // committing its state — a true loading state, not a stuck one.
+    // Both hooks above are "ready"-settled by this point (every loading/
+    // error/unset-baselines branch above already returned otherwise), so
+    // this is only the single render between that settling and the build
+    // effect above committing its state — a true loading state, not a
+    // stuck one.
     return (
       <main className="screen countdown-screen">
         <p className="mono-status">LOADING…</p>
@@ -256,6 +288,26 @@ export default function Countdown() {
   // the fallback keeps this defensive rather than crash-on-empty.
   const nextLabel = run.phases[0]?.label ?? "";
 
+  // Un-start the draft AND drop the run this screen already built — both,
+  // together, are what makes CANCEL coherent (Phase 6B Task 2's own report
+  // flagged the loop without this: ConfirmTargets redirects a STARTED draft
+  // straight past its editable form, so navigating there with `startedAt`
+  // still set would bounce right back here/to the timer instead of letting
+  // the rower re-edit). Clearing the run too keeps the two keys from
+  // disagreeing about whether a session is in progress — draft.ts's own
+  // `cancelStart` doc comment carries the same reasoning. A named function
+  // (not an inline arrow closing over `draft` directly), with its own
+  // defensive re-check, same reasoning as `ConfirmTargets.tsx`'s
+  // `handleStart`: TS's control-flow narrowing of `draft` from the guard
+  // clause above doesn't propagate into a closure defined this much later
+  // in the same function body.
+  function handleCancel() {
+    if (draft === null) return;
+    saveDraft(cancelStart(draft));
+    clearRun();
+    navigate("/session/confirm");
+  }
+
   return (
     <main className="screen countdown-screen">
       <p className="countdown-label">GET ON THE HANDLE</p>
@@ -265,7 +317,7 @@ export default function Countdown() {
         <button
           type="button"
           className="countdown-cancel"
-          onClick={() => navigate("/session/confirm")}
+          onClick={handleCancel}
         >
           CANCEL
         </button>
