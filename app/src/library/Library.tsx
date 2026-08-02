@@ -63,13 +63,26 @@ export default function Library() {
   // (not gated on rowsReady) so the listener is torn down deterministically
   // on unmount regardless of which state the hooks were in.
   useEffect(() => {
+    // Tracked on EVERY scroll event, unthrottled — only the sessionStorage
+    // WRITE below is throttled. This is what the unmount flush below reads,
+    // deliberately NOT a fresh `window.scrollY` read at cleanup time: by the
+    // time a route-change unmount's cleanup runs, React has already
+    // committed the NEW screen's (typically much shorter) DOM in place of
+    // Library's, and the browser clamps `window.scrollY` to that new,
+    // smaller document's max — reading it live at cleanup time was tried
+    // first and measured 0 on a real navigation in e2e, not the position
+    // the rower actually left at. `lastKnownY` was captured while Library's
+    // own tall content was still on screen, so it's the value that's
+    // actually meaningful to restore.
+    let lastKnownY = window.scrollY;
     let lastSavedAt = 0;
     let trailing: ReturnType<typeof setTimeout> | undefined;
     const flush = () => {
       lastSavedAt = Date.now();
-      saveLibraryScroll(window.scrollY);
+      saveLibraryScroll(lastKnownY);
     };
     const onScroll = () => {
+      lastKnownY = window.scrollY;
       const elapsed = Date.now() - lastSavedAt;
       if (elapsed >= SCROLL_SAVE_THROTTLE_MS) {
         flush();
@@ -82,6 +95,11 @@ export default function Library() {
     return () => {
       window.removeEventListener("scroll", onScroll);
       clearTimeout(trailing);
+      // Flush the last KNOWN position synchronously on unmount — navigating
+      // away (e.g. tapping a row) within the throttle window would
+      // otherwise leave the trailing save cancelled with nothing written,
+      // so BACK would restore a stale, pre-scroll position.
+      flush();
     };
   }, []);
 

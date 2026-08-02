@@ -111,12 +111,14 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     // outcomes, not accidentally within each other's tolerance.
     const targetRow = rows.nth(29);
     await targetRow.scrollIntoViewIfNeeded();
-    // The save listener is throttled to ~100ms (Library.tsx) — give it
-    // room to persist this position before navigating away.
-    await page.waitForTimeout(300);
     const scrolledY = await page.evaluate(() => window.scrollY);
     expect(scrolledY).toBeGreaterThan(200);
 
+    // Deliberately no wait here: the save listener is throttled to ~100ms
+    // (Library.tsx), and clicking IMMEDIATELY — inside that window — is
+    // exactly the case Library.tsx's unmount cleanup has to cover (flush
+    // the CURRENT scrollY synchronously on unmount) rather than relying on
+    // the throttled write ever having landed on its own.
     const title = await targetRow.locator(".workout-row-title").innerText();
     await targetRow.click();
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
