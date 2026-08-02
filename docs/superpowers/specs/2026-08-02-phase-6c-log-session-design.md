@@ -98,3 +98,16 @@ fills it); Today enhancements (queued separately).
 - An off-app row logs through "Log it after" with assumed actuals.
 - A failed save loses nothing; discard requires two presses.
 - Full gates; screenshots checked.
+
+## Amendment (2026-08-02, mid-phase): one server change after all
+
+Task 1 proved the log validation predates effort refs: `validateLogStepEntry`
+requires `targetSplit` (30..600) and `actualSource` unconditionally — an
+effort step (Microburst) cannot be logged as designed, and sending the
+internal estimate as `targetSplit` would freeze a fake prescription into
+history (the 5G rule exists to prevent exactly that). Resolution:
+**`targetSplit` becomes optional; `actualSplit` and `actualSource` become a
+paired unit (both or neither).** Loosening required→optional is
+additive-compatible — every previously-valid payload stays valid — so the
+between-tags API discipline holds. The integration suite covers both arms.
+"Zero server changes" was an observation, not a goal; it falls honestly.
