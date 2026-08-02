@@ -232,6 +232,107 @@ async function postLog(body: Record<string, unknown>): Promise<Response> {
   });
 }
 
+// The part of the POST body that genuinely differs per door — where the
+// workout identity/steps come FROM (a frozen `SessionRun` vs a fetched
+// `LibraryWorkout`). `held`/`pain`/`notes` are NOT here: those are the
+// shared form state `useLogForm` itself owns and merges in below.
+interface LogFormFields {
+  workoutId: string | null;
+  workoutTitle: string;
+  workoutType: WorkoutType;
+  steps: LogStep[];
+}
+
+/** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
+ *  ~45 lines of verbatim-duplicated behaviour (the held/pain/notes state
+ *  quintet, body assembly, and — the part that actually carries the app's
+ *  rules — the `field === "workoutId"` 400-retry policy and the error
+ *  string). `LogScreen` already made the two doors' MARKUP structurally
+ *  unable to diverge; this hook does the same for their BEHAVIOUR: there is
+ *  now exactly one copy of the retry policy, not two that a future fix to
+ *  one door could silently leave the other behind.
+ *
+ *  Each door supplies only what genuinely differs: `submit`'s own
+ *  `LogFormFields` argument (workoutId/title/type/steps — where the
+ *  workout identity comes from), and `onSaved` (what happens after a
+ *  genuine 201 — the session door clears the draft/run records before
+ *  navigating; the manual door never touched either in the first place, so
+ *  it just navigates). Both still navigate to `/today` (README.md §7:
+ *  "Save session ... returns to Today", true of the Log screen as a whole,
+ *  not just the session door) — that call lives in each door's own
+ *  `onSaved`, not here, since navigation itself isn't part of the shared
+ *  save behaviour (a future third door could plausibly want to land
+ *  somewhere else). */
+function useLogForm(onSaved: () => void) {
+  const [held, setHeld] = useState<HeldResult | null>(null);
+  const [pain, setPain] = useState<number | null>(null);
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function submit(fields: LogFormFields) {
+    // Defensive, not reachable via the UI: the Save button's own
+    // `disabled={... || held === null || pain === null}` already keeps a
+    // click from firing this at all (same convention as Today.tsx's own
+    // `handleShuffle` guard comment).
+    if (held === null || pain === null) return;
+    setSaving(true);
+    setSaveError(null);
+    const body: Record<string, unknown> = {
+      ...fields,
+      held,
+      pain,
+      notes: notes.trim().length > 0 ? notes : null,
+    };
+    try {
+      let res = await postLog(body);
+      // Retry once with `workoutId: null` ONLY when the 400 is specifically
+      // about workoutId (the server's own `field` name on its error body —
+      // server/routes/data.ts's `badRequest`) — e.g. the workout was
+      // deleted between this door's mount and the Save click. Any other
+      // 400 (a real validation bug in this screen's own payload) must
+      // surface as a genuine failure, not be silently papered over by
+      // stripping workoutId and resubmitting. The ONE place this policy
+      // lives now, for both doors.
+      if (res.status === 400 && body.workoutId !== null) {
+        let field: unknown;
+        try {
+          field = ((await res.json()) as { field?: unknown }).field;
+        } catch {
+          field = undefined;
+        }
+        if (field === "workoutId") {
+          res = await postLog({ ...body, workoutId: null });
+        }
+      }
+      if (res.ok) {
+        // Only ever fires on a genuine 201 — a failed save (network error,
+        // a real validation 400, a 500) leaves the caller's own records
+        // intact so the rower can retry without redoing anything.
+        onSaved();
+        return;
+      }
+      setSaveError("Couldn't save this session. Try again.");
+    } catch {
+      setSaveError("Couldn't save this session. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return {
+    held,
+    setHeld,
+    pain,
+    setPain,
+    notes,
+    setNotes,
+    saving,
+    saveError,
+    submit,
+  };
+}
+
 /** LogSession: the Log screen's TWO doors (Phase 6C spec, "Doors" decision;
  *  Task 3 brief) — `/session/log` (the session door: a just-completed timer
  *  run) and `/library/:id/log` (the manual door: an off-app row logged
@@ -446,11 +547,25 @@ function SessionDoorLog() {
   const [run] = useState<SessionRun | null>(() => loadRun());
   const workoutsState = useWorkouts();
 
-  const [held, setHeld] = useState<HeldResult | null>(null);
-  const [pain, setPain] = useState<number | null>(null);
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // Only ever clears the draft/run records on a genuine 201 (`onSaved`
+  // fires after that, never on a failed save) — a network error, a real
+  // validation 400, or a 500 leaves both intact so the rower can retry
+  // without having to redo the session.
+  const {
+    held,
+    setHeld,
+    pain,
+    setPain,
+    notes,
+    setNotes,
+    saving,
+    saveError,
+    submit,
+  } = useLogForm(() => {
+    clearDraft();
+    clearRun();
+    navigate("/today");
+  });
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
   // No run record, or a run that isn't actually complete yet (a direct/deep
@@ -479,63 +594,22 @@ function SessionDoorLog() {
   const k6 = lockedBaseline("6k", run, matchedDraft);
   const pacesText = pacesLockedText(k2, k6);
   // TS narrowing from the `run === null` guard above doesn't survive into a
-  // function DECLARED later in this component (handleSave, below) — a
-  // separately-typed `const` alias is the standard fix, not a non-null
-  // assertion at each use site.
+  // function DECLARED later in this component (the arrow function passed
+  // to `submit`, below) — a separately-typed `const` alias is the standard
+  // fix, not a non-null assertion at each use site.
   const activeRun: SessionRun = run;
 
-  async function handleSave() {
-    // Defensive, not reachable via the UI: the Save button's own
-    // `disabled={... || held === null || pain === null}` already keeps a
-    // click from firing this at all (same convention as Today.tsx's own
-    // `handleShuffle` guard comment).
-    if (held === null || pain === null) return;
-    setSaving(true);
-    setSaveError(null);
-    const body: Record<string, unknown> = {
+  // Fix round 1 (I1): the body-assembly and 400-retry logic that used to
+  // live in this door's own `handleSave` now lives once, in `useLogForm`'s
+  // `submit` above — this is only what genuinely differs for this door:
+  // WHERE the workout identity/steps come from (the frozen `SessionRun`).
+  function handleSave() {
+    return submit({
       workoutId: activeRun.workoutId,
       workoutTitle: activeRun.title,
       workoutType,
-      held,
-      pain,
-      notes: notes.trim().length > 0 ? notes : null,
       steps: logSteps,
-    };
-    try {
-      let res = await postLog(body);
-      // Retry once with `workoutId: null` ONLY when the 400 is specifically
-      // about workoutId (the server's own `field` name on its error body —
-      // server/routes/data.ts's `badRequest`) — e.g. the workout was
-      // deleted between session start and save. Any other 400 (a real
-      // validation bug in this screen's own payload) must surface as a
-      // genuine failure, not be silently papered over by stripping
-      // workoutId and resubmitting.
-      if (res.status === 400 && body.workoutId !== null) {
-        let field: unknown;
-        try {
-          field = ((await res.json()) as { field?: unknown }).field;
-        } catch {
-          field = undefined;
-        }
-        if (field === "workoutId") {
-          res = await postLog({ ...body, workoutId: null });
-        }
-      }
-      if (res.ok) {
-        // Only ever clears on a genuine 201 — a failed save (network error,
-        // a real validation 400, a 500) leaves both records intact so the
-        // rower can retry without having to redo the session.
-        clearDraft();
-        clearRun();
-        navigate("/today");
-        return;
-      }
-      setSaveError("Couldn't save this session. Try again.");
-    } catch {
-      setSaveError("Couldn't save this session. Try again.");
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   function handleDiscard() {
@@ -625,11 +699,20 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const workoutsState = useWorkouts();
   const baselinesState = useBaselines();
 
-  const [held, setHeld] = useState<HeldResult | null>(null);
-  const [pain, setPain] = useState<number | null>(null);
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // This door never read the draft/run records in the first place (the
+  // hard constraint below), so `onSaved` here is just the navigation —
+  // unlike the session door's `onSaved`, there is nothing to clear.
+  const {
+    held,
+    setHeld,
+    pain,
+    setPain,
+    notes,
+    setNotes,
+    saving,
+    saveError,
+    submit,
+  } = useLogForm(() => navigate("/today"));
 
   if (workoutsState.state === "loading" || baselinesState.state === "loading") {
     return (
@@ -719,60 +802,24 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const k6 = manualLockedBaseline("6k", workout.steps, baselines);
   const pacesText = pacesLockedText(k2, k6);
   // TS narrowing from the `!workout` guard above doesn't survive into a
-  // function DECLARED later in this component (handleSave, below) — the
-  // same separately-typed `const` alias fix the session door's own
-  // `activeRun` uses, not a non-null assertion at each use site.
+  // function DECLARED later in this component (the arrow function passed
+  // to `submit`, below) — the same separately-typed `const` alias fix the
+  // session door's own `activeRun` uses, not a non-null assertion at each
+  // use site.
   const activeWorkout: LibraryWorkout = workout;
 
-  async function handleSave() {
-    // Defensive, not reachable via the UI — same convention as the session
-    // door's identical guard.
-    if (held === null || pain === null) return;
-    setSaving(true);
-    setSaveError(null);
-    const body: Record<string, unknown> = {
+  // Fix round 1 (I1): same shared `submit` the session door now calls —
+  // this is only what genuinely differs for this door: `workoutId` is
+  // OWNED here (a real route param, not a possibly-stale run record), and
+  // there is no `clearDraft`/`clearRun` in this door's own `onSaved` at all
+  // (wired above), since this door never touched either to begin with.
+  function handleSave() {
+    return submit({
       workoutId: activeWorkout.id,
       workoutTitle: activeWorkout.title,
       workoutType: activeWorkout.type,
-      held,
-      pain,
-      notes: notes.trim().length > 0 ? notes : null,
       steps: logSteps,
-    };
-    try {
-      let res = await postLog(body);
-      // Same 400-retry-with-null idiom as the session door: `workoutId` is
-      // OWNED here (it's a real route param, not a possibly-stale run
-      // record), but the workout can still have been deleted between this
-      // screen's mount and the Save click — the server's own `field` name
-      // is what decides a retry, not an assumption about which door posted.
-      if (res.status === 400 && body.workoutId !== null) {
-        let field: unknown;
-        try {
-          field = ((await res.json()) as { field?: unknown }).field;
-        } catch {
-          field = undefined;
-        }
-        if (field === "workoutId") {
-          res = await postLog({ ...body, workoutId: null });
-        }
-      }
-      if (res.ok) {
-        // Deliberately touches NEITHER `clearDraft` NOR `clearRun` — this
-        // door never read either in the first place (the brief's own hard
-        // constraint: a live session elsewhere must survive logging an
-        // off-app row). README.md §7's own "Save session ... returns to
-        // Today" applies to the Log screen as a whole, not just the session
-        // door.
-        navigate("/today");
-        return;
-      }
-      setSaveError("Couldn't save this session. Try again.");
-    } catch {
-      setSaveError("Couldn't save this session. Try again.");
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   return (
