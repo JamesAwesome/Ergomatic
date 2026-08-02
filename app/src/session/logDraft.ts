@@ -333,15 +333,22 @@ export function buildManualLogSteps(
 
 // Mirrors Today.tsx's own (private, unexported) `formatLogDate` byte for
 // byte — the house day format `docs/design/README.md`:185 established
-// ("JUL 25"). NOT imported from Today.tsx: that file is a screen component
-// (react-router-dom, hooks, JSX) and this module is a pure, framework-free
-// session builder with no other reason to depend on a screen — pulling in
-// Today.tsx's whole import chain to reuse six lines would be backwards
-// (screens depend on session/, not the other way around) and this task is
-// explicitly scoped pure/no-e2e, so touching `src/today/Today.tsx` to
-// export the helper is out of scope here too. A future DRY pass could hoist
-// this into `domain/format.js` now that there are two call sites — flagged,
-// not fixed, in this task's report.
+// ("JUL 25"). Still NOT imported BY Today.tsx: that file is a screen
+// component (react-router-dom, hooks, JSX) and this module is a pure,
+// framework-free session builder with no reason to depend on a screen —
+// pulling in Today.tsx's whole import chain to reuse six lines would be
+// backwards (screens depend on session/, not the other way around). A future
+// DRY pass could hoist this into `domain/format.js` now that there are two
+// independent copies — flagged, not fixed, in Task 1's own report.
+//
+// EXPORTED (Task 3, the manual door): `LogSession.tsx` already sits
+// downstream of this module (imports `buildLogSteps`/`logTotals`/
+// `buildManualLogSteps`), so this is the SANCTIONED direction the paragraph
+// above describes — not the screen-depends-on-session violation that keeps
+// Today.tsx's own copy separate. The manual door's header needs today's
+// date (there is no `SessionRun.completedAt` to read it from, unlike
+// `logTotals` below), so it composes it directly from this same function
+// rather than growing a third copy of `MONTH_ABBREV`.
 const MONTH_ABBREV = [
   "JAN",
   "FEB",
@@ -357,7 +364,7 @@ const MONTH_ABBREV = [
   "DEC",
 ];
 
-function formatLogDate(iso: string): string {
+export function formatLogDate(iso: string): string {
   const d = new Date(iso);
   return `${MONTH_ABBREV[d.getMonth()]} ${d.getDate()}`;
 }
