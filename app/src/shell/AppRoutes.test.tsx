@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import AppRoutes from "./AppRoutes";
+import AppRoutes, { hidesTabBar } from "./AppRoutes";
 
 vi.mock("../library/Library", () => ({
   default: () => <h1>Library</h1>,
@@ -17,6 +17,9 @@ vi.mock("../workout/WorkoutDetail", () => ({
 }));
 vi.mock("../plan/Plan", () => ({
   default: () => <h1>Plan</h1>,
+}));
+vi.mock("../session/Countdown", () => ({
+  default: () => <h1>Countdown</h1>,
 }));
 
 describe("AppRoutes", () => {
@@ -88,5 +91,65 @@ describe("AppRoutes", () => {
     );
     expect(await screen.findByRole("heading", { name: "Plan" })).toBeVisible();
     expect(screen.queryByText(/Phase 8/)).not.toBeInTheDocument();
+  });
+
+  // Task 2 (6B): countdown/timer/complete own the whole viewport, so the
+  // bottom tab bar is hidden for them (handoff: "Tabs are hidden during
+  // countdown and timer"). Countdown is mocked here (like every other
+  // screen this file already mocks) purely to keep this an AppRoutes-level
+  // routing/shell test, not a re-test of Countdown's own data-loading path.
+  it("hides the tab bar on /session/countdown", async () => {
+    render(
+      <MemoryRouter initialEntries={["/session/countdown"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Countdown" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("navigation", { name: "Main" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the tab bar on an ordinary route (today)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/today"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Main" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("hidesTabBar", () => {
+  it.each([
+    "/session/countdown",
+    "/session/run",
+    "/session/complete",
+    // Sub-paths of a hidden prefix stay hidden too (a future param/query
+    // string on any of these routes never needs its own opt-out).
+    "/session/run/foo",
+  ])("hides the tab bar for %s", (pathname) => {
+    expect(hidesTabBar(pathname)).toBe(true);
+  });
+
+  it.each([
+    "/today",
+    "/library",
+    "/session/confirm",
+    // Prefix-match traps: neither of these should accidentally match
+    // "/session/run"/"/session" via a naive substring check.
+    "/session",
+    "/sessions/run",
+    // A hidden path appearing mid-string, not as a PREFIX: a naive
+    // `.includes()` (instead of `.startsWith()`) would wrongly hide the tab
+    // bar here too.
+    "/library/session/countdown",
+  ])("shows the tab bar for %s", (pathname) => {
+    expect(hidesTabBar(pathname)).toBe(false);
   });
 });

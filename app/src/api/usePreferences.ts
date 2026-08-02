@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Difficulty } from "../../domain/types.js";
 
-// GET /api/prefs already returns all three fields (server/stores/
-// preferences.ts's PreferencesRow); this type only exposed warmupMinutes
-// until Today (Phase 6A) needed difficulties/timeCapMinutes too, for the
-// suggestion engine's prefs input. Purely additive — no response shape
-// changed, just what the client bothers to type.
+// GET /api/prefs already returns every PreferencesRow field (server/stores/
+// preferences.ts); this type only exposed warmupMinutes until Today (Phase
+// 6A) needed difficulties/timeCapMinutes too, and now Countdown (Phase 6B
+// Task 2) needs countdownSeconds for the pre-workout count. Purely
+// additive each time — no response shape changed, just what the client
+// bothers to type.
 export interface PreferencesData {
   difficulties: Difficulty[];
   timeCapMinutes: number;
   warmupMinutes: number;
+  countdownSeconds: number;
 }
 
 export type PreferencesState =

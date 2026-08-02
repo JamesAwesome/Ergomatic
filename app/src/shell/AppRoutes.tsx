@@ -1,16 +1,43 @@
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import Builder from "../builder/Builder";
 import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
 import Library from "../library/Library";
 import Plan from "../plan/Plan";
 import ConfirmTargets from "../session/ConfirmTargets";
+import Countdown from "../session/Countdown";
 import RunPlaceholder from "../session/RunPlaceholder";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
+
+// Routes whose screens own the whole viewport — the handoff's own rule
+// ("Tabs are hidden during countdown and timer," carried forward to
+// /session/complete by the 6B plan since it's the same full-bleed holder
+// pattern) — checked by PREFIX, not exact match, so a future param/query
+// string on any of these routes never needs to remember to opt back in.
+// /session/complete has no route yet (Task 4 adds SessionComplete); it's
+// listed now so this list is only ever written once.
+const HIDDEN_TABBAR_PREFIXES = [
+  "/session/countdown",
+  "/session/run",
+  "/session/complete",
+];
+
+// Pure and exported for direct testing, same pattern as ClockInput.tsx's
+// digitsToClock/TabBar.tsx/auth.tsx/ConfirmTargets.tsx's own step helpers.
+// eslint-disable-next-line react-refresh/only-export-components
+export function hidesTabBar(pathname: string): boolean {
+  return HIDDEN_TABBAR_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
 
 function Placeholder({ title, phase }: { title: string; phase: string }) {
   return (
@@ -40,6 +67,7 @@ export default function AppRoutes({
   user?: Me;
   onSignedOut?: () => void;
 } = {}) {
+  const location = useLocation();
   return (
     <div className="app-shell">
       <Routes>
@@ -59,6 +87,7 @@ export default function AppRoutes({
         <Route path="/library/:id/edit" element={<EditWorkout />} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/session/confirm" element={<ConfirmTargets />} />
+        <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<RunPlaceholder />} />
         <Route
           path="/trend"
@@ -72,7 +101,7 @@ export default function AppRoutes({
         )}
         <Route path="*" element={<Navigate to="/today" replace />} />
       </Routes>
-      <TabBar />
+      {!hidesTabBar(location.pathname) && <TabBar />}
     </div>
   );
 }
