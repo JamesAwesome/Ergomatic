@@ -151,6 +151,57 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeLessThanOrEqual(50);
   });
+
+  test("BACK with filters enabled keeps the chips active and restores against the FILTERED list; a fresh tab tap forgets both", async ({
+    page,
+  }) => {
+    // The device bug this pins: filters lived in component state, so a
+    // BACK return remounted Library unfiltered — the chips were gone and
+    // the restored scroll position (measured against the shorter filtered
+    // list) landed on the wrong rows.
+    // PAIN ≤3 keeps 20 of the seeded 35 (4×pain-1 + 7×pain-2 + 9×pain-3,
+    // server/seed/starter.ts) — genuinely narrowed, yet still several
+    // viewports deep, so "restored against the filtered list" and
+    // "restored to the top" stay unambiguously different outcomes.
+    const rows = page.locator(".workout-row");
+    const painChip = page.getByRole("button", { name: "PAIN ≤3" });
+    await painChip.click();
+    await expect(painChip).toHaveAttribute("aria-pressed", "true");
+    const filteredCount = await rows.count();
+    expect(filteredCount).toBeGreaterThan(0);
+    expect(filteredCount).toBeLessThan(SEEDED_WORKOUT_COUNT);
+
+    // Scroll deep into the FILTERED list — the position only means
+    // anything against this narrowed set of rows.
+    const lastRow = rows.nth(filteredCount - 1);
+    await lastRow.scrollIntoViewIfNeeded();
+    const scrolledY = await page.evaluate(() => window.scrollY);
+    expect(scrolledY).toBeGreaterThan(200);
+    const title = await lastRow.locator(".workout-row-title").innerText();
+    await lastRow.click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    await page.getByRole("link", { name: "← BACK" }).click();
+
+    // Filters survive the round trip: chip still pressed, count still the
+    // filtered one — asserted BEFORE the scroll check because the restore
+    // is only correct if it happened against this narrowed list.
+    await expect(painChip).toHaveAttribute("aria-pressed", "true");
+    await expect(rows).toHaveCount(filteredCount);
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(scrolledY - 50);
+
+    // A deliberate tab tap is a fresh visit: both halves forgotten.
+    await page.getByRole("link", { name: "TODAY" }).click();
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+    await page.getByRole("link", { name: "LIBRARY" }).click();
+    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT);
+    await expect(painChip).toHaveAttribute("aria-pressed", "false");
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeLessThanOrEqual(50);
+  });
 });
 
 test.describe("baseline changes propagate to a workout's detail targets", () => {

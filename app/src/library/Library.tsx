@@ -4,13 +4,9 @@ import { useWorkouts } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
 import type { Baselines } from "../../domain/types.js";
-import {
-  applyFilters,
-  clearFilters,
-  EMPTY_FILTERS,
-  type Filters,
-} from "./filters";
+import { applyFilters, clearFilters, type Filters } from "./filters";
 import FilterChips from "./FilterChips";
+import { loadLibraryFilters, saveLibraryFilters } from "./libraryFilters";
 import { loadLibraryScroll, saveLibraryScroll } from "./libraryScroll";
 import WorkoutRow from "./WorkoutRow";
 
@@ -47,7 +43,14 @@ function Header() {
 export default function Library() {
   const workoutsState = useWorkouts();
   const baselinesState = useBaselines();
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  // Lazy-initialized from sessionStorage so a BACK return re-applies the
+  // filters SYNCHRONOUSLY, before the first render. This ordering is the
+  // whole filter-BACK fix: the saved scroll position was measured against
+  // the FILTERED list, and the restore effect below fires on the first
+  // rowsReady render — if the filters arrived any later (an effect, a
+  // fetch), that first ready render would be the unfiltered list and the
+  // restored position would land on the wrong rows.
+  const [filters, setFilters] = useState<Filters>(loadLibraryFilters);
   const restoredScrollRef = useRef(false);
   // The list only has HEIGHT once both hooks land on "ready" — the same
   // condition every render branch below keys off (loading/error branches
@@ -102,6 +105,14 @@ export default function Library() {
       flush();
     };
   }, []);
+
+  // Every filter change is persisted immediately (the same "where you
+  // were" lifecycle as the scroll position — cleared together by the tab
+  // bar's LIBRARY link). Also fires once on mount, re-writing what was just
+  // loaded: harmless, and cheaper than tracking a dirty flag.
+  useEffect(() => {
+    saveLibraryFilters(filters);
+  }, [filters]);
 
   // Restores at most once per mount (`restoredScrollRef`) — without the
   // guard, a later re-render caused by e.g. a filter click would re-fire

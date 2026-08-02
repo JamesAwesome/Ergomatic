@@ -102,6 +102,10 @@ function visibleHrefs(): (string | null)[] {
 
 beforeEach(() => {
   vi.resetModules();
+  // Filters now persist to sessionStorage by design (the filter-BACK fix),
+  // so without this every test would inherit whatever chips the previous
+  // test left active.
+  sessionStorage.clear();
 });
 
 describe("Library", () => {
@@ -524,6 +528,101 @@ describe("Library", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe("filter persistence (bugfix: BACK with filters enabled)", () => {
+    it("mounts with the saved filters applied — chips pressed AND the list already narrowed", async () => {
+      sessionStorage.setItem(
+        "ergomatic.libraryFilters",
+        JSON.stringify({
+          type: "AT",
+          durations: [],
+          painMax3: false,
+          recency: null,
+          customOnly: false,
+        }),
+      );
+      mockReady();
+      await renderLibrary();
+
+      expect(await screen.findByRole("button", { name: "AT" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(screen.getByText("1 ENTERED")).toBeInTheDocument();
+      expect(screen.getByText("Anaerobic Threshold Blitz")).toBeInTheDocument();
+      expect(screen.queryByText("Steady State Cruise")).not.toBeInTheDocument();
+    });
+
+    it("restores the scroll position against the FILTERED list — the saved filters are live on the very first ready render, before scrollTo fires", async () => {
+      // The bug this pins: filters used to reset to empty on remount, so
+      // the restored Y (measured against the filtered list) landed on the
+      // wrong rows of the full list. The fix loads filters synchronously in
+      // the useState initializer, so by the time the rowsReady
+      // useLayoutEffect calls scrollTo, the list is ALREADY narrowed.
+      sessionStorage.setItem("ergomatic.libraryScroll", "1200");
+      sessionStorage.setItem(
+        "ergomatic.libraryFilters",
+        JSON.stringify({
+          type: "AT",
+          durations: [],
+          painMax3: false,
+          recency: null,
+          customOnly: false,
+        }),
+      );
+      let rowsAtRestore: number | null = null;
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {
+          rowsAtRestore = document.querySelectorAll(".workout-row").length;
+        });
+      mockReady();
+      await renderLibrary();
+
+      expect(await screen.findByRole("list")).toBeInTheDocument();
+      expect(scrollToSpy).toHaveBeenCalledWith(0, 1200);
+      // 1 filtered row, not the full 3 — the restore never saw the
+      // unfiltered list.
+      expect(rowsAtRestore).toBe(1);
+      scrollToSpy.mockRestore();
+    });
+
+    it("persists every filter change to sessionStorage as it happens", async () => {
+      mockReady();
+      await renderLibrary();
+      await screen.findByRole("list");
+
+      await userEvent.click(screen.getByRole("button", { name: "AT" }));
+      expect(
+        JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
+      ).toMatchObject({ type: "AT" });
+
+      await userEvent.click(screen.getByRole("button", { name: "PAIN ≤3" }));
+      expect(
+        JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
+      ).toMatchObject({ type: "AT", painMax3: true });
+
+      // ALL empties the persisted set too — a BACK after clearing must not
+      // resurrect the cleared chips.
+      await userEvent.click(screen.getByRole("button", { name: "ALL" }));
+      expect(
+        JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
+      ).toMatchObject({ type: null, painMax3: false });
+    });
+
+    it("ignores a malformed stored value and mounts unfiltered", async () => {
+      sessionStorage.setItem("ergomatic.libraryFilters", "not json {");
+      mockReady();
+      await renderLibrary();
+
+      expect(await screen.findByRole("list")).toBeInTheDocument();
+      expect(screen.getByText("3 ENTERED")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "ALL" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
     });
   });
 });
