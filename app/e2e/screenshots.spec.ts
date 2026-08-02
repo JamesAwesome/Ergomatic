@@ -846,3 +846,55 @@ test("log-session", async ({ page }) => {
   });
   await cleanupByTitle(page, title);
 });
+
+// Phase 6C Task 4: the Log screen's OTHER door (Task 3, `/library/:id/log`)
+// — visibly distinct from the session door above (no tab-bar hiding, no
+// Discard button at all, reached straight from a workout's detail screen
+// rather than the timer's own hand-off), so per the plan's own "both doors
+// if visibly distinct" clause this gets its own capture too. Same single-
+// base "6k" shape and SCREENSHOT_BASELINES pairing as the session door's
+// capture, so the two images read as the same product's two doors, not two
+// different products — and no real timer run is needed at all here, so this
+// test needs none of that one's extended timeout.
+test("log-session-manual", async ({ page }) => {
+  const title = "Screenshot Log Session Manual Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-session-manual@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await importBulk(
+    page,
+    [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
+  );
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("link", { name: "Log it after" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+  await expect(
+    page.getByRole("heading", { name: `Log ${title}` }),
+  ).toBeVisible();
+  // Same 6K value as the session door's own capture (SCREENSHOT_BASELINES'
+  // k6Seconds, 122.0 -> "2:02.0") — the manual door reads CURRENT baselines
+  // directly (the lock moment IS save time, Task 3's brief), which happen
+  // to be identical to what the session door's run locked here since
+  // neither test ever changes a baseline mid-flow.
+  await expect(page.locator(".log-paces-value")).toHaveText("6K 2:02.0");
+  // No Discard button at all on this door — the visible difference the
+  // screenshot pair exists to show.
+  await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+
+  // Realistic, non-empty state (CLAUDE.md's own "no empty-state screenshots"
+  // rule), same values as the session door's own capture for a fair visual
+  // comparison between the two doors.
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page
+    .getByLabel("NOTES")
+    .fill("Rowed at the gym, logging it after the fact.");
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-session-manual.png"),
+  });
+  await cleanupByTitle(page, title);
+});

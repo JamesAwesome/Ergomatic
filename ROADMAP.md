@@ -509,22 +509,66 @@ is exactly what 6C's own save flow is for.
 
 ## Phase 6C — Log & completion
 
-**Status:** Not started
+**Status:** Done (2026-08-02, PR #TBD)
 **Goal:** A finished session becomes history the same day it happened.
+**Design authority:** `docs/superpowers/specs/2026-08-02-phase-6c-log-session-design.md`.
 
-- [ ] Log session screen: paces frozen at save ("PACES LOCKED AT …"), Held/Under/Over, pain **1–5** (Ergomatic's scale, not the handoff's 1–10 — see `docs/design/DEVIATIONS.md`), notes
-- [ ] Today's "Quick log" action (handoff §1) — not built in 6A, which only wired "Start workout"
-- [ ] Structural coverage + a real design pass for the held/under/over presentation this phase's log screen introduces (6A's Today LAST THREE already renders the finished shape — this is about the screen that *writes* a log, not the one that reads it back)
+- [x] `logDraft.ts`'s two pure builders (`buildLogSteps(run, draft)`,
+      `buildManualLogSteps(workout, baselines)`, `logTotals(run)`): both
+      doors' step labels compose through one shared `refPaceLabel`
+      function, fed the draft's real, un-resolved `PaceRef` whenever a
+      matching draft is on hand (session door) or the workout's own steps
+      directly (manual door) — not the phase's already-resolved split —
+      so a nudged/offset step reads identically either way
+- [x] The Log screen, two doors sharing one `LogScreen` presentational
+      component and one `useLogForm` save/retry hook: `/session/log` (the
+      session door — the timer's own hand-off from `/session/complete`,
+      and Today's unlogged line's real `Log it` link) and
+      `/library/:id/log` (the manual door — WorkoutDetail's "Log it after",
+      real once baselines are set, else the existing no-target/Set
+      baselines idiom). Paces frozen at save ("PACES LOCKED AT …", showing
+      only the base(s) the workout's own steps actually reference — never
+      a bare dash, see `docs/design/DEVIATIONS.md`), the per-step list
+      (frozen split + a stopwatch-only ACTUAL line), Held/Under/Over, pain
+      **1–5** (Ergomatic's scale, not the handoff's 1–10), notes, `Save
+      session` (54px, pinned by a computed-style regression test). The
+      session door hides the tab bar and offers a staged `Discard without
+      logging`; the manual door has neither — nothing staged to discard,
+      so the tab bar stays visible there as the only way out
+- [x] Save posts to the already-existing `POST /api/logs` route (zero
+      server changes needed this phase, per Task 1.5's same-day amendment
+      making `targetSplit` optional for an effort step): a 201 clears the
+      draft/run records (session door only — the manual door never reads
+      or writes either) and returns to Today; a `workoutId`-specific 400
+      retries once with `workoutId: null`; any other failure surfaces
+      inline with retry, leaving both records intact
+- [x] Full-loop e2e for both doors (Today → suggestion/Library → Confirm →
+      Countdown SKIP → tiny timer session → complete → Log → Held + pain +
+      notes → Save → Today), structural design coverage (both doors swept
+      independently — visibly distinct chrome, not a re-sweep of shared
+      markup — plus the staged-Discard panel open), and screenshots for
+      both doors (`log-session.png`, `log-session-manual.png`)
 
-**Note:** the server side of "save advances `doneN`" **already exists** —
+**Note:** the server side of "save advances `doneN`" **already existed** —
 `server/stores/logs.ts`'s `create` bumps `plan_state.done_n` on every
 `POST /api/logs` call, wired since the Phase 4 schema work, well before this
-UI exists. 6C's job is the log-writing screen that calls the existing route,
-not new plan-advancement plumbing (found while seeding e2e fixtures for
-Phase 6A Task 5 — seeding 3 logs against a freshly-chosen plan advanced
+UI existed. 6C's job was the log-writing screen that calls the existing
+route, not new plan-advancement plumbing (found while seeding e2e fixtures
+for Phase 6A Task 5 — seeding 3 logs against a freshly-chosen plan advanced
 `doneN` to 3, not 0, the first time it was tried).
 
-**Exit:** Full flow Today → Confirm → Countdown → Timer → Log → Today survives a mid-workout page reload; frozen log paces stay unchanged after later baseline edits.
+**Exit:** MET — **the core loop closes end to end**: Today → suggestion/
+Library → Confirm → Countdown → Timer → complete → Log → Today, proved
+against the real compose stack with the plan's session counter read both
+before and after (advanced by exactly one) and Today's LAST THREE showing
+the logged session dated today; a mid-workout reload survives (6B); frozen
+log paces stay unchanged after a later baseline edit (reconstructed from the
+draft's own frozen ref, not re-read live); the manual door proves the same
+save path from a workout's own detail screen for an off-app row, without
+ever touching the draft/run records an in-progress session elsewhere might
+be using. Next: Today enhancements (suggestion filters visible on Today,
+type-swap for the plan's assigned workout — queued, not started) and
+Phase 7's PM5 integration.
 
 ## Phase 7 — PM5 over Bluetooth
 

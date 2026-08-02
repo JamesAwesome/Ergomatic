@@ -150,6 +150,37 @@ function clockToSeconds(text: string | null): number {
     .reduce((acc, n) => acc * 60 + n, 0);
 }
 
+/** Phase 6C Task 4: the exact label Today's own LAST THREE row renders for
+ *  "right now" — `Today.tsx`'s (and `logDraft.ts`'s) own private
+ *  `formatLogDate`/`MONTH_ABBREV` pair, duplicated here rather than
+ *  imported (an e2e file can't import a client module; same "tiny local
+ *  copy" precedent `cleanupByTitle`'s own comment in this file already
+ *  states). Computed INSIDE the browser context, not in Node: the real
+ *  `formatLogDate` parses the server's `loggedAt` ISO string via `new
+ *  Date(iso)`, which resolves the month/day in the BROWSER's own local
+ *  timezone — asserting from a Node-side `Date` would risk a host/container
+ *  timezone mismatch this file has never otherwise had to care about. */
+async function todayDateLabel(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const MONTH_ABBREV = [
+      "JAN",
+      "FEB",
+      "MAR",
+      "APR",
+      "MAY",
+      "JUN",
+      "JUL",
+      "AUG",
+      "SEP",
+      "OCT",
+      "NOV",
+      "DEC",
+    ];
+    const d = new Date();
+    return `${MONTH_ABBREV[d.getMonth()]} ${d.getDate()}`;
+  });
+}
+
 test.describe("Phase 6B Task 4: session completion + resilience", () => {
   test("tiny bulk-imported workout: time phase auto-advances, distance phase counts up, the last-phase finish stage completes the run, and Today keeps the completed-but-unlogged draft", async ({
     page,
@@ -478,14 +509,21 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await expect(page.locator(".log-step-row")).toHaveCount(1);
 
     await page.getByRole("button", { name: "HELD" }).click();
-    await page.getByRole("button", { name: "Pain 2" }).click();
+    // Pain 3, not 2 (Phase 6C Task 4's own brief) — deliberately mid-scale,
+    // distinct from every other pain figure this file's design/screenshot
+    // siblings already pin (2), so this assertion can't pass by coincidence
+    // if the wrong picker cell were wired.
+    await page.getByRole("button", { name: "Pain 3" }).click();
     await page.getByLabel("NOTES").fill("Felt strong.");
     await page.getByRole("button", { name: "Save session" }).click();
 
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
-    // The plan's session counter advanced (server-side done_n, bumped by
-    // stores/logs.ts's own `create` — Task 1.5's own report on this).
+    // The plan's session counter advanced BY EXACTLY ONE (server-side
+    // done_n, bumped by stores/logs.ts's own `create` — Task 1.5's own
+    // report on this) — asserted both before (SESSION 1 OF 84, above) and
+    // after this save, the exact "before and after" pairing Phase 6C
+    // Task 4's brief calls for.
     await expect(page.getByText(/^SESSION 2 OF 84/)).toBeVisible();
     // LAST THREE shows the just-logged session for real. `.first()`: a
     // log row is never deleted by `cleanupByTitle` (that only removes the
@@ -501,8 +539,11 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
       .filter({ hasText: title })
       .first();
     await expect(row).toBeVisible();
+    // Today's date, not merely "some date" — Phase 6C Task 4's own brief:
+    // the LAST THREE row this loop produces reads as having happened today.
+    await expect(row).toContainText(await todayDateLabel(page));
     await expect(row).toContainText("HELD");
-    await expect(row).toContainText("2/5");
+    await expect(row).toContainText("3/5");
 
     // Both session records cleared — nothing left to accidentally resurface
     // the Log screen or Today's resume/unlogged treatment on a later visit.
@@ -624,6 +665,11 @@ test.describe("Phase 6C Task 3: the manual door", () => {
       .filter({ hasText: title })
       .first();
     await expect(row).toBeVisible();
+    // Phase 6C Task 4: today's date, the same assertion the session door's
+    // own full-loop test above pins — an off-app row logged through the
+    // manual door reads as having happened today too, not the workout's own
+    // (irrelevant) creation date.
+    await expect(row).toContainText(await todayDateLabel(page));
     await expect(row).toContainText("HELD");
     await expect(row).toContainText("2/5");
 
