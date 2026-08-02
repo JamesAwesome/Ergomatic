@@ -1242,3 +1242,41 @@ test.describe("iOS safe-area insets", () => {
     expect(declarations.builderScreen).toContain("env(safe-area-inset-right");
   });
 });
+
+test.describe("iOS input zoom guard", () => {
+  // iOS Safari/WKWebView zooms the page when a focused input's font-size is
+  // below 16px, wrecking the 44px-tap-target layout (device report,
+  // 2026-08-01: the builder title field zoomed on focus). Chromium cannot
+  // reproduce the zoom itself, so this asserts the mechanism: every
+  // input/textarea on every screen computes to >=16px. The signed-in
+  // builder + import screens carry every typed field in the app; You is
+  // stepper-only but swept anyway in case that changes.
+  for (const [name, path] of [
+    ["builder", "/library/new"],
+    ["import", "/library/import"],
+    ["you", "/you"],
+  ] as const) {
+    test(`every input on ${name} computes font-size >= 16px`, async ({
+      page,
+    }) => {
+      await signInViaBackdoor(page, {
+        email: `design-zoom-${name}@e2e.test`,
+        name: "Zoom Guard",
+      });
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      const undersized = await page.evaluate(() =>
+        Array.from(document.querySelectorAll("input, textarea"))
+          .map((el) => ({
+            id:
+              el.getAttribute("aria-label") ??
+              el.getAttribute("class") ??
+              el.tagName,
+            size: parseFloat(getComputedStyle(el).fontSize),
+          }))
+          .filter((e) => e.size < 16),
+      );
+      expect(undersized, JSON.stringify(undersized)).toEqual([]);
+    });
+  }
+});

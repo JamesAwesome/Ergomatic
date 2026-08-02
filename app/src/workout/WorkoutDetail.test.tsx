@@ -575,3 +575,17 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText(/logged sessions are kept/i)).toBeInTheDocument();
   });
 });
+
+describe("custom badge on the detail screen", () => {
+  // Device report (2026-08-01): the 5H CUSTOM tag lived only in the library
+  // list, so an opened custom workout showed nothing marking it yours.
+  it("shows CUSTOM beside the type badge for a personal workout", async () => {
+    await renderDetail("/library/w3"); // PERSONAL_WORKOUT, isGlobal: false
+    expect(screen.getByText("CUSTOM")).toBeInTheDocument();
+  });
+
+  it("shows no CUSTOM tag for a seeded global workout", async () => {
+    await renderDetail("/library/w1"); // WORKOUT, isGlobal: true
+    expect(screen.queryByText("CUSTOM")).not.toBeInTheDocument();
+  });
+});
