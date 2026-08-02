@@ -368,4 +368,124 @@ describe("Library", () => {
       expect(await screen.findByText("PROBE from=/library")).toBeVisible();
     });
   });
+
+  describe("scroll restoration", () => {
+    const SAVED_SCROLL_Y = 2400;
+
+    beforeEach(() => {
+      sessionStorage.clear();
+    });
+
+    it("restores the saved position only once rows render — never during LOADING", async () => {
+      sessionStorage.setItem("ergomatic.libraryScroll", String(SAVED_SCROLL_Y));
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+
+      // A mutable "current hook value" the mock reads live, so a later
+      // `rerender()` of the SAME Library instance can walk it through the
+      // real loading -> ready transition instead of remounting fresh.
+      let workoutsState: unknown = { state: "loading" };
+      vi.doMock("../api/useWorkouts", () => ({
+        useWorkouts: () => workoutsState,
+      }));
+      vi.doMock("../api/useBaselines", () => ({
+        useBaselines: () => ({ state: "ready", baselines: BASELINES }),
+      }));
+
+      const { default: Library } = await import("./Library");
+      const { rerender } = render(
+        <MemoryRouter>
+          <Library />
+        </MemoryRouter>,
+      );
+
+      // Order matters: while still LOADING the list has no height at all,
+      // so a restore here would be a no-op scroll against an empty
+      // placeholder — asserting this BEFORE the transition is the point of
+      // the test, not just checking the end state below.
+      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+      expect(scrollToSpy).not.toHaveBeenCalled();
+
+      workoutsState = { state: "ready", workouts: WORKOUTS };
+      rerender(
+        <MemoryRouter>
+          <Library />
+        </MemoryRouter>,
+      );
+
+      expect(await screen.findByRole("list")).toBeInTheDocument();
+      expect(scrollToSpy).toHaveBeenCalledTimes(1);
+      expect(scrollToSpy).toHaveBeenCalledWith(0, SAVED_SCROLL_Y);
+
+      scrollToSpy.mockRestore();
+    });
+
+    it("does not restore again on a later re-render once rows are already showing (a filter click doesn't re-scroll)", async () => {
+      sessionStorage.setItem("ergomatic.libraryScroll", String(SAVED_SCROLL_Y));
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      mockReady();
+      await renderLibrary();
+
+      expect(await screen.findByRole("list")).toBeInTheDocument();
+      expect(scrollToSpy).toHaveBeenCalledTimes(1);
+
+      await userEvent.click(screen.getByRole("button", { name: "AT" }));
+
+      expect(scrollToSpy).toHaveBeenCalledTimes(1);
+      scrollToSpy.mockRestore();
+    });
+
+    it("does nothing once rows render when nothing was saved (a genuinely fresh visit)", async () => {
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      mockReady();
+      await renderLibrary();
+
+      expect(await screen.findByRole("list")).toBeInTheDocument();
+      expect(scrollToSpy).not.toHaveBeenCalled();
+      scrollToSpy.mockRestore();
+    });
+
+    it("saves scrollY to sessionStorage, throttled to ~100ms (the trailing value survives, not just the first tick)", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockReady();
+        await renderLibrary();
+
+        Object.defineProperty(window, "scrollY", {
+          value: 111,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        // First scroll of the window fires the leading edge immediately —
+        // nothing throttled to wait for yet.
+        expect(sessionStorage.getItem("ergomatic.libraryScroll")).toBe("111");
+
+        // Two scrolls in quick succession, both inside the same 100ms
+        // window: only the LAST position should ultimately land, once the
+        // trailing timer fires — proving this throttles rather than just
+        // sampling the first event and ignoring the rest.
+        Object.defineProperty(window, "scrollY", {
+          value: 222,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        Object.defineProperty(window, "scrollY", {
+          value: 333,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        expect(sessionStorage.getItem("ergomatic.libraryScroll")).toBe("111");
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(sessionStorage.getItem("ergomatic.libraryScroll")).toBe("333");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

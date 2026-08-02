@@ -90,6 +90,67 @@ test.describe("library list", () => {
   });
 });
 
+test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "library-scroll@e2e.test",
+      name: "Scroll Tester",
+    });
+    await page.goto("/library");
+    await expect(page.locator(".workout-row")).toHaveCount(
+      SEEDED_WORKOUT_COUNT,
+    );
+  });
+
+  test("BACK from a workout's detail restores where you were; leaving via a tab and returning starts fresh at the top", async ({
+    page,
+  }) => {
+    const rows = page.locator(".workout-row");
+    // Row ~30 of the seeded 35 — deep enough that "restored to the top"
+    // and "restored to where you were" are unambiguously different
+    // outcomes, not accidentally within each other's tolerance.
+    const targetRow = rows.nth(29);
+    await targetRow.scrollIntoViewIfNeeded();
+    // The save listener is throttled to ~100ms (Library.tsx) — give it
+    // room to persist this position before navigating away.
+    await page.waitForTimeout(300);
+    const scrolledY = await page.evaluate(() => window.scrollY);
+    expect(scrolledY).toBeGreaterThan(200);
+
+    const title = await targetRow.locator(".workout-row-title").innerText();
+    await targetRow.click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    await page.getByRole("link", { name: "← BACK" }).click();
+    await expect(page.locator(".workout-row").first()).toBeVisible();
+
+    // The restore runs in a useLayoutEffect gated on the rows having
+    // rendered — poll rather than read once, so a slow first paint on CI
+    // doesn't race a bare assertion.
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(scrolledY - 50);
+    const restoredY = await page.evaluate(() => window.scrollY);
+    expect(Math.abs(restoredY - scrolledY)).toBeLessThanOrEqual(50);
+
+    // Leave Library entirely via a DIFFERENT tab (so the next Library visit
+    // is a genuine fresh mount, not the same instance BACK returned to),
+    // then tap the LIBRARY tab explicitly — that tap is what clears the
+    // saved position (TabBar.tsx), so this lands at the top, not back at
+    // row 30.
+    await page.getByRole("link", { name: "TODAY" }).click();
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+
+    await page.getByRole("link", { name: "LIBRARY" }).click();
+    await expect(page.locator(".workout-row")).toHaveCount(
+      SEEDED_WORKOUT_COUNT,
+    );
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeLessThanOrEqual(50);
+  });
+});
+
 test.describe("baseline changes propagate to a workout's detail targets", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {

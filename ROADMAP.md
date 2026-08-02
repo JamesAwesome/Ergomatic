@@ -579,6 +579,22 @@ Phase 6A Task 5 — seeding 3 logs against a freshly-chosen plan advanced
 
 **Exit:** Two rowers share a phone by the erg without re-typing credentials; app installs to a home screen; audit findings closed.
 
+## Bugfix rounds
+
+Ad hoc fix rounds outside the phase sequence — small bundles of device
+reports and quick fixes shipped as their own PR rather than waiting on the
+next phase. One line per round, newest first.
+
+- **PR #TBD** (2026-08-02) — history-aware `← BACK`: every back link now
+  returns to wherever its screen was entered from (Today → suggestion →
+  detail → BACK lands on Today, not a hardcoded `/library`) via a shared
+  `BackLink` component; Library remembers its scroll position across a
+  detail round trip (BACK restores it, a tab tap starts fresh at the top).
+- **PR #36** (2026-08-02) — CUSTOM indicator on workout detail; iOS
+  input-zoom floor (every builder/import/you field now computes
+  `font-size >= 16px`); head-race preset blurb reworded to match sprint's;
+  Plan sequence's scroll-in-a-box removed (flows with the page, Library-style).
+
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
 - **App icon redraw**: replace the current AI-generated icon with a clean
