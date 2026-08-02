@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
 import { useWorkouts } from "../api/useWorkouts";
 import { effortWord, resolveSplit, toleranceRange } from "../../domain/pace.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
+import BackLink from "../shell/BackLink";
 import ClassificationCard from "./ClassificationCard";
 import {
   addBlankStep,
@@ -105,6 +106,13 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const workoutsState = useWorkouts();
   const preferencesState = usePreferences();
   const navigate = useNavigate();
+  // Whatever origin THIS screen (new or edit) was itself entered from —
+  // forwarded UNCHANGED onto the edit-mode back link below so a detail ->
+  // edit -> back -> detail -> back round trip preserves the ORIGINAL origin
+  // (design doc: "Chains preserve the ORIGINAL origin"). Unused in new-mode,
+  // where `<BackLink />` reads this same location itself.
+  const location = useLocation();
+  const from = (location.state as { from?: unknown } | null)?.from;
 
   const [form, setForm] = useState<BuilderForm>(mode?.initial ?? newForm());
   // At most one row expanded at a time (design doc's "Interactions &
@@ -331,9 +339,25 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   return (
     <main className="screen builder-screen">
       <div className="builder-header">
-        <Link to="/library" className="back-link">
-          ← BACK
-        </Link>
+        {mode ? (
+          // Editing an existing workout always cancels back to the specific
+          // workout you were editing — the same fixed-target precedent
+          // EditWorkout.tsx's own guard-clause screens already use — rather
+          // than chaining through `from` (which would skip the detail
+          // screen entirely, since it holds the ORIGIN before detail, e.g.
+          // "/today"). `state={{ from }}` forwards that same origin through
+          // unchanged so detail's OWN back link still lands on it correctly
+          // once you're back there.
+          <Link
+            to={`/library/${mode.id}`}
+            state={{ from }}
+            className="back-link"
+          >
+            ← BACK
+          </Link>
+        ) : (
+          <BackLink />
+        )}
         <h1 className="screen-title">
           {mode ? "Edit workout" : "New workout"}
         </h1>

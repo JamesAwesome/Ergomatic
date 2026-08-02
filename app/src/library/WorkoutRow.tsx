@@ -16,7 +16,11 @@ export default function WorkoutRow({
       : `${workout.lastDoneDaysAgo}D AGO`;
 
   return (
-    <Link to={`/library/${workout.id}`} className="workout-row">
+    <Link
+      to={`/library/${workout.id}`}
+      state={{ from: "/library" }}
+      className="workout-row"
+    >
       <div className="workout-row-line1">
         <span className="workout-row-title">{workout.title}</span>
         <span className="workout-row-duration">

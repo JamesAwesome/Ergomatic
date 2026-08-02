@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
@@ -10,6 +10,7 @@ import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import { buildDraft, loadDraft, saveDraft } from "../session/draft";
 import { clearRun, loadRun } from "../session/run";
+import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 
@@ -75,9 +76,7 @@ export default function WorkoutDetail() {
     return (
       <main className="screen">
         <p className="mono-status">That workout isn't in your library.</p>
-        <Link to="/library" className="back-link">
-          ← BACK
-        </Link>
+        <BackLink />
       </main>
     );
   }
@@ -132,6 +131,15 @@ function WorkoutDetailView({
     "in-progress" | "unlogged" | null
   >(null);
   const navigate = useNavigate();
+  // Whatever origin THIS screen was itself entered from (Today's suggestion
+  // card, a Library row, or nothing for a deep link) — forwarded onto the
+  // Edit link below UNCHANGED (its own received `from`, never this screen's
+  // own pathname) so the chain survives a detail -> edit -> back -> detail
+  // -> back round trip instead of collapsing to the /library fallback the
+  // instant an intermediate screen is inserted (design doc: "Chains
+  // preserve the ORIGINAL origin").
+  const location = useLocation();
+  const from = (location.state as { from?: unknown } | null)?.from;
 
   // Builds and saves the session draft (session/draft.ts owns the shape and
   // the storage key — this screen never touches localStorage itself), then
@@ -222,9 +230,7 @@ function WorkoutDetailView({
 
   return (
     <main className="screen">
-      <Link to="/library" className="back-link">
-        ← BACK
-      </Link>
+      <BackLink />
       <div className="workout-detail-meta">
         <TypeBadge type={workout.type} />
         {/* Same metadata tag as the library row (5H): a custom workout must
@@ -306,7 +312,7 @@ function WorkoutDetailView({
           must never present controls whose only outcome is that rejection,
           so Edit/Delete render only for the rower's own workouts. */}
       {!workout.isGlobal && (
-        <OwnerActions workoutId={workout.id} navigate={navigate} />
+        <OwnerActions workoutId={workout.id} navigate={navigate} from={from} />
       )}
     </main>
   );
@@ -315,9 +321,11 @@ function WorkoutDetailView({
 function OwnerActions({
   workoutId,
   navigate,
+  from,
 }: {
   workoutId: string;
   navigate: (path: string) => void;
+  from: unknown;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -334,6 +342,11 @@ function OwnerActions({
         setError("Couldn't delete this workout. Try again.");
         return;
       }
+      // Deliberately NOT `from`-chained (design doc: "Delete stays
+      // /library"): whatever the rower came from may no longer make sense
+      // after this workout is gone (e.g. a Today suggestion pointing at a
+      // now-deleted workout), so delete always lands on the library
+      // regardless of origin.
       navigate("/library");
     } catch {
       setError("Couldn't delete this workout. Try again.");
@@ -344,7 +357,11 @@ function OwnerActions({
 
   return (
     <div className="workout-owner-actions">
-      <Link to={`/library/${workoutId}/edit`} className="button-outline">
+      <Link
+        to={`/library/${workoutId}/edit`}
+        state={{ from }}
+        className="button-outline"
+      >
         Edit
       </Link>
       {!confirming ? (

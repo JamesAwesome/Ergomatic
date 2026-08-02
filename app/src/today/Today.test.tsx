@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanSequenceItem } from "../api/usePlan";
@@ -150,6 +150,32 @@ async function renderToday() {
   );
 }
 
+// Renders `location.state.from` as plain text so a click through a real
+// `<Link>` can be asserted against without reaching into react-router
+// internals — the same "prove it via the resulting navigation, not the
+// prop" discipline WorkoutDetail.test.tsx's own route-based renderers use.
+function LocationProbe() {
+  const location = useLocation();
+  const from = (location.state as { from?: unknown } | null)?.from;
+  return <p>PROBE from={String(from)}</p>;
+}
+
+// Today links into both a workout's detail page (the suggestion card) and
+// the builder (`+ Build a workout`, empty-library case) — one probe route
+// per target so either click's landing state can be inspected.
+async function renderTodayWithProbes() {
+  const { default: Today } = await import("./Today");
+  return render(
+    <MemoryRouter initialEntries={["/today"]}>
+      <Routes>
+        <Route path="/today" element={<Today />} />
+        <Route path="/library/:id" element={<LocationProbe />} />
+        <Route path="/library/new" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 function cardLinkTo(id: string): HTMLElement | undefined {
   return screen
     .getAllByRole("link")
@@ -208,6 +234,18 @@ describe("Today (plan mode)", () => {
     mockReady();
     await renderToday();
     expect(cardLinkTo("w-warmfront")).toBeTruthy();
+  });
+
+  // The bug this task fixes (device report): Today's suggestion card was the
+  // one hop the recorded flow always took, and its Link never carried any
+  // `from` at all, so detail's hardcoded `to="/library"` back link was the
+  // only place a rower ever actually landed. Pins the fix at its source: the
+  // card itself must now stamp its own pathname into state.
+  it("stamps state={from:'/today'} onto the suggestion card link", async () => {
+    mockReady();
+    await renderTodayWithProbes();
+    await userEvent.click(screen.getByRole("link", { name: /Warm Front/i }));
+    expect(await screen.findByText("PROBE from=/today")).toBeVisible();
   });
 });
 
@@ -365,6 +403,18 @@ describe("Today (empty library)", () => {
     expect(screen.getByText("No AT sessions in your library.")).toBeVisible();
     const buildLink = screen.getByRole("link", { name: /build a workout/i });
     expect(buildLink).toHaveAttribute("href", "/library/new");
+  });
+
+  // Same "from" chain as the suggestion card's own link (above): Builder's
+  // BACK must return here, not to /library, once this is the only way into
+  // the builder Today itself offers.
+  it("stamps state={from:'/today'} onto the + Build a workout link", async () => {
+    mockReady({ workouts: [] });
+    await renderTodayWithProbes();
+    await userEvent.click(
+      screen.getByRole("link", { name: /build a workout/i }),
+    );
+    expect(await screen.findByText("PROBE from=/today")).toBeVisible();
   });
 });
 

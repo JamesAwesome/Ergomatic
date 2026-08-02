@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  Link,
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { api } from "../api";
 import {
@@ -184,6 +190,33 @@ async function renderDetailWithLibraryRoute(initialPath: string) {
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/library" element={<p>LIBRARY SCREEN</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// Renders `location.state.from` as plain text — the "prove the navigation,
+// not the prop" idiom this task round's other probe-route tests all use.
+function LocationProbe() {
+  const location = useLocation();
+  const from = (location.state as { from?: unknown } | null)?.from;
+  return <p>PROBE from={String(from)}</p>;
+}
+
+// Renders WorkoutDetail with an initial history entry carrying `state` —
+// the same `{pathname, state}` shape a real `<Link state={...}>` produces —
+// alongside a `/library` route (BackLink's fallback/CTA target) and a
+// `/library/:id/edit` PROBE route, so both BackLink's own target AND
+// whatever the Edit link forwards can be asserted against the ACTUAL
+// origin received, not a bare pathname a plain string entry can't carry.
+async function renderDetailWithState(pathname: string, state: unknown) {
+  const { default: WorkoutDetail } = await import("./WorkoutDetail");
+  render(
+    <MemoryRouter initialEntries={[{ pathname, state }]}>
+      <Routes>
+        <Route path="/library/:id" element={<WorkoutDetail />} />
+        <Route path="/library/:id/edit" element={<LocationProbe />} />
         <Route path="/library" element={<p>LIBRARY SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
@@ -692,6 +725,75 @@ describe("WorkoutDetail", () => {
     await userEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(screen.getByText(/logged sessions are kept/i)).toBeInTheDocument();
+  });
+
+  // The recorded bug this task round fixes: every ← BACK on this screen was
+  // hardcoded to /library, so Today -> suggestion -> detail -> BACK always
+  // skipped past Today. BackLink.tsx owns the general target logic
+  // (BackLink.test.tsx's own table); this only pins that WorkoutDetail
+  // actually wires it in, using a REAL origin a Link would carry.
+  describe("← BACK", () => {
+    it("returns to the origin recorded in location.state.from", async () => {
+      mockHooks(BASELINES, [WORKOUT]);
+      await renderDetailWithState("/library/w1", { from: "/today" });
+
+      expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+    });
+
+    it("falls back to /library with no state at all (a deep link)", async () => {
+      mockHooks(BASELINES, [WORKOUT]);
+      await renderDetailWithState("/library/w1", undefined);
+
+      expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+        "href",
+        "/library",
+      );
+    });
+  });
+
+  // The chain's first real hop, from the detail side: WorkoutDetail must
+  // forward the `from` it ITSELF received onto the Edit link, unchanged —
+  // not its own pathname (`/library/w3`), which is what a naive
+  // `state={{from: location.pathname}}` copy-paste of the general rule
+  // would produce here and would collapse the chain back to detail instead
+  // of preserving Today as the eventual double-BACK destination.
+  it("forwards its own received `from` onto the Edit link, not its own pathname", async () => {
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetailWithState("/library/w3", { from: "/today" });
+
+    await userEvent.click(screen.getByRole("link", { name: "Edit" }));
+
+    expect(await screen.findByText("PROBE from=/today")).toBeVisible();
+  });
+
+  it("forwards undefined (no state to forward) onto the Edit link when detail itself has none", async () => {
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetailWithState("/library/w3", undefined);
+
+    await userEvent.click(screen.getByRole("link", { name: "Edit" }));
+
+    expect(await screen.findByText("PROBE from=undefined")).toBeVisible();
+  });
+
+  // Design doc: "Delete stays /library" — deliberate, since whatever the
+  // rower came from (e.g. a Today suggestion) may no longer make sense once
+  // the workout it pointed at is gone. Proves it holds even when the
+  // origin WOULD otherwise resolve to somewhere else entirely.
+  it("still navigates to /library on delete, even when entered from Today", async () => {
+    const api = mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetailWithState("/library/w3", { from: "/today" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
+
+    expect(api).toHaveBeenCalledWith("/api/workouts/w3", { method: "DELETE" });
+    expect(await screen.findByText("LIBRARY SCREEN")).toBeInTheDocument();
   });
 });
 

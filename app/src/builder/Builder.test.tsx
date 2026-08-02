@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { api } from "../api";
 import type { BuilderEditMode } from "./Builder";
-import { fromWorkout, newRow, type BuilderForm } from "./builderState";
+import { fromWorkout, newForm, newRow, type BuilderForm } from "./builderState";
 import type { Step } from "../../domain/types.js";
 import { STARTER_WORKOUTS } from "../../server/seed/starter";
 
@@ -77,6 +77,35 @@ async function renderBuilder(mode?: BuilderEditMode) {
   render(
     <MemoryRouter>
       <Builder mode={mode} />
+    </MemoryRouter>,
+  );
+}
+
+// Renders `location.state.from` as plain text — the "prove the navigation,
+// not the prop" idiom this task round's other probe-route tests all use.
+function LocationProbe() {
+  const location = useLocation();
+  const from = (location.state as { from?: unknown } | null)?.from;
+  return <p>PROBE from={String(from)}</p>;
+}
+
+// Renders Builder at a real `/library/w1/edit`-shaped history entry
+// (carrying `state`, the shape a real `<Link state={...}>` produces),
+// alongside a `/library/:id` PROBE route — edit mode's own ← BACK targets
+// a SPECIFIC workout's detail page (`mode.id`), not the general BackLink
+// mechanism, so this is the only way to prove both its href and what it
+// forwards through `state`.
+async function renderBuilderWithProbe(
+  mode: BuilderEditMode | undefined,
+  state?: unknown,
+) {
+  const { default: Builder } = await import("./Builder");
+  render(
+    <MemoryRouter initialEntries={[{ pathname: "/library/w1/edit", state }]}>
+      <Routes>
+        <Route path="/library/w1/edit" element={<Builder mode={mode} />} />
+        <Route path="/library/:id" element={<LocationProbe />} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -255,6 +284,44 @@ describe("Builder", () => {
     expect(
       screen.queryByRole("button", { name: "Suggest a name" }),
     ).not.toBeInTheDocument();
+  });
+
+  // Edit mode's own ← BACK is a recorded departure from the general
+  // BackLink mechanism (docs/superpowers/specs/2026-08-02-bugfix-back-nav-
+  // scroll-design.md): cancelling an edit always returns to the SPECIFIC
+  // workout you were editing — the same fixed-target precedent
+  // EditWorkout.tsx's own guard-clause screens already use — rather than
+  // chaining through `from`, which would skip the detail screen entirely
+  // (it holds the origin BEFORE detail, e.g. "/today", not detail itself).
+  it("in edit mode, ← BACK targets this workout's own detail page, not /library", async () => {
+    mockBaselines(BASELINES);
+    await renderBuilderWithProbe({
+      kind: "edit",
+      id: "w1",
+      initial: newForm(),
+    });
+
+    expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+      "href",
+      "/library/w1",
+    );
+  });
+
+  // The chain's second hop: whatever origin Builder ITSELF received (via
+  // detail's own Edit link) must ride along onto this fixed-target back
+  // link, unchanged, so detail's OWN BackLink — once you're back there —
+  // still has "/today" to return to on the NEXT ← BACK press, instead of
+  // losing it and falling back to /library.
+  it("in edit mode, ← BACK forwards the origin Builder itself received", async () => {
+    mockBaselines(BASELINES);
+    await renderBuilderWithProbe(
+      { kind: "edit", id: "w1", initial: newForm() },
+      { from: "/today" },
+    );
+
+    await userEvent.click(screen.getByRole("link", { name: "← BACK" }));
+
+    expect(await screen.findByText("PROBE from=/today")).toBeVisible();
   });
 
   it("fills Title with a non-empty name not already in the library when AUTO NAME is pressed", async () => {

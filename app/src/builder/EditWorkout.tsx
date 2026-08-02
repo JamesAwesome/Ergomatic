@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
+import BackLink from "../shell/BackLink";
 import Builder from "./Builder";
 import {
   fromWorkout,
@@ -43,9 +44,7 @@ export default function EditWorkout() {
     return (
       <main className="screen">
         <p className="mono-status">That workout isn't in your library.</p>
-        <Link to="/library" className="back-link">
-          ← BACK
-        </Link>
+        <BackLink />
       </main>
     );
   }
@@ -53,6 +52,13 @@ export default function EditWorkout() {
   // Defence in depth: the Edit link is never rendered for a global workout
   // (WorkoutDetail.tsx), but a hand-typed /library/:id/edit URL must not
   // present an editor whose save the server will 403 anyway.
+  //
+  // The three guard clauses below (isGlobal / unsupported steps / mid-span
+  // reps) all deliberately stay fixed to this SPECIFIC workout's detail
+  // page rather than the `from`-chained BackLink — same precedent
+  // Builder.tsx's own edit-mode back link uses: a real, already-identified
+  // workout you can't (yet) edit always has one sensible landing spot (the
+  // thing itself), regardless of where you started browsing from.
   if (workout.isGlobal) {
     return (
       <main className="screen">

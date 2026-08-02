@@ -235,3 +235,37 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
     await expect(page.getByText(/^STEP 1 OF \d+/)).toBeVisible();
   });
 });
+
+test.describe("bugfix round: history-aware ← BACK", () => {
+  // The exact recorded bug (owner's screen recording, 2026-08-02): Today ->
+  // a suggestion -> the workout's detail screen -> ← BACK used to always
+  // land on /library, because that Link was hardcoded and predates Today
+  // being the landing screen. Asserts the TODAY HEADING, not just the URL —
+  // a URL-only check would pass even if the heading briefly flashed
+  // "Library" during a redirect.
+  test("Today -> suggestion -> detail -> BACK returns to Today", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "backnav-flow@e2e.test",
+      name: "Back Nav Tester",
+    });
+    await setGenerousTimeCap(page);
+    await page.goto("/today");
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+
+    const card = page.locator(".today-card");
+    await expect(card).toBeVisible();
+    const title = (
+      await card.locator(".today-card-title").textContent()
+    )?.trim();
+    expect(title).toBeTruthy();
+
+    await card.click();
+    await expect(page.getByRole("heading", { name: title! })).toBeVisible();
+
+    await page.getByRole("link", { name: "← BACK" }).click();
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+    await expect(page).toHaveURL(/\/today$/);
+  });
+});

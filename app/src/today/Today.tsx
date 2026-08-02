@@ -405,7 +405,11 @@ function TodayView({
       </div>
 
       {recommended ? (
-        <Link to={`/library/${recommended.id}`} className="today-card">
+        <Link
+          to={`/library/${recommended.id}`}
+          state={{ from: "/today" }}
+          className="today-card"
+        >
           <div className="today-card-top">
             <TypeBadge type={recommended.type} />
             <span className="today-card-duration">
@@ -423,7 +427,11 @@ function TodayView({
       ) : (
         <div className="today-card today-card-empty">
           <p className="today-card-reason">{suggestion.reason}</p>
-          <Link to="/library/new" className="button-outline">
+          <Link
+            to="/library/new"
+            state={{ from: "/today" }}
+            className="button-outline"
+          >
             + Build a workout
           </Link>
         </div>
