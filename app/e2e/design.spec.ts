@@ -1494,6 +1494,28 @@ test.describe("timer screen (landscape, 844x420)", () => {
     await cleanupByTitle(page, title);
   });
 
+  // Owner report (2026-08-02, device screenshot): on frames taller than the
+  // handoff's 844x420 (e.g. a Pro Max's 932x430) the grid top-packed its
+  // rows and left a dead band under the controls. `align-content:
+  // space-between` distributes the rows to fill any frame height; this
+  // asserts the fill at the taller frame — the 844x420 scroll guard above
+  // (session.spec.ts) still covers the no-overflow direction.
+  test("fills a taller landscape frame — no dead band under the controls (932x430)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 932, height: 430 });
+    const gap = await page.evaluate(() => {
+      const controls = document.querySelector(".timer-controls");
+      const screen = document.querySelector(".timer-screen");
+      const controlsBottom = controls.getBoundingClientRect().bottom;
+      const screenBottom = screen.getBoundingClientRect().bottom;
+      return Math.round(screenBottom - controlsBottom);
+    });
+    // The last grid row must sit near the frame's bottom edge; the old
+    // top-packed layout measured a gap of 60px+ here.
+    expect(gap).toBeLessThanOrEqual(24);
+  });
+
   test("every visible interactive element has a >=44x44 tap target", async ({
     page,
   }) => {

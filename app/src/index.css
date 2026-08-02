@@ -2787,7 +2787,12 @@ button:disabled {
     grid-template-columns: 1fr 1fr;
     column-gap: 20px;
     row-gap: 8px;
-    align-content: start;
+    /* space-between (was start): the grid previously top-packed and left a
+       dead band under the controls on tall landscape frames (owner report,
+       2026-08-02, device screenshot) — distributing the rows fills the
+       frame on any device height without touching font sizes, and the
+       scrollHeight<=clientHeight guard still holds at 844x420. */
+    align-content: space-between;
     /* Fix round (whole-branch review, F3): `.timer-screen`'s own base rule
        (above) only ever subtracts `.screen`'s own 26px padding from
        `100dvh` — it never accounts for `.app-shell`'s OWN `padding-bottom:
