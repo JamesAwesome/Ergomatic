@@ -41,6 +41,23 @@ export function effortWord(effort: Effort): "ALL OUT" | "EASY" {
   return effort === "max" ? "ALL OUT" : "EASY";
 }
 
+// Inverse of effortWord. Exists so a caller holding only a frozen "ALL
+// OUT"/"EASY" display word (not the original PaceRef/Effort it came from)
+// can still reach `refLabel`'s chip idiom ("MAX"/"MIN") — the session log
+// builder (`src/session/logDraft.ts`'s `buildLogSteps`) only ever sees an
+// `EnginePhase`'s frozen `label`, which for an effort phase already IS
+// `effortWord`'s own output, but needs the SAME step-text chip the manual
+// log door produces from a real ref for the same workout (Phase 6C Task 1
+// F1 review: the two doors disagreed — "0:30 @ ALL OUT" vs "0:30 @ MAX" for
+// Microburst's identical effort step). Bijective by construction (effortWord
+// is a total function over the two-element Effort type), so this never
+// needs a null/error case. Kept beside `effortWord` rather than duplicated
+// as a private map at that call site, so the ALL OUT/EASY <-> MAX/MIN
+// vocabulary — the 5G rule's own domain — lives in exactly one file.
+export function effortFromWord(word: "ALL OUT" | "EASY"): Effort {
+  return word === "ALL OUT" ? "max" : "min";
+}
+
 // The spoken form for an effort step's composed accessible name. The chip
 // word (`refLabel`'s "MAX"/"MIN") is a visual token that reads as ambiguous
 // jargon aloud — "MIN" is indistinguishable from "minutes", the exact

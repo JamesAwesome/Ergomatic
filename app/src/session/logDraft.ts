@@ -1,6 +1,11 @@
 import { fmtDuration } from "../../domain/duration.js";
 import { liveSteps } from "../../domain/expand.js";
-import { isEffortRef, refLabel, resolveSplit } from "../../domain/pace.js";
+import {
+  effortFromWord,
+  isEffortRef,
+  refLabel,
+  resolveSplit,
+} from "../../domain/pace.js";
 import type { Baselines, Step } from "../../domain/types.js";
 import type { EnginePhase } from "./engine";
 import type { SessionRun } from "./run";
@@ -22,66 +27,60 @@ import type { SessionRun } from "./run";
  *  `LogStep` out of even if it were included. This was verified against
  *  `domain/expand.ts` directly, not assumed from the brief's prose alone.
  *
- *  DEVIATION FROM THE TASK BRIEF'S OWN LABEL EXAMPLES (flagged per CLAUDE.md
- *  rule #10 — say so rather than silently working around it): the brief
- *  gives `buildLogSteps` the same label examples as the detail screen's
- *  ref-based idiom (`20:00 @ 6k +10`, `0:30 @ MAX`, via `refLabel`). That
- *  idiom needs the step's raw `PaceRef` (base+offset, or which effort word).
- *  `SessionRun.phases` is `EnginePhase[]` (`engine.ts`), which is `Phase`
- *  (`domain/expand.ts`) minus `originalStepIndex` plus `originalIndex` — it
- *  carries only the RESOLVED `targetSplit` (a number) and the frozen display
- *  `label` domain/expand.ts already computed (`toleranceRange(...).label`
- *  for a split ref, `effortWord(ref.effort)` for an effort ref). There is no
- *  `ref` field anywhere on it, and `buildLogSteps(run)` has no OTHER
- *  parameter to recover one from — `SessionRun` doesn't carry the workout's
- *  authored `Step[]`, only `workoutId`/`title`. Reconstructing "6k +10" from
- *  a resolved `targetSplit` number would also be genuinely lossy (many
- *  `(base, off)` pairs, plus any session nudge folded in by
- *  `effectiveSteps` before `buildRun` ever ran, can resolve to the same
- *  number) — exactly the kind of re-derivation the brief itself says not to
- *  do ("reuse refLabel/fmtDuration, don't re-derive"). So `buildLogSteps`
- *  composes each label as `${duration} @ ${phase.label}` — reusing the
- *  phase's OWN frozen display text verbatim, never recomputing it — which
- *  for an effort phase literally IS `effortWord`'s output already ("ALL
- *  OUT"/"EASY"), matching the spec's own (more precise) Design-section line
- *  for that case: "label carries the effort word" — not the brief's `MAX`
- *  chip. `buildManualLogSteps` below, by contrast, DOES receive the
- *  workout's real `Step[]` (with `ref`), so it reuses `refLabel` directly
- *  and matches the brief's literal examples exactly (see its own comment).
- *  Net effect: the two doors render an effort step's pace text differently
- *  ("ALL OUT" vs "MAX") — worth the Log screen task (not this one) knowing
- *  about, not a bug in either builder.
+ *  LABEL IDIOM (Task 1 F1 review, James's resolution): a step's LABEL is
+ *  its identity and must match every other step-text surface — the chip
+ *  idiom (`refLabel`'s "MAX"/"MIN"), not a target-display word. `EnginePhase`
+ *  carries no raw `PaceRef` (see the next paragraph for the split-ref case,
+ *  which genuinely can't reach the chip), but an EFFORT phase doesn't need
+ *  one: `domain/expand.ts` sets its frozen `label` to `effortWord(ref.effort)`
+ *  ("ALL OUT"/"EASY"), and `domain/pace.ts`'s `effortFromWord` is that
+ *  function's exact inverse — bijective over the two-element `Effort` type,
+ *  so recovering the ref and re-deriving the chip via `refLabel({effort:
+ *  effortFromWord(phase.label)})` is a lookup, not a guess (unlike the
+ *  split-ref case below, which has no such inverse: a resolved split number
+ *  doesn't uniquely determine which `(base, off)` pair produced it). Before
+ *  this fix, `buildLogSteps` rendered an effort step as "0:30 @ ALL OUT"
+ *  while `buildManualLogSteps` rendered the SAME workout's SAME step as
+ *  "0:30 @ MAX" — the same session, logged through either door, disagreeing
+ *  with itself in history. Pinned by a same-workout, both-doors equality
+ *  test (Microburst) in the test file.
  *
- *  A SECOND, MORE SERIOUS CONTRADICTION (also flagged, not silently
- *  resolved): the spec's Design section says an effort phase's `targetSplit`
- *  is "omitted" from the `LogStep` entirely (the 5G rule — an effort's
- *  frozen number is an estimate, never a real prescription to hold), and
- *  this file implements that literally (`targetSplit`/`actualSplit`/
- *  `actualSource` are all optional below, all omitted together for an
- *  effort phase). But `server/stores/logs.ts`'s `LogStep` declares
- *  `targetSplit: number` and `actualSource: ActualSource` as REQUIRED
- *  (non-optional), and `server/routes/data.ts`'s `validateLogStepEntry`
- *  enforces that unconditionally — there is no branch that accepts a
- *  missing `targetSplit` or `actualSource` for any reason. Since the spec
- *  also says "Zero server changes" for this phase, a `LogStep` this module
- *  emits for an effort work step CANNOT be POSTed to `/api/logs` as-is; it
- *  will 400. This module's own `LogStep` type is therefore NOT identical to
- *  the server's — it's the honest, pure-domain shape the spec asks for.
- *  Whichever later task assembles the actual POST body (the Log screen) has
- *  to decide how to bridge the gap (e.g. filling a placeholder number back
- *  in for `targetSplit`/`actualSource` immediately before the request, the
- *  same way the estimate already exists on the frozen phase/resolved split
- *  even though this module never surfaces it). Flagging this now rather
- *  than guessing at that task's resolution and baking a silent workaround
- *  into a "pure" file that has no reason to know about the wire format. */
+ *  The split-ref case remains a genuine, unresolved asymmetry (not part of
+ *  the F1 fix — `effortWord`'s bijection has no split-ref equivalent):
+ *  `buildLogSteps` composes a split-ref work phase's label as `${duration} @
+ *  ${phase.label}`, reusing the RESOLVED split range/value domain/expand.ts
+ *  already computed (`toleranceRange(...).label`, e.g. "2:16.0"), because
+ *  `SessionRun` carries no authored `Step[]` to recover a `PaceRef` from at
+ *  all, and reconstructing "6k +10" from a resolved number would be
+ *  genuinely lossy (many `(base, off)` pairs, plus any session nudge, can
+ *  resolve to the same split) — the exact re-derivation the original task
+ *  brief said not to do. `buildManualLogSteps` DOES have the real `Step[]`
+ *  (with `ref`), so its split-ref labels use `refLabel` directly (`6k +10`,
+ *  matching the detail screen's own idiom, `StepRow.tsx`'s `left = `${duration}
+ *  @ ${refLabel(ref)}``). So the two doors' split-ref labels still differ
+ *  ("2:16.0" vs "6k +16") even after this fix — only the effort case was
+ *  unifiable, and F1 only asked for the effort case (verified live against
+ *  Microburst).
+ *
+ *  SERVER CONTRACT (Task 1.5 amendment, 2026-08-02 — supersedes what this
+ *  paragraph used to say): `server/stores/logs.ts`'s `LogStep` and
+ *  `server/routes/data.ts`'s `validateLogStepEntry` were amended the same
+ *  day this module shipped, specifically because this module proved the old
+ *  validation predated effort refs. `targetSplit` is now OPTIONAL there too
+ *  (previously required unconditionally), and `actualSplit`/`actualSource`
+ *  are now a PAIRED unit — both present or both absent, enforced by the
+ *  route, never one without the other. This module's own `LogStep` below
+ *  was ALREADY shaped this way (the 5G rule, implemented here before the
+ *  server caught up) — the two are now the same shape, not two different
+ *  ones needing a bridge at POST time. An effort work step's `LogStep` from
+ *  either builder here posts to `/api/logs` cleanly. */
 
 export type ActualSource = "assumed" | "stopwatch" | "pm5";
 
-/** This module's own `LogStep` — see the module header's second flagged
- *  contradiction for exactly how (and why) this is NOT byte-identical to
- *  `server/stores/logs.ts`'s `LogStep`: `targetSplit` and `actualSource`
- *  are optional here (omitted together for an effort phase, per the 5G
- *  rule) where the server's shape requires both unconditionally. */
+/** This module's own `LogStep` — now the SAME shape as `server/stores/
+ *  logs.ts`'s `LogStep` (Task 1.5 amendment, module header): `targetSplit`
+ *  optional, `actualSplit`/`actualSource` a paired unit, both omitted
+ *  together for an effort phase (5G rule). */
 export interface LogStep {
   label: string;
   targetSplit?: number;
@@ -109,9 +108,12 @@ function durationText(phase: { seconds?: number; meters?: number }): string {
  *  `originalIndex` but each needs its OWN actual lookup.
  *
  *  Per work phase (module header: wu/rest/test never produce one):
- *  - `label`: `${duration} @ ${phase.label}` — see the module header's first
- *    flagged deviation for why this reuses the phase's own frozen label
- *    rather than `refLabel` (no raw `ref` available on `EnginePhase`).
+ *  - `label`: `${duration} @ ${pace}`, where `pace` is `refLabel({effort:
+ *    effortFromWord(phase.label)})` for an effort phase (module header's
+ *    LABEL IDIOM paragraph — matches `buildManualLogSteps`'s chip byte for
+ *    byte) or the phase's own frozen `phase.label` (a resolved split/range)
+ *    for a split-ref phase (no raw `ref` available on `EnginePhase` to do
+ *    better — see the module header's split-ref paragraph).
  *  - `targetSplit`: omitted for an effort phase (5G rule — the frozen number
  *    is `estimationSplit`'s guess, never a real prescription); present
  *    otherwise, straight from the phase (already resolved at `buildRun`
@@ -141,8 +143,19 @@ export function buildLogSteps(run: SessionRun): LogStep[] {
   run.phases.forEach((phase: EnginePhase, i: number) => {
     if (phase.type !== "work") return;
     const isEffort = phase.targetKind === "effort";
+    // Effort phases: recover the chip word ("MAX"/"MIN") from the frozen
+    // display word via effortFromWord's inverse, so this door's label
+    // matches buildManualLogSteps's for the same workout (module header's
+    // LABEL IDIOM paragraph). The cast is safe: this branch only runs when
+    // `targetKind === "effort"`, and domain/expand.ts's "case w" sets
+    // `label` to exactly `effortWord(ref.effort)` in that case — never any
+    // other string. Split-ref phases keep the phase's own resolved label
+    // (no raw ref to do better with).
+    const pace = isEffort
+      ? refLabel({ effort: effortFromWord(phase.label as "ALL OUT" | "EASY") })
+      : phase.label;
     const step: LogStep = {
-      label: `${durationText(phase)} @ ${phase.label}`,
+      label: `${durationText(phase)} @ ${pace}`,
     };
     if (!isEffort) {
       // Both branches of domain/expand.ts's "case w" set targetSplit for
@@ -193,8 +206,7 @@ export function buildLogSteps(run: SessionRun): LogStep[] {
  *  (an off-app row is recorded as "held the target", identical to
  *  `buildLogSteps`'s completed-time-phase rule). Effort steps omit
  *  `targetSplit`/`actualSplit`/`actualSource` entirely, same 5G rule as
- *  `buildLogSteps` (module header's second flagged contradiction applies
- *  here too). */
+ *  `buildLogSteps` (module header's SERVER CONTRACT paragraph). */
 export function buildManualLogSteps(
   workout: { steps: Step[] },
   baselines: Baselines,
