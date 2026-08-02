@@ -267,11 +267,27 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     // than relying on no OTHER text on the page ever containing "PAUSED".
     await expect(page.locator(".timer-state")).toHaveText("PAUSED");
     await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+    const frozen = await page.locator(".timer-time").textContent();
 
+    // Real wall-clock time actually needs to pass here — a reload racing
+    // straight through in under a second would pass even with a broken
+    // pause (the elapsed-since-phaseStartedAt math only misbehaves once
+    // real time has elapsed to misbehave ON).
+    await page.waitForTimeout(3000);
     await page.reload();
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
     await expect(page.locator(".timer-state")).toHaveText("PAUSED");
     await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
+    // Fix round (whole-branch review, F1): this used to only check "still
+    // paused," which the running-phase test next to it already proves
+    // isn't a coincidence — a paused phase's elapsed time must be
+    // IDENTICAL after a reload, not merely close (engine.ts's own contract:
+    // `pausedAt`, not `now`, is elapsed's right edge while paused — the
+    // whole reason `phaseElapsedMs` freezes is so THIS is exact, not
+    // approximate). The ±2s tolerance belongs to the running-phase test
+    // only, where real time elapsing during the reload is expected to move
+    // the number; here it must not move at all.
+    await expect(page.locator(".timer-time")).toHaveText(frozen ?? "");
 
     await cleanupByTitle(page, title);
   });
@@ -339,6 +355,18 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
       .locator(".timer-time")
       .evaluate((el) => getComputedStyle(el).fontSize);
     expect(fontSize).toBe("128px");
+
+    // Fix round (whole-branch review, F3): the 844×420 frame used to carry
+    // 18px of dead vertical scroll (`.timer-screen`'s own min-height
+    // formula never accounted for `.app-shell`'s hidden-tab-bar padding —
+    // see index.css's own comment on this media query). A real
+    // scrollHeight-vs-clientHeight check, not a bounding-box one, is what
+    // actually proves the frame fits with nothing to scroll.
+    const overflow = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
 
     await cleanupByTitle(page, title);
   });

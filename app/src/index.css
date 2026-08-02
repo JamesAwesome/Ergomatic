@@ -2691,6 +2691,35 @@ button:disabled {
     column-gap: 20px;
     row-gap: 8px;
     align-content: start;
+    /* Fix round (whole-branch review, F3): `.timer-screen`'s own base rule
+       (above) only ever subtracts `.screen`'s own 26px padding from
+       `100dvh` — it never accounts for `.app-shell`'s OWN `padding-bottom:
+       calc(var(--tap) + safe-area-bottom)` (44px here), which stays
+       reserved for the tab bar's fixed height even on THIS route, where
+       `hidesTabBar` (AppRoutes.tsx) never renders one. Portrait's tall
+       844px reference frame has enough slack that the mismatch is
+       invisible; the 420px landscape frame has none — measured live at
+       844×420 (`document.documentElement.scrollHeight` 438 vs
+       `clientHeight` 420, exactly the missing 44px minus the ~26px this
+       formula already subtracts = 18px of dead vertical scroll,
+       `main.timer-screen`'s own box was never the problem — its rendered
+       height matched its min-height floor exactly). Subtracting
+       `var(--tap)` here too — the same token `.app-shell` itself reserves,
+       not a second hardcoded 44 — closes exactly that gap. Re-measured
+       after this fix: scrollHeight 414, clientHeight 420 (6px of slack,
+       zero scroll) — `main.timer-screen`'s own height dropped from 394px
+       to ~350px (this min-height became a lower floor than the grid's own
+       ~344px content height, so the content's natural size — not this
+       formula — is what actually renders now, same principle as portrait).
+       This same formula (sans this landscape subtraction) is shared by
+       `.countdown-screen`/`.session-complete-screen`; whether either of
+       those needs the identical fix on a short landscape viewport wasn't
+       measured this round — flagging for the final review's triage rather
+       than broadening this fix round's diff past what F3 asked for. */
+    min-height: calc(
+      100dvh - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
+    );
     /* Overrides `main`/`.screen`'s own 480px cap (index.css's global rule,
        sized for a PORTRAIT phone column) — a two-column layout squeezed
        into that width on an 844px-wide landscape frame (the handoff's own

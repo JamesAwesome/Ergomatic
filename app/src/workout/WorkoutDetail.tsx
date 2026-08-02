@@ -9,6 +9,7 @@ import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import { buildDraft, loadDraft, saveDraft } from "../session/draft";
+import { clearRun, loadRun } from "../session/run";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 
@@ -121,35 +122,64 @@ function WorkoutDetailView({
   const [startError, setStartError] = useState<string | null>(null);
   // Staged-confirm idiom (src/you/BaselineEditor.tsx, also copied by this
   // file's own OwnerActions delete flow): gates the one-shot replacement of
-  // an in-progress session behind an explicit second press rather than
-  // letting the first Start press silently overwrite it.
-  const [replaceConfirming, setReplaceConfirming] = useState(false);
+  // an in-progress OR completed-but-unlogged session behind an explicit
+  // second press rather than letting the first Start press silently
+  // overwrite it. Two distinct reasons share one staged panel (below), not
+  // two separate booleans — `null` means "no stage," either non-null value
+  // both blocks the immediate `startSession()` call AND picks the panel's
+  // copy, so the two can never disagree about which case triggered it.
+  const [replaceStage, setReplaceStage] = useState<
+    "in-progress" | "unlogged" | null
+  >(null);
   const navigate = useNavigate();
 
   // Builds and saves the session draft (session/draft.ts owns the shape and
   // the storage key — this screen never touches localStorage itself), then
   // hands off to the confirm screen. `saveDraft` can fail (quota, private-
   // mode Safari) without throwing; that's surfaced inline rather than
-  // navigating to a confirm screen with nothing behind it.
+  // navigating to a confirm screen with nothing behind it. `clearRun` runs
+  // only AFTER a successful `saveDraft` — never before — so a save failure
+  // never destroys a prior run record for nothing: the reviewer's F5
+  // finding (Phase 6B Task 4 fix round) was exactly this, a stale run
+  // sitting in RUN_KEY (SessionComplete.tsx deliberately keeps one, for 6C)
+  // getting silently orphaned the instant a NEW draft overwrote DRAFT_KEY —
+  // clearing it here, at the one point this screen actually commits to a
+  // new session, is what makes the staged confirm's "Replace" copy true
+  // rather than aspirational. Unconditional (not gated on `replaceStage`):
+  // `clearRun` is a no-op `localStorage.removeItem` when there was nothing
+  // to clear, so this needs no extra branching for the common case where
+  // there wasn't a stale run at all.
   function startSession() {
     const draft = buildDraft(workout);
     if (saveDraft(draft)) {
+      clearRun();
       navigate("/session/confirm");
     } else {
       setStartError("Couldn't start this session. Try again.");
     }
   }
 
-  // A STARTED draft already sitting in storage means a session is in
-  // progress (ConfirmTargets.tsx's own re-entry guard sends a back-swipe on
-  // /session/confirm to /session/run for the same reason). Overwriting it
-  // here with no warning would silently drop whatever that session was
-  // doing, so the first Start press only stages the replacement; only the
-  // staged confirm's own button actually calls `startSession`.
+  // Two independent reasons block an immediate start, checked in order of
+  // severity: a completed-but-unlogged RUN record (reviewer's F5 — real
+  // data loss, since nothing else will ever surface it again once
+  // overwritten) takes priority over a merely-started, not-yet-finished
+  // DRAFT (the original F4 finding, still real but recoverable — the old
+  // session was never going to be logged anyway once abandoned). Checking
+  // the run first also resolves the one case where both could be true at
+  // once (the SAME workout's own detail page, revisited after finishing
+  // it): that reads as "unlogged," the accurate description, not
+  // "in progress." A STARTED draft with no matching run (shouldn't happen
+  // in the normal flow, but costs nothing to keep guarding) still falls
+  // through to the "in-progress" copy exactly as before this fix round.
   function handleStart() {
-    const existing = loadDraft();
-    if (existing !== null && existing.startedAt !== null) {
-      setReplaceConfirming(true);
+    const existingRun = loadRun();
+    if (existingRun !== null && existingRun.completedAt !== null) {
+      setReplaceStage("unlogged");
+      return;
+    }
+    const existingDraft = loadDraft();
+    if (existingDraft !== null && existingDraft.startedAt !== null) {
+      setReplaceStage("in-progress");
       return;
     }
     startSession();
@@ -229,7 +259,7 @@ function WorkoutDetailView({
         )}
       </div>
       <div className="workout-detail-actions">
-        {!replaceConfirming ? (
+        {replaceStage === null ? (
           <button
             type="button"
             className="button-primary"
@@ -240,13 +270,15 @@ function WorkoutDetailView({
         ) : (
           <div className="baseline-confirm">
             <p className="baseline-confirm-line">
-              A session is in progress — replace it?
+              {replaceStage === "unlogged"
+                ? "You have an unlogged session — starting a new one discards it."
+                : "A session is in progress — replace it?"}
             </p>
             <div className="baseline-actions">
               <button
                 type="button"
                 className="button-outline"
-                onClick={() => setReplaceConfirming(false)}
+                onClick={() => setReplaceStage(null)}
               >
                 Cancel
               </button>
