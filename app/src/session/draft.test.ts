@@ -197,7 +197,7 @@ describe("draftMinutes", () => {
 
   // F1 fix (final whole-branch review): draftMinutes used to price the
   // recount from the UN-nudged split — nudging a distance step's target
-  // moved the resolved range shown on its own row but never touched the
+  // moved the resolved split shown on its own row but never touched the
   // Confirm footer's minute recount, because draftMinutes called
   // estimateMinutes over draftSteps(d) while draftSteps folded SPM
   // overrides but not nudges. (The reviewer's exact probe: nudging a

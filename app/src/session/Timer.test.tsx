@@ -465,6 +465,68 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
   });
 });
 
+// Q3 (fix round 1): a `v:1` SessionRun written before this task shipped
+// `Phase.ref` has phases with no `ref` field at all, and whatever `label`
+// they were frozen with — for a split-ref phase written before this round,
+// that's still the OLD "lo–hi" tolerance-band string (`run.ts`'s own loose
+// `isSessionRun` validation admits this shape; it never checks per-phase
+// fields). The reviewer traced this safe (no crash, a two-line TARGET
+// SPLIT card, UP NEXT rendering the stored label verbatim) — this pins it
+// directly rather than leaving it an unasserted trace.
+describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  function legacyKindMatrixRun(): SessionRun {
+    const run = buildAndSaveRun(kindMatrixDraft());
+    // Phase 1 is Doldrums' own split-ref work step (6k+16). Reshape it into
+    // exactly what a pre-Task-2 `buildRun` would have frozen: no `ref` at
+    // all, and `label` set to the old `toleranceRange(136, 1)` band string
+    // (lo=135 -> "2:15.0", hi=137 -> "2:17.0") instead of the exact split.
+    const phases = run.phases.map((p, i) => {
+      if (i !== 1) return p;
+      const legacy = { ...p };
+      delete (legacy as { ref?: unknown }).ref;
+      legacy.label = "2:15.0–2:17.0";
+      return legacy;
+    });
+    return { ...run, phases };
+  }
+
+  it("renders the legacy phase's UP NEXT label verbatim (the stored band, not recomputed)", async () => {
+    mockKeepAwake();
+    const run = legacyKindMatrixRun();
+    runAtIndex(run, 0); // warm-up; UP NEXT names phase 1, the legacy phase
+    await renderTimer();
+
+    expect(screen.getByText("STEP 1 OF 5 · WARM-UP")).toBeInTheDocument();
+    // The OLD band string, byte-for-byte, not "WORK · 2:16.0" — this run's
+    // frozen label is never recomputed against the current domain code.
+    expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument();
+  });
+
+  it("renders the legacy phase itself without crashing: a two-line TARGET SPLIT card (main value from targetSplit, no ref sub-line)", async () => {
+    mockKeepAwake();
+    const run = legacyKindMatrixRun();
+    runAtIndex(run, 1); // the legacy split-ref phase itself
+    await renderTimer();
+
+    expect(screen.getByText("STEP 2 OF 5 · WORK")).toBeInTheDocument();
+    // The main value still resolves — it comes from `targetSplit`
+    // (untouched by the missing `ref`), not from `label` at all.
+    expect(screen.getByText("2:16.0")).toBeInTheDocument();
+    // No ref sub-line (nothing to reconstruct `refLabel` from) and no
+    // leftover band text either — the card degrades to two lines, it
+    // doesn't fall back to showing the old label as a caption.
+    const cards = document.querySelector(".timer-cards")!;
+    expect(cards.textContent).not.toContain("6K");
+    expect(cards.textContent).not.toMatch(/–/);
+    expect(screen.getByText("18")).toBeInTheDocument(); // spm, unaffected
+  });
+});
+
 describe("Timer — controls", () => {
   // `toFake: ["Date"]` only — NOT setTimeout/setInterval: this repo's
   // installed @testing-library/user-event (14.6.1) + vitest (4.1.10)

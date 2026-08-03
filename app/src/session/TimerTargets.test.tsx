@@ -90,11 +90,17 @@ describe("targetSplitDisplay", () => {
     expect(result).toStrictEqual({ main: "1:40.0", sub: "2K" });
   });
 
-  // Defensive: a "split" targetKind phase with no `ref` at all shouldn't be
-  // producible by domain/expand.ts's own `case "w"` (it always sets both
-  // together), but the display helper degrades to no sub-line rather than
-  // crashing on the missing field.
-  it("split with no ref at all (defensive): no sub-line, never a crash", () => {
+  // Q3 (fix round 1): this is NOT unreachable/defensive — it's the exact
+  // shape of a `v:1` SessionRun frozen before this round shipped `Phase.ref`
+  // at all. `domain/expand.ts`'s own `case "w"` always sets `ref` together
+  // with `targetKind: "split"` for a run built TODAY, but an old stored
+  // record loaded via `run.ts`'s own loose `isSessionRun` validation (which
+  // only checks `v`/top-level shape, never per-phase fields) can genuinely
+  // have `targetKind: "split"` with no `ref` at all. The card degrades to
+  // no sub-line (two lines, not three) rather than crashing — see
+  // Timer.test.tsx's own dedicated legacy-run test for the full timer-level
+  // proof (no crash, two-line card, UP NEXT shows the stored label as-is).
+  it("split with no ref at all (a legacy pre-ref run, not a defensive/unreachable case): no sub-line, never a crash", () => {
     const result = targetSplitDisplay(
       phase({
         type: "work",

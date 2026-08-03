@@ -9,9 +9,9 @@ import {
 } from "./builderState";
 
 // Loading/error/404 states mirror WorkoutDetail.tsx's — deliberately
-// duplicated rather than extracted, matching the precedent Builder.tsx set
-// for readPaceTolerance (a shared helper wasn't worth it for this small a
-// screen count).
+// duplicated rather than extracted, the same "not worth a shared helper for
+// this small a screen count" call `Countdown.tsx`'s own `readPaceTolerance`
+// comment makes for an unrelated one-liner.
 export default function EditWorkout() {
   const { id } = useParams();
   const workoutsState = useWorkouts();

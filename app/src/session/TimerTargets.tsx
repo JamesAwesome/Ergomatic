@@ -20,9 +20,12 @@ import type { EnginePhase } from "./engine";
  *    `toleranceRange`, a "lo–hi" string, or the bare central value once tol
  *    hit 0) — retired in favour of "where did this number come from," which
  *    the band never answered and the ref does. `phase.ref` is only absent
- *    here in the unreachable case of a "split" targetKind phase that
- *    somehow carries no ref (domain/expand.ts's own `case "w"` always sets
- *    both together); the sub-line is omitted rather than crashing on it.
+ *    for a LEGACY `v:1` `SessionRun` frozen before this field existed on
+ *    `Phase`/`EnginePhase` at all (`domain/expand.ts`'s own `case "w"`
+ *    always sets both together for a run built today; an old stored
+ *    record, loaded via `run.ts`'s loose `isSessionRun` validation, can
+ *    still have `targetKind: "split"` with no `ref`) — the sub-line is
+ *    omitted rather than crashing on it, degrading to a two-line card.
  *  - `undefined` (warmup/rest/test — the only phase kinds with no
  *    `targetKind` at all): `phase.label` alone (already "Easy"/"Rest"/
  *    "All out"), no sub-line — there is no split to trace a ref for.

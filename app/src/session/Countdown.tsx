@@ -8,12 +8,13 @@ import { buildRun } from "./engine";
 import { cancelStart, loadDraft, saveDraft, type SessionDraft } from "./draft";
 import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
 
-// Copied a THIRD time from WorkoutDetail.tsx's own readPaceTolerance
-// (ConfirmTargets.tsx already carries the second copy, with the same
-// comment) — a shared module for this many one-line callers still isn't
-// obviously worth the extra indirection, but three is the point at which a
-// future reviewer should feel free to extract it; not done here to keep
-// this task's diff to the files its brief names.
+// Ui-fix round Task 2 removed the WorkoutDetail.tsx/Builder.tsx/
+// ConfirmTargets.tsx copies of this same one-liner (their own displayed
+// targets went exact and stopped needing a tolerance value at all) — this
+// is now the ONLY reader of --pace-tolerance left in the client, feeding
+// buildRun's own `tol` argument (still part of `phases()`'s signature, even
+// though nothing in its body currently consumes it for display purposes —
+// see domain/expand.ts's own comment on that parameter).
 function readPaceTolerance(): number {
   if (typeof window === "undefined") return 1;
   const raw = getComputedStyle(document.documentElement)
