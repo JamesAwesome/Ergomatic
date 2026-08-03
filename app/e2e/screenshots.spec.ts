@@ -15,8 +15,8 @@ const SCREENSHOT_BASELINES = { k2Seconds: 112.0, k6Seconds: 122.0 };
 
 /**
  * Sets baselines for the signed-in user so screenshots show the product's
- * real numbers (durations, resolved target ranges) instead of the
- * no-baselines fallback ("—" / "no target"). Driven via an in-page fetch
+ * real numbers (durations, resolved targets) instead of the no-baselines
+ * fallback ("—" / "no target"). Driven via an in-page fetch
  * (real Chromium networking), not `page.request`: the api container runs
  * with NODE_ENV=production, so the session cookie is Set-Cookie'd with
  * `Secure` — Chromium exempts http://127.0.0.1 from that (the loopback
@@ -550,7 +550,7 @@ test("builder", async ({ page }) => {
   // accordion invariant this whole redesign exists to prove, captured live
   // before any save. Every collapsed row resolves a target (five splits
   // against the set baselines, one effort word for the MAX row); the open
-  // row shows its own resolved range in the TARGET strip instead.
+  // row shows its own resolved (exact) split in the TARGET strip instead.
   await expect(page.locator(".step-card")).toHaveCount(6);
   await expect(page.locator(".step-card-split")).toHaveCount(6);
   await expect(page.locator(".step-editor")).toHaveCount(1);

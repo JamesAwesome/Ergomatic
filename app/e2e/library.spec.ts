@@ -262,7 +262,7 @@ test.describe("baseline changes propagate to a workout's detail targets", () => 
 
     await firstRow.click();
     // Every seeded workout has at least one paced ("w") step, so the first
-    // rendered target range is a real, comparable value once baselines are
+    // rendered target is a real, comparable value once baselines are
     // set (never the "no target" fallback — see StepRow.tsx).
     const target = page.locator(".step-row-range").first();
     const before = await target.innerText();
