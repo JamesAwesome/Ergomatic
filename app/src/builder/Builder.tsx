@@ -520,7 +520,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
 
       <button
         type="button"
-        className="builder-save"
+        className="button-l1"
         onClick={handleSave}
         disabled={saving}
       >

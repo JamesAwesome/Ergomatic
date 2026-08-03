@@ -112,7 +112,7 @@ describe("ConfirmTargets", () => {
       screen.queryByRole("heading", { name: "Hoarfrost" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "START" }),
+      screen.queryByRole("button", { name: "Looks right, start" }),
     ).not.toBeInTheDocument();
   });
 
@@ -178,7 +178,7 @@ describe("ConfirmTargets", () => {
     await renderConfirm();
 
     expect(
-      screen.queryByRole("button", { name: "START" }),
+      screen.queryByRole("button", { name: "Looks right, start" }),
     ).not.toBeInTheDocument();
     const footer = screen.getByText("— MIN").closest("footer")!;
     const link = within(footer).getByRole("link", { name: "Set baselines" });
@@ -468,7 +468,9 @@ describe("ConfirmTargets", () => {
     seedDraft("Hoarfrost");
     await renderConfirm();
 
-    await userEvent.click(screen.getByRole("button", { name: "START" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Looks right, start" }),
+    );
 
     expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const saved = loadDraft();

@@ -114,15 +114,18 @@ export default function SessionComplete() {
           ))}
         </ul>
       )}
-      <div className="complete-actions">
-        <Link to="/session/log" className="button-primary complete-log">
+      {/* Task 1 (ui-fix round): the two half-width side-by-side buttons
+          become full-width blocks in one `.action-stack` — Log this session
+          (L1, 56px) then Back to Today (L2, 52px). Task 3 appends a rule +
+          Discard (L4/L4-armed) below Back to Today; this stays a single
+          flat container (no extra wrapping div) so that append is a plain
+          sibling insertion, the same shape WorkoutDetail's own merged stack
+          (Edit/rule/Delete) already establishes. */}
+      <div className="action-stack complete-actions">
+        <Link to="/session/log" className="button-l1">
           Log this session
         </Link>
-        <button
-          type="button"
-          className="button-outline complete-back"
-          onClick={handleBack}
-        >
+        <button type="button" className="button-l2" onClick={handleBack}>
           Back to Today
         </button>
       </div>

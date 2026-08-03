@@ -36,15 +36,17 @@ const HELD_OPTIONS: { value: HeldResult; label: string }[] = [
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
 
-// Duplicated from ClassificationCard.tsx's own `PAIN_RAMP_VAR`, matching
-// this repo's established convention of keeping this tiny 5-entry map local
-// to each file that needs it rather than importing it (ClassificationCard's
-// own header comment on this: "Kept local ... matching the existing
-// duplication convention"). The task brief calls for the Log screen's own
-// pain picker to follow ClassificationCard's numeral-cell pattern, which
-// this reuses down to the exact CSS classes (`.classification-*`) — only
-// this color map is re-declared, the same way every other file that paints
-// a pain ramp does.
+// Originally duplicated from ClassificationCard.tsx's own `PAIN_RAMP_VAR`,
+// matching this repo's established convention of keeping this tiny 5-entry
+// map local to each file that needs it rather than importing it. The
+// ui-fix round's Task 1 later moved ClassificationCard.tsx's own selected
+// PAIN chip off this ramp onto plain ink (DESIGN.md: "Builder's gold pain
+// selection goes" — this screen wasn't touched that round, so its own
+// per-level ramp fill is unchanged) — this map and the `.classification-*`
+// CSS classes it paints are still shared with (not owned by)
+// ClassificationCard.tsx's own `.classification-chip-pain[aria-pressed=
+// "true"]` rule, which this screen's inline style always overrides
+// regardless of which one is "true" today.
 const PAIN_RAMP_VAR: Record<(typeof PAIN_LEVELS)[number], string> = {
   1: "--pain-ramp-1",
   2: "--pain-ramp-2",

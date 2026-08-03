@@ -264,13 +264,18 @@ function WorkoutDetailView({
           ),
         )}
       </div>
-      <div className="workout-detail-actions">
+      {/* Task 1 (ui-fix round): one `.action-stack` for every screen-level
+          action — Start / Log it after / Edit / a rule / Delete workout —
+          not two separate divs the way this used to split Start/Log it
+          after from OwnerActions' own Edit/Delete. OwnerActions still owns
+          its own wrapping element below (`.workout-owner-actions`, kept for
+          e2e/builder.spec.ts's existing "absent for a global workout"
+          check) but renders `display: contents` (index.css) so its children
+          are this stack's own direct flex items, not a nested box breaking
+          the 12px gap rhythm. */}
+      <div className="action-stack workout-detail-actions">
         {replaceStage === null ? (
-          <button
-            type="button"
-            className="button-primary"
-            onClick={handleStart}
-          >
+          <button type="button" className="button-l1" onClick={handleStart}>
             Start
           </button>
         ) : (
@@ -311,7 +316,7 @@ function WorkoutDetailView({
           <Link
             to={`/library/${workout.id}/log`}
             state={{ from }}
-            className="button-outline"
+            className="button-l2"
           >
             Log it after
           </Link>
@@ -320,13 +325,18 @@ function WorkoutDetailView({
             <em>no target</em> <Link to="/you">Set baselines</Link>
           </span>
         )}
+        {/* Globals are read-only server-side (a 403 on any mutation) — the
+            UI must never present controls whose only outcome is that
+            rejection, so Edit/Delete render only for the rower's own
+            workouts. */}
+        {!workout.isGlobal && (
+          <OwnerActions
+            workoutId={workout.id}
+            navigate={navigate}
+            from={from}
+          />
+        )}
       </div>
-      {/* Globals are read-only server-side (a 403 on any mutation) — the UI
-          must never present controls whose only outcome is that rejection,
-          so Edit/Delete render only for the rower's own workouts. */}
-      {!workout.isGlobal && (
-        <OwnerActions workoutId={workout.id} navigate={navigate} from={from} />
-      )}
     </main>
   );
 }
@@ -369,53 +379,68 @@ function OwnerActions({
   };
 
   return (
+    // `display: contents` (index.css): this wrapper stays purely for the
+    // e2e "absent for a global workout" check — visually its children are
+    // direct items of the parent `.action-stack`, not a nested flex column
+    // of their own, so the shared 12px gap and full-width sizing apply
+    // exactly as if Edit/the rule/Delete were declared inline there.
     <div className="workout-owner-actions">
       <Link
         to={`/library/${workoutId}/edit`}
         state={{ from }}
-        className="button-outline"
+        className="button-l2"
       >
         Edit
       </Link>
       {!confirming ? (
-        <button
-          type="button"
-          className="button-outline"
-          onClick={() => setConfirming(true)}
-        >
-          Delete
-        </button>
+        <>
+          <hr className="action-stack-rule" />
+          <button
+            type="button"
+            className="button-l4"
+            onClick={() => setConfirming(true)}
+          >
+            Delete
+          </button>
+        </>
       ) : (
         // Staged-confirm idiom (src/you/BaselineEditor.tsx): the destructive
         // action never fires on the first press. Copy is explicit that
         // logged history survives — session_logs.workout_id is set to NULL
         // on delete and each log keeps its own frozen title/type, so
         // deleting a workout does NOT erase the rower's past sessions of it.
-        <div className="baseline-confirm">
-          <p className="baseline-confirm-line">
-            Delete this workout? Your logged sessions are kept — they keep their
-            own copy of the title and type.
-          </p>
-          {error && <p className="baseline-error">{error}</p>}
-          <div className="baseline-actions">
-            <button
-              type="button"
-              className="button-outline"
-              onClick={() => setConfirming(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="button-primary"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              Delete workout
-            </button>
+        // Kept as the existing half-width Cancel/Delete pair (not the
+        // level system) — the level system's own destructive idiom for
+        // THIS confirm shape is the still-unbuilt "armed" self-toggle
+        // (Tasks 2-3), a different UI than this two-button panel.
+        <>
+          <hr className="action-stack-rule" />
+          <div className="baseline-confirm">
+            <p className="baseline-confirm-line">
+              Delete this workout? Your logged sessions are kept — they keep
+              their own copy of the title and type.
+            </p>
+            {error && <p className="baseline-error">{error}</p>}
+            <div className="baseline-actions">
+              <button
+                type="button"
+                className="button-outline"
+                onClick={() => setConfirming(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button-primary"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                Delete workout
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

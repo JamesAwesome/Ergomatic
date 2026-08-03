@@ -10,6 +10,14 @@
      expanded one (which stays --surface) without a border-only change. */
   --surface-collapsed: #fbf9f1;
   --ink: #1b1a17;
+  /* Alias of --ink, not a new colour: docs/design/handoffs/2026-08-03-ui-fix/
+     DESIGN.md (Item 4, SHUFFLE) and this round's own task-1 brief both name
+     `--ink-1` for SHUFFLE's label — a token this file never defined (the
+     ink scale below has always started at unsuffixed `--ink`, then
+     `--ink-2` through `--ink-5`. Added literally rather than silently
+     substituting `--ink` at the one call site, so a future reader of either
+     handoff document finds the name they were given actually resolves. */
+  --ink-1: #1b1a17;
   --ink-2: #3f3c35;
   --ink-3: #57544c;
   --ink-4: #6f6a5f;
