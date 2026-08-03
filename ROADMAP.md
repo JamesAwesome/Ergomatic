@@ -632,10 +632,64 @@ progress (the swap resets cleanly once that session is logged), and log a
 genuine off-plan or make-up session without moving the plan's counter.
 
 **Next:** a **UI-fix round** (exact targets replace the range displays; a
-drop-X on Today's unlogged line; a discard option on SessionComplete),
-then a **workout-generation phase** (James supplies references; the
-library grows beyond the 35 starters so testers have real content to work
-against), then Phase 7's PM5 integration.
+drop-X on Today's unlogged line; a discard option on SessionComplete; SHUFFLE
+full-width) — queued ahead of the workout-generation phase below but not yet
+started — then Phase 7's PM5 integration.
+
+## Phase 6E — Workout library generation
+
+**Status:** Done (2026-08-03, PR #TBD)
+**Goal:** Replace the 35-workout starter library with ~300 original workouts,
+structurally derived (never verbatim) from James's Erg Book photos, so
+TestFlight testers have realistic content instead of a small, well-worn set.
+**Design authority:** `docs/superpowers/specs/2026-08-03-workout-generation-design.md`,
+plan: `docs/superpowers/plans/2026-08-03-workout-generation.md`.
+
+- [x] Offline five-stage pipeline: double-read vision extraction of the book
+      photos → private `originals.json` and a personal originals CSV on
+      James's Desktop (neither enters the repo) → a repo-safe aggregate
+      pattern digest (`app/domain/generation/patterns.json` — per type×duration
+      cell: interval-shape frequencies, work:rest ratio ranges, pace-offset
+      distributions per base, spm bands, warm-up conventions, rep-count
+      ranges; aggregate statistics only, no titles/prose/per-workout rows)
+      → grid-constrained authoring by subagents → a permanent validation
+      gate (domain `validate.ts`, duration/spm/rep-count/pain-plausibility
+      checks, structural dedup within the 300, quota exactly satisfied)
+- [x] Exact quota grid, 300 total: O2 90 / AT 75 / TR 75 / AN 60 across five
+      duration bands (<20′ 30, 20–30′ 75, 30–45′ 120, 45–60′ 45, 60′+ 30); a
+      ~320-name weather/atmospheric pool allocated per cell so authoring
+      agents can't collide; an offline no-structure+parameter-clone check
+      against the private originals (can't live in CI — it needs book
+      content — so it ran once during the phase and its result is recorded
+      in the PR)
+- [x] `STARTER_WORKOUTS`/`server/seed/starter.ts` retired entirely;
+      `server/seed/library/{o2,at,tr,an}.ts` hold the 300 as original
+      content, `sortOrder` grouped by type then easy→hard (the same
+      browsing order the 35-workout library used). `seedGlobalLibrary`
+      (`server/seed/seed.ts`) reconciles the shared global library to the
+      code's set inside one advisory-locked transaction: no globals →
+      insert; the running title-set already matches → no-op; anything else
+      → swap (delete all globals, insert the current 300) — called once at
+      boot, not per-user. The swap nulls `session_logs.workout_id`
+      (`ON DELETE SET NULL`) — logs keep their rows and lose the workout
+      link; accepted at TestFlight scale, called out in the PR. Personal
+      (non-global) workouts are structurally untouched, and a seeded
+      workout the user has since edited counts as custom (kept, not
+      swapped)
+- [x] Fixtures across the client/server test suites re-anchored from the
+      retired 35-workout set to real entries in the 300 (e.g. "Fork
+      Lightning" for the effort-ref `0:30 @ MAX` shape, "Hoarfrost" for the
+      warm-up-then-split-ref shape, "Filling Low" for the reps-expanded
+      distance shape, "Sea Fret" for the first-sorted global)
+
+**Exit:** MET — new and existing accounts alike see the same generated
+300-workout global library; the seed reconcile is idempotent (an unchanged
+set no-ops on a second boot) and swaps cleanly when the code's set changes;
+personal workouts and their logs are structurally unaffected by a swap.
+Pending: James's review of the generated batch and PR approval before merge
+(normal SDLC — no merge without it).
+
+**Next:** the deferred UI-fix round above, then Phase 7's PM5 integration.
 
 ## Phase 7 — PM5 over Bluetooth
 
@@ -721,5 +775,5 @@ next phase. One line per round, newest first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
-- **Parametric workout generator**: "generate me a 45' AT workout" from the starter library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Still queued behind the UI-fix round and the workout-generation phase above (Phase 6D's own "Next" line), not started. Generation will load richer structural references from the owner's source material (patterns and parameters only — never entries/titles/prose, per the content policy).
+- **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Still queued behind the UI-fix round (ROADMAP's Phase 6D "Next" line), not started — what remains is the runtime generator itself, not the data it would draw from.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.

@@ -10,7 +10,7 @@ import { saveDraft, loadDraft, DRAFT_KEY } from "./draft";
 // 3x2000m @ 6k+4 with 3' rest — the same reps-expanded distance workout
 // engine.test.ts uses, so a run built from it exercises actuals, set
 // numbering, and originalIndex in one realistic shape.
-function coldFrontDraft(id: string) {
+function fillingLowDraft(id: string) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
   if (!w) throw new Error("missing library fixture: Filling Low");
   return buildDraft({
@@ -29,7 +29,7 @@ function addSeconds(d: Date, s: number): Date {
 }
 
 function freshRun(): SessionRun {
-  return buildRun(coldFrontDraft(`cf-${Math.random()}`), baselines, 3, t0);
+  return buildRun(fillingLowDraft(`fl-${Math.random()}`), baselines, 3, t0);
 }
 
 // A phase with no `set` (no reps marker active, e.g. warmup) still carries
@@ -90,7 +90,7 @@ describe("saveRun / loadRun / clearRun", () => {
   // survives untouched.
   it("resilience 5: returns null and clears the key for an unknown version, leaving the DRAFT untouched", () => {
     const run = freshRun();
-    const draft = coldFrontDraft("cf-draft-survives");
+    const draft = fillingLowDraft("fl-draft-survives");
     saveDraft(draft);
     localStorage.setItem(RUN_KEY, JSON.stringify({ ...run, v: 2 }));
 
