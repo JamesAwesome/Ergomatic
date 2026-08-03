@@ -312,6 +312,30 @@ export function describeStoreContracts(
         expect(after).toBe((await stores.workouts.listGlobals()).length);
       });
 
+      // Task 9: deleteGlobals is the seed-reconcile's swap primitive (see
+      // app/server/seed/seed.ts, Task 10) — it must clear every global row
+      // and leave personal rows completely untouched.
+      it("deleteGlobals empties the global library and leaves personal workouts alone", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.workouts.createMany(null, [
+          workoutInput({ title: "Global One" }),
+          workoutInput({ title: "Global Two" }),
+        ]);
+        const personal = await stores.workouts.create(
+          userId,
+          workoutInput({ title: "Mine, Survives" }),
+        );
+
+        await stores.workouts.deleteGlobals();
+
+        expect(await stores.workouts.countGlobals()).toBe(0);
+        expect(await stores.workouts.get(userId, personal.id)).toMatchObject({
+          title: "Mine, Survives",
+          isGlobal: false,
+        });
+      });
+
       // createMany is one transaction in the real store. There are no num
       // clashes left to trigger a rollback, so the guarantee is proved with a
       // genuine failure instead: an out-of-enum `type`, which Postgres

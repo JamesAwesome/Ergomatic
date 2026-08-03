@@ -222,6 +222,11 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     async countGlobals() {
       return globals.size;
     },
+    // Mirrors the real store's deleteGlobals (app/server/stores/workouts.ts):
+    // wipes the global bucket only, never touches `byUser`.
+    async deleteGlobals() {
+      globals.clear();
+    },
     // Test-only seam: the real store's globals come from seedGlobalLibrary
     // at boot, never through this router. Injects a global row directly.
     _seedGlobal(input: NewWorkoutInput) {
