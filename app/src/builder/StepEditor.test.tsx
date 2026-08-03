@@ -125,7 +125,7 @@ function Harness({
 describe("StepEditor", () => {
   // 1. The seven rows render in order for a work step.
   it("renders the seven rows in order: header, DUR, PACE, SPM, REST, TARGET, DONE", () => {
-    const { container } = setup({ splitLabel: "2:11.0–2:13.0" });
+    const { container } = setup({ splitLabel: "2:12.0" });
 
     expect(screen.getByText("STEP 1")).toBeInTheDocument();
     expect(
@@ -149,7 +149,7 @@ describe("StepEditor", () => {
       "TARGET",
     ]);
 
-    const target = screen.getByText("2:11.0–2:13.0");
+    const target = screen.getByText("2:12.0");
     const done = screen.getByRole("button", { name: "DONE" });
     expect(
       target.compareDocumentPosition(done) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -159,8 +159,8 @@ describe("StepEditor", () => {
   // 2. TARGET shows splitLabel, rendered ink — not accent, since it's
   // output, not a selected state.
   it("shows splitLabel in the TARGET strip, rendered as ink output rather than an accent selection", () => {
-    setup({ splitLabel: "2:11.0–2:13.0" });
-    const value = screen.getByText("2:11.0–2:13.0");
+    setup({ splitLabel: "2:12.0" });
+    const value = screen.getByText("2:12.0");
     expect(value).toHaveClass("step-editor-target-value");
     expect(value.className).not.toMatch(/accent/i);
     expect(value).not.toHaveAttribute("style");

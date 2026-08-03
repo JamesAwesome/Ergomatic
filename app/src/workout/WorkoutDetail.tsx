@@ -14,20 +14,6 @@ import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 
-// Settings expose --pace-tolerance (tokens.css); read once, in this lazy
-// initializer, so it's captured at mount. A future settings screen changing
-// the custom property at runtime would NOT propagate here without a remount
-// (useState's initializer only runs once) — that's a known limitation, not
-// an oversight.
-function readPaceTolerance(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--pace-tolerance")
-    .trim();
-  const parsed = Number(raw);
-  return raw !== "" && Number.isFinite(parsed) ? parsed : 1;
-}
-
 export default function WorkoutDetail() {
   const { id } = useParams();
   const workoutsState = useWorkouts();
@@ -117,7 +103,6 @@ function WorkoutDetailView({
   // workout.steps directly rather than the expanded per-repetition list) —
   // never persisted (Phase 6 will pass them per-request).
   const [nudges, setNudges] = useState<Record<number, number>>({});
-  const [tolerance] = useState(readPaceTolerance);
   const [startError, setStartError] = useState<string | null>(null);
   // Staged-confirm idiom (src/you/BaselineEditor.tsx, also copied by this
   // file's own OwnerActions delete flow): gates the one-shot replacement of
@@ -257,7 +242,6 @@ function WorkoutDetailView({
               key={index}
               step={step}
               baselines={baselines}
-              tolerance={tolerance}
               nudge={nudges[index] ?? 0}
               onNudge={(delta) => handleNudge(index, delta)}
             />

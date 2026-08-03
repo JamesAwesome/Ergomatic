@@ -19,7 +19,6 @@ describe("StepRow durations (house clock format)", () => {
           ref: { base: "6k", off: 0 },
         }}
         baselines={BASELINES}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,
@@ -37,7 +36,6 @@ describe("StepRow durations (house clock format)", () => {
           ref: { base: "6k", off: 0 },
         }}
         baselines={BASELINES}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,
@@ -50,7 +48,6 @@ describe("StepRow durations (house clock format)", () => {
       <StepRow
         step={{ k: "wu", minutes: 65 }}
         baselines={null}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,
@@ -65,7 +62,6 @@ describe("StepRow durations (house clock format)", () => {
       <StepRow
         step={{ k: "r", minutes: 2.5 }}
         baselines={null}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,
@@ -98,7 +94,6 @@ describe("StepRow durations (house clock format)", () => {
           restMinutes: 1,
         }}
         baselines={BASELINES}
-        tolerance={1}
         nudge={0}
         onNudge={vi.fn()}
       />,
@@ -109,15 +104,65 @@ describe("StepRow durations (house clock format)", () => {
     expect(screen.getByText(/23 spm/)).toBeInTheDocument();
     expect(screen.getByText(/1:00 rest/)).toBeInTheDocument();
   });
+
+  // Ui-fix round, Item 1: the target sits as the single exact resolved
+  // split — never a "lo–hi" tolerance band — regardless of what
+  // --pace-tolerance is set to (this component no longer even takes a
+  // tolerance prop; StepRow.tsx's own toleranceRange call site was
+  // deleted, not just fed a zero). 6k=122, off=4, nudge=0 -> 126 ->
+  // fmtSplit(126) = "2:06.0".
+  it("shows the exact resolved split, never a tolerance band", () => {
+    renderStep(
+      <StepRow
+        step={{
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "6k", off: 4 },
+        }}
+        baselines={BASELINES}
+        nudge={0}
+        onNudge={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("2:06.0")).toBeInTheDocument();
+    // No EN DASH (U+2013) anywhere — a band would render one.
+    expect(screen.queryByText(/–/)).not.toBeInTheDocument();
+  });
+
+  it("a nudge moves the exact split shown, still no band", () => {
+    renderStep(
+      <StepRow
+        step={{
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "6k", off: 4 },
+        }}
+        baselines={BASELINES}
+        nudge={-2}
+        onNudge={() => {}}
+      />,
+    );
+
+    // 122 + 4 - 2 = 124 -> "2:04.0".
+    expect(screen.getByText("2:04.0")).toBeInTheDocument();
+    expect(screen.queryByText("2:06.0")).not.toBeInTheDocument();
+    expect(screen.queryByText(/–/)).not.toBeInTheDocument();
+  });
 });
 
 describe("StepRow effort refs (Phase 5G)", () => {
   // Realistic fixture: "Fork Lightning" (app/server/seed/library/an.ts,
-  // AN, 10x30s effort-ref). This is that workout's step verbatim — one of
-  // the generated library's many effort-ref AN entries — so what a reader
-  // actually sees on the detail screen for a seeded workout is exactly what
-  // this asserts.
-  it("renders an effort step's word where the range sits, with no nudges", () => {
+  // AN, effort-ref work steps). This is that workout's step verbatim — one
+  // of the generated library's many effort-ref AN entries — so what a
+  // reader actually sees on the detail screen for a seeded workout is
+  // exactly what this asserts.
+  //
+  // Mixed workout proving words survive alongside the round's exact-split
+  // rule (task brief): this same describe block's split-ref tests above
+  // render a plain number, while every test here renders "ALL OUT"/"EASY" —
+  // an effort ref is never coerced into a number or a bare dash.
+  it("renders an effort step's word where the target sits, with no nudges", () => {
     renderStep(
       <StepRow
         step={{
@@ -128,7 +173,6 @@ describe("StepRow effort refs (Phase 5G)", () => {
           restMinutes: 1.25,
         }}
         baselines={BASELINES}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,
@@ -152,7 +196,6 @@ describe("StepRow effort refs (Phase 5G)", () => {
           ref: { effort: "max" },
         }}
         baselines={BASELINES}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,
@@ -177,7 +220,6 @@ describe("StepRow effort refs (Phase 5G)", () => {
           ref: { effort: "min" },
         }}
         baselines={BASELINES}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,
@@ -202,7 +244,6 @@ describe("StepRow effort refs (Phase 5G)", () => {
           ref: { effort: "max" },
         }}
         baselines={null}
-        tolerance={1}
         nudge={0}
         onNudge={() => {}}
       />,

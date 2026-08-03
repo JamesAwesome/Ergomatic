@@ -36,11 +36,14 @@ function library(title: string) {
 // them too (domain/expand.ts's own `liveIndices`), doubling the appended
 // phases for no reason; this fixture wants each kind exactly once.
 //
-// Resulting phases (baselines {k2:100,k6:120}, tol 1):
+// Resulting phases (baselines {k2:100,k6:120}, tol 1). Ui-fix round, Item
+// 1: the label/UP NEXT value is the EXACT split, never a "lo–hi" band; the
+// TimerTargets sub-line is the ref it was resolved from instead, uppercased
+// (refLabel(ref).toUpperCase()).
 //   0 warmup   240s   "Easy"
-//   1 work     720s   split  "2:12.0" / "2:11.0–2:13.0"  spm 22
+//   1 work     720s   split  "2:12.0", ref "6K +12"  spm 22
 //   2 rest     300s   "Rest"
-//   3 work     —      distance 500m, split "1:40.0" / "1:39.0–1:41.0"
+//   3 work     —      distance 500m, split "1:40.0", ref "2K"
 //   4 work     60s    effort "ALL OUT"
 function kindMatrixDraft(): SessionDraft {
   const hoarfrost = library("Hoarfrost");
@@ -268,11 +271,12 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining
     expect(screen.getByText("Easy")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
-    expect(screen.getByText("WORK · 2:11.0–2:13.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
+    expect(screen.getByText("WORK · 2:12.0")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  it("work (split, time): the resolved central value + range, spm", async () => {
+  it("work (split, time): the exact resolved split + its ref sub-line, spm", async () => {
     mockKeepAwake();
     const run = buildAndSaveRun(kindMatrixDraft());
     runAtIndex(run, 1);
@@ -281,7 +285,9 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("STEP 2 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.getByText("12:00")).toBeInTheDocument(); // 720s remaining
     expect(screen.getByText("2:12.0")).toBeInTheDocument();
-    expect(screen.getByText("2:11.0–2:13.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: the sub-line is the ref, uppercased — not a
+    // tolerance band.
+    expect(screen.getByText("6K +12")).toBeInTheDocument();
     expect(screen.getByText("22")).toBeInTheDocument();
     expect(screen.getByText("spm")).toBeInTheDocument();
     // Fix round (whole-branch review, F4): a rest phase's own resolved
@@ -327,7 +333,8 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("5:00")).toBeInTheDocument(); // 300s remaining
     expect(screen.getByText("Rest")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
-    expect(screen.getByText("WORK · 1:39.0–1:41.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
+    expect(screen.getByText("WORK · 1:40.0")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -340,7 +347,9 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("STEP 4 OF 5 · WORK · 500M")).toBeInTheDocument();
     expect(screen.getByText("0:00")).toBeInTheDocument(); // elapsed, not remaining
     expect(screen.getByText("1:40.0")).toBeInTheDocument();
-    expect(screen.getByText("1:39.0–1:41.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: the sub-line is the ref, uppercased. off=0 ->
+    // refLabel drops the sign entirely -> just the base, "2K".
+    expect(screen.getByText("2K")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
     expect(screen.getByText("WORK · ALL OUT")).toBeInTheDocument();
     // Fix round (spec review F1/F2): distance mode keeps ◀/Pause — only the
@@ -389,7 +398,9 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       runAtIndex(run, 0); // next=work(split), afterNext=rest
       await renderTimer();
 
-      expect(screen.getByText("WORK · 2:11.0–2:13.0")).toBeInTheDocument(); // UP NEXT's own value, unchanged
+      // UP NEXT's own value — exact now (ui-fix round, Item 1), never a
+      // "lo–hi" band.
+      expect(screen.getByText("WORK · 2:12.0")).toBeInTheDocument();
       // Same F4 dedupe as upNextText's own rest-phase case above, applied
       // here via the shared `phaseAnnouncement` helper.
       expect(screen.getByText("then REST")).toBeInTheDocument();

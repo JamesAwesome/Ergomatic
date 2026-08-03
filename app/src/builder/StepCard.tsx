@@ -17,8 +17,9 @@ export default function StepCard({
 }: {
   index: number;
   row: BuilderRow;
-  // Pre-computed resolved range (e.g. "2:11.0–2:13.0") or null when
-  // baselines are unknown — this card does no pace math of its own.
+  // Pre-computed exact resolved split (e.g. "2:12.0" — ui-fix round, Item
+  // 1: never a tolerance band) or null when baselines are unknown — this
+  // card does no pace math of its own.
   splitLabel: string | null;
   // The left marker's colour source for the EXPANDED state (StepEditor.tsx,
   // Task 3) — the collapsed marker here is always --rule-2 (design doc

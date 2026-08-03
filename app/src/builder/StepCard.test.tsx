@@ -63,7 +63,7 @@ function setup(overrides: Partial<Parameters<typeof StepCard>[0]> = {}) {
     <StepCard
       index={0}
       row={workRow()}
-      splitLabel="2:11.0–2:13.0"
+      splitLabel="2:12.0"
       typeColorVar="--type-o2"
       onExpand={onExpand}
       onDuplicate={onDuplicate}
@@ -79,7 +79,7 @@ describe("StepCard", () => {
     setup({ index: 2 });
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("20:00 @ 6k +10")).toBeInTheDocument();
-    expect(screen.getByText("2:11.0–2:13.0")).toBeInTheDocument();
+    expect(screen.getByText("2:12.0")).toBeInTheDocument();
     expect(screen.getByText("20 spm · rest 1:30")).toBeInTheDocument();
   });
 
@@ -146,7 +146,7 @@ describe("StepCard", () => {
 
   it("renders nothing in the split area — not a stray dash — when splitLabel is null", () => {
     setup({ splitLabel: null });
-    expect(screen.queryByText("2:11.0–2:13.0")).not.toBeInTheDocument();
+    expect(screen.queryByText("2:12.0")).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
     expect(screen.queryByText("-")).not.toBeInTheDocument();
   });

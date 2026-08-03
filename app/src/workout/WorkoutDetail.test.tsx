@@ -52,7 +52,7 @@ const WORKOUT: LibraryWorkout = {
 // A repeat-block workout for the handoff's nudge model: one raw "reps"
 // marker step governs everything after it, so the block is nudged once
 // rather than per-repetition. 2k baseline 1:52.0 (112s); off 0 -> 112s
-// target; tolerance 1 -> 1:51.0-1:53.0. Its work step sits at raw index 1
+// target, shown exact (ui-fix round). Its work step sits at raw index 1
 // — the SAME index as WORKOUT's first nudgeable work step — so the
 // per-workout scoping test below actually exercises the bug (stale nudge
 // state reappearing at a matching index) rather than passing by
@@ -264,16 +264,17 @@ beforeEach(() => {
 });
 
 describe("WorkoutDetail", () => {
-  it("resolves a work step's target against real baselines into a tolerance range", async () => {
+  it("resolves a work step's target against real baselines into the exact split", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    // Hardcoded expectation (EN DASH, U+2013) — not recomputed via
-    // resolveSplit/toleranceRange, which would make this tautological.
-    expect(screen.getByText("1:59.0–2:01.0")).toBeInTheDocument();
+    // Hardcoded expectation — not recomputed via resolveSplit/fmtSplit,
+    // which would make this tautological. Ui-fix round, Item 1: the exact
+    // split, never a "lo–hi" tolerance band.
+    expect(screen.getByText("2:00.0")).toBeInTheDocument();
   });
 
-  it("shifts the resolved range one second faster after a single ▲ (faster) nudge", async () => {
+  it("shifts the resolved split one second faster after a single ▲ (faster) nudge", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
@@ -281,7 +282,7 @@ describe("WorkoutDetail", () => {
       screen.getAllByRole("button", { name: "Nudge faster" })[0]!,
     );
 
-    expect(screen.getByText("1:58.0–2:00.0")).toBeInTheDocument();
+    expect(screen.getByText("1:59.0")).toBeInTheDocument();
     expect(screen.getByText(/nudged −1s/)).toBeInTheDocument();
   });
 
@@ -294,9 +295,9 @@ describe("WorkoutDetail", () => {
     );
 
     expect(screen.getByText(/nudged \+1s/)).toBeInTheDocument();
-    // Hardcoded expectation (EN DASH, U+2013) — not recomputed via
-    // resolveSplit/toleranceRange, which would make this tautological.
-    expect(screen.getByText("2:00.0–2:02.0")).toBeInTheDocument();
+    // Hardcoded expectation — not recomputed via resolveSplit/fmtSplit,
+    // which would make this tautological.
+    expect(screen.getByText("2:01.0")).toBeInTheDocument();
   });
 
   it("shows the step's stroke rate in the sub-line", async () => {
@@ -613,7 +614,7 @@ describe("WorkoutDetail", () => {
     expect(screen.queryByText(/2′ rest/)).not.toBeInTheDocument();
   });
 
-  it("renders a rest step's label and duration with no target range or nudge controls", async () => {
+  it("renders a rest step's label and duration with no target split or nudge controls", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
@@ -625,14 +626,14 @@ describe("WorkoutDetail", () => {
     expect(
       within(restRow as HTMLElement).queryByRole("button"),
     ).not.toBeInTheDocument();
-    // No target range (EN DASH, U+2013) renders in a rest row — resting has
-    // no pace target to nudge.
+    // No target split (EN DASH, U+2013 — a band would render one) renders
+    // in a rest row — resting has no pace target to nudge.
     expect(
       within(restRow as HTMLElement).queryByText(/–/),
     ).not.toBeInTheDocument();
   });
 
-  it("renders a test step's label with no target range or nudge controls", async () => {
+  it("renders a test step's label with no target split or nudge controls", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
@@ -641,8 +642,8 @@ describe("WorkoutDetail", () => {
     expect(
       within(testRow as HTMLElement).queryByRole("button"),
     ).not.toBeInTheDocument();
-    // No target range (EN DASH, U+2013) renders in a test row — a test
-    // step is all-out effort, not paced to a target.
+    // No target split (EN DASH, U+2013 — a band would render one) renders
+    // in a test row — a test step is all-out effort, not paced to a target.
     expect(
       within(testRow as HTMLElement).queryByText(/–/),
     ).not.toBeInTheDocument();
@@ -654,10 +655,10 @@ describe("WorkoutDetail", () => {
 
     // liveSteps() would have expanded this into 4 separate work rows; the
     // handoff's raw-step model renders the block once with a marker above
-    // it, so there is exactly one range and exactly one pair of nudge
+    // it, so there is exactly one target and exactly one pair of nudge
     // buttons for the whole 4x block.
     expect(screen.getByText("4× the block below")).toBeInTheDocument();
-    expect(screen.getByText("1:51.0–1:53.0")).toBeInTheDocument();
+    expect(screen.getByText("1:52.0")).toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: "Nudge faster" }),
     ).toHaveLength(1);
@@ -672,11 +673,11 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText("4 MIN", { exact: false })).toBeInTheDocument();
 
     // One nudge covers the whole block: clicking the single ▲ moves the
-    // single displayed range, proving it's wired to the marker's raw
+    // single displayed split, proving it's wired to the marker's raw
     // step, not silently a no-op or scoped to one repetition.
     await userEvent.click(screen.getByRole("button", { name: "Nudge faster" }));
-    expect(screen.queryByText("1:51.0–1:53.0")).not.toBeInTheDocument();
-    expect(screen.getByText("1:50.0–1:52.0")).toBeInTheDocument();
+    expect(screen.queryByText("1:52.0")).not.toBeInTheDocument();
+    expect(screen.getByText("1:51.0")).toBeInTheDocument();
   });
 
   it("does not carry nudges from one workout to another when the route id changes without a component remount", async () => {
@@ -691,10 +692,10 @@ describe("WorkoutDetail", () => {
     await userEvent.click(screen.getByRole("link", { name: "Go to w2" }));
 
     // w2's step at the same raw index (its first work step) must render
-    // its neutral, un-nudged range — not w1's leftover nudge re-applied by
+    // its neutral, un-nudged split — not w1's leftover nudge re-applied by
     // index.
     expect(screen.queryByText(/nudged/)).not.toBeInTheDocument();
-    expect(screen.getByText("1:51.0–1:53.0")).toBeInTheDocument();
+    expect(screen.getByText("1:52.0")).toBeInTheDocument();
   });
 
   it("clamps a long run of same-direction nudges at MIN_SPLIT instead of drifting into a nonsense split", async () => {
@@ -704,14 +705,13 @@ describe("WorkoutDetail", () => {
     // 2k baseline is 112s; unclamped, 80 "faster" nudges would drive the
     // resolved split to 112 - 80 = 32s (and further presses toward
     // negative, where fmtSplit renders garbage like "-1:-1.0"). Clamped to
-    // MIN_SPLIT (60s), it should stop dead at "0:59.0–1:01.0" (tolerance 1)
-    // well before that.
+    // MIN_SPLIT (60s), it should stop dead at "1:00.0" well before that.
     const faster = screen.getByRole("button", { name: "Nudge faster" });
     for (let i = 0; i < 80; i++) {
       await userEvent.click(faster);
     }
 
-    expect(screen.getByText("0:59.0–1:01.0")).toBeInTheDocument();
+    expect(screen.getByText("1:00.0")).toBeInTheDocument();
   });
 
   it("renders Edit and Delete workout controls for a personal (non-global) workout", async () => {
