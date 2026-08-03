@@ -29,7 +29,7 @@ Three gaps in the plan flow:
   library. `durationsUnknown` suppresses cap claims in reason text.
 - `todayPick` (localStorage) keys on `{date, planKey, doneN}` — any
   mismatch silently discards. A pick absent from the pool falls back to
-  `sorted[0]` inside suggest (verified `suggest.ts:108-111`).
+  `sorted[0]` inside suggest (verified `suggest.ts:117-120`).
 - `PlanCode = WorkoutType | "TEST"`; `suggest` maps TEST → the TR pool.
 - The plan line renders `SESSION {doneN+1} OF 84 · {code}`.
 - `POST /api/logs` advances `done_n` in the store; the Log screen (6C) has
@@ -85,8 +85,10 @@ interface TodayOverrides {
 match exactly; garbage/shape-mismatch/stale → `null` (the todayPick
 idiom, same strict validation style as `libraryFilters.ts`). `save`/
 `clear` best-effort. **One invalidation rule for all of today's mood:** a
-new day, a switched/reset plan, or a logged session (doneN advance)
-resets swap + filters together — same semantics the pick already has.
+new day, a switched/reset plan, or a doneN advance resets swap + filters
+together — same semantics the pick already has. (See the Amendment below:
+this used to also say "a logged session," which is imprecise — the
+trigger is specifically the doneN advance, not the act of logging.)
 
 ### 3. Today UI (`Today.tsx`)
 
@@ -178,3 +180,31 @@ server-side; type chips in freestyle; PM5 (Phase 7); editing past logs.
 - A session can be logged without consuming a plan slot, from either
   door; the default behaviour is byte-identical to today's.
 - Full gates; screenshots checked.
+
+## Amendment (2026-08-03, final fix wave): the invalidation trigger is the
+doneN advance, not "a logged session"
+
+§2's original sentence said the swap+filters reset on "a new day, a
+switched/reset plan, or **a logged session (doneN advance)**" — two readings
+of the same clause, and they disagree the moment a log doesn't advance the
+plan. The whole-branch review walked the composed case directly: swap the
+type, run a session against the swapped pool, mark it OUTSIDE THE PLAN at
+log time, Save. `advancesPlan: false` skips the `done_n` upsert entirely
+(`server/stores/logs.ts`'s own `create`), so `doneN` is unchanged; Today
+remounts with the identical `{date, planKey, doneN}` key, `loadTodayOverrides`
+matches, and the swap survives.
+
+That's the correct behaviour, not a bug — and it's the ONLY reading the
+Decisions table's own composability clause allows. That table says a
+swapped session advancing the plan is "composable" specifically because "a
+swap the rower doesn't want counted can be marked outside-plan at log time."
+If marking a session outside-plan also reset the swap, the two features
+would cancel each other: the rower would lose the very swap they were
+mid-way through using, in the same action meant to let them keep it (an
+outside-plan log by definition didn't consume today's plan slot, so the
+rower still owes today's session — there's no reason today's mood about it
+should reset). "A logged session" as the trigger, read literally, would have
+mandated the wrong behaviour; "a doneN advance" is what the code correctly
+does, and is now the sentence's only reading. No new DEVIATIONS.md row is
+needed — the existing Today row there already documents the `{date, planKey,
+doneN}` invalidation contract; this amendment just makes §2 agree with it.

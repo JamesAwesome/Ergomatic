@@ -315,13 +315,14 @@ function TodayView({
   // Timer.tsx's own repaint interval); F2's resume card only needs a single
   // "elapsed so far" reading, not a live-updating stopwatch.
   const now = new Date();
-  // plan.sequence always has 84 entries while a plan is active; doneN can
-  // only reach 84 once every session is logged (out of scope this phase —
-  // 6C is what advances it) — treated the same as freestyle rather than
-  // crashing on a missing sequence entry. `prescribedCode` is the plan's OWN
-  // call (never affected by a type-swap chip below) — the plan line's first
-  // segment and the type chips' "which one is the un-swap target" both read
-  // off this, never off the swapped `todayCode`.
+  // plan.sequence always has 84 entries while a plan is active; doneN
+  // reaches 84 once every session has been logged (each advancing log
+  // increments it — server/stores/logs.ts's own upsert) — treated the same
+  // as freestyle rather than crashing on a missing sequence entry.
+  // `prescribedCode` is the plan's OWN call (never affected by a type-swap
+  // chip below) — the plan line's first segment and the type chips' "which
+  // one is the un-swap target" both read off this, never off the swapped
+  // `todayCode`.
   const prescribedCode: PlanCode | null =
     plan.planKey !== null ? (plan.sequence[plan.doneN]?.code ?? null) : null;
   const usesPlan = prescribedCode !== null;
@@ -576,29 +577,83 @@ function TodayView({
           (single-select, exactly one always active) · pain (toggle). Every
           tap re-runs suggest() above on the next render since they all
           write into `overrides`, which the suggestion computation reads
-          directly — no separate "apply" step. */}
-      <div className="chip-wrap today-filter-chips">
-        {DIFFICULTY_CHIPS.map(({ value, label }) => (
-          <TodayChip
-            key={value}
-            label={label}
-            active={overrides.difficulties.includes(value)}
-            onClick={() => handleDifficultyChip(value)}
-          />
-        ))}
-        {CAP_CHIPS.map(({ value, label }) => (
-          <TodayChip
-            key={label}
-            label={label}
-            active={overrides.capMinutes === value}
-            onClick={() => handleCapChip(value)}
-          />
-        ))}
-        <TodayChip
-          label="PAIN ≤3"
-          active={overrides.painMax3}
-          onClick={handlePainChip}
-        />
+          directly — no separate "apply" step.
+
+          Fix round 2 (whole-branch review, M4): these nine chips used to sit
+          as flat siblings in one `.chip-wrap`, mixing three different
+          selection semantics (multi-select, single-select-exactly-one-
+          always-active, and a plain toggle) behind one visual and one ARIA
+          vocabulary (every chip is `aria-pressed`) with nothing visible
+          distinguishing them — the row also wraps mid-cap-group at 390px,
+          so `HARD` and `≤60′` render pixel-identical despite opposite
+          behaviour. Grouped into three labelled clusters now, the same
+          `.classification-group`/`.classification-group-label` precedent
+          ClassificationCard.tsx uses for its own single-select DIFFICULTY
+          group — visible small mono labels, plus `role="group"` +
+          `aria-labelledby` pointing at each visible label for the
+          accessible name. `.today-filter-chips` itself, and every chip's
+          own class/behaviour, are UNCHANGED — only the wrapping structure
+          around them changed (still a single element with that class,
+          `e2e/today.spec.ts`'s own `.today-filter-chips` visibility check
+          stays a one-element match). */}
+      <div className="today-filter-chips">
+        <div className="today-filter-group">
+          <p
+            className="today-filter-group-label"
+            id="today-filter-difficulty-label"
+          >
+            DIFFICULTY
+          </p>
+          <div
+            className="chip-wrap"
+            role="group"
+            aria-labelledby="today-filter-difficulty-label"
+          >
+            {DIFFICULTY_CHIPS.map(({ value, label }) => (
+              <TodayChip
+                key={value}
+                label={label}
+                active={overrides.difficulties.includes(value)}
+                onClick={() => handleDifficultyChip(value)}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="today-filter-group">
+          <p className="today-filter-group-label" id="today-filter-time-label">
+            TIME
+          </p>
+          <div
+            className="chip-wrap"
+            role="group"
+            aria-labelledby="today-filter-time-label"
+          >
+            {CAP_CHIPS.map(({ value, label }) => (
+              <TodayChip
+                key={label}
+                label={label}
+                active={overrides.capMinutes === value}
+                onClick={() => handleCapChip(value)}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="today-filter-group">
+          <p className="today-filter-group-label" id="today-filter-pain-label">
+            PAIN
+          </p>
+          <div
+            className="chip-wrap"
+            role="group"
+            aria-labelledby="today-filter-pain-label"
+          >
+            <TodayChip
+              label="PAIN ≤3"
+              active={overrides.painMax3}
+              onClick={handlePainChip}
+            />
+          </div>
+        </div>
       </div>
 
       {recommended ? (

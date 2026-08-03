@@ -986,6 +986,25 @@ describe("GET/POST /api/logs", () => {
     expect(list.body).toHaveLength(1);
   });
 
+  // Fix round 2 (whole-branch review, L2): the fake logs store used to
+  // spread the WHOLE `LogInput` (including `advancesPlan`) into the row it
+  // stored, so `GET /api/logs` leaked a field production can never emit —
+  // the real `sessionLogs` table has no `advances_plan` column at all
+  // (`server/stores/logs.ts`'s own `create` uses the flag purely to gate
+  // the `plan_state` upsert, never to build the inserted row). This test
+  // exists specifically because `toMatchObject` elsewhere in this file
+  // wouldn't have caught an extra field — only a strict absence check does.
+  it("GET /api/logs never includes advancesPlan on the row, whichever way it was posted", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      advancesPlan: false,
+    });
+    const list = await asA(request(app).get("/api/logs"));
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0]).not.toHaveProperty("advancesPlan");
+  });
+
   // The "no plan row at all" arm: a brand-new user (no plan_state row ever
   // created) who logs a false row must still 201, and the plan must still
   // report the untouched, never-created state.

@@ -283,10 +283,10 @@ describe("Today (freestyle mode)", () => {
   });
 
   it("treats a plan with no sequence entry at doneN the same as freestyle, rather than crashing", async () => {
-    // A completed plan (doneN reached the end of the 84-session sequence)
-    // is out of scope this phase (6C advances doneN) — this pins the
-    // fallback documented at the todayCode computation: fall through to
-    // freestyle instead of indexing past the end of an empty/short array.
+    // A completed plan (doneN reached the end of the 84-session sequence,
+    // each advancing log having incremented it) — this pins the fallback
+    // documented at the todayCode computation: fall through to freestyle
+    // instead of indexing past the end of an empty/short array.
     mockReady({
       plan: { planKey: "sprint", doneN: 84, sequence: buildSequence(11, "AT") },
     });
@@ -519,6 +519,36 @@ describe("Today (filter chips: live narrowing)", () => {
       "false",
     );
   });
+
+  // Fix round 2 (whole-branch review, M4): the nine chips used to sit as
+  // flat siblings with no visible grouping — `HARD` and `≤60′` rendered
+  // pixel-identical despite opposite selection semantics (multi-select vs.
+  // single-select-exactly-one-always-active). Each cluster now has a
+  // visible mono label AND an accessible group name (`role="group"` +
+  // `aria-labelledby` pointing at that same visible label) — this pins
+  // both, and that each group actually contains the chips it claims to.
+  it("each filter cluster has a visible group label wired to an accessible group name", async () => {
+    mockReady();
+    await renderToday();
+
+    const difficultyGroup = screen.getByRole("group", { name: "DIFFICULTY" });
+    expect(screen.getByText("DIFFICULTY")).toBeVisible();
+    expect(
+      within(difficultyGroup).getByRole("button", { name: "EASY" }),
+    ).toBeInTheDocument();
+
+    const timeGroup = screen.getByRole("group", { name: "TIME" });
+    expect(screen.getByText("TIME")).toBeVisible();
+    expect(
+      within(timeGroup).getByRole("button", { name: "≤60′" }),
+    ).toBeInTheDocument();
+
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    expect(screen.getByText("PAIN")).toBeVisible();
+    expect(
+      within(painGroup).getByRole("button", { name: "PAIN ≤3" }),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("Today (overrides: persistence and invalidation)", () => {
@@ -691,7 +721,7 @@ describe("Today (type-swap chips)", () => {
     expect(painChip).toHaveAttribute("aria-pressed", "true");
   });
 
-  // Pins suggest.ts's own pick-lookup fallback (suggest.ts:108-111,
+  // Pins suggest.ts's own pick-lookup fallback (suggest.ts:117-120,
   // `sorted.find(...) ?? undefined` then `picked = pickOverride ?? sorted[0]`)
   // from the swap side: SHUFFLE/pick state itself is untouched by this task,
   // so a stale pick from BEFORE a swap has to fall back inside suggest

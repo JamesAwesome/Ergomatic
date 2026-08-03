@@ -331,6 +331,92 @@ test.describe("Today enhancements: the type-swap loop", () => {
 // already-established `choosePlan`/`resetPlanProgress`/`titles` cleanup
 // idiom rather than duplicating a third copy of them here.
 
+// Fix round 2 (whole-branch review, the swap × outside-plan seam): the
+// type-swap loop above proves the swap RESETS after an ADVANCING log, and
+// session.spec.ts's manual-door test proves the counter HOLDS after an
+// outside-plan log — but nothing before this crossed the two. The spec's
+// Amendment (2026-08-02-today-enhancements-design.md) settles that an
+// outside-plan log must NOT reset the swap either (composability: marking a
+// swapped session outside-plan would otherwise destroy the very swap the
+// rower is mid-way through using), and the review's own adjudication walked
+// this exact path by hand: `advancesPlan: false` skips the `done_n` upsert,
+// so the `{date, planKey, doneN}` key Today remounts with is unchanged,
+// `loadTodayOverrides` matches, and the swap survives.
+test.describe("Today enhancements: the swap x outside-plan composition seam", () => {
+  const title = "Today Swap Outside Plan E2E";
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("swap type -> run the swapped session -> Log OUTSIDE THE PLAN -> Save -> Today: counter unchanged, the swap survives, LAST THREE shows the row", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-swap-outside-plan@e2e.test",
+      name: "Today Swap Outside Plan Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // Same neutralize-then-import idiom as the type-swap loop test above:
+    // makes this fixture the guaranteed pick once the pool swaps to AN.
+    await neutralizeGlobalRecency(page, "AN");
+    await importBulk(
+      page,
+      [`${title} | AN | medium | 1`, "w 0:03 6k"].join("\n"),
+    );
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+
+    await page.goto("/today");
+    await expect(page.locator(".today-card")).toBeVisible();
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "SESSION 1 OF 84",
+    );
+    await expect(page.locator(".today-plan-line")).not.toContainText("→");
+
+    const anChip = page.getByRole("button", { name: "AN", exact: true });
+    await anChip.click();
+    await expect(page.locator(".today-plan-line")).toContainText("O2 → AN");
+    await expect(page.locator(".today-card-title")).toHaveText(title);
+
+    const card = page.locator(".today-card");
+    await card.click();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(page).toHaveURL(/\/session\/confirm$/);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+
+    await page.getByRole("link", { name: "Log this session" }).click();
+    await expect(page).toHaveURL(/\/session\/log$/);
+    const toggle = page.getByRole("button", { name: /COUNTS TOWARD PLAN/ });
+    await expect(toggle).toContainText("SESSION 1 OF 84");
+    await toggle.click();
+    await expect(
+      page.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Save session" }).click();
+
+    await expect(page).toHaveURL(/\/today$/);
+    // The seam itself: unlike the type-swap loop test's ADVANCING log
+    // (which bumps the counter to SESSION 2 OF 84 and resets the swap),
+    // an outside-plan log leaves doneN untouched — the counter stays put
+    // AND the swap survives, because the invalidation key never changed.
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "SESSION 1 OF 84",
+    );
+    await expect(page.locator(".today-plan-line")).toContainText("O2 → AN");
+
+    const topRow = page.locator(".today-log-row").first();
+    await expect(topRow).toContainText(title);
+    await expect(topRow.locator(".type-badge")).toHaveText("AN");
+  });
+});
+
 test.describe("Today enhancements: freestyle spot-check", () => {
   test("a no-plan user sees the filter chips but no type chips", async ({
     page,
