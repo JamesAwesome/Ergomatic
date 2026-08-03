@@ -142,8 +142,11 @@ async function seedLogs(page: Page, count: number): Promise<void> {
 }
 
 /** Navigates to a workout's detail screen by title via the real API list —
- *  used to reach Microburst (server/seed/starter.ts), the one starter
- *  workout with an effort-ref work step, without hardcoding its seeded id. */
+ *  used to reach Fork Lightning (server/seed/library/an.ts), one of the
+ *  library's effort-ref AN workouts (`{effort:"max"}`, reps×10, 0:30 work,
+ *  spm 32 — see Task 11's fixture-anchor mapping; the old 35-workout library
+ *  had exactly one such workout, Microburst, but the 300-workout library has
+ *  44), without hardcoding its seeded id. */
 async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
   const workout = await page.evaluate(async (t) => {
     const res = await fetch("/api/workouts");
@@ -161,8 +164,8 @@ async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
 
 // Phase 6B (Task 5): the session-route sweeps below (countdown, timer,
 // session complete) all need a tiny bulk-imported workout driven through
-// the real START -> countdown -> timer flow, not a starter workout — same
-// three-step idiom as e2e/session.spec.ts's own identical helpers,
+// the real START -> countdown -> timer flow, not a seeded library workout —
+// same three-step idiom as e2e/session.spec.ts's own identical helpers,
 // duplicated here per this file's own stated precedent (see
 // `cleanupByTitle`'s own comment above) rather than shared across files.
 
@@ -416,7 +419,7 @@ test.describe("workout detail screen", () => {
 // added to "workout detail screen" above: OwnerActions (WorkoutDetail.tsx)
 // renders Edit/Delete only for `!workout.isGlobal`, and that describe's own
 // beforeEach opens the first `.workout-row`, which is always one of the
-// seeded (global, read-only) starter workouts — Edit/Delete never render
+// seeded (global, read-only) library workouts — Edit/Delete never render
 // there at all. Author a personal workout through the builder instead, the
 // only way to land on a workout this signed-in user actually owns.
 test.describe("workout detail screen (personal workout, owner actions)", () => {
@@ -664,22 +667,25 @@ test.describe("plan screen (a plan active)", () => {
   });
 });
 
-// The confirm sweep's own fixture: Microburst (server/seed/starter.ts) is
-// the one starter workout with an effort-ref work step (`{effort:"max"}`)
-// AND a reps marker — the no-nudge, no-remove-on-the-marker layout that a
-// split-only workout (e.g. any other starter) never renders at all. Sweeping
-// only a split-ref confirm screen would repeat exactly the "every test built
-// the same shape" blind spot this task's brief calls out.
-test.describe("confirm targets screen (effort step present — Microburst)", () => {
+// The confirm sweep's own fixture: Fork Lightning (server/seed/library/an.ts)
+// is an AN-hard workout with an effort-ref work step (`{effort:"max"}`) AND
+// a reps marker (reps×10) — the no-nudge, no-remove-on-the-marker layout
+// that a split-only workout (e.g. any other library entry) never renders at
+// all. In the old 35-workout library, Microburst was the sole such workout;
+// Fork Lightning is Task 11's chosen replacement anchor (same shape: 0:30
+// work, effort:max, spm 32). Sweeping only a split-ref confirm screen would
+// repeat exactly the "every test built the same shape" blind spot this
+// task's brief calls out.
+test.describe("confirm targets screen (effort step present — Fork Lightning)", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await signInViaBackdoor(page, {
       email: `design-confirm-${testInfo.parallelIndex}@e2e.test`,
       name: "Design Confirm Tester",
     });
     await setBaselines(page);
-    await gotoWorkoutByTitle(page, "Microburst");
+    await gotoWorkoutByTitle(page, "Fork Lightning");
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
-      "Microburst",
+      "Fork Lightning",
     );
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page).toHaveURL(/\/session\/confirm$/);
@@ -1047,9 +1053,9 @@ test.describe("builder screen", () => {
   // an already-saved (edit-mode) workout — see builder.spec.ts's own
   // "editing a workout with a stored warm-up" test, which this mirrors to
   // get an edit-mode screen open, but for the axe/tap-target sweep instead
-  // of a save-round-trip assertion. Every one of the 35 starter workouts
-  // opens with a `wu`, so this is the realistic, common case the earlier
-  // sweep never touched.
+  // of a save-round-trip assertion. Every one of the library's 300 workouts
+  // opens with a `wu` (verified in Task 12's docs reconcile), so this is the
+  // realistic, common case the earlier sweep never touched.
   test.describe("edit mode with a stored warm-up row (wu StepCard)", () => {
     const title = "Design WU Sweep";
 
@@ -1071,7 +1077,7 @@ test.describe("builder screen", () => {
         name: "Design Builder WU Tester",
       });
       // Bulk import is the only way to get a `wu` row into a personal
-      // (editable) workout — starter workouts are global and can't be
+      // (editable) workout — seeded library workouts are global and can't be
       // edited (EditWorkout.tsx refuses isGlobal workouts), and the
       // create-mode builder has no control that can author one.
       await page.goto("/library/import");
@@ -1738,8 +1744,13 @@ test.describe("log session screen (session door)", () => {
     // DESIGN_BASELINES' k6Seconds (120.0) -> "2:00.0", recovered exactly
     // regardless of this step's own -2 offset — the baseline, not the
     // per-step split. F1 (whole-branch review): no step here references
-    // "2k" at all, so that half is OMITTED entirely (not a "2K —" dash —
-    // 0 of the 35 seeded starters reference both bases in one workout).
+    // "2k" at all, so that half is OMITTED entirely (not a "2K —" dash).
+    // This fixture is a bulk-imported synthetic (single 6k-only step) that
+    // deliberately doesn't mix bases, to prove the OMIT branch directly —
+    // most of the library doesn't either (only 3 of the 300 generated
+    // workouts reference both bases, per Task 11/12's LogSession.tsx and
+    // DEVIATIONS.md reconciliation), but this test never depends on a real
+    // seeded workout's shape.
     await expect(page.locator(".log-paces-value")).toHaveText("6K 2:00.0");
     await expect(page.locator(".log-step-row")).toHaveCount(1);
     // 118.0s target (120 - 2), shown as the frozen split this step was

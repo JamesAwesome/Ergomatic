@@ -222,7 +222,7 @@ test("library", async ({ page }) => {
   await setBaselines(page);
 
   // Phase 5H: personal (non-global) workouts now wear a CUSTOM badge on
-  // the library row's second line. Every seeded starter workout is
+  // the library row's second line. Every seeded library workout is
   // global, so without authoring one of its own first, this capture would
   // never show the badge at all — same reasoning as "workout-detail"'s
   // own builder-authored personal workout below. Simplest valid form:
@@ -240,7 +240,7 @@ test("library", async ({ page }) => {
   // page.goto only waits for the navigation's load event, not that — wait
   // for a real row so the screenshot isn't just the loading state.
   await page.locator(".workout-row").first().waitFor();
-  // The library sorts the 36 global starter workouts ahead of a single
+  // The library sorts the 300 global library workouts ahead of a single
   // freshly-authored personal one, so it lands well past the first
   // viewport-height screen — the CUSTOM filter chip (Phase 5H) isolates it
   // so the committed capture actually shows the badge, not just a taller
@@ -291,7 +291,7 @@ test("workout-detail", async ({ page }) => {
 
   // A personal (non-global) workout, authored through the builder like the
   // "builder" capture below — WorkoutDetail.tsx renders Edit/Delete only
-  // for `!workout.isGlobal`, and every seeded starter workout is global, so
+  // for `!workout.isGlobal`, and every seeded library workout is global, so
   // the previous version of this capture (the library's first row) never
   // showed Task 8's owner-action styling fix at all. This replaces that
   // capture rather than adding a second one: a screenshot of a *global*
@@ -657,7 +657,7 @@ test("countdown", async ({ page }) => {
   });
   await setBaselines(page);
   // A warm-up-first, three-step ladder — the realistic shape the seeded
-  // starter library itself uses (CLAUDE.md's own "test against a realistic
+  // library itself uses (CLAUDE.md's own "test against a realistic
   // fixture" rule), not a single bare work step. The countdown's own
   // next-phase line reads the CURRENT (warm-up) phase's resolved label —
   // "Easy" — the same never-a-dash word every warm-up phase resolves to.
@@ -798,11 +798,12 @@ test("log-session", async ({ page }) => {
   await setBaselines(page);
   // F1 (whole-branch review): the FIRST capture used two split-ref steps
   // (one "2k", one "6k") to show the PACES LOCKED panel's own two-slot
-  // form — but 0 of the 35 seeded starters ever reference both bases in
-  // one workout (16 are 2k-only, 18 are 6k-only, and Microburst references
-  // neither), so that shape can't happen in production and the panel
-  // NEVER actually renders both. This capture uses a REAL single-base
-  // shape instead — one 60-SECOND (not an artificially tiny 3s) split-ref
+  // form — but only 3 of the library's 300 generated workouts ever
+  // reference both bases in one workout (LogSession.tsx's own reconciled
+  // comment, Task 11/12), so that shape is rare enough in production that
+  // the panel showing both is the exception, not the rule. This capture
+  // uses a REAL single-base shape instead — one 60-SECOND (not an
+  // artificially tiny 3s) split-ref
   // TIME step at "6k" (off 0) — so the TOTAL reads as a genuine non-zero
   // "1 MIN" rather than the earlier capture's misleading "0 MIN", and the
   // PACES LOCKED panel shows only the 6K half, matching what an actual

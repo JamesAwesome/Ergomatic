@@ -252,7 +252,7 @@ test.describe("authoring loop", () => {
     await expect(page.getByText(title, { exact: false })).not.toBeVisible();
   });
 
-  test("a global starter workout's detail shows no Edit or Delete control", async ({
+  test("a global library workout's detail shows no Edit or Delete control", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -263,8 +263,8 @@ test.describe("authoring loop", () => {
     await page.goto("/library");
 
     // A brand-new user has no personal workouts yet, so every row on a
-    // fresh /library is one of the 35 global starters (server/seed/
-    // starter.ts) — the first is as good as any for asserting the
+    // fresh /library is one of the seeded global workouts (server/seed/
+    // library/index.ts) — the first is as good as any for asserting the
     // read-only affordance.
     await page.locator(".workout-row").first().click();
     await expect(page.locator("h1.workout-detail-title")).toBeVisible();
@@ -567,7 +567,7 @@ test.describe("new controls this phase introduced", () => {
     // The builder has no `+ WARM-UP` control any more (docs/design/
     // DEVIATIONS.md) — a `wu` row can only land in a form via bulk import
     // or an already-saved workout, so bulk import is how this test
-    // manufactures one to then edit, mirroring every starter workout's own
+    // manufactures one to then edit, mirroring every library workout's own
     // shape (they all open with a stored warm-up).
     await page.goto("/library/import");
     const title = "WU Edit Row";
@@ -627,8 +627,10 @@ test.describe("new controls this phase introduced", () => {
     });
     await setBaselines(page);
     // Bulk import a work step carrying rest (domain/bulk.ts's inline `r5`
-    // token) — the same shape a real starter workout (Doldrums,
-    // server/seed/starter.ts) carries. `stepToRow` writes the stored
+    // token) — the same shape a real library workout (Hoarfrost,
+    // server/seed/library/o2.ts — Task 11's fixture-anchor replacement for
+    // the retired Doldrums, same reps count and rest minutes) carries.
+    // `stepToRow` writes the stored
     // `restMinutes` into `row.rest` as a clock string ("5:00"); before this
     // fix `restSecondsFromRow` still read that with a bare `Number(...)`
     // (NaN), so one tap of REST wrote the literal string "NaN" back into
@@ -691,11 +693,11 @@ test.describe("new controls this phase introduced", () => {
 
     // The reported bug, end to end: nameGenerator.ts used to probe linearly
     // forward from a seed-derived start index, and its noun list opened
-    // with the same weather words the starter library's own titles use —
-    // every seed inside that taken cluster slid to the same first-free
-    // slot, so repeated presses returned the same name forever (fixed in
-    // Task 1; unit-covered in nameGenerator.test.ts against the real
-    // starter library — this proves the same fix through the live UI).
+    // with the same weather words the library's own titles use — every seed
+    // inside that taken cluster slid to the same first-free slot, so
+    // repeated presses returned the same name forever (fixed in Task 1;
+    // unit-covered in nameGenerator.test.ts against the real 300-workout
+    // library — this proves the same fix through the live UI).
     expect(second).not.toBe(first);
   });
 

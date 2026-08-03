@@ -129,7 +129,7 @@ async function startFromLibrary(page: Page, title: string): Promise<void> {
 }
 
 /** START on Confirm, then SKIP the countdown — the same handoff flows.spec.ts's
- *  own Phase 6A/6B test already proves against a real starter workout;
+ *  own Phase 6A/6B test already proves against a real seeded workout;
  *  reused here verbatim for this file's own tiny bulk-imported fixtures. */
 async function startAndSkipCountdown(page: Page): Promise<void> {
   await page.getByRole("button", { name: "START" }).click();
