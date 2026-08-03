@@ -269,6 +269,41 @@ async function assertNoA11yViolations(page: Page): Promise<void> {
   expect(results.violations).toEqual([]);
 }
 
+// --ink-4's own rgb (tokens.css #6f6a5f) — computed once here rather than
+// re-derived per call site.
+const INK_4_RGB = "rgb(111, 106, 95)";
+
+/** Task 1 (ui-fix round) contrast sweep: docs/design/handoffs/2026-08-03-
+ *  ui-fix/DESIGN.md's contrast note — "All small mono labels in the mockup
+ *  are --ink-3 or darker" — --ink-4 measures only 4.48:1 against
+ *  --surface-sunken (index.css's own token comment), just under the 4.5:1
+ *  AA floor, even though it clears comfortably against --page/--surface
+ *  (4.76:1/5.29:1). Walking every leaf element rather than asserting a
+ *  fixed list of selectors is deliberate: a label some future task adds at
+ *  this size inherits the same guard automatically instead of needing its
+ *  own new pin. Leaf-only (no element children) — a wrapper's own computed
+ *  font-size/color describe layout, not what's actually painted as text. */
+async function assertNoFailingInk4Labels(page: Page): Promise<void> {
+  const offenders = await page.evaluate((ink4) => {
+    const bad: string[] = [];
+    document.querySelectorAll("body *").forEach((node) => {
+      const el = node as HTMLElement;
+      if (el.children.length > 0) return;
+      if ((el.textContent ?? "").trim() === "") return;
+      const style = getComputedStyle(el);
+      const fontSize = parseFloat(style.fontSize);
+      const isMono = style.fontFamily.toLowerCase().includes("mono");
+      if (fontSize <= 11 && isMono && style.color === ink4) {
+        bad.push(
+          `${el.tagName}.${el.className || "(no class)"}: "${(el.textContent ?? "").slice(0, 40)}"`,
+        );
+      }
+    });
+    return bad;
+  }, INK_4_RGB);
+  expect(offenders).toEqual([]);
+}
+
 test.describe("sign-in screen (signed out)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -415,6 +450,28 @@ test.describe("workout detail screen", () => {
       .evaluate((el) => getComputedStyle(el).color);
     expect(backLinkColor).toBe("rgb(27, 26, 23)"); // --ink
   });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Task 1 (ui-fix round): Start is the screen's one L1, at the level
+  // system's own 56px — not the pre-Task-1 `.button-primary`'s 52px (which
+  // itself under-rendered further still, DEVIATIONS.md's IMP-6 row: a real
+  // `<button>`'s UA chrome added ~6px on top of THAT). `.button-l1` zeroes
+  // padding/border explicitly so this is the first button in the app whose
+  // rendered height actually equals its own spec.
+  test("Start is the screen's one L1 action, rendered at 56px", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Start");
+    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBe(56);
+  });
 });
 
 // Task 8's `.button-outline` fix (color/text-decoration/inline-flex, so the
@@ -467,6 +524,49 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
     });
     expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink
     expect(styles.decoration).toBe("none");
+  });
+
+  // Task 1 (ui-fix round): one merged `.action-stack` — Edit (L2, 52px) and
+  // Delete (L4, 52px) render as this owned workout's own stack items, under
+  // a rule divider, rather than a second detached block. Structural proof
+  // OwnerActions' `display: contents` wrapper (index.css) actually puts its
+  // children in the SAME flex stack, not just visually adjacent to it.
+  test("Edit and Delete render at the level system's 52px, under a rule, inside the one action stack", async ({
+    page,
+  }) => {
+    const stack = page.locator(".action-stack");
+    await expect(stack).toHaveCount(1);
+
+    const edit = page.getByRole("link", { name: "Edit" });
+    const editHeight = await edit.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(editHeight).toBe(52);
+    await expect(edit).toHaveClass(/button-l2/);
+
+    const del = page.getByRole("button", { name: "Delete", exact: true });
+    const delHeight = await del.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(delHeight).toBe(52);
+    await expect(del).toHaveClass(/button-l4/);
+    const delColor = await del.evaluate((el) => getComputedStyle(el).color);
+    expect(delColor).toBe("rgb(181, 52, 31)"); // --accent, outlined not solid
+
+    await expect(stack.locator(".action-stack-rule")).toHaveCount(1);
+
+    // Both Edit and Delete fall within the ONE stack's own bounding box
+    // (not a second, separately-positioned block below it) — the visible
+    // proof that `display: contents` (index.css) actually puts OwnerActions'
+    // children in this flex column's own layout rather than merely sitting
+    // next to it.
+    const stackBox = (await stack.boundingBox())!;
+    const editBox = (await edit.boundingBox())!;
+    const delBox = (await del.boundingBox())!;
+    expect(editBox.y).toBeGreaterThanOrEqual(stackBox.y);
+    expect(delBox.y + delBox.height).toBeLessThanOrEqual(
+      stackBox.y + stackBox.height + 1,
+    );
   });
 });
 
@@ -538,13 +638,22 @@ test.describe("today screen (plan active, logs present)", () => {
       .evaluate((el) => getComputedStyle(el).borderColor);
     expect(cardBorder).toBe("rgb(27, 26, 23)"); // --ink
 
-    // LAST THREE's own mono meta line ("JUL 25 · HELD · 2/5" shape) —
-    // docs/design/DEVIATIONS.md's ink-4 substitution row.
+    // LAST THREE's own mono meta line ("JUL 25 · HELD · 2/5" shape) — Task 1
+    // (ui-fix round) moved this off --ink-4 (4.76:1 here, but part of the
+    // blanket "no small mono label reads --ink-4" sweep DESIGN.md's contrast
+    // note calls for) onto --ink-3, same substitution as every other small
+    // mono label this task's sweep touched (index.css).
     const logMetaColor = await page
       .locator(".today-log-meta")
       .first()
       .evaluate((el) => getComputedStyle(el).color);
-    expect(logMetaColor).toBe("rgb(111, 106, 95)"); // --ink-4
+    expect(logMetaColor).toBe("rgb(87, 84, 76)"); // --ink-3
+  });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
   });
 
   // Today enhancements (Task 4): the chip row's default aria-pressed state
@@ -604,6 +713,83 @@ test.describe("today screen (plan active, logs present)", () => {
     await expect(o2Chip).toHaveAttribute("aria-pressed", "true");
     await expect(atChip).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator(".today-plan-line")).not.toContainText("→");
+  });
+
+  // Task 1 (ui-fix round): "the fix for Today vs Builder" — a selected type
+  // chip fills with ITS OWN type color (identical rule to Builder's
+  // ClassificationCard, DESIGN.md's "Identical chip whether the rower is
+  // filtering or authoring"), never the flat accent red this used to render
+  // (the bug DESIGN.md names explicitly). Every OTHER selection here
+  // (DIFFICULTY/TIME/PAIN) fills ink instead — accent no longer means
+  // "selected" anywhere on this screen.
+  test("the active type-swap chip fills with its own type color, not accent", async ({
+    page,
+  }) => {
+    const o2Chip = page.getByRole("button", { name: "O2", exact: true });
+    const o2Bg = await o2Chip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(o2Bg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+
+    const atChip = page.getByRole("button", { name: "AT", exact: true });
+    await atChip.click();
+    const atBg = await atChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(atBg).toBe("rgb(138, 95, 24)"); // --type-at
+  });
+
+  test("selected DIFFICULTY/TIME/PAIN chips fill ink, never accent", async ({
+    page,
+  }) => {
+    const easyChip = page.getByRole("button", { name: "EASY", exact: true });
+    const easyBg = await easyChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
+
+    const capChip = page.getByRole("button", { name: "≤60′", exact: true });
+    const capBg = await capChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(capBg).toBe("rgb(27, 26, 23)"); // --ink
+
+    const painChip = page.getByRole("button", { name: "PAIN ≤3" });
+    await painChip.click();
+    const painBg = await painChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(painBg).toBe("rgb(27, 26, 23)"); // --ink
+  });
+
+  // Item 4 (DESIGN.md): SHUFFLE stops being "its own species" — 44px chip
+  // geometry, transparent fill, mono 11/0.14em ink-1 label, 1px rule-3
+  // border, parked right of the header label (unchanged position). Pool
+  // has 35 starters minus the difficulty/cap/pain filters, comfortably >1
+  // member with this describe's fixture, so SHUFFLE is enabled here.
+  test("SHUFFLE re-cut to chip geometry: 44px, transparent, mono ink-1 label, rule-3 border", async ({
+    page,
+  }) => {
+    const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
+    await expect(shuffle).toBeEnabled();
+    const styles = await shuffle.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return {
+        height: box.height,
+        background: s.backgroundColor,
+        borderColor: s.borderColor,
+        borderStyle: s.borderStyle,
+        color: s.color,
+        fontFamily: s.fontFamily,
+      };
+    });
+    expect(styles.height).toBe(44);
+    expect(styles.background).toBe("rgba(0, 0, 0, 0)"); // transparent
+    expect(styles.borderColor).toBe("rgb(201, 195, 178)"); // --rule-3
+    expect(styles.borderStyle).toBe("solid");
+    expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink-1 (alias of --ink)
+    expect(styles.fontFamily.toLowerCase()).toContain("mono");
   });
 });
 
@@ -801,16 +987,51 @@ test.describe("confirm targets screen (effort step present — Heat Lightning)",
       expect(labelStyles.decoration).toBe("line-through");
 
       // Pins the fix for a real finding this sweep caught: the DUR field
-      // label is ink-4 (5.29:1) on the row's ordinary --surface, but the
-      // SAME class sat at only 4.48:1 on --surface-sunken before index.css
-      // gained a `.confirm-step-removed .step-editor-row-label` override —
-      // failing axe's color-contrast rule the first time this test ran.
+      // label used to be ink-4 (5.29:1) on the row's ordinary --surface,
+      // but the SAME class sat at only 4.48:1 on --surface-sunken before
+      // index.css gained a struck-row override — failing axe's
+      // color-contrast rule the first time this test ran. Task 1 (ui-fix
+      // round)'s own blanket small-mono-label sweep since moved
+      // `.step-editor-row-label`'s BASE rule to --ink-3 everywhere, so the
+      // struck-row override that used to carry this colour is gone — this
+      // now just confirms the base rule still resolves the same way here.
       const durLabelColor = await row
         .locator(".step-editor-row-label")
         .first()
         .evaluate((el) => getComputedStyle(el).color);
       expect(durLabelColor).toBe("rgb(87, 84, 76)"); // --ink-3
     });
+  });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Task 1 (ui-fix round): the small bottom-right START becomes a
+  // full-width L1 "Looks right, start" at 56px, below the TOTAL line —
+  // matching Detail and Builder's own L1. REMOVE (the per-row control)
+  // stays the existing 44px text control (`.confirm-toggle-btn`),
+  // unchanged.
+  test("the confirm footer's one L1 action reads 'Looks right, start' at 56px, below the recount", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Looks right, start");
+    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBe(56);
+
+    const recountBox = (await page.locator(".confirm-recount").boundingBox())!;
+    const l1Box = (await l1.boundingBox())!;
+    expect(l1Box.y).toBeGreaterThan(recountBox.y);
+
+    const remove = page.getByRole("button", { name: "Remove Row 1" });
+    const removeHeight = await remove.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(removeHeight).toBe(44);
   });
 });
 
@@ -945,6 +1166,93 @@ test.describe("builder screen", () => {
       .getByRole("button", { name: "Repeat up" })
       .evaluate((el) => getComputedStyle(el).userSelect);
     expect(stepperSelect).toBe("none");
+  });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Task 1 (ui-fix round): "Save to library stays L1" — the screen's one
+  // L1, now the level system's own 56px class rather than the bespoke
+  // 62px `.builder-save`.
+  test("Save to library is the screen's one L1 action, rendered at 56px", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Save to library");
+    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBe(56);
+  });
+
+  // Task 1 (ui-fix round): DONE is a NAMED level (L3) — solid ink, mono
+  // 12/600, 0.16em, 48px — "was already black" (DESIGN.md) but not
+  // previously part of any named system.
+  test("the step editor's DONE button is L3: solid ink, mono, 48px", async ({
+    page,
+  }) => {
+    const done = page.getByRole("button", { name: "DONE" });
+    const styles = await done.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        height: el.getBoundingClientRect().height,
+        background: s.backgroundColor,
+        color: s.color,
+        fontFamily: s.fontFamily,
+        fontSize: s.fontSize,
+        fontWeight: s.fontWeight,
+        letterSpacing: s.letterSpacing,
+      };
+    });
+    expect(styles.height).toBe(48);
+    expect(styles.background).toBe("rgb(27, 26, 23)"); // --ink
+    expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
+    expect(styles.fontFamily.toLowerCase()).toContain("mono");
+    expect(styles.fontSize).toBe("12px");
+    expect(styles.fontWeight).toBe("600");
+    // getComputedStyle resolves letter-spacing to its computed PIXEL value,
+    // not the authored em string — 0.16em @ 12px font-size = 1.92px.
+    expect(styles.letterSpacing).toBe("1.92px");
+  });
+
+  // Task 1 (ui-fix round): DESIGN.md's selected-state fix, Builder's own
+  // half — PAIN's old per-level ramp colour goes ("Builder's gold pain
+  // selection goes"), DIFFICULTY was already ink (ClassificationCard.tsx's
+  // own unit tests cover that structurally); both read ink here too, in a
+  // real browser, alongside PACE (2k/6k/MAX/MIN) and the MIN/M duration
+  // unit toggle — none of them accent.
+  test("selected PAIN/DIFFICULTY/PACE/MIN-M chips fill ink, never accent", async ({
+    page,
+  }) => {
+    const painChip = page.getByRole("button", { name: "Pain 4" });
+    await painChip.click();
+    const painBg = await painChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(painBg).toBe("rgb(27, 26, 23)"); // --ink, not --pain-ramp-4
+
+    const hardChip = page.getByRole("button", { name: "HARD", exact: true });
+    await hardChip.click();
+    const hardBg = await hardChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(hardBg).toBe("rgb(27, 26, 23)"); // --ink
+
+    const sixK = page.getByRole("radio", { name: /pace 6K/i });
+    await sixK.click();
+    const sixKBg = await sixK.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(sixKBg).toBe("rgb(27, 26, 23)"); // --ink, not --accent
+
+    const meters = page.getByRole("radio", { name: /duration unit meters/i });
+    await meters.click();
+    const metersBg = await meters.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(metersBg).toBe("rgb(27, 26, 23)"); // --ink
   });
 
   // A prior review (5B) only ever swept the builder blank — never after a
@@ -1429,6 +1737,12 @@ test.describe("timer screen (portrait, TIME phase)", () => {
       page.getByRole("button", { name: "Next phase" }),
     ).toBeVisible();
   });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
 });
 
 // Phase 6B (Task 5): the live timer in a DISTANCE work phase (meters
@@ -1672,16 +1986,24 @@ test.describe("session complete screen (with a recorded actual)", () => {
   test("TOTAL and the recorded actual split match the token palette", async ({
     page,
   }) => {
+    // Task 1 (ui-fix round): moved off --ink-4 onto --ink-3, same blanket
+    // small-mono-label sweep as Today's `.today-log-meta` above.
     const totalLabelColor = await page
       .locator(".complete-total-label")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(totalLabelColor).toBe("rgb(111, 106, 95)"); // --ink-4
+    expect(totalLabelColor).toBe("rgb(87, 84, 76)"); // --ink-3
 
     await expect(page.locator(".complete-actual-row")).toHaveCount(1);
     const actualColor = await page
       .locator(".complete-actual-value")
       .evaluate((el) => getComputedStyle(el).color);
     expect(actualColor).toBe("rgb(181, 52, 31)"); // --accent
+  });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
   });
 
   // Final-review triage item (see the countdown describe's identical test
@@ -1696,6 +2018,31 @@ test.describe("session complete screen (with a recorded actual)", () => {
       clientHeight: document.documentElement.clientHeight,
     }));
     expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+  });
+
+  // Task 1 (ui-fix round): the two half-width side-by-side buttons become
+  // full-width L1/L2 blocks in one `.action-stack` — one L1 ("Log this
+  // session") per screen, "Back to Today" at L2's own 52px.
+  test("Log this session (L1, 56px) stacks above Back to Today (L2, 52px) in one action stack", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Log this session");
+    const l1Height = await l1.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(l1Height).toBe(56);
+
+    const l2 = page.getByRole("button", { name: "Back to Today" });
+    const l2Height = await l2.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(l2Height).toBe(52);
+
+    const l1Box = (await l1.boundingBox())!;
+    const l2Box = (await l2.boundingBox())!;
+    expect(l2Box.y).toBeGreaterThan(l1Box.y);
   });
 });
 

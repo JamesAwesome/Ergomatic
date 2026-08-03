@@ -401,8 +401,8 @@ test("confirm", async ({ page }) => {
   ).toBeVisible();
 
   // Fix (final whole-branch review): four step-editor rows plus the header
-  // push `.confirm-footer` (the recount + START — the screen's one
-  // load-bearing control) below the 390×844 viewport, so a viewport-only
+  // push `.confirm-footer` (the recount + "Looks right, start" — the
+  // screen's one L1) below the 390×844 viewport, so a viewport-only
   // capture used to cut it off entirely. Same fullPage + fixed-tabbar
   // neutralizer as "builder" above, for the same reason: a fullPage
   // capture on a document taller than the viewport stitches the fixed

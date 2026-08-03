@@ -672,6 +672,44 @@ describe("Today (type-swap chips)", () => {
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   });
 
+  // Task 1 (ui-fix round): DESIGN.md's selected-state fix — "Today's
+  // accent-red O2 chip is the bug; it goes." The active type-swap chip now
+  // fills with ITS OWN type colour (mirroring ClassificationCard.tsx's own
+  // TYPE test), never a flat accent, and an inactive chip carries no style
+  // at all.
+  it("fills the active type-swap chip with its own type colour, not accent — inactive chips carry no style", async () => {
+    mockReady();
+    await renderToday();
+    const atChip = screen.getByRole("button", { name: "AT" });
+    expect(atChip).toHaveAttribute(
+      "style",
+      expect.stringContaining("--type-at"),
+    );
+    expect(atChip).toHaveAttribute(
+      "style",
+      expect.stringContaining("--on-color"),
+    );
+    expect(screen.getByRole("button", { name: "O2" })).not.toHaveAttribute(
+      "style",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "style",
+      expect.stringContaining("--type-o2"),
+    );
+    // AT just went from active to inactive: React clears the style
+    // properties but (a documented React DOM quirk) can leave a bare
+    // `style=""` attribute behind rather than removing it outright — assert
+    // the type colour is gone, not attribute presence, which is what
+    // actually matters here.
+    expect(screen.getByRole("button", { name: "AT" })).not.toHaveAttribute(
+      "style",
+      expect.stringContaining("--type-at"),
+    );
+  });
+
   it("tapping the already-prescribed chip un-swaps and restores the original pool", async () => {
     mockReady();
     await renderToday();

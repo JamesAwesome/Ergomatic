@@ -368,15 +368,16 @@ export default function ConfirmTargets() {
           />
         ))}
       </div>
+      {/* Task 1 (ui-fix round): the small bottom-right START becomes a
+          full-width L1 "Looks right, start" (56px) below the TOTAL line,
+          matching Detail's and Builder's own L1 — `.confirm-footer` moved
+          from a row (recount + button side by side) to a column so the
+          button sits BELOW the recount rather than beside it. */}
       <footer className="confirm-footer">
         <span className="confirm-recount">{minutesLabel}</span>
         {baselines ? (
-          <button
-            type="button"
-            className="button-primary confirm-start"
-            onClick={handleStart}
-          >
-            START
+          <button type="button" className="button-l1" onClick={handleStart}>
+            Looks right, start
           </button>
         ) : (
           // Controller decision (Phase 6B Task 2's own flagged gap):

@@ -326,7 +326,7 @@ describe("SessionComplete", () => {
     expect(keepAwakeOff).toHaveBeenCalledTimes(1);
   });
 
-  it("renders a Log this session link to /session/log, beside Back to Today", async () => {
+  it("renders a Log this session link to /session/log, stacked above Back to Today", async () => {
     mockKeepAwake();
     completeDraftAndRun();
     await renderComplete();

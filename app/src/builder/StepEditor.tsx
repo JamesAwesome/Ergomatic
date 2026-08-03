@@ -278,7 +278,12 @@ export default function StepEditor({
         </div>
       )}
 
-      <button type="button" className="step-editor-done" onClick={onDone}>
+      {/* Task 1 (ui-fix round): DONE is a NAMED level (L3, commit-in-card)
+          — solid ink, mono 12/600, 0.16em, 48px. It "was already black"
+          (DESIGN.md) via the pre-Task-1 `.step-editor-done` class; this is
+          that same look, formalized into the level system's own shared
+          class rather than a StepEditor-only one-off. */}
+      <button type="button" className="button-l3" onClick={onDone}>
         DONE
       </button>
     </div>

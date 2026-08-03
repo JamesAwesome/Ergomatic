@@ -32,6 +32,18 @@ import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 // alphabetical).
 const TYPE_CHIPS: WorkoutType[] = ["AN", "O2", "AT", "TR"];
 
+// CSS custom property per workout type — never a raw hex (tokens.css). Kept
+// local rather than shared with ClassificationCard.tsx's own identical map:
+// this repo's established per-file duplication convention (that file's own
+// comment on TYPE_COLOR_VAR explains the precedent — Builder.tsx, PainBar.tsx
+// and TypeBadge.tsx each already keep their own copy).
+const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
+  O2: "--type-o2",
+  AT: "--type-at",
+  AN: "--type-an",
+  TR: "--type-tr",
+};
+
 // "≤NN′" — Library's own prime-mark idiom for minutes (FilterChips.tsx's
 // DURATION_CHIPS), applied here to an upper-bound cap rather than a range
 // bucket, hence "≤" instead of Library's "<"/"–"/"+".
@@ -47,21 +59,41 @@ const CAP_CHIPS: { value: number | null; label: string }[] = [
  *  convention as Library's own FilterChips.tsx `Chip`, not that component
  *  itself: Today's chips have different selection semantics per group
  *  (multi-select difficulties, single-select cap, a toggle, and a type
- *  swap that reads its active state off two different sources). */
+ *  swap that reads its active state off two different sources).
+ *
+ *  `typeColorVar` (Task 1, ui-fix round — DESIGN.md's selected-state fix):
+ *  only the type-swap chips pass this, mirroring ClassificationCard.tsx's
+ *  own inline-style-when-selected treatment for TYPE exactly, so the same
+ *  chip reads identically whether the rower is filtering here or authoring
+ *  in the builder. Every other chip here (DIFFICULTY/TIME/PAIN) leaves it
+ *  undefined and falls through to `.today-filter-chips .chip[aria-pressed=
+ *  "true"]`'s own ink fill (index.css) — accent no longer means "selected"
+ *  on this screen at all. */
 function TodayChip({
   label,
   active,
   onClick,
+  typeColorVar,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  typeColorVar?: string;
 }) {
   return (
     <button
       type="button"
       className="chip"
       aria-pressed={active}
+      style={
+        active && typeColorVar
+          ? {
+              background: `var(${typeColorVar})`,
+              borderColor: `var(${typeColorVar})`,
+              color: "var(--on-color)",
+            }
+          : undefined
+      }
       onClick={onClick}
     >
       {label}
@@ -499,6 +531,7 @@ function TodayView({
                 label={type}
                 active={(overrides.swapType ?? effectivePrescribed) === type}
                 onClick={() => handleTypeChip(type)}
+                typeColorVar={TYPE_COLOR_VAR[type]}
               />
             ))}
           </div>
