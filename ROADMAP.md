@@ -571,11 +571,13 @@ frozen log paces stay unchanged after a later baseline edit (reconstructed
 from the draft's own frozen ref, not re-read live); the manual door proves
 the same save path from a workout's own detail screen for an off-app row,
 without ever touching the draft/run records an in-progress session elsewhere
-might be using. One seam stays unspanned by design, not oversight: no single
-browser session runs the WHOLE arc card→log in one continuous test — each
-hand-off is its own proof. Recorded here rather than closed, since it became
-a real (not just theoretical) gap once Today enhancements' type-swap (below)
-made Confirm entry-dependent on an earlier screen's choice.
+might be using. One seam was left unspanned at the time this phase closed:
+no single browser session ran the WHOLE arc card→log in one continuous
+test, each hand-off was its own proof instead. That gap is now closed —
+Phase 6D's own `today.spec.ts` "the type-swap loop" test drives exactly
+that continuous session in one page (Today's suggestion card → Start →
+Confirm → SKIP the countdown → the live run → complete → Log → Save →
+back to Today), the first (and so far only) e2e in the repo to do so.
 
 ## Phase 6D — Today enhancements
 
@@ -628,6 +630,12 @@ plan: `docs/superpowers/plans/2026-08-02-today-enhancements.md`.
 screen itself, row a plan day as a different type without losing plan
 progress (the swap resets cleanly once that session is logged), and log a
 genuine off-plan or make-up session without moving the plan's counter.
+
+**Next:** a **UI-fix round** (exact targets replace the range displays; a
+drop-X on Today's unlogged line; a discard option on SessionComplete),
+then a **workout-generation phase** (James supplies references; the
+library grows beyond the 35 starters so testers have real content to work
+against), then Phase 7's PM5 integration.
 
 ## Phase 7 — PM5 over Bluetooth
 
@@ -713,5 +721,5 @@ next phase. One line per round, newest first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
-- **Parametric workout generator**: "generate me a 45' AT workout" from the starter library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. Generation will load richer structural references from the owner's source material (patterns and parameters only — never entries/titles/prose, per the content policy).
+- **Parametric workout generator**: "generate me a 45' AT workout" from the starter library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Still queued behind the UI-fix round and the workout-generation phase above (Phase 6D's own "Next" line), not started. Generation will load richer structural references from the owner's source material (patterns and parameters only — never entries/titles/prose, per the content policy).
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
