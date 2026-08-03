@@ -673,16 +673,18 @@ function SessionDoorLog() {
   // nothing to wait for, so this never flashes a loading screen in the
   // common case where nothing is actually unresolved.
   //
-  // Task 3: `planState`'s OWN loading folds into this same gate — the
-  // toggle's copy needs `doneN`/`sequence.length` before it can render
-  // correctly, so Save can't be reached before that resolves either. Its
-  // ERROR state deliberately does NOT join this condition: logging must
-  // never be hostage to the plan fetch (see `plan` below, and each door's
-  // comment on the same rule).
-  if (
-    (matchedDraft === null && workoutsState.state === "loading") ||
-    planState.state === "loading"
-  ) {
+  // Fix round 2 (whole-branch review, M1/M2): `planState` no longer joins
+  // this gate at all — a STALLED (not merely slow) `/api/plan` request (`
+  // api()` is a bare `fetch` with no `AbortSignal.timeout`, and `usePlan`
+  // only ever leaves `loading` on resolve or reject) used to park this
+  // door at LOADING… forever: no Retry, no BackLink, no tab bar — the
+  // exact "logging held hostage to the plan fetch" failure this door's own
+  // comments elsewhere claim can't happen. `plan` (below) already reads as
+  // null while `planState` is loading, the identical value it takes for a
+  // genuine no-plan or plan-error state, so the toggle simply appears once
+  // (and only once) the fetch resolves with an active plan — the form
+  // itself never waits on it.
+  if (matchedDraft === null && workoutsState.state === "loading") {
     return (
       <main className="screen">
         <p className="mono-status">LOADING…</p>
@@ -690,12 +692,13 @@ function SessionDoorLog() {
     );
   }
 
-  // Task 3: null means "render the form with no toggle at all" — either
-  // there's genuinely no active plan (`planKey === null`, the ordinary
-  // freestyle case) or the plan hook errored. The latter is deliberate: a
-  // rower whose plan fetch failed can still log their session normally,
-  // just without the option to opt it out of a plan whose own state this
-  // screen couldn't confirm.
+  // Task 3 (fix round 2, M1/M2): null means "render the form with no
+  // toggle at all" — no active plan (`planKey === null`, the ordinary
+  // freestyle case), the plan hook errored, OR the plan fetch simply
+  // hasn't resolved yet. All three are deliberate: a rower whose plan
+  // fetch failed, or hasn't returned yet, can still log their session
+  // normally, just without the option to opt it out of a plan whose own
+  // state this screen couldn't yet confirm.
   const plan: PlanData | null =
     planState.state === "ready" && planState.plan.planKey !== null
       ? planState.plan
@@ -857,15 +860,15 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     submit,
   } = useLogForm(() => navigate("/today", { replace: true }));
 
-  // Task 3: `planState`'s loading folds into this door's own pre-existing
-  // gate (same reasoning as the session door's own comment on this) — its
-  // ERROR deliberately does NOT join it, so a plan-fetch failure never
-  // blocks logging, just drops the toggle (see `plan` below).
-  if (
-    workoutsState.state === "loading" ||
-    baselinesState.state === "loading" ||
-    planState.state === "loading"
-  ) {
+  // Fix round 2 (whole-branch review, M1/M2): `planState` no longer joins
+  // this gate either. It used to run BEFORE the workouts/baselines error
+  // branches just below, so a merely-slow plan fetch hid a genuine
+  // library/baselines load failure behind LOADING…; a STALLED plan fetch
+  // (no `AbortSignal.timeout` on `api()`) hid it forever, with no Retry
+  // reachable at all. `plan` (below) reads as null while `planState` is
+  // loading — same value as a genuine no-plan or plan-error state — so the
+  // toggle just appears once the plan resolves with an active plan.
+  if (workoutsState.state === "loading" || baselinesState.state === "loading") {
     return (
       <main className="screen">
         <p className="mono-status">LOADING…</p>
@@ -903,10 +906,11 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     );
   }
 
-  // Task 3: same derivation as the session door's own `plan` — null means
-  // "no toggle" for either an honest no-active-plan state OR a plan-hook
-  // error, deliberately NOT gated above alongside the workouts/baselines
-  // errors (logging must never be hostage to the plan fetch).
+  // Task 3 (fix round 2, M1/M2): same derivation as the session door's own
+  // `plan` — null means "no toggle" for a no-active-plan state, a
+  // plan-hook error, OR the plan fetch still being in flight, none of
+  // which gate this door's form (logging must never be hostage to the
+  // plan fetch).
   const plan: PlanData | null =
     planState.state === "ready" && planState.plan.planKey !== null
       ? planState.plan

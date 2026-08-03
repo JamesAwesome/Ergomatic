@@ -957,6 +957,46 @@ button:disabled {
   flex-shrink: 0;
 }
 
+/* Fix round 2 (whole-branch review, M4): the nine filter chips used to be
+   flat siblings in one flex-wrap row (plain `.chip-wrap`); grouped into
+   three labelled clusters (DIFFICULTY/TIME/PAIN) now — see Today.tsx's own
+   comment on why. `.today-filter-chips` keeps its name and stays a single
+   element (the e2e visibility check's own selector), it just now stacks
+   three groups vertically instead of laying all nine chips out itself. */
+.today-filter-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.today-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Same small-mono-caps treatment as `.classification-group-label`
+   (ClassificationCard.tsx) — kept as its own class per this repo's
+   established per-file duplication convention rather than importing a
+   builder-only class into Today, the same reasoning `DIFFICULTY_CHIPS`'s
+   own extraction comment gives for what's worth sharing vs. not. */
+.today-filter-group-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-4);
+}
+
+/* Each group's own chip row reuses `.chip-wrap` verbatim for the flex/wrap/
+   gap behaviour, but the outer `.today-filter-chips` already spaces the
+   three groups via its own `gap` — an extra `margin-bottom` from
+   `.chip-wrap` here would double up on that spacing. */
+.today-filter-group .chip-wrap {
+  margin-bottom: 0;
+}
+
 .today-card {
   display: block;
   background: var(--surface);
@@ -3185,17 +3225,27 @@ button:disabled {
 /* Task 3 (outside-plan logging): a single full-width toggle row, above
    Save, rendered only when the rower has an active plan (`plan.planKey !==
    null` — LogSession.tsx's own gate; a freestyle session or a plan-fetch
-   error has nothing to advance or opt out of, so nothing renders at all).
-   Default (`aria-pressed="false"`, "COUNTS TOWARD PLAN …") reads as calm,
-   informational text, matching `.log-paces-panel`'s own dashed "this is
-   just context" treatment. Toggled ("OUTSIDE THE PLAN — won't advance")
-   switches to a solid `--accent` border/text — the same "this is a
+   error, or a plan fetch still in flight, has nothing to advance or opt out
+   of, so nothing renders at all).
+   Fix round 2 (whole-branch review, M3): this used to copy
+   `.log-paces-panel`'s dashed-border "this is just context" treatment
+   deliberately — found, in review, to make the screen's ONE interactive
+   control visually indistinguishable from the screen's ONE purely-
+   informational panel directly above it, with nothing signalling that one
+   is tappable and the other isn't. Now follows the `.button-outline`
+   treatment family instead — a SOLID `--ink` border, same as every other
+   real control in the app (Discard/Retry/Cancel all use `.button-outline`
+   verbatim) — so this row reads as a control on sight, not as a second
+   PACES LOCKED-style caption. Toggled ("OUTSIDE THE PLAN — won't advance")
+   still switches to a solid `--accent` border/text — the same "this is a
    deviation from the default" language `.chip[aria-pressed="true"]`
    already uses via an accent FILL, though a fill would fight this row's
    own longer sentence-length copy for legibility, so the accent is
-   applied to the border/text instead. Contrast: ink-3 on surface 7.43:1
-   (default), accent on surface 5.94:1 (toggled) — both comfortably >
-   4.5:1. --tap (44px) satisfies the house hit-target floor. */
+   applied to the border/text instead. Contrast: ink on surface 17.1:1
+   (default — computed from `--ink` #1b1a17 / `--surface` #fffdf7 via the
+   WCAG relative-luminance formula), accent on surface 5.94:1 (toggled) —
+   both comfortably > 4.5:1. --tap (44px) satisfies the house hit-target
+   floor; `aria-pressed` is unchanged. */
 .log-plan-toggle {
   display: flex;
   align-items: center;
@@ -3206,8 +3256,8 @@ button:disabled {
   margin-bottom: 12px;
   border-radius: var(--radius);
   background: var(--surface);
-  border: 1px dashed var(--rule-3);
-  color: var(--ink-3);
+  border: 1px solid var(--ink);
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.06em;

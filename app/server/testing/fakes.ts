@@ -268,7 +268,7 @@ function makeFakePlanStateStore(): FakePlanStateStore {
 function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
   const byUser = new Map<
     string,
-    Array<LogInput & { id: string; loggedAt: Date }>
+    Array<Omit<LogInput, "advancesPlan"> & { id: string; loggedAt: Date }>
   >();
   return {
     async list(userId: string, limit: number) {
@@ -279,14 +279,22 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
     },
     async create(userId: string, input: LogInput) {
       const rows = byUser.get(userId) ?? [];
-      const row = { ...input, id: crypto.randomUUID(), loggedAt: new Date() };
+      // Fix round 2 (whole-branch review, L2): `advancesPlan` is destructured
+      // OUT rather than spread into the stored row. It's an input-only flag
+      // (stores/logs.ts's own `create` uses it purely to gate the plan_state
+      // upsert; the real `sessionLogs` table has no `advances_plan` column at
+      // all), so the real store's `list` can never return it. Spreading the
+      // whole `input` here used to leak it into this fake's `list` (and thus
+      // `GET /api/logs`) — a shape production can never produce.
+      const { advancesPlan, ...stored } = input;
+      const row = { ...stored, id: crypto.randomUUID(), loggedAt: new Date() };
       rows.unshift(row);
       byUser.set(userId, rows);
       // Task 3: mirrors the real store's `if (input.advancesPlan)` guard
       // around the plan_state upsert (see stores/logs.ts's own `create`) —
       // a false row never touches plan_state at all, including never
       // creating a row for a user who had none yet.
-      if (input.advancesPlan) planState._advance(userId);
+      if (advancesPlan) planState._advance(userId);
       return { id: row.id };
     },
     async lastDonePerWorkout(userId: string) {

@@ -43,7 +43,7 @@ export interface Suggestion {
   recommendationId: string | null;
   reason: string;
   poolIds: string[];
-  fellBack: boolean; // prefs/cap filters matched nothing; pool is the unfiltered type list
+  fellBack: boolean; // difficulty/cap/pain filters matched nothing; pool is the unfiltered type list
 }
 
 /** Never-done (null) sorts first; otherwise most days-ago (least recently

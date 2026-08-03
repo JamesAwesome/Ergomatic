@@ -1592,73 +1592,72 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
     ).not.toBeInTheDocument();
   });
 
-  // Fix round 1 (M2): both doors OR `planState.state === "loading"` into
-  // their pre-existing loading gate (see each door's own comment on this
-  // in LogSession.tsx) — nothing in this file exercised that disjunct
-  // before this pair, so deleting it left the whole suite green.
-  // `usePlan()` here is a plain synchronous function reading a mutable
-  // ref (`mockPlan`'s own comment above), not real async state, so there's
-  // no natural "resolves later" moment to await — `rerender` with an
-  // otherwise-identical element tree, after flipping the ref to ready,
-  // forces this same component instance to re-run its hooks and observe
-  // the new `usePlan()` value, the same way a real resolved fetch would.
-  it("session door: holds at the LOADING… gate while the plan is still loading, then renders once it resolves", async () => {
+  // Fix round 2 (whole-branch review, M1/M2): both doors used to OR
+  // `planState.state === "loading"` into their pre-existing loading gate,
+  // which parked the whole form at LOADING… — with no Retry and no
+  // BackLink — for as long as (or forever, if `/api/plan` stalled) the
+  // plan fetch took. The fix removes `planState` from the gate entirely:
+  // the form renders regardless of plan state, and the toggle itself
+  // appears only once the plan resolves with an active plan. These two
+  // tests replace the old "holds at LOADING…" pair, pinning the NEW
+  // behaviour instead: a still-loading plan renders the form immediately,
+  // with no toggle, and Save posts with no `advancesPlan` key — the same
+  // observable shape as "no active plan" or "plan hook errored" (see the
+  // plan-hook-error tests below, unchanged).
+  it("session door: renders the form immediately while the plan is still loading, with no toggle, and Save posts no advancesPlan key", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     mockPlan({ state: "loading" });
-    const view = await renderLog();
-
-    expect(screen.getByText("LOADING…")).toBeInTheDocument();
-    expect(screen.queryByText("AUG 1 · 30 MIN")).not.toBeInTheDocument();
-
-    mockPlan(readyPlanState(activePlan()));
-    const { default: LogSession } = await import("./LogSession");
-    view.rerender(
-      <MemoryRouter initialEntries={["/session/log"]}>
-        <Routes>
-          <Route path="/session/log" element={<LogSession />} />
-          <Route path="/today" element={<p>TODAY SCREEN</p>} />
-        </Routes>
-      </MemoryRouter>,
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-plan-still-loading" }), {
+          status: 201,
+        }),
+      ),
     );
+    await renderLog();
 
     await screen.findByText("AUG 1 · 30 MIN");
     expect(
-      screen.getByRole("button", {
-        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
-      }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /OUTSIDE THE PLAN/ }),
+    ).not.toBeInTheDocument();
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).not.toHaveProperty("advancesPlan");
   });
 
-  it("manual door: holds at the LOADING… gate while the plan is still loading, then renders once it resolves", async () => {
+  it("manual door: renders the form immediately while the plan is still loading, with no toggle, and Save posts no advancesPlan key", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
     mockPlan({ state: "loading" });
-    const view = await renderManualLog(workout.id);
-
-    expect(screen.getByText("LOADING…")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: `Log ${workout.title}` }),
-    ).not.toBeInTheDocument();
-
-    mockPlan(readyPlanState(activePlan()));
-    const { default: LogSession } = await import("./LogSession");
-    view.rerender(
-      <MemoryRouter initialEntries={[`/library/${workout.id}/log`]}>
-        <Routes>
-          <Route path="/library/:id/log" element={<LogSession />} />
-          <Route path="/today" element={<p>TODAY SCREEN</p>} />
-        </Routes>
-      </MemoryRouter>,
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-plan-still-loading" }), {
+          status: 201,
+        }),
+      ),
     );
+    await renderManualLog(workout.id);
 
     await screen.findByText(MANUAL_TOTAL_LABEL);
     expect(
-      screen.getByRole("button", {
-        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
-      }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    ).not.toBeInTheDocument();
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).not.toHaveProperty("advancesPlan");
   });
 
   it("renders the default COUNTS TOWARD PLAN copy, sourced from doneN/sequence.length, when a plan is active", async () => {
@@ -1744,6 +1743,58 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body.advancesPlan).toBe(false);
+  });
+
+  // Fix round 2 (whole-branch review, L3): the workoutId-retry policy
+  // (`useLogForm`'s `submit`, `LogSession.tsx`) rebuilds the retry body by
+  // SPREADING the original body with only `workoutId` overridden — this
+  // pins that `advancesPlan: false` survives that spread untouched, the
+  // same way the sibling "retries once with workoutId:null" test above
+  // pins `steps`/`held`/`pain`/`notes` surviving it. Nothing before this
+  // test exercised the retry path with the toggle on: a future refactor
+  // that rebuilt the retry body from `fields` instead of spreading `body`
+  // would silently convert an outside-plan retry into a plan-advancing
+  // log, and this is the only test that would catch it.
+  it("outside-plan toggle survives the workoutId retry: the retry body still carries advancesPlan: false", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { run, workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "workoutId does not exist",
+              field: "workoutId",
+            }),
+            { status: 400 },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-retry-outside" }), {
+          status: 201,
+        }),
+      );
+    });
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+    await userEvent.click(
+      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    );
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+    const bodies = parsedBodies(apiFn);
+    expect(bodies[0]!.workoutId).toBe(run.workoutId);
+    expect(bodies[0]!.advancesPlan).toBe(false);
+    expect(bodies[1]!.workoutId).toBeNull();
+    expect(bodies[1]!.advancesPlan).toBe(false);
+    expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
   });
 
   // Fix round 1 (M1): this used to be ONE test titled "untouched posts no
