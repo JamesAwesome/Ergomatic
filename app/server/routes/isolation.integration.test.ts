@@ -12,7 +12,7 @@ import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
 import { seedGlobalLibrary } from "../seed/seed.js";
-import { STARTER_WORKOUTS } from "../seed/starter.js";
+import { LIBRARY_WORKOUTS } from "../seed/library/index.js";
 import { createBaselinesStore } from "../stores/baselines.js";
 import { createLogsStore } from "../stores/logs.js";
 import { createPlanStateStore } from "../stores/planState.js";
@@ -33,7 +33,7 @@ import type { Stores } from "./data.js";
 //
 // Under the global model there is no per-user seeding: seedGlobalLibrary()
 // runs ONCE in beforeAll (mirroring index.ts's boot order — after migrate(),
-// before any request is served), producing exactly STARTER_COUNT rows with
+// before any request is served), producing exactly LIBRARY_COUNT rows with
 // user_id NULL. Both users then see the identical global set on every list,
 // and everything each creates personally must stay invisible to the other:
 // every list/get endpoint, every id-addressed mutation against a foreign id
@@ -42,7 +42,7 @@ import type { Stores } from "./data.js";
 // (a logged session's frozen values survive a later baseline edit).
 // ---------------------------------------------------------------------------
 
-const STARTER_COUNT = STARTER_WORKOUTS.length;
+const LIBRARY_COUNT = LIBRARY_WORKOUTS.length;
 
 describe("two-user isolation, global-library sharing, and log-freezing across the full API", () => {
   let container: StartedPostgreSqlContainer;
@@ -182,8 +182,8 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
 
     const listA = await asA().get("/api/workouts");
     const listB = await asB().get("/api/workouts");
-    expect(listA.body).toHaveLength(STARTER_COUNT);
-    expect(listB.body).toHaveLength(STARTER_COUNT);
+    expect(listA.body).toHaveLength(LIBRARY_COUNT);
+    expect(listB.body).toHaveLength(LIBRARY_COUNT);
     expect(
       listA.body.every((w: { isGlobal: boolean }) => w.isGlobal === true),
     ).toBe(true);
@@ -256,7 +256,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     });
 
     const listA = (await asA().get("/api/workouts")).body;
-    expect(listA).toHaveLength(STARTER_COUNT + 1);
+    expect(listA).toHaveLength(LIBRARY_COUNT + 1);
   });
 
   it("log-freezing: changing baselines after logging leaves the stored log untouched", async () => {
@@ -289,7 +289,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
 
   it("every list/get endpoint shows B none of A's data, but B still sees every global", async () => {
     const workoutsB = await asB().get("/api/workouts");
-    expect(workoutsB.body).toHaveLength(STARTER_COUNT);
+    expect(workoutsB.body).toHaveLength(LIBRARY_COUNT);
     expect(
       workoutsB.body.every((w: { isGlobal: boolean }) => w.isGlobal === true),
     ).toBe(true);
@@ -333,7 +333,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
   it("A can still see everything after B's reads", async () => {
     expect((await asA().get("/api/today")).status).toBe(200);
     const workoutsA = await asA().get("/api/workouts");
-    expect(workoutsA.body).toHaveLength(STARTER_COUNT + 1);
+    expect(workoutsA.body).toHaveLength(LIBRARY_COUNT + 1);
     // A's isTestResult baseline update landed a test-history row that B's
     // (already-checked) empty list proves stayed off B's account.
     const historyA = await asA().get("/api/test-history");
@@ -417,7 +417,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     ).toBe(200);
 
     const listA = await asA().get("/api/workouts");
-    expect(listA.body).toHaveLength(STARTER_COUNT + 1);
+    expect(listA.body).toHaveLength(LIBRARY_COUNT + 1);
     expect(
       listA.body.some((w: { title: string }) => w.title === "Only B Custom"),
     ).toBe(false);
@@ -439,7 +439,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     });
 
     const listB = await asB().get("/api/workouts");
-    expect(listB.body).toHaveLength(STARTER_COUNT + 1);
+    expect(listB.body).toHaveLength(LIBRARY_COUNT + 1);
   });
 
   it('logging a GLOBAL workout end to end: the FK holds, and "done" status is isolated per user through /api/today', async () => {
@@ -448,8 +448,8 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     // which is easiest to reason about starting from a brand-new account
     // rather than threading through A/B's state built up by every test
     // above. This is the most common production flow under the global
-    // model: logging a session against a shared starter-library workout,
-    // not one you created yourself.
+    // model: logging a session against a shared, globally-seeded workout
+    // (source: "starter"), not one you created yourself.
     const mintedC = await request(app)
       .post("/api/auth/native")
       .send({ idToken: "token-c" });

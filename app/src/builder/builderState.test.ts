@@ -33,7 +33,7 @@ import {
 import { validateSteps } from "../../domain/validate.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import type { Step } from "../../domain/types.js";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -1191,29 +1191,27 @@ describe("rest seconds bridge", () => {
   });
 
   // Realistic fixture (docs/TESTING.md's "test against production-shaped
-  // data" rule, and this task's own brief): a real starter workout pushed
+  // data" rule, and this task's own brief): a real library workout pushed
   // through fromWorkout, not a hand-built row — the exact shape (stepToRow
   // writing restMinutes as a clock string) that hid the NaN bricking bug
-  // Task 4's fix wave found. "High Pressure" carries both spm and
-  // restMinutes on its one work step.
-  it("reads rest correctly off a real starter workout pushed through fromWorkout", () => {
-    const highPressure = STARTER_WORKOUTS.find(
-      (w) => w.title === "High Pressure",
-    );
-    if (!highPressure) throw new Error("fixture not found");
-    const form = fromWorkout(highPressure);
+  // Task 4's fix wave found. "Slack Tide" carries both spm and restMinutes
+  // on its one work step (spm 19, restMinutes 2 -> "2:00" -> 120s).
+  it("reads rest correctly off a real library workout pushed through fromWorkout", () => {
+    const slackTide = LIBRARY_WORKOUTS.find((w) => w.title === "Slack Tide");
+    if (!slackTide) throw new Error("fixture not found");
+    const form = fromWorkout(slackTide);
     const workStep = form.rows.find((r) => r.kind === "w");
     if (!workStep) throw new Error("expected a work row");
 
-    expect(workStep.rest).toBe("3:00");
-    expect(workStep.spm).toBe("22");
-    expect(restSecondsFromRow(workStep)).toBe(180);
+    expect(workStep.rest).toBe("2:00");
+    expect(workStep.spm).toBe("19");
+    expect(restSecondsFromRow(workStep)).toBe(120);
 
     // One tap of REST − still produces a valid, saveable clock string —
-    // the exact seam ("3:00" parsed with `Number()`) that used to write
-    // the literal string "NaN" into the row.
-    const stepped = rowWithRestSeconds(workStep, 180 - REST_STEP_SECONDS);
-    expect(stepped.rest).toBe("2:30");
+    // the exact seam ("2:00" parsed with `Number()`) that used to write
+    // the literal string "NaN" into the row. 120 - 30 (REST_STEP_SECONDS) = 90s = "1:30".
+    const stepped = rowWithRestSeconds(workStep, 120 - REST_STEP_SECONDS);
+    expect(stepped.rest).toBe("1:30");
     const out = toSteps({ ...form, rows: [stepped] });
     expect(out.ok).toBe(true);
   });
@@ -1271,9 +1269,9 @@ describe("summaries", () => {
   // The landmine Task 1's review carried forward: called on a `wu`/`r` row,
   // `stepSummary` used to echo `refBase`/`refOff` straight off `newRow`'s
   // unused defaults, fabricating a pace reference ("10′ @ 6k ±0") the row
-  // never represents. StepCard renders stored workouts — the 35 starters and
-  // anything bulk-imported genuinely contain `wu` and standalone `r` rows —
-  // so this can't stay a `w`-only assumption.
+  // never represents. StepCard renders stored workouts — the seeded library
+  // and anything bulk-imported genuinely contain `wu` and standalone `r`
+  // rows — so this can't stay a `w`-only assumption.
   it("summarises a warm-up row by duration and kind, with no fabricated pace reference", () => {
     expect(stepSummary(wuRow("wu1", "10"))).toBe("10:00 warm-up");
   });
@@ -1423,26 +1421,28 @@ describe("effort refs in rows", () => {
     expect(t!.total).toBeCloseTo(7.4667, 3);
   });
 
-  // Realistic fixture, per this task's brief: a real starter workout, not
+  // Realistic fixture, per this task's brief: a real library workout, not
   // only hand-built rows. This used to patch an effort ref onto "Zephyr"
-  // because no starter carried one; Task 6's seed audit converted
-  // "Microburst" for real, so the fixture is now the shipped workout
-  // UNPATCHED — a wu step, a reps marker and a work step with an effort ref,
-  // spm and rest together, which is the exact shape a rower opens when they
-  // edit a seeded workout.
-  it("round-trips a real starter workout's effort step (Microburst, unpatched)", () => {
-    const microburst = STARTER_WORKOUTS.find((w) => w.title === "Microburst");
-    if (!microburst) throw new Error("fixture not found: Microburst");
-    const steps: Step[] = microburst.steps;
+  // because no starter carried one; the generated library's AN block ships
+  // many effort-ref workouts for real, so the fixture is the shipped
+  // workout UNPATCHED — a wu step, a reps marker and a work step with an
+  // effort ref, spm and rest together, which is the exact shape a rower
+  // opens when they edit a seeded workout.
+  it("round-trips a real library workout's effort step (Fork Lightning, unpatched)", () => {
+    const forkLightning = LIBRARY_WORKOUTS.find(
+      (w) => w.title === "Fork Lightning",
+    );
+    if (!forkLightning) throw new Error("fixture not found: Fork Lightning");
+    const steps: Step[] = forkLightning.steps;
     expect(steps).toContainEqual(
       expect.objectContaining({ ref: { effort: "max" } }),
     );
 
     const form = fromWorkout({
-      title: microburst.title,
-      type: microburst.type,
-      difficulty: microburst.difficulty,
-      pain: microburst.pain,
+      title: forkLightning.title,
+      type: forkLightning.type,
+      difficulty: forkLightning.difficulty,
+      pain: forkLightning.pain,
       steps,
     });
     const workRowOut = form.rows.find((r) => r.kind === "w");
@@ -1454,7 +1454,7 @@ describe("effort refs in rows", () => {
       throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
     // Lossless: the whole step list survives, effort ref and the independent
     // spm/rest axes included — not just the ref field this task added.
-    expect(out.steps).toStrictEqual(microburst.steps);
+    expect(out.steps).toStrictEqual(forkLightning.steps);
     expect(validateSteps(out.steps)).toStrictEqual({
       ok: true,
       steps: out.steps,

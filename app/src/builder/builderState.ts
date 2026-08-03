@@ -51,7 +51,7 @@ export interface BuilderForm {
 }
 
 // Row kinds that sit OUTSIDE the derived repeat span (see `spanStartIndex`).
-// The 35 starter workouts all open with a stored `wu` step, so opening one
+// Every seeded library workout opens with a stored `wu` step, so opening one
 // in the builder must not start repeating its warm-up. Adding a cooldown
 // later is one entry here plus a domain kind — nothing else about the span
 // logic needs to change.
@@ -228,8 +228,8 @@ function fmtRowDuration(row: BuilderRow): string {
  *  `refBase`/`refOff` on those rows are just `newRow`'s unused defaults,
  *  never anything the row represents — so echoing them here would fabricate
  *  a target line the row never had. StepCard renders stored workouts (the
- *  35 starters, anything bulk-imported), which genuinely contain `wu` and
- *  standalone `r` rows, so this can no longer assume `w`-only callers. */
+ *  seeded library, anything bulk-imported), which genuinely contain `wu`
+ *  and standalone `r` rows, so this can no longer assume `w`-only callers. */
 export function stepSummary(row: BuilderRow): string {
   const dur = fmtRowDuration(row);
   if (row.kind === "wu") return `${dur} warm-up`;

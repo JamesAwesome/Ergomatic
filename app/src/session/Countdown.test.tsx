@@ -9,7 +9,7 @@ import {
   Routes,
   RouterProvider,
 } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
@@ -23,13 +23,13 @@ import { hasRunProgress } from "./Countdown";
 import { loadRun, saveRun, type SessionRun } from "./run";
 
 // Realistic fixture, matching Timer.test.tsx/ConfirmTargets.test.tsx:
-// Doldrums (O2) — wu 4' + reps×2 marker + one split-ref work step. Its
+// Hoarfrost (O2) — wu 10' + reps×2 marker + one split-ref work step. Its
 // FIRST phase is always the warm-up ("Easy"), which is what makes it a good
 // fixture for pinning the next-phase line: the assertion doesn't depend on
 // baselines at all.
 function doldrumsDraft(id = "id-doldrums"): SessionDraft {
-  const w = STARTER_WORKOUTS.find((s) => s.title === "Doldrums");
-  if (!w) throw new Error("missing starter fixture: Doldrums");
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Hoarfrost");
+  if (!w) throw new Error("missing library fixture: Hoarfrost");
   return buildDraft({
     id,
     title: w.title,
@@ -163,7 +163,7 @@ describe("Countdown", () => {
 
     expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
-    // Doldrums' first phase is its warm-up: label "Easy" (domain/expand.ts).
+    // Hoarfrost's first phase is its warm-up: label "Easy" (domain/expand.ts).
     expect(screen.getByText("Easy")).toBeInTheDocument();
     expect(loadRun()).not.toBeNull();
   });

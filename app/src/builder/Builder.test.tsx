@@ -6,7 +6,7 @@ import type { api } from "../api";
 import type { BuilderEditMode } from "./Builder";
 import { fromWorkout, newForm, newRow, type BuilderForm } from "./builderState";
 import type { Step } from "../../domain/types.js";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -960,24 +960,24 @@ describe("Builder", () => {
 
   // Task 4: an effort row's TARGET reads the effort word — and, unlike a
   // split row, doesn't need baselines to do it (a word needs no resolution).
-  // Real starter workout (Zephyr: [wu 5', w 20' @ 6k+18]), not a hand-built
-  // fixture — its one work step's ref is patched to MAX before going through
-  // the real edit-mode load path (fromWorkout), matching the ledger's
-  // "test against a realistic fixture" rule.
+  // Real library workout (Sea Fret: [wu 6', w 12' @ 6k+15]), not a
+  // hand-built fixture — its one work step's ref is patched to MAX before
+  // going through the real edit-mode load path (fromWorkout), matching the
+  // ledger's "test against a realistic fixture" rule.
   it("shows ALL OUT and no offset stepper for a MAX row opened via the edit path, even with no baselines set", async () => {
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     mockApi(() => new Response(null, { status: 201 }));
 
-    const zephyr = STARTER_WORKOUTS.find((w) => w.title === "Zephyr");
-    if (!zephyr) throw new Error("fixture not found: Zephyr");
-    const steps: Step[] = zephyr.steps.map((s) =>
+    const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret");
+    if (!seaFret) throw new Error("fixture not found: Sea Fret");
+    const steps: Step[] = seaFret.steps.map((s) =>
       s.k === "w" ? { ...s, ref: { effort: "max" as const } } : s,
     );
     const initial = fromWorkout({
-      title: zephyr.title,
-      type: zephyr.type,
-      difficulty: zephyr.difficulty,
-      pain: zephyr.pain,
+      title: seaFret.title,
+      type: seaFret.type,
+      difficulty: seaFret.difficulty,
+      pain: seaFret.pain,
       steps,
     });
     const maxRowIndex = initial.rows.findIndex((r) => r.refEffort === "max");

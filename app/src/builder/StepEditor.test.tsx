@@ -194,8 +194,8 @@ describe("StepEditor", () => {
   // the fix for this review's IMPORTANT 1: the old `clampSpm` floored at
   // SPM_MIN instead of clearing, so a step with any spm could never become
   // free-rate again (one accidental `+` on a new step was unrecoverable,
-  // and all 35 starter workouts carry spm on every work step, so no
-  // starter-shaped or bulk-imported workout could ever be made free-rate).
+  // and every seeded library workout carries spm on every work step, so no
+  // library-shaped or bulk-imported workout could ever be made free-rate).
   // The spec's own "SPM stays optional — empty round-trips as absent" line
   // and the handoff's "`−` below 17 goes to 0 = FREE" both require this.
   it("clears spm to FREE (empty) when − is pressed at the domain's 10 floor", async () => {
@@ -410,7 +410,7 @@ describe("StepEditor", () => {
   });
 
   // 8. A wu row renders the minutes-only editor — no PACE, SPM, REST or
-  // TARGET rows — since bulk-imported and starter workouts contain them and
+  // TARGET rows — since bulk-imported and library workouts contain them and
   // must stay editable, even though the handoff models only work steps.
   it("renders a wu row as a minutes-only editor: header, DUR, DONE — no PACE, SPM, REST or TARGET", () => {
     setup({ row: wuRow() });

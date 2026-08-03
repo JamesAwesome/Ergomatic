@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanSequenceItem } from "../api/usePlan";
 import type { RecentLog } from "../api/useRecentLogs";
@@ -14,20 +14,21 @@ import { elapsedSinceStart } from "./Today";
 import { TODAY_PICK_KEY, todayDateString } from "./todayPick";
 import { TODAY_OVERRIDES_KEY, type TodayOverrides } from "./todayOverrides";
 
-// Realistic fixtures, per repo convention: real starter workouts
-// (app/server/seed/starter.ts), not hand-built minimums.
-// - Zephyr (O2, easy): the freestyle/least-recently-done pick.
-// - Isobar / Warm Front / Tailwind (all AT, easy): the plan-mode pool —
-//   THREE same-type entries, not two, so a SHUFFLE test can tell a real
-//   wraparound (1->2->0) apart from an off-by-one bug that only happens
-//   to look right on a 2-item pool (see the SHUFFLE describe block).
-function starterEntry(
+// Realistic fixtures, per repo convention: real library workouts
+// (app/server/seed/library/), not hand-built minimums.
+// - Sea Fret (O2, easy): the freestyle/least-recently-done pick.
+// - Occluded Front / Stationary Front / Pressure Ridge (all AT, easy): the
+//   plan-mode pool — THREE same-type entries, not two, so a SHUFFLE test
+//   can tell a real wraparound (1->2->0) apart from an off-by-one bug that
+//   only happens to look right on a 2-item pool (see the SHUFFLE describe
+//   block).
+function libraryEntry(
   title: string,
   id: string,
   lastDoneDaysAgo: number | null,
 ): LibraryWorkout {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   return {
     id,
     title: w.title,
@@ -40,10 +41,10 @@ function starterEntry(
   };
 }
 
-const ZEPHYR = starterEntry("Zephyr", "w-zephyr", 30);
-const ISOBAR = starterEntry("Isobar", "w-isobar", 10);
-const WARM_FRONT = starterEntry("Warm Front", "w-warmfront", 20);
-const TAILWIND = starterEntry("Tailwind", "w-tailwind", 15);
+const ZEPHYR = libraryEntry("Sea Fret", "w-zephyr", 30);
+const ISOBAR = libraryEntry("Occluded Front", "w-isobar", 10);
+const WARM_FRONT = libraryEntry("Stationary Front", "w-warmfront", 20);
+const TAILWIND = libraryEntry("Pressure Ridge", "w-tailwind", 15);
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
@@ -100,7 +101,7 @@ const LOGS: RecentLog[] = [
   {
     id: "log-1",
     workoutId: "w-isobar",
-    workoutTitle: "Isobar",
+    workoutTitle: "Occluded Front",
     workoutType: "AT",
     loggedAt: "2026-07-25T12:00:00.000Z",
     held: "held",
@@ -109,7 +110,7 @@ const LOGS: RecentLog[] = [
   {
     id: "log-2",
     workoutId: "w-zephyr",
-    workoutTitle: "Zephyr",
+    workoutTitle: "Sea Fret",
     workoutType: "O2",
     loggedAt: "2026-07-20T12:00:00.000Z",
     held: "under",
@@ -214,15 +215,17 @@ describe("Today (plan mode)", () => {
 
     expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
     expect(screen.getByText("SESSION 12 OF 84 · AT")).toBeVisible();
-    // Warm Front (20d ago) outranks Isobar (10d ago); Zephyr is O2, not AT,
+    // Stationary Front (20d ago) outranks Occluded Front (10d ago); Sea Fret is O2, not AT,
     // so it must never be the pick when a plan names AT for today.
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
-    // Zephyr is O2, not AT — it must never be the suggestion card's title
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    // Sea Fret is O2, not AT — it must never be the suggestion card's title
     // (it's still allowed to show up in LAST THREE, a different section,
     // since it's in the LOGS fixture too — so this checks the card's own
-    // heading specifically, not "Zephyr" text anywhere on the page).
+    // heading specifically, not "Sea Fret" text anywhere on the page).
     expect(
-      screen.queryByRole("heading", { name: "Zephyr" }),
+      screen.queryByRole("heading", { name: "Sea Fret" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/Least recently done/)).toBeVisible();
   });
@@ -230,14 +233,16 @@ describe("Today (plan mode)", () => {
   it("renders a resolved duration preview when baselines exist", async () => {
     mockReady();
     await renderToday();
-    // Warm Front: wu 4' + 2 * (10' work + 5' rest) = 34' total.
-    expect(screen.getByText("34′")).toBeVisible();
+    // Stationary Front: wu 5' + 12' continuous work, no reps/rest = 17' total.
+    expect(screen.getByText("17′")).toBeVisible();
   });
 
   it("still renders the card, without a duration preview, when baselines are unset — and the reason never claims a cap that was never checked", async () => {
     mockReady({ baselines: NO_BASELINES });
     await renderToday();
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
     expect(screen.getByText("—")).toBeVisible();
     const reason = screen.getByText(/Least recently done/);
     expect(reason).toBeVisible();
@@ -264,7 +269,9 @@ describe("Today (plan mode)", () => {
   it("stamps state={from:'/today'} onto the suggestion card link", async () => {
     mockReady();
     await renderTodayWithProbes();
-    await userEvent.click(screen.getByRole("link", { name: /Warm Front/i }));
+    await userEvent.click(
+      screen.getByRole("link", { name: /Stationary Front/i }),
+    );
     expect(await screen.findByText("PROBE from=/today")).toBeVisible();
   });
 });
@@ -277,9 +284,9 @@ describe("Today (freestyle mode)", () => {
     expect(screen.getByText(/FREESTYLE/)).toBeVisible();
     const planLink = screen.getByRole("link", { name: /choose a plan/i });
     expect(planLink).toHaveAttribute("href", "/plan");
-    // Zephyr (30d ago) is the least recently done across the WHOLE library
-    // (not filtered to one type) — AT's Warm Front/Isobar are more recent.
-    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+    // Sea Fret (30d ago) is the least recently done across the WHOLE library
+    // (not filtered to one type) — AT's Stationary Front/Occluded Front are more recent.
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   });
 
   it("treats a plan with no sequence entry at doneN the same as freestyle, rather than crashing", async () => {
@@ -292,7 +299,7 @@ describe("Today (freestyle mode)", () => {
     });
     await renderToday();
     expect(screen.getByText(/FREESTYLE/)).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   });
 });
 
@@ -305,28 +312,36 @@ describe("Today (SHUFFLE)", () => {
   }
 
   it("cycles through the FULL 3-member pool in order and wraps back to the start", async () => {
-    // Pool sorted by least-recently-done: Warm Front (20d) -> Tailwind
-    // (15d) -> Isobar (10d). A 3-item pool (not 2) is deliberate: on a
+    // Pool sorted by least-recently-done: Stationary Front (20d) -> Pressure Ridge
+    // (15d) -> Occluded Front (10d). A 3-item pool (not 2) is deliberate: on a
     // 2-item pool, a missing "% pool.length" bug still lands back on the
     // starting item after two clicks by coincidence (index 2 vs. index 0
     // both read as "not index 1"), so it wouldn't be caught here. Three
     // items make every step's expected index unambiguous.
     mockReady();
     await renderToday();
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
 
     const shuffle = screen.getByRole("button", { name: /shuffle/i });
 
     await userEvent.click(shuffle);
-    expect(screen.getByRole("heading", { name: "Tailwind" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Pressure Ridge" }),
+    ).toBeVisible();
     expect(storedPickWorkoutId()).toBe("w-tailwind");
 
     await userEvent.click(shuffle);
-    expect(screen.getByRole("heading", { name: "Isobar" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Occluded Front" }),
+    ).toBeVisible();
     expect(storedPickWorkoutId()).toBe("w-isobar");
 
     await userEvent.click(shuffle);
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
     expect(storedPickWorkoutId()).toBe("w-warmfront");
   });
 
@@ -335,7 +350,9 @@ describe("Today (SHUFFLE)", () => {
     const first = await renderToday();
     const shuffle = screen.getByRole("button", { name: /shuffle/i });
     await userEvent.click(shuffle);
-    expect(screen.getByRole("heading", { name: "Tailwind" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Pressure Ridge" }),
+    ).toBeVisible();
 
     const stored = JSON.parse(localStorage.getItem(TODAY_PICK_KEY)!) as {
       workoutId: string;
@@ -353,7 +370,7 @@ describe("Today (SHUFFLE)", () => {
     mockReady();
     await renderToday();
     expect(
-      await screen.findByRole("heading", { name: "Tailwind" }),
+      await screen.findByRole("heading", { name: "Pressure Ridge" }),
     ).toBeVisible();
   });
 
@@ -369,8 +386,10 @@ describe("Today (SHUFFLE)", () => {
     );
     mockReady();
     await renderToday();
-    // Falls back to the default pool[0] (Warm Front), not the stale pick.
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    // Falls back to the default pool[0] (Stationary Front), not the stale pick.
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
   });
 
   it("is disabled when the pool has one or zero members (nothing to shuffle to)", async () => {
@@ -462,7 +481,9 @@ describe("Today (filter chips: live narrowing)", () => {
   it("deselecting EASY changes the reason to a fellback explanation without changing the pick (deselecting every difficulty is allowed)", async () => {
     mockReady();
     await renderToday();
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
     expect(screen.getByText(/Least recently done/)).toBeVisible();
 
     const easyChip = screen.getByRole("button", { name: "EASY" });
@@ -470,7 +491,9 @@ describe("Today (filter chips: live narrowing)", () => {
 
     // Same pick (the fellback pool is still the full AT list, sorted the
     // same way) — only the REASON narrows to say nothing matched.
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
     expect(screen.getByText(/Nothing fit your difficulty/)).toBeVisible();
     expect(easyChip).toHaveAttribute("aria-pressed", "false");
 
@@ -559,7 +582,7 @@ describe("Today (overrides: persistence and invalidation)", () => {
     // Every difficulty is active by default (DEFAULT_PREFS), so this
     // deselects HARD rather than selecting it — the change under test.
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
     // Same-day "reload": unmount and mount fresh, mirroring the SHUFFLE
     // describe's own persistence test above.
@@ -568,7 +591,7 @@ describe("Today (overrides: persistence and invalidation)", () => {
     await renderToday();
 
     expect(
-      await screen.findByRole("heading", { name: "Zephyr" }),
+      await screen.findByRole("heading", { name: "Sea Fret" }),
     ).toBeVisible();
     expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
     expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
@@ -644,15 +667,15 @@ describe("Today (type-swap chips)", () => {
       "aria-pressed",
       "false",
     );
-    // Zephyr (O2) is now the pool — none of the AT fixtures qualify.
-    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+    // Sea Fret (O2) is now the pool — none of the AT fixtures qualify.
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   });
 
   it("tapping the already-prescribed chip un-swaps and restores the original pool", async () => {
     mockReady();
     await renderToday();
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
-    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "AT" }));
 
@@ -665,7 +688,9 @@ describe("Today (type-swap chips)", () => {
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
   });
 
   it("on a TEST day, TR reads active by default and swapping shows TEST → <type>", async () => {
@@ -730,16 +755,18 @@ describe("Today (type-swap chips)", () => {
     mockReady();
     await renderToday();
     const shuffle = screen.getByRole("button", { name: /shuffle/i });
-    await userEvent.click(shuffle); // Warm Front (AT) -> Tailwind (AT)
-    expect(screen.getByRole("heading", { name: "Tailwind" })).toBeVisible();
+    await userEvent.click(shuffle); // Stationary Front (AT) -> Pressure Ridge (AT)
+    expect(
+      screen.getByRole("heading", { name: "Pressure Ridge" }),
+    ).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
 
     // "w-tailwind" isn't in the O2 pool — suggest() can't find it by id in
     // the swapped pool, so the pick falls back to the pool's own
-    // least-recently-done default (Zephyr, the only O2 entry) instead of
+    // least-recently-done default (Sea Fret, the only O2 entry) instead of
     // crashing or keeping the stale AT id.
-    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
     expect(screen.queryByText(/YOUR PICK/)).not.toBeInTheDocument();
   });
 });
@@ -757,12 +784,12 @@ describe("Today (LAST THREE)", () => {
     await renderToday();
 
     const section = screen.getByText("LAST THREE").closest("section")!;
-    expect(within(section).getByText("Isobar")).toBeVisible();
+    expect(within(section).getByText("Occluded Front")).toBeVisible();
     expect(within(section).getByText(/JUL 25/)).toBeVisible();
     expect(within(section).getByText(/HELD/)).toBeVisible();
     expect(within(section).getByText(/2\/5/)).toBeVisible();
 
-    expect(within(section).getByText("Zephyr")).toBeVisible();
+    expect(within(section).getByText("Sea Fret")).toBeVisible();
     expect(within(section).getByText(/JUL 20/)).toBeVisible();
     expect(within(section).getByText(/UNDER/)).toBeVisible();
     expect(within(section).getByText(/1\/5/)).toBeVisible();
@@ -807,7 +834,7 @@ describe("Today (stale draft discard on mount)", () => {
     return {
       v: 1,
       workoutId: "w-warmfront",
-      title: "Warm Front",
+      title: "Stationary Front",
       type: "AT",
       steps: [],
       nudges: {},
@@ -864,7 +891,7 @@ describe("Today (stale draft discard on mount)", () => {
     return {
       v: 1,
       workoutId: "w-warmfront",
-      title: "Warm Front",
+      title: "Stationary Front",
       phases: [],
       index: 1,
       phaseStartedAt: new Date().toISOString(),
@@ -997,20 +1024,20 @@ describe("Today (loading/error states)", () => {
 // F2/F3a (whole-branch review): a cold start (the OS killed the app
 // mid-session — real on iOS) has to surface a way back into a live or
 // completed-but-unlogged run right from Today, since Start on the
-// suggestion card only ever REPLACES it. A real starter workout distinct
-// from every fixture `mockReady`'s own library uses (Cold Front never
+// suggestion card only ever REPLACES it. A real library workout distinct
+// from every fixture `mockReady`'s own library uses (Filling Low never
 // appears there) — so a resume-card assertion can never coincidentally
 // match the suggestion card's own text, and the fixture proves F3a's own
 // point in passing: the resume card renders straight off `run.title`, with
-// no need for Cold Front to be a real library entry OR for a matching
+// no need for Filling Low to be a real library entry OR for a matching
 // draft to exist in storage.
 const RESUME_BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 
 function liveRunFor(startedAt: Date): SessionRun {
-  const w = STARTER_WORKOUTS.find((s) => s.title === "Cold Front");
-  if (!w) throw new Error("missing starter fixture: Cold Front");
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+  if (!w) throw new Error("missing library fixture: Filling Low");
   const draft = buildDraft({
-    id: "w-coldfront",
+    id: "w-fillinglow",
     title: w.title,
     type: w.type as WorkoutType,
     steps: w.steps,
@@ -1035,7 +1062,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     await renderToday();
 
     expect(screen.getByText("SESSION IN PROGRESS")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Cold Front" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Filling Low" })).toBeVisible();
     expect(screen.getByText("12:34 elapsed")).toBeVisible();
     const resumeLink = screen.getByRole("link", { name: "Resume session" });
     expect(resumeLink).toBeVisible();
@@ -1060,7 +1087,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     mockReady();
     await renderToday();
 
-    expect(screen.getByText("Cold Front")).toBeVisible();
+    expect(screen.getByText("Filling Low")).toBeVisible();
     expect(screen.getByText(/unlogged session/i)).toBeVisible();
     // Phase 6C Task 2: the placeholder copy ("6C will log it here") is
     // replaced by a real link to the screen that now exists.

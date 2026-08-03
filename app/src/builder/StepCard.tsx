@@ -75,8 +75,9 @@ export default function StepCard({
             own to summarise. Rendering this button unconditionally used to
             put a focusable control with an empty accessible name in the DOM
             for every such row (axe button-name / WCAG 4.1.2), which fires on
-            essentially every starter workout's edit screen since all 35 open
-            with a `wu`. Render it only when there's real text to expose. */}
+            essentially every seeded library workout's edit screen since
+            every one opens with a `wu`. Render it only when there's real
+            text to expose. */}
         {subSummary !== "" && (
           <button type="button" className="step-card-sub" onClick={onExpand}>
             {subSummary}

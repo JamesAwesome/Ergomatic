@@ -87,10 +87,10 @@ const PAIN_RAMP_VAR: Record<(typeof PAIN_LEVELS)[number], string> = {
  *  entirely rather than fabricating a number from the rower's current
  *  baseline, which would have nothing to do with what this particular run
  *  actually locked (an earlier version of this panel rendered a literal
- *  "—" for the missing half instead — found, in review, to be what EVERY
- *  real session would show, since no starter workout references both
- *  bases; see `pacesLockedText`'s own doc comment). `draft` should be the
- *  caller's
+ *  "—" for the missing half instead — found, in review, to be what almost
+ *  every real session would show, since almost no seeded library workout
+ *  references both bases; see `pacesLockedText`'s own doc comment).
+ *  `draft` should be the caller's
  *  match-checked draft (null when missing or foreign — see LogSession's own
  *  `matchedDraft`), never a draft this run wasn't built from: `rawOff`/
  *  `nudge` from the WRONG workout's steps would silently reconstruct a
@@ -130,13 +130,19 @@ function lockedBaseline(
 /** F1 (whole-branch review, Task 2 fix round): renders ONLY the bases the
  *  workout's own steps actually reference — never a bare dash. The
  *  original two-slot "2K … · 6K …" layout (matching README.md §7's own
- *  literal mock) was checked against all 35 seeded starters and found to
- *  be unconditionally wrong in production: not one references both "2k"
- *  and "6k" in the same workout (16 are 2k-only, 18 are 6k-only, and
- *  Microburst references neither at all) — so the two-slot layout would
- *  show a permanent dash for one half of EVERY real session logged,
- *  violating the house "never a bare dash" rule this screen's own per-step
- *  list already honors. `null` (both bases absent — an all-effort workout,
+ *  literal mock) was checked against all 35 seeded starters (this repo's
+ *  original starter library, later retired at Phase 7 for a generated
+ *  300-workout one) and found to be unconditionally wrong in production:
+ *  not one referenced both "2k" and "6k" in the same workout (16 were
+ *  2k-only, 18 were 6k-only, and Microburst referenced neither at all) — so
+ *  the two-slot layout would show a permanent dash for one half of almost
+ *  every real session logged (the generated library still overwhelmingly
+ *  keeps to one base per workout — only 3 of its 300 entries mix both —
+ *  but is no longer exactly zero, hence "almost"), violating the house
+ *  "never a bare dash" rule this screen's own per-step list already
+ *  honors. The two-slot form still renders correctly for one of those rare
+ *  both-bases workouts (see the dedicated test that pins this). `null`
+ *  (both bases absent — an all-effort workout,
  *  or a mismatched/missing draft with nothing to reconstruct) means there
  *  is nothing honest to show at all; the caller omits the whole panel
  *  rather than rendering an empty "PACES LOCKED AT" label with no value.

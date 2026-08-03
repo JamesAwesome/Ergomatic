@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType, Baselines } from "../../domain/types.js";
 import {
   buildDraft,
@@ -16,36 +16,36 @@ import {
   type SessionDraft,
 } from "./draft";
 
-// Realistic fixtures, per repo convention: pull real starter workouts
-// (app/server/seed/starter.ts) rather than hand-built minimums.
-// - Microburst (AN): the effort-ref fixture — `ref: { effort: "max" }` —
+// Realistic fixtures, per repo convention: pull real library workouts
+// (app/server/seed/library/index.ts) rather than hand-built minimums.
+// - Fork Lightning (AN): the effort-ref fixture — `ref: { effort: "max" }` —
 //   proving nudges refuse an entry for it.
-// - Jet Stream (O2): the distance fixture — a single 10,000 m work step —
+// - Meltemi (O2): the distance fixture — a single 10,000 m work step —
 //   proving draftMinutes needs baselines and pins an exact total.
-// - Doldrums (O2): the reps-marker fixture — `{ k: "reps", count: 2 }` —
+// - Hoarfrost (O2): the reps-marker fixture — `{ k: "reps", count: 2 }` —
 //   proving draftSteps keeps the marker so estimateMinutes still expands it.
-function starter(title: string) {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   return w;
 }
 
 function draftInputFor(title: string, id: string) {
-  const w = starter(title);
+  const w = library(title);
   return { id, title: w.title, type: w.type as WorkoutType, steps: w.steps };
 }
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 
 describe("buildDraft", () => {
-  it("builds a v1 draft with defaults from a real starter workout", () => {
-    const jetStream = starter("Jet Stream");
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream"));
+  it("builds a v1 draft with defaults from a real library workout", () => {
+    const meltemi = library("Meltemi");
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi"));
     expect(d.v).toBe(1);
-    expect(d.workoutId).toBe("id-jet-stream");
-    expect(d.title).toBe("Jet Stream");
+    expect(d.workoutId).toBe("id-meltemi");
+    expect(d.title).toBe("Meltemi");
     expect(d.type).toBe("O2");
-    expect(d.steps).toStrictEqual(jetStream.steps);
+    expect(d.steps).toStrictEqual(meltemi.steps);
     expect(d.nudges).toStrictEqual({});
     expect(d.spmOverrides).toStrictEqual({});
     expect(d.removed).toStrictEqual([]);
@@ -54,15 +54,15 @@ describe("buildDraft", () => {
   });
 
   it("deep-copies steps so mutating the draft never touches the library workout", () => {
-    const jetStream = starter("Jet Stream");
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-2"));
-    expect(d.steps).not.toBe(jetStream.steps);
+    const meltemi = library("Meltemi");
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-2"));
+    expect(d.steps).not.toBe(meltemi.steps);
     const draftWork = d.steps.find((s) => s.k === "w") as Extract<
       Step,
       { k: "w" }
     >;
     draftWork.spm = 999;
-    const libraryWork = jetStream.steps.find((s) => s.k === "w") as Extract<
+    const libraryWork = meltemi.steps.find((s) => s.k === "w") as Extract<
       Step,
       { k: "w" }
     >;
@@ -72,7 +72,7 @@ describe("buildDraft", () => {
 
 describe("draftSteps", () => {
   it("folds SPM overrides into work steps and keeps the reps marker intact", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums"));
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const mutated: SessionDraft = {
       ...d,
@@ -86,7 +86,7 @@ describe("draftSteps", () => {
   });
 
   it("excludes removed step indices from the effective list", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-2"));
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-2"));
     const wuIndex = d.steps.findIndex((s) => s.k === "wu");
     const mutated: SessionDraft = { ...d, removed: [wuIndex] };
     const steps = draftSteps(mutated);
@@ -95,12 +95,12 @@ describe("draftSteps", () => {
   });
 
   it("folds a split-ref work step's nudge into its ref.off", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-nudge"));
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-nudge"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const nudged = withNudge(d, workIndex, -5);
     const steps = draftSteps(nudged);
     const work = steps[workIndex] as Extract<Step, { k: "w" }>;
-    expect(work.ref).toStrictEqual({ base: "6k", off: 3 }); // 8 + (-5)
+    expect(work.ref).toStrictEqual({ base: "6k", off: 8 }); // 13 + (-5)
   });
 });
 
@@ -111,9 +111,9 @@ describe("effectiveSteps", () => {
   // has to re-derive "which original step was this" by counting positions
   // in the filtered array.
   it("pairs each surviving step with its ORIGINAL index, not its filtered position", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-effective"));
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-effective"));
     const wuIndex = d.steps.findIndex((s) => s.k === "wu");
-    expect(wuIndex).toBe(0); // Doldrums: wu, reps, w — striking index 0
+    expect(wuIndex).toBe(0); // Hoarfrost: wu, reps, w — striking index 0
     const mutated: SessionDraft = { ...d, removed: [wuIndex] };
 
     const effective = effectiveSteps(mutated);
@@ -129,7 +129,9 @@ describe("effectiveSteps", () => {
   });
 
   it("agrees with draftSteps' own step values (same fold, just paired with the index)", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-effective-2"));
+    const d = buildDraft(
+      draftInputFor("Hoarfrost", "id-hoarfrost-effective-2"),
+    );
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const mutated: SessionDraft = { ...d, spmOverrides: { [workIndex]: 24 } };
 
@@ -140,20 +142,20 @@ describe("effectiveSteps", () => {
 });
 
 describe("draftMinutes", () => {
-  it("computes an exact pinned total for a distance workout (Jet Stream) given baselines", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-3"));
-    // wu 5' (300s) + 10,000m @ 6k+8 = 128 s/500m -> 20 * 128 = 2560s.
-    // total 2860s -> round(2860/60) = 48.
-    expect(draftMinutes(d, baselines)).toBe(48);
+  it("computes an exact pinned total for a distance workout (Meltemi) given baselines", () => {
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-3"));
+    // wu 10' (600s) + 10,000m @ 6k+13 = 133 s/500m -> 20 * 133 = 2660s.
+    // total 3260s -> round(3260/60) = 54.
+    expect(draftMinutes(d, baselines)).toBe(54);
   });
 
   it("returns null for a distance workout when baselines are absent", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-4"));
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-4"));
     expect(draftMinutes(d, null)).toBeNull();
   });
 
   it("also returns null for a TIME-based work step without baselines (any pace ref needs resolving)", () => {
-    // Doldrums is time-based (not distance), but its work step still carries
+    // Hoarfrost is time-based (not distance), but its work step still carries
     // a SplitRef that expand.ts's phases() resolves unconditionally via
     // resolveSplit(baselines, ref) regardless of duration kind - so it
     // crashes without baselines exactly like the distance case. The brief
@@ -162,7 +164,7 @@ describe("draftMinutes", () => {
     // expand.ts phases()) requires baselines for ANY "w" step, split or
     // effort ref, time or distance duration. This test pins that broader,
     // actually-correct rule.
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-3"));
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-3"));
     expect(draftMinutes(d, null)).toBeNull();
   });
 
@@ -182,10 +184,11 @@ describe("draftMinutes", () => {
     expect(draftMinutes(d, null)).toBe(5);
   });
 
-  it("computes an exact pinned total for an effort-ref workout (Microburst) given baselines", () => {
-    const d = buildDraft(draftInputFor("Microburst", "id-microburst"));
-    // wu 5' (300s) + 10 * (30s work + 150s rest) = 300 + 1800 = 2100s -> 35.
-    expect(draftMinutes(d, baselines)).toBe(35);
+  it("computes an exact pinned total for an effort-ref workout (Fork Lightning) given baselines", () => {
+    const d = buildDraft(draftInputFor("Fork Lightning", "id-fork-lightning"));
+    // wu 10' (600s) + 10 * (30s work + 75s rest) = 600 + 1050 = 1650s ->
+    // 1650/60 = 27.5 -> 28 (Math.round rounds .5 up).
+    expect(draftMinutes(d, baselines)).toBe(28);
   });
 
   // F1 fix (final whole-branch review): draftMinutes used to price the
@@ -193,39 +196,41 @@ describe("draftMinutes", () => {
   // moved the resolved range shown on its own row but never touched the
   // Confirm footer's minute recount, because draftMinutes called
   // estimateMinutes over draftSteps(d) while draftSteps folded SPM
-  // overrides but not nudges. (The reviewer's exact probe: nudging Jet
-  // Stream's split step should move its 44-ish minute recount; instead it
+  // overrides but not nudges. (The reviewer's exact probe: nudging
+  // Meltemi's split step should move its 54-ish minute recount; instead it
   // read the same number before and after.) Pinned here with a nudge big
   // enough to cross a rounding boundary, so a fix that folds the nudge in
   // but gets the sign or magnitude wrong would still fail this.
   it("prices a nudge into the recount for a distance workout (the exact case a prior version silently ignored)", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-priced"));
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-priced"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
-    // Unnudged: wu 5' (300s) + 10,000m @ 6k+8 = 128 s/500m -> 20*128 = 2560s;
-    // total 2860s -> round(2860/60) = 48 (same pinned total as the earlier
-    // "exact pinned total" test above — this test's whole point is the
-    // BEFORE/AFTER delta, not a fresh number).
-    expect(draftMinutes(d, baselines)).toBe(48);
+    // Unnudged: wu 10' (600s) + 10,000m @ 6k+13 = 133 s/500m -> 20*133 =
+    // 2660s; total 3260s -> round(3260/60) = 54 (same pinned total as the
+    // earlier "exact pinned total" test above — this test's whole point is
+    // the BEFORE/AFTER delta, not a fresh number).
+    expect(draftMinutes(d, baselines)).toBe(54);
 
-    // -5s/500m nudge: split becomes 123 -> 20*123 = 2460s; total 2760s ->
-    // round(2760/60) = 46 exactly. A version that ignores nudges would
-    // still report 48 here.
+    // -5s/500m nudge: split becomes 128 -> 20*128 = 2560s; total 3160s ->
+    // round(3160/60) = 53 exactly. A version that ignores nudges would
+    // still report 54 here.
     const nudged = withNudge(d, workIndex, -5);
-    expect(draftMinutes(nudged, baselines)).toBe(46);
+    expect(draftMinutes(nudged, baselines)).toBe(53);
   });
 });
 
 describe("withNudge", () => {
-  it("no-ops on an effort-ref work step (Microburst)", () => {
-    const d = buildDraft(draftInputFor("Microburst", "id-microburst-2"));
+  it("no-ops on an effort-ref work step (Fork Lightning)", () => {
+    const d = buildDraft(
+      draftInputFor("Fork Lightning", "id-fork-lightning-2"),
+    );
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const result = withNudge(d, workIndex, 5);
     expect(result).toBe(d);
     expect(result.nudges).toStrictEqual({});
   });
 
-  it("nudges a split-ref work step cumulatively (Jet Stream)", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-5"));
+  it("nudges a split-ref work step cumulatively (Meltemi)", () => {
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-5"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const once = withNudge(d, workIndex, 3);
     expect(once.nudges[workIndex]).toBe(3);
@@ -234,7 +239,7 @@ describe("withNudge", () => {
   });
 
   it("no-ops on a non-work step index and on an out-of-range index", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-6"));
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-6"));
     const wuIndex = d.steps.findIndex((s) => s.k === "wu");
     expect(withNudge(d, wuIndex, 1)).toBe(d);
     expect(withNudge(d, 999, 1)).toBe(d);
@@ -243,7 +248,7 @@ describe("withNudge", () => {
 
 describe("startDraft / cancelStart", () => {
   it("startDraft stamps a real ISO startedAt", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-start"));
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-start"));
     expect(d.startedAt).toBeNull();
     const started = startDraft(d);
     expect(started.startedAt).not.toBeNull();
@@ -251,7 +256,7 @@ describe("startDraft / cancelStart", () => {
   });
 
   it("cancelStart reverses startDraft, returning startedAt to null", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-cancel"));
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-cancel"));
     const started = startDraft(d);
     const cancelled = cancelStart(started);
     expect(cancelled.startedAt).toBeNull();
@@ -261,7 +266,7 @@ describe("startDraft / cancelStart", () => {
   });
 
   it("cancelStart on an already-unstarted draft is a no-op value (still null)", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-cancel-2"));
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-cancel-2"));
     expect(cancelStart(d).startedAt).toBeNull();
   });
 });
@@ -269,8 +274,10 @@ describe("startDraft / cancelStart", () => {
 describe("saveDraft / loadDraft / clearDraft", () => {
   beforeEach(() => localStorage.clear());
 
-  it("round-trips a Microburst (effort step) draft byte-identical after mutation", () => {
-    const d = buildDraft(draftInputFor("Microburst", "id-microburst-3"));
+  it("round-trips a Fork Lightning (effort step) draft byte-identical after mutation", () => {
+    const d = buildDraft(
+      draftInputFor("Fork Lightning", "id-fork-lightning-3"),
+    );
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const nudged = withNudge(d, workIndex, 5); // no-op: effort ref
     const mutated: SessionDraft = {
@@ -284,37 +291,38 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(loaded!.nudges).toStrictEqual({});
     const effective = draftSteps(loaded!);
     expect(effective.some((s) => s.k === "wu")).toBe(false);
-    // 35 total minus the removed 5' warmup.
-    expect(draftMinutes(loaded!, baselines)).toBe(30);
+    // 28 total minus the removed 10' warmup: 10*(30s+75s) = 1050s -> 17.5 ->
+    // 18.
+    expect(draftMinutes(loaded!, baselines)).toBe(18);
   });
 
-  it("round-trips a Jet Stream (distance) draft byte-identical with a nudge applied", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-7"));
+  it("round-trips a Meltemi (distance) draft byte-identical with a nudge applied", () => {
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-7"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
-    // -5, not +2: a +2 nudge (128 -> 130 s/500m) still rounds to the same
-    // 48-minute total as unnudged (2900/60 = 48.33 -> 48), so it would pass
+    // -5, not -1: a -1 nudge (133 -> 132 s/500m) still rounds to the same
+    // 54-minute total as unnudged (3240/60 = 54 exactly), so it would pass
     // whether or not draftMinutes actually priced the nudge in — exactly
     // the gap the F1 fix ("prices a nudge into the recount…" test above)
-    // was found through. -5 crosses the rounding boundary (48 -> 46), so
+    // was found through. -5 crosses the rounding boundary (54 -> 53), so
     // this round trip also proves the nudge survived storage AND still
     // prices correctly after a reload.
     const nudged = withNudge(d, workIndex, -5);
     expect(saveDraft(nudged)).toBe(true);
     const loaded = loadDraft();
     expect(loaded).toStrictEqual(nudged);
-    expect(draftMinutes(loaded!, baselines)).toBe(46);
+    expect(draftMinutes(loaded!, baselines)).toBe(53);
     expect(draftMinutes(loaded!, null)).toBeNull();
   });
 
-  it("round-trips a Doldrums (reps marker) draft, keeping the marker live", () => {
-    const d = buildDraft(draftInputFor("Doldrums", "id-doldrums-4"));
+  it("round-trips a Hoarfrost (reps marker) draft, keeping the marker live", () => {
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-4"));
     expect(saveDraft(d)).toBe(true);
     const loaded = loadDraft();
     expect(loaded).toStrictEqual(d);
     const steps = draftSteps(loaded!);
     expect(steps.some((s) => s.k === "reps")).toBe(true);
-    // wu 4' (240s) + 2 * (20' work + 3' rest) = 240 + 2760 = 3000s -> 50.
-    expect(draftMinutes(loaded!, baselines)).toBe(50);
+    // wu 10' (600s) + 2 * (12' work + 3' rest) = 600 + 1800 = 2400s -> 40.
+    expect(draftMinutes(loaded!, baselines)).toBe(40);
   });
 
   it("returns null when nothing is stored", () => {
@@ -328,7 +336,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null and clears the key for an unknown version", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-8"));
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-8"));
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, v: 2 }));
     expect(loadDraft()).toBeNull();
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
@@ -358,9 +366,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null for v:1 with steps/removed as the wrong shape (an object, not an array)", () => {
-    const d = buildDraft(
-      draftInputFor("Jet Stream", "id-jet-stream-malformed"),
-    );
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-malformed"));
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({ ...d, steps: {}, removed: {} }),
@@ -370,9 +376,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null for v:1 with nudges/spmOverrides as the wrong shape (an array, not a record)", () => {
-    const d = buildDraft(
-      draftInputFor("Jet Stream", "id-jet-stream-malformed-2"),
-    );
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-malformed-2"));
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({ ...d, nudges: [], spmOverrides: [] }),
@@ -382,16 +386,14 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null for v:1 with a non-string title", () => {
-    const d = buildDraft(
-      draftInputFor("Jet Stream", "id-jet-stream-malformed-3"),
-    );
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-malformed-3"));
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, title: 42 }));
     expect(loadDraft()).toBeNull();
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
   });
 
   it("clearDraft removes the stored draft", () => {
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-9"));
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-9"));
     saveDraft(d);
     clearDraft();
     expect(loadDraft()).toBeNull();
@@ -404,7 +406,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
       .mockImplementation(() => {
         throw new DOMException("quota exceeded", "QuotaExceededError");
       });
-    const d = buildDraft(draftInputFor("Jet Stream", "id-jet-stream-10"));
+    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-10"));
     expect(() => saveDraft(d)).not.toThrow();
     expect(saveDraft(d)).toBe(false);
     spy.mockRestore();

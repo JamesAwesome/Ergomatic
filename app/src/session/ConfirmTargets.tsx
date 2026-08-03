@@ -60,8 +60,8 @@ export const METERS_MAX = 42195;
 // from StepEditor.tsx's authoring-time SPM_MIN/MAX (10..60) — the builder
 // permits any legal spm while authoring a workout, but the pre-session
 // confirm step is deliberately narrower: 18-32 is the whole physiological
-// band the seeded library ever prescribes (starter.ts's own comment: "every
-// work step prescribes spm within 18-32").
+// band the seeded library ever prescribes (verified against every work
+// step across the generated 300-workout library, server/seed/library/).
 export const SPM_MIN = 18;
 export const SPM_MAX = 32;
 export const SPM_WAKE = 20;
@@ -383,7 +383,7 @@ export default function ConfirmTargets() {
           // `buildRun` requires a concrete `Baselines` — always, even for a
           // workout with no split-ref step, since it's a fixed 4-arg
           // contract, not a per-workout one. Rather than have Countdown
-          // silently freeze a near-zero split for the one starter/authored
+          // silently freeze a near-zero split for the one library/authored
           // workout that DOES have a split-ref step (the {0,0} dummy this
           // replaces), START is blocked here, at the one place a rower can
           // still act on it — the row-level "no target" idiom already

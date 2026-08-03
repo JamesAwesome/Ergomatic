@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
@@ -19,17 +19,17 @@ const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const TOL = 1;
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
-function starter(title: string) {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   return w;
 }
 
 // The phase-kind matrix fixture — the brief's own "a real starter workout
 // with an added effort step via the draft," extended one further step for
-// distance (no single starter step list otherwise exercises wu/work-split/
-// rest/work-effort/distance all in one run). Doldrums' own real split-ref
-// work step (time, spm 18, its own embedded 3' rest) supplies wu/
+// distance (no single library step list otherwise exercises wu/work-split/
+// rest/work-effort/distance all in one run). Hoarfrost's own real split-ref
+// work step (time, spm 19, its own embedded 3' rest) supplies wu/
 // work-split/rest; a distance split-ref step and an effort-ref step are
 // appended directly onto the draft. The reps marker is deliberately NOT
 // reused here — appending steps after a LIVE "reps" marker would repeat
@@ -38,20 +38,20 @@ function starter(title: string) {
 //
 // Resulting phases (baselines {k2:100,k6:120}, tol 1):
 //   0 warmup   240s   "Easy"
-//   1 work     1200s  split  "2:16.0" / "2:15.0–2:17.0"  spm 18
+//   1 work     720s   split  "2:12.0" / "2:11.0–2:13.0"  spm 19
 //   2 rest     180s   "Rest"
 //   3 work     —      distance 500m, split "1:40.0" / "1:39.0–1:41.0"
 //   4 work     60s    effort "ALL OUT"
 function kindMatrixDraft(): SessionDraft {
-  const doldrums = starter("Doldrums");
-  const splitWork = doldrums.steps.find((s) => s.k === "w") as Extract<
+  const hoarfrost = library("Hoarfrost");
+  const splitWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
     Step,
     { k: "w" }
   >;
   return buildDraft({
     id: "id-kind-matrix",
-    title: doldrums.title,
-    type: doldrums.type as WorkoutType,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
     steps: [
       { k: "wu", minutes: 4 },
       splitWork,
@@ -69,7 +69,7 @@ function kindMatrixDraft(): SessionDraft {
   });
 }
 
-// No starter workout authors a "test" (open-ended) step (Task 1's own
+// No library workout authors a "test" (open-ended) step (Task 1's own
 // report: none exists in the seeded library) — a hand-built minimal draft,
 // the same exception draft.test.ts's own "Warm-up only" fixture takes.
 function testKindDraft(): SessionDraft {
@@ -268,7 +268,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining
     expect(screen.getByText("Easy")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
-    expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument();
+    expect(screen.getByText("WORK · 2:11.0–2:13.0")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -279,10 +279,10 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     await renderTimer();
 
     expect(screen.getByText("STEP 2 OF 5 · WORK")).toBeInTheDocument();
-    expect(screen.getByText("20:00")).toBeInTheDocument(); // 1200s remaining
-    expect(screen.getByText("2:16.0")).toBeInTheDocument();
-    expect(screen.getByText("2:15.0–2:17.0")).toBeInTheDocument();
-    expect(screen.getByText("18")).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument(); // 720s remaining
+    expect(screen.getByText("2:12.0")).toBeInTheDocument();
+    expect(screen.getByText("2:11.0–2:13.0")).toBeInTheDocument();
+    expect(screen.getByText("19")).toBeInTheDocument();
     expect(screen.getByText("spm")).toBeInTheDocument();
     // Fix round (whole-branch review, F4): a rest phase's own resolved
     // `label` is literally "Rest" (domain/expand.ts), which used to render
@@ -293,19 +293,19 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  // Doldrums' OWN unmodified reps block (`{k:"reps",count:2}` repeating its
+  // Hoarfrost's OWN unmodified reps block (`{k:"reps",count:2}` repeating its
   // one work+rest pair) — the SET N/M segment of the STEP line only ever
   // appears on a phase produced by a live reps marker (domain/expand.ts's
   // own `set` stamping), which `kindMatrixDraft` deliberately avoids
   // reusing (see its own comment) to keep that fixture's phase count exact.
   it("a repeated (SET) phase folds SET i/j into the STEP line", async () => {
     mockKeepAwake();
-    const doldrums = starter("Doldrums");
+    const hoarfrost = library("Hoarfrost");
     const draft = buildDraft({
-      id: "id-doldrums-set",
-      title: doldrums.title,
-      type: doldrums.type as WorkoutType,
-      steps: doldrums.steps,
+      id: "id-hoarfrost-set",
+      title: hoarfrost.title,
+      type: hoarfrost.type as WorkoutType,
+      steps: hoarfrost.steps,
     });
     const run = buildAndSaveRun(draft);
     // Phases: [0 wu, 1 work(set 1/2), 2 rest(set 1/2), 3 work(set 2/2), 4 rest(set 2/2)].
@@ -389,7 +389,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       runAtIndex(run, 0); // next=work(split), afterNext=rest
       await renderTimer();
 
-      expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument(); // UP NEXT's own value, unchanged
+      expect(screen.getByText("WORK · 2:11.0–2:13.0")).toBeInTheDocument(); // UP NEXT's own value, unchanged
       // Same F4 dedupe as upNextText's own rest-phase case above, applied
       // here via the shared `phaseAnnouncement` helper.
       expect(screen.getByText("then REST")).toBeInTheDocument();
@@ -478,19 +478,19 @@ describe("Timer — controls", () => {
     runAtIndex(run, 1, FIXED_NOW);
     vi.setSystemTime(new Date(FIXED_NOW.getTime() + 10_000)); // 10s in
     await renderTimer();
-    expect(screen.getByText("19:50")).toBeInTheDocument(); // 1200 - 10
-    // The phase-progress bar's fill: 10s elapsed of the phase's 1200s full
+    expect(screen.getByText("11:50")).toBeInTheDocument(); // 720 - 10
+    // The phase-progress bar's fill: 10s elapsed of the phase's 720s full
     // duration — a genuine non-zero, non-trivial fraction (unlike every
     // phase-kind-rendering test above, which all render at elapsed=0).
     const phaseBarWidth = parseFloat(
       (document.querySelector(".timer-phase-bar span") as HTMLElement).style
         .width,
     );
-    expect(phaseBarWidth).toBeCloseTo((10 / 1200) * 100, 6);
+    expect(phaseBarWidth).toBeCloseTo((10 / 720) * 100, 6);
 
     await userEvent.click(screen.getByRole("button", { name: "Pause" }));
     expect(screen.getByText("PAUSED")).toBeInTheDocument();
-    expect(screen.getByText("19:50")).toBeInTheDocument();
+    expect(screen.getByText("11:50")).toBeInTheDocument();
 
     // Time passes while paused — advancing the frozen clock directly and
     // forcing a repaint via `visibilitychange` exercises the SAME
@@ -501,7 +501,7 @@ describe("Timer — controls", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    expect(screen.getByText("19:50")).toBeInTheDocument(); // still frozen
+    expect(screen.getByText("11:50")).toBeInTheDocument(); // still frozen
 
     await userEvent.click(screen.getByRole("button", { name: "Resume" }));
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
@@ -510,7 +510,7 @@ describe("Timer — controls", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    expect(screen.getByText("19:45")).toBeInTheDocument(); // 1200 - 15
+    expect(screen.getByText("11:45")).toBeInTheDocument(); // 720 - 15
   });
 
   it("◀ rewinds to the previous phase, re-seeding its clock (not partially elapsed)", async () => {
@@ -1001,16 +1001,16 @@ describe("Timer — the repaint loop", () => {
   // `visibilitychange`, not only from the next 1s interval tick.
   it("catches up multiple phases on visibilitychange (a simulated lock)", async () => {
     mockKeepAwake();
-    const mackerelSky = starter("Mackerel Sky");
+    const moderateBreeze = library("Moderate Breeze");
     const draft = buildDraft({
-      id: "id-mackerel",
-      title: mackerelSky.title,
-      type: mackerelSky.type as WorkoutType,
-      steps: mackerelSky.steps,
+      id: "id-moderate-breeze",
+      title: moderateBreeze.title,
+      type: moderateBreeze.type as WorkoutType,
+      steps: moderateBreeze.steps,
     });
     const run = buildAndSaveRun(draft);
-    // wu 300s + work1 900s = 1200s boundary; 10s into work2 (index 2).
-    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 1_210_000));
+    // wu 600s + work1 360s = 960s boundary; 10s into work2 (index 2).
+    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 970_000));
     await renderTimer();
 
     // Before any tick fires, the stale phase 0 is still what renders.
