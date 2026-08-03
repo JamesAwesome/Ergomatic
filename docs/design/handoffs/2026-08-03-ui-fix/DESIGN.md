@@ -141,6 +141,33 @@ unchanged at level 1.
    compound control.
 5. **Pace bands removed from display**; `toleranceRange()` retained in the domain.
 
+## Library (second pass)
+
+Mockup: `Ergomatic UI fix - Library.dc.html` (three states, build notes beside them).
+
+- The eleven-chip ragged wrap and the accent `ALL` chip are gone. At rest the screen
+  shows one `FILTER ⌄` chip (ink border, 44px) and the count.
+- Active filters render as **tokens**: 44px tall, 12px leading pad, mono 11/600 cream
+  label, then a 44×44 `✕` cell that removes that filter. Type tokens fill with the type
+  color; every other kind fills ink. `CLEAR ALL` is a 44px accent-label control on the
+  count line, present only while something is on.
+- **One token per group, not per band.** Contiguous bands collapse into a range token
+  (`PAIN 4–5`); a non-contiguous selection lists them in one token (`PAIN 1, 4`). The
+  count reads tokens, so the row and the count never disagree.
+- `FILTER ⌄` opens a **sheet** over the list holding all five groups (TYPE, TIME, PAIN
+  as 4/4/5-cell grids; LAST DONE and SOURCE sharing a line as 2-cell grids) and a
+  level-1 button that counts the result: "Show 12 workouts".
+- **Pain is 1–5**, five cells, multi-select union. The old single `PAIN ≤3` chip could
+  not express "give me something hard".
+- **Recency** is `<21D` / `21D+` under a LAST DONE label. RECENT / NOT RECENT and every
+  adjective tried in its place (OLDER, STALE) read as a verdict on the workout.
+- **Source** is `GLOBAL` / `CUSTOM`, its own group; CUSTOM was never a filter of the
+  same kind as the others, and GLOBAL avoids naming the book in the UI.
+- Count copy: "35 WORKOUTS" at rest, "12 OF 35 SHOWN" when filtered. "35 ENTERED"
+  described the data-entry backlog rather than anything the rower needs.
+- Semantics unchanged otherwise: TYPE single-select and toggles off, TIME and PAIN
+  unions, LAST DONE and SOURCE mutually exclusive.
+
 ## Not touched, by request
 
 Chips' own shape/size, in-card actions, `choose a plan →`, the Library and Plan

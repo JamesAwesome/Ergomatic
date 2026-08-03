@@ -54,6 +54,47 @@ already asking for. Scope, in the design's own structure:
 6. **Contrast sweep** — no 10–11px mono label may sit at `--ink-4` on
    `--page` (fails 4.5:1); move survivors to `--ink-3`. (`--ink-4` uses
    exist today at index.css:418/511/565 among others — audit all.)
+7. **Library second pass** (v2 handoff, `mockup-library.html`, three
+   states):
+   - At rest: one `FILTER ⌄` chip (ink border, 44px) + the count. The
+     eleven-chip wrap and the accent ALL chip go.
+   - Active filters render as removable TOKENS: 44px, mono 11/600 cream
+     label + a 44×44 `✕` cell; type tokens fill the type color, all
+     others ink. `CLEAR ALL` (44px, accent label) sits on the count line
+     only while something is on.
+   - ONE token per group: contiguous selections collapse (`PAIN 4–5`),
+     non-contiguous list (`PAIN 1, 4`). The count reads tokens.
+   - `FILTER ⌄` opens a SHEET over the list: TYPE / TIME / PAIN as
+     4/4/5-cell grids, LAST DONE + SOURCE sharing a line as 2-cell
+     grids, and a level-1 button counting the result ("Show 12
+     workouts").
+   - **Filter model changes:** pain becomes a 1–5 MULTI-SELECT UNION
+     (replacing `painMax3` — "≤3 could not express give me something
+     hard"); recency renames to LAST DONE `<21D` / `21D+`; CUSTOM
+     becomes SOURCE `GLOBAL`/`CUSTOM`. TYPE stays single-select
+     toggle-off; TIME and PAIN are unions; LAST DONE and SOURCE stay
+     mutually exclusive pairs. The 21-day boundary and all matching
+     semantics are otherwise unchanged.
+   - Count copy: `35 WORKOUTS` at rest, `12 OF 35 SHOWN` filtered
+     ("ENTERED" goes).
+   - Implementation consequences (verified): `filters.ts`'s `Filters`
+     shape changes (`painMax3: boolean` → `painLevels: number[]`,
+     `recency` codes, `customOnly` → `source`), so `libraryFilters.ts`'s
+     persisted sessionStorage shape changes with it — strict validation
+     rejects the old shape (falls back to empty, the module's existing
+     contract; no migration needed for a per-tab session value).
+8. **Today's pain group follows the new model** (James, 2026-08-03,
+   resolving the mockup's `PAIN 1–2` chip): Today's PAIN group becomes
+   the same five cells inline, multi-select union, edited in place like
+   its DIFFICULTY/TIME neighbours; the chip-collapse display rule
+   applies to the GROUP LABEL only if the design's Today mock shows one
+   (it shows the selected cells directly — follow the mock).
+   `SuggestPrefs.painMax3` widens to `painLevels?: number[]` (empty/
+   absent = no pain filter; union semantics identical to the Library's),
+   and `todayOverrides`' stored shape changes accordingly (strict
+   validation, old shape falls back — same contract as above). This is
+   a client-domain change to `suggest.ts` only; the reason-wording rule
+   ("name only dimensions actually checked") extends to the union.
 
 Per-screen change lists: DESIGN.md's own section is the checklist
 (Today · Workout detail · Session complete · Confirm · Timer · Builder).
@@ -103,12 +144,27 @@ Start/Log it after/Edit/rule/Delete, nothing paired.
   buttons moved); screenshots re-captured for all six screens, opened.
 - Self-mutation DoD; two back-to-back e2e runs.
 
+## Testing additions for the Library pass
+
+- `filters.ts`: the new model's table (pain unions incl. non-contiguous,
+  LAST DONE pairs, SOURCE pairs, TYPE toggle-off) — every rule pinned.
+- Token collapse: contiguous → range label, non-contiguous → list label,
+  one token per group, count agrees with tokens.
+- The sheet: open/apply round trip, the level-1 button's live count,
+  scroll restoration STILL works with the new persisted shape (PR #41's
+  e2e must keep passing — the BACK-with-filters flow now goes through
+  tokens; update its selectors, keep its assertions).
+- Old persisted shapes (both `libraryFilters` and `todayOverrides`)
+  fall back cleanly — validation-table cases for the v1 shapes.
+- Today: five-cell pain group drives suggest() (union semantics), reason
+  wording for union cases, overrides round trip.
+
 ## Out of scope
 
-Chips' shape/size, in-card actions, `choose a plan →`, Library/Plan
-screens (beyond zero-regression), domain math, server, PM5. The
-DEVIATIONS rows the design mandates (5 listed in DESIGN.md) land with
-the implementation.
+Chips' base shape/size, in-card actions, `choose a plan →`, the Plan
+screen, domain math beyond `suggest.ts`'s pain-union widening, server,
+PM5. The DEVIATIONS rows the design mandates (5 listed in DESIGN.md,
+plus the Library second pass's own) land with the implementation.
 
 ## Exit criteria
 
