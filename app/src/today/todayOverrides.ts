@@ -28,6 +28,11 @@ export interface TodayOverrides {
 
 const TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
 const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
+// The Today filter row's only five cap values (`≤30′ ≤45′ ≤60′ ≤90′ NO
+// CAP`) — shared between `parseOverrides`' validation below and `snapCap`
+// further down, so the two can never drift apart into "a value a stored
+// record is allowed to hold" vs. "a value a chip can actually represent".
+const CAP_STEPS = [30, 45, 60, 90] as const;
 
 function isWorkoutType(v: unknown): v is WorkoutType {
   return typeof v === "string" && (TYPES as readonly string[]).includes(v);
@@ -37,6 +42,10 @@ function isDifficulty(v: unknown): v is Difficulty {
   return (
     typeof v === "string" && (DIFFICULTIES as readonly string[]).includes(v)
   );
+}
+
+function isCapMinutes(v: unknown): v is number | null {
+  return v === null || (CAP_STEPS as readonly number[]).includes(v as number);
 }
 
 /** Strict shape check, same discipline as libraryFilters.ts's parseFilters
@@ -61,16 +70,7 @@ function parseOverrides(raw: string): TodayOverrides | null {
   if (!Array.isArray(o.difficulties) || !o.difficulties.every(isDifficulty)) {
     return null;
   }
-  if (
-    o.capMinutes !== null &&
-    !(
-      typeof o.capMinutes === "number" &&
-      Number.isFinite(o.capMinutes) &&
-      o.capMinutes > 0
-    )
-  ) {
-    return null;
-  }
+  if (!isCapMinutes(o.capMinutes)) return null;
   if (typeof o.painMax3 !== "boolean") return null;
   return {
     date: o.date,
@@ -127,8 +127,6 @@ export function saveTodayOverrides(o: TodayOverrides): void {
     // best-effort
   }
 }
-
-const CAP_STEPS = [30, 45, 60, 90] as const;
 
 /** Maps a raw preference cap to the nearest chip value: the smallest of
  *  30/45/60/90 that is >= pref, else null (NO CAP) once pref exceeds every

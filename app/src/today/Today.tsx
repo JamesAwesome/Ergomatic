@@ -25,17 +25,12 @@ import {
   type TodayOverrides,
 } from "./todayOverrides";
 import TypeBadge from "../components/TypeBadge";
+import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 
 // Chip order per the task brief — AN before O2, matching Library's own
 // FilterChips.tsx (docs/design/README.md §Screens → "2. Library": not
 // alphabetical).
 const TYPE_CHIPS: WorkoutType[] = ["AN", "O2", "AT", "TR"];
-
-const DIFFICULTY_CHIPS: { value: Difficulty; label: string }[] = [
-  { value: "easy", label: "EASY" },
-  { value: "medium", label: "MED" },
-  { value: "hard", label: "HARD" },
-];
 
 // "≤NN′" — Library's own prime-mark idiom for minutes (FilterChips.tsx's
 // DURATION_CHIPS), applied here to an upper-bound cap rather than a range
