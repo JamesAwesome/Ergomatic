@@ -856,6 +856,15 @@ test("log-session", async ({ page }) => {
 // capture, so the two images read as the same product's two doors, not two
 // different products — and no real timer run is needed at all here, so this
 // test needs none of that one's extended timeout.
+//
+// Today enhancements (Task 4): a plan is chosen here too, specifically so
+// this capture also shows the plan toggle (`.log-plan-toggle`) — no
+// screenshot fixture ever activated a plan on the Log screen before this,
+// so the toggle had never appeared in a committed capture at all. Left in
+// its default ("COUNTS TOWARD PLAN …") state rather than toggled, since
+// that's what a rower logging a genuine plan session actually sees; the
+// toggled ("OUTSIDE THE PLAN") state is covered instead by design.spec.ts's
+// own dedicated sweep, which measures and axes BOTH states.
 test("log-session-manual", async ({ page }) => {
   const title = "Screenshot Log Session Manual Workout";
   await signInViaBackdoor(page, {
@@ -863,6 +872,8 @@ test("log-session-manual", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
   await importBulk(
     page,
     [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
@@ -883,6 +894,10 @@ test("log-session-manual", async ({ page }) => {
   // No Discard button at all on this door — the visible difference the
   // screenshot pair exists to show.
   await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+  // The plan toggle, default state — a plan is active for this fixture now.
+  await expect(
+    page.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+  ).toContainText("SESSION 1 OF 84");
 
   // Realistic, non-empty state (CLAUDE.md's own "no empty-state screenshots"
   // rule), same values as the session door's own capture for a fair visual
