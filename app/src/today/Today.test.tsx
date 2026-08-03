@@ -404,7 +404,7 @@ describe("Today (overrides: init from preferences)", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "MED" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );

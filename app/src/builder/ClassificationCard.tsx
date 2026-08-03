@@ -1,5 +1,6 @@
 import type { Difficulty, WorkoutType } from "../../domain/types.js";
 import { PAIN_WORDS, TYPE_WORDS } from "./builderState";
+import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 
 // Chip order per docs/design/README.md §Screens -> "2. Library" (AN before
 // O2 — not alphabetical), matching src/library/FilterChips.tsx and
@@ -21,14 +22,6 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   AN: "--type-an",
   TR: "--type-tr",
 };
-
-// Difficulty reads EASY/MEDIUM/HARD (docs/design/DEVIATIONS.md), not the
-// handoff's Introductory/Moderate/Advanced.
-const DIFFICULTY_CHIPS: { value: Difficulty; label: string }[] = [
-  { value: "easy", label: "EASY" },
-  { value: "medium", label: "MEDIUM" },
-  { value: "hard", label: "HARD" },
-];
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
 type PainLevel = (typeof PAIN_LEVELS)[number];

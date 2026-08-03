@@ -113,7 +113,17 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
         JSON.stringify({ ...FULL, difficulties: ["extreme"] }),
       ],
       [
-        "capMinutes not a positive finite number",
+        // Validation accepts ONLY the five values a cap chip can actually
+        // render (30/45/60/90/null) — not merely "a positive finite
+        // number" — so a value that would leave zero cap chips active
+        // (the "exactly one is always active" invariant broken) can never
+        // survive a load. 37 is the review's own probe value: finite,
+        // positive, and still correctly rejected.
+        "capMinutes not one of the five chip values (e.g. 37)",
+        JSON.stringify({ ...FULL, capMinutes: 37 }),
+      ],
+      [
+        "capMinutes zero (not a chip value either)",
         JSON.stringify({ ...FULL, capMinutes: 0 }),
       ],
       ["capMinutes negative", JSON.stringify({ ...FULL, capMinutes: -30 })],
@@ -121,7 +131,8 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
         // JSON.stringify(Infinity) itself serialises to `null` (a VALID no-
         // cap value), so this has to hand-craft raw JSON text containing a
         // numeric literal that overflows to Infinity on parse (`1e400` is
-        // valid JSON syntax) to actually exercise the Number.isFinite guard.
+        // valid JSON syntax) to actually exercise the guard against a
+        // capMinutes value outside the five chip values.
         "capMinutes overflows to Infinity on parse (e.g. 1e400)",
         JSON.stringify(FULL).replace('"capMinutes":45', '"capMinutes":1e400'),
       ],
