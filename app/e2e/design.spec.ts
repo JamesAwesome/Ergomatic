@@ -538,6 +538,65 @@ test.describe("today screen (plan active, logs present)", () => {
       .evaluate((el) => getComputedStyle(el).color);
     expect(logMetaColor).toBe("rgb(111, 106, 95)"); // --ink-4
   });
+
+  // Today enhancements (Task 4): the chip row's default aria-pressed state
+  // matches the server preferences it was derived from on first mount
+  // (todayOverrides.ts's own fallback — DESIGN_BASELINES' fixture never
+  // touches /api/prefs, so this is the server's own default row: every
+  // difficulty, a 60-min cap, no pain filter) — and the swap chips read the
+  // plan's own prescribed type with nothing swapped yet.
+  test("the chip row's default aria-pressed state matches the unmodified server preferences", async ({
+    page,
+  }) => {
+    for (const label of ["EASY", "MEDIUM", "HARD"]) {
+      await expect(
+        page.getByRole("button", { name: label, exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+    await expect(
+      page.getByRole("button", { name: "≤60′", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    for (const label of ["≤30′", "≤45′", "≤90′", "NO CAP"]) {
+      await expect(
+        page.getByRole("button", { name: label, exact: true }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
+    await expect(
+      page.getByRole("button", { name: "PAIN ≤3", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    // Sprint's doneN=0 code is "O2" (SPRINT_WEEKS week 0, index 0) — the O2
+    // type chip reads active with nothing swapped, the other three don't.
+    await expect(
+      page.getByRole("button", { name: "O2", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    for (const label of ["AN", "AT", "TR"]) {
+      await expect(
+        page.getByRole("button", { name: label, exact: true }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  // Today enhancements (Task 4): the swap state itself — tapping a
+  // different type chip shows the plan line's own `→` arrow and flips
+  // aria-pressed on both the newly-active and newly-inactive chip; tapping
+  // the plan's own prescribed chip again (the "un-swap" rule,
+  // handleTypeChip's own doc comment) clears it.
+  test("tapping a different type chip shows the swap arrow in the plan line; tapping the prescribed chip again clears it", async ({
+    page,
+  }) => {
+    const o2Chip = page.getByRole("button", { name: "O2", exact: true });
+    const atChip = page.getByRole("button", { name: "AT", exact: true });
+
+    await atChip.click();
+    await expect(atChip).toHaveAttribute("aria-pressed", "true");
+    await expect(o2Chip).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".today-plan-line")).toContainText("O2 → AT");
+
+    await o2Chip.click();
+    await expect(o2Chip).toHaveAttribute("aria-pressed", "true");
+    await expect(atChip).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator(".today-plan-line")).not.toContainText("→");
+  });
 });
 
 test.describe("plan screen (a plan active)", () => {
@@ -1818,6 +1877,89 @@ test.describe("log session screen (manual door)", () => {
     await expect(page.locator(".classification-pain-word")).toHaveText(
       "EXPECTED 3/5",
     );
+  });
+});
+
+// Today enhancements (Task 4): the Log screen's plan toggle, with a plan
+// actually active — no other design sweep in this file ever chooses a plan
+// before reaching either Log door, so the toggle has never been rendered
+// under this file's own axe/tap-target sweeps at all. Reuses the manual
+// door (no timer run needed to reach it, unlike the session door) plus this
+// file's own top-level `choosePlan`/`resetPlanProgress` helpers.
+test.describe("log session screen (manual door, plan active — the plan toggle)", () => {
+  const title = "Design Log Plan Toggle Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-log-toggle-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Log Toggle Tester",
+    });
+    await setBaselines(page);
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 1:00 6k-2"].join("\n"),
+    );
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+    await expect(
+      page.getByRole("heading", { name: `Log ${title}` }),
+    ).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target, including the plan toggle in its default state", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+    const toggle = page.getByRole("button", { name: /COUNTS TOWARD PLAN/ });
+    const box = await toggle.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(toggle).toContainText("SESSION 1 OF 84");
+  });
+
+  test("zero WCAG 2A/2AA violations with the plan toggle rendered in its default state", async ({
+    page,
+  }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test.describe("toggled to OUTSIDE THE PLAN", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.getByRole("button", { name: /COUNTS TOWARD PLAN/ }).click();
+      await expect(
+        page.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+      ).toBeVisible();
+    });
+
+    test("every visible interactive element has a >=44x44 tap target, including the toggled plan toggle", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+      const toggle = page.getByRole("button", {
+        name: "OUTSIDE THE PLAN — won't advance",
+      });
+      const box = await toggle.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    });
+
+    test("zero WCAG 2A/2AA violations with the plan toggle in its toggled state", async ({
+      page,
+    }) => {
+      await assertNoA11yViolations(page);
+    });
   });
 });
 

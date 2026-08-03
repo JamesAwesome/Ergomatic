@@ -773,6 +773,63 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     );
     await expect(page.getByText("no target").last()).toBeVisible();
   });
+
+  // Today enhancements (Task 4): the outside-plan toggle's manual-door half
+  // — the session-door half of the SAME toggle already gets driven, in its
+  // default (untouched) state, by e2e/today.spec.ts's own type-swap loop
+  // test. This is the one e2e proof that actually TOGGLES it and confirms
+  // the plan's counter really does stay put.
+  test("the plan toggle: Log it after -> toggle OUTSIDE THE PLAN -> Save -> Today's counter is unchanged, LAST THREE shows the row", async ({
+    page,
+  }) => {
+    const title = "Tiny E2E Outside Plan";
+    titles.push(title);
+    await signInViaBackdoor(page, {
+      email: "manual-log-outside-plan@e2e.test",
+      name: "Manual Log Outside Plan Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
+    );
+
+    await page.goto("/today");
+    await expect(page.getByText(/^SESSION 1 OF 84/)).toBeVisible();
+
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+
+    const toggle = page.getByRole("button", { name: /COUNTS TOWARD PLAN/ });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toContainText("SESSION 1 OF 84");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.click();
+    const toggledOff = page.getByRole("button", {
+      name: "OUTSIDE THE PLAN — won't advance",
+    });
+    await expect(toggledOff).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "HELD" }).click();
+    await page.getByRole("button", { name: "Pain 2" }).click();
+    await page.getByRole("button", { name: "Save session" }).click();
+
+    await expect(page).toHaveURL(/\/today$/);
+    // Unchanged — exactly what advancesPlan:false is for.
+    await expect(page.getByText(/^SESSION 1 OF 84/)).toBeVisible();
+    const row = page
+      .locator(".today-log-row")
+      .filter({ hasText: title })
+      .first();
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("HELD");
+    await expect(row).toContainText("2/5");
+  });
 });
 
 test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a progressed or completed run", () => {
