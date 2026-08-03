@@ -211,7 +211,7 @@ Purpose: verify and edit this run before sitting down.
   row, a −/+ **repeat stepper** (×1–12), then a 44px **×** that removes the step
   (row dims to `#b8b2a3`, sub-line "removed", glyph becomes **+** to restore).
 - Header minutes recompute live from the edited session.
-- "Looks right — start" (accent, 56px).
+- "Looks right, start" (accent, 56px) — shipped this way (ui-fix round, Task 1); this row's own em dash was never reconciled against the later handoff/task brief, which both spell it with a comma.
 
 ### 5. Countdown
 Centred, fills the frame in both orientations (no fixed min-height):

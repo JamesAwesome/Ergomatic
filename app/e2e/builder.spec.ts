@@ -243,10 +243,13 @@ test.describe("authoring loop", () => {
 
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
-    // Staged-confirm idiom (src/you/BaselineEditor.tsx): the destructive
-    // action never fires on the first press.
-    await page.getByRole("button", { name: "Delete workout" }).click();
+    await page
+      .getByRole("button", { name: "Delete workout", exact: true })
+      .click();
+    // Fix round 1 (F2): Delete workout arms IN PLACE (the level system's
+    // own L4/L4-armed idiom) rather than opening a side confirm panel — the
+    // destructive action still never fires on the first press.
+    await page.getByRole("button", { name: "Tap again to delete" }).click();
 
     await expect(page).toHaveURL(/\/library$/);
     await expect(page.getByText(title, { exact: false })).not.toBeVisible();
@@ -276,7 +279,7 @@ test.describe("authoring loop", () => {
     await expect(page.locator(".workout-owner-actions")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Delete", exact: true }),
+      page.getByRole("button", { name: "Delete workout", exact: true }),
     ).toHaveCount(0);
   });
 });

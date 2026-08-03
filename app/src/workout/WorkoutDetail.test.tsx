@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Link,
@@ -714,7 +714,7 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText("0:59.0–1:01.0")).toBeInTheDocument();
   });
 
-  it("renders Edit and Delete controls for a personal (non-global) workout", async () => {
+  it("renders Edit and Delete workout controls for a personal (non-global) workout", async () => {
     mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetail("/library/w3");
@@ -723,10 +723,12 @@ describe("WorkoutDetail", () => {
       "href",
       "/library/w3/edit",
     );
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Delete workout" }),
+    ).toBeInTheDocument();
   });
 
-  it("renders neither Edit nor Delete for a global workout, since the server 403s its mutations", async () => {
+  it("renders neither Edit nor Delete workout for a global workout, since the server 403s its mutations", async () => {
     mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [WORKOUT]);
     await renderDetail("/library/w1");
@@ -735,45 +737,101 @@ describe("WorkoutDetail", () => {
       screen.queryByRole("link", { name: "Edit" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Delete" }),
+      screen.queryByRole("button", { name: "Delete workout" }),
     ).not.toBeInTheDocument();
   });
 
-  it("asks for confirmation before deleting — the API is not called on the first Delete press", async () => {
+  // Fix round 1 (F2): the old two-button staged-confirm panel (Cancel
+  // beside a second "Delete workout" button) is gone — Delete workout now
+  // arms IN PLACE, the level system's own L4/L4-armed idiom, same shape as
+  // Discard elsewhere in this round. No side panel means no separate
+  // reassurance copy either; the two-tap safety itself is unchanged.
+  it("asks for confirmation before deleting — the API is not called on the first Delete workout press", async () => {
     const api = mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetail("/library/w3");
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
 
     expect(api).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: "Delete workout" }),
+      screen.getByRole("button", { name: "Tap again to delete" }),
     ).toBeInTheDocument();
   });
 
-  it("issues DELETE /api/workouts/:id once the confirmation is pressed", async () => {
+  it("issues DELETE /api/workouts/:id once the armed 'Tap again to delete' press lands", async () => {
     const api = mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetailWithLibraryRoute("/library/w3");
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Delete workout" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to delete" }),
     );
 
     expect(api).toHaveBeenCalledWith("/api/workouts/w3", { method: "DELETE" });
     expect(await screen.findByText("LIBRARY SCREEN")).toBeInTheDocument();
   });
 
-  it("tells the rower their logged history survives in the delete confirmation copy", async () => {
-    mockApi(() => new Response(null, { status: 204 }));
+  // Same auto-disarm rule Discard uses elsewhere this round (DESIGN.md:
+  // "Auto-disarms on blur or 4s") — proven here via blur, the cheaper of
+  // the two to test (the 4s timer is exercised by its own fake-timers test
+  // below).
+  it("disarms on blur — a second press after focus moves away arms again instead of deleting", async () => {
+    const api = mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetail("/library/w3");
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const del = screen.getByRole("button", { name: "Delete workout" });
+    await userEvent.click(del);
+    expect(
+      screen.getByRole("button", { name: "Tap again to delete" }),
+    ).toBeInTheDocument();
 
-    expect(screen.getByText(/logged sessions are kept/i)).toBeInTheDocument();
+    // Focus moving away — a real Edit click would navigate this test's
+    // single-route render out from under itself, so blur is fired directly
+    // rather than routing through a real navigation.
+    fireEvent.blur(screen.getByRole("button", { name: "Tap again to delete" }));
+    expect(
+      screen.getByRole("button", { name: "Delete workout" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
+    expect(api).not.toHaveBeenCalled();
+  });
+
+  it("disarms after 4 seconds with no second press", async () => {
+    vi.useFakeTimers();
+    try {
+      mockApi(() => new Response(null, { status: 204 }));
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      await renderDetail("/library/w3");
+
+      // fireEvent (not userEvent, which schedules its own real-time delays
+      // that fake timers would otherwise stall) fires the click directly.
+      fireEvent.click(screen.getByRole("button", { name: "Delete workout" }));
+      expect(
+        screen.getByRole("button", { name: "Tap again to delete" }),
+      ).toBeInTheDocument();
+
+      // `act` wraps the fake-timer advance so the auto-disarm timeout's
+      // `setArmed(false)` (called OUTSIDE any React event, from a raw
+      // `setTimeout`) is flushed to the DOM before the next assertion —
+      // same idiom as Countdown.test.tsx's own tick-down test.
+      await act(() => vi.advanceTimersByTimeAsync(4000));
+
+      expect(
+        screen.getByRole("button", { name: "Delete workout" }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // The recorded bug this task round fixes: every ← BACK on this screen was
@@ -860,9 +918,11 @@ describe("WorkoutDetail", () => {
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetailWithState("/library/w3", { from: "/today" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Delete workout" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to delete" }),
     );
 
     expect(api).toHaveBeenCalledWith("/api/workouts/w3", { method: "DELETE" });

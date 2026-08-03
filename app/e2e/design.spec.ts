@@ -414,6 +414,30 @@ test.describe("library screen", () => {
       .evaluate((el) => getComputedStyle(el).userSelect);
     expect(rowSelect).toBe("none");
   });
+
+  // Fix round 1 (F1, James's ruling): `--type-tr` used to be the IDENTICAL
+  // hex to `--accent` — every TR badge/chip filled with what was
+  // structurally "accent". A fresh account's 35 seeded starters
+  // (server/seed/starter.ts) always include several TR workouts, so this
+  // pins the resolved colour on a REAL `.type-badge` here, not just the
+  // chip contexts (Today/Builder, asserted in their own describes) — the
+  // same `.type-badge` class Library/Plan/Today's LAST THREE all share.
+  // `--on-color` text on `--ink` background measures 17.1:1, the identical
+  // pairing `--type-test` already used before this fix (TypeBadge.tsx sets
+  // a fixed `--on-color` label regardless of which type fills the
+  // background).
+  test("a TR type badge fills ink, not accent, with on-color text", async ({
+    page,
+  }) => {
+    const trBadge = page.locator(".type-badge", { hasText: "TR" }).first();
+    await expect(trBadge).toBeVisible();
+    const styles = await trBadge.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(styles.background).toBe("rgb(27, 26, 23)"); // --type-tr = --ink
+    expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
+  });
 });
 
 test.describe("workout detail screen", () => {
@@ -471,6 +495,13 @@ test.describe("workout detail screen", () => {
     await expect(l1).toHaveText("Start");
     const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
     expect(height).toBe(56);
+
+    // Fix round 1 (F2, reviewer finding): the one-L1 count alone couldn't
+    // tell a genuine L1 migration from a screen that ALSO still rendered a
+    // legacy `.button-primary` block sitting outside the level system
+    // entirely (WorkoutDetail's own staged-delete panel did exactly this
+    // until F2). Asserted on every one-L1 screen's sweep now.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
   });
 });
 
@@ -527,11 +558,20 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
   });
 
   // Task 1 (ui-fix round): one merged `.action-stack` — Edit (L2, 52px) and
-  // Delete (L4, 52px) render as this owned workout's own stack items, under
-  // a rule divider, rather than a second detached block. Structural proof
-  // OwnerActions' `display: contents` wrapper (index.css) actually puts its
-  // children in the SAME flex stack, not just visually adjacent to it.
-  test("Edit and Delete render at the level system's 52px, under a rule, inside the one action stack", async ({
+  // Delete workout (L4, 52px) render as this owned workout's own stack
+  // items, under a rule divider, rather than a second detached block.
+  //
+  // Fix round 1 (F3, reviewer finding): the prior version of this test only
+  // checked that Edit/Delete's Y positions fell somewhere inside the
+  // stack's own bounding box — a `display: contents` -> `display: block`
+  // regression on `.workout-owner-actions` (index.css) still passes THAT
+  // check (Edit/Delete would still render inside the stack's box, just as
+  // a nested column with its own margin) while silently collapsing the
+  // shared 12px gap to whatever margin that nested block happens to carry.
+  // This measures the actual gaps between consecutive stack children
+  // (Edit-bottom -> rule-top, rule-bottom -> Delete-top) — the thing
+  // `display: contents` is actually FOR — rather than mere containment.
+  test("Edit and Delete workout render at the level system's 52px, 12px apart, under a rule, inside the one action stack", async ({
     page,
   }) => {
     const stack = page.locator(".action-stack");
@@ -544,29 +584,72 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
     expect(editHeight).toBe(52);
     await expect(edit).toHaveClass(/button-l2/);
 
-    const del = page.getByRole("button", { name: "Delete", exact: true });
+    const del = page.getByRole("button", {
+      name: "Delete workout",
+      exact: true,
+    });
     const delHeight = await del.evaluate(
       (el) => el.getBoundingClientRect().height,
     );
     expect(delHeight).toBe(52);
-    await expect(del).toHaveClass(/button-l4/);
+    await expect(del).toHaveClass("button-l4");
     const delColor = await del.evaluate((el) => getComputedStyle(el).color);
     expect(delColor).toBe("rgb(181, 52, 31)"); // --accent, outlined not solid
 
-    await expect(stack.locator(".action-stack-rule")).toHaveCount(1);
+    const rule = stack.locator(".action-stack-rule");
+    await expect(rule).toHaveCount(1);
 
-    // Both Edit and Delete fall within the ONE stack's own bounding box
-    // (not a second, separately-positioned block below it) — the visible
-    // proof that `display: contents` (index.css) actually puts OwnerActions'
-    // children in this flex column's own layout rather than merely sitting
-    // next to it.
-    const stackBox = (await stack.boundingBox())!;
     const editBox = (await edit.boundingBox())!;
+    const ruleBox = (await rule.boundingBox())!;
     const delBox = (await del.boundingBox())!;
-    expect(editBox.y).toBeGreaterThanOrEqual(stackBox.y);
-    expect(delBox.y + delBox.height).toBeLessThanOrEqual(
-      stackBox.y + stackBox.height + 1,
-    );
+
+    // The real proof `display: contents` (index.css) is doing its job:
+    // Edit/Delete and the rule share the SAME 12px gap `.action-stack`
+    // declares for its own direct children — not "inside the box
+    // somewhere," a check a collapsed/degenerate gap could still satisfy.
+    expect(Math.round(ruleBox.y - (editBox.y + editBox.height))).toBe(12);
+    expect(Math.round(delBox.y - (ruleBox.y + ruleBox.height))).toBe(12);
+  });
+
+  // Fix round 1 (F2): the old two-button staged-confirm panel (Cancel
+  // beside a second solid-accent "Delete workout") is gone — Delete workout
+  // now arms IN PLACE, the level system's own L4/L4-armed idiom (fills
+  // solid accent, copy swaps to "Tap again to delete"), same shape as
+  // Discard elsewhere in this round. Disarms on blur; the 4s auto-disarm
+  // timer itself is proven in WorkoutDetail.test.tsx (jsdom fake timers),
+  // not re-proven here in real time.
+  test("Delete workout arms in place (solid accent, 'Tap again to delete') and disarms on blur", async ({
+    page,
+  }) => {
+    const del = page.getByRole("button", {
+      name: "Delete workout",
+      exact: true,
+    });
+    await expect(del).toHaveClass("button-l4");
+
+    await del.click();
+    // Playwright's own click leaves the mouse resting on the button, so
+    // its `:hover` rule (index.css, same fix round's own F7) would
+    // otherwise paint `--accent-hover` here instead of the armed state's
+    // OWN base `--accent` fill — move the pointer away first so this reads
+    // the resting armed style, not the hovered one.
+    await page.mouse.move(0, 0);
+    const armed = page.getByRole("button", { name: "Tap again to delete" });
+    await expect(armed).toHaveClass("button-l4-armed");
+    const armedStyles = await armed.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(armedStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(armedStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+
+    await armed.evaluate((el) => (el as HTMLElement).blur());
+    await expect(
+      page.getByRole("button", { name: "Delete workout", exact: true }),
+    ).toHaveClass("button-l4");
+    await expect(
+      page.getByRole("button", { name: "Tap again to delete" }),
+    ).toHaveCount(0);
   });
 });
 
@@ -656,6 +739,14 @@ test.describe("today screen (plan active, logs present)", () => {
     await assertNoFailingInk4Labels(page);
   });
 
+  // Fix round 1 (F2, reviewer finding): Today never had an L1 of its own,
+  // but the "one-L1 + no legacy .button-primary" sweep still applies —
+  // asserted here rather than skipped just because there's no L1 count to
+  // pair it with.
+  test("no legacy .button-primary renders on this screen", async ({ page }) => {
+    await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
+
   // Today enhancements (Task 4): the chip row's default aria-pressed state
   // matches the server preferences it was derived from on first mount
   // (todayOverrides.ts's own fallback — DESIGN_BASELINES' fixture never
@@ -722,6 +813,12 @@ test.describe("today screen (plan active, logs present)", () => {
   // (the bug DESIGN.md names explicitly). Every OTHER selection here
   // (DIFFICULTY/TIME/PAIN) fills ink instead — accent no longer means
   // "selected" anywhere on this screen.
+  //
+  // Fix round 1 (F1, James's ruling): TR is asserted explicitly, not just
+  // O2/AT — `--type-tr` used to be the IDENTICAL hex to `--accent`, so a
+  // selected TR chip rendered "accent" by coincidence and this exact test,
+  // checking only two of the four types, never caught it. TR now resolves
+  // to `--ink` (tokens.css).
   test("the active type-swap chip fills with its own type color, not accent", async ({
     page,
   }) => {
@@ -737,6 +834,13 @@ test.describe("today screen (plan active, logs present)", () => {
       (el) => getComputedStyle(el).backgroundColor,
     );
     expect(atBg).toBe("rgb(138, 95, 24)"); // --type-at
+
+    const trChip = page.getByRole("button", { name: "TR", exact: true });
+    await trChip.click();
+    const trBg = await trChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(trBg).toBe("rgb(27, 26, 23)"); // --type-tr = --ink, NOT --accent
   });
 
   test("selected DIFFICULTY/TIME/PAIN chips fill ink, never accent", async ({
@@ -790,6 +894,38 @@ test.describe("today screen (plan active, logs present)", () => {
     expect(styles.borderStyle).toBe("solid");
     expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink-1 (alias of --ink)
     expect(styles.fontFamily.toLowerCase()).toContain("mono");
+  });
+
+  // Fix round 1 (F4): SHUFFLE's disabled state (pool <= 1) — ink-5 label,
+  // DASHED rule-3 border, no grey fill — computed, not just `toBeDisabled`.
+  // This describe's fixture is sprint/doneN=0 (O2 for today, DESIGN_
+  // BASELINES {k2Seconds:100, k6Seconds:120}). Narrowing to HARD-only +
+  // <=60' leaves exactly ONE O2 match: High Pressure (baseline-independent,
+  // time-based: 5' wu + 3x(20' + 3' rest) = 74') is excluded by the cap,
+  // Jet Stream (10000m @ 6k+8 = 128s/500m -> 2560s work + 5' wu = ~48') is
+  // the sole survivor — server/seed/starter.ts's only two O2 HARD entries.
+  test("SHUFFLE disabled (pool of 1): ink-5 label, dashed rule-3 border, no fill", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "EASY", exact: true }).click();
+    await page.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await page.getByRole("button", { name: "≤60′", exact: true }).click();
+
+    const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
+    await expect(shuffle).toBeDisabled();
+    const styles = await shuffle.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        background: s.backgroundColor,
+        borderColor: s.borderColor,
+        borderStyle: s.borderStyle,
+        color: s.color,
+      };
+    });
+    expect(styles.background).toBe("rgba(0, 0, 0, 0)"); // no fill
+    expect(styles.borderColor).toBe("rgb(201, 195, 178)"); // --rule-3
+    expect(styles.borderStyle).toBe("dashed");
+    expect(styles.color).toBe("rgb(160, 154, 140)"); // --ink-5
   });
 });
 
@@ -1032,6 +1168,11 @@ test.describe("confirm targets screen (effort step present — Heat Lightning)",
       (el) => el.getBoundingClientRect().height,
     );
     expect(removeHeight).toBe(44);
+
+    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
+    // assertion — the one-L1 count alone doesn't rule out a legacy
+    // `.button-primary` block surviving elsewhere on the same screen.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
   });
 });
 
@@ -1068,6 +1209,17 @@ test.describe("builder screen", () => {
       .getByRole("button", { name: "O2", exact: true })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(o2ChipBg).toBe("rgb(42, 98, 117)"); // --type-o2
+
+    // Fix round 1 (F1, James's ruling): TR asserted explicitly — it used to
+    // be the IDENTICAL hex to --accent, so a selected TR chip rendered
+    // "accent" by coincidence and no test here ever picked TR to notice.
+    // Now resolves to --ink (tokens.css).
+    const trChip = page.getByRole("button", { name: "TR", exact: true });
+    await trChip.click();
+    const trChipBg = await trChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(trChipBg).toBe("rgb(27, 26, 23)"); // --type-tr = --ink
   });
 
   // Phase 5F Task 7: the warm-up line moved above the step list, reading as
@@ -1185,6 +1337,11 @@ test.describe("builder screen", () => {
     await expect(l1).toHaveText("Save to library");
     const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
     expect(height).toBe(56);
+
+    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
+    // assertion — the one-L1 count alone doesn't rule out a legacy
+    // `.button-primary` block surviving elsewhere on the same screen.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
   });
 
   // Task 1 (ui-fix round): DONE is a NAMED level (L3) — solid ink, mono
@@ -1743,6 +1900,19 @@ test.describe("timer screen (portrait, TIME phase)", () => {
   }) => {
     await assertNoFailingInk4Labels(page);
   });
+
+  // Fix round 1 (F2, reviewer finding): Timer's transport row (Pause
+  // between two 56x56 L2 squares) is the documented full-width-stack
+  // exception — it never carries `.button-l1`, so this checks the "no
+  // legacy .button-primary" half of the sweep on its own. `.button-primary`
+  // only ever renders here for the END/finish/suspect STAGED confirms
+  // (Timer.tsx:522/611/635, DEVIATIONS.md's IMP-6 row) — none of which is
+  // staged in this describe's own default portrait/TIME-phase state.
+  test("no legacy .button-primary renders in this screen's default state", async ({
+    page,
+  }) => {
+    await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
 });
 
 // Phase 6B (Task 5): the live timer in a DISTANCE work phase (meters
@@ -2043,6 +2213,11 @@ test.describe("session complete screen (with a recorded actual)", () => {
     const l1Box = (await l1.boundingBox())!;
     const l2Box = (await l2.boundingBox())!;
     expect(l2Box.y).toBeGreaterThan(l1Box.y);
+
+    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
+    // assertion — the one-L1 count alone doesn't rule out a legacy
+    // `.button-primary` block surviving elsewhere on the same screen.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
   });
 });
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
@@ -341,6 +341,13 @@ function WorkoutDetailView({
   );
 }
 
+// How long an armed destructive control stays armed before silently
+// disarming (DESIGN.md's own copy: "Auto-disarms on blur or 4s") — shared
+// by every armed control this round introduces (Delete workout here;
+// Discard, Tasks 2-3), so a rower's "tap again" window is the same
+// everywhere it appears.
+const ARM_TIMEOUT_MS = 4000;
+
 function OwnerActions({
   workoutId,
   navigate,
@@ -350,9 +357,41 @@ function OwnerActions({
   navigate: (path: string) => void;
   from: unknown;
 }) {
-  const [confirming, setConfirming] = useState(false);
+  // Fix round 1 (F2): the two-button staged-confirm panel (Cancel beside a
+  // second solid-`.button-primary` "Delete workout") sat outside the level
+  // system this round otherwise landed everywhere else — a second
+  // accent-filled block, and a side-by-side pair, on the exact screen this
+  // round systematized. Replaced with the level system's OWN destructive
+  // idiom: the L4 button arms IN PLACE (fills solid accent, copy swaps to
+  // "Tap again to delete") rather than opening a side panel with its own
+  // Cancel — the same two-tap safety, the system's own shape. `armed`
+  // replaces the old `confirming` boolean 1:1.
+  const [armed, setArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Belt-and-suspenders: a pending disarm timer must not fire (and call
+  // setState) after this component has already unmounted — e.g. Edit was
+  // clicked while armed, navigating away before the 4s elapses.
+  useEffect(() => {
+    return () => {
+      if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+    };
+  }, []);
+
+  function disarm() {
+    if (disarmTimer.current !== null) {
+      clearTimeout(disarmTimer.current);
+      disarmTimer.current = null;
+    }
+    setArmed(false);
+  }
+
+  function arm() {
+    setArmed(true);
+    disarmTimer.current = setTimeout(disarm, ARM_TIMEOUT_MS);
+  }
 
   const handleDelete = async () => {
     setError(null);
@@ -363,6 +402,7 @@ function OwnerActions({
       });
       if (!res.ok) {
         setError("Couldn't delete this workout. Try again.");
+        disarm();
         return;
       }
       // Deliberately NOT `from`-chained (design doc: "Delete stays
@@ -373,10 +413,25 @@ function OwnerActions({
       navigate("/library");
     } catch {
       setError("Couldn't delete this workout. Try again.");
+      disarm();
     } finally {
       setDeleting(false);
     }
   };
+
+  // The button's own click handler carries both taps: the first arms (no
+  // network call yet — logged history survives a delete regardless, but
+  // the action itself never fires on a first press), the second — reached
+  // only while already `armed`, which `disabled` can't be true for at the
+  // same time as a delete in flight — fires it for real.
+  function handleClick() {
+    if (armed) {
+      disarm();
+      void handleDelete();
+    } else {
+      arm();
+    }
+  }
 
   return (
     // `display: contents` (index.css): this wrapper stays purely for the
@@ -392,56 +447,17 @@ function OwnerActions({
       >
         Edit
       </Link>
-      {!confirming ? (
-        <>
-          <hr className="action-stack-rule" />
-          <button
-            type="button"
-            className="button-l4"
-            onClick={() => setConfirming(true)}
-          >
-            Delete
-          </button>
-        </>
-      ) : (
-        // Staged-confirm idiom (src/you/BaselineEditor.tsx): the destructive
-        // action never fires on the first press. Copy is explicit that
-        // logged history survives — session_logs.workout_id is set to NULL
-        // on delete and each log keeps its own frozen title/type, so
-        // deleting a workout does NOT erase the rower's past sessions of it.
-        // Kept as the existing half-width Cancel/Delete pair (not the
-        // level system) — the level system's own destructive idiom for
-        // THIS confirm shape is the still-unbuilt "armed" self-toggle
-        // (Tasks 2-3), a different UI than this two-button panel.
-        <>
-          <hr className="action-stack-rule" />
-          <div className="baseline-confirm">
-            <p className="baseline-confirm-line">
-              Delete this workout? Your logged sessions are kept — they keep
-              their own copy of the title and type.
-            </p>
-            {error && <p className="baseline-error">{error}</p>}
-            <div className="baseline-actions">
-              <button
-                type="button"
-                className="button-outline"
-                onClick={() => setConfirming(false)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="button-primary"
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                Delete workout
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      <hr className="action-stack-rule" />
+      <button
+        type="button"
+        className={armed ? "button-l4-armed" : "button-l4"}
+        onClick={handleClick}
+        onBlur={disarm}
+        disabled={deleting}
+      >
+        {armed ? "Tap again to delete" : "Delete workout"}
+      </button>
+      {error && <p className="baseline-error">{error}</p>}
     </div>
   );
 }

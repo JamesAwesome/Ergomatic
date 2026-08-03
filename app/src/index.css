@@ -248,6 +248,15 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Fix round 1 (F7, reviewer finding): L1/L3/L4-armed all had a hover
+   treatment; L2/L4 didn't. `--surface-sunken` is this file's own standing
+   "resting surface, one shade darker" hover idiom (`.pace-ref-step:hover`,
+   `.step-card-confirm-no:hover`) — reused here rather than inventing a
+   third hover language for one more class pair. */
+.button-l2:hover {
+  background: var(--surface-sunken);
+}
+
 .button-l2:disabled {
   border-color: var(--rule-3);
   cursor: not-allowed;
@@ -284,6 +293,14 @@ button:disabled {
   font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 600;
+}
+
+/* Fix round 1 (F7): darkens border/label to `--accent-hover`, the same
+   token `.button-l4-armed:hover` (below) darkens its solid fill to — one
+   hover vocabulary for both destructive states, outlined or filled. */
+.button-l4:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
 }
 
 /* 4 · armed — "Tap again to discard": fills solid accent, cream label,
