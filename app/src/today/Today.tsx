@@ -6,17 +6,73 @@ import { useBaselines } from "../api/useBaselines";
 import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
 import { usePreferences } from "../api/usePreferences";
+import type { PreferencesData } from "../api/usePreferences";
 import { useRecentLogs } from "../api/useRecentLogs";
 import type { RecentLog } from "../api/useRecentLogs";
 import { fmtDuration } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { suggest, suggestFreestyle } from "../../domain/suggest.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
-import type { Baselines } from "../../domain/types.js";
+import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
+import type { PlanCode } from "../../domain/plans.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
+import {
+  loadTodayOverrides,
+  saveTodayOverrides,
+  snapCap,
+  type TodayOverrides,
+} from "./todayOverrides";
 import TypeBadge from "../components/TypeBadge";
+
+// Chip order per the task brief — AN before O2, matching Library's own
+// FilterChips.tsx (docs/design/README.md §Screens → "2. Library": not
+// alphabetical).
+const TYPE_CHIPS: WorkoutType[] = ["AN", "O2", "AT", "TR"];
+
+const DIFFICULTY_CHIPS: { value: Difficulty; label: string }[] = [
+  { value: "easy", label: "EASY" },
+  { value: "medium", label: "MED" },
+  { value: "hard", label: "HARD" },
+];
+
+// "≤NN′" — Library's own prime-mark idiom for minutes (FilterChips.tsx's
+// DURATION_CHIPS), applied here to an upper-bound cap rather than a range
+// bucket, hence "≤" instead of Library's "<"/"–"/"+".
+const CAP_CHIPS: { value: number | null; label: string }[] = [
+  { value: 30, label: "≤30′" },
+  { value: 45, label: "≤45′" },
+  { value: 60, label: "≤60′" },
+  { value: 90, label: "≤90′" },
+  { value: null, label: "NO CAP" },
+];
+
+/** Local chip button — same `.chip` class + `aria-pressed` rendering
+ *  convention as Library's own FilterChips.tsx `Chip`, not that component
+ *  itself: Today's chips have different selection semantics per group
+ *  (multi-select difficulties, single-select cap, a toggle, and a type
+ *  swap that reads its active state off two different sources). */
+function TodayChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="chip"
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
 
 const STALE_DRAFT_MS = 24 * 60 * 60 * 1000;
 
@@ -205,24 +261,20 @@ export default function Today() {
         }
       : null;
 
-  const prefs: SuggestPrefs = {
-    difficulties: preferencesState.preferences.difficulties,
-    timeCapMinutes: preferencesState.preferences.timeCapMinutes,
-    // See toLibraryEntry's comment: with no baselines, every entry's
-    // estMinutes is a 0 placeholder, so the reason text must not claim a
-    // cap was actually checked against a real duration.
-    durationsUnknown: baselines === null,
-  };
-
-  // key={} forces a fresh TodayView (and thus fresh pickOverride/shuffle
-  // state) whenever the plan's identity or position changes underneath —
-  // same reasoning as WorkoutDetail.tsx's key={workout.id}.
+  // key={} forces a fresh TodayView (and thus fresh pickOverride/overrides/
+  // shuffle state) whenever the plan's identity or position changes
+  // underneath — same reasoning as WorkoutDetail.tsx's key={workout.id}.
+  // TodayView builds its own SuggestPrefs from the chip overrides below
+  // (Task 2); it still needs the raw server preferences to seed those
+  // overrides' defaults on first mount (snapCap(preferences.timeCapMinutes),
+  // preferences.difficulties) and `baselines` to compute durationsUnknown
+  // itself, so both are passed through rather than a pre-built SuggestPrefs.
   return (
     <TodayView
       key={`${planState.plan.planKey}-${planState.plan.doneN}`}
       library={workoutsState.workouts}
       baselines={baselines}
-      prefs={prefs}
+      preferences={preferencesState.preferences}
       plan={planState.plan}
       logs={recentLogsState.logs}
       run={run}
@@ -251,14 +303,14 @@ function ErrorScreen({
 function TodayView({
   library,
   baselines,
-  prefs,
+  preferences,
   plan,
   logs,
   run,
 }: {
   library: LibraryWorkout[];
   baselines: Baselines | null;
-  prefs: SuggestPrefs;
+  preferences: PreferencesData;
   plan: PlanData;
   logs: RecentLog[];
   run: SessionRun | null;
@@ -271,9 +323,87 @@ function TodayView({
   // plan.sequence always has 84 entries while a plan is active; doneN can
   // only reach 84 once every session is logged (out of scope this phase —
   // 6C is what advances it) — treated the same as freestyle rather than
-  // crashing on a missing sequence entry.
-  const todayCode =
+  // crashing on a missing sequence entry. `prescribedCode` is the plan's OWN
+  // call (never affected by a type-swap chip below) — the plan line's first
+  // segment and the type chips' "which one is the un-swap target" both read
+  // off this, never off the swapped `todayCode`.
+  const prescribedCode: PlanCode | null =
     plan.planKey !== null ? (plan.sequence[plan.doneN]?.code ?? null) : null;
+  const usesPlan = prescribedCode !== null;
+
+  // TEST maps to TR's pool exactly like suggest.ts's own `matchType`
+  // (domain/suggest.ts:93) — the type chips' "which chip is currently
+  // active absent a swap" and "which chip un-swaps" both need that same
+  // mapping client-side, so it's computed once here rather than duplicated
+  // at each call site below.
+  const effectivePrescribed: WorkoutType | null =
+    prescribedCode === null
+      ? null
+      : prescribedCode === "TEST"
+        ? "TR"
+        : prescribedCode;
+
+  // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
+  // nudge state — the `key` above already forces a remount (and thus a
+  // fresh read) whenever plan/doneN change underneath this screen. Falls
+  // back to the preference-derived default (no swap, prefs' own
+  // difficulties/cap, pain filter off) when nothing valid is stored —
+  // same "stored wins, else derive a default" shape as `pickOverride`
+  // below, just with a richer default than `null`.
+  const [overrides, setOverrides] = useState<TodayOverrides>(
+    () =>
+      loadTodayOverrides(today, plan.planKey, plan.doneN) ?? {
+        date: today,
+        planKey: plan.planKey,
+        doneN: plan.doneN,
+        swapType: null,
+        difficulties: preferences.difficulties,
+        // Approximates the rower's real preference to the nearest chip —
+        // see snapCap's own doc comment for why this rounds up, never down.
+        capMinutes: snapCap(preferences.timeCapMinutes),
+        painMax3: false,
+      },
+  );
+
+  // Every chip handler below funnels through this: update the visible
+  // state AND persist in the same call, so no chip tap is ever lost to a
+  // reload/remount before its effect would otherwise flush.
+  function updateOverrides(next: TodayOverrides) {
+    setOverrides(next);
+    saveTodayOverrides(next);
+  }
+
+  function handleTypeChip(type: WorkoutType) {
+    // Tapping the chip that matches what's already effectively prescribed
+    // (the plan's own call, or TR standing in for a TEST day) clears the
+    // swap rather than swapping to itself — the brief's "tapping the
+    // prescribed chip (or TR on a TEST day) sets swapType: null".
+    updateOverrides({
+      ...overrides,
+      swapType: type === effectivePrescribed ? null : type,
+    });
+  }
+
+  function handleDifficultyChip(value: Difficulty) {
+    // Multi-select, deselecting every difficulty is allowed by design (the
+    // fellBack pool then applies, with an honest reason) — no "at least one
+    // must stay active" guard, unlike the single-select cap chips below.
+    const difficulties = overrides.difficulties.includes(value)
+      ? overrides.difficulties.filter((d) => d !== value)
+      : [...overrides.difficulties, value];
+    updateOverrides({ ...overrides, difficulties });
+  }
+
+  function handleCapChip(value: number | null) {
+    // Single-select: unlike toggleType/toggleDuration's "tap again to
+    // clear" idiom, exactly one cap chip (including NO CAP) is always
+    // active, so this always sets rather than toggling.
+    updateOverrides({ ...overrides, capMinutes: value });
+  }
+
+  function handlePainChip() {
+    updateOverrides({ ...overrides, painMax3: !overrides.painMax3 });
+  }
 
   // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
   // nudge state — the `key` above already forces a remount (and thus a
@@ -284,6 +414,22 @@ function TodayView({
 
   const entries = library.map((w) => toLibraryEntry(w, baselines));
 
+  // The swapped-in type: a swap always names a real WorkoutType, which IS a
+  // PlanCode (WorkoutType is a subset of the PlanCode union), so this needs
+  // no cast to feed `suggest`'s `todayCode: PlanCode` parameter below.
+  const todayCode: PlanCode | null =
+    prescribedCode !== null ? (overrides.swapType ?? prescribedCode) : null;
+
+  const suggestPrefs: SuggestPrefs = {
+    difficulties: overrides.difficulties,
+    timeCapMinutes: overrides.capMinutes,
+    painMax3: overrides.painMax3,
+    // See toLibraryEntry's comment: with no baselines, every entry's
+    // estMinutes is a 0 placeholder, so the reason text must not claim a
+    // cap was actually checked against a real duration.
+    durationsUnknown: baselines === null,
+  };
+
   // Narrowing on todayCode (rather than a separate boolean) lets TS see
   // `suggest`'s todayCode argument is non-null in the true branch with no
   // assertion.
@@ -292,11 +438,10 @@ function TodayView({
       ? suggest({
           todayCode,
           library: entries,
-          prefs,
+          prefs: suggestPrefs,
           todayPickId: pickOverride ?? undefined,
         })
-      : suggestFreestyle(entries, prefs, pickOverride ?? undefined);
-  const usesPlan = todayCode !== null;
+      : suggestFreestyle(entries, suggestPrefs, pickOverride ?? undefined);
 
   // The `?? null` is defensive, not reachable from this call site: `entries`
   // (fed to `suggest`/`suggestFreestyle`) is `library.map(toLibraryEntry)`,
@@ -338,9 +483,30 @@ function TodayView({
     <main className="screen">
       <h1 className="screen-title">Today</h1>
       {usesPlan ? (
-        <p className="today-plan-line mono-status">
-          SESSION {plan.doneN + 1} OF {plan.sequence.length} · {todayCode}
-        </p>
+        <>
+          <p className="today-plan-line mono-status">
+            SESSION {plan.doneN + 1} OF {plan.sequence.length} ·{" "}
+            {prescribedCode}
+            {overrides.swapType !== null && ` → ${overrides.swapType}`}
+          </p>
+          {/* Type-swap chips: only meaningful with a plan active (there is
+              no "prescribed type" to swap away from in freestyle). Active
+              state reads `swapType ?? effectivePrescribed` — the un-swapped
+              chip lights up whichever type the plan actually calls for
+              today (TR standing in on a TEST day), and tapping THAT chip
+              again clears the swap rather than swapping to itself
+              (handleTypeChip). */}
+          <div className="chip-wrap today-type-chips">
+            {TYPE_CHIPS.map((type) => (
+              <TodayChip
+                key={type}
+                label={type}
+                active={(overrides.swapType ?? effectivePrescribed) === type}
+                onClick={() => handleTypeChip(type)}
+              />
+            ))}
+          </div>
+        </>
       ) : (
         <div className="today-plan-line today-plan-line-freestyle">
           <span className="mono-status">FREESTYLE</span>
@@ -408,6 +574,36 @@ function TodayView({
         >
           SHUFFLE ↻
         </button>
+      </div>
+
+      {/* Filter chips: both modes (plan and freestyle alike narrow the same
+          pool), order per the brief — difficulty (multi) · cap
+          (single-select, exactly one always active) · pain (toggle). Every
+          tap re-runs suggest() above on the next render since they all
+          write into `overrides`, which the suggestion computation reads
+          directly — no separate "apply" step. */}
+      <div className="chip-wrap today-filter-chips">
+        {DIFFICULTY_CHIPS.map(({ value, label }) => (
+          <TodayChip
+            key={value}
+            label={label}
+            active={overrides.difficulties.includes(value)}
+            onClick={() => handleDifficultyChip(value)}
+          />
+        ))}
+        {CAP_CHIPS.map(({ value, label }) => (
+          <TodayChip
+            key={label}
+            label={label}
+            active={overrides.capMinutes === value}
+            onClick={() => handleCapChip(value)}
+          />
+        ))}
+        <TodayChip
+          label="PAIN ≤3"
+          active={overrides.painMax3}
+          onClick={handlePainChip}
+        />
       </div>
 
       {recommended ? (

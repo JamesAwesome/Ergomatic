@@ -11,7 +11,8 @@ import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
 import { elapsedSinceStart } from "./Today";
-import { TODAY_PICK_KEY } from "./todayPick";
+import { TODAY_PICK_KEY, todayDateString } from "./todayPick";
+import { TODAY_OVERRIDES_KEY, type TodayOverrides } from "./todayOverrides";
 
 // Realistic fixtures, per repo convention: real starter workouts
 // (app/server/seed/starter.ts), not hand-built minimums.
@@ -67,6 +68,25 @@ const PLAN_AT: PlanData = {
   planKey: "sprint",
   doneN: 11,
   sequence: buildSequence(11, "AT"),
+};
+
+// Same plan identity as PLAN_AT, doneN advanced by one — a session logged
+// since (Task 2's "doneN bump discards" case), same invalidation trigger
+// todayPick.ts's own pick already relies on.
+const PLAN_AT_NEXT: PlanData = {
+  planKey: "sprint",
+  doneN: 12,
+  sequence: buildSequence(12, "AT"),
+};
+
+// A checkpoint day: prescribedCode is the literal "TEST" plan code, which
+// suggest.ts maps to TR's pool (matchType) — Today's own type chips mirror
+// that mapping (effectivePrescribed) so TR, not "TEST" itself, is the chip
+// that reads active absent a swap.
+const PLAN_TEST: PlanData = {
+  planKey: "sprint",
+  doneN: 20,
+  sequence: buildSequence(20, "TEST"),
 };
 
 const FREESTYLE_PLAN: PlanData = { planKey: null, doneN: 0, sequence: [] };
@@ -357,6 +377,340 @@ describe("Today (SHUFFLE)", () => {
     mockReady({ workouts: [WARM_FRONT] });
     await renderToday();
     expect(screen.getByRole("button", { name: /shuffle/i })).toBeDisabled();
+  });
+});
+
+describe("Today (overrides: init from preferences)", () => {
+  it.each([
+    [60, "≤60′"],
+    [45, "≤45′"],
+    [100, "NO CAP"],
+  ] as const)(
+    "snaps a %i min preference cap to the %s chip by default (no stored overrides)",
+    async (timeCapMinutes, label) => {
+      mockReady({ preferences: { ...DEFAULT_PREFS, timeCapMinutes } });
+      await renderToday();
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    },
+  );
+
+  it("defaults difficulties to every preference value and pain filter to off", async () => {
+    mockReady();
+    await renderToday();
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "MED" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "PAIN ≤3" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});
+
+describe("Today (overrides: stored record wins over preferences)", () => {
+  it("uses the stored difficulties/cap/pain instead of the preference-derived default", async () => {
+    const stored: TodayOverrides = {
+      date: todayDateString(),
+      planKey: "sprint",
+      doneN: 11,
+      swapType: null,
+      difficulties: ["hard"],
+      capMinutes: 30,
+      painMax3: true,
+    };
+    localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(stored));
+    mockReady();
+    await renderToday();
+
+    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "≤30′" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "PAIN ≤3" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // Every fixture workout is "easy" difficulty (see the fixtures' own
+    // comment) — none match the stored "hard"-only filter, so the fellback
+    // reason proves the STORED record drove suggest(), not the 60-min/
+    // easy-medium-hard preference default DEFAULT_PREFS would have produced.
+    expect(screen.getByText(/Nothing fit your/)).toBeVisible();
+  });
+});
+
+describe("Today (filter chips: live narrowing)", () => {
+  it("deselecting EASY changes the reason to a fellback explanation without changing the pick (deselecting every difficulty is allowed)", async () => {
+    mockReady();
+    await renderToday();
+    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(screen.getByText(/Least recently done/)).toBeVisible();
+
+    const easyChip = screen.getByRole("button", { name: "EASY" });
+    await userEvent.click(easyChip);
+
+    // Same pick (the fellback pool is still the full AT list, sorted the
+    // same way) — only the REASON narrows to say nothing matched.
+    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+    expect(screen.getByText(/Nothing fit your difficulty/)).toBeVisible();
+    expect(easyChip).toHaveAttribute("aria-pressed", "false");
+
+    // Re-selecting EASY (the multi-select's "add back" branch, distinct
+    // from the "remove" branch just exercised above) restores the normal
+    // least-recently-done reason.
+    await userEvent.click(easyChip);
+    expect(easyChip).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Least recently done/)).toBeVisible();
+  });
+
+  it("PAIN ≤3 toggles independently of the difficulty/cap chips", async () => {
+    mockReady();
+    await renderToday();
+    const painChip = screen.getByRole("button", { name: "PAIN ≤3" });
+    expect(painChip).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(painChip);
+    expect(painChip).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("cap chips are single-select: exactly one is ever active", async () => {
+    mockReady();
+    await renderToday();
+    expect(screen.getByRole("button", { name: "≤60′" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "≤30′" }));
+    expect(screen.getByRole("button", { name: "≤30′" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "≤60′" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "NO CAP" }));
+    expect(screen.getByRole("button", { name: "NO CAP" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "≤30′" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});
+
+describe("Today (overrides: persistence and invalidation)", () => {
+  it("persists a type swap and a filter chip change across a same-context remount", async () => {
+    mockReady();
+    const first = await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+    // Every difficulty is active by default (DEFAULT_PREFS), so this
+    // deselects HARD rather than selecting it — the change under test.
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+
+    // Same-day "reload": unmount and mount fresh, mirroring the SHUFFLE
+    // describe's own persistence test above.
+    first.unmount();
+    mockReady();
+    await renderToday();
+
+    expect(
+      await screen.findByRole("heading", { name: "Zephyr" }),
+    ).toBeVisible();
+    expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
+    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("discards the stored overrides once doneN advances (a session logged since)", async () => {
+    mockReady();
+    const first = await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+    expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
+
+    first.unmount();
+    // A plain mockReady() re-registers the SAME doMock factories, which
+    // Vitest only re-resolves for a FRESH module import — "./Today" (and
+    // the hook modules it pulls in) are already cached from the render
+    // above within this same test, so a second dynamic import would keep
+    // returning the old PLAN_AT-backed instances without this. resetModules
+    // forces the next `import("./Today")` in renderToday() to re-resolve
+    // every mock from scratch against the new plan fixture below.
+    vi.resetModules();
+    mockReady({ plan: PLAN_AT_NEXT });
+    await renderToday();
+
+    // New context (doneN 12, not 11): the swap doesn't carry forward — the
+    // plan line shows the plain prescribed code with no arrow, and the
+    // previously-swapped O2 chip is no longer active.
+    expect(await screen.findByText("SESSION 13 OF 84 · AT")).toBeVisible();
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+});
+
+describe("Today (type-swap chips)", () => {
+  it("hides the type-swap chips in freestyle mode but keeps the filter chips", async () => {
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    for (const type of ["AN", "O2", "AT", "TR"] as const) {
+      expect(
+        screen.queryByRole("button", { name: type }),
+      ).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: "EASY" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "≤60′" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PAIN ≤3" })).toBeInTheDocument();
+  });
+
+  it("swapping the type chip changes the pool and the plan line shows PRESCRIBED → SWAPPED", async () => {
+    mockReady();
+    await renderToday();
+    expect(screen.getByText("SESSION 12 OF 84 · AT")).toBeVisible();
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+    expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    // Zephyr (O2) is now the pool — none of the AT fixtures qualify.
+    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+  });
+
+  it("tapping the already-prescribed chip un-swaps and restores the original pool", async () => {
+    mockReady();
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+
+    expect(screen.getByText("SESSION 12 OF 84 · AT")).toBeVisible();
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("heading", { name: "Warm Front" })).toBeVisible();
+  });
+
+  it("on a TEST day, TR reads active by default and swapping shows TEST → <type>", async () => {
+    mockReady({ plan: PLAN_TEST });
+    await renderToday();
+    expect(screen.getByText("SESSION 21 OF 84 · TEST")).toBeVisible();
+    expect(screen.getByRole("button", { name: "TR" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "AN" }));
+
+    expect(screen.getByText("SESSION 21 OF 84 · TEST → AN")).toBeVisible();
+    expect(screen.getByRole("button", { name: "AN" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "TR" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("tapping TR on a TEST day un-swaps, since TR is the effective prescribed type for TEST", async () => {
+    mockReady({ plan: PLAN_TEST });
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "AN" }));
+    expect(screen.getByText(/TEST → AN/)).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "TR" }));
+
+    expect(screen.getByText("SESSION 21 OF 84 · TEST")).toBeVisible();
+    expect(screen.getByRole("button", { name: "TR" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("swapping to a type with nothing in the library shows the existing empty-pool card, with chips still interactive", async () => {
+    mockReady();
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "AN" }));
+
+    expect(screen.getByText("No AN sessions in your library.")).toBeVisible();
+    const buildLink = screen.getByRole("link", { name: /build a workout/i });
+    expect(buildLink).toHaveAttribute("href", "/library/new");
+
+    // Chips remain interactive against the empty pool — toggling one still
+    // flips its own pressed state rather than becoming inert/disabled.
+    const painChip = screen.getByRole("button", { name: "PAIN ≤3" });
+    await userEvent.click(painChip);
+    expect(painChip).toHaveAttribute("aria-pressed", "true");
+  });
+
+  // Pins suggest.ts's own pick-lookup fallback (suggest.ts:108-111,
+  // `sorted.find(...) ?? undefined` then `picked = pickOverride ?? sorted[0]`)
+  // from the swap side: SHUFFLE/pick state itself is untouched by this task,
+  // so a stale pick from BEFORE a swap has to fall back inside suggest
+  // rather than the UI crashing or silently keeping a now-invalid id.
+  it("a SHUFFLE pick that falls outside a newly-swapped pool falls back to the new pool's own default", async () => {
+    mockReady();
+    await renderToday();
+    const shuffle = screen.getByRole("button", { name: /shuffle/i });
+    await userEvent.click(shuffle); // Warm Front (AT) -> Tailwind (AT)
+    expect(screen.getByRole("heading", { name: "Tailwind" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+    // "w-tailwind" isn't in the O2 pool — suggest() can't find it by id in
+    // the swapped pool, so the pick falls back to the pool's own
+    // least-recently-done default (Zephyr, the only O2 entry) instead of
+    // crashing or keeping the stale AT id.
+    expect(screen.getByRole("heading", { name: "Zephyr" })).toBeVisible();
+    expect(screen.queryByText(/YOUR PICK/)).not.toBeInTheDocument();
   });
 });
 
