@@ -114,7 +114,10 @@ validation script:
 - quota grid exactly satisfied.
 
 Failures bounce back to their authoring agent. The validator ships as a
-permanent test over the seed content, not a throwaway script.
+permanent test over the seed content, not a throwaway script — except the
+no-clone check, which needs the private originals and therefore runs as an
+offline gate during the phase (its result is recorded in the PR); it cannot
+live in CI without committing book content.
 
 ### 6. Seed replacement + migration
 
