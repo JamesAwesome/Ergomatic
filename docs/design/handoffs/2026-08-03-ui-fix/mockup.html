@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas"></meta>
+<link rel="preconnect" href="https://fonts.googleapis.com"></link>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500;600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"></link>
+<style>
+  body { margin:0; background:#ddd8cc; font-family:Archivo,system-ui,sans-serif; }
+  a { color:#b5341f; text-decoration:none; }
+  a:hover { color:#9c2c19; }
+</style>
+</helmet>
+
+<section style="display:flex;flex-direction:column;gap:28px;padding:40px">
+
+  <div style="display:flex;align-items:baseline;gap:14px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">UI-FIX ROUND · TURN 1</span>
+    <span style="font-family:Newsreader,serif;font-size:26px;color:#1b1a17">Uniform control language</span>
+    <span style="font-family:Archivo,sans-serif;font-size:13px;color:#57544c">Approved spec, then the six screens built to it. Hand this file to the build session with README.md.</span>
+  </div>
+
+  <div style="display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap">
+
+    <div id="1a" style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;background:#1b1a17;color:#fffdf7;padding:4px 8px">1A</span>
+        <span style="font-family:Newsreader,serif;font-size:22px;color:#1b1a17">Approved: one column of blocks</span>
+      </div>
+
+      <div style="width:820px;display:flex;flex-direction:column;gap:20px;background:#f4f1e8;border:1px solid #1b1a17;padding:22px">
+
+        <div style="display:flex;flex-direction:column;gap:6px;border-bottom:2px solid #1b1a17;padding-bottom:12px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">CONTROL SPEC</span>
+          <span style="font-family:Newsreader,serif;font-size:28px;color:#1b1a17">Five levels, one column, no exceptions</span>
+          <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35;max-width:640px;text-wrap:pretty">Every action that acts on the whole screen is a full-width block in a single bottom-anchored stack, 12px gap. Nothing sits side-by-side except transport and steppers, which are geometrically paired by meaning, not by convenience.</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:220px 1fr;gap:18px 22px;align-items:start">
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;font-family:Archivo,sans-serif;font-size:16px;font-weight:600;border-radius:2px" style-hover="background:#9c2c19">Start workout</div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LEVEL 1 · PRIMARY · 56PX</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;padding-top:2px">
+            <span style="font-family:Archivo,sans-serif;font-size:13px;font-weight:600;color:#1b1a17">Solid accent, one per screen.</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">Start · Looks right, start · Save to library · Log this session. If a screen looks like it needs two, one of them is a level 2.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;color:#1b1a17;font-family:Archivo,sans-serif;font-size:16px;font-weight:600;border-radius:2px" style-hover="background:#efeade">Log it after</div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LEVEL 2 · OUTLINE · 52PX</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;padding-top:2px">
+            <span style="font-family:Archivo,sans-serif;font-size:13px;font-weight:600;color:#1b1a17">Ink border on surface, full width, same type as level 1.</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">Log it after · Back to Today · Edit · Retry. Two of these may stack; they never shrink to share a row.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="height:48px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em;border-radius:2px">DONE</div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LEVEL 3 · COMMIT-IN-CARD · 48PX</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;padding-top:2px">
+            <span style="font-family:Archivo,sans-serif;font-size:13px;font-weight:600;color:#1b1a17">Solid ink, mono label, full width of its card.</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">Closes an editor without leaving the screen (builder step DONE, staged baseline Apply). Ink, not accent, so it never reads as the screen's primary.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #b5341f;color:#b5341f;font-family:Archivo,sans-serif;font-size:16px;font-weight:600;border-radius:2px" style-hover="background:#f8ece3">Delete workout</div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LEVEL 4 · DESTRUCTIVE · 52PX</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;padding-top:2px">
+            <span style="font-family:Archivo,sans-serif;font-size:13px;font-weight:600;color:#1b1a17">Accent border, accent label, surface fill, full width like every other block.</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">Delete workout · Discard without logging. Sits last in the stack, under a 1px rule. The outline says "danger" without a solid block competing with the primary.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;font-family:Archivo,sans-serif;font-size:16px;font-weight:600;border-radius:2px">Tap again to discard</div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LEVEL 4 · ARMED · FILLS</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;padding-top:2px">
+            <span style="font-family:Archivo,sans-serif;font-size:13px;font-weight:600;color:#1b1a17">The outline arms in place: same box, fills accent, explicit copy.</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">An outlined destructive fills solid accent when armed. Auto-disarms on blur or 4s.</span>
+          </div>
+
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;border-top:1px solid #d8d3c4;padding-top:16px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">SELECTED-STATE COLOR · THE RULE THAT FIXES TODAY VS BUILDER</span>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:6px;background:#fffdf7;border:1px solid #d8d3c4;padding:12px;width:246px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TYPE → ALWAYS THE TYPE COLOR</span>
+              <div style="display:flex;gap:6px">
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#5c4382;color:#fffdf7;border:1px solid #5c4382;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em">AN</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#2a6275;color:#fffdf7;border:1px solid #2a6275;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em">O2</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#8a5f18;color:#fffdf7;border:1px solid #8a5f18;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em">AT</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em">TR</div>
+              </div>
+              <span style="font-family:Archivo,sans-serif;font-size:12px;line-height:1.45;color:#3f3c35">Filtering on Today and authoring in the builder use the identical chip. Today's red O2 chip is the bug.</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;background:#fffdf7;border:1px solid #d8d3c4;padding:12px;width:246px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">EVERY OTHER SELECTION → INK</span>
+              <div style="display:flex;gap:6px">
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em">EASY</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;color:#57544c;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em">MEDIUM</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:transparent;color:#57544c;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em">HARD</div>
+              </div>
+              <span style="font-family:Archivo,sans-serif;font-size:12px;line-height:1.45;color:#3f3c35">Difficulty, time cap, pain, MIN/M, 2k/6k, HELD/UNDER/OVER: all ink fill, cream label.</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;background:#fffdf7;border:1px solid #d8d3c4;padding:12px;width:246px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">ACCENT IS RESERVED</span>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#1b1a17">Accent red means exactly four things: the level-1 action, a resolved split or duration, a destructive control, the active tab mark.</span>
+                <span style="font-family:Archivo,sans-serif;font-size:12px;line-height:1.45;color:#3f3c35">It stops meaning "selected". That single subtraction is what makes the six screens feel like one app.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid #d8d3c4;padding-top:16px">
+          <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:5px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">ITEM 1 · EXACT TARGETS</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">Bands become single splits on detail, builder, confirm and UP NEXT. The timer's sub-line repurposes to the ref (<span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#1b1a17">6K +16</span>) · it answers "where did this number come from", which the band never did.</span>
+          </div>
+          <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:5px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">ITEMS 2 + 3 · DISCARD</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">One voice at all three surfaces: <span style="color:#1b1a17">Discard without logging</span> → <span style="color:#b5341f">Tap again to discard</span>. Level 4 on SessionComplete and Log; on Today's one-line row the same control compresses to an armed-in-place ✕.</span>
+          </div>
+          <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:5px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">ITEM 4 · SHUFFLE</span>
+            <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">Stays short, but stops being its own species: identical geometry to a chip (44px, 1px rule-3 border, mono 11px), parked at the right of the header row. Disabled = ink-5 label, dashed border, no grey fill.</span>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:5px;border-top:1px solid #d8d3c4;padding-top:16px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DOCUMENTED DEVIATIONS · FOR DEVIATIONS.MD</span>
+          <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.5;color:#3f3c35">1 · Transport (◀ Pause ▶) and steppers (− +) stay in a row, because they are one control, not three actions. 2 · SHUFFLE remains sub-full-width by explicit request; it is the only screen-level control that does. 3 · Level 3 introduces a solid-ink button that did not exist in the README's two-idiom set.</span>
+        </div>
+
+      </div>
+
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+
+        <div data-screen-label="A · Today" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;color:#1b1a17;border:1px solid #1b1a17">
+          <div style="flex:1;display:flex;flex-direction:column;gap:16px;padding:20px 20px 24px">
+            <div style="display:flex;flex-direction:column;gap:8px;border-bottom:2px solid #1b1a17;padding-bottom:14px">
+              <span style="font-family:Newsreader,serif;font-size:31px;font-weight:500;letter-spacing:-0.01em">Today</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">SESSION 1 OF 84 · O2</span>
+            </div>
+
+            <div style="display:flex;gap:6px">
+              <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">AN</div>
+              <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#2a6275;border:1px solid #2a6275;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em;color:#fffdf7">O2</div>
+              <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">AT</div>
+              <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">TR</div>
+            </div>
+
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c;margin-bottom:-8px">UNLOGGED ROW · DEFAULT</span>
+            <div style="display:flex;align-items:center;gap:10px;background:#efeade;border:1px solid #d8d3c4;border-radius:2px;padding:0 8px 0 12px;min-height:52px">
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <span style="font-family:Archivo,sans-serif;font-size:14px;font-weight:600;color:#1b1a17">Mackerel Sky</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">UNLOGGED SESSION · 25′</span>
+              </div>
+              <div style="height:44px;padding:0 12px;display:flex;align-items:center;justify-content:center;border:1px solid #1b1a17;border-radius:2px;background:#fffdf7;font-family:Archivo,sans-serif;font-size:14px;font-weight:600;color:#1b1a17">Log it</div>
+              <div style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid #b5341f;border-radius:2px;background:#fffdf7;color:#b5341f;font-size:17px" style-hover="background:#f8ece3">✕</div>
+            </div>
+
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c;border-top:1px dashed #c9c3b2;padding-top:12px;margin-bottom:-8px">SAME ROW · ARMED (NOT A SECOND SESSION)</span>
+            <div style="display:flex;align-items:center;gap:10px;background:#efeade;border:1px solid #b5341f;border-radius:2px;padding:0 8px 0 12px;min-height:52px">
+              <span style="flex:1;min-width:0;font-family:Archivo,sans-serif;font-size:13px;line-height:1.35;color:#1b1a17">Discard <span style="font-weight:600">Mackerel Sky</span> without logging?</span>
+              <div style="height:44px;padding:0 12px;display:flex;align-items:center;justify-content:center;background:#b5341f;border-radius:2px;font-family:Archivo,sans-serif;font-size:13px;font-weight:600;color:#fffdf7">Tap again</div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#1b1a17">SUGGESTED FOR TODAY</span>
+              <div style="height:44px;flex:none;padding:0 14px;display:flex;align-items:center;gap:8px;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#1b1a17" style-hover="border-color:#1b1a17">SHUFFLE ↻</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">DIFFICULTY</span>
+                <div style="display:flex;gap:6px">
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#fffdf7">EASY</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">MEDIUM</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">HARD</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">TIME</span>
+                <div style="display:flex;gap:6px">
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#57544c">≤30′</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#57544c">≤45′</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.08em;color:#fffdf7">≤60′</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#57544c">≤90′</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;color:#57544c">NO CAP</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">PAIN</span>
+                <div style="display:flex;gap:6px">
+                  <div style="width:110px;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.1em;color:#fffdf7">PAIN ≤3</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;padding:16px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:none;background:#2a6275;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.08em;padding:3px 7px">O2</span>
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#57544c">NO. 141</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:20px;color:#b5341f">25′</span>
+              </div>
+              <span style="font-family:Newsreader,serif;font-size:26px;font-weight:500;letter-spacing:-0.01em">Zephyr</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">EASY · PAIN 1/10</span>
+              <span style="font-family:Archivo,sans-serif;font-size:13px;line-height:1.45;color:#57544c;text-wrap:pretty">Least recently done O2 that fits your 60′ cap. Never done.</span>
+              <div style="display:flex;flex-direction:column;gap:0;margin-top:4px">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid #ded8c9">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">10:00 warm-up</span>
+                  <span style="font-family:Archivo,sans-serif;font-size:13px;font-style:italic;color:#57544c">easy</span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid #ded8c9">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">15:00 @ 6k +16</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#b5341f">2:22.0</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">LAST THREE</span>
+              <div style="display:flex;align-items:center;gap:10px;min-height:46px;border-top:1px solid #ded8c9">
+                <span style="flex:none;background:#8a5f18;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:0.08em;padding:3px 6px">AT</span>
+                <span style="flex:1;min-width:0;font-family:Archivo,sans-serif;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Bell Buoy</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">AUG 3 · HELD · 2/10</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;min-height:46px;border-top:1px solid #ded8c9">
+                <span style="flex:none;background:#5c4382;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:0.08em;padding:3px 6px">AN</span>
+                <span style="flex:1;min-width:0;font-family:Archivo,sans-serif;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Short Chop</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">AUG 1 · UNDER · 6/10</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;border-top:1px solid #d8d3c4;background:#f4f1e8">
+            <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:16px;height:3px;background:#b5341f"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#1b1a17">TODAY</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">LIBRARY</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">PLAN</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TREND</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">YOU</span></div>
+          </div>
+        </div>
+
+        <div data-screen-label="A · Workout detail" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;color:#1b1a17;border:1px solid #1b1a17">
+          <div style="flex:1;display:flex;flex-direction:column;gap:14px;padding:20px 20px 24px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">← BACK</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="background:#2a6275;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.08em;padding:3px 7px">O2</span>
+              <span style="border:1px solid #c9c3b2;color:#57544c;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;padding:3px 7px">CUSTOM</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">EASY</span>
+            </div>
+            <span style="font-family:Newsreader,serif;font-size:33px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">Personal Workout</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">21 MIN · PAIN 3/10 · NEVER DONE</span>
+            <div style="background:#efeade;border-radius:2px;padding:11px 12px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">PREVIEW · NUDGE ANY TARGET</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:10px;border-top:1px solid #1b1a17;padding-top:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:14px">20:00 @ 6k +16</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#b5341f">2:22.0</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#57544c">21 spm · rest none</span>
+                <div style="display:flex;flex:none;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;overflow:hidden">
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#1b1a17">▲</div>
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;font-size:12px;color:#1b1a17">▼</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:4px;border-top:1px solid #ded8c9;padding-top:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:14px">0:30 @ MAX</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">ALL OUT</span>
+              </div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#57544c">21 spm</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:12px;margin-top:6px">
+              <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600" style-hover="background:#9c2c19">Start</div>
+              <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600">Log it after</div>
+              <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600">Edit</div>
+              <div style="border-top:1px solid #d8d3c4;padding-top:12px">
+                <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #b5341f;color:#b5341f;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600" style-hover="background:#f8ece3">Delete workout</div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;border-top:1px solid #d8d3c4">
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TODAY</span></div>
+            <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:16px;height:3px;background:#b5341f"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#1b1a17">LIBRARY</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">PLAN</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TREND</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">YOU</span></div>
+          </div>
+        </div>
+
+        <div data-screen-label="A · Session complete" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;color:#1b1a17;border:1px solid #1b1a17;min-height:760px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:16px;padding:20px">
+            <span style="font-family:Newsreader,serif;font-size:31px;font-weight:500;line-height:1.15;letter-spacing:-0.01em">Complete Workout</span>
+            <div style="display:flex;flex-direction:column;gap:4px;border-top:2px solid #1b1a17;padding-top:14px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">TOTAL</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:52px;font-weight:500;letter-spacing:-0.04em">0:23</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:14px 14px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#3f3c35">WORK · 100M</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#b5341f">1:40.0</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 24px">
+            <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600" style-hover="background:#9c2c19">Log this session</div>
+            <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600">Back to Today</div>
+            <div style="border-top:1px solid #d8d3c4;padding-top:12px">
+              <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #b5341f;color:#b5341f;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600" style-hover="background:#f8ece3">Discard without logging</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;border-top:1px dashed #c9c3b2;padding-top:12px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">ARMED STATE</span>
+              <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600">Tap again to discard</div>
+            </div>
+          </div>
+        </div>
+
+        <div data-screen-label="A · Confirm" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;color:#1b1a17;border:1px solid #1b1a17">
+          <div style="flex:1;display:flex;flex-direction:column;gap:14px;padding:20px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">← BACK</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="background:#8a5f18;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.08em;padding:3px 7px">AT</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">2K 1:52.0 · 6K 2:02.0</span>
+            </div>
+            <span style="font-family:Newsreader,serif;font-size:31px;font-weight:500;line-height:1.12;letter-spacing:-0.01em">Confirm Workout</span>
+
+            <div style="display:flex;flex-direction:column;gap:10px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">ROW 1 · WARM-UP</span>
+                <div style="height:44px;padding:0 12px;display:flex;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">REMOVE</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DUR</span>
+                <div style="flex:1;display:flex;border:1px solid #c9c3b2;border-radius:2px;overflow:hidden">
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:16px">−</div>
+                  <span style="flex:1;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;border-right:1px solid #ded8c9;font-family:'IBM Plex Mono',monospace;font-size:15px">5:00</span>
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:16px">+</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:10px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">ROW 3 · 6K</span>
+                <div style="height:44px;padding:0 12px;display:flex;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">REMOVE</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DUR</span>
+                <div style="flex:1;display:flex;border:1px solid #c9c3b2;border-radius:2px;overflow:hidden">
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:16px">−</div>
+                  <span style="flex:1;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;border-right:1px solid #ded8c9;font-family:'IBM Plex Mono',monospace;font-size:15px">1:00</span>
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:16px">+</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;background:#efeade;border-radius:2px;padding:11px 12px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">TARGET</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#b5341f">2:02.0</span>
+              </div>
+              <div style="display:flex;gap:8px">
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;font-size:12px">▲</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;font-size:12px">▼</div>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #1b1a17;padding-top:14px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">TOTAL</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:20px;color:#b5341f">8 MIN</span>
+            </div>
+            <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600" style-hover="background:#9c2c19">Looks right, start</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #d8d3c4">
+            <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:16px;height:3px;background:#b5341f"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#1b1a17">TODAY</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">LIBRARY</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">PLAN</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TREND</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">YOU</span></div>
+          </div>
+        </div>
+
+        <div data-screen-label="A · Timer" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;color:#1b1a17;border:1px solid #1b1a17;min-height:800px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:14px;padding:20px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="flex:1;min-width:0;font-family:Archivo,sans-serif;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Timer Workout</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">END →</span>
+            </div>
+            <div style="display:flex;gap:4px">
+              <span style="flex:1;height:3px;background:#1b1a17"></span>
+              <span style="flex:1;height:3px;background:#d8d3c4"></span>
+              <span style="flex:1;height:3px;background:#d8d3c4"></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#3f3c35">STEP 1 OF 3 · WORK</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#b5341f">RUNNING</span>
+            </div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:96px;font-weight:500;letter-spacing:-0.05em;line-height:1">4:00</span>
+            <div style="height:6px;background:#ded8c9"><span style="display:block;width:34%;height:6px;background:#1b1a17"></span></div>
+            <div style="display:flex;gap:10px">
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">TARGET SPLIT</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;color:#b5341f;letter-spacing:-0.02em">2:02.0</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">6K +0</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">RATE</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;letter-spacing:-0.02em">20</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">SPM</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;background:#efeade;border-radius:2px;padding:13px 12px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">UP NEXT</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#1b1a17">REST · 2:00</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #1b1a17;padding-top:12px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">TOTAL LEFT</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:22px">9:30</span>
+            </div>
+            <div style="height:6px;background:#ded8c9"><span style="display:block;width:22%;height:6px;background:#b5341f"></span></div>
+          </div>
+          <div style="display:flex;gap:10px;padding:0 20px 24px">
+            <div style="width:56px;height:56px;flex:none;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:14px">◀</div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600" style-hover="background:#9c2c19">Pause</div>
+            <div style="width:56px;height:56px;flex:none;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:14px">▶</div>
+          </div>
+        </div>
+
+        <div data-screen-label="A · Builder" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;color:#1b1a17;border:1px solid #1b1a17">
+          <div style="flex:1;display:flex;flex-direction:column;gap:14px;padding:20px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">← BACK</span>
+            <span style="font-family:Newsreader,serif;font-size:30px;font-weight:500;letter-spacing:-0.01em">New workout</span>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1;height:48px;display:flex;align-items:center;background:#fffdf7;border:1px solid #c9c3b2;border-radius:2px;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:14px">Intervals</div>
+              <div style="height:48px;flex:none;display:flex;align-items:center;justify-content:center;padding:0 14px;border:1px solid #1b1a17;background:#fffdf7;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em">↻ AUTO NAME</div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:14px;background:#fffdf7;border:1px solid #ded8c9;border-radius:2px;padding:14px">
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">TYPE</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#3f3c35">LOW &amp; SLOW</span>
+                </div>
+                <div style="display:flex;gap:6px">
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">AN</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#2a6275;border:1px solid #2a6275;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em;color:#fffdf7">O2</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">AT</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">TR</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">DIFFICULTY</span>
+                <div style="display:flex;gap:6px">
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#fffdf7">EASY</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">MEDIUM</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">HARD</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">EXPECTED PAIN</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.06em;color:#3f3c35">WORKING</span>
+                </div>
+                <div style="display:flex;gap:6px">
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">1</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">2</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:#fffdf7">3</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">4</div>
+                  <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">5</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;justify-content:space-between">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">STEPS</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">7 STEPS</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:6px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:9px 9px 9px 11px">
+              <div style="display:flex;align-items:baseline;gap:10px">
+                <span style="width:16px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">2</span>
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:14px">2000 m @ 2k ±0</span>
+                <span style="flex:none;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">1:52.0</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="flex:1;padding-left:26px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#57544c">25 spm · rest 3:00</span>
+                <div style="display:flex;flex:none;border:1px solid #d8d3c4;border-radius:2px;overflow:hidden">
+                  <div style="width:48px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#1b1a17">EDIT</div>
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;font-size:13px;color:#1b1a17">⧉</div>
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;font-size:15px;color:#57544c">✕</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:10px;background:#fffdf7;border:1px solid #1b1a17;border-left:3px solid #2a6275;border-radius:2px;padding:12px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#57544c">STEP 7</span>
+                <div style="height:44px;padding:0 12px;display:flex;align-items:center;border:1px solid #d8d3c4;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em">DUPLICATE</div>
+                <div style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid #d8d3c4;border-radius:2px;font-size:15px;color:#57544c">✕</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DUR</span>
+                <div style="flex:1;min-width:0;height:44px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:15px">8:00</div>
+                <div style="display:flex;flex:none;border:1px solid #c9c3b2;border-radius:2px;overflow:hidden">
+                  <div style="width:52px;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em">MIN</div>
+                  <div style="width:52px;height:44px;display:flex;align-items:center;justify-content:center;border-left:1px solid #c9c3b2;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">M</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:6px">
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">2K</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;background:#1b1a17;border:1px solid #1b1a17;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;color:#fffdf7">6K</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">MAX</div>
+                <div style="flex:1;height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">MIN</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="width:34px;flex:none;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">PACE</span>
+                <div style="flex:1;display:flex;border:1px solid #c9c3b2;border-radius:2px;background:#fffdf7;overflow:hidden">
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:16px">−</div>
+                  <span style="flex:1;display:flex;align-items:center;justify-content:center;border-left:1px solid #ded8c9;border-right:1px solid #ded8c9;font-family:'IBM Plex Mono',monospace;font-size:15px">6k −5</span>
+                  <div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:16px">+</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;background:#efeade;border-radius:2px;padding:11px 12px">
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">TARGET</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#b5341f">1:57.0</span>
+              </div>
+              <div style="height:48px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em">DONE</div>
+            </div>
+
+            <div style="height:48px;display:flex;align-items:center;justify-content:center;border:1px dashed #c9c3b2;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#57544c">+ ADD STEP</div>
+
+            <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #1b1a17;padding-top:14px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">TOTAL</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:20px;color:#b5341f">204 MIN</span>
+            </div>
+            <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-family:Archivo,sans-serif;font-size:16px;font-weight:600" style-hover="background:#9c2c19">Save to library</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #d8d3c4">
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TODAY</span></div>
+            <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px"><span style="width:16px;height:3px;background:#b5341f"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#1b1a17">LIBRARY</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">PLAN</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TREND</span></div>
+            <div style="flex:1;height:56px;display:flex;align-items:center;justify-content:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">YOU</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1800,&quot;height&quot;:1200}}"></script>
+</body>
+</html>
