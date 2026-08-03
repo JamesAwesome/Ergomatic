@@ -666,9 +666,10 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 4 rounds of a 60/45/30 s descending ladder (2k-4 → 2k-6), generous
-    // rest scaling down with the reps — a repeating ladder instead of one
-    // flat rep count.
+    // AN: 4 rounds of a 60/45/30 s descending ladder (2k-4 → 2k-6); rest
+    // tapers within the round (1' → 45 s) then resets longer (1.5') before
+    // the next round starts — a repeating ladder instead of one flat rep
+    // count.
     title: "Satellite Tornado",
     type: "AN",
     difficulty: "hard",
@@ -1250,7 +1251,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 2 rounds of a 75/60/45/30 s all-out descending ladder off a 20'
+    // AN: 2 rounds of a 75/60/45/30 s all-out descending ladder off a 22'
     // warm-up, generous rest scaling down with the reps — deepening fast,
     // and it does not let up.
     title: "Bomb Cyclone",
@@ -1258,7 +1259,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     difficulty: "hard",
     pain: 5,
     steps: [
-      { k: "wu", minutes: 20 },
+      { k: "wu", minutes: 22 },
       { k: "reps", count: 2 },
       {
         k: "w",
