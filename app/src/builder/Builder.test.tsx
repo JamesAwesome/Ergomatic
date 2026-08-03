@@ -920,7 +920,7 @@ describe("Builder", () => {
     ).toHaveAttribute("href", "/you");
   });
 
-  it("live-resolves a work row's typed duration and pace ref into the tolerance range", async () => {
+  it("live-resolves a work row's typed duration and pace ref into the exact split", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -930,9 +930,10 @@ describe("Builder", () => {
     await userEvent.click(faster);
     await userEvent.click(faster);
 
-    // Hardcoded expectation (EN DASH, U+2013) — never recomputed by calling
-    // resolveSplit/toleranceRange, which would make this assertion tautological.
-    expect(screen.getByText("1:59.0–2:01.0")).toBeInTheDocument();
+    // Hardcoded expectation — never recomputed by calling
+    // resolveSplit/fmtSplit, which would make this assertion tautological.
+    // Ui-fix round, Item 1: the exact split, never a "lo–hi" tolerance band.
+    expect(screen.getByText("2:00.0")).toBeInTheDocument();
   });
 
   it("renders a work row's pace as a structured control (four radios: 2K/6K/MAX/MIN), not a free-text field", async () => {

@@ -3,7 +3,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import { resolveSplit, toleranceRange } from "../../domain/pace.js";
+import { resolveSplit } from "../../domain/pace.js";
+import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
@@ -342,20 +343,20 @@ describe("ConfirmTargets", () => {
     expect(screen.getByText("40 MIN")).toBeInTheDocument();
   });
 
-  it("nudging a split step's target updates the resolved range shown in both directions, clamped to a real split", async () => {
+  it("nudging a split step's target updates the exact split shown in both directions, clamped to a real split", async () => {
     mockBaselines();
     seedDraft("Hoarfrost");
     await renderConfirm();
 
     const ref = { base: "6k" as const, off: 12 };
-    const before = toleranceRange(resolveSplit(BASELINES, ref, 0), 1).label;
+    const before = fmtSplit(resolveSplit(BASELINES, ref, 0));
     expect(screen.getByText(before)).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 3 nudge slower" }),
     );
 
-    const after = toleranceRange(resolveSplit(BASELINES, ref, 1), 1).label;
+    const after = fmtSplit(resolveSplit(BASELINES, ref, 1));
     expect(screen.getByText(after)).toBeInTheDocument();
     expect(screen.queryByText(before)).not.toBeInTheDocument();
 

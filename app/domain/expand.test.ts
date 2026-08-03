@@ -124,20 +124,43 @@ describe("phases", () => {
     });
   });
 
-  it("marks split work phases targetKind split and behaves as before", () => {
+  it("marks split work phases targetKind split, with an EXACT label — no tolerance band (ui-fix round, Item 1)", () => {
+    const ref = { base: "6k" as const, off: -2 };
     const phases_ = phases(
       [
         {
           k: "w",
           duration: { kind: "time", minutes: 1 },
-          ref: { base: "6k", off: -2 },
+          ref,
         },
       ],
       { k2Seconds: 112, k6Seconds: 122 },
       1,
     );
-    expect(phases_[0]).toMatchObject({ targetKind: "split", targetSplit: 120 });
-    expect(phases_[0]!.label).toContain("–"); // still a range label
+    expect(phases_[0]).toMatchObject({
+      targetKind: "split",
+      targetSplit: 120,
+      ref,
+    });
+    // Exact — never a "lo–hi" band, regardless of the tol argument (1 here).
+    expect(phases_[0]!.label).toBe("2:00.0");
+    expect(phases_[0]!.label).not.toContain("–");
+  });
+
+  it("a split work phase carries no ref when the target is an effort (5G rule: an effort target is a word, never a number to trace a ref for)", () => {
+    const phases_ = phases(
+      [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 0.5 },
+          ref: { effort: "max" },
+        },
+      ],
+      { k2Seconds: 112, k6Seconds: 122 },
+      1,
+    );
+    expect(phases_[0]!.targetKind).toBe("effort");
+    expect(phases_[0]!.ref).toBeUndefined();
   });
 });
 

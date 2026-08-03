@@ -602,13 +602,15 @@ describe("LogSession: the ledger residual (workoutId mismatch)", () => {
     expect(rows).toHaveLength(2);
     // Fallback label: the phase's own frozen (already-resolved) label, not
     // the draft's chip idiom — proves the mismatch guard actually changed
-    // behavior rather than passing vacuously. targetSplit 132 for BOTH
-    // Hoarfrost (6k+12) and Calm Sea (6k+12, same offset) at TOL=1 ->
-    // toleranceRange labels "2:11.0–2:13.0" for each — the point here is
-    // the fallback FORMAT (a resolved range, not the "@ 6k +12" chip idiom
-    // the matched-draft tests pin), not that the two rows differ.
-    expect(rows[0]).toHaveTextContent("12:00 @ 2:11.0–2:13.0");
-    expect(rows[1]).toHaveTextContent("10000 m @ 2:11.0–2:13.0");
+    // behavior rather than passing vacuously. Ui-fix round, Item 1: the
+    // fallback label is the exact split now, never a "lo–hi" band
+    // (domain/expand.ts's own `case "w"` stopped calling `toleranceRange`).
+    // targetSplit 132 for BOTH Hoarfrost (6k+12) and Calm Sea (6k+12, same
+    // offset) -> fmtSplit(132) = "2:12.0" for each — the point here is the
+    // fallback FORMAT (an exact split, not the "@ 6k +12" chip idiom the
+    // matched-draft tests pin), not that the two rows differ.
+    expect(rows[0]).toHaveTextContent("12:00 @ 2:12.0");
+    expect(rows[1]).toHaveTextContent("10000 m @ 2:12.0");
   });
 });
 

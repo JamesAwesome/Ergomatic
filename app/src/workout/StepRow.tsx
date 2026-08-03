@@ -5,13 +5,13 @@ import {
   isEffortRef,
   refLabel,
   resolveSplit,
-  toleranceRange,
 } from "../../domain/pace.js";
+import { fmtSplit } from "../../domain/format.js";
 import { fmtDuration, fmtDurationSpoken } from "../../domain/duration.js";
 import type { Baselines, Step } from "../../domain/types.js";
 
-// MINUS SIGN (U+2212) for negative, matching the tolerance range's EN DASH
-// convention of using real typographic characters rather than ASCII "-".
+// MINUS SIGN (U+2212) for negative — a real typographic character rather
+// than ASCII "-".
 function nudgeLabel(nudge: number): string | null {
   if (nudge === 0) return null;
   return nudge > 0 ? `nudged +${nudge}s` : `nudged −${-nudge}s`;
@@ -20,7 +20,6 @@ function nudgeLabel(nudge: number): string | null {
 export default function StepRow({
   step,
   baselines,
-  tolerance,
   nudge,
   onNudge,
 }: {
@@ -30,7 +29,6 @@ export default function StepRow({
   // a dead branch.
   step: Exclude<Step, { k: "reps" }>;
   baselines: Baselines | null;
-  tolerance: number;
   nudge: number;
   onNudge: (delta: number) => void;
 }) {
@@ -133,13 +131,12 @@ export default function StepRow({
           // fallback below).
           <span className="step-row-range">{effortWord(step.ref.effort)}</span>
         ) : baselines ? (
+          // Ui-fix round, Item 1: the exact resolved split, not a
+          // tolerance band — `toleranceRange()` still exists in the domain
+          // (off-target judgments elsewhere may still want `.lo`/`.hi`),
+          // but this display call site now shows only the single number.
           <span className="step-row-range">
-            {
-              toleranceRange(
-                resolveSplit(baselines, step.ref, nudge),
-                tolerance,
-              ).label
-            }
+            {fmtSplit(resolveSplit(baselines, step.ref, nudge))}
           </span>
         ) : (
           <span className="step-row-no-target">

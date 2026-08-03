@@ -1,30 +1,34 @@
 import { fmtSplit } from "../../domain/format.js";
+import { refLabel } from "../../domain/pace.js";
 import type { EnginePhase } from "./engine";
 
-/** TARGET SPLIT card content: `main` is the mono-30px accent value, `range`
+/** TARGET SPLIT card content: `main` is the mono-30px accent value, `sub`
  *  (when non-null) is the smaller line beneath it.
  *
  *  `targetKind` is only ever set on work phases (domain/expand.ts's own
  *  comment on `Phase.targetKind`: "work phases only; set on every work
  *  phase"), so branching on it alone — never on `phase.type` — already
  *  covers every case correctly:
- *  - `"effort"`: the word (`phase.label` — "ALL OUT"/"EASY"), no range.
+ *  - `"effort"`: the word (`phase.label` — "ALL OUT"/"EASY"), no sub-line.
  *    The spec is explicit that the numeric estimate behind an effort target
  *    (`targetSplit`) is NEVER displayed, so there is nothing to put
  *    underneath it, unlike a split-ref target below.
- *  - `"split"`: the resolved CENTRAL split (`fmtSplit(phase.targetSplit)`)
- *    as the main value, with the tolerance range (`phase.label` — already a
- *    formatted `"lo–hi"` string, `domain/pace.ts`'s `toleranceRange`) as the
- *    line beneath — UNLESS the tolerance is 0, in which case
- *    `toleranceRange`'s own label collapses to the exact same string as the
- *    central value, and showing it twice would be pointless duplication,
- *    not information.
+ *  - `"split"`: the resolved EXACT split (`fmtSplit(phase.targetSplit)`) as
+ *    the main value, with the REF it was resolved from (`refLabel(phase.ref)`,
+ *    uppercased — e.g. `"6K +16"`) as the line beneath. Ui-fix round, Item 1:
+ *    this used to be the tolerance-range label (`domain/pace.ts`'s
+ *    `toleranceRange`, a "lo–hi" string, or the bare central value once tol
+ *    hit 0) — retired in favour of "where did this number come from," which
+ *    the band never answered and the ref does. `phase.ref` is only absent
+ *    here in the unreachable case of a "split" targetKind phase that
+ *    somehow carries no ref (domain/expand.ts's own `case "w"` always sets
+ *    both together); the sub-line is omitted rather than crashing on it.
  *  - `undefined` (warmup/rest/test — the only phase kinds with no
  *    `targetKind` at all): `phase.label` alone (already "Easy"/"Rest"/
- *    "All out"), no range — there is no split to range around.
+ *    "All out"), no sub-line — there is no split to trace a ref for.
  *
  *  The older design prototype's own mock data (`Erg Log.dc.html`) reuses
- *  this same "range" slot to show `'rate free'` for a warm-up's TARGET
+ *  this same sub-line slot to show `'rate free'` for a warm-up's TARGET
  *  SPLIT card and a bare `'—'` for a warm-up's RATE card — an internal
  *  inconsistency in the prototype's own placeholder logic (the written
  *  handoff text and this house's binding "never a bare dash" rule both
@@ -33,16 +37,17 @@ import type { EnginePhase } from "./engine";
 // eslint-disable-next-line react-refresh/only-export-components
 export function targetSplitDisplay(phase: EnginePhase): {
   main: string;
-  range: string | null;
+  sub: string | null;
 } {
   if (phase.targetKind === "effort") {
-    return { main: phase.label, range: null };
+    return { main: phase.label, sub: null };
   }
   if (phase.targetKind === "split" && phase.targetSplit !== undefined) {
     const main = fmtSplit(phase.targetSplit);
-    return { main, range: phase.label === main ? null : phase.label };
+    const sub = phase.ref ? refLabel(phase.ref).toUpperCase() : null;
+    return { main, sub };
   }
-  return { main: phase.label, range: null };
+  return { main: phase.label, sub: null };
 }
 
 /** RATE card content: the spm value + its `"spm"` caption when the phase
@@ -71,8 +76,8 @@ export default function TimerTargets({ phase }: { phase: EnginePhase }) {
         <span className="timer-card-value timer-card-value-accent">
           {target.main}
         </span>
-        {target.range !== null && (
-          <span className="timer-card-caption">{target.range}</span>
+        {target.sub !== null && (
+          <span className="timer-card-caption">{target.sub}</span>
         )}
       </div>
       <div className="timer-card">

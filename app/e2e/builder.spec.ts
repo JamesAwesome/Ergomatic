@@ -112,26 +112,25 @@ test.describe("authoring loop", () => {
     await spmUp.click();
     await spmUp.click();
 
-    // With a 6k baseline of 122.0s: 122 - 2 = 120.0, tolerance +/-1s (the
-    // token default, tokens.css's --pace-tolerance) -> "1:59.0-2:01.0" (EN
-    // DASH, domain/pace.ts's toleranceRange). The builder resolves this live
-    // (StepEditor.tsx's TARGET strip), before any save — check it here too,
-    // not just on the post-save detail screen below, so a failure here (bad
-    // live math) isn't confused with a failure there (bad round-trip
-    // through the API).
+    // With a 6k baseline of 122.0s: 122 - 2 = 120.0 -> "2:00.0" exact
+    // (ui-fix round, Item 1: the tolerance band retired from every display
+    // call site — --pace-tolerance still exists for the domain's own
+    // toleranceRange, but no screen shows it any more). The builder
+    // resolves this live (StepEditor.tsx's TARGET strip), before any save —
+    // check it here too, not just on the post-save detail screen below, so
+    // a failure here (bad live math) isn't confused with a failure there
+    // (bad round-trip through the API).
     await expect(page.locator(".step-editor-target-value")).toHaveText(
-      "1:59.0–2:01.0",
+      "2:00.0",
     );
 
     await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
-    // WorkoutDetail's own resolved-range class (StepRow.tsx) — untouched by
+    // WorkoutDetail's own resolved-target class (StepRow.tsx) — untouched by
     // the builder redesign.
-    await expect(page.locator(".step-row-range").first()).toHaveText(
-      "1:59.0–2:01.0",
-    );
+    await expect(page.locator(".step-row-range").first()).toHaveText("2:00.0");
 
     await cleanupByTitle(page, title);
   });

@@ -1,11 +1,11 @@
+import { fmtSplit } from "./format.js";
 import {
   effortWord,
   estimationSplit,
   isEffortRef,
   resolveSplit,
-  toleranceRange,
 } from "./pace.js";
-import type { Baselines, Step } from "./types.js";
+import type { Baselines, PaceRef, Step } from "./types.js";
 
 export interface Phase {
   type: "warmup" | "work" | "rest" | "test";
@@ -13,8 +13,31 @@ export interface Phase {
   meters?: number; // distance work phases
   targetSplit?: number; // work phases (resolved, nudge excluded — session nudges are applied by callers)
   targetKind?: "split" | "effort"; // work phases only; set on every work phase
+  // The raw ref a "split" targetKind phase was resolved from — set ONLY
+  // for that case (an effort phase's target is words, never a number to
+  // trace back to a ref; the same 5G rule). When this Phase came from
+  // `buildRun` (engine.ts), `effectiveSteps` has already folded any
+  // confirm-time nudge into `off` before `phases()` ever sees it, so this
+  // is always the EFFECTIVE ref — the same one `targetSplit` was resolved
+  // against — not the pre-nudge authored value. Exists so a display
+  // surface that needs "where did this number come from" (the timer's
+  // TARGET SPLIT sub-line, ui-fix round Item 1) can call `domain/pace.ts`'s
+  // `refLabel` directly, without reaching back into a `SessionDraft` the
+  // way `logDraft.ts`'s own LABEL IDIOM comment documents having to do
+  // before this field existed.
+  ref?: PaceRef;
   spm?: number;
-  label: string; // 'Easy' | 'Rest' | 'All out' | 'ALL OUT' | 'EASY' | fmtSplit-range label
+  // 'Easy' | 'Rest' | 'All out' | 'ALL OUT' | 'EASY' | the EXACT resolved
+  // split (`fmtSplit`) for a "split" targetKind phase. Ui-fix round, Item
+  // 1: this used to be `toleranceRange(split, tol).label` (a "lo–hi"
+  // band) — retired because this label reaches display (Timer.tsx's own
+  // `upNextText`/`thenNextText` read `EnginePhase.label` straight
+  // through, and `logDraft.ts`'s `buildLogSteps` fallback path composes a
+  // LogStep's label from it too), and the round's own rule is that no
+  // display surface shows a band any more. `toleranceRange()` itself is
+  // untouched and still lives in `pace.ts`; see this module's own
+  // `phases()` doc comment on its now-otherwise-unused `tol` parameter.
+  label: string;
   set?: { index: number; of: number };
   // The index in the `steps` array PASSED TO `phases()` (before this
   // function's own reps-block expansion) that this phase was expanded
@@ -76,10 +99,22 @@ export function phaseSeconds(
   return null;
 }
 
+// `_tol` (ui-fix round): this used to size the "lo–hi" band `case "w"`'s
+// split branch put into `label` (`toleranceRange(split, tol).label`).
+// Every display call site the label ever reached has been retired to the
+// exact split instead, and `toleranceRange()`'s `.lo`/`.hi` have no other
+// consumer left in this codebase — a repo-wide search at the time of this
+// change found none — so the parameter is genuinely inert inside this
+// function's own body now. Kept (not dropped) rather than removing it and
+// updating the three call sites (`engine.ts`'s `buildRun`, this module's
+// own `estimateMinutes`, and every test file constructing a `phases()`
+// call with a tolerance argument) that already pass a tolerance value here
+// — that's a real signature-simplification opportunity, flagged in the
+// task report rather than done silently as a wider-than-scoped change.
 export function phases(
   steps: Step[],
   baselines: Baselines,
-  tol: number,
+  _tol: number,
 ): Phase[] {
   const idx = steps.findIndex((s) => s.k === "reps");
   const marker =
@@ -146,8 +181,9 @@ export function phases(
             type: "work",
             targetKind: "split",
             targetSplit: split,
+            ref: s.ref,
             spm: s.spm,
-            label: toleranceRange(split, tol).label,
+            label: fmtSplit(split),
             set,
             originalStepIndex,
           };

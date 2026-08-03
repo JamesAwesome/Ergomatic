@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useBaselines } from "../api/useBaselines";
 import { fmtDuration } from "../../domain/duration.js";
+import { fmtSplit } from "../../domain/format.js";
 import {
   effortWord,
   isEffortRef,
   refLabel,
   resolveSplit,
-  toleranceRange,
 } from "../../domain/pace.js";
 import type { Baselines, Step } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
@@ -21,19 +21,6 @@ import {
   withNudge,
   type SessionDraft,
 } from "./draft";
-
-// Copied from WorkoutDetail.tsx's own `readPaceTolerance` — both screens
-// read the same settings-owned custom property, and the function is small
-// enough that a shared module for two callers isn't yet worth the extra
-// indirection. Keep the two in lockstep if either changes.
-function readPaceTolerance(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--pace-tolerance")
-    .trim();
-  const parsed = Number(raw);
-  return raw !== "" && Number.isFinite(parsed) ? parsed : 1;
-}
 
 // The house 30s grid (docs/superpowers spec: "duration steppers (30 s grid
 // on the stepper, the house rule)") for time-based durations (wu/r minutes
@@ -290,8 +277,8 @@ export default function ConfirmTargets() {
   // into a delta so the actual mutation still goes through draft.ts's
   // `withNudge` (the module's own sanctioned mutator, which also refuses an
   // effort ref and a non-work index). Unclamped, a repeated nudge could push
-  // a split negative, which the display formatter (fmtSplit, via
-  // toleranceRange) has no sane rendering for.
+  // a split negative, which the display formatter (fmtSplit) has no sane
+  // rendering for.
   function handleNudge(i: number, delta: number) {
     commit((prev) => {
       const step = prev.steps[i];
@@ -335,7 +322,6 @@ export default function ConfirmTargets() {
     navigate("/session/countdown");
   }
 
-  const tolerance = readPaceTolerance();
   const minutes = draftMinutes(draft, baselines);
   const minutesLabel = minutes === null ? "— MIN" : `${minutes} MIN`;
 
@@ -358,7 +344,6 @@ export default function ConfirmTargets() {
             spmOverride={step.k === "w" ? draft.spmOverrides[i] : undefined}
             nudge={draft.nudges[i] ?? 0}
             baselines={baselines}
-            tolerance={tolerance}
             onToggleRemoved={() => toggleRemoved(i)}
             onDurationStep={(delta) => stepDuration(i, delta)}
             onMetersStep={(delta) => stepMeters(i, delta)}
@@ -412,7 +397,6 @@ function ConfirmStepRow({
   spmOverride,
   nudge,
   baselines,
-  tolerance,
   onToggleRemoved,
   onDurationStep,
   onMetersStep,
@@ -426,7 +410,6 @@ function ConfirmStepRow({
   spmOverride: number | undefined;
   nudge: number;
   baselines: Baselines | null;
-  tolerance: number;
   onToggleRemoved: () => void;
   onDurationStep: (delta: number) => void;
   onMetersStep: (delta: number) => void;
@@ -522,13 +505,11 @@ function ConfirmStepRow({
                 {effortWord(step.ref.effort)}
               </span>
             ) : baselines ? (
+              // Ui-fix round, Item 1: the exact resolved split — a
+              // tolerance band never appears here any more, though
+              // `toleranceRange()` itself is unchanged in the domain.
               <span className="step-editor-target-value">
-                {
-                  toleranceRange(
-                    resolveSplit(baselines, step.ref, nudge),
-                    tolerance,
-                  ).label
-                }
+                {fmtSplit(resolveSplit(baselines, step.ref, nudge))}
               </span>
             ) : (
               <span className="step-editor-target-value step-editor-no-target">

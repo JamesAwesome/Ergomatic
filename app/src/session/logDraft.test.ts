@@ -497,8 +497,13 @@ describe("buildLogSteps", () => {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
       });
-      // toleranceRange(132, tol=0).label = fmtSplit(132) = "2:12.0" — the
-      // pre-F1b resolved-split text, not "6k +12".
+      // domain/expand.ts's own label = fmtSplit(132) = "2:12.0" — the
+      // pre-F1b resolved-split text, not "6k +12". Ui-fix round, Item 1:
+      // this was ALREADY exact even before the band was retired from
+      // display (tol=0 here), since `toleranceRange`'s own tol=0 branch
+      // collapsed to bare `fmtSplit` — the round's change only affects a
+      // NON-zero tolerance run's fallback label, which no fixture in this
+      // file happens to exercise at a non-zero tol.
       expect(buildLogSteps(run, null)).toStrictEqual([
         { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 20, meters: 10000 },
       ]);
@@ -606,15 +611,16 @@ describe("buildLogSteps", () => {
     // wholeSecond(v.minutes, SECOND, 180)). The FALLBACK path's split-ref
     // text (the only one left that can run long, now that the primary
     // draft-based path uses the short `refLabel` chip — "6k -60" tops out
-    // at 6 chars, off bound ±60 per domain/validate.ts's checkRef) tops
-    // out on a tolerance RANGE ("m:ss.t–m:ss.t", 13 chars for two 6-char
-    // fmtSplit values joined by an en dash) rather than an exact split or
-    // an effort word ("ALL OUT" is only 7). 7 + " @ " (3) + 13 = 23,
-    // nowhere near 80.
-    const longest = `${fmtDuration(180)} @ ${fmtSplit(60)}–${fmtSplit(240)}`;
-    expect(longest).toBe("3:00:00 @ 1:00.0–4:00.0");
+    // at 6 chars, off bound ±60 per domain/validate.ts's checkRef) is now
+    // an EXACT `fmtSplit` value (ui-fix round, Item 1: domain/expand.ts's
+    // own label stopped being a "lo–hi" tolerance-range string), topping
+    // out at 6 chars for a split at the app's own MIN/MAX_SPLIT bound
+    // (`you/baselineDraft.ts`) — nowhere near the old range string's
+    // 13-char worst case. 7 + " @ " (3) + 6 = 16, nowhere near 80.
+    const longest = `${fmtDuration(180)} @ ${fmtSplit(240)}`;
+    expect(longest).toBe("3:00:00 @ 4:00.0");
     expect(longest.length).toBeLessThanOrEqual(80);
-    expect(longest.length).toBe(23);
+    expect(longest.length).toBe(16);
   });
 });
 
