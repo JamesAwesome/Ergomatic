@@ -146,7 +146,7 @@ async function seedLogs(page: Page, count: number): Promise<void> {
  *  library's effort-ref AN workouts (`{effort:"max"}`, reps×10, 0:30 work,
  *  spm 32 — see Task 11's fixture-anchor mapping; the old 35-workout library
  *  had exactly one such workout, Microburst, but the 300-workout library has
- *  44), without hardcoding its seeded id. */
+ *  38), without hardcoding its seeded id. */
 async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
   const workout = await page.evaluate(async (t) => {
     const res = await fetch("/api/workouts");

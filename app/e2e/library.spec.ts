@@ -35,7 +35,9 @@ test.describe("library list", () => {
     const rows = page.locator(".workout-row");
     await waitForLibraryLoaded(page);
     const count = await rows.count();
-    expect(count).toBeGreaterThan(0);
+    // The library seeds 300; this floor catches a broken/regressed seed
+    // (e.g. a quota bug shipping 5 rows) without re-pinning the exact count.
+    expect(count).toBeGreaterThan(250);
     await expect(rows).toHaveCount(count);
     await expect(page.locator(".library-count")).toHaveText(`${count} ENTERED`);
   });
