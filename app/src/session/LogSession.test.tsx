@@ -1592,6 +1592,75 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Fix round 1 (M2): both doors OR `planState.state === "loading"` into
+  // their pre-existing loading gate (see each door's own comment on this
+  // in LogSession.tsx) — nothing in this file exercised that disjunct
+  // before this pair, so deleting it left the whole suite green.
+  // `usePlan()` here is a plain synchronous function reading a mutable
+  // ref (`mockPlan`'s own comment above), not real async state, so there's
+  // no natural "resolves later" moment to await — `rerender` with an
+  // otherwise-identical element tree, after flipping the ref to ready,
+  // forces this same component instance to re-run its hooks and observe
+  // the new `usePlan()` value, the same way a real resolved fetch would.
+  it("session door: holds at the LOADING… gate while the plan is still loading, then renders once it resolves", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockPlan({ state: "loading" });
+    const view = await renderLog();
+
+    expect(screen.getByText("LOADING…")).toBeInTheDocument();
+    expect(screen.queryByText("AUG 1 · 30 MIN")).not.toBeInTheDocument();
+
+    mockPlan(readyPlanState(activePlan()));
+    const { default: LogSession } = await import("./LogSession");
+    view.rerender(
+      <MemoryRouter initialEntries={["/session/log"]}>
+        <Routes>
+          <Route path="/session/log" element={<LogSession />} />
+          <Route path="/today" element={<p>TODAY SCREEN</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("AUG 1 · 30 MIN");
+    expect(
+      screen.getByRole("button", {
+        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("manual door: holds at the LOADING… gate while the plan is still loading, then renders once it resolves", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockPlan({ state: "loading" });
+    const view = await renderManualLog(workout.id);
+
+    expect(screen.getByText("LOADING…")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: `Log ${workout.title}` }),
+    ).not.toBeInTheDocument();
+
+    mockPlan(readyPlanState(activePlan()));
+    const { default: LogSession } = await import("./LogSession");
+    view.rerender(
+      <MemoryRouter initialEntries={[`/library/${workout.id}/log`]}>
+        <Routes>
+          <Route path="/library/:id/log" element={<LogSession />} />
+          <Route path="/today" element={<p>TODAY SCREEN</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    expect(
+      screen.getByRole("button", {
+        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("renders the default COUNTS TOWARD PLAN copy, sourced from doneN/sequence.length, when a plan is active", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
@@ -1677,14 +1746,47 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
     expect(body.advancesPlan).toBe(false);
   });
 
-  it("manual door wire shape: untouched posts no key, toggled posts advancesPlan: false", async () => {
+  // Fix round 1 (M1): this used to be ONE test titled "untouched posts no
+  // key, toggled posts advancesPlan: false" whose body only ever clicked
+  // the toggle and exercised the toggled-off arm — the "untouched posts no
+  // key" half of the title was never actually asserted. Split into the
+  // same two-test shape as the session door's own pair above, each test
+  // now asserting exactly what its own title promises. The absent-key
+  // assertion uses the same `.not.toHaveProperty` idiom the session door's
+  // "leaving the toggle untouched" test already uses above — a real
+  // property-existence check on the parsed wire body, not a truthiness
+  // check on `body.advancesPlan` (which would also pass for an explicit
+  // `false`).
+  it("manual door wire shape: leaving the toggle untouched posts NO advancesPlan key at all", async () => {
     mockPlan(readyPlanState(activePlan()));
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
     const apiFn = mockApi(() =>
       Promise.resolve(
-        new Response(JSON.stringify({ id: "log-manual-plan" }), {
+        new Response(JSON.stringify({ id: "log-manual-plan-default" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).not.toHaveProperty("advancesPlan");
+  });
+
+  it("manual door wire shape: toggling OFF posts advancesPlan: false", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-plan-outside" }), {
           status: 201,
         }),
       ),
