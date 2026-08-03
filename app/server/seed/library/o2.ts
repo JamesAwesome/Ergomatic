@@ -7,7 +7,8 @@ import type { WorkoutInput } from "../../../domain/types.js";
 export const O2_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------- easy / pain 1
   {
-    // O2: 18' total — 12' continuous at 6k+15 — the shortest aerobic entry point.
+    // O2: 18' total — 12' continuous at 6k+15 — a quick easy entry point (not
+    // the shortest here — Haar, 6'+6', totals 17').
     title: "Sea Fret",
     type: "O2",
     difficulty: "easy",
@@ -23,7 +24,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 12' continuous UT2 at 6k+15 — a conversational first steady piece.
+    // O2: 14' continuous UT2 at 6k+16 — a conversational first steady piece.
     title: "Petrichor",
     type: "O2",
     difficulty: "easy",
@@ -32,8 +33,8 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       { k: "wu", minutes: 10 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 12 },
-        ref: { base: "6k", off: 15 },
+        duration: { kind: "time", minutes: 14 },
+        ref: { base: "6k", off: 16 },
         spm: 18,
       },
     ],
@@ -161,7 +162,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 4×4' at 6k+10 with 1:30 rest — short aerobic reps at a workable rate.
+    // O2: 3×4' at 6k+10 with 1:30 rest — short aerobic reps at a workable rate.
     title: "Slack Water",
     type: "O2",
     difficulty: "easy",

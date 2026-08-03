@@ -328,7 +328,8 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 6×250 m at 2k-5 with ~1:2.2 rest — the longest distance rep that still counts as anaerobic.
+    // AN: 6×250 m at 2k-5 with ~1:2.2 rest — a long distance rep for anaerobic
+    // work, though not the longest here (Plow Wind and Hail Shaft both run 300 m).
     title: "Bow Echo",
     type: "AN",
     difficulty: "medium",
@@ -665,20 +666,36 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 12×30 s at 2k-6 with 1:3.5 rest — maximum rep count at a prescribed split.
+    // AN: 4 rounds of a 60/45/30 s descending ladder (2k-4 → 2k-6), generous
+    // rest scaling down with the reps — a repeating ladder instead of one
+    // flat rep count.
     title: "Satellite Tornado",
     type: "AN",
     difficulty: "hard",
     pain: 4,
     steps: [
       { k: "wu", minutes: 12 },
-      { k: "reps", count: 12 },
+      { k: "reps", count: 4 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1 },
+        ref: { base: "2k", off: -4 },
+        spm: 29,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.75 },
+        ref: { base: "2k", off: -5 },
+        spm: 30,
+        restMinutes: 0.75,
+      },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.5 },
         ref: { base: "2k", off: -6 },
         spm: 31,
-        restMinutes: 1.75,
+        restMinutes: 1.5,
       },
     ],
   },
@@ -865,20 +882,28 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 10×60 s all out with 1:2 rest — ten minutes of maximal work spread over forty.
+    // AN: 4×(75 s + 30 s) all out, generous rest after each — a long strike
+    // and a short one, paired and repeated, instead of one flat rep length.
     title: "Giant Hail",
     type: "AN",
     difficulty: "hard",
     pain: 5,
     steps: [
       { k: "wu", minutes: 12 },
-      { k: "reps", count: 10 },
+      { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 1.25 },
         ref: { effort: "max" },
         spm: 32,
         restMinutes: 2,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2.5,
       },
     ],
   },
@@ -901,7 +926,8 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 8×75 s all out with 1:2 rest — the longest max rep repeated past the point it stays maximal.
+    // AN: 8×75 s all out with 1:2 rest — a long max rep repeated past the
+    // point it stays maximal (Macroburst's 90 s reps run longer still).
     title: "Flash Flood",
     type: "AN",
     difficulty: "hard",
@@ -999,38 +1025,75 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 10×60 s all out with 1:1.75 rest — wide, slow-moving and it takes everything with it.
+    // AN: 5×(60 s + 30 s) all out, generous rest after each — wide,
+    // slow-moving, and the short second strike in every round is the part
+    // that takes everything with it.
     title: "Wedge Tornado",
     type: "AN",
     difficulty: "hard",
     pain: 5,
     steps: [
       { k: "wu", minutes: 15 },
-      { k: "reps", count: 10 },
+      { k: "reps", count: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1.75,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2,
       },
     ],
   },
   {
-    // AN: 12×30 s all out with 1:3.5 rest — thin, fast and far more violent than it looks on paper.
+    // AN: 30/45/60/45/30 s all-out pyramid, generous rest throughout — thin,
+    // fast and far more violent than it looks on paper, building to one
+    // longer strike in the middle and back down.
     title: "Rope Tornado",
     type: "AN",
     difficulty: "hard",
     pain: 5,
     steps: [
       { k: "wu", minutes: 10 },
-      { k: "reps", count: 12 },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1.75,
+        restMinutes: 5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.75 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 4.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 4,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.75 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 3.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.5 },
+        ref: { effort: "max" },
+        spm: 32,
       },
     ],
   },
@@ -1187,20 +1250,43 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 10×60 s all out with ~1:2.75 rest off a 20' warm-up — deepening fast, and it does not let up.
+    // AN: 2 rounds of a 75/60/45/30 s all-out descending ladder off a 20'
+    // warm-up, generous rest scaling down with the reps — deepening fast,
+    // and it does not let up.
     title: "Bomb Cyclone",
     type: "AN",
     difficulty: "hard",
     pain: 5,
     steps: [
       { k: "wu", minutes: 20 },
-      { k: "reps", count: 10 },
+      { k: "reps", count: 2 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1.25 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 3,
+      },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2.75,
+        restMinutes: 2.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.75 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 1.5,
       },
     ],
   },

@@ -1,10 +1,12 @@
 import type { WorkoutInput } from "../../../domain/types.js";
 
 // TR (transport/race pace) block of the generated library — 75 workouts,
-// easy→hard. 2k race-pace and sprint pieces with roughly 1:2–1:3 rest,
-// including community-canon shapes. Authored in Task 7 against the pattern
-// digest (app/domain/generation/patterns.json); ordering here IS the library
-// browsing order within the type block.
+// easy→hard. 2k race-pace and sprint pieces, including community-canon
+// shapes. Rest is not one ratio across the block: short sprint sets (30s-2'
+// reps) carry generous rest, often 1:2 or more, while sustained race-pace
+// sets (3'+ reps, or reps near/at 2k pace) sit nearer 1:1. Authored in
+// Task 7 against the pattern digest (app/domain/generation/patterns.json);
+// ordering here IS the library browsing order within the type block.
 export const TR_WORKOUTS: WorkoutInput[] = [
   {
     // TR: 2000 m continuous at 2k+6 — race distance rehearsed just off pace.
@@ -1490,8 +1492,28 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 6×4' at 2k+2 with 90 s rest — twenty-four minutes of work bought with nine of rest.
+    // TR: 4×4' at 2k+2 with 4' rest (1:1) — sixteen minutes of work, fewer
+    // reps than before and rest that finally matches it.
     title: "Equatorial Countercurrent",
+    type: "TR",
+    difficulty: "hard",
+    pain: 5,
+    steps: [
+      { k: "wu", minutes: 10 },
+      { k: "reps", count: 4 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { base: "2k", off: 2 },
+        spm: 26,
+        restMinutes: 4,
+      },
+    ],
+  },
+  {
+    // TR: 6×90 s faster than race pace on 3' rest — still a hard ask at
+    // 2k-1, but the rest now actually supports it (2:1 rest:work).
+    title: "Somali Current",
     type: "TR",
     difficulty: "hard",
     pain: 5,
@@ -1500,28 +1522,10 @@ export const TR_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 6 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
-        ref: { base: "2k", off: 2 },
-        spm: 26,
-        restMinutes: 1.5,
-      },
-    ],
-  },
-  {
-    // TR: 10×2' faster than race pace on 75 s rest — the tenth one is a different sport.
-    title: "Somali Current",
-    type: "TR",
-    difficulty: "hard",
-    pain: 5,
-    steps: [
-      { k: "wu", minutes: 10 },
-      { k: "reps", count: 10 },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 1.5 },
         ref: { base: "2k", off: -1 },
         spm: 28,
-        restMinutes: 1.25,
+        restMinutes: 3,
       },
     ],
   },
@@ -1856,20 +1860,21 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 8×3' at 2k+1 with 1:0.8 rest — twenty-four minutes a second off race pace.
+    // TR: 6×3' at 2k+1 with 1:1.5 rest — eighteen minutes a second off race
+    // pace, fewer reps than before and rest that actually covers the work.
     title: "Karayel",
     type: "TR",
     difficulty: "hard",
     pain: 5,
     steps: [
       { k: "wu", minutes: 10 },
-      { k: "reps", count: 8 },
+      { k: "reps", count: 6 },
       {
         k: "w",
         duration: { kind: "time", minutes: 3 },
         ref: { base: "2k", off: 1 },
         spm: 27,
-        restMinutes: 2.5,
+        restMinutes: 4.5,
       },
     ],
   },
@@ -2228,7 +2233,8 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 2000/1500 m, 4', 1000 m, 3', 500 m — six pieces descending to flat 2k. The longest day here.
+    // TR: 2000/1500 m, 4', 1000 m, 3', 500 m — six pieces descending to flat
+    // 2k. Ties Alaska Current for the longest day here, at 66'.
     title: "Furious Fifties",
     type: "TR",
     difficulty: "hard",

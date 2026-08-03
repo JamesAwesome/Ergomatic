@@ -38,7 +38,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 3×3' at 6k+2 with 1:3 rest — a threshold taste on a short clock.
+    // AT: 3×3' at 6k+2 with 3:1 rest — a threshold taste on a short clock.
     title: "Pressure Ridge",
     type: "AT",
     difficulty: "easy",
@@ -581,7 +581,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 4×5' at 6k+2 with 1:2 rest — the workhorse threshold set.
+    // AT: 4×5' at 6k+2 with 2:1 rest — the workhorse threshold set.
     title: "Blocking High",
     type: "AT",
     difficulty: "medium",
@@ -635,7 +635,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 4×4' at 6k-2 with 1:2 rest — top of the band, paid for with rest.
+    // AT: 4×4' at 6k-2 with 2:1 rest — top of the band, paid for with rest.
     title: "Heat Low",
     type: "AT",
     difficulty: "medium",
@@ -653,7 +653,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 2×10' at 2k+10 with equal rest — the long rep, prescribed off 2k.
+    // AT: 2×10' at 2k+10 with 2:1 rest — the long rep, prescribed off 2k.
     title: "Cutoff Low",
     type: "AT",
     difficulty: "medium",
@@ -1901,8 +1901,9 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 8000 m at 6k+8 then 4×3' at 6k pace — the longest session here, and
-    // the fast reps come after the distance, not before it.
+    // AT: 8000 m at 6k+8 then 4×3' at 6k pace — a long session (71'), though
+    // not the longest here (Subtropical Jet is 80'); the fast reps come
+    // after the distance, not before it.
     title: "Split Front",
     type: "AT",
     difficulty: "hard",
