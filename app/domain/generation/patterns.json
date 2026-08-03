@@ -23,7 +23,7 @@
       "spm": [20, 33],
       "warmupMinutes": [5, 10],
       "repsCount": [3, 10],
-      "effortShare": 0.21
+      "effortShare": 0.24
     },
     "TR|30-45": {
       "n": 30,
@@ -41,7 +41,7 @@
       "spm": [16, 38],
       "warmupMinutes": [5, 10],
       "repsCount": [2, 35],
-      "effortShare": 0.15
+      "effortShare": 0.2
     },
     "AN|20-30": {
       "n": 6,
@@ -59,7 +59,7 @@
       "spm": [24, 36],
       "warmupMinutes": [10, 20],
       "repsCount": [6, 20],
-      "effortShare": 0.25
+      "effortShare": 0.5
     },
     "AN|<20": {
       "n": 9,
@@ -75,7 +75,7 @@
       "spm": [28, 28],
       "warmupMinutes": [10, 10],
       "repsCount": [8, 10],
-      "effortShare": 0.5
+      "effortShare": 0.11
     },
     "AN|30-45": {
       "n": 8,
@@ -94,7 +94,7 @@
       "spm": [24, 34],
       "warmupMinutes": [10, 20],
       "repsCount": [3, 15],
-      "effortShare": 0.85
+      "effortShare": 0.88
     },
     "O2|<20": {
       "n": 5,
@@ -165,7 +165,7 @@
       "spm": [16, 32],
       "warmupMinutes": [10, 10],
       "repsCount": [3, 10],
-      "effortShare": 0.05
+      "effortShare": 0.14
     },
     "AT|30-45": {
       "n": 19,
@@ -185,7 +185,7 @@
       "spm": [16, 32],
       "warmupMinutes": [10, 10],
       "repsCount": [2, 4],
-      "effortShare": 0.01
+      "effortShare": 0.05
     },
     "AT|<20": {
       "n": 3,
@@ -221,7 +221,7 @@
       "spm": [24, 30],
       "warmupMinutes": [10, 10],
       "repsCount": [3, 5],
-      "effortShare": 0.18
+      "effortShare": 0.13
     },
     "AN|45-60": {
       "n": 14,
@@ -238,7 +238,7 @@
       "spm": [30, 36],
       "warmupMinutes": [10, 20],
       "repsCount": [4, 25],
-      "effortShare": 1
+      "effortShare": 0.71
     },
     "AN|60+": {
       "n": 14,
@@ -254,7 +254,7 @@
       "spm": [30, 36],
       "warmupMinutes": [10, 10],
       "repsCount": [4, 25],
-      "effortShare": 1
+      "effortShare": 0.86
     },
     "O2|45-60": {
       "n": 26,
@@ -272,7 +272,7 @@
       "spm": [14, 32],
       "warmupMinutes": [10, 10],
       "repsCount": [2, 3],
-      "effortShare": 0.09
+      "effortShare": 0.04
     },
     "O2|60+": {
       "n": 39,
@@ -291,7 +291,7 @@
       "spm": [12, 32],
       "warmupMinutes": [10, 10],
       "repsCount": [3, 8],
-      "effortShare": 0.03
+      "effortShare": 0.1
     },
     "AT|45-60": {
       "n": 24,
@@ -348,7 +348,7 @@
       "spm": [20, 38],
       "warmupMinutes": [10, 10],
       "repsCount": [2, 15],
-      "effortShare": 0.03
+      "effortShare": 0.17
     },
     "TR|60+": {
       "n": 20,
@@ -367,7 +367,7 @@
       "spm": [16, 36],
       "warmupMinutes": [10, 10],
       "repsCount": [3, 30],
-      "effortShare": 0.03
+      "effortShare": 0.05
     }
   }
 }
