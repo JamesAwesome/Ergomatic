@@ -600,17 +600,19 @@ describe("LogSession: the ledger residual (workoutId mismatch)", () => {
 
     const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows).toHaveLength(2);
-    // Fallback label: the phase's own frozen (already-resolved) label, not
-    // the draft's chip idiom — proves the mismatch guard actually changed
-    // behavior rather than passing vacuously. Ui-fix round, Item 1: the
-    // fallback label is the exact split now, never a "lo–hi" band
-    // (domain/expand.ts's own `case "w"` stopped calling `toleranceRange`).
-    // targetSplit 132 for BOTH Hoarfrost (6k+12) and Calm Sea (6k+12, same
-    // offset) -> fmtSplit(132) = "2:12.0" for each — the point here is the
-    // fallback FORMAT (an exact split, not the "@ 6k +12" chip idiom the
-    // matched-draft tests pin), not that the two rows differ.
-    expect(rows[0]).toHaveTextContent("12:00 @ 2:12.0");
-    expect(rows[1]).toHaveTextContent("10000 m @ 2:12.0");
+    // Fallback label: `matchedDraft` gates on `workoutId`, so `draftStep`
+    // resolves to `undefined` for this mismatched draft — proving the
+    // mismatch guard actually changed behavior rather than passing
+    // vacuously — but `phase.ref` (ui-fix round Task 2 fix round, F1b) is
+    // still present on a run built through the normal `buildRun` path, so
+    // the fallback reconstructs the SAME chip the preferred (matched-draft)
+    // path would have: "6k +12" for both rows (Hoarfrost and Calm Sea share
+    // the same offset), not the phase's frozen label (which, for a run this
+    // fresh, would already be the exact split anyway — the chip and the
+    // exact split only diverge for a LEGACY pre-ref run, see Timer.test.tsx's
+    // own dedicated test for that case).
+    expect(rows[0]).toHaveTextContent("12:00 @ 6k +12");
+    expect(rows[1]).toHaveTextContent("10000 m @ 6k +12");
   });
 });
 

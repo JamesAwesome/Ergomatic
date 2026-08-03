@@ -456,7 +456,7 @@ describe("StepEditor", () => {
   });
 
   // Task 4: an effort row's TARGET reads the effort word, in the SAME
-  // target-value element a resolved split range renders in — Builder's
+  // target-value element a resolved (exact) split renders in — Builder's
   // splitLabelFor is what actually resolves refEffort to effortWord(...)
   // (deliberately without needing baselines, unlike the split branch above);
   // this component does no pace math of its own and just renders whatever

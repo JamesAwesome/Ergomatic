@@ -113,7 +113,7 @@ export function totalSessionSeconds(run: SessionRun): number {
  *  which case this renders the word once, not "REST · Rest" (whole-branch
  *  review, F4: exactly this duplication was visible in the committed
  *  timer.png). No other phase kind's label ever matches its own kind word
- *  (a warm-up's "Easy", a work phase's resolved split range or "ALL
+ *  (a warm-up's "Easy", a work phase's exact resolved split or "ALL
  *  OUT"/"EASY", a test phase's "All out" — none of them equal "WARM-UP"/
  *  "WORK"/"TEST"), so this only ever actually collapses the rest case, but
  *  the check is general rather than hardcoded to "rest" specifically.

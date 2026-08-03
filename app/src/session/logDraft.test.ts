@@ -492,24 +492,26 @@ describe("buildLogSteps", () => {
       }
     });
 
-    it("draft null: a split-ref phase falls back to the phase's own resolved split text — the one case where a fallback label can still differ from the manual door's", () => {
+    // Ui-fix round Task 2 fix round, F1b: since `EnginePhase` now carries
+    // the effective `ref` (`domain/expand.ts`'s own `case "w"`), a
+    // split-ref phase built through the normal `buildRun` path reconstructs
+    // through `refPaceLabel` in the fallback too — the SAME chip the
+    // preferred (draft-based) path would have composed for this exact
+    // step, "10000 m @ 6k +12" (Calm Sea: `{base:"6k", off:12}`), not the
+    // old "10000 m @ 2:12.0" resolved-split text. That old behavior only
+    // survives for a genuinely LEGACY run with no `ref` field at all — see
+    // the dedicated describe block below.
+    it("draft null: a split-ref phase reconstructs the SAME ref chip the preferred path would have (byte-identical, not the old resolved-split fallback)", () => {
       const { run } = runFor("Calm Sea", 0, {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
       });
-      // domain/expand.ts's own label = fmtSplit(132) = "2:12.0" — the
-      // pre-F1b resolved-split text, not "6k +12". Ui-fix round, Item 1:
-      // this was ALREADY exact even before the band was retired from
-      // display (tol=0 here), since `toleranceRange`'s own tol=0 branch
-      // collapsed to bare `fmtSplit` — the round's change only affects a
-      // NON-zero tolerance run's fallback label, which no fixture in this
-      // file happens to exercise at a non-zero tol.
       expect(buildLogSteps(run, null)).toStrictEqual([
-        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 20, meters: 10000 },
+        { label: "10000 m @ 6k +12", targetSplit: 132, spm: 20, meters: 10000 },
       ]);
     });
 
-    it('a mismatched/stale draft (originalIndex doesn\'t land on a real "w" step) falls back safely instead of crashing or mislabeling', () => {
+    it('a mismatched/stale draft (originalIndex doesn\'t land on a real "w" step) falls back safely to the SAME ref chip instead of crashing or mislabeling', () => {
       const { run } = runFor("Calm Sea", 0, {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
@@ -517,7 +519,9 @@ describe("buildLogSteps", () => {
       // A draft that does NOT match this run at all: its steps[1] (the
       // index Calm Sea's work phase's originalIndex points at) is a
       // second warm-up, not a "w" step — draftWorkStep must return
-      // undefined here, not throw, not silently mislabel.
+      // undefined here, not throw, not silently mislabel. Falls all the
+      // way through to the `phase.ref` branch, same as the draft-null case
+      // above (a mismatched draft is just as "no real draftStep" as none).
       const wrongDraft = buildDraft({
         id: "id-wrong",
         title: "Wrong Draft",
@@ -528,7 +532,67 @@ describe("buildLogSteps", () => {
         ],
       });
       expect(buildLogSteps(run, wrongDraft)).toStrictEqual([
-        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 20, meters: 10000 },
+        { label: "10000 m @ 6k +12", targetSplit: 132, spm: 20, meters: 10000 },
+      ]);
+    });
+
+    // Q2 (fix round 1): the explicit byte-equality pin the finding asked
+    // for — the SAME run's SAME split-ref phase, labeled once through the
+    // preferred (real-draft) path and once through the fallback
+    // (draft-null) path, must produce the identical string. Hoarfrost (not
+    // Calm Sea) here so this also exercises a TIME-kind work step with a
+    // non-zero tolerance and an embedded rest — a different shape than the
+    // distance fixture above, same guarantee.
+    it("preferred and fallback paths compose byte-identical labels for the same split-ref phase", () => {
+      const { draft, run } = runFor("Hoarfrost", 1, {
+        completedAt: new Date(NOW.getTime() + 60 * 60 * 1000).toISOString(),
+      });
+      const viaDraft = buildLogSteps(run, draft);
+      const viaFallback = buildLogSteps(run, null);
+      const splitPhaseIndex = run.phases.findIndex(
+        (p) => p.type === "work" && p.targetKind === "split",
+      );
+      expect(splitPhaseIndex).toBeGreaterThanOrEqual(0);
+      // Hoarfrost's reps marker (x2) repeats its one work step, so
+      // `run.phases` carries TWO work occurrences — but both come from the
+      // SAME authored step (same `originalIndex`, same `ref`), so the
+      // FIRST LogStep entry on both sides already proves the point; no
+      // need to check the second occurrence too.
+      expect(viaDraft[0]!.label).toBe(viaFallback[0]!.label);
+      expect(viaDraft[0]!.label).toBe("12:00 @ 6k +12");
+    });
+  });
+
+  // Q3 (fix round 1): a `v:1` SessionRun written before this task shipped
+  // the `ref` field has phases with NO `ref` at all — `EnginePhase`'s own
+  // type marks it optional precisely so an old stored record (which
+  // `isSessionRun`'s loose load-time validation admits — it only checks
+  // `v`/`phases` is-an-array/etc., never per-phase shape) still loads
+  // without crashing. This is the ONE case that still hits the true
+  // "nothing to reconstruct from" fallback branch.
+  describe("legacy pre-ref SessionRun (Q3: a v:1 run frozen before Phase.ref existed)", () => {
+    it("draft null, phase.ref absent: keeps the phase's own frozen label verbatim, band string and all", () => {
+      const { run } = runFor("Calm Sea", 1, {
+        completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
+        actuals: {},
+      });
+      // Simulates a record written by the pre-Task-2 code: `label` is the
+      // old tolerance-band string (`toleranceRange(132, 1)` -> "2:11.0–
+      // 2:13.0"), and `ref` is simply absent — not undefined-but-present,
+      // genuinely missing, the same shape `JSON.parse`ing an old stored
+      // record would produce. `run.phases[1]` is Calm Sea's own work
+      // phase (`[0]` is the warm-up, which never produces a LogStep).
+      const legacyPhase = { ...run.phases[1]! };
+      delete (legacyPhase as { ref?: unknown }).ref;
+      legacyPhase.label = "2:11.0–2:13.0";
+      const legacyRun = { ...run, phases: [legacyPhase] };
+      expect(buildLogSteps(legacyRun, null)).toStrictEqual([
+        {
+          label: "10000 m @ 2:11.0–2:13.0",
+          targetSplit: 132,
+          spm: 20,
+          meters: 10000,
+        },
       ]);
     });
   });

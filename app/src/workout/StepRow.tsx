@@ -133,7 +133,9 @@ export default function StepRow({
         ) : baselines ? (
           // Ui-fix round, Item 1: the exact resolved split, not a
           // tolerance band — `toleranceRange()` still exists in the domain
-          // (off-target judgments elsewhere may still want `.lo`/`.hi`),
+          // (retained per the task brief; a repo-wide search found no
+          // reader of its `.lo`/`.hi` anywhere, past or present — this
+          // display call site is just the one that stopped calling it),
           // but this display call site now shows only the single number.
           <span className="step-row-range">
             {fmtSplit(resolveSplit(baselines, step.ref, nudge))}
