@@ -927,6 +927,78 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(400);
     expect(res.body.field).toBe("steps");
   });
+
+  // Task 3 (outside-plan logging): advancesPlan is optional, and when
+  // present must be a boolean — anything else (a string, a number, etc.)
+  // is a genuine client bug, not silently coerced.
+  it.each([
+    ["a string", "nope"],
+    ["a number", 1],
+    ["null", null],
+  ])(
+    "rejects advancesPlan: %s with 400 + field advancesPlan",
+    async (_label, value) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        advancesPlan: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("advancesPlan");
+      expect(res.body.error).toBe("advancesPlan must be a boolean");
+    },
+  );
+
+  it("advancesPlan absent behaves exactly like the pre-Task-3 default: the plan advances", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/logs")).send(
+      validLogBody(),
+    );
+    expect(created.status).toBe(201);
+    const plan = await asA(request(app).get("/api/plan"));
+    expect(plan.body.doneN).toBe(1);
+  });
+
+  it("advancesPlan:true behaves exactly like the absent-field default", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      advancesPlan: true,
+    });
+    expect(created.status).toBe(201);
+    const plan = await asA(request(app).get("/api/plan"));
+    expect(plan.body.doneN).toBe(1);
+  });
+
+  it("advancesPlan:false creates the log (201, listed) but leaves plan doneN unchanged", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      advancesPlan: false,
+    });
+    expect(created.status).toBe(201);
+
+    const plan = await asA(request(app).get("/api/plan"));
+    expect(plan.body.doneN).toBe(0);
+
+    const list = await asA(request(app).get("/api/logs"));
+    expect(list.body).toHaveLength(1);
+  });
+
+  // The "no plan row at all" arm: a brand-new user (no plan_state row ever
+  // created) who logs a false row must still 201, and the plan must still
+  // report the untouched, never-created state.
+  it("advancesPlan:false with no plan row at all still 201s, and /api/plan still reports the untouched default", async () => {
+    const app = appFor(makeStores());
+    const created = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      advancesPlan: false,
+    });
+    expect(created.status).toBe(201);
+    const plan = await asA(request(app).get("/api/plan"));
+    expect(plan.body).toStrictEqual({ planKey: null, doneN: 0, sequence: [] });
+  });
 });
 
 describe("GET/PUT /api/plan", () => {

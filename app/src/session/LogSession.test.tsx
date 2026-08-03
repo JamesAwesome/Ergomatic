@@ -6,6 +6,8 @@ import { STARTER_WORKOUTS } from "../../server/seed/starter";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import type { PlanData, PlanKey, PlanState } from "../api/usePlan";
+import type { PlanCode } from "../../domain/plans.js";
 import {
   buildDraft,
   clearDraft,
@@ -125,6 +127,52 @@ function mockBaselines(
   vi.doMock("../api/useBaselines", () => ({
     useBaselines: () => ({ state: "ready", baselines }),
   }));
+}
+
+const NO_PLAN: PlanData = { planKey: null, doneN: 0, sequence: [] };
+
+// Task 3 (outside-plan logging): unlike `mockWorkouts`/`mockBaselines`
+// (each called at most once per test), `mockPlan` needs to run TWICE in
+// tests that override the plan state — once implicitly via `beforeEach`'s
+// default, once explicitly in the test body — since most tests in this
+// file never touch the plan at all and should keep seeing the pre-Task-3
+// "no active plan" shape unmodified. Registering `vi.doMock` itself twice
+// per test (the naive version of this helper) proved unreliable under a
+// full, heavily parallel coverage run (flaky in a way a single-file run
+// never reproduced) — this registers the mock factory exactly ONCE, at
+// this module's own load time, closing over a mutable ref instead;
+// `mockPlan(state)` just reassigns the ref, and `beforeEach` below resets
+// it to the default before every test. One registration, many reads —
+// structurally immune to whatever race repeated `vi.doMock` calls hit.
+let planStateRef: PlanState = readyPlanState(NO_PLAN);
+vi.doMock("../api/usePlan", () => ({ usePlan: () => planStateRef }));
+
+function mockPlan(state: PlanState = readyPlanState(NO_PLAN)) {
+  planStateRef = state;
+}
+
+// `choose`/`reset` are never exercised by anything in this file (the Log
+// screen only ever READS `usePlan()`'s data, per LogSession.tsx's own
+// comment on why its error state must not block Save) — `vi.fn()` stubs
+// satisfy `PlanState`'s own ready-state shape (usePlan.ts) without
+// implying either function is under test here.
+function readyPlanState(plan: PlanData): PlanState {
+  return { state: "ready", plan, choose: vi.fn(), reset: vi.fn() };
+}
+
+// A minimal but real-shaped active plan — `sequence` entries mirror the
+// server's own `planResponse` shape (routes/data.ts), not a hand-built
+// minimum missing fields the toggle's copy actually reads (`doneN`,
+// `sequence.length`).
+function activePlan(overrides: Partial<PlanData> = {}): PlanData {
+  const planKey: PlanKey = "sprint";
+  const doneN = 3;
+  const sequence: PlanData["sequence"] = Array.from({ length: 84 }, (_, i) => ({
+    index: i,
+    code: "O2" as PlanCode,
+    status: i < doneN ? "done" : i === doneN ? "today" : "upcoming",
+  }));
+  return { planKey, doneN, sequence, ...overrides };
 }
 
 // A real, mixed-kind fixture for the manual door — the SAME two starters'
@@ -250,6 +298,9 @@ async function renderManualLogWithHistory(workoutId: string) {
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
+  // Default: no active plan — see `mockPlan`'s own comment on why this
+  // keeps every pre-Task-3 test in this file passing unmodified.
+  mockPlan();
 });
 
 describe("LogSession: deep-link/reload guards", () => {
@@ -1505,5 +1556,253 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(document.querySelector(".log-paces-value")?.textContent).toBe(
       "2K 1:40.0 · 6K 2:00.0",
     );
+  });
+});
+
+// Task 3 (outside-plan logging): both doors share `useLogForm`'s
+// `outsidePlan` state and `LogScreen`'s own toggle markup verbatim (see
+// LogSession.tsx's own header comments on why the toggle lives in the
+// shared hook rather than per-door) — this describe block proves the
+// SAME battery of cases against both, rather than duplicating each case
+// twice with only the render helper swapped.
+describe("LogSession: outside-plan toggle (Task 3)", () => {
+  it("renders no toggle at all when there's no active plan (this file's own default mockPlan())", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    expect(
+      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /OUTSIDE THE PLAN/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("manual door: renders no toggle at all when there's no active plan", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+
+    expect(
+      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the default COUNTS TOWARD PLAN copy, sourced from doneN/sequence.length, when a plan is active", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    const toggle = screen.getByRole("button", {
+      name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+    });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("tapping the toggle flips it to OUTSIDE THE PLAN — won't advance, and back again", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    const toggle = screen.getByRole("button", {
+      name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+    });
+    await userEvent.click(toggle);
+    const toggled = screen.getByRole("button", {
+      name: "OUTSIDE THE PLAN — won't advance",
+    });
+    expect(toggled).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(toggled);
+    expect(
+      screen.getByRole("button", {
+        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+      }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  // Wire-shape: proves the ABSENT key on the default/counting path, not
+  // merely `advancesPlan: true` — the 6C wire-shape idiom this file's own
+  // "posts an effort step..." test established, applied to the new field.
+  it("wire shape: leaving the toggle untouched posts NO advancesPlan key at all", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-plan-default" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).not.toHaveProperty("advancesPlan");
+  });
+
+  it("wire shape: toggling OFF posts advancesPlan: false", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-plan-outside" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+    await userEvent.click(
+      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    );
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.advancesPlan).toBe(false);
+  });
+
+  it("manual door wire shape: untouched posts no key, toggled posts advancesPlan: false", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-plan" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await userEvent.click(
+      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    );
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.advancesPlan).toBe(false);
+  });
+
+  // Logging must never be hostage to the plan fetch (LogSession.tsx's own
+  // comment on this): an errored plan hook degrades to "no toggle, no key"
+  // — the SAME observable shape as "no active plan" — rather than blocking
+  // Save or crashing on an undefined `plan`.
+  it("plan-hook error: no toggle renders, and Save still succeeds with no advancesPlan key", async () => {
+    mockPlan({ state: "error", retry: vi.fn() });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-plan-error" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    expect(
+      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /OUTSIDE THE PLAN/ }),
+    ).not.toBeInTheDocument();
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).not.toHaveProperty("advancesPlan");
+  });
+
+  it("manual door: plan-hook error renders no toggle either", async () => {
+    mockPlan({ state: "error", retry: vi.fn() });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+
+    expect(
+      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  // The toggle is part of `useLogForm`'s own state quintet lifecycle (see
+  // its header comment) — a failed save must not silently reset it, the
+  // same guarantee held/pain/notes already had before this task.
+  it("a failed save keeps the toggle in its OUTSIDE THE PLAN state", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "server exploded" }), {
+          status: 500,
+        }),
+      ),
+    );
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+    await userEvent.click(
+      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    );
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("manual door: a failed save keeps the toggle in its OUTSIDE THE PLAN state", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "server exploded" }), {
+          status: 500,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await userEvent.click(
+      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+    );
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 });

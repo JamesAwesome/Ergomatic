@@ -397,6 +397,7 @@ describe("domain stores against real Postgres", () => {
         pain: 1,
         notes: null,
         steps: [],
+        advancesPlan: true,
       });
       expect(await s.get(fresh.id)).toStrictEqual({
         planKey: "head",
@@ -525,6 +526,10 @@ describe("domain stores against real Postgres", () => {
           actualSource: "stopwatch",
         },
       ],
+      // Task 3: true matches every pre-Task-3 call in this file (a log
+      // always advanced the plan) — the new advancesPlan:false cases below
+      // override it explicitly.
+      advancesPlan: true,
       ...overrides,
     });
 
@@ -566,6 +571,49 @@ describe("domain stores against real Postgres", () => {
       expect(await planState.get(userA)).toStrictEqual({
         planKey: "sprint",
         doneN: 2,
+      });
+    });
+
+    // Task 3: real-Postgres proof that `advancesPlan:false` skips ONLY the
+    // plan_state upsert inside `create`'s own transaction — the log insert
+    // itself is unconditional (verified via `list`, not just the return
+    // value) and, for a user with no plan_state row at all yet, `false`
+    // must not create one.
+    it("create with advancesPlan:false inserts the log without creating a plan_state row", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "log-outside-plan-fresh",
+        email: "logoutsideplanfresh@x.com",
+        name: "LOF",
+      });
+
+      expect(await planState.get(fresh.id)).toBeNull();
+      const { id } = await logs.create(
+        fresh.id,
+        logInput({ advancesPlan: false }),
+      );
+      expect(await planState.get(fresh.id)).toBeNull();
+
+      const list = await logs.list(fresh.id, 10);
+      expect(list.some((row) => row.id === id)).toBe(true);
+    });
+
+    it("create with advancesPlan:false leaves an EXISTING plan_state.done_n unchanged", async () => {
+      const logs = createLogsStore(db);
+      const planState = createPlanStateStore(db);
+      await planState.set(userA, "sprint");
+      await logs.create(userA, logInput());
+      expect(await planState.get(userA)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 1,
+      });
+
+      await logs.create(userA, logInput({ advancesPlan: false }));
+      expect(await planState.get(userA)).toStrictEqual({
+        planKey: "sprint",
+        doneN: 1,
       });
     });
 

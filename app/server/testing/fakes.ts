@@ -282,7 +282,11 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
       const row = { ...input, id: crypto.randomUUID(), loggedAt: new Date() };
       rows.unshift(row);
       byUser.set(userId, rows);
-      planState._advance(userId);
+      // Task 3: mirrors the real store's `if (input.advancesPlan)` guard
+      // around the plan_state upsert (see stores/logs.ts's own `create`) —
+      // a false row never touches plan_state at all, including never
+      // creating a row for a user who had none yet.
+      if (input.advancesPlan) planState._advance(userId);
       return { id: row.id };
     },
     async lastDonePerWorkout(userId: string) {

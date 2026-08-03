@@ -72,6 +72,10 @@ function logInput(overrides: Partial<LogInput> = {}): LogInput {
     pain: 2,
     notes: null,
     steps: [],
+    // Task 3: true is the pre-Task-3 behavior every existing case in this
+    // suite already assumes (every log here bumps done_n) — cases that
+    // exercise the new `false` arm override it explicitly.
+    advancesPlan: true,
     ...overrides,
   };
 }
@@ -343,6 +347,53 @@ export function describeStoreContracts(
         expect(await stores.planState.get(userId)).toStrictEqual({
           planKey: null,
           doneN: 2,
+        });
+      });
+
+      // Task 3: `advancesPlan: false` skips ONLY the plan_state upsert —
+      // the log row itself is still created either way (proved via
+      // `list`, not just the return value, since a failed insert would
+      // never reach the return statement at all).
+      it("create with advancesPlan:false still inserts the log but leaves plan_state untouched", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        expect(await stores.planState.get(userId)).toBeNull();
+
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({ advancesPlan: false }),
+        );
+
+        // No plan_state row is created at all — not even one pinned at 0 —
+        // for a user who had none before this call.
+        expect(await stores.planState.get(userId)).toBeNull();
+        const list = await stores.logs.list(userId, 10);
+        expect(list.some((row) => row.id === id)).toBe(true);
+      });
+
+      it("create with advancesPlan:false leaves an EXISTING plan_state row's done_n unchanged", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.logs.create(userId, logInput());
+        expect(await stores.planState.get(userId)).toStrictEqual({
+          planKey: null,
+          doneN: 1,
+        });
+
+        await stores.logs.create(userId, logInput({ advancesPlan: false }));
+        expect(await stores.planState.get(userId)).toStrictEqual({
+          planKey: null,
+          doneN: 1,
+        });
+      });
+
+      it("create with advancesPlan:true behaves exactly like the absent-field default", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.logs.create(userId, logInput({ advancesPlan: true }));
+        expect(await stores.planState.get(userId)).toStrictEqual({
+          planKey: null,
+          doneN: 1,
         });
       });
 
