@@ -3182,6 +3182,44 @@ button:disabled {
   resize: vertical;
 }
 
+/* Task 3 (outside-plan logging): a single full-width toggle row, above
+   Save, rendered only when the rower has an active plan (`plan.planKey !==
+   null` — LogSession.tsx's own gate; a freestyle session or a plan-fetch
+   error has nothing to advance or opt out of, so nothing renders at all).
+   Default (`aria-pressed="false"`, "COUNTS TOWARD PLAN …") reads as calm,
+   informational text, matching `.log-paces-panel`'s own dashed "this is
+   just context" treatment. Toggled ("OUTSIDE THE PLAN — won't advance")
+   switches to a solid `--accent` border/text — the same "this is a
+   deviation from the default" language `.chip[aria-pressed="true"]`
+   already uses via an accent FILL, though a fill would fight this row's
+   own longer sentence-length copy for legibility, so the accent is
+   applied to the border/text instead. Contrast: ink-3 on surface 7.43:1
+   (default), accent on surface 5.94:1 (toggled) — both comfortably >
+   4.5:1. --tap (44px) satisfies the house hit-target floor. */
+.log-plan-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px dashed var(--rule-3);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-align: center;
+  cursor: pointer;
+}
+
+.log-plan-toggle[aria-pressed="true"] {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
 .log-actions {
   display: flex;
   flex-direction: column;

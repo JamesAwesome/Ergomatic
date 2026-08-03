@@ -3,6 +3,8 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts, type LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
+import { usePlan } from "../api/usePlan";
+import type { PlanData } from "../api/usePlan";
 import type { HeldResult } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
 import { estimateMinutes } from "../../domain/expand.js";
@@ -270,11 +272,27 @@ interface LogFormFields {
  *  not just the session door) — that call lives in each door's own
  *  `onSaved`, not here, since navigation itself isn't part of the shared
  *  save behaviour (a future third door could plausibly want to land
- *  somewhere else). */
+ *  somewhere else).
+ *
+ *  Task 3 (outside-plan logging): `outsidePlan`/`setOutsidePlan` join the
+ *  quintet above rather than living per-door — the toggle is door-
+ *  INDEPENDENT (its copy/behaviour never differs between the session and
+ *  manual doors, unlike `LogFormFields`), so hoisting it here makes it
+ *  structurally impossible for the two doors' toggle behaviour to drift,
+ *  the same reasoning this hook's own header comment gives for the retry
+ *  policy. It must survive a failed save (a rower who toggled OFF, hit
+ *  Save, and got a network error shouldn't have to re-toggle) — living
+ *  alongside `held`/`pain`/`notes` (none of which reset on error either)
+ *  gets that for free, with no extra code. `submit` includes `advancesPlan:
+ *  false` in the POST body ONLY when the toggle is on; the default
+ *  (counting toward the plan) leaves the key OFF the wire entirely, proving
+ *  the common path still exercises the server's own `?? true` default
+ *  rather than the client silently re-asserting it. */
 function useLogForm(onSaved: () => void) {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
+  const [outsidePlan, setOutsidePlan] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -292,6 +310,7 @@ function useLogForm(onSaved: () => void) {
       pain,
       notes: notes.trim().length > 0 ? notes : null,
     };
+    if (outsidePlan) body.advancesPlan = false;
     try {
       let res = await postLog(body);
       // Retry once with `workoutId: null` ONLY when the 400 is specifically
@@ -335,6 +354,8 @@ function useLogForm(onSaved: () => void) {
     setPain,
     notes,
     setNotes,
+    outsidePlan,
+    setOutsidePlan,
     saving,
     saveError,
     submit,
@@ -409,6 +430,9 @@ function LogScreen({
   onPain,
   notes,
   onNotes,
+  plan,
+  outsidePlan,
+  onToggleOutsidePlan,
   saving,
   saveError,
   onSave,
@@ -428,6 +452,13 @@ function LogScreen({
   onPain: (value: number) => void;
   notes: string;
   onNotes: (value: string) => void;
+  // Task 3: null means "nothing to render" — either there's no active plan
+  // (`plan.planKey === null`) or the plan hook itself errored (logging must
+  // never be hostage to the plan fetch — see each door's own comment on
+  // this). A non-null value means the toggle row renders.
+  plan: PlanData | null;
+  outsidePlan: boolean;
+  onToggleOutsidePlan: () => void;
   saving: boolean;
   saveError: string | null;
   onSave: () => void;
@@ -545,6 +576,19 @@ function LogScreen({
         onChange={(e) => onNotes(e.target.value)}
       />
 
+      {plan !== null && (
+        <button
+          type="button"
+          className="log-plan-toggle"
+          aria-pressed={outsidePlan}
+          onClick={onToggleOutsidePlan}
+        >
+          {outsidePlan
+            ? "OUTSIDE THE PLAN — won't advance"
+            : `COUNTS TOWARD PLAN · SESSION ${plan.doneN + 1} OF ${plan.sequence.length}`}
+        </button>
+      )}
+
       <div className="log-actions">
         {saveError && <p className="field-error">{saveError}</p>}
         <button
@@ -580,6 +624,7 @@ function SessionDoorLog() {
   const [draft] = useState<SessionDraft | null>(() => loadDraft());
   const [run] = useState<SessionRun | null>(() => loadRun());
   const workoutsState = useWorkouts();
+  const planState = usePlan();
 
   // Only ever clears the draft/run records on a genuine 201 (`onSaved`
   // fires after that, never on a failed save) — a network error, a real
@@ -592,6 +637,8 @@ function SessionDoorLog() {
     setPain,
     notes,
     setNotes,
+    outsidePlan,
+    setOutsidePlan,
     saving,
     saveError,
     submit,
@@ -625,13 +672,34 @@ function SessionDoorLog() {
   // loading): a matched draft already has an authoritative type with
   // nothing to wait for, so this never flashes a loading screen in the
   // common case where nothing is actually unresolved.
-  if (matchedDraft === null && workoutsState.state === "loading") {
+  //
+  // Task 3: `planState`'s OWN loading folds into this same gate — the
+  // toggle's copy needs `doneN`/`sequence.length` before it can render
+  // correctly, so Save can't be reached before that resolves either. Its
+  // ERROR state deliberately does NOT join this condition: logging must
+  // never be hostage to the plan fetch (see `plan` below, and each door's
+  // comment on the same rule).
+  if (
+    (matchedDraft === null && workoutsState.state === "loading") ||
+    planState.state === "loading"
+  ) {
     return (
       <main className="screen">
         <p className="mono-status">LOADING…</p>
       </main>
     );
   }
+
+  // Task 3: null means "render the form with no toggle at all" — either
+  // there's genuinely no active plan (`planKey === null`, the ordinary
+  // freestyle case) or the plan hook errored. The latter is deliberate: a
+  // rower whose plan fetch failed can still log their session normally,
+  // just without the option to opt it out of a plan whose own state this
+  // screen couldn't confirm.
+  const plan: PlanData | null =
+    planState.state === "ready" && planState.plan.planKey !== null
+      ? planState.plan
+      : null;
 
   const library = workoutsState.state === "ready" ? workoutsState.workouts : [];
   const libraryWorkout =
@@ -686,6 +754,9 @@ function SessionDoorLog() {
       onPain={setPain}
       notes={notes}
       onNotes={setNotes}
+      plan={plan}
+      outsidePlan={outsidePlan}
+      onToggleOutsidePlan={() => setOutsidePlan((v) => !v)}
       saving={saving}
       saveError={saveError}
       onSave={handleSave}
@@ -752,6 +823,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const navigate = useNavigate();
   const workoutsState = useWorkouts();
   const baselinesState = useBaselines();
+  const planState = usePlan();
 
   // This door never read the draft/run records in the first place (the
   // hard constraint below), so `onSaved` here is just the navigation —
@@ -778,12 +850,22 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     setPain,
     notes,
     setNotes,
+    outsidePlan,
+    setOutsidePlan,
     saving,
     saveError,
     submit,
   } = useLogForm(() => navigate("/today", { replace: true }));
 
-  if (workoutsState.state === "loading" || baselinesState.state === "loading") {
+  // Task 3: `planState`'s loading folds into this door's own pre-existing
+  // gate (same reasoning as the session door's own comment on this) — its
+  // ERROR deliberately does NOT join it, so a plan-fetch failure never
+  // blocks logging, just drops the toggle (see `plan` below).
+  if (
+    workoutsState.state === "loading" ||
+    baselinesState.state === "loading" ||
+    planState.state === "loading"
+  ) {
     return (
       <main className="screen">
         <p className="mono-status">LOADING…</p>
@@ -820,6 +902,15 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       </main>
     );
   }
+
+  // Task 3: same derivation as the session door's own `plan` — null means
+  // "no toggle" for either an honest no-active-plan state OR a plan-hook
+  // error, deliberately NOT gated above alongside the workouts/baselines
+  // errors (logging must never be hostage to the plan fetch).
+  const plan: PlanData | null =
+    planState.state === "ready" && planState.plan.planKey !== null
+      ? planState.plan
+      : null;
 
   const workout = workoutsState.workouts.find((w) => w.id === workoutId);
   if (!workout) {
@@ -906,6 +997,9 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       onPain={setPain}
       notes={notes}
       onNotes={setNotes}
+      plan={plan}
+      outsidePlan={outsidePlan}
+      onToggleOutsidePlan={() => setOutsidePlan((v) => !v)}
       saving={saving}
       saveError={saveError}
       onSave={() => void handleSave()}

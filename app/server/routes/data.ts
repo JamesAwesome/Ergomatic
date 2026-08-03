@@ -429,6 +429,18 @@ export function createDataRouter({
       badRequest(res, "notes must be a string or null", "notes");
       return;
     }
+    // Task 3 (outside-plan logging): optional, defaults to true below (the
+    // pre-Task-3 behavior every existing caller already gets) — present
+    // means the caller is deliberately opting a row OUT of plan progress,
+    // so a malformed value here is a genuine client bug, not silently
+    // coerced.
+    if (
+      body.advancesPlan !== undefined &&
+      typeof body.advancesPlan !== "boolean"
+    ) {
+      badRequest(res, "advancesPlan must be a boolean", "advancesPlan");
+      return;
+    }
     if (!Array.isArray(body.steps) || body.steps.length === 0) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
@@ -461,6 +473,7 @@ export function createDataRouter({
       pain: body.pain,
       notes: (body.notes as string | null | undefined) ?? null,
       steps,
+      advancesPlan: (body.advancesPlan as boolean | undefined) ?? true,
     });
     res.status(201).json({ id });
   });

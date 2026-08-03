@@ -35,6 +35,15 @@ export interface LogInput {
   pain: number;
   notes: string | null;
   steps: LogStep[];
+  // Task 3 (outside-plan logging): true (the default the route falls back
+  // to when the client omits the field — routes/data.ts) means this log
+  // counts toward the active plan's progress, exactly like every log
+  // before this field existed. false is an off-app/free row the rower
+  // explicitly doesn't want counted (e.g. a make-up row logged twice in
+  // one day, or a workout done outside the plan entirely) — `create`
+  // below skips the plan_state upsert for it, but the log row itself is
+  // always inserted either way.
+  advancesPlan: boolean;
 }
 
 export function createLogsStore(db: Db) {
@@ -59,6 +68,13 @@ export function createLogsStore(db: Db) {
     // Inserts the log and bumps plan_state.done_n in one transaction so the
     // two writes can never diverge (e.g. a crash after the log lands but
     // before progress advances).
+    //
+    // Task 3: `input.advancesPlan` wraps ONLY the plan_state upsert below —
+    // the log insert above is unchanged and still happens unconditionally,
+    // inside the same transaction, regardless of the flag. A `false` row
+    // still logs (the rower did the work; they just don't want it counted
+    // toward the plan), it simply leaves plan_state untouched — including
+    // never creating a plan_state row at all for a user who had none yet.
     async create(userId: string, input: LogInput): Promise<{ id: string }> {
       return db.transaction(async (tx) => {
         const [row] = await tx
@@ -77,13 +93,15 @@ export function createLogsStore(db: Db) {
           })
           .returning({ id: sessionLogs.id });
 
-        await tx
-          .insert(planState)
-          .values({ userId, doneN: 1 })
-          .onConflictDoUpdate({
-            target: planState.userId,
-            set: { doneN: sql`${planState.doneN} + 1` },
-          });
+        if (input.advancesPlan) {
+          await tx
+            .insert(planState)
+            .values({ userId, doneN: 1 })
+            .onConflictDoUpdate({
+              target: planState.userId,
+              set: { doneN: sql`${planState.doneN} + 1` },
+            });
+        }
 
         return row;
       });
