@@ -1,0 +1,373 @@
+{
+  "_meta": {
+    "policy": "aggregate statistics only — no titles, no prose, no per-workout rows",
+    "source": "owner's reference photos, extracted 2026-08-03",
+    "cards": 334
+  },
+  "cells": {
+    "TR|20-30": {
+      "n": 21,
+      "shapes": {
+        "nxtime": 7,
+        "ladder": 4,
+        "pyramid": 1,
+        "mixed": 6,
+        "unmapped": 2,
+        "nxdistance": 1
+      },
+      "workRestRatio": [0.3, 3],
+      "paceOff": {
+        "2k": [-4, 4],
+        "6k": [-8, 0]
+      },
+      "spm": [20, 33],
+      "warmupMinutes": [5, 10],
+      "repsCount": [3, 10],
+      "effortShare": 0.21
+    },
+    "TR|30-45": {
+      "n": 30,
+      "shapes": {
+        "nxtime": 4,
+        "ladder": 5,
+        "mixed": 13,
+        "nxdistance": 8
+      },
+      "workRestRatio": [0.33, 3.33],
+      "paceOff": {
+        "2k": [-7, 14],
+        "6k": [-6, -4]
+      },
+      "spm": [16, 38],
+      "warmupMinutes": [5, 10],
+      "repsCount": [2, 35],
+      "effortShare": 0.15
+    },
+    "AN|20-30": {
+      "n": 6,
+      "shapes": {
+        "nxtime": 3,
+        "continuous": 1,
+        "mixed": 1,
+        "nxdistance": 1
+      },
+      "workRestRatio": [0.33, 2],
+      "paceOff": {
+        "2k": [-5, -3],
+        "6k": [18, 18]
+      },
+      "spm": [24, 36],
+      "warmupMinutes": [10, 20],
+      "repsCount": [6, 20],
+      "effortShare": 0.25
+    },
+    "AN|<20": {
+      "n": 9,
+      "shapes": {
+        "unmapped": 7,
+        "nxdistance": 2
+      },
+      "workRestRatio": null,
+      "paceOff": {
+        "2k": [-5, -5],
+        "6k": null
+      },
+      "spm": [28, 28],
+      "warmupMinutes": [10, 10],
+      "repsCount": [8, 10],
+      "effortShare": 0.5
+    },
+    "AN|30-45": {
+      "n": 8,
+      "shapes": {
+        "nxtime": 4,
+        "mixed": 1,
+        "unmapped": 1,
+        "nxdistance": 1,
+        "ladder": 1
+      },
+      "workRestRatio": [0.2, 1],
+      "paceOff": {
+        "2k": null,
+        "6k": [5, 5]
+      },
+      "spm": [24, 34],
+      "warmupMinutes": [10, 20],
+      "repsCount": [3, 15],
+      "effortShare": 0.85
+    },
+    "O2|<20": {
+      "n": 5,
+      "shapes": {
+        "unmapped": 3,
+        "continuous": 2
+      },
+      "workRestRatio": null,
+      "paceOff": {
+        "2k": null,
+        "6k": [0, 0]
+      },
+      "spm": [20, 22],
+      "warmupMinutes": [10, 10],
+      "repsCount": null,
+      "effortShare": 0
+    },
+    "O2|30-45": {
+      "n": 36,
+      "shapes": {
+        "continuous": 9,
+        "unmapped": 1,
+        "mixed": 19,
+        "nxtime": 2,
+        "ladder": 4,
+        "pyramid": 1
+      },
+      "workRestRatio": [0.5, 12],
+      "paceOff": {
+        "2k": [-5, 16],
+        "6k": [0, 15]
+      },
+      "spm": [12, 34],
+      "warmupMinutes": [10, 10],
+      "repsCount": [2, 4],
+      "effortShare": 0
+    },
+    "O2|20-30": {
+      "n": 7,
+      "shapes": {
+        "mixed": 4,
+        "ladder": 1,
+        "continuous": 2
+      },
+      "workRestRatio": null,
+      "paceOff": {
+        "2k": null,
+        "6k": [2, 15]
+      },
+      "spm": [18, 26],
+      "warmupMinutes": [10, 10],
+      "repsCount": null,
+      "effortShare": 0
+    },
+    "AT|20-30": {
+      "n": 14,
+      "shapes": {
+        "nxtime": 3,
+        "ladder": 4,
+        "mixed": 6,
+        "nxdistance": 1
+      },
+      "workRestRatio": [1, 1.5],
+      "paceOff": {
+        "2k": [-6, 12],
+        "6k": [-2, 8]
+      },
+      "spm": [16, 32],
+      "warmupMinutes": [10, 10],
+      "repsCount": [3, 10],
+      "effortShare": 0.05
+    },
+    "AT|30-45": {
+      "n": 19,
+      "shapes": {
+        "ladder": 2,
+        "mixed": 11,
+        "pyramid": 1,
+        "continuous": 1,
+        "nxtime": 3,
+        "nxdistance": 1
+      },
+      "workRestRatio": [0.5, 5],
+      "paceOff": {
+        "2k": [4, 15],
+        "6k": [-4, 15]
+      },
+      "spm": [16, 32],
+      "warmupMinutes": [10, 10],
+      "repsCount": [2, 4],
+      "effortShare": 0.01
+    },
+    "AT|<20": {
+      "n": 3,
+      "shapes": {
+        "ladder": 1,
+        "continuous": 1,
+        "unmapped": 1
+      },
+      "workRestRatio": null,
+      "paceOff": {
+        "2k": null,
+        "6k": [-4, 0]
+      },
+      "spm": [20, 26],
+      "warmupMinutes": [10, 10],
+      "repsCount": null,
+      "effortShare": 0
+    },
+    "TR|<20": {
+      "n": 8,
+      "shapes": {
+        "pyramid": 1,
+        "nxdistance": 2,
+        "mixed": 2,
+        "unmapped": 2,
+        "continuous": 1
+      },
+      "workRestRatio": [1, 1],
+      "paceOff": {
+        "2k": [-3, 4],
+        "6k": [0, 0]
+      },
+      "spm": [24, 30],
+      "warmupMinutes": [10, 10],
+      "repsCount": [3, 5],
+      "effortShare": 0.18
+    },
+    "AN|45-60": {
+      "n": 14,
+      "shapes": {
+        "unmapped": 4,
+        "nxtime": 9,
+        "nxdistance": 1
+      },
+      "workRestRatio": [0.2, 0.38],
+      "paceOff": {
+        "2k": null,
+        "6k": null
+      },
+      "spm": [30, 36],
+      "warmupMinutes": [10, 20],
+      "repsCount": [4, 25],
+      "effortShare": 1
+    },
+    "AN|60+": {
+      "n": 14,
+      "shapes": {
+        "nxtime": 12,
+        "unmapped": 2
+      },
+      "workRestRatio": [0.03, 2],
+      "paceOff": {
+        "2k": null,
+        "6k": null
+      },
+      "spm": [30, 36],
+      "warmupMinutes": [10, 10],
+      "repsCount": [4, 25],
+      "effortShare": 1
+    },
+    "O2|45-60": {
+      "n": 26,
+      "shapes": {
+        "mixed": 10,
+        "continuous": 8,
+        "nxtime": 2,
+        "ladder": 6
+      },
+      "workRestRatio": [1, 8],
+      "paceOff": {
+        "2k": [4, 20],
+        "6k": [0, 18]
+      },
+      "spm": [14, 32],
+      "warmupMinutes": [10, 10],
+      "repsCount": [2, 3],
+      "effortShare": 0.09
+    },
+    "O2|60+": {
+      "n": 39,
+      "shapes": {
+        "continuous": 11,
+        "mixed": 19,
+        "nxdistance": 5,
+        "ladder": 3,
+        "unmapped": 1
+      },
+      "workRestRatio": [0.67, 32],
+      "paceOff": {
+        "2k": [0, 15],
+        "6k": [-8, 16]
+      },
+      "spm": [12, 32],
+      "warmupMinutes": [10, 10],
+      "repsCount": [3, 8],
+      "effortShare": 0.03
+    },
+    "AT|45-60": {
+      "n": 24,
+      "shapes": {
+        "nxtime": 7,
+        "ladder": 8,
+        "mixed": 7,
+        "pyramid": 1,
+        "nxdistance": 1
+      },
+      "workRestRatio": [0.2, 6.67],
+      "paceOff": {
+        "2k": [-4, 14],
+        "6k": [-4, 10]
+      },
+      "spm": [16, 34],
+      "warmupMinutes": [10, 10],
+      "repsCount": [2, 15],
+      "effortShare": 0
+    },
+    "AT|60+": {
+      "n": 19,
+      "shapes": {
+        "ladder": 3,
+        "mixed": 8,
+        "nxtime": 6,
+        "pyramid": 2
+      },
+      "workRestRatio": [0.2, 3.33],
+      "paceOff": {
+        "2k": [0, 13],
+        "6k": [0, 8]
+      },
+      "spm": [18, 32],
+      "warmupMinutes": [10, 10],
+      "repsCount": [3, 10],
+      "effortShare": 0
+    },
+    "TR|45-60": {
+      "n": 12,
+      "shapes": {
+        "mixed": 5,
+        "ladder": 2,
+        "nxtime": 1,
+        "unmapped": 1,
+        "nxdistance": 2,
+        "pyramid": 1
+      },
+      "workRestRatio": [0.28, 1],
+      "paceOff": {
+        "2k": [-4, 8],
+        "6k": null
+      },
+      "spm": [20, 38],
+      "warmupMinutes": [10, 10],
+      "repsCount": [2, 15],
+      "effortShare": 0.03
+    },
+    "TR|60+": {
+      "n": 20,
+      "shapes": {
+        "pyramid": 2,
+        "mixed": 10,
+        "nxtime": 6,
+        "ladder": 1,
+        "nxdistance": 1
+      },
+      "workRestRatio": [0.33, 3],
+      "paceOff": {
+        "2k": [-4, 15],
+        "6k": null
+      },
+      "spm": [16, 36],
+      "warmupMinutes": [10, 10],
+      "repsCount": [3, 30],
+      "effortShare": 0.03
+    }
+  }
+}
