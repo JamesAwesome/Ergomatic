@@ -633,6 +633,73 @@ describe("Today (FILTER sheet)", () => {
     expect(easyChip).toHaveAttribute("aria-pressed", "false");
   });
 
+  // m5 (final fix wave, 2026-08-04 round final review): both existing
+  // dismiss tests ("dismissing (Escape) drops the draft" above, and the
+  // e2e backdrop-tap sweep) start from a record that was NEVER written and
+  // assert the storage key stays `null` — they can't tell "dismiss doesn't
+  // write" apart from "dismiss discards a SECOND draft, leaving the FIRST
+  // applied record in place" apart from "dismiss quietly resets to
+  // defaults." This is the one that actually exercises the seam between
+  // `draft` (the sheet's own scratch state) and `overrides` (the saved
+  // record `draft` is re-seeded from on every open) once a real record
+  // already exists — the case a regression that made dismiss write would
+  // slip straight through both existing tests.
+  it("dismiss after a prior Apply leaves the FIRST applied record untouched — not the second draft, not defaults", async () => {
+    mockReady();
+    await renderToday();
+
+    // First apply: drop HARD, keep EASY/MEDIUM. This is now the one and
+    // only saved record until something else writes it.
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+    );
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ difficulties: ["easy", "medium"] });
+
+    // Reopen and edit the draft further — drop EASY too — but never apply
+    // this second edit.
+    await openFilterSheet();
+    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    // Dismiss (Escape) instead of Apply.
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // The saved record is still the FIRST apply's state — not the second
+    // draft (["medium"] only, EASY dropped too) and not `filterDefaults`
+    // (all three difficulties, CLEAR ALL's own reset shape).
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ difficulties: ["easy", "medium"] });
+
+    // Reopening confirms the sheet re-seeds from that same untouched
+    // record too, not from the discarded second draft.
+    await openFilterSheet();
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   it("focus returns to FILTER ⌄ once the sheet closes via Apply", async () => {
     mockReady();
     await renderToday();
@@ -1478,7 +1545,7 @@ describe("Today (F2: session resume / unlogged)", () => {
     // the brief's own "most prominent element" placement.
     const main = document.querySelector("main")!;
     expect(main.textContent!.indexOf("SESSION IN PROGRESS")).toBeLessThan(
-      main.textContent!.indexOf("SUGGESTED FOR TODAY"),
+      main.textContent!.indexOf("SUGGESTED"),
     );
   });
 
