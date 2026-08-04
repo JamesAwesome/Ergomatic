@@ -123,13 +123,13 @@ describe("suggest", () => {
     expect(r.reason).not.toMatch(/time/i);
   });
 
-  it("keeps a pain-3 entry and excludes a pain-4 entry when painMax3 is set", () => {
+  it("keeps a pain-3 entry and excludes a pain-4 entry when painLevels is [1,2,3]", () => {
     const r = suggest({
       todayCode: "AT",
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        painMax3: true,
+        painLevels: [1, 2, 3],
       },
       library: [
         w("ok", { pain: 3, lastDoneDaysAgo: 5 }),
@@ -140,13 +140,13 @@ describe("suggest", () => {
     expect(r.recommendationId).toBe("ok");
   });
 
-  it("falls back when painMax3 excludes everything in a non-empty type pool; pool is the unfiltered type list", () => {
+  it("falls back when painLevels excludes everything in a non-empty type pool; pool is the unfiltered type list", () => {
     const r = suggest({
       todayCode: "AT",
       prefs: {
         ...prefs,
         difficulties: [...prefs.difficulties],
-        painMax3: true,
+        painLevels: [1, 2, 3],
       },
       library: [w("hurts", { pain: 5, lastDoneDaysAgo: 12 })],
     });
@@ -155,6 +155,83 @@ describe("suggest", () => {
     expect(r.recommendationId).toBe("hurts");
     expect(r.reason).toMatch(/closest match/i);
     expect(r.reason).toMatch(/pain/i);
+  });
+
+  describe("painLevels union semantics", () => {
+    it("a single-level union ([3]) keeps only that exact level, excluding both a lower and a higher entry", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          ...prefs,
+          difficulties: [...prefs.difficulties],
+          painLevels: [3],
+        },
+        library: [
+          w("low", { pain: 2, lastDoneDaysAgo: 5 }),
+          w("mid", { pain: 3, lastDoneDaysAgo: 40 }),
+          w("high", { pain: 4, lastDoneDaysAgo: 60 }),
+        ],
+      });
+      expect(r.poolIds).toStrictEqual(["mid"]);
+      expect(r.recommendationId).toBe("mid");
+    });
+
+    it("a non-contiguous union ([1,3,5]) keeps 1/3/5 and excludes 2/4", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          ...prefs,
+          difficulties: [...prefs.difficulties],
+          painLevels: [1, 3, 5],
+        },
+        library: [
+          w("p1", { pain: 1, lastDoneDaysAgo: 10 }),
+          w("p2", { pain: 2, lastDoneDaysAgo: 10 }),
+          w("p3", { pain: 3, lastDoneDaysAgo: 10 }),
+          w("p4", { pain: 4, lastDoneDaysAgo: 10 }),
+          w("p5", { pain: 5, lastDoneDaysAgo: 10 }),
+        ],
+      });
+      expect(new Set(r.poolIds)).toStrictEqual(new Set(["p1", "p3", "p5"]));
+      expect(r.poolIds).not.toContain("p2");
+      expect(r.poolIds).not.toContain("p4");
+    });
+
+    it("an empty union ([]) is off — identical to the field being unset entirely", () => {
+      const withEmpty = suggest({
+        todayCode: "AT",
+        prefs: {
+          ...prefs,
+          difficulties: [...prefs.difficulties],
+          painLevels: [],
+        },
+        library: [w("any", { pain: 5, lastDoneDaysAgo: 5 })],
+      });
+      const withUnset = suggest({
+        todayCode: "AT",
+        prefs: { ...prefs, difficulties: [...prefs.difficulties] },
+        library: [w("any", { pain: 5, lastDoneDaysAgo: 5 })],
+      });
+      expect(withEmpty.poolIds).toStrictEqual(["any"]);
+      expect(withEmpty).toStrictEqual(withUnset);
+    });
+
+    it("every level covered ([1,2,3,4,5]) filters nothing out, same as off", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          ...prefs,
+          difficulties: [...prefs.difficulties],
+          painLevels: [1, 2, 3, 4, 5],
+        },
+        library: [
+          w("a", { pain: 1, lastDoneDaysAgo: 5 }),
+          w("b", { pain: 5, lastDoneDaysAgo: 6 }),
+        ],
+      });
+      expect(new Set(r.poolIds)).toStrictEqual(new Set(["a", "b"]));
+      expect(r.fellBack).toBe(false);
+    });
   });
 
   it("keeps a 200-min entry when timeCapMinutes is null (capless)", () => {
@@ -171,7 +248,7 @@ describe("suggest", () => {
     expect(r.recommendationId).toBe("long");
   });
 
-  describe("standard-reason wording across cap x durationsUnknown x painMax3", () => {
+  describe("standard-reason wording across cap x durationsUnknown x painLevels", () => {
     const base = {
       todayCode: "AT" as const,
       library: [w("a", { lastDoneDaysAgo: 33 })],
@@ -219,13 +296,27 @@ describe("suggest", () => {
       expect(r.reason).toBe("Least recently done (33 days ago).");
     });
 
-    it("painMax3 does not appear in the standard-reason sentence (only fellback names it)", () => {
+    it("an active painLevels union does not appear in the standard-reason sentence (only fellback names it)", () => {
       const r = suggest({
         ...base,
         prefs: {
           difficulties: [...prefs.difficulties],
           timeCapMinutes: 60,
-          painMax3: true,
+          painLevels: [1, 2, 3],
+        },
+      });
+      expect(r.reason).toBe(
+        "Least recently done (33 days ago) within your 60 min cap.",
+      );
+    });
+
+    it("an empty painLevels union ([]) also does not appear (off is off, not merely unset)", () => {
+      const r = suggest({
+        ...base,
+        prefs: {
+          difficulties: [...prefs.difficulties],
+          timeCapMinutes: 60,
+          painLevels: [],
         },
       });
       expect(r.reason).toBe(
@@ -234,7 +325,7 @@ describe("suggest", () => {
     });
   });
 
-  describe("fellback-reason wording across cap x durationsUnknown x painMax3", () => {
+  describe("fellback-reason wording across cap x durationsUnknown x painLevels", () => {
     const fellbackLib = [
       w("only", {
         difficulty: "hard",
@@ -281,13 +372,13 @@ describe("suggest", () => {
       );
     });
 
-    it("cap checked, pain filter set -> difficulty/time/pain", () => {
+    it("cap checked, pain filter set (non-contiguous union) -> difficulty/time/pain", () => {
       const r = suggest({
         todayCode: "AT",
         prefs: {
           difficulties: ["easy"],
           timeCapMinutes: 20,
-          painMax3: true,
+          painLevels: [1, 3],
         },
         library: fellbackLib,
       });
@@ -302,12 +393,27 @@ describe("suggest", () => {
         prefs: {
           difficulties: ["easy"],
           timeCapMinutes: null,
-          painMax3: true,
+          painLevels: [1, 2, 3],
         },
         library: fellbackLib,
       });
       expect(r.reason).toBe(
         "Nothing fit your difficulty/pain filters — closest match, last done 33 days ago.",
+      );
+    });
+
+    it("cap checked, pain filter empty ([]) -> difficulty/time only (empty union names nothing, same as unset)", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          difficulties: ["easy"],
+          timeCapMinutes: 20,
+          painLevels: [],
+        },
+        library: fellbackLib,
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/time filters — closest match, last done 33 days ago.",
       );
     });
   });
@@ -412,29 +518,51 @@ describe("suggestFreestyle", () => {
     expect(r.reason).not.toMatch(/time/i);
   });
 
-  it("keeps a pain-3 entry and excludes a pain-4 entry when painMax3 is set", () => {
+  it("keeps a pain-3 entry and excludes a pain-4 entry when painLevels is [1,2,3]", () => {
     const r = suggestFreestyle(
       [
         w("ok", { pain: 3, lastDoneDaysAgo: 5 }),
         w("hurts", { pain: 4, lastDoneDaysAgo: 50 }),
       ],
-      { ...prefs, difficulties: [...prefs.difficulties], painMax3: true },
+      {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        painLevels: [1, 2, 3],
+      },
     );
     expect(r.poolIds).toStrictEqual(["ok"]);
     expect(r.recommendationId).toBe("ok");
   });
 
-  it("falls back when painMax3 excludes everything; pool is the unfiltered library", () => {
+  it("falls back when painLevels excludes everything; pool is the unfiltered library", () => {
     const r = suggestFreestyle([w("hurts", { pain: 5, lastDoneDaysAgo: 12 })], {
       ...prefs,
       difficulties: [...prefs.difficulties],
-      painMax3: true,
+      painLevels: [1, 2, 3],
     });
     expect(r.fellBack).toBe(true);
     expect(r.poolIds).toStrictEqual(["hurts"]);
     expect(r.recommendationId).toBe("hurts");
     expect(r.reason).toMatch(/closest match/i);
     expect(r.reason).toMatch(/pain/i);
+  });
+
+  it("a non-contiguous union ([1,3,5]) keeps 1/3/5 and excludes 2/4, type-independent", () => {
+    const r = suggestFreestyle(
+      [
+        w("p1", { type: "AT", pain: 1, lastDoneDaysAgo: 10 }),
+        w("p2", { type: "O2", pain: 2, lastDoneDaysAgo: 10 }),
+        w("p3", { type: "AN", pain: 3, lastDoneDaysAgo: 10 }),
+        w("p4", { type: "TR", pain: 4, lastDoneDaysAgo: 10 }),
+        w("p5", { type: "AT", pain: 5, lastDoneDaysAgo: 10 }),
+      ],
+      {
+        ...prefs,
+        difficulties: [...prefs.difficulties],
+        painLevels: [1, 3, 5],
+      },
+    );
+    expect(new Set(r.poolIds)).toStrictEqual(new Set(["p1", "p3", "p5"]));
   });
 
   it("keeps a 200-min entry when timeCapMinutes is null (capless)", () => {
@@ -450,7 +578,7 @@ describe("suggestFreestyle", () => {
     expect(r.recommendationId).toBe("long");
   });
 
-  describe("standard-reason wording across cap x durationsUnknown x painMax3 (freestyle parity)", () => {
+  describe("standard-reason wording across cap x durationsUnknown x painLevels (freestyle parity)", () => {
     const lib = [w("a", { lastDoneDaysAgo: 33 })];
 
     it("cap set, durations known, no pain filter -> cap clause present", () => {
@@ -490,7 +618,7 @@ describe("suggestFreestyle", () => {
     });
   });
 
-  describe("fellback-reason wording across cap x durationsUnknown x painMax3 (freestyle parity)", () => {
+  describe("fellback-reason wording across cap x durationsUnknown x painLevels (freestyle parity)", () => {
     const fellbackLib = [
       w("only", {
         difficulty: "hard",
@@ -500,11 +628,11 @@ describe("suggestFreestyle", () => {
       }),
     ];
 
-    it("cap checked, pain filter set -> difficulty/time/pain", () => {
+    it("cap checked, pain filter set (non-contiguous union) -> difficulty/time/pain", () => {
       const r = suggestFreestyle(fellbackLib, {
         difficulties: ["easy"],
         timeCapMinutes: 20,
-        painMax3: true,
+        painLevels: [1, 3],
       });
       expect(r.reason).toBe(
         "Nothing fit your difficulty/time/pain filters — closest match, last done 33 days ago.",
@@ -515,10 +643,21 @@ describe("suggestFreestyle", () => {
       const r = suggestFreestyle(fellbackLib, {
         difficulties: ["easy"],
         timeCapMinutes: null,
-        painMax3: true,
+        painLevels: [1, 2, 3],
       });
       expect(r.reason).toBe(
         "Nothing fit your difficulty/pain filters — closest match, last done 33 days ago.",
+      );
+    });
+
+    it("cap checked, pain filter empty ([]) -> difficulty/time only", () => {
+      const r = suggestFreestyle(fellbackLib, {
+        difficulties: ["easy"],
+        timeCapMinutes: 20,
+        painLevels: [],
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/time filters — closest match, last done 33 days ago.",
       );
     });
   });

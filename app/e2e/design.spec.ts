@@ -796,9 +796,12 @@ test.describe("today screen (plan active, logs present)", () => {
         page.getByRole("button", { name: label, exact: true }),
       ).toHaveAttribute("aria-pressed", "false");
     }
-    await expect(
-      page.getByRole("button", { name: "PAIN ≤3", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
+    const painGroup = page.getByRole("group", { name: "PAIN" });
+    for (const level of ["1", "2", "3", "4", "5"]) {
+      await expect(
+        painGroup.getByRole("button", { name: level, exact: true }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
     // Sprint's doneN=0 code is "O2" (SPRINT_WEEKS week 0, index 0) — the O2
     // type chip reads active with nothing swapped, the other three don't.
     await expect(
@@ -885,9 +888,11 @@ test.describe("today screen (plan active, logs present)", () => {
     );
     expect(capBg).toBe("rgb(27, 26, 23)"); // --ink
 
-    const painChip = page.getByRole("button", { name: "PAIN ≤3" });
-    await painChip.click();
-    const painBg = await painChip.evaluate(
+    const painCell = page
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "3", exact: true });
+    await painCell.click();
+    const painBg = await painCell.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
     expect(painBg).toBe("rgb(27, 26, 23)"); // --ink

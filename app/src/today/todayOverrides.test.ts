@@ -14,6 +14,23 @@ const FULL: TodayOverrides = {
   swapType: "AT",
   difficulties: ["easy", "hard"],
   capMinutes: 45,
+  painLevels: [1, 3, 5],
+};
+
+// The pre-Task-5 (ui-fix round) shape: every other field kept its name
+// across the change, only the pain field's shape/name differ (`painMax3`
+// boolean here vs. `painLevels: number[]` now) — this is exactly the
+// record a rower's browser could still be holding in localStorage from
+// before this round shipped. Kept verbatim as a fixture rather than
+// derived from FULL (TodayOverrides no longer has a `painMax3` field to
+// spread it from).
+const V1_RECORD = {
+  date: "2026-08-01",
+  planKey: "sprint",
+  doneN: 11,
+  swapType: "AT",
+  difficulties: ["easy", "hard"],
+  capMinutes: 45,
   painMax3: true,
 };
 
@@ -90,6 +107,26 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
     ).toStrictEqual(["easy", "hard"]);
   });
 
+  it("de-dupes duplicated pain levels from a tampered value", () => {
+    localStorage.setItem(
+      TODAY_OVERRIDES_KEY,
+      JSON.stringify({ ...FULL, painLevels: [5, 5, 1] }),
+    );
+    expect(
+      loadTodayOverrides("2026-08-01", "sprint", 11)?.painLevels,
+    ).toStrictEqual([1, 5]);
+  });
+
+  it("sorts an out-of-order stored painLevels value (cells always render 1-5)", () => {
+    localStorage.setItem(
+      TODAY_OVERRIDES_KEY,
+      JSON.stringify({ ...FULL, painLevels: [5, 1, 3] }),
+    );
+    expect(
+      loadTodayOverrides("2026-08-01", "sprint", 11)?.painLevels,
+    ).toStrictEqual([1, 3, 5]);
+  });
+
   describe("rejects malformed stored values (falls back to null)", () => {
     const store = (value: string) =>
       localStorage.setItem(TODAY_OVERRIDES_KEY, value);
@@ -137,10 +174,28 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
         JSON.stringify(FULL).replace('"capMinutes":45', '"capMinutes":1e400'),
       ],
       ["capMinutes wrong shape", JSON.stringify({ ...FULL, capMinutes: "45" })],
-      ["painMax3 not boolean", JSON.stringify({ ...FULL, painMax3: "yes" })],
+      ["painLevels not an array", JSON.stringify({ ...FULL, painLevels: 3 })],
+      [
+        "painLevels contains an out-of-range level",
+        JSON.stringify({ ...FULL, painLevels: [0] }),
+      ],
+      [
+        "painLevels contains a non-integer",
+        JSON.stringify({ ...FULL, painLevels: [4.5] }),
+      ],
       [
         "missing field",
         JSON.stringify({ date: "2026-08-01", planKey: "sprint", doneN: 11 }),
+      ],
+      // The pre-Task-5 (ui-fix round) shape: every field but the pain one
+      // has the same name/type as v2, but `painMax3` isn't `painLevels` —
+      // Array.isArray(undefined) is false, so this fails the array check
+      // above and is rejected whole, never half-applied under the new
+      // field name. Same contract as libraryFilters.test.ts's own
+      // v1-shaped-record case.
+      [
+        "a v1-shaped record (painMax3, not painLevels)",
+        JSON.stringify(V1_RECORD),
       ],
     ])("%s", (_name, raw) => {
       store(raw);

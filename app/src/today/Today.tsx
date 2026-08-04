@@ -56,6 +56,14 @@ const CAP_CHIPS: { value: number | null; label: string }[] = [
   { value: null, label: "NO CAP" },
 ];
 
+// Task 5 (ui-fix round): the PAIN group's five cells, matching Library's own
+// 1-5 union (FilterSheet.tsx's PAIN_LEVELS) rather than a single "≤3"
+// threshold toggle. Kept as a local copy per this file's own established
+// per-file duplication precedent (see TYPE_COLOR_VAR's comment above) —
+// FilterSheet.tsx keeps its own identical array rather than either
+// importing the other's.
+const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
+
 /** Local chip button — same `.chip` class + `aria-pressed` rendering
  *  convention Library's own filter controls use, not a shared component:
  *  Today's chips have different selection semantics per group
@@ -108,8 +116,8 @@ const STALE_DRAFT_MS = 24 * 60 * 60 * 1000;
 // title + "JUL 25 · HELD · 2/10" — a date (not days-ago), the plain word,
 // and the pain figure. The handoff's own "2/10" is its unmodified 1-10
 // scale; docs/design/DEVIATIONS.md's first row establishes Ergomatic's is
-// 1-5 everywhere else (PainBar, WorkoutDetail's "PAIN n/5", the library's
-// "PAIN ≤3" chip) — matching the handoff's literal "/10" here would
+// 1-5 everywhere else (PainBar, WorkoutDetail's "PAIN n/5", Library's own
+// 1-5 PAIN filter cells) — matching the handoff's literal "/10" here would
 // contradict that already-decided, already-documented scale, so this uses
 // "/5" like every other pain display in the app.
 const MONTH_ABBREV = [
@@ -487,7 +495,7 @@ function TodayView({
         // Approximates the rower's real preference to the nearest chip —
         // see snapCap's own doc comment for why this rounds up, never down.
         capMinutes: snapCap(preferences.timeCapMinutes),
-        painMax3: false,
+        painLevels: [],
       },
   );
 
@@ -527,8 +535,16 @@ function TodayView({
     updateOverrides({ ...overrides, capMinutes: value });
   }
 
-  function handlePainChip() {
-    updateOverrides({ ...overrides, painMax3: !overrides.painMax3 });
+  function handlePainChip(level: number) {
+    // Multi-select union, same toggle-membership shape as
+    // handleDifficultyChip above and Library's own togglePainLevel
+    // (src/library/filters.ts) — sorted on add so a round-tripped/persisted
+    // value always matches the cells' own fixed 1-5 order (todayOverrides.ts's
+    // parseOverrides sorts identically on load).
+    const painLevels = overrides.painLevels.includes(level)
+      ? overrides.painLevels.filter((l) => l !== level)
+      : [...overrides.painLevels, level].sort((a, b) => a - b);
+    updateOverrides({ ...overrides, painLevels });
   }
 
   // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
@@ -549,7 +565,7 @@ function TodayView({
   const suggestPrefs: SuggestPrefs = {
     difficulties: overrides.difficulties,
     timeCapMinutes: overrides.capMinutes,
-    painMax3: overrides.painMax3,
+    painLevels: overrides.painLevels,
     // See toLibraryEntry's comment: with no baselines, every entry's
     // estMinutes is a 0 placeholder, so the reason text must not claim a
     // cap was actually checked against a real duration.
@@ -701,8 +717,10 @@ function TodayView({
 
       {/* Filter chips: both modes (plan and freestyle alike narrow the same
           pool), order per the brief — difficulty (multi) · cap
-          (single-select, exactly one always active) · pain (toggle). Every
-          tap re-runs suggest() above on the next render since they all
+          (single-select, exactly one always active) · pain (Task 5, ui-fix
+          round: multi-select union across five cells, not the old single
+          threshold toggle). Every tap re-runs suggest() above on the next
+          render since they all
           write into `overrides`, which the suggestion computation reads
           directly — no separate "apply" step.
 
@@ -774,11 +792,14 @@ function TodayView({
             role="group"
             aria-labelledby="today-filter-pain-label"
           >
-            <TodayChip
-              label="PAIN ≤3"
-              active={overrides.painMax3}
-              onClick={handlePainChip}
-            />
+            {PAIN_LEVELS.map((level) => (
+              <TodayChip
+                key={level}
+                label={String(level)}
+                active={overrides.painLevels.includes(level)}
+                onClick={() => handlePainChip(level)}
+              />
+            ))}
           </div>
         </div>
       </div>
