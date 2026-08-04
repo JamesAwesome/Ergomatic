@@ -131,7 +131,7 @@ random other member of `pool`. Changing the preference chips clears `todayPick`.
 | rule | `#d8d3c4` | card borders |
 | rule-2 | `#ded8c9` | dividers, bar tracks |
 | rule-3 | `#c9c3b2` | control borders |
-| accent (TR) | `#b5341f` | primary action, targets, active state |
+| accent (TR) | `#b5341f` | primary action, resolved target, destructive control, active tab mark — no longer "active state" generically; see "Accent meaning" below (ui-fix round) |
 | accent-hover | `#9c2c19` | pressed/hover |
 | type O2 | `#2a6275` | aerobic |
 | type AT | `#8a5f18` | anaerobic threshold |
@@ -139,6 +139,58 @@ random other member of `pool`. Changing the preference chips clears `todayPick`.
 | type TEST | `#1b1a17` | 2k/6k test |
 | on-color text | `#fffdf7` | text on any type color or accent |
 | desk (outside frame) | `#ddd8cc` | prototype only |
+
+### Buttons (five-level system — current authority)
+
+> Ported from the ui-fix round's own handoff
+> (`docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md`), which is now the
+> historical record of *why*; this section is the standing description of
+> *what ships*. Superseded here: the two-idiom `.button-primary`/
+> `.button-outline` vocabulary this document originally specified as the
+> only two button shapes (referenced throughout "Screens" below) — those two
+> classes are still real and still render on every screen nothing has
+> migrated off yet, but they are no longer the app's only two shapes.
+
+Every action that acts on the whole screen renders as a full-width block in
+a single bottom-anchored stack, 12px gap. Five levels, no other button
+shapes:
+
+| Level | Look | Height | Where |
+|---|---|---|---|
+| 1 · primary | solid `--accent`, cream label, Archivo 16/600 | 56px | One per screen: Start · Looks right, start · Save to library · Log this session |
+| 2 · secondary | surface fill, 1px `--ink` border, ink label, same type | 52px | Log it after · Back to Today · Edit · Retry. May stack; never share a row |
+| 3 · commit-in-card | solid `--ink`, mono 12/600, 0.16em | 48px | Closes an editor without leaving the screen: the builder step editor's DONE. Ink so it can't read as level 1 |
+| 4 · destructive | surface fill, 1px `--accent` border, accent label | 52px | Delete workout · Discard without logging. Last in the stack, under a 1px `--rule` divider |
+| 4 · armed | fills solid `--accent`, cream label, copy changes | 52px | "Tap again to discard." Auto-disarms on blur or 4s |
+
+Exceptions, deliberate: transport (`◀ Pause ▶`) and steppers (`− +`) stay in
+a row — one control, not several actions. SHUFFLE stays sub-full-width,
+chip geometry (not level 2), by explicit product decision.
+
+Implemented as `.button-l1`–`.button-l4`/`.button-l4-armed` in `index.css`
+(real classes, not aliases). `BaselineEditor.tsx`'s staged "Apply baselines"
+is DESIGN.md's own named level-3 target but is not converted as of this
+round — a named, still-`.button-primary` survivor, along with several
+others; see `docs/design/DEVIATIONS.md`'s IMP-6 row for the current,
+line-numbered list of everything still unconverted.
+
+### Accent meaning
+
+Accent red (`--accent`) means exactly four things, no more:
+
+1. The level-1 primary action.
+2. A resolved split or duration — always the single exact value, never a
+   range (see `DEVIATIONS.md`, "exact targets").
+3. A destructive control (level 4's outline, or its armed solid fill).
+4. The active tab mark.
+
+It no longer means "selected." Every other selected state (difficulty, time
+cap, pain, MIN/M, 2k/6k/MAX/MIN, HELD/UNDER/OVER) fills `--ink` with a cream
+label. Type chips are the one exception to the ink rule: they always fill
+their own type color (`--type-an`/`--type-o2`/`--type-at`, `--type-tr` =
+`--accent`) whether the rower is filtering (Today) or authoring (Builder) —
+identical chip either way. Inactive control, any group: transparent fill,
+`--rule-3` border, `--ink-3` label.
 
 ### Typography
 - **Newsreader** (serif, 500) — screen titles 31px, workout titles 26px, detail 33px,
