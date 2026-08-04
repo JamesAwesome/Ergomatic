@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CellGrid } from "./CellGrid";
 
@@ -34,6 +34,42 @@ describe("CellGrid", () => {
           { value: "a", label: "A", pressed: false },
           { value: "b", label: "B", pressed: false },
           { value: "c", label: "C", pressed: false },
+        ]}
+        onToggle={vi.fn()}
+      />,
+    );
+    expect(container.querySelector(".filter-sheet-grid-3")).toBeInTheDocument();
+  });
+
+  // Fix round 1 (whole-branch review M3): restores the accessible group
+  // name Today's own pre-extraction chip groups had — additive, no
+  // existing Library test queries a group role.
+  it("exposes an accessible group name matching its own visible label", () => {
+    render(
+      <CellGrid
+        label="PAIN"
+        cells={[{ value: "3", label: "3", pressed: false }]}
+        onToggle={vi.fn()}
+      />,
+    );
+    const group = screen.getByRole("group", { name: "PAIN" });
+    expect(
+      within(group).getByRole("button", { name: "3" }),
+    ).toBeInTheDocument();
+  });
+
+  // Fix round 1 (whole-branch review M1): three cells is Today's own
+  // DIFFICULTY group — the Library's five groups only ever had 2/4/5
+  // cells, so this pins the previously-uncovered N=3 case now that the
+  // underlying CSS is N-agnostic rather than a fixed `-2`/`-4`/`-5` set.
+  it("still derives a column-count class at a cell count the Library never had (N=3)", () => {
+    const { container } = render(
+      <CellGrid
+        label="DIFFICULTY"
+        cells={[
+          { value: "easy", label: "EASY", pressed: false },
+          { value: "medium", label: "MEDIUM", pressed: false },
+          { value: "hard", label: "HARD", pressed: false },
         ]}
         onToggle={vi.fn()}
       />,

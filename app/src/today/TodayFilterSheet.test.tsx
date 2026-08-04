@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 
@@ -95,6 +95,28 @@ describe("TodayFilterSheet", () => {
     // by this sheet (the collapsible-filter spec's own "Type swap stays on
     // the plan line" decision).
     expect(screen.queryByText("TYPE")).not.toBeInTheDocument();
+  });
+
+  // Fix round 1 (whole-branch review M3): CellGrid (Task 1's extraction)
+  // now carries `role="group"` + `aria-labelledby` pointing at its own
+  // visible label — restores the accessible group name Today's pre-Task-2
+  // hand-rolled chip groups had (fix round 2, M4).
+  it("each group exposes an accessible name matching its own visible label", () => {
+    renderSheet();
+    for (const label of ["DIFFICULTY", "TIME", "PAIN"]) {
+      expect(screen.getByRole("group", { name: label })).toBeInTheDocument();
+    }
+    expect(
+      within(screen.getByRole("group", { name: "DIFFICULTY" })).getByRole(
+        "button",
+        { name: "EASY" },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("group", { name: "PAIN" })).getByRole("button", {
+        name: "3",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {

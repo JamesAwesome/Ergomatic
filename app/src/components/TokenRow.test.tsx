@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TokenRow } from "./TokenRow";
 
@@ -78,6 +78,29 @@ describe("TokenRow", () => {
     );
     expect(
       screen.getByRole("button", { name: "CLEAR ALL" }),
+    ).toBeInTheDocument();
+  });
+
+  // Fix round 1 (whole-branch review M2): the row's own layout now lives
+  // on TokenRow's own wrapper, not left to whatever the caller wraps it
+  // in — Library.tsx happened to supply it (`.library-filter-row`), a
+  // caller that renders `<TokenRow>` bare (Today.tsx) didn't, and the
+  // result (caught live, not in jsdom) was tokens butting into one
+  // continuous ink bar with `trailing` wrapping onto its own line.
+  it("wraps its tokens and trailing content in its own row container, not a bare fragment", () => {
+    const { container } = render(
+      <TokenRow
+        tokens={[{ key: "type", label: "AT", onClear: vi.fn() }]}
+        trailing={<button type="button">CLEAR ALL</button>}
+      />,
+    );
+    const row = container.querySelector<HTMLElement>(".token-row");
+    expect(row).toBeInTheDocument();
+    expect(
+      within(row!).getByText("AT", { selector: ".filter-token-label" }),
+    ).toBeInTheDocument();
+    expect(
+      within(row!).getByRole("button", { name: "CLEAR ALL" }),
     ).toBeInTheDocument();
   });
 });

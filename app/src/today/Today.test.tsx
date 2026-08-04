@@ -210,17 +210,6 @@ async function openFilterSheet() {
   await userEvent.click(screen.getByRole("button", { name: "FILTER ⌄" }));
 }
 
-// CellGrid (Task 1's extraction, consumed verbatim here) renders each
-// group's label as a plain visible `<span class="filter-sheet-group-
-// label">`, not an ARIA `role="group"` — so a group's own cells are
-// scoped by walking up from that visible label rather than
-// `getByRole("group", {name})`, unlike Today's pre-Task-2 hand-rolled
-// chip groups (which added `role="group"` themselves). See the "visible
-// label" test below for the full note on this behaviour change.
-function sheetGroup(label: string): HTMLElement {
-  return screen.getByText(label).closest(".filter-sheet-group") as HTMLElement;
-}
-
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
@@ -452,7 +441,7 @@ describe("Today (overrides: init from preferences)", () => {
       "aria-pressed",
       "true",
     );
-    const painGroup = sheetGroup("PAIN");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
         within(painGroup).getByRole("button", { name: level }),
@@ -489,7 +478,7 @@ describe("Today (overrides: stored record wins over preferences)", () => {
       "aria-pressed",
       "true",
     );
-    const painGroup = sheetGroup("PAIN");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     for (const level of ["1", "2", "3"]) {
       expect(
         within(painGroup).getByRole("button", { name: level }),
@@ -660,7 +649,7 @@ describe("Today (FILTER sheet)", () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
-    const painGroup = sheetGroup("PAIN");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     const cell1 = within(painGroup).getByRole("button", { name: "1" });
     const cell2 = within(painGroup).getByRole("button", { name: "2" });
     expect(cell1).toHaveAttribute("aria-pressed", "false");
@@ -712,34 +701,39 @@ describe("Today (FILTER sheet)", () => {
     );
   });
 
-  // Note: CellGrid (Task 1's extraction, consumed verbatim) renders each
-  // group's label as a plain visible `<span>`, not an ARIA `role="group"`/
-  // `aria-labelledby` pairing — matching Library's own FilterSheet groups
-  // exactly (which never had one either). This is a real accessible-name
-  // regression versus Today's pre-Task-2 hand-rolled chip groups (fix
-  // round 2, whole-branch review M4, added `role="group"` specifically for
-  // Today); flagged in this task's report rather than silently patched
-  // into the shared component. `sheetGroup()` below scopes by the visible
-  // label's DOM ancestor instead of an accessible group name.
-  it("each sheet group has its own visible label, grouping its own cells", async () => {
+  // Fix round 1 (whole-branch review M3): restores the accessible-group-
+  // name assertion this test originally made — CellGrid (Task 1's
+  // extraction) initially rendered each group's label as a plain visible
+  // `<span>` with no ARIA `role="group"`/`aria-labelledby` pairing at all
+  // (matching Library's own FilterSheet groups, which never needed one),
+  // a real regression versus Today's pre-Task-2 hand-rolled chip groups
+  // (fix round 2, whole-branch review M4, which added `role="group"`
+  // specifically for Today). M3 puts `role="group"` + `aria-labelledby`
+  // back on `CellGrid` itself (additive — no Library test queries a group
+  // role), so this asserts the real accessible name again, not just DOM
+  // containment via the visible label.
+  it("each sheet group has a visible group label wired to an accessible group name", async () => {
     mockReady();
     await renderToday();
     await openFilterSheet();
 
+    const difficultyGroup = screen.getByRole("group", { name: "DIFFICULTY" });
     expect(screen.getByText("DIFFICULTY")).toBeVisible();
     expect(
-      within(sheetGroup("DIFFICULTY")).getByRole("button", { name: "EASY" }),
+      within(difficultyGroup).getByRole("button", { name: "EASY" }),
     ).toBeInTheDocument();
 
+    const timeGroup = screen.getByRole("group", { name: "TIME" });
     expect(screen.getByText("TIME")).toBeVisible();
     expect(
-      within(sheetGroup("TIME")).getByRole("button", { name: "≤60′" }),
+      within(timeGroup).getByRole("button", { name: "≤60′" }),
     ).toBeInTheDocument();
 
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     expect(screen.getByText("PAIN")).toBeVisible();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
-        within(sheetGroup("PAIN")).getByRole("button", { name: level }),
+        within(painGroup).getByRole("button", { name: level }),
       ).toBeInTheDocument();
     }
   });
@@ -755,7 +749,7 @@ describe("Today (FILTER sheet)", () => {
       await renderToday();
       await openFilterSheet();
 
-      const painGroup = sheetGroup("PAIN");
+      const painGroup = screen.getByRole("group", { name: "PAIN" });
       await userEvent.click(
         within(painGroup).getByRole("button", { name: "3" }),
       );
@@ -815,7 +809,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     // Two deviations at once: DIFFICULTY narrowed AND a PAIN filter set.
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    const painGroup = sheetGroup("PAIN");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
     await userEvent.click(
       screen.getByRole("button", { name: /^Show \d+ options?$/ }),
@@ -892,7 +886,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
     await userEvent.click(screen.getByRole("button", { name: "≤30′" }));
-    const painGroup = sheetGroup("PAIN");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
     await userEvent.click(
       screen.getByRole("button", { name: /^Show \d+ options?$/ }),
@@ -1010,7 +1004,7 @@ describe("Today (type-swap chips)", () => {
     await openFilterSheet();
     expect(screen.getByRole("button", { name: "EASY" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "≤60′" })).toBeInTheDocument();
-    const painGroup = sheetGroup("PAIN");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     expect(
       within(painGroup).getByRole("button", { name: "1" }),
     ).toBeInTheDocument();
@@ -1151,7 +1145,7 @@ describe("Today (type-swap chips)", () => {
     // inert/disabled (only the primary button itself disables, at a
     // genuinely empty count — see the "Today (FILTER sheet)" describe).
     await openFilterSheet();
-    const painGroup = sheetGroup("PAIN");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
     const painCell = within(painGroup).getByRole("button", { name: "1" });
     await userEvent.click(painCell);
     expect(painCell).toHaveAttribute("aria-pressed", "true");

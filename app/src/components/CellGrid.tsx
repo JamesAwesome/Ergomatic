@@ -22,6 +22,18 @@ import type { CSSProperties } from "react";
  * caller apply a layout modifier (`filter-sheet-group-half`, for the LAST
  * DONE/SOURCE pair that shares a row) without this component needing to
  * know that modifier exists.
+ *
+ * Fix round 1 (whole-branch review M3): `role="group"` + `aria-labelledby`
+ * on the cell grid itself, pointing at the visible label — restores the
+ * accessible group name Today's own pre-extraction chip groups had (fix
+ * round 2, M4, ui-fix round: `role="group"` + `aria-labelledby` on a hand-
+ * rolled `.chip-wrap`) but this component's own first cut (Task 1) never
+ * carried over, since no Library test or e2e spec asserted it. Additive —
+ * no existing Library test queries a group role, so this can't regress
+ * `FilterSheet.test.tsx`. The id is derived from `label` (lowercased,
+ * spaces to hyphens) rather than taken as a prop: every group on a given
+ * screen already has a distinct label, and only one sheet is ever mounted
+ * at a time in this app, so a derived id can't collide in practice.
  */
 export function CellGrid({
   label,
@@ -39,12 +51,19 @@ export function CellGrid({
   onToggle: (value: string) => void;
   className?: string;
 }) {
+  const labelId = `filter-sheet-group-${label.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <div
       className={["filter-sheet-group", className].filter(Boolean).join(" ")}
     >
-      <span className="filter-sheet-group-label">{label}</span>
-      <div className={`filter-sheet-grid filter-sheet-grid-${cells.length}`}>
+      <span id={labelId} className="filter-sheet-group-label">
+        {label}
+      </span>
+      <div
+        className={`filter-sheet-grid filter-sheet-grid-${cells.length}`}
+        role="group"
+        aria-labelledby={labelId}
+      >
         {cells.map((cell) => (
           <button
             key={cell.value}
