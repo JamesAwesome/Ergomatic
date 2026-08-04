@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
   EMPTY_FILTERS,
+  RECENCY_BOUNDARY_DAYS,
   applyFilters,
   bucketFor,
   clearFilters,
-  setRecency,
-  toggleCustom,
+  isRecent,
+  setLastDone,
+  setSource,
   toggleDuration,
-  togglePain,
+  togglePainLevel,
   toggleType,
   type Filters,
 } from "./filters";
@@ -28,7 +30,7 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   } as LibraryWorkout;
 }
 
-describe("chip state transitions", () => {
+describe("chip/cell state transitions", () => {
   it("selects a type, and selecting the same type again clears it", () => {
     const once = toggleType(EMPTY_FILTERS, "AT");
     expect(once.type).toBe("AT");
@@ -46,28 +48,44 @@ describe("chip state transitions", () => {
     expect(toggleDuration(f, "<30").durations).toStrictEqual(["60+"]);
   });
 
-  it("makes RECENT and NOT RECENT mutually exclusive", () => {
-    const f = setRecency(setRecency(EMPTY_FILTERS, "recent"), "not-recent");
-    expect(f.recency).toBe("not-recent");
+  it("accumulates pain levels (multi-select union) and removes on repeat", () => {
+    const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
+    expect(f.painLevels).toStrictEqual([1, 4]);
+    expect(togglePainLevel(f, 1).painLevels).toStrictEqual([4]);
   });
 
-  it("clears a recency chip when the active one is tapped again", () => {
-    const on = setRecency(EMPTY_FILTERS, "recent");
-    expect(setRecency(on, "recent").recency).toBeNull();
+  it("makes under21 and over21 mutually exclusive", () => {
+    const f = setLastDone(setLastDone(EMPTY_FILTERS, "under21"), "over21");
+    expect(f.lastDone).toBe("over21");
   });
 
-  it("clears NOT RECENT when tapped again (symmetric toggle-off)", () => {
-    const on = setRecency(EMPTY_FILTERS, "not-recent");
-    expect(setRecency(on, "not-recent").recency).toBeNull();
+  it("clears a LAST DONE cell when the active one is tapped again", () => {
+    const on = setLastDone(EMPTY_FILTERS, "under21");
+    expect(setLastDone(on, "under21").lastDone).toBeNull();
   });
 
-  it("clears every chip at once", () => {
+  it("clears over21 when tapped again (symmetric toggle-off)", () => {
+    const on = setLastDone(EMPTY_FILTERS, "over21");
+    expect(setLastDone(on, "over21").lastDone).toBeNull();
+  });
+
+  it("makes global and custom mutually exclusive", () => {
+    const f = setSource(setSource(EMPTY_FILTERS, "global"), "custom");
+    expect(f.source).toBe("custom");
+  });
+
+  it("clears a SOURCE cell when the active one is tapped again", () => {
+    const on = setSource(EMPTY_FILTERS, "custom");
+    expect(setSource(on, "custom").source).toBeNull();
+  });
+
+  it("clears every filter at once", () => {
     const busy: Filters = {
       type: "AN",
       durations: ["<30"],
-      painMax3: true,
-      recency: "recent",
-      customOnly: true,
+      painLevels: [4, 5],
+      lastDone: "under21",
+      source: "custom",
     };
     expect(clearFilters()).toStrictEqual(EMPTY_FILTERS);
     expect(busy).not.toStrictEqual(EMPTY_FILTERS);
@@ -80,6 +98,21 @@ describe("bucketFor", () => {
     expect(bucketFor(30)).toBe("30-45");
     expect(bucketFor(45)).toBe("45-60");
     expect(bucketFor(60)).toBe("60+");
+  });
+});
+
+describe("isRecent", () => {
+  it("is true strictly under the recency boundary", () => {
+    expect(isRecent(RECENCY_BOUNDARY_DAYS - 1)).toBe(true);
+  });
+
+  it("is false AT and beyond the recency boundary", () => {
+    expect(isRecent(RECENCY_BOUNDARY_DAYS)).toBe(false);
+    expect(isRecent(RECENCY_BOUNDARY_DAYS + 1)).toBe(false);
+  });
+
+  it("counts never-done (null) as NOT recent — pinned, not an oversight", () => {
+    expect(isRecent(null)).toBe(false);
   });
 });
 
@@ -103,30 +136,34 @@ describe("applyFilters", () => {
     ).toStrictEqual(["short", "long"]);
   });
 
-  it("keeps only pain 3 or lower when PAIN ≤3 is on", () => {
-    const rows = [w({ id: "ok", pain: 3 }), w({ id: "hurts", pain: 4 })];
-    expect(
-      applyFilters(rows, togglePain(EMPTY_FILTERS), baselines).map((r) => r.id),
-    ).toStrictEqual(["ok"]);
+  it("unions pain levels — a non-contiguous selection still matches every level named", () => {
+    const rows = [
+      w({ id: "p1", pain: 1 }),
+      w({ id: "p3", pain: 3 }),
+      w({ id: "p4", pain: 4 }),
+    ];
+    const f = togglePainLevel(togglePainLevel(EMPTY_FILTERS, 1), 4);
+    expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
+      "p1",
+      "p4",
+    ]);
   });
 
-  it("splits recency at 21 days, counting never-done as not recent", () => {
+  it("splits recency at the boundary via lastDone, counting never-done as over21", () => {
     const rows = [
-      w({ id: "fresh", lastDoneDaysAgo: 20 }),
-      w({ id: "stale", lastDoneDaysAgo: 21 }),
+      w({ id: "fresh", lastDoneDaysAgo: RECENCY_BOUNDARY_DAYS - 1 }),
+      w({ id: "stale", lastDoneDaysAgo: RECENCY_BOUNDARY_DAYS }),
       w({ id: "never", lastDoneDaysAgo: null }),
     ];
     expect(
-      applyFilters(rows, setRecency(EMPTY_FILTERS, "recent"), baselines).map(
+      applyFilters(rows, setLastDone(EMPTY_FILTERS, "under21"), baselines).map(
         (r) => r.id,
       ),
     ).toStrictEqual(["fresh"]);
     expect(
-      applyFilters(
-        rows,
-        setRecency(EMPTY_FILTERS, "not-recent"),
-        baselines,
-      ).map((r) => r.id),
+      applyFilters(rows, setLastDone(EMPTY_FILTERS, "over21"), baselines).map(
+        (r) => r.id,
+      ),
     ).toStrictEqual(["stale", "never"]);
   });
 
@@ -139,27 +176,36 @@ describe("applyFilters", () => {
     ]);
   });
 
-  it("intersects different chip kinds", () => {
+  it("intersects different filter kinds", () => {
     const rows = [
       w({ id: "match", type: "AT", pain: 2 }),
       w({ id: "wrongtype", type: "O2", pain: 2 }),
       w({ id: "toopainful", type: "AT", pain: 5 }),
     ];
-    const f = togglePain(toggleType(EMPTY_FILTERS, "AT"));
+    const f = togglePainLevel(toggleType(EMPTY_FILTERS, "AT"), 2);
     expect(applyFilters(rows, f, baselines).map((r) => r.id)).toStrictEqual([
       "match",
     ]);
   });
 });
 
-describe("customOnly", () => {
-  it("keeps only non-global workouts when set", () => {
+describe("source", () => {
+  it("keeps only non-global workouts when source is custom", () => {
     const ws = [
       w({ id: "mine", title: "Mine", isGlobal: false }),
       w({ id: "seeded", title: "Seeded", isGlobal: true }),
     ];
-    const out = applyFilters(ws, { ...EMPTY_FILTERS, customOnly: true }, null);
+    const out = applyFilters(ws, { ...EMPTY_FILTERS, source: "custom" }, null);
     expect(out.map((r) => r.title)).toStrictEqual(["Mine"]);
+  });
+
+  it("keeps only global workouts when source is global", () => {
+    const ws = [
+      w({ id: "mine", title: "Mine", isGlobal: false }),
+      w({ id: "seeded", title: "Seeded", isGlobal: true }),
+    ];
+    const out = applyFilters(ws, { ...EMPTY_FILTERS, source: "global" }, null);
+    expect(out.map((r) => r.title)).toStrictEqual(["Seeded"]);
   });
 
   it("ANDs with the type filter", () => {
@@ -170,16 +216,16 @@ describe("customOnly", () => {
     ];
     const out = applyFilters(
       ws,
-      { ...EMPTY_FILTERS, customOnly: true, type: "AN" },
+      { ...EMPTY_FILTERS, source: "custom", type: "AN" },
       null,
     );
     expect(out.map((r) => r.title)).toStrictEqual(["Mine-AN"]);
   });
 
-  it("toggleCustom flips and clearFilters resets", () => {
-    const on = toggleCustom(EMPTY_FILTERS);
-    expect(on.customOnly).toBe(true);
-    expect(toggleCustom(on).customOnly).toBe(false);
-    expect(clearFilters().customOnly).toBe(false);
+  it("setSource flips exclusively and clearFilters resets", () => {
+    const custom = setSource(EMPTY_FILTERS, "custom");
+    expect(custom.source).toBe("custom");
+    expect(setSource(custom, "global").source).toBe("global");
+    expect(clearFilters().source).toBeNull();
   });
 });

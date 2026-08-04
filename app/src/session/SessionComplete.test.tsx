@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import { buildDraft, saveDraft, startDraft, type SessionDraft } from "./draft";
 import { buildRun, type EnginePhase } from "./engine";
@@ -10,16 +10,15 @@ import { saveRun, type SessionRun } from "./run";
 import { actualRows, totalElapsedSeconds } from "./SessionComplete";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
-const TOL = 1;
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
-function starter(title: string) {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   return w;
 }
 
-// A real starter workout (Doldrums: wu + a split-ref work/rest pair, per
+// A real library workout (Hoarfrost: wu + a split-ref work/rest pair, per
 // repo convention — not a hand-built minimum) with ONE distance step
 // appended directly (not after its own live "reps" marker, which would
 // repeat it too — the same "reps marker deliberately not reused" call
@@ -28,15 +27,15 @@ function starter(title: string) {
 // LAST phase is the one this module's own actuals list has anything to show
 // for, since 6B's engine only ever records an actual for a distance phase.
 function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
-  const doldrums = starter("Doldrums");
-  const splitWork = doldrums.steps.find((s) => s.k === "w") as Extract<
+  const hoarfrost = library("Hoarfrost");
+  const splitWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
     Step,
     { k: "w" }
   >;
   const draft = buildDraft({
     id: "id-complete-fixture",
-    title: doldrums.title,
-    type: doldrums.type as WorkoutType,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
     steps: [
       { k: "wu", minutes: 4 },
       splitWork,
@@ -49,7 +48,7 @@ function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   });
   const started = startDraft(draft);
   saveDraft(started);
-  const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+  const built = buildRun(started, BASELINES, FIXED_NOW);
   const distanceIndex = built.phases.length - 1;
   // Completion is a CONSTRUCTION here, not a derivation — engine.test.ts and
   // Timer.test.tsx already own proving tick/advance walk to this state
@@ -105,7 +104,7 @@ function multiActualDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   });
   const started = startDraft(draft);
   saveDraft(started);
-  const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+  const built = buildRun(started, BASELINES, FIXED_NOW);
   // Phases: 0 warmup, 1 work (2000m), 2 work (6000m).
   const completedAt = new Date(
     FIXED_NOW.getTime() + 40 * 60 * 1000,
@@ -247,7 +246,7 @@ describe("SessionComplete", () => {
 
   it("redirects to /today when there's no run record", async () => {
     mockKeepAwake();
-    saveDraft(startDraft(buildDraft({ ...starter("Doldrums"), id: "id-x" })));
+    saveDraft(startDraft(buildDraft({ ...library("Hoarfrost"), id: "id-x" })));
     await renderComplete();
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
   });
@@ -326,7 +325,7 @@ describe("SessionComplete", () => {
     expect(keepAwakeOff).toHaveBeenCalledTimes(1);
   });
 
-  it("renders a Log this session link to /session/log, beside Back to Today", async () => {
+  it("renders a Log this session link to /session/log, stacked above Back to Today", async () => {
     mockKeepAwake();
     completeDraftAndRun();
     await renderComplete();
@@ -355,5 +354,102 @@ describe("SessionComplete", () => {
     const run = loadRun();
     expect(run).not.toBeNull();
     expect(run!.completedAt).not.toBeNull();
+  });
+
+  // Task 3 (ui-fix round): a third action, Discard without logging (L4/
+  // L4-armed, `useStagedDiscard`), joins the stack under a rule — same
+  // in-place two-tap idiom WorkoutDetail.tsx's own Delete workout uses.
+  describe("Discard without logging", () => {
+    it("arms on the first press without clearing anything or firing a network request", async () => {
+      mockKeepAwake();
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      ).toBeInTheDocument();
+      const { loadDraft } = await import("./draft");
+      const { loadRun } = await import("./run");
+      expect(loadDraft()).not.toBeNull();
+      expect(loadRun()).not.toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
+      mockKeepAwake();
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+      fireEvent.blur(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      ).toBeInTheDocument();
+    });
+
+    it("disarms automatically 4 seconds after arming with no second press", async () => {
+      mockKeepAwake();
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+      // Fake timers only AFTER the render above has resolved — RTL's own
+      // `findByText` polls via a real `setTimeout` internally (same reason
+      // WorkoutDetail.test.tsx's identical fake-timers test never awaits a
+      // `findBy*` once fake timers are active, only synchronous `getByRole`
+      // calls from here on).
+      vi.useFakeTimers();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      ).toBeInTheDocument();
+
+      // `act` wraps the fake-timer advance so the auto-disarm timeout's
+      // `setArmed(false)` (called OUTSIDE any React event, from a raw
+      // `setTimeout`) is flushed to the DOM before the next assertion — same
+      // idiom as WorkoutDetail.test.tsx's own identical test.
+      await act(() => vi.advanceTimersByTimeAsync(4000));
+
+      expect(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      ).toBeInTheDocument();
+    });
+
+    it("clears both records, navigates to /today, and never fires a network request once the armed press lands", async () => {
+      mockKeepAwake();
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      const user = userEvent.setup();
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+
+      await user.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      );
+
+      expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+      const { loadDraft } = await import("./draft");
+      const { loadRun } = await import("./run");
+      expect(loadDraft()).toBeNull();
+      expect(loadRun()).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
   });
 });

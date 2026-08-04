@@ -9,7 +9,7 @@ import {
   Routes,
   RouterProvider,
 } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
@@ -23,13 +23,13 @@ import { hasRunProgress } from "./Countdown";
 import { loadRun, saveRun, type SessionRun } from "./run";
 
 // Realistic fixture, matching Timer.test.tsx/ConfirmTargets.test.tsx:
-// Doldrums (O2) — wu 4' + reps×2 marker + one split-ref work step. Its
+// Hoarfrost (O2) — wu 10' + reps×2 marker + one split-ref work step. Its
 // FIRST phase is always the warm-up ("Easy"), which is what makes it a good
 // fixture for pinning the next-phase line: the assertion doesn't depend on
 // baselines at all.
-function doldrumsDraft(id = "id-doldrums"): SessionDraft {
-  const w = STARTER_WORKOUTS.find((s) => s.title === "Doldrums");
-  if (!w) throw new Error("missing starter fixture: Doldrums");
+function hoarfrostDraft(id = "id-hoarfrost"): SessionDraft {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Hoarfrost");
+  if (!w) throw new Error("missing library fixture: Hoarfrost");
   return buildDraft({
     id,
     title: w.title,
@@ -104,7 +104,7 @@ describe("Countdown", () => {
 
   it("shows LOADING while baselines are resolving", async () => {
     mockAdapters({ baselinesState: { state: "loading" } });
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     await renderCountdown();
 
     expect(screen.getByText("LOADING…")).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe("Countdown", () => {
 
   it("shows LOADING while preferences are resolving", async () => {
     mockAdapters({ preferencesState: { state: "loading" } });
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     await renderCountdown();
 
     expect(screen.getByText("LOADING…")).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe("Countdown", () => {
   it("shows a retry control when baselines fail to load, and calling it retries", async () => {
     const retry = vi.fn();
     mockAdapters({ baselinesState: { state: "error", retry } });
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     await renderCountdown();
 
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -132,7 +132,7 @@ describe("Countdown", () => {
   it("shows a retry control when preferences fail to load, and calling it retries", async () => {
     const retry = vi.fn();
     mockAdapters({ preferencesState: { state: "error", retry } });
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     await renderCountdown();
 
     expect(
@@ -144,7 +144,7 @@ describe("Countdown", () => {
 
   it("shows a brief LOADING state between settled hooks and the run finishing its build", async () => {
     mockAdapters();
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     // Deliberately NOT awaiting anything before this assertion: the build
     // effect defers its setState to a microtask (see Countdown.tsx's own
     // comment on why), so the very first synchronous render after mount is
@@ -157,13 +157,13 @@ describe("Countdown", () => {
   });
 
   it("builds and saves the run on mount, and renders the configured countdown", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters();
     await renderCountdown();
 
     expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
-    // Doldrums' first phase is its warm-up: label "Easy" (domain/expand.ts).
+    // Hoarfrost's first phase is its warm-up: label "Easy" (domain/expand.ts).
     expect(screen.getByText("Easy")).toBeInTheDocument();
     expect(loadRun()).not.toBeNull();
   });
@@ -176,7 +176,7 @@ describe("Countdown", () => {
   // Confirm — the same place a rower trying to START without baselines
   // lands anyway.
   it("redirects to /session/confirm without building a run when baselines are ready but unset", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters({
       baselinesState: {
         state: "ready",
@@ -191,7 +191,7 @@ describe("Countdown", () => {
   });
 
   it("does not build or save a run while baselines are in an error state", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters({ baselinesState: { state: "error", retry: vi.fn() } });
     await renderCountdown();
 
@@ -208,7 +208,7 @@ describe("Countdown", () => {
   });
 
   it("does not build or save a run while preferences are in an error state", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters({ preferencesState: { state: "error", retry: vi.fn() } });
     await renderCountdown();
 
@@ -233,7 +233,7 @@ describe("Countdown", () => {
     mockAdapters();
     const saveRunSpy = vi.fn(() => true);
     vi.doMock("./run", () => ({ saveRun: saveRunSpy, loadRun: () => null }));
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     const { default: Countdown } = await import("./Countdown");
 
     render(
@@ -259,7 +259,7 @@ describe("Countdown", () => {
     // stamps startedAt BEFORE navigating here; a never-started draft
     // wouldn't distinguish "CANCEL un-starts it" from "it was never
     // started."
-    saveDraft(startDraft(doldrumsDraft()));
+    saveDraft(startDraft(hoarfrostDraft()));
     mockAdapters();
     await renderCountdown();
     await screen.findByText("GET ON THE HANDLE");
@@ -274,7 +274,7 @@ describe("Countdown", () => {
   });
 
   it("SKIP navigates straight to /session/run", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters();
     await renderCountdown();
     await screen.findByText("GET ON THE HANDLE");
@@ -292,7 +292,7 @@ describe("Countdown", () => {
   // via `router.navigate(-1)` and read the router's own settled location —
   // proving `replace`, not merely that SKIP still lands on /session/run.
   it("SKIP replaces this screen in history — browser BACK from the live timer does not return to the countdown", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters();
     const { default: Countdown } = await import("./Countdown");
     const router = createMemoryRouter(
@@ -318,7 +318,7 @@ describe("Countdown", () => {
   });
 
   it("turns keep-awake on while mounted and off on unmount", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     const { keepAwakeOn, keepAwakeOff } = mockAdapters();
     const { unmount } = await renderCountdown();
     await screen.findByText("GET ON THE HANDLE");
@@ -332,7 +332,7 @@ describe("Countdown", () => {
   });
 
   it("a countdownSeconds of 0 never renders the countdown UI and redirects immediately", async () => {
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters({
       preferencesState: {
         state: "ready",
@@ -355,7 +355,7 @@ describe("Countdown", () => {
   });
 
   it("reads the draft fresh on every mount and rebuilds the run (reload-on-countdown restarts, deliberately)", async () => {
-    const draft = doldrumsDraft();
+    const draft = hoarfrostDraft();
     saveDraft(draft);
     mockAdapters();
     const { unmount } = await renderCountdown();
@@ -380,7 +380,7 @@ describe("Countdown", () => {
 
   it("ticks the numeral down each second and redirects to /session/run at zero", async () => {
     vi.useFakeTimers();
-    saveDraft(doldrumsDraft());
+    saveDraft(hoarfrostDraft());
     mockAdapters({
       preferencesState: {
         state: "ready",
@@ -413,9 +413,8 @@ describe("Countdown", () => {
 // cover the component's REACTION to it.
 describe("hasRunProgress", () => {
   const BASE_RUN = buildRun(
-    doldrumsDraft(),
+    hoarfrostDraft(),
     BASELINES,
-    1,
     new Date("2026-08-01T12:00:00.000Z"),
   );
 
@@ -459,10 +458,10 @@ describe("hasRunProgress", () => {
 // progress or a completed-but-unlogged record.
 describe("Countdown — F1 mount guard against rebuilding a progressed run", () => {
   it("redirects to /session/run without rebuilding when the existing run already shows progress (index > 0)", async () => {
-    const draft = doldrumsDraft();
+    const draft = hoarfrostDraft();
     saveDraft(draft);
     const progressed: SessionRun = {
-      ...buildRun(draft, BASELINES, 1, new Date()),
+      ...buildRun(draft, BASELINES, new Date()),
       index: 1,
     };
     const saveRunSpy = vi.fn(() => true);
@@ -480,9 +479,9 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
   });
 
   it("redirects to /session/run without rebuilding when the existing run is already complete", async () => {
-    const draft = doldrumsDraft();
+    const draft = hoarfrostDraft();
     saveDraft(draft);
-    const built = buildRun(draft, BASELINES, 1, new Date());
+    const built = buildRun(draft, BASELINES, new Date());
     const completed: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -503,13 +502,13 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
   });
 
   it("still rebuilds — the ordinary reload-during-countdown case — when an existing run has no progress yet", async () => {
-    const draft = doldrumsDraft();
+    const draft = hoarfrostDraft();
     saveDraft(draft);
     // Real run.ts (not mocked): a run already sitting in storage with none
     // of hasRunProgress's three signals — exactly what Countdown's OWN
     // first mount leaves behind, and what a reload immediately afterward
     // would see. Resilience 4 still requires this to rebuild, not redirect.
-    saveRun(buildRun(draft, BASELINES, 1, new Date()));
+    saveRun(buildRun(draft, BASELINES, new Date()));
     mockAdapters();
     await renderCountdown();
 

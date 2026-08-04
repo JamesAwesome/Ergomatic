@@ -71,9 +71,10 @@ a value where they agree).
   never judge by eye. Inputs keep `font-size: 16px` (iOS Safari zooms below
   it). 2px radii, no shadows, no animation.
 - **Realistic fixtures**: at least one test per client task starts from a
-  real starter workout (`app/server/seed/starter.ts`) via `fromWorkout`, not
-  a hand-built minimum. Fixtures emptier than production have hidden two
-  shipped defects and one bricking bug.
+  real library workout (`app/server/seed/library/index.ts`'s
+  `LIBRARY_WORKOUTS`, the generated 300) via `fromWorkout`, not a hand-built
+  minimum. Fixtures emptier than production have hidden two shipped defects
+  and one bricking bug.
 - Values in your brief that the controller computed by head are marked
   `UNVERIFIED — check before use`; verify them. Unmarked values still lose
   to what the code actually says.

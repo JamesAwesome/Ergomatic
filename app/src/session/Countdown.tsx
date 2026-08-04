@@ -8,21 +8,6 @@ import { buildRun } from "./engine";
 import { cancelStart, loadDraft, saveDraft, type SessionDraft } from "./draft";
 import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
 
-// Copied a THIRD time from WorkoutDetail.tsx's own readPaceTolerance
-// (ConfirmTargets.tsx already carries the second copy, with the same
-// comment) — a shared module for this many one-line callers still isn't
-// obviously worth the extra indirection, but three is the point at which a
-// future reviewer should feel free to extract it; not done here to keep
-// this task's diff to the files its brief names.
-function readPaceTolerance(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--pace-tolerance")
-    .trim();
-  const parsed = Number(raw);
-  return raw !== "" && Number.isFinite(parsed) ? parsed : 1;
-}
-
 // The countdown's own timing state: `total` is the configured length
 // (preferences.countdownSeconds), `startedAtMs` is the wall-clock instant
 // (Date.now(), NOT the component's mount time — see the build effect below)
@@ -204,7 +189,7 @@ export default function Countdown() {
     // preferences fetch took) — otherwise the very first "ready" render
     // could read fewer seconds remaining than `countdownSeconds`, or even a
     // negative elapsed if an earlier `nowMs` predates `startedAtMs`.
-    const run = buildRun(draft, baselines, readPaceTolerance(), now);
+    const run = buildRun(draft, baselines, now);
     saveRun(run);
     void Promise.resolve().then(() => {
       setBuilt({

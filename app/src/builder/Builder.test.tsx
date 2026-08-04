@@ -6,7 +6,7 @@ import type { api } from "../api";
 import type { BuilderEditMode } from "./Builder";
 import { fromWorkout, newForm, newRow, type BuilderForm } from "./builderState";
 import type { Step } from "../../domain/types.js";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -920,7 +920,7 @@ describe("Builder", () => {
     ).toHaveAttribute("href", "/you");
   });
 
-  it("live-resolves a work row's typed duration and pace ref into the tolerance range", async () => {
+  it("live-resolves a work row's typed duration and pace ref into the exact split", async () => {
     mockBaselines(BASELINES);
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
@@ -930,9 +930,10 @@ describe("Builder", () => {
     await userEvent.click(faster);
     await userEvent.click(faster);
 
-    // Hardcoded expectation (EN DASH, U+2013) — never recomputed by calling
-    // resolveSplit/toleranceRange, which would make this assertion tautological.
-    expect(screen.getByText("1:59.0–2:01.0")).toBeInTheDocument();
+    // Hardcoded expectation — never recomputed by calling
+    // resolveSplit/fmtSplit, which would make this assertion tautological.
+    // Ui-fix round, Item 1: the exact split, never a "lo–hi" tolerance band.
+    expect(screen.getByText("2:00.0")).toBeInTheDocument();
   });
 
   it("renders a work row's pace as a structured control (four radios: 2K/6K/MAX/MIN), not a free-text field", async () => {
@@ -960,24 +961,24 @@ describe("Builder", () => {
 
   // Task 4: an effort row's TARGET reads the effort word — and, unlike a
   // split row, doesn't need baselines to do it (a word needs no resolution).
-  // Real starter workout (Zephyr: [wu 5', w 20' @ 6k+18]), not a hand-built
-  // fixture — its one work step's ref is patched to MAX before going through
-  // the real edit-mode load path (fromWorkout), matching the ledger's
-  // "test against a realistic fixture" rule.
+  // Real library workout (Sea Fret: [wu 5', 2×4' @ 6k+12]), not a
+  // hand-built fixture — its one work step's ref is patched to MAX before
+  // going through the real edit-mode load path (fromWorkout), matching the
+  // ledger's "test against a realistic fixture" rule.
   it("shows ALL OUT and no offset stepper for a MAX row opened via the edit path, even with no baselines set", async () => {
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     mockApi(() => new Response(null, { status: 201 }));
 
-    const zephyr = STARTER_WORKOUTS.find((w) => w.title === "Zephyr");
-    if (!zephyr) throw new Error("fixture not found: Zephyr");
-    const steps: Step[] = zephyr.steps.map((s) =>
+    const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret");
+    if (!seaFret) throw new Error("fixture not found: Sea Fret");
+    const steps: Step[] = seaFret.steps.map((s) =>
       s.k === "w" ? { ...s, ref: { effort: "max" as const } } : s,
     );
     const initial = fromWorkout({
-      title: zephyr.title,
-      type: zephyr.type,
-      difficulty: zephyr.difficulty,
-      pain: zephyr.pain,
+      title: seaFret.title,
+      type: seaFret.type,
+      difficulty: seaFret.difficulty,
+      pain: seaFret.pain,
       steps,
     });
     const maxRowIndex = initial.rows.findIndex((r) => r.refEffort === "max");

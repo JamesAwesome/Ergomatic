@@ -112,26 +112,24 @@ test.describe("authoring loop", () => {
     await spmUp.click();
     await spmUp.click();
 
-    // With a 6k baseline of 122.0s: 122 - 2 = 120.0, tolerance +/-1s (the
-    // token default, tokens.css's --pace-tolerance) -> "1:59.0-2:01.0" (EN
-    // DASH, domain/pace.ts's toleranceRange). The builder resolves this live
-    // (StepEditor.tsx's TARGET strip), before any save — check it here too,
-    // not just on the post-save detail screen below, so a failure here (bad
-    // live math) isn't confused with a failure there (bad round-trip
-    // through the API).
+    // With a 6k baseline of 122.0s: 122 - 2 = 120.0 -> "2:00.0" exact
+    // (ui-fix round, Item 1: the tolerance band retired from every display
+    // call site). The builder resolves this live (StepEditor.tsx's TARGET
+    // strip), before any save —
+    // check it here too, not just on the post-save detail screen below, so
+    // a failure here (bad live math) isn't confused with a failure there
+    // (bad round-trip through the API).
     await expect(page.locator(".step-editor-target-value")).toHaveText(
-      "1:59.0–2:01.0",
+      "2:00.0",
     );
 
     await page.getByRole("button", { name: "Save to library" }).click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
-    // WorkoutDetail's own resolved-range class (StepRow.tsx) — untouched by
+    // WorkoutDetail's own resolved-target class (StepRow.tsx) — untouched by
     // the builder redesign.
-    await expect(page.locator(".step-row-range").first()).toHaveText(
-      "1:59.0–2:01.0",
-    );
+    await expect(page.locator(".step-row-range").first()).toHaveText("2:00.0");
 
     await cleanupByTitle(page, title);
   });
@@ -243,16 +241,19 @@ test.describe("authoring loop", () => {
 
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
 
-    await page.getByRole("button", { name: "Delete", exact: true }).click();
-    // Staged-confirm idiom (src/you/BaselineEditor.tsx): the destructive
-    // action never fires on the first press.
-    await page.getByRole("button", { name: "Delete workout" }).click();
+    await page
+      .getByRole("button", { name: "Delete workout", exact: true })
+      .click();
+    // Fix round 1 (F2): Delete workout arms IN PLACE (the level system's
+    // own L4/L4-armed idiom) rather than opening a side confirm panel — the
+    // destructive action still never fires on the first press.
+    await page.getByRole("button", { name: "Tap again to delete" }).click();
 
     await expect(page).toHaveURL(/\/library$/);
     await expect(page.getByText(title, { exact: false })).not.toBeVisible();
   });
 
-  test("a global starter workout's detail shows no Edit or Delete control", async ({
+  test("a global library workout's detail shows no Edit or Delete control", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -263,8 +264,8 @@ test.describe("authoring loop", () => {
     await page.goto("/library");
 
     // A brand-new user has no personal workouts yet, so every row on a
-    // fresh /library is one of the 35 global starters (server/seed/
-    // starter.ts) — the first is as good as any for asserting the
+    // fresh /library is one of the seeded global workouts (server/seed/
+    // library/index.ts) — the first is as good as any for asserting the
     // read-only affordance.
     await page.locator(".workout-row").first().click();
     await expect(page.locator("h1.workout-detail-title")).toBeVisible();
@@ -276,7 +277,7 @@ test.describe("authoring loop", () => {
     await expect(page.locator(".workout-owner-actions")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: "Delete", exact: true }),
+      page.getByRole("button", { name: "Delete workout", exact: true }),
     ).toHaveCount(0);
   });
 });
@@ -567,7 +568,7 @@ test.describe("new controls this phase introduced", () => {
     // The builder has no `+ WARM-UP` control any more (docs/design/
     // DEVIATIONS.md) — a `wu` row can only land in a form via bulk import
     // or an already-saved workout, so bulk import is how this test
-    // manufactures one to then edit, mirroring every starter workout's own
+    // manufactures one to then edit, mirroring every library workout's own
     // shape (they all open with a stored warm-up).
     await page.goto("/library/import");
     const title = "WU Edit Row";
@@ -627,8 +628,10 @@ test.describe("new controls this phase introduced", () => {
     });
     await setBaselines(page);
     // Bulk import a work step carrying rest (domain/bulk.ts's inline `r5`
-    // token) — the same shape a real starter workout (Doldrums,
-    // server/seed/starter.ts) carries. `stepToRow` writes the stored
+    // token) — the same shape a real library workout (Hoarfrost,
+    // server/seed/library/o2.ts — Task 11's fixture-anchor replacement for
+    // the retired Doldrums, same reps count and rest minutes) carries.
+    // `stepToRow` writes the stored
     // `restMinutes` into `row.rest` as a clock string ("5:00"); before this
     // fix `restSecondsFromRow` still read that with a bare `Number(...)`
     // (NaN), so one tap of REST wrote the literal string "NaN" back into
@@ -691,11 +694,11 @@ test.describe("new controls this phase introduced", () => {
 
     // The reported bug, end to end: nameGenerator.ts used to probe linearly
     // forward from a seed-derived start index, and its noun list opened
-    // with the same weather words the starter library's own titles use —
-    // every seed inside that taken cluster slid to the same first-free
-    // slot, so repeated presses returned the same name forever (fixed in
-    // Task 1; unit-covered in nameGenerator.test.ts against the real
-    // starter library — this proves the same fix through the live UI).
+    // with the same weather words the library's own titles use — every seed
+    // inside that taken cluster slid to the same first-free slot, so
+    // repeated presses returned the same name forever (fixed in Task 1;
+    // unit-covered in nameGenerator.test.ts against the real 300-workout
+    // library — this proves the same fix through the live UI).
     expect(second).not.toBe(first);
   });
 

@@ -2,12 +2,38 @@ import { test, expect, type Page } from "@playwright/test";
 import { signInViaBackdoor } from "./helpers";
 
 // Golden flows through Library -> detail -> You, against the real compose
-// stack (nginx + api + postgres, seeded with 35 global workouts at boot —
-// see server/seed/starter.ts). Per docs/TESTING.md's pyramid, this layer
-// proves the wiring between screens/routes/the SPA fallback, not the Erg
-// Book math itself (that's domain/pace.test.ts's job).
+// stack (nginx + api + postgres, seeded with the global workout library at
+// boot — see server/seed/seed.ts / server/seed/library/index.ts). Per
+// docs/TESTING.md's pyramid, this layer proves the wiring between
+// screens/routes/the SPA fallback, not the Erg Book math itself (that's
+// domain/pace.test.ts's job).
+//
+// The library is regenerated periodically (300 workouts as of the
+// workout-generation phase, up from an original 35) and its exact count
+// isn't this suite's concern, so nothing here hardcodes it. `.library-count`
+// only renders once both workouts and baselines have resolved (Library.tsx
+// shows "LOADING…" until then), so waiting for it to match `/^\d+ WORKOUTS$/`
+// doubles as this suite's "the list finished loading" signal — the same
+// auto-retry a `toHaveCount(35)` used to provide, without pinning a number
+// that drifts every time the library is regenerated. (Task 4, ui-fix round,
+// retired the literal word "ENTERED" for "WORKOUTS" — DEVIATIONS.md.)
+async function waitForLibraryLoaded(page: Page): Promise<void> {
+  await expect(page.locator(".library-count")).toHaveText(/^\d+ WORKOUTS$/);
+}
 
-const SEEDED_WORKOUT_COUNT = 35;
+/** Opens the FILTER sheet — every filter interaction below goes through it
+ *  now that the old flat chip row (FilterChips.tsx) is retired (Task 4,
+ *  ui-fix round). */
+function openFilterSheet(page: Page) {
+  return page.getByRole("button", { name: "FILTER ⌄" }).click();
+}
+
+/** The sheet's own live-counting primary — accessible name changes with the
+ *  draft ("Show 12 workouts"), hence the regex. Commits the draft and
+ *  closes the sheet. */
+function applyFilterSheet(page: Page) {
+  return page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+}
 
 test.describe("library list", () => {
   test.beforeEach(async ({ page }) => {
@@ -22,36 +48,56 @@ test.describe("library list", () => {
     page,
   }) => {
     const rows = page.locator(".workout-row");
-    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT);
+    await waitForLibraryLoaded(page);
+    const count = await rows.count();
+    // The library seeds 300; this floor catches a broken/regressed seed
+    // (e.g. a quota bug shipping 5 rows) without re-pinning the exact count.
+    expect(count).toBeGreaterThan(250);
+    await expect(rows).toHaveCount(count);
     await expect(page.locator(".library-count")).toHaveText(
-      `${SEEDED_WORKOUT_COUNT} ENTERED`,
+      `${count} WORKOUTS`,
     );
   });
 
-  test("a type chip narrows the list and ALL restores it", async ({ page }) => {
+  test("a TYPE cell narrows the list via the sheet, and CLEAR ALL restores it", async ({
+    page,
+  }) => {
     const rows = page.locator(".workout-row");
-    // Anchor on the known seeded total first: Library shows "LOADING…" until
-    // both workouts and baselines resolve, and a bare `.count()` doesn't
-    // auto-wait like a `toHaveCount` assertion does — reading it too early
-    // races the fetch and observes 0.
-    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT);
+    // Anchor on load completion first, via the header text rather than a
+    // hardcoded total (see `waitForLibraryLoaded`) — a bare `.count()`
+    // doesn't auto-wait like a `toHaveText` assertion does; reading it too
+    // early races the fetch and observes 0.
+    await waitForLibraryLoaded(page);
     const initialCount = await rows.count();
 
-    // Seed has 8 AN / 10 O2 / 8 AT / 9 TR workouts (server/seed/starter.ts)
-    // — a proper, non-trivial subset either way of the 35 total.
-    await page.getByRole("button", { name: "AN", exact: true }).click();
+    // The library has 90 O2 / 75 AT / 75 TR / 60 AN workouts
+    // (server/seed/library/index.ts's quota grid) — a proper, non-trivial
+    // subset either way of the whole library.
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "AN", exact: true })
+      .click();
+    await applyFilterSheet(page);
+
     await expect(rows).not.toHaveCount(initialCount);
     const filteredCount = await rows.count();
     expect(filteredCount).toBeGreaterThan(0);
     expect(filteredCount).toBeLessThan(initialCount);
     await expect(page.locator(".library-count")).toHaveText(
-      `${filteredCount} ENTERED`,
+      `${filteredCount} OF ${initialCount} SHOWN`,
     );
+    // Scoped to the token's own label (not a bare page-wide text query):
+    // every visible row also wears an "AN" type badge once filtered, which
+    // would otherwise make this a strict-mode-violating multi-match.
+    await expect(
+      page.locator(".filter-token-label", { hasText: "AN" }),
+    ).toBeVisible();
 
-    await page.getByRole("button", { name: "ALL", exact: true }).click();
+    await page.getByRole("button", { name: "CLEAR ALL" }).click();
     await expect(rows).toHaveCount(initialCount);
     await expect(page.locator(".library-count")).toHaveText(
-      `${initialCount} ENTERED`,
+      `${initialCount} WORKOUTS`,
     );
   });
 
@@ -97,18 +143,18 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
       name: "Scroll Tester",
     });
     await page.goto("/library");
-    await expect(page.locator(".workout-row")).toHaveCount(
-      SEEDED_WORKOUT_COUNT,
-    );
+    await waitForLibraryLoaded(page);
   });
 
   test("BACK from a workout's detail restores where you were; leaving via a tab and returning starts fresh at the top", async ({
     page,
   }) => {
     const rows = page.locator(".workout-row");
-    // Row ~30 of the seeded 35 — deep enough that "restored to the top"
-    // and "restored to where you were" are unambiguously different
-    // outcomes, not accidentally within each other's tolerance.
+    const fullCount = await rows.count();
+    expect(fullCount).toBeGreaterThan(29);
+    // Row ~30 of the library — deep enough that "restored to the top" and
+    // "restored to where you were" are unambiguously different outcomes,
+    // not accidentally within each other's tolerance.
     const targetRow = rows.nth(29);
     await targetRow.scrollIntoViewIfNeeded();
     const scrolledY = await page.evaluate(() => window.scrollY);
@@ -144,32 +190,43 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
 
     await page.getByRole("link", { name: "LIBRARY" }).click();
-    await expect(page.locator(".workout-row")).toHaveCount(
-      SEEDED_WORKOUT_COUNT,
-    );
+    await waitForLibraryLoaded(page);
+    await expect(page.locator(".workout-row")).toHaveCount(fullCount);
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeLessThanOrEqual(50);
   });
 
-  test("BACK with filters enabled keeps the chips active and restores against the FILTERED list; a fresh tab tap forgets both", async ({
+  test("BACK with filters enabled keeps the tokens active and restores against the FILTERED list; a fresh tab tap forgets both", async ({
     page,
   }) => {
     // The device bug this pins: filters lived in component state, so a
-    // BACK return remounted Library unfiltered — the chips were gone and
-    // the restored scroll position (measured against the shorter filtered
-    // list) landed on the wrong rows.
-    // PAIN ≤3 keeps 20 of the seeded 35 (4×pain-1 + 7×pain-2 + 9×pain-3,
-    // server/seed/starter.ts) — genuinely narrowed, yet still several
-    // viewports deep, so "restored against the filtered list" and
-    // "restored to the top" stay unambiguously different outcomes.
+    // BACK return remounted Library unfiltered — the filter row was gone
+    // and the restored scroll position (measured against the shorter
+    // filtered list) landed on the wrong rows.
+    // PAIN 1, 2, 3 (via the sheet) keeps a genuine subset of the library
+    // (per-workout pain values are spread 1–5, server/seed/library/index.ts)
+    // — narrowed enough, yet still several viewports deep, so "restored
+    // against the filtered list" and "restored to the top" stay
+    // unambiguously different outcomes. Task 4 (ui-fix round) replaces the
+    // old single PAIN ≤3 chip with a 1–5 multi-select, contiguous-collapsing
+    // to one "PAIN 1–3" token — reached through the sheet.
     const rows = page.locator(".workout-row");
-    const painChip = page.getByRole("button", { name: "PAIN ≤3" });
-    await painChip.click();
-    await expect(painChip).toHaveAttribute("aria-pressed", "true");
+    const fullCount = await rows.count();
+    await openFilterSheet(page);
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "1", exact: true }).click();
+    await dialog.getByRole("button", { name: "2", exact: true }).click();
+    await dialog.getByRole("button", { name: "3", exact: true }).click();
+    await applyFilterSheet(page);
+
+    const painToken = page.locator(".filter-token-label", {
+      hasText: "PAIN 1–3",
+    });
+    await expect(painToken).toBeVisible();
     const filteredCount = await rows.count();
     expect(filteredCount).toBeGreaterThan(0);
-    expect(filteredCount).toBeLessThan(SEEDED_WORKOUT_COUNT);
+    expect(filteredCount).toBeLessThan(fullCount);
 
     // Scroll deep into the FILTERED list — the position only means
     // anything against this narrowed set of rows.
@@ -183,10 +240,10 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
 
     await page.getByRole("link", { name: "← BACK" }).click();
 
-    // Filters survive the round trip: chip still pressed, count still the
+    // Filters survive the round trip: the token is back, count still the
     // filtered one — asserted BEFORE the scroll check because the restore
     // is only correct if it happened against this narrowed list.
-    await expect(painChip).toHaveAttribute("aria-pressed", "true");
+    await expect(painToken).toBeVisible();
     await expect(rows).toHaveCount(filteredCount);
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
@@ -196,8 +253,9 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     await page.getByRole("link", { name: "TODAY" }).click();
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
     await page.getByRole("link", { name: "LIBRARY" }).click();
-    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT);
-    await expect(painChip).toHaveAttribute("aria-pressed", "false");
+    await waitForLibraryLoaded(page);
+    await expect(rows).toHaveCount(fullCount);
+    await expect(painToken).not.toBeVisible();
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeLessThanOrEqual(50);
@@ -245,7 +303,7 @@ test.describe("baseline changes propagate to a workout's detail targets", () => 
 
     await firstRow.click();
     // Every seeded workout has at least one paced ("w") step, so the first
-    // rendered target range is a real, comparable value once baselines are
+    // rendered target is a real, comparable value once baselines are
     // set (never the "no target" fallback — see StepRow.tsx).
     const target = page.locator(".step-row-range").first();
     const before = await target.innerText();
@@ -307,8 +365,8 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
   }
 }
 
-test.describe("CUSTOM filter", () => {
-  test("tapping CUSTOM narrows to an authored workout, and ALL restores the full library", async ({
+test.describe("SOURCE filter", () => {
+  test("selecting CUSTOM narrows to an authored workout, and CLEAR ALL restores the full library", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -317,9 +375,17 @@ test.describe("CUSTOM filter", () => {
     });
     const title = "E2E Custom Filter Workout";
 
+    // Baseline count first (the global library, dynamic per
+    // `waitForLibraryLoaded` above — see its comment for why this suite
+    // doesn't hardcode a total).
+    await page.goto("/library");
+    const rows = page.locator(".workout-row");
+    await waitForLibraryLoaded(page);
+    const baselineCount = await rows.count();
+
     // Author a workout through the builder (same minimal single-row flow as
     // builder.spec.ts's exit-criterion test) — it lands in the library as
-    // `isGlobal: false`, the only kind CUSTOM should surface.
+    // `isGlobal: false`, the only kind SOURCE=custom should surface.
     await page.goto("/library/new");
     await page.getByLabel("Title").fill(title);
     await page.getByRole("button", { name: "Pain 3" }).click();
@@ -328,10 +394,14 @@ test.describe("CUSTOM filter", () => {
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
 
     await page.goto("/library");
-    const rows = page.locator(".workout-row");
-    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT + 1);
+    await expect(rows).toHaveCount(baselineCount + 1);
 
-    await page.getByRole("button", { name: "CUSTOM", exact: true }).click();
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "CUSTOM", exact: true })
+      .click();
+    await applyFilterSheet(page);
 
     await expect(rows).toHaveCount(1);
     await expect(rows.first().locator(".workout-row-title")).toHaveText(title);
@@ -339,8 +409,8 @@ test.describe("CUSTOM filter", () => {
       "CUSTOM",
     );
 
-    await page.getByRole("button", { name: "ALL", exact: true }).click();
-    await expect(rows).toHaveCount(SEEDED_WORKOUT_COUNT + 1);
+    await page.getByRole("button", { name: "CLEAR ALL" }).click();
+    await expect(rows).toHaveCount(baselineCount + 1);
 
     await cleanupByTitle(page, title);
   });

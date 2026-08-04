@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   parsePaceRef,
   resolveSplit,
-  toleranceRange,
   isEffortRef,
   effortWord,
   effortFromWord,
@@ -43,19 +42,6 @@ describe("resolveSplit", () => {
     expect(resolveSplit(B, { base: "2k", off: 4 })).toBe(116);
     expect(resolveSplit(B, { base: "6k", off: -2 }, -1)).toBe(119);
     expect(resolveSplit(B, { base: "6k", off: -2 }, 2)).toBe(122);
-  });
-});
-
-describe("toleranceRange", () => {
-  it("builds the ± band with formatted label", () => {
-    expect(toleranceRange(120, 1)).toStrictEqual({
-      lo: 119,
-      hi: 121,
-      label: "1:59.0–2:01.0",
-    });
-  });
-  it("tol 0 is a single value", () => {
-    expect(toleranceRange(120, 0).label).toBe("2:00.0");
   });
 });
 

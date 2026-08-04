@@ -6,8 +6,21 @@ import {
   loadLibraryFilters,
   saveLibraryFilters,
 } from "./libraryFilters";
+import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 
 const FULL: Filters = {
+  type: "AT",
+  durations: ["30-45", "60+"],
+  painLevels: [4, 5],
+  lastDone: "over21",
+  source: "custom",
+};
+
+// The pre-Task-4 shape, kept verbatim as a fixture rather than reused from
+// filters.ts (which no longer exports these field names at all) — this is
+// exactly the record a rower's browser could still be holding in
+// sessionStorage from before this round shipped.
+const V1_RECORD = {
   type: "AT",
   durations: ["30-45", "60+"],
   painMax3: true,
@@ -58,13 +71,26 @@ describe("libraryFilters", () => {
         "unknown duration bucket",
         JSON.stringify({ ...FULL, durations: ["25-30"] }),
       ],
-      ["painMax3 not boolean", JSON.stringify({ ...FULL, painMax3: "yes" })],
-      ["unknown recency", JSON.stringify({ ...FULL, recency: "today" })],
-      ["customOnly not boolean", JSON.stringify({ ...FULL, customOnly: 1 })],
+      ["painLevels not an array", JSON.stringify({ ...FULL, painLevels: 4 })],
+      [
+        "painLevels contains an out-of-range level",
+        JSON.stringify({ ...FULL, painLevels: [0] }),
+      ],
+      [
+        "painLevels contains a non-integer",
+        JSON.stringify({ ...FULL, painLevels: [4.5] }),
+      ],
+      ["unknown lastDone", JSON.stringify({ ...FULL, lastDone: "today" })],
+      ["lastDone wrong shape", JSON.stringify({ ...FULL, lastDone: 21 })],
+      ["unknown source", JSON.stringify({ ...FULL, source: "book" })],
       [
         "missing field",
-        JSON.stringify({ type: null, durations: [], painMax3: false }),
+        JSON.stringify({ type: null, durations: [], painLevels: [] }),
       ],
+      // The pre-Task-4 (v1) shape: none of its fields overlap the v2
+      // validator's own field names, so it's rejected wholesale — the
+      // point of the strict, per-field check rather than a partial merge.
+      ["a v1-shaped record", JSON.stringify(V1_RECORD)],
     ])("%s", (_name, raw) => {
       store(raw);
       expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
@@ -77,6 +103,43 @@ describe("libraryFilters", () => {
       JSON.stringify({ ...FULL, durations: ["60+", "60+", "30-45"] }),
     );
     expect(loadLibraryFilters().durations).toStrictEqual(["60+", "30-45"]);
+  });
+
+  it("de-dupes duplicated pain levels from a tampered value", () => {
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, painLevels: [5, 5, 4] }),
+    );
+    expect(loadLibraryFilters().painLevels).toStrictEqual([5, 4]);
+  });
+
+  // L5 (whole-branch review): libraryScroll's own saved position was
+  // measured against whatever list the REJECTED filters record was
+  // showing, not the wider EMPTY_FILTERS list this fallback produces —
+  // restoring it against the wrong list is exactly the failure the two
+  // files being a matched pair (see LIBRARY_FILTERS_KEY's own comment
+  // above) exists to prevent.
+  it("clears a stale libraryScroll when the stored filters record is rejected (v1 shape, malformed, etc.)", () => {
+    saveLibraryScroll(1200);
+    sessionStorage.setItem(LIBRARY_FILTERS_KEY, JSON.stringify(V1_RECORD));
+
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
+    expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBeNull();
+  });
+
+  it("leaves libraryScroll untouched when nothing is stored at all — a fresh visit, not a rejection", () => {
+    saveLibraryScroll(1200);
+
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
+    expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("1200");
+  });
+
+  it("leaves libraryScroll untouched when a valid filters record loads successfully", () => {
+    saveLibraryScroll(1200);
+    saveLibraryFilters(FULL);
+
+    expect(loadLibraryFilters()).toStrictEqual(FULL);
+    expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("1200");
   });
 
   it("clearLibraryFilters removes the stored value", () => {

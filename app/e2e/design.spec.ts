@@ -142,8 +142,16 @@ async function seedLogs(page: Page, count: number): Promise<void> {
 }
 
 /** Navigates to a workout's detail screen by title via the real API list —
- *  used to reach Microburst (server/seed/starter.ts), the one starter
- *  workout with an effort-ref work step, without hardcoding its seeded id. */
+ *  used to reach Heat Lightning (server/seed/library/an.ts), one of the
+ *  library's effort-ref AN workouts (`{effort:"max"}`, reps×10, a single
+ *  repeated work step per rep, spm 32 — see Task 11's fixture-anchor
+ *  mapping; the old 35-workout library had exactly one such workout,
+ *  Microburst, but the current 300-workout library has 43. Fork Lightning
+ *  used to hold this anchor role, but the content rewrite (a62c33f) turned
+ *  its reps block into TWO alternating work steps, which breaks the
+ *  "exactly one ALL OUT row" assumption this file's confirm-targets sweep
+ *  makes (same reason `ConfirmTargets.test.tsx` re-anchored) — without
+ *  hardcoding its seeded id. */
 async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
   const workout = await page.evaluate(async (t) => {
     const res = await fetch("/api/workouts");
@@ -161,8 +169,8 @@ async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
 
 // Phase 6B (Task 5): the session-route sweeps below (countdown, timer,
 // session complete) all need a tiny bulk-imported workout driven through
-// the real START -> countdown -> timer flow, not a starter workout — same
-// three-step idiom as e2e/session.spec.ts's own identical helpers,
+// the real START -> countdown -> timer flow, not a seeded library workout —
+// same three-step idiom as e2e/session.spec.ts's own identical helpers,
 // duplicated here per this file's own stated precedent (see
 // `cleanupByTitle`'s own comment above) rather than shared across files.
 
@@ -261,6 +269,41 @@ async function assertNoA11yViolations(page: Page): Promise<void> {
   expect(results.violations).toEqual([]);
 }
 
+// --ink-4's own rgb (tokens.css #6f6a5f) — computed once here rather than
+// re-derived per call site.
+const INK_4_RGB = "rgb(111, 106, 95)";
+
+/** Task 1 (ui-fix round) contrast sweep: docs/design/handoffs/2026-08-03-
+ *  ui-fix/DESIGN.md's contrast note — "All small mono labels in the mockup
+ *  are --ink-3 or darker" — --ink-4 measures only 4.48:1 against
+ *  --surface-sunken (index.css's own token comment), just under the 4.5:1
+ *  AA floor, even though it clears comfortably against --page/--surface
+ *  (4.76:1/5.29:1). Walking every leaf element rather than asserting a
+ *  fixed list of selectors is deliberate: a label some future task adds at
+ *  this size inherits the same guard automatically instead of needing its
+ *  own new pin. Leaf-only (no element children) — a wrapper's own computed
+ *  font-size/color describe layout, not what's actually painted as text. */
+async function assertNoFailingInk4Labels(page: Page): Promise<void> {
+  const offenders = await page.evaluate((ink4) => {
+    const bad: string[] = [];
+    document.querySelectorAll("body *").forEach((node) => {
+      const el = node as HTMLElement;
+      if (el.children.length > 0) return;
+      if ((el.textContent ?? "").trim() === "") return;
+      const style = getComputedStyle(el);
+      const fontSize = parseFloat(style.fontSize);
+      const isMono = style.fontFamily.toLowerCase().includes("mono");
+      if (fontSize <= 11 && isMono && style.color === ink4) {
+        bad.push(
+          `${el.tagName}.${el.className || "(no class)"}: "${(el.textContent ?? "").slice(0, 40)}"`,
+        );
+      }
+    });
+    return bad;
+  }, INK_4_RGB);
+  expect(offenders).toEqual([]);
+}
+
 test.describe("sign-in screen (signed out)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -336,20 +379,94 @@ test.describe("library screen", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("body background and the active filter chip match the token palette", async ({
+  // L1 (whole-branch review): this describe renders `.workout-row-meta`
+  // (11px mono), a guard-gap the ink-4 sweep never covered on this screen.
+  // Waits for a real row first — unlike every other describe this sweep
+  // runs in, this one's own `beforeEach` only navigates (no locator-based
+  // wait), so the workouts fetch can still be in flight when a raw
+  // `page.evaluate()` (no auto-wait, unlike a locator action) would
+  // otherwise run against a still-empty list.
+  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
+    await page.locator(".workout-row").first().waitFor();
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Task 6 (ui-fix round, close-out): this axe scan used to exist only as a
+  // one-off manual probe run by Task 4's own reviewer (N5: "I ran axe
+  // (wcag2a+wcag2aa) against the open sheet and against a filtered token
+  // row: zero violations in both") — never codified as a structural test, so
+  // nothing would have caught a future regression here. This is that
+  // codification, against the SAME two states the reviewer checked by hand:
+  // the sheet open (FilterSheet.tsx's `role="dialog"`/`aria-modal="true"`,
+  // the first such element in the codebase, per N5) and a filtered token
+  // row. N5's own separate finding — `aria-modal="true"` with no focus trap
+  // or focus restore — is a real, accepted Minor gap axe cannot see either
+  // way; recorded, not fixed here (out of this task's scope; see the task-4
+  // review for the full writeup).
+  test("zero WCAG 2A/2AA violations with the FILTER sheet open", async ({
     page,
   }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
+  test("zero WCAG 2A/2AA violations with an active filter token on screen", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "O2", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+    await expect(
+      page.locator(".filter-token", { hasText: "O2" }),
+    ).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
+  test("body background matches the token palette", async ({ page }) => {
     const bodyBg = await page.evaluate(
       () => getComputedStyle(document.body).backgroundColor,
     );
     expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+  });
 
-    // No filters applied on first load, so the "ALL" chip is the active
-    // (aria-pressed) one — see FilterChips.tsx's isEmptyFilters.
-    const allChipBg = await page
-      .getByRole("button", { name: "ALL", exact: true })
+  // Task 4 (ui-fix round): a TYPE token fills with its own type colour, the
+  // same selected-state rule DESIGN.md extends from chips to tokens — never
+  // a flat accent regardless of which type is active.
+  test("a TYPE token fills with its own type colour, not accent", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "O2", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+
+    const tokenBg = await page
+      .locator(".filter-token", { hasText: "O2" })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(allChipBg).toBe("rgb(181, 52, 31)"); // --accent
+    expect(tokenBg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+  });
+
+  // Task 4 (ui-fix round): every other token kind fills plain ink.
+  test("a non-TYPE token (e.g. LAST DONE) fills ink, not accent", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "21D+", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+
+    const tokenBg = await page
+      .locator(".filter-token", { hasText: "21D+" })
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(tokenBg).toBe("rgb(27, 26, 23)"); // --ink
   });
 
   // iOS device report, 2026-08-01: long-pressing a filter chip or a
@@ -357,19 +474,43 @@ test.describe("library screen", () => {
   // Translate) — WKWebView treats button/link text as selectable unless
   // told otherwise. Chromium can only assert the computed style; the
   // callout behaviour itself is verified on device (see index.css).
-  test("the filter chip and workout row resist the iOS text-selection callout", async ({
+  test("the FILTER toggle and workout row resist the iOS text-selection callout", async ({
     page,
   }) => {
-    const chipSelect = await page
-      .getByRole("button", { name: "ALL", exact: true })
+    const toggleSelect = await page
+      .getByRole("button", { name: "FILTER ⌄" })
       .evaluate((el) => getComputedStyle(el).userSelect);
-    expect(chipSelect).toBe("none");
+    expect(toggleSelect).toBe("none");
 
     const rowSelect = await page
       .locator(".workout-row")
       .first()
       .evaluate((el) => getComputedStyle(el).userSelect);
     expect(rowSelect).toBe("none");
+  });
+
+  // Fix round 1 (F1, James's ruling): `--type-tr` used to be the IDENTICAL
+  // hex to `--accent` — every TR badge/chip filled with what was
+  // structurally "accent". A fresh account's 300-workout generated library
+  // (server/seed/library/index.ts) always include several TR workouts, so
+  // this pins the resolved colour on a REAL `.type-badge` here, not just the
+  // chip contexts (Today/Builder, asserted in their own describes) — the
+  // same `.type-badge` class Library/Plan/Today's LAST THREE all share.
+  // `--on-color` text on `--ink` background measures 17.1:1, the identical
+  // pairing `--type-test` already used before this fix (TypeBadge.tsx sets
+  // a fixed `--on-color` label regardless of which type fills the
+  // background).
+  test("a TR type badge fills ink, not accent, with on-color text", async ({
+    page,
+  }) => {
+    const trBadge = page.locator(".type-badge", { hasText: "TR" }).first();
+    await expect(trBadge).toBeVisible();
+    const styles = await trBadge.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(styles.background).toBe("rgb(27, 26, 23)"); // --type-tr = --ink
+    expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
   });
 });
 
@@ -407,6 +548,35 @@ test.describe("workout detail screen", () => {
       .evaluate((el) => getComputedStyle(el).color);
     expect(backLinkColor).toBe("rgb(27, 26, 23)"); // --ink
   });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Task 1 (ui-fix round): Start is the screen's one L1, at the level
+  // system's own 56px — not the pre-Task-1 `.button-primary`'s 52px (which
+  // itself under-rendered further still, DEVIATIONS.md's IMP-6 row: a real
+  // `<button>`'s UA chrome added ~6px on top of THAT). `.button-l1` zeroes
+  // padding/border explicitly so this is the first button in the app whose
+  // rendered height actually equals its own spec.
+  test("Start is the screen's one L1 action, rendered at 56px", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Start");
+    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBe(56);
+
+    // Fix round 1 (F2, reviewer finding): the one-L1 count alone couldn't
+    // tell a genuine L1 migration from a screen that ALSO still rendered a
+    // legacy `.button-primary` block sitting outside the level system
+    // entirely (WorkoutDetail's own staged-delete panel did exactly this
+    // until F2). Asserted on every one-L1 screen's sweep now.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
 });
 
 // Task 8's `.button-outline` fix (color/text-decoration/inline-flex, so the
@@ -416,7 +586,7 @@ test.describe("workout detail screen", () => {
 // added to "workout detail screen" above: OwnerActions (WorkoutDetail.tsx)
 // renders Edit/Delete only for `!workout.isGlobal`, and that describe's own
 // beforeEach opens the first `.workout-row`, which is always one of the
-// seeded (global, read-only) starter workouts — Edit/Delete never render
+// seeded (global, read-only) library workouts — Edit/Delete never render
 // there at all. Author a personal workout through the builder instead, the
 // only way to land on a workout this signed-in user actually owns.
 test.describe("workout detail screen (personal workout, owner actions)", () => {
@@ -459,6 +629,101 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
     });
     expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink
     expect(styles.decoration).toBe("none");
+  });
+
+  // Task 1 (ui-fix round): one merged `.action-stack` — Edit (L2, 52px) and
+  // Delete workout (L4, 52px) render as this owned workout's own stack
+  // items, under a rule divider, rather than a second detached block.
+  //
+  // Fix round 1 (F3, reviewer finding): the prior version of this test only
+  // checked that Edit/Delete's Y positions fell somewhere inside the
+  // stack's own bounding box — a `display: contents` -> `display: block`
+  // regression on `.workout-owner-actions` (index.css) still passes THAT
+  // check (Edit/Delete would still render inside the stack's box, just as
+  // a nested column with its own margin) while silently collapsing the
+  // shared 12px gap to whatever margin that nested block happens to carry.
+  // This measures the actual gaps between consecutive stack children
+  // (Edit-bottom -> rule-top, rule-bottom -> Delete-top) — the thing
+  // `display: contents` is actually FOR — rather than mere containment.
+  test("Edit and Delete workout render at the level system's 52px, 12px apart, under a rule, inside the one action stack", async ({
+    page,
+  }) => {
+    const stack = page.locator(".action-stack");
+    await expect(stack).toHaveCount(1);
+
+    const edit = page.getByRole("link", { name: "Edit" });
+    const editHeight = await edit.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(editHeight).toBe(52);
+    await expect(edit).toHaveClass(/button-l2/);
+
+    const del = page.getByRole("button", {
+      name: "Delete workout",
+      exact: true,
+    });
+    const delHeight = await del.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(delHeight).toBe(52);
+    await expect(del).toHaveClass("button-l4");
+    const delColor = await del.evaluate((el) => getComputedStyle(el).color);
+    expect(delColor).toBe("rgb(181, 52, 31)"); // --accent, outlined not solid
+
+    const rule = stack.locator(".action-stack-rule");
+    await expect(rule).toHaveCount(1);
+
+    const editBox = (await edit.boundingBox())!;
+    const ruleBox = (await rule.boundingBox())!;
+    const delBox = (await del.boundingBox())!;
+
+    // The real proof `display: contents` (index.css) is doing its job:
+    // Edit/Delete and the rule share the SAME 12px gap `.action-stack`
+    // declares for its own direct children — not "inside the box
+    // somewhere," a check a collapsed/degenerate gap could still satisfy.
+    expect(Math.round(ruleBox.y - (editBox.y + editBox.height))).toBe(12);
+    expect(Math.round(delBox.y - (ruleBox.y + ruleBox.height))).toBe(12);
+  });
+
+  // Fix round 1 (F2): the old two-button staged-confirm panel (Cancel
+  // beside a second solid-accent "Delete workout") is gone — Delete workout
+  // now arms IN PLACE, the level system's own L4/L4-armed idiom (fills
+  // solid accent, copy swaps to "Tap again to delete"), same shape as
+  // Discard elsewhere in this round. Disarms on blur; the 4s auto-disarm
+  // timer itself is proven in WorkoutDetail.test.tsx (jsdom fake timers),
+  // not re-proven here in real time.
+  test("Delete workout arms in place (solid accent, 'Tap again to delete') and disarms on blur", async ({
+    page,
+  }) => {
+    const del = page.getByRole("button", {
+      name: "Delete workout",
+      exact: true,
+    });
+    await expect(del).toHaveClass("button-l4");
+
+    await del.click();
+    // Playwright's own click leaves the mouse resting on the button, so
+    // its `:hover` rule (index.css, same fix round's own F7) would
+    // otherwise paint `--accent-hover` here instead of the armed state's
+    // OWN base `--accent` fill — move the pointer away first so this reads
+    // the resting armed style, not the hovered one.
+    await page.mouse.move(0, 0);
+    const armed = page.getByRole("button", { name: "Tap again to delete" });
+    await expect(armed).toHaveClass("button-l4-armed");
+    const armedStyles = await armed.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(armedStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(armedStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+
+    await armed.evaluate((el) => (el as HTMLElement).blur());
+    await expect(
+      page.getByRole("button", { name: "Delete workout", exact: true }),
+    ).toHaveClass("button-l4");
+    await expect(
+      page.getByRole("button", { name: "Tap again to delete" }),
+    ).toHaveCount(0);
   });
 });
 
@@ -530,42 +795,77 @@ test.describe("today screen (plan active, logs present)", () => {
       .evaluate((el) => getComputedStyle(el).borderColor);
     expect(cardBorder).toBe("rgb(27, 26, 23)"); // --ink
 
-    // LAST THREE's own mono meta line ("JUL 25 · HELD · 2/5" shape) —
-    // docs/design/DEVIATIONS.md's ink-4 substitution row.
+    // LAST THREE's own mono meta line ("JUL 25 · HELD · 2/5" shape) — Task 1
+    // (ui-fix round) moved this off --ink-4 (4.76:1 here, but part of the
+    // blanket "no small mono label reads --ink-4" sweep DESIGN.md's contrast
+    // note calls for) onto --ink-3, same substitution as every other small
+    // mono label this task's sweep touched (index.css).
     const logMetaColor = await page
       .locator(".today-log-meta")
       .first()
       .evaluate((el) => getComputedStyle(el).color);
-    expect(logMetaColor).toBe("rgb(111, 106, 95)"); // --ink-4
+    expect(logMetaColor).toBe("rgb(87, 84, 76)"); // --ink-3
+  });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Fix round 1 (F2, reviewer finding): Today never had an L1 of its own,
+  // but the "one-L1 + no legacy .button-primary" sweep still applies —
+  // asserted here rather than skipped just because there's no L1 count to
+  // pair it with.
+  test("no legacy .button-primary renders on this screen", async ({ page }) => {
+    await expect(page.locator(".button-primary")).toHaveCount(0);
   });
 
   // Today enhancements (Task 4): the chip row's default aria-pressed state
   // matches the server preferences it was derived from on first mount
   // (todayOverrides.ts's own fallback — DESIGN_BASELINES' fixture never
   // touches /api/prefs, so this is the server's own default row: every
-  // difficulty, a 60-min cap, no pain filter) — and the swap chips read the
-  // plan's own prescribed type with nothing swapped yet.
+  // difficulty, a 60-min cap's own bucket set, no pain filter) — and the
+  // swap chips read the plan's own prescribed type with nothing swapped
+  // yet.
+  //
+  // Task 3 (2026-08-04 round): DIFFICULTY/TIME/PAIN no longer render inline
+  // — the FILTER ⌄ sheet has to be opened first to reach them; the O2/AN/
+  // AT/TR type-swap chips are untouched (they stay on the plan line, never
+  // moved into the sheet).
+  //
+  // Amendment (2026-08-04 PR #50 round): TIME's default is the bucket SET
+  // `bucketsForCap(60)` derives (the first three buckets), not a single
+  // cap chip.
   test("the chip row's default aria-pressed state matches the unmodified server preferences", async ({
     page,
   }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
     for (const label of ["EASY", "MEDIUM", "HARD"]) {
       await expect(
-        page.getByRole("button", { name: label, exact: true }),
+        dialog.getByRole("button", { name: label, exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+    for (const label of ["<30′", "30–45′", "45–60′"]) {
+      await expect(
+        dialog.getByRole("button", { name: label, exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
     }
     await expect(
-      page.getByRole("button", { name: "≤60′", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
-    for (const label of ["≤30′", "≤45′", "≤90′", "NO CAP"]) {
+      dialog.getByRole("button", { name: "60′+", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
+    const painGroup = dialog.getByRole("group", { name: "PAIN" });
+    for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
-        page.getByRole("button", { name: label, exact: true }),
+        painGroup.getByRole("button", { name: level, exact: true }),
       ).toHaveAttribute("aria-pressed", "false");
     }
-    await expect(
-      page.getByRole("button", { name: "PAIN ≤3", exact: true }),
-    ).toHaveAttribute("aria-pressed", "false");
     // Sprint's doneN=0 code is "O2" (SPRINT_WEEKS week 0, index 0) — the O2
     // type chip reads active with nothing swapped, the other three don't.
+    // Queried page-wide (not scoped to `dialog`): the type-swap chips live
+    // on the plan line, outside the sheet, and no name here collides with
+    // anything the sheet itself renders.
     await expect(
       page.getByRole("button", { name: "O2", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -596,6 +896,448 @@ test.describe("today screen (plan active, logs present)", () => {
     await expect(o2Chip).toHaveAttribute("aria-pressed", "true");
     await expect(atChip).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator(".today-plan-line")).not.toContainText("→");
+  });
+
+  // Amendment (2026-08-04 PR #50 round), Task 2: the four type-swap chips
+  // now span the plan line's full content width as a 4-column 1fr grid
+  // (`.today-type-chips`, index.css) instead of sitting left-packed at
+  // their own intrinsic `.chip` width inside a flex-wrap row. Verified via
+  // real bounding boxes (jsdom has no layout engine) — all four chips are
+  // near-equal width (a 1fr share each) and the row's total span (first
+  // chip's left edge to last chip's right edge) reaches the container's
+  // own width, proving they stretch rather than merely sit side by side.
+  test("the type-swap chips span the full row as a 4-column grid, not left-packed intrinsic widths", async ({
+    page,
+  }) => {
+    const chips = await page
+      .locator(".today-type-chips .chip")
+      .evaluateAll((els) =>
+        els.map((el) => el.getBoundingClientRect().toJSON()),
+      );
+    expect(chips).toHaveLength(4);
+
+    const rowBox = (await page.locator(".today-type-chips").boundingBox())!;
+
+    // Every cell within a few px of an equal 1fr share of the row.
+    const expectedWidth = rowBox.width / 4;
+    for (const box of chips) {
+      expect(Math.abs(box.width - expectedWidth)).toBeLessThan(6);
+    }
+
+    // The row itself spans (within a couple px) the full width Today's
+    // other full-width controls (e.g. the suggestion card) also use —
+    // proof this is a stretching grid, not four chips merely sitting next
+    // to each other at their own content width (which left a visible gap
+    // on the right at 390px before this task).
+    const firstLeft = chips[0]!.x;
+    const lastRight = chips[3]!.x + chips[3]!.width;
+    expect(lastRight - firstLeft).toBeGreaterThan(rowBox.width - 4);
+  });
+
+  // Task 1 (ui-fix round): "the fix for Today vs Builder" — a selected type
+  // chip fills with ITS OWN type color (identical rule to Builder's
+  // ClassificationCard, DESIGN.md's "Identical chip whether the rower is
+  // filtering or authoring"), never the flat accent red this used to render
+  // (the bug DESIGN.md names explicitly). Every OTHER selection here
+  // (DIFFICULTY/TIME/PAIN) fills ink instead — accent no longer means
+  // "selected" anywhere on this screen.
+  //
+  // Fix round 1 (F1, James's ruling): TR is asserted explicitly, not just
+  // O2/AT — `--type-tr` used to be the IDENTICAL hex to `--accent`, so a
+  // selected TR chip rendered "accent" by coincidence and this exact test,
+  // checking only two of the four types, never caught it. TR now resolves
+  // to `--ink` (tokens.css).
+  test("the active type-swap chip fills with its own type color, not accent", async ({
+    page,
+  }) => {
+    const o2Chip = page.getByRole("button", { name: "O2", exact: true });
+    const o2Bg = await o2Chip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(o2Bg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+
+    const atChip = page.getByRole("button", { name: "AT", exact: true });
+    await atChip.click();
+    const atBg = await atChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(atBg).toBe("rgb(138, 95, 24)"); // --type-at
+
+    const trChip = page.getByRole("button", { name: "TR", exact: true });
+    await trChip.click();
+    const trBg = await trChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(trBg).toBe("rgb(27, 26, 23)"); // --type-tr = --ink, NOT --accent
+  });
+
+  // Task 3 (2026-08-04 round): re-targeted at the FILTER sheet's own cells —
+  // the assertion's intent (ink, never accent, on both the cells AND the
+  // tokens `--ink` resolves to) is unchanged, only the location moved.
+  test("selected DIFFICULTY/TIME/PAIN chips fill ink, never accent", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+
+    const easyChip = dialog.getByRole("button", { name: "EASY", exact: true });
+    const easyBg = await easyChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
+
+    const timeChip = dialog.getByRole("button", {
+      name: "45–60′",
+      exact: true,
+    });
+    const timeBg = await timeChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(timeBg).toBe("rgb(27, 26, 23)"); // --ink
+
+    const painCell = dialog
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "3", exact: true });
+    await painCell.click();
+    const painBg = await painCell.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(painBg).toBe("rgb(27, 26, 23)"); // --ink
+  });
+
+  // Item 4 (DESIGN.md): SHUFFLE stops being "its own species" — 44px chip
+  // geometry, transparent fill, mono 11/0.14em ink-1 label, 1px rule-3
+  // border, parked right of the header label (unchanged position). Pool is
+  // the day's O2 entries from the 300-workout library, unfiltered
+  // (difficulty/cap/pain all at their default, unset state) — comfortably
+  // >1 member with this describe's fixture, so SHUFFLE is enabled here.
+  test("SHUFFLE re-cut to chip geometry: 44px, transparent, mono ink-1 label, rule-3 border", async ({
+    page,
+  }) => {
+    const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
+    await expect(shuffle).toBeEnabled();
+    const styles = await shuffle.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return {
+        height: box.height,
+        background: s.backgroundColor,
+        borderColor: s.borderColor,
+        borderStyle: s.borderStyle,
+        color: s.color,
+        fontFamily: s.fontFamily,
+      };
+    });
+    expect(styles.height).toBe(44);
+    expect(styles.background).toBe("rgba(0, 0, 0, 0)"); // transparent
+    expect(styles.borderColor).toBe("rgb(201, 195, 178)"); // --rule-3
+    expect(styles.borderStyle).toBe("solid");
+    expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink-1 (alias of --ink)
+    expect(styles.fontFamily.toLowerCase()).toContain("mono");
+  });
+
+  // Fix round 1 (F4): SHUFFLE's disabled state (pool <= 1) — ink-5 label,
+  // DASHED rule-3 border, no grey fill — computed, not just `toBeDisabled`.
+  // This describe's fixture is sprint/doneN=0 (O2 for today, DESIGN_
+  // BASELINES {k2Seconds:100, k6Seconds:120}). Rebase seed-math note
+  // (2026-08-04): the 300-workout library has ZERO O2/HARD entries at all
+  // (aerobic-base work is never authored "hard" — see library.test.ts's own
+  // PAIN_BY_TYPE/PAIN_BY_DIFF bands), so a natural pool-of-one no longer
+  // exists the way the old 35-starter library's "High Pressure"/"Jet
+  // Stream" pair once provided one. Built here instead: one personal O2/
+  // HARD workout under the 60' cap, via bulk import — with zero global O2/
+  // HARD entries to join it, narrowing to HARD-only + <=60' leaves exactly
+  // this one row.
+  test("SHUFFLE disabled (pool of 1): ink-5 label, dashed rule-3 border, no fill", async ({
+    page,
+  }) => {
+    const soloTitle = "Design Sweep Solo O2 Hard";
+    await importBulk(
+      page,
+      [`${soloTitle} | O2 | hard | 4`, "wu 5", "w 20:00 6k+10 @20"].join("\n"),
+    );
+    await page.goto("/today");
+    await expect(page.locator(".today-card")).toBeVisible();
+
+    // Task 3 (2026-08-04 round): the setup that narrows to this solo
+    // fixture moves through the FILTER sheet — EASY/MEDIUM no longer
+    // render inline. Amendment (2026-08-04 PR #50 round): TIME's default
+    // (bucketsForCap(60) — the first three buckets) already covers this
+    // fixture's 25-min estimate (wu 5 + 20:00 work), so no TIME cell needs
+    // touching at all to narrow to HARD alone.
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "EASY", exact: true }).click();
+    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+
+    const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
+    await expect(shuffle).toBeDisabled();
+    const styles = await shuffle.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        background: s.backgroundColor,
+        borderColor: s.borderColor,
+        borderStyle: s.borderStyle,
+        color: s.color,
+      };
+    });
+    expect(styles.background).toBe("rgba(0, 0, 0, 0)"); // no fill
+    expect(styles.borderColor).toBe("rgb(201, 195, 178)"); // --rule-3
+    expect(styles.borderStyle).toBe("dashed");
+    expect(styles.color).toBe("rgb(160, 154, 140)"); // --ink-5
+
+    await cleanupByTitle(page, soloTitle);
+  });
+
+  // Task 3 (2026-08-04 round): structural sweeps against the FILTER sheet
+  // itself — mirrors design.spec.ts's own Library "the FILTER sheet open"/
+  // "an active filter token on screen" pair (Task 6, ui-fix round) for the
+  // identical SheetShell/CellGrid/TokenRow machinery reused here.
+  test("zero WCAG 2A/2AA violations with the FILTER sheet open", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
+  test("zero WCAG 2A/2AA violations with an active filter token on screen", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "3", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+    await expect(
+      page.locator(".filter-token", { hasText: "PAIN 3" }),
+    ).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
+  test("every visible interactive element still meets the 44px floor with the FILTER sheet open", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertTapTargets(page);
+  });
+
+  test("every visible interactive element still meets the 44px floor with an active filter token on screen", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "3", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+    await expect(
+      page.locator(".filter-token", { hasText: "PAIN 3" }),
+    ).toBeVisible();
+    await assertTapTargets(page);
+  });
+
+  test("no mono label ≤11px still paints at --ink-4 with the FILTER sheet open", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // CellGrid.tsx's own `role="group"` + `aria-labelledby` (fix round 1,
+  // whole-branch review M3, present at HEAD for this round) restores the
+  // accessible group name Today's pre-extraction inline chip groups had —
+  // pinned here now that all three groups live inside the sheet.
+  test("DIFFICULTY/TIME/PAIN each expose a role=group with the visible label as its accessible name", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("group", { name: "DIFFICULTY" }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "TIME" })).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "PAIN" })).toBeVisible();
+  });
+});
+
+// Task 3 (ui-fix round): Today's unlogged row gains a 44×44 accent-outlined
+// ✕ that arms IN PLACE — a real timer run driven all the way to
+// /session/complete, then a bare `/today` nav WITHOUT ever logging it, is
+// the only way to land a completed-but-unlogged run record here (same
+// "drive the real flow" idiom as e2e/session.spec.ts's own discard test).
+test.describe("today screen (unlogged session row)", () => {
+  const title = "Design Unlogged Row Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-unlogged-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Unlogged Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 0:03 6k"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    await page.getByRole("button", { name: "Back to Today" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(page.getByText(/unlogged session/i)).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // The DEFAULT state's own ✕ — outlined, never solid (DEVIATIONS.md #2).
+  test("the row's ✕ is 44x44 and accent-outlined at rest", async ({ page }) => {
+    const discardBtn = page.getByRole("button", {
+      name: "Discard without logging",
+    });
+    const box = (await discardBtn.boundingBox())!;
+    expect(box.width).toBe(44);
+    expect(box.height).toBe(44);
+    const styles = await discardBtn.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, borderColor: s.borderColor };
+    });
+    expect(styles.background).toBe("rgba(0, 0, 0, 0)"); // no fill
+    expect(styles.borderColor).toBe("rgb(181, 52, 31)"); // --accent
+  });
+
+  // Arming swaps the ROW's CONTENTS, not its layout (DESIGN.md's own words):
+  // border -> accent, text -> "Discard {title} without logging?", ✕ ->
+  // solid accent "Tap again" — and the row's own box stays the same size and
+  // position throughout.
+  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+    page,
+  }) => {
+    const row = page.locator(".today-unlogged-line");
+    const boxBefore = (await row.boundingBox())!;
+
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await page.mouse.move(0, 0);
+
+    await expect(row).toHaveClass(/today-unlogged-line-armed/);
+    const rowBorderColor = await row.evaluate(
+      (el) => getComputedStyle(el).borderColor,
+    );
+    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    await expect(
+      page.getByText(`Discard ${title} without logging?`),
+    ).toBeVisible();
+    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgainStyles = await tapAgain.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+    // "Log it" is gone while armed — replaced, not merely joined.
+    await expect(page.getByRole("link", { name: "Log it" })).toHaveCount(0);
+
+    const boxAfter = (await row.boundingBox())!;
+    expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
+    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
+  });
+
+  // Fix round 1 (reviewer M1): the original version of this test asserted
+  // with Playwright's default 5s `expect` timeout — LONGER than the 4s
+  // auto-disarm timer, so it stayed a false green even with `onBlur`
+  // deleted entirely (the timeout alone would flip the button back before
+  // the 5s poll gave up). Two changes make this load-bearing: (1) a real
+  // focus check BEFORE blurring — `el.blur()` (called via `.evaluate`,
+  // below) is a spec'd no-op unless `el` genuinely is
+  // `document.activeElement`, so asserting that first is what actually
+  // proves the row's own re-focus-on-arm fix is wired, not just that SOME
+  // path eventually flips the copy back; (2) a ≤1s assertion timeout, well
+  // under the 4s auto-disarm, so a real regression can't hide behind the
+  // timer firing first.
+  test("disarms on a REAL blur — not a synthetic event, and faster than the 4s auto-disarm timer could account for", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    const armed = page.getByRole("button", { name: "Tap again" });
+    await expect(armed).toBeVisible();
+
+    const armedIsFocused = await armed.evaluate(
+      (el) => el === document.activeElement,
+    );
+    expect(armedIsFocused).toBe(true);
+
+    await armed.evaluate((el) => (el as HTMLElement).blur());
+
+    await expect(
+      page.getByRole("button", { name: "Discard without logging" }),
+    ).toBeVisible({ timeout: 1000 });
+  });
+
+  // A real 4s wait (no fake timers in an e2e context) — the machine's own
+  // arm/disarm-timeout logic is proven fast, with fake timers, in
+  // useStagedDiscard.test.ts; this only proves it's actually WIRED to the
+  // real row, end to end.
+  test("arms, waits 4s with no second press, and disarms automatically — with the run record still intact", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+
+    await page.waitForTimeout(4200);
+
+    await expect(
+      page.getByRole("button", { name: "Discard without logging" }),
+    ).toBeVisible();
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).not.toBeNull();
+  });
+
+  // arm -> tap -> gone: the row disappears in place with no navigation, and
+  // clears both records with no POST.
+  test("a second press while armed fires the discard — the row disappears in place, no navigation, both records cleared, no POST", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await page.getByRole("button", { name: "Tap again" }).click();
+
+    await expect(page.getByText(/unlogged session/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+    // Still on Today — unlike SessionComplete's/the Log screen's own
+    // Discard, this one never navigates anywhere.
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).toBeNull();
+    const draftAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    expect(draftAfter).toBeNull();
+    // LAST THREE never shows this workout — discarding never POSTs a log.
+    await expect(
+      page.locator(".today-log-row").filter({ hasText: title }),
+    ).toHaveCount(0);
   });
 });
 
@@ -664,22 +1406,31 @@ test.describe("plan screen (a plan active)", () => {
   });
 });
 
-// The confirm sweep's own fixture: Microburst (server/seed/starter.ts) is
-// the one starter workout with an effort-ref work step (`{effort:"max"}`)
-// AND a reps marker — the no-nudge, no-remove-on-the-marker layout that a
-// split-only workout (e.g. any other starter) never renders at all. Sweeping
-// only a split-ref confirm screen would repeat exactly the "every test built
-// the same shape" blind spot this task's brief calls out.
-test.describe("confirm targets screen (effort step present — Microburst)", () => {
+// The confirm sweep's own fixture: Heat Lightning (server/seed/library/an.ts)
+// is an AN-hard workout with an effort-ref work step (`{effort:"max"}`) AND
+// a reps marker (reps×10) — the no-nudge, no-remove-on-the-marker layout
+// that a split-only workout (e.g. any other library entry) never renders at
+// all. In the old 35-workout library, Microburst was the sole such workout;
+// Task 11 originally anchored this sweep to Fork Lightning (same shape: 0:30
+// work, effort:max, spm 32), but the content rewrite (a62c33f) turned Fork
+// Lightning's reps block into TWO alternating work steps — both rendering
+// their own "ALL OUT" TARGET-strip row — which breaks this test's own
+// `expect(effortWord).toBeVisible()` single-match assumption (strict-mode
+// violation on 2 elements). Re-anchored to Heat Lightning, which still has a
+// single repeated work step (distance-ref 150 m, effort:max, spm 32) — the
+// same re-anchor `ConfirmTargets.test.tsx` made for the identical reason.
+// Sweeping only a split-ref confirm screen would repeat exactly the "every
+// test built the same shape" blind spot this task's brief calls out.
+test.describe("confirm targets screen (effort step present — Heat Lightning)", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await signInViaBackdoor(page, {
       email: `design-confirm-${testInfo.parallelIndex}@e2e.test`,
       name: "Design Confirm Tester",
     });
     await setBaselines(page);
-    await gotoWorkoutByTitle(page, "Microburst");
+    await gotoWorkoutByTitle(page, "Heat Lightning");
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
-      "Microburst",
+      "Heat Lightning",
     );
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page).toHaveURL(/\/session\/confirm$/);
@@ -784,16 +1535,56 @@ test.describe("confirm targets screen (effort step present — Microburst)", () 
       expect(labelStyles.decoration).toBe("line-through");
 
       // Pins the fix for a real finding this sweep caught: the DUR field
-      // label is ink-4 (5.29:1) on the row's ordinary --surface, but the
-      // SAME class sat at only 4.48:1 on --surface-sunken before index.css
-      // gained a `.confirm-step-removed .step-editor-row-label` override —
-      // failing axe's color-contrast rule the first time this test ran.
+      // label used to be ink-4 (5.29:1) on the row's ordinary --surface,
+      // but the SAME class sat at only 4.48:1 on --surface-sunken before
+      // index.css gained a struck-row override — failing axe's
+      // color-contrast rule the first time this test ran. Task 1 (ui-fix
+      // round)'s own blanket small-mono-label sweep since moved
+      // `.step-editor-row-label`'s BASE rule to --ink-3 everywhere, so the
+      // struck-row override that used to carry this colour is gone — this
+      // now just confirms the base rule still resolves the same way here.
       const durLabelColor = await row
         .locator(".step-editor-row-label")
         .first()
         .evaluate((el) => getComputedStyle(el).color);
       expect(durLabelColor).toBe("rgb(87, 84, 76)"); // --ink-3
     });
+  });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Task 1 (ui-fix round): the small bottom-right START becomes a
+  // full-width L1 "Looks right, start" at 56px, below the TOTAL line —
+  // matching Detail and Builder's own L1. REMOVE (the per-row control)
+  // stays the existing 44px text control (`.confirm-toggle-btn`),
+  // unchanged.
+  test("the confirm footer's one L1 action reads 'Looks right, start' at 56px, below the recount", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Looks right, start");
+    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBe(56);
+
+    const recountBox = (await page.locator(".confirm-recount").boundingBox())!;
+    const l1Box = (await l1.boundingBox())!;
+    expect(l1Box.y).toBeGreaterThan(recountBox.y);
+
+    const remove = page.getByRole("button", { name: "Remove Row 1" });
+    const removeHeight = await remove.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(removeHeight).toBe(44);
+
+    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
+    // assertion — the one-L1 count alone doesn't rule out a legacy
+    // `.button-primary` block surviving elsewhere on the same screen.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
   });
 });
 
@@ -830,6 +1621,17 @@ test.describe("builder screen", () => {
       .getByRole("button", { name: "O2", exact: true })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(o2ChipBg).toBe("rgb(42, 98, 117)"); // --type-o2
+
+    // Fix round 1 (F1, James's ruling): TR asserted explicitly — it used to
+    // be the IDENTICAL hex to --accent, so a selected TR chip rendered
+    // "accent" by coincidence and no test here ever picked TR to notice.
+    // Now resolves to --ink (tokens.css).
+    const trChip = page.getByRole("button", { name: "TR", exact: true });
+    await trChip.click();
+    const trChipBg = await trChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(trChipBg).toBe("rgb(27, 26, 23)"); // --type-tr = --ink
   });
 
   // Phase 5F Task 7: the warm-up line moved above the step list, reading as
@@ -928,6 +1730,98 @@ test.describe("builder screen", () => {
       .getByRole("button", { name: "Repeat up" })
       .evaluate((el) => getComputedStyle(el).userSelect);
     expect(stepperSelect).toBe("none");
+  });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Task 1 (ui-fix round): "Save to library stays L1" — the screen's one
+  // L1, now the level system's own 56px class rather than the bespoke
+  // 62px `.builder-save`.
+  test("Save to library is the screen's one L1 action, rendered at 56px", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Save to library");
+    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBe(56);
+
+    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
+    // assertion — the one-L1 count alone doesn't rule out a legacy
+    // `.button-primary` block surviving elsewhere on the same screen.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
+
+  // Task 1 (ui-fix round): DONE is a NAMED level (L3) — solid ink, mono
+  // 12/600, 0.16em, 48px — "was already black" (DESIGN.md) but not
+  // previously part of any named system.
+  test("the step editor's DONE button is L3: solid ink, mono, 48px", async ({
+    page,
+  }) => {
+    const done = page.getByRole("button", { name: "DONE" });
+    const styles = await done.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        height: el.getBoundingClientRect().height,
+        background: s.backgroundColor,
+        color: s.color,
+        fontFamily: s.fontFamily,
+        fontSize: s.fontSize,
+        fontWeight: s.fontWeight,
+        letterSpacing: s.letterSpacing,
+      };
+    });
+    expect(styles.height).toBe(48);
+    expect(styles.background).toBe("rgb(27, 26, 23)"); // --ink
+    expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
+    expect(styles.fontFamily.toLowerCase()).toContain("mono");
+    expect(styles.fontSize).toBe("12px");
+    expect(styles.fontWeight).toBe("600");
+    // getComputedStyle resolves letter-spacing to its computed PIXEL value,
+    // not the authored em string — 0.16em @ 12px font-size = 1.92px.
+    expect(styles.letterSpacing).toBe("1.92px");
+  });
+
+  // Task 1 (ui-fix round): DESIGN.md's selected-state fix, Builder's own
+  // half — PAIN's old per-level ramp colour goes ("Builder's gold pain
+  // selection goes"), DIFFICULTY was already ink (ClassificationCard.tsx's
+  // own unit tests cover that structurally); both read ink here too, in a
+  // real browser, alongside PACE (2k/6k/MAX/MIN) and the MIN/M duration
+  // unit toggle — none of them accent.
+  test("selected PAIN/DIFFICULTY/PACE/MIN-M chips fill ink, never accent", async ({
+    page,
+  }) => {
+    const painChip = page.getByRole("button", { name: "Pain 4" });
+    await painChip.click();
+    const painBg = await painChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(painBg).toBe("rgb(27, 26, 23)"); // --ink, not --pain-ramp-4
+
+    const hardChip = page.getByRole("button", { name: "HARD", exact: true });
+    await hardChip.click();
+    const hardBg = await hardChip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(hardBg).toBe("rgb(27, 26, 23)"); // --ink
+
+    const sixK = page.getByRole("radio", { name: /pace 6K/i });
+    await sixK.click();
+    const sixKBg = await sixK.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(sixKBg).toBe("rgb(27, 26, 23)"); // --ink, not --accent
+
+    const meters = page.getByRole("radio", { name: /duration unit meters/i });
+    await meters.click();
+    const metersBg = await meters.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(metersBg).toBe("rgb(27, 26, 23)"); // --ink
   });
 
   // A prior review (5B) only ever swept the builder blank — never after a
@@ -1047,9 +1941,9 @@ test.describe("builder screen", () => {
   // an already-saved (edit-mode) workout — see builder.spec.ts's own
   // "editing a workout with a stored warm-up" test, which this mirrors to
   // get an edit-mode screen open, but for the axe/tap-target sweep instead
-  // of a save-round-trip assertion. Every one of the 35 starter workouts
-  // opens with a `wu`, so this is the realistic, common case the earlier
-  // sweep never touched.
+  // of a save-round-trip assertion. Every one of the library's 300 workouts
+  // opens with a `wu` (verified in Task 12's docs reconcile), so this is the
+  // realistic, common case the earlier sweep never touched.
   test.describe("edit mode with a stored warm-up row (wu StepCard)", () => {
     const title = "Design WU Sweep";
 
@@ -1071,7 +1965,7 @@ test.describe("builder screen", () => {
         name: "Design Builder WU Tester",
       });
       // Bulk import is the only way to get a `wu` row into a personal
-      // (editable) workout — starter workouts are global and can't be
+      // (editable) workout — seeded library workouts are global and can't be
       // edited (EditWorkout.tsx refuses isGlobal workouts), and the
       // create-mode builder has no control that can author one.
       await page.goto("/library/import");
@@ -1412,6 +2306,25 @@ test.describe("timer screen (portrait, TIME phase)", () => {
       page.getByRole("button", { name: "Next phase" }),
     ).toBeVisible();
   });
+
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // Fix round 1 (F2, reviewer finding): Timer's transport row (Pause
+  // between two 56x56 L2 squares) is the documented full-width-stack
+  // exception — it never carries `.button-l1`, so this checks the "no
+  // legacy .button-primary" half of the sweep on its own. `.button-primary`
+  // only ever renders here for the END/finish/suspect STAGED confirms
+  // (Timer.tsx:522/611/635, DEVIATIONS.md's IMP-6 row) — none of which is
+  // staged in this describe's own default portrait/TIME-phase state.
+  test("no legacy .button-primary renders in this screen's default state", async ({
+    page,
+  }) => {
+    await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
 });
 
 // Phase 6B (Task 5): the live timer in a DISTANCE work phase (meters
@@ -1473,8 +2386,8 @@ test.describe("timer screen (portrait, DISTANCE phase)", () => {
 // Phase 6B (Task 5): the live timer with an effort-ref TARGET (`ref:
 // {effort:"max"}`) — TimerTargets.tsx's own binding rule: the numeric
 // estimate behind an effort ref is NEVER shown, only the resolved word
-// ("ALL OUT"/"EASY"), with no range line underneath it (unlike a split-ref
-// target's tolerance range). Time-based (not distance) so the ▶ control
+// ("ALL OUT"/"EASY"), with no sub-line underneath it (unlike a split-ref
+// target's own ref sub-line, ui-fix round Item 1). Time-based (not distance) so the ▶ control
 // shows, distinct from the DISTANCE sweep above.
 test.describe("timer screen (portrait, effort target visible)", () => {
   const title = "Design Timer Effort Sweep";
@@ -1655,10 +2568,12 @@ test.describe("session complete screen (with a recorded actual)", () => {
   test("TOTAL and the recorded actual split match the token palette", async ({
     page,
   }) => {
+    // Task 1 (ui-fix round): moved off --ink-4 onto --ink-3, same blanket
+    // small-mono-label sweep as Today's `.today-log-meta` above.
     const totalLabelColor = await page
       .locator(".complete-total-label")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(totalLabelColor).toBe("rgb(111, 106, 95)"); // --ink-4
+    expect(totalLabelColor).toBe("rgb(87, 84, 76)"); // --ink-3
 
     await expect(page.locator(".complete-actual-row")).toHaveCount(1);
     const actualColor = await page
@@ -1667,18 +2582,128 @@ test.describe("session complete screen (with a recorded actual)", () => {
     expect(actualColor).toBe("rgb(181, 52, 31)"); // --accent
   });
 
+  test("no small mono label uses the failing --ink-4 color", async ({
+    page,
+  }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
   // Final-review triage item (see the countdown describe's identical test
   // above for the full derivation): `.session-complete-screen` shared
   // `.countdown-screen`'s own pre-fix landscape min-height formula.
-  test("no dead vertical scroll at 844x420 (the same fix Timer's own landscape layout needed)", async ({
+  //
+  // Fix round 1 (reviewer M2): the bare document-level check below is
+  // structurally UNFALSIFIABLE the instant `.session-complete-screen`
+  // itself gets an inner `overflow-y: auto` (exactly what this fix round's
+  // first pass shipped, to make the OUTER document's own scrollHeight
+  // artificially always equal its clientHeight) — it would keep passing
+  // even while Discard sits entirely below the fold inside that inner
+  // scroll container, which is exactly what happened. Two more checks make
+  // this test actually bite: the screen element's OWN scrollHeight vs its
+  // own clientHeight (catches an inner scroll container directly, not just
+  // the document that wraps it), and a bounding-rect check on the stack's
+  // own LAST child (Discard) — the control most likely to clip first —
+  // confirming it renders fully inside the 420px frame with nothing to
+  // scroll to reach it.
+  test("no dead vertical scroll at 844x420, and Discard (the stack's last child) renders fully in-frame with nothing to scroll", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 844, height: 420 });
+
     const overflow = await page.evaluate(() => ({
       scrollHeight: document.documentElement.scrollHeight,
       clientHeight: document.documentElement.clientHeight,
     }));
     expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+
+    const screenOverflow = await page
+      .locator(".session-complete-screen")
+      .evaluate((el) => ({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      }));
+    expect(screenOverflow.scrollHeight).toBeLessThanOrEqual(
+      screenOverflow.clientHeight,
+    );
+
+    const discard = page.getByRole("button", {
+      name: "Discard without logging",
+    });
+    const box = (await discard.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(420);
+  });
+
+  // Task 1 (ui-fix round): the two half-width side-by-side buttons become
+  // full-width L1/L2 blocks in one `.action-stack` — one L1 ("Log this
+  // session") per screen, "Back to Today" at L2's own 52px.
+  test("Log this session (L1, 56px) stacks above Back to Today (L2, 52px) in one action stack", async ({
+    page,
+  }) => {
+    const l1 = page.locator(".button-l1");
+    await expect(l1).toHaveCount(1);
+    await expect(l1).toHaveText("Log this session");
+    const l1Height = await l1.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(l1Height).toBe(56);
+
+    const l2 = page.getByRole("button", { name: "Back to Today" });
+    const l2Height = await l2.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(l2Height).toBe(52);
+
+    const l1Box = (await l1.boundingBox())!;
+    const l2Box = (await l2.boundingBox())!;
+    expect(l2Box.y).toBeGreaterThan(l1Box.y);
+
+    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
+    // assertion — the one-L1 count alone doesn't rule out a legacy
+    // `.button-primary` block surviving elsewhere on the same screen.
+    await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
+
+  // Task 3 (ui-fix round): a third action, Discard without logging
+  // (L4/L4-armed), joins the stack under a rule below Back to Today — same
+  // in-place two-tap idiom as WorkoutDetail's own Delete workout above.
+  test("Discard without logging sits under a rule below Back to Today, and arms in place (solid accent, 'Tap again to discard')", async ({
+    page,
+  }) => {
+    const stack = page.locator(".action-stack.complete-actions");
+    const discard = page.getByRole("button", {
+      name: "Discard without logging",
+    });
+    await expect(discard).toHaveClass("button-l4");
+
+    const rule = stack.locator(".action-stack-rule");
+    await expect(rule).toHaveCount(1);
+    const backToToday = page.getByRole("button", { name: "Back to Today" });
+    const backBox = (await backToToday.boundingBox())!;
+    const ruleBox = (await rule.boundingBox())!;
+    const discardBoxBefore = (await discard.boundingBox())!;
+    expect(Math.round(ruleBox.y - (backBox.y + backBox.height))).toBe(12);
+    expect(Math.round(discardBoxBefore.y - (ruleBox.y + ruleBox.height))).toBe(
+      12,
+    );
+
+    await discard.click();
+    // Same reasoning as WorkoutDetail's identical assertion: move the
+    // pointer off the button first so `:hover`'s own `--accent-hover` fill
+    // doesn't mask the armed state's resting `--accent` one.
+    await page.mouse.move(0, 0);
+    const armed = page.getByRole("button", { name: "Tap again to discard" });
+    await expect(armed).toHaveClass("button-l4-armed");
+    const armedStyles = await armed.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(armedStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(armedStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+
+    await armed.evaluate((el) => (el as HTMLElement).blur());
+    await expect(
+      page.getByRole("button", { name: "Discard without logging" }),
+    ).toBeVisible();
   });
 });
 
@@ -1728,6 +2753,12 @@ test.describe("log session screen (session door)", () => {
     await assertNoA11yViolations(page);
   });
 
+  // L1 (whole-branch review): this describe renders `.log-paces-label`
+  // (10px mono), a guard-gap the ink-4 sweep never covered on this screen.
+  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
   test("no tab bar on this session route", async ({ page }) => {
     await expect(page.locator(".tabbar")).toHaveCount(0);
   });
@@ -1738,8 +2769,14 @@ test.describe("log session screen (session door)", () => {
     // DESIGN_BASELINES' k6Seconds (120.0) -> "2:00.0", recovered exactly
     // regardless of this step's own -2 offset — the baseline, not the
     // per-step split. F1 (whole-branch review): no step here references
-    // "2k" at all, so that half is OMITTED entirely (not a "2K —" dash —
-    // 0 of the 35 seeded starters reference both bases in one workout).
+    // "2k" at all, so that half is OMITTED entirely (not a "2K —" dash).
+    // This fixture is a bulk-imported synthetic (single 6k-only step) that
+    // deliberately doesn't mix bases, to prove the OMIT branch directly —
+    // none of the library's workouts do either (zero of the 300 generated
+    // workouts reference both bases post the taste pass, 9b9fde5 — 3 did
+    // before it — per Task 11/12's LogSession.tsx and DEVIATIONS.md
+    // reconciliation), but this test never depends on a real seeded
+    // workout's shape.
     await expect(page.locator(".log-paces-value")).toHaveText("6K 2:00.0");
     await expect(page.locator(".log-step-row")).toHaveCount(1);
     // 118.0s target (120 - 2), shown as the frozen split this step was
@@ -1771,16 +2808,17 @@ test.describe("log session screen (session door)", () => {
     expect(height).toBe("54px");
   });
 
-  // The staged Discard idiom (BaselineEditor.tsx's own `.baseline-confirm`/
-  // `.baseline-actions`) gets its own sweep with the panel open, same
-  // pattern as the timer screen's three staged-confirm describes below.
+  // Task 3 (ui-fix round): the old `.baseline-confirm` side panel is gone —
+  // Discard now arms in place, the level system's own L4/L4-armed idiom
+  // (same shape WorkoutDetail's own Delete workout and SessionComplete's own
+  // Discard both use) — this sweep runs with the button already armed.
   test.describe("Discard staged", () => {
     test.beforeEach(async ({ page }) => {
       await page
         .getByRole("button", { name: "Discard without logging" })
         .click();
       await expect(
-        page.getByRole("button", { name: "Discard session" }),
+        page.getByRole("button", { name: "Tap again to discard" }),
       ).toBeVisible();
     });
 
@@ -1792,6 +2830,20 @@ test.describe("log session screen (session door)", () => {
 
     test("zero WCAG 2A/2AA violations", async ({ page }) => {
       await assertNoA11yViolations(page);
+    });
+
+    test("armed fills solid accent, cream label — the same L4-armed look as WorkoutDetail's Delete and SessionComplete's Discard", async ({
+      page,
+    }) => {
+      const armed = page.getByRole("button", { name: "Tap again to discard" });
+      await expect(armed).toHaveClass("button-l4-armed");
+      await page.mouse.move(0, 0);
+      const styles = await armed.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { background: s.backgroundColor, color: s.color };
+      });
+      expect(styles.background).toBe("rgb(181, 52, 31)"); // --accent
+      expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
     });
   });
 });
@@ -1837,6 +2889,12 @@ test.describe("log session screen (manual door)", () => {
 
   test("zero WCAG 2A/2AA violations", async ({ page }) => {
     await assertNoA11yViolations(page);
+  });
+
+  // L1 (whole-branch review): this describe renders `.log-paces-label`
+  // (10px mono), a guard-gap the ink-4 sweep never covered on this screen.
+  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
+    await assertNoFailingInk4Labels(page);
   });
 
   // Unlike the session door (which hides the tab bar as the same full-bleed
@@ -1959,6 +3017,23 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
       page,
     }) => {
       await assertNoA11yViolations(page);
+    });
+
+    // Fix round 2 (whole-branch review, Md1): OUTSIDE THE PLAN's own
+    // selected fill used to switch to an accent border/text — the round's
+    // last surviving "accent means selected" use. Now the same plain ink
+    // fill every other selected state uses, never pinned by a computed-style
+    // assertion before this one.
+    test("the toggled state fills ink, not accent", async ({ page }) => {
+      const toggle = page.getByRole("button", {
+        name: "OUTSIDE THE PLAN — won't advance",
+      });
+      const styles = await toggle.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { background: s.backgroundColor, color: s.color };
+      });
+      expect(styles.background).toBe("rgb(27, 26, 23)"); // --ink
+      expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
     });
   });
 });
