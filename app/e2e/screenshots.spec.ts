@@ -178,6 +178,14 @@ test("signin", async ({ page }) => {
 // above already carries a scar for. This capture seeds a plan and real
 // history first specifically so it never reduces to that empty/loading
 // state again.
+//
+// Task 3 (2026-08-04 round): three captures from one continuous flow — the
+// same "multiple screenshots per test" idiom the "library" test below (and
+// "today-unlogged" above it in history) already uses — now that DIFFICULTY/
+// TIME/PAIN live behind a FILTER ⌄ sheet instead of always-on chip rows.
+// `today.png` is the REST state (FILTER ⌄ beside SHUFFLE, no chip groups on
+// screen); `today-sheet.png` and `today-filtered.png` mirror
+// `library-sheet.png`/`library-filtered.png`'s own open/applied pair.
 test("today", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-today@e2e.test",
@@ -191,8 +199,35 @@ test("today", async ({ page }) => {
   // Today shows "LOADING…" until all five of its data hooks resolve — wait
   // for the suggested-workout card itself before shooting.
   await page.locator(".today-card").waitFor();
+
+  // REST: FILTER ⌄ beside SHUFFLE, no DIFFICULTY/TIME/PAIN chip groups on
+  // the screen itself.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today.png"),
+  });
+
+  // SHEET: open, all three groups (DIFFICULTY/TIME/PAIN), and the live-
+  // counting primary (`Show N options`). Deselecting HARD is a real,
+  // visible DIFFICULTY deviation with zero risk of a zero-result pool — the
+  // 300-workout library's own O2 quota (today's sprint-plan code) has no
+  // HARD entries at all (design.spec.ts's own SHUFFLE-disabled comment).
+  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "HARD", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: /^Show \d+ options?$/ }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-sheet.png"),
+  });
+
+  // FILTERED: applied — the DIFFICULTY token ("EASY–MEDIUM") and CLEAR ALL.
+  await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+  await expect(page.locator(".filter-token")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-filtered.png"),
   });
 });
 

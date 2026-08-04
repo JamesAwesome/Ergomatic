@@ -827,23 +827,30 @@ test.describe("today screen (plan active, logs present)", () => {
   // touches /api/prefs, so this is the server's own default row: every
   // difficulty, a 60-min cap, no pain filter) — and the swap chips read the
   // plan's own prescribed type with nothing swapped yet.
+  //
+  // Task 3 (2026-08-04 round): DIFFICULTY/TIME/PAIN no longer render inline
+  // — the FILTER ⌄ sheet has to be opened first to reach them; the O2/AN/
+  // AT/TR type-swap chips are untouched (they stay on the plan line, never
+  // moved into the sheet).
   test("the chip row's default aria-pressed state matches the unmodified server preferences", async ({
     page,
   }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
     for (const label of ["EASY", "MEDIUM", "HARD"]) {
       await expect(
-        page.getByRole("button", { name: label, exact: true }),
+        dialog.getByRole("button", { name: label, exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
     }
     await expect(
-      page.getByRole("button", { name: "≤60′", exact: true }),
+      dialog.getByRole("button", { name: "≤60′", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     for (const label of ["≤30′", "≤45′", "≤90′", "NO CAP"]) {
       await expect(
-        page.getByRole("button", { name: label, exact: true }),
+        dialog.getByRole("button", { name: label, exact: true }),
       ).toHaveAttribute("aria-pressed", "false");
     }
-    const painGroup = page.getByRole("group", { name: "PAIN" });
+    const painGroup = dialog.getByRole("group", { name: "PAIN" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
         painGroup.getByRole("button", { name: level, exact: true }),
@@ -851,6 +858,9 @@ test.describe("today screen (plan active, logs present)", () => {
     }
     // Sprint's doneN=0 code is "O2" (SPRINT_WEEKS week 0, index 0) — the O2
     // type chip reads active with nothing swapped, the other three don't.
+    // Queried page-wide (not scoped to `dialog`): the type-swap chips live
+    // on the plan line, outside the sheet, and no name here collides with
+    // anything the sheet itself renders.
     await expect(
       page.getByRole("button", { name: "O2", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -920,22 +930,28 @@ test.describe("today screen (plan active, logs present)", () => {
     expect(trBg).toBe("rgb(27, 26, 23)"); // --type-tr = --ink, NOT --accent
   });
 
+  // Task 3 (2026-08-04 round): re-targeted at the FILTER sheet's own cells —
+  // the assertion's intent (ink, never accent, on both the cells AND the
+  // tokens `--ink` resolves to) is unchanged, only the location moved.
   test("selected DIFFICULTY/TIME/PAIN chips fill ink, never accent", async ({
     page,
   }) => {
-    const easyChip = page.getByRole("button", { name: "EASY", exact: true });
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+
+    const easyChip = dialog.getByRole("button", { name: "EASY", exact: true });
     const easyBg = await easyChip.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
     expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
 
-    const capChip = page.getByRole("button", { name: "≤60′", exact: true });
+    const capChip = dialog.getByRole("button", { name: "≤60′", exact: true });
     const capBg = await capChip.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
     expect(capBg).toBe("rgb(27, 26, 23)"); // --ink
 
-    const painCell = page
+    const painCell = dialog
       .getByRole("group", { name: "PAIN" })
       .getByRole("button", { name: "3", exact: true });
     await painCell.click();
@@ -999,9 +1015,18 @@ test.describe("today screen (plan active, logs present)", () => {
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
 
-    await page.getByRole("button", { name: "EASY", exact: true }).click();
-    await page.getByRole("button", { name: "MEDIUM", exact: true }).click();
-    await page.getByRole("button", { name: "≤60′", exact: true }).click();
+    // Task 3 (2026-08-04 round): the setup that narrows to this solo
+    // fixture moves through the FILTER sheet — EASY/MEDIUM/≤60′ no longer
+    // render inline. ≤60′ is already the default cap (server preference
+    // 60, snapCap unchanged) — re-clicking it is a harmless no-op, kept for
+    // the same "explicitly narrow to HARD + ≤60′" clarity the original
+    // setup had.
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "EASY", exact: true }).click();
+    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await dialog.getByRole("button", { name: "≤60′", exact: true }).click();
+    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
 
     const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
     await expect(shuffle).toBeDisabled();
@@ -1020,6 +1045,82 @@ test.describe("today screen (plan active, logs present)", () => {
     expect(styles.color).toBe("rgb(160, 154, 140)"); // --ink-5
 
     await cleanupByTitle(page, soloTitle);
+  });
+
+  // Task 3 (2026-08-04 round): structural sweeps against the FILTER sheet
+  // itself — mirrors design.spec.ts's own Library "the FILTER sheet open"/
+  // "an active filter token on screen" pair (Task 6, ui-fix round) for the
+  // identical SheetShell/CellGrid/TokenRow machinery reused here.
+  test("zero WCAG 2A/2AA violations with the FILTER sheet open", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
+  test("zero WCAG 2A/2AA violations with an active filter token on screen", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "3", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+    await expect(
+      page.locator(".filter-token", { hasText: "PAIN 3" }),
+    ).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
+  test("every visible interactive element still meets the 44px floor with the FILTER sheet open", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertTapTargets(page);
+  });
+
+  test("every visible interactive element still meets the 44px floor with an active filter token on screen", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("group", { name: "PAIN" })
+      .getByRole("button", { name: "3", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+    await expect(
+      page.locator(".filter-token", { hasText: "PAIN 3" }),
+    ).toBeVisible();
+    await assertTapTargets(page);
+  });
+
+  test("no mono label ≤11px still paints at --ink-4 with the FILTER sheet open", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertNoFailingInk4Labels(page);
+  });
+
+  // CellGrid.tsx's own `role="group"` + `aria-labelledby` (fix round 1,
+  // whole-branch review M3, present at HEAD for this round) restores the
+  // accessible group name Today's pre-extraction inline chip groups had —
+  // pinned here now that all three groups live inside the sheet.
+  test("DIFFICULTY/TIME/PAIN each expose a role=group with the visible label as its accessible name", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("group", { name: "DIFFICULTY" }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "TIME" })).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "PAIN" })).toBeVisible();
   });
 });
 
