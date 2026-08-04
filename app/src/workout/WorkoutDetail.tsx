@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
@@ -10,23 +10,10 @@ import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import { buildDraft, loadDraft, saveDraft } from "../session/draft";
 import { clearRun, loadRun } from "../session/run";
+import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
-
-// Settings expose --pace-tolerance (tokens.css); read once, in this lazy
-// initializer, so it's captured at mount. A future settings screen changing
-// the custom property at runtime would NOT propagate here without a remount
-// (useState's initializer only runs once) — that's a known limitation, not
-// an oversight.
-function readPaceTolerance(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--pace-tolerance")
-    .trim();
-  const parsed = Number(raw);
-  return raw !== "" && Number.isFinite(parsed) ? parsed : 1;
-}
 
 export default function WorkoutDetail() {
   const { id } = useParams();
@@ -117,7 +104,6 @@ function WorkoutDetailView({
   // workout.steps directly rather than the expanded per-repetition list) —
   // never persisted (Phase 6 will pass them per-request).
   const [nudges, setNudges] = useState<Record<number, number>>({});
-  const [tolerance] = useState(readPaceTolerance);
   const [startError, setStartError] = useState<string | null>(null);
   // Staged-confirm idiom (src/you/BaselineEditor.tsx, also copied by this
   // file's own OwnerActions delete flow): gates the one-shot replacement of
@@ -257,20 +243,24 @@ function WorkoutDetailView({
               key={index}
               step={step}
               baselines={baselines}
-              tolerance={tolerance}
               nudge={nudges[index] ?? 0}
               onNudge={(delta) => handleNudge(index, delta)}
             />
           ),
         )}
       </div>
-      <div className="workout-detail-actions">
+      {/* Task 1 (ui-fix round): one `.action-stack` for every screen-level
+          action — Start / Log it after / Edit / a rule / Delete workout —
+          not two separate divs the way this used to split Start/Log it
+          after from OwnerActions' own Edit/Delete. OwnerActions still owns
+          its own wrapping element below (`.workout-owner-actions`, kept for
+          e2e/builder.spec.ts's existing "absent for a global workout"
+          check) but renders `display: contents` (index.css) so its children
+          are this stack's own direct flex items, not a nested box breaking
+          the 12px gap rhythm. */}
+      <div className="action-stack workout-detail-actions">
         {replaceStage === null ? (
-          <button
-            type="button"
-            className="button-primary"
-            onClick={handleStart}
-          >
+          <button type="button" className="button-l1" onClick={handleStart}>
             Start
           </button>
         ) : (
@@ -311,7 +301,7 @@ function WorkoutDetailView({
           <Link
             to={`/library/${workout.id}/log`}
             state={{ from }}
-            className="button-outline"
+            className="button-l2"
           >
             Log it after
           </Link>
@@ -320,13 +310,18 @@ function WorkoutDetailView({
             <em>no target</em> <Link to="/you">Set baselines</Link>
           </span>
         )}
+        {/* Globals are read-only server-side (a 403 on any mutation) — the
+            UI must never present controls whose only outcome is that
+            rejection, so Edit/Delete render only for the rower's own
+            workouts. */}
+        {!workout.isGlobal && (
+          <OwnerActions
+            workoutId={workout.id}
+            navigate={navigate}
+            from={from}
+          />
+        )}
       </div>
-      {/* Globals are read-only server-side (a 403 on any mutation) — the UI
-          must never present controls whose only outcome is that rejection,
-          so Edit/Delete render only for the rower's own workouts. */}
-      {!workout.isGlobal && (
-        <OwnerActions workoutId={workout.id} navigate={navigate} from={from} />
-      )}
     </main>
   );
 }
@@ -340,9 +335,41 @@ function OwnerActions({
   navigate: (path: string) => void;
   from: unknown;
 }) {
-  const [confirming, setConfirming] = useState(false);
+  // Fix round 1 (F2): the two-button staged-confirm panel (Cancel beside a
+  // second solid-`.button-primary` "Delete workout") sat outside the level
+  // system this round otherwise landed everywhere else — a second
+  // accent-filled block, and a side-by-side pair, on the exact screen this
+  // round systematized. Replaced with the level system's OWN destructive
+  // idiom: the L4 button arms IN PLACE (fills solid accent, copy swaps to
+  // "Tap again to delete") rather than opening a side panel with its own
+  // Cancel — the same two-tap safety, the system's own shape. `armed`
+  // replaces the old `confirming` boolean 1:1.
+  const [armed, setArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Belt-and-suspenders: a pending disarm timer must not fire (and call
+  // setState) after this component has already unmounted — e.g. Edit was
+  // clicked while armed, navigating away before the 4s elapses.
+  useEffect(() => {
+    return () => {
+      if (disarmTimer.current !== null) clearTimeout(disarmTimer.current);
+    };
+  }, []);
+
+  function disarm() {
+    if (disarmTimer.current !== null) {
+      clearTimeout(disarmTimer.current);
+      disarmTimer.current = null;
+    }
+    setArmed(false);
+  }
+
+  function arm() {
+    setArmed(true);
+    disarmTimer.current = setTimeout(disarm, ARM_TIMEOUT_MS);
+  }
 
   const handleDelete = async () => {
     setError(null);
@@ -353,6 +380,7 @@ function OwnerActions({
       });
       if (!res.ok) {
         setError("Couldn't delete this workout. Try again.");
+        disarm();
         return;
       }
       // Deliberately NOT `from`-chained (design doc: "Delete stays
@@ -363,60 +391,63 @@ function OwnerActions({
       navigate("/library");
     } catch {
       setError("Couldn't delete this workout. Try again.");
+      disarm();
     } finally {
       setDeleting(false);
     }
   };
 
+  // The button's own click handler carries both taps: the first arms (no
+  // network call yet — logged history survives a delete regardless, but
+  // the action itself never fires on a first press), the second — reached
+  // only while already `armed`, which `disabled` can't be true for at the
+  // same time as a delete in flight — fires it for real.
+  function handleClick() {
+    if (armed) {
+      disarm();
+      void handleDelete();
+    } else {
+      arm();
+    }
+  }
+
   return (
+    // `display: contents` (index.css): this wrapper stays purely for the
+    // e2e "absent for a global workout" check — visually its children are
+    // direct items of the parent `.action-stack`, not a nested flex column
+    // of their own, so the shared 12px gap and full-width sizing apply
+    // exactly as if Edit/the rule/Delete were declared inline there.
     <div className="workout-owner-actions">
       <Link
         to={`/library/${workoutId}/edit`}
         state={{ from }}
-        className="button-outline"
+        className="button-l2"
       >
         Edit
       </Link>
-      {!confirming ? (
-        <button
-          type="button"
-          className="button-outline"
-          onClick={() => setConfirming(true)}
-        >
-          Delete
-        </button>
-      ) : (
-        // Staged-confirm idiom (src/you/BaselineEditor.tsx): the destructive
-        // action never fires on the first press. Copy is explicit that
-        // logged history survives — session_logs.workout_id is set to NULL
-        // on delete and each log keeps its own frozen title/type, so
-        // deleting a workout does NOT erase the rower's past sessions of it.
-        <div className="baseline-confirm">
-          <p className="baseline-confirm-line">
-            Delete this workout? Your logged sessions are kept — they keep their
-            own copy of the title and type.
-          </p>
-          {error && <p className="baseline-error">{error}</p>}
-          <div className="baseline-actions">
-            <button
-              type="button"
-              className="button-outline"
-              onClick={() => setConfirming(false)}
-              disabled={deleting}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="button-primary"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              Delete workout
-            </button>
-          </div>
-        </div>
+      <hr className="action-stack-rule" />
+      {/* Fix round 2 (whole-branch review Md5): the retired two-button
+          panel's own reassurance line — session_logs.workout_id nulls on
+          delete and each log keeps its own frozen title/type, so a
+          rower's history survives this regardless — is back here, shown
+          only at the moment of the actual destructive decision (armed,
+          one tap from firing) rather than permanently above the stack. */}
+      {armed && (
+        <p className="baseline-confirm-line">
+          Your logged sessions are kept — they keep their own copy of the title
+          and type.
+        </p>
       )}
+      <button
+        type="button"
+        className={armed ? "button-l4-armed" : "button-l4"}
+        onClick={handleClick}
+        onBlur={disarm}
+        disabled={deleting}
+      >
+        {armed ? "Tap again to delete" : "Delete workout"}
+      </button>
+      {error && <p className="baseline-error">{error}</p>}
     </div>
   );
 }

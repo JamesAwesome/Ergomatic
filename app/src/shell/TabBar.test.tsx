@@ -52,9 +52,9 @@ describe("TabBar", () => {
     const SAVED_FILTERS = JSON.stringify({
       type: "AT",
       durations: [],
-      painMax3: false,
-      recency: null,
-      customOnly: false,
+      painLevels: [],
+      lastDone: null,
+      source: null,
     });
 
     beforeEach(() => sessionStorage.clear());

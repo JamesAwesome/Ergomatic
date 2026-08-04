@@ -7,6 +7,7 @@ import { isComplete, type EnginePhase } from "./engine";
 import { loadDraft, type SessionDraft } from "./draft";
 import { loadRun, type PhaseActual, type SessionRun } from "./run";
 import { phaseKindWord } from "./Timer";
+import { useStagedDiscard } from "./useStagedDiscard";
 
 /** The session's own wall-clock length: `completedAt` minus `startedAt`,
  *  both stamped by the engine (buildRun/tick/advance) — not a sum of phase
@@ -64,13 +65,22 @@ export function actualRows(
  *  do): `keepAwakeOff` is idempotent (its own doc comment), so this is safe
  *  even though Timer's unmount, moments earlier, already released it in the
  *  ordinary router-navigation case — a direct/reload landing here (draft +
- *  a completed run both survive in storage) is the case this guards. */
+ *  a completed run both survive in storage) is the case this guards.
+ *
+ *  Task 3 (ui-fix round): a third action, Discard without logging (L4/
+ *  L4-armed, `useStagedDiscard`), joins Log this session/Back to Today under
+ *  an `.action-stack-rule` — the same in-place two-tap idiom
+ *  WorkoutDetail.tsx's own Delete workout uses. Firing it clears the draft/
+ *  run records (no POST, ever) and navigates to `/today`, same destination
+ *  as Back to Today — the records just aren't there for a later "Log it" to
+ *  find. */
 export default function SessionComplete() {
   const navigate = useNavigate();
   // Lazy initializers: read both fresh from storage exactly once, the same
   // idiom every other session screen uses (Timer.tsx's own comment on this).
   const [draft] = useState<SessionDraft | null>(() => loadDraft());
   const [run] = useState<SessionRun | null>(() => loadRun());
+  const discard = useStagedDiscard();
 
   useEffect(() => {
     void keepAwakeOff();
@@ -88,6 +98,19 @@ export default function SessionComplete() {
 
   function handleBack() {
     navigate("/today");
+  }
+
+  // The button's own click handler carries both taps, same shape as
+  // WorkoutDetail.tsx's OwnerActions `handleClick`: the first arms (no
+  // records touched yet), the second — reachable only while `armed` — fires
+  // the shared discard (clearDraft + clearRun, no POST) and navigates.
+  function handleDiscardClick() {
+    if (discard.armed) {
+      discard.fire();
+      navigate("/today");
+    } else {
+      discard.arm();
+    }
   }
 
   return (
@@ -114,16 +137,28 @@ export default function SessionComplete() {
           ))}
         </ul>
       )}
-      <div className="complete-actions">
-        <Link to="/session/log" className="button-primary complete-log">
+      {/* Task 1 (ui-fix round): the two half-width side-by-side buttons
+          become full-width blocks in one `.action-stack` — Log this session
+          (L1, 56px) then Back to Today (L2, 52px). Task 3 appends a rule +
+          Discard (L4/L4-armed) below Back to Today; this stays a single
+          flat container (no extra wrapping div) so that append is a plain
+          sibling insertion, the same shape WorkoutDetail's own merged stack
+          (Edit/rule/Delete) already establishes. */}
+      <div className="action-stack complete-actions">
+        <Link to="/session/log" className="button-l1">
           Log this session
         </Link>
+        <button type="button" className="button-l2" onClick={handleBack}>
+          Back to Today
+        </button>
+        <hr className="action-stack-rule" />
         <button
           type="button"
-          className="button-outline complete-back"
-          onClick={handleBack}
+          className={discard.armed ? "button-l4-armed" : "button-l4"}
+          onClick={handleDiscardClick}
+          onBlur={discard.disarm}
         >
-          Back to Today
+          {discard.armed ? "Tap again to discard" : "Discard without logging"}
         </button>
       </div>
     </main>

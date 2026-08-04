@@ -33,10 +33,11 @@ console.log("migrations up to date");
 // traffic so the very first request ever served already sees the full
 // global library. Idempotent — safe to run on every boot.
 //
-// seedGlobalLibrary's own check-then-insert isn't atomic across processes:
-// if two replicas boot at once, both can see zero globals and both attempt
-// the insert. It serialises them with a transaction-scoped advisory lock (see
-// seed/seed.ts), so the loser now just no-ops. Until 2026-07-30 the two
+// seedGlobalLibrary's own check-then-reconcile isn't atomic across
+// processes: if two replicas boot at once, both can observe the same
+// mismatch and both attempt to reconcile it. It serialises them with a
+// transaction-scoped advisory lock (see seed/seed.ts), so the loser sees the
+// winner's already-reconciled rows and just no-ops. Until 2026-07-30 the two
 // partial unique indexes on `num` did that job instead and the loser's insert
 // failed with a unique violation surfaced as StoreConflictError; the catch
 // below is kept as a belt-and-braces boot guard for exactly that shape of

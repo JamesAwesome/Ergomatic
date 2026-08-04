@@ -30,12 +30,19 @@
    `.workout-row`/`.back-link`/`.library-import`/`.library-new`/`.tab` are
    `<Link>`/`<NavLink>` anchors, not <button>s, so the bare `button`
    selector below doesn't reach them; `.button-primary`/`.button-outline`
-   are shared between real <button>s (already covered) and the anchor-
-   styled sign-in/Edit links (auth.tsx, WorkoutDetail.tsx), which aren't.
-   Left deliberately selectable: plain inline text hyperlinks (e.g.
+   and the five-level system's own `.button-l1`-`.button-l4-armed` (ui-fix
+   round, Task 1) are each shared between real <button>s (already covered)
+   and anchor-styled links (auth.tsx's sign-in, WorkoutDetail.tsx's Edit/Log
+   it after), which aren't. Left deliberately selectable: plain inline text
+   hyperlinks (e.g.
    StepEditor.tsx/StepRow.tsx's "Set baselines") — those read as ordinary
    body-copy links, not chrome controls, and a copy/look-up callout on
-   link text is normal iOS behaviour there. */
+   link text is normal iOS behaviour there. `.filter-token` (Task 4, ui-fix
+   round) joins the list for the same reason `.chip` is here: it's a chrome
+   pill representing an active filter, not body copy, even though the pill
+   itself isn't the clickable element — its nested `.filter-token-remove` is
+   a real `<button>`, already covered below; this entry is only for the
+   pill's own label text. */
 button,
 [role="radio"],
 .chip,
@@ -47,6 +54,12 @@ span.stepper-value,
 .library-new,
 .button-primary,
 .button-outline,
+.button-l1,
+.button-l2,
+.button-l3,
+.button-l4,
+.button-l4-armed,
+.filter-token,
 .tab {
   user-select: none;
   -webkit-user-select: none;
@@ -156,6 +169,162 @@ button:disabled {
 
 .button-outline:disabled {
   border-color: var(--rule-3);
+}
+
+/* -- Five-level button system (ui-fix round, Task 1) ---------------------
+   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md, "The rule this round
+   adds": every action that acts on the whole screen is a full-width block
+   in ONE bottom-anchored stack, 12px gap — five levels, no other button
+   shapes (transport controls and steppers are the two documented
+   exceptions, DEVIATIONS.md's "Rows for DEVIATIONS.md" #4). Tasks 2-6
+   consume these five classes plus `.action-stack`/`.action-stack-rule`
+   verbatim rather than re-deriving them; do not rename without checking
+   every later task's own report first.
+
+   `display: flex` + `padding: 0` + an explicit `border` (or `border: none`)
+   on every level, rather than `.button-primary`'s line-height approach,
+   is deliberate: a real `<button>`'s UA chrome (Chromium: ~2px outset
+   border plus ~1px vertical padding per side) adds height on TOP of
+   `min-height` that neither `.button-primary` nor the file's own `button`
+   reset clears — DEVIATIONS.md's IMP-6 row documents this on WorkoutDetail's
+   own pre-migration "Start" (specced 52px, rendered 58px). Zeroing padding
+   and declaring the border explicitly (never left to the UA stylesheet)
+   removes the gap structurally for every consumer of these five classes,
+   rather than only the one-off `.log-save` fix IMP-6 also records. */
+.action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-stack-rule {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 0;
+}
+
+.button-l1,
+.button-l2,
+.button-l3,
+.button-l4,
+.button-l4-armed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0;
+  border-radius: var(--radius);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* 1 · primary — solid accent, cream label. One per screen (Start, Looks
+   right start, Save to library, Log this session). */
+.button-l1 {
+  min-height: 56px;
+  background: var(--accent);
+  border: none;
+  color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.button-l1:hover {
+  background: var(--accent-hover);
+}
+
+.button-l1:disabled,
+.button-l1:disabled:hover {
+  background: var(--rule);
+  cursor: not-allowed;
+}
+
+/* 2 · secondary — surface fill, ink border/label, same type as L1. May
+   stack (Log it after / Edit); never shares a row with another action. */
+.button-l2 {
+  min-height: 52px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Fix round 1 (F7, reviewer finding): L1/L3/L4-armed all had a hover
+   treatment; L2/L4 didn't. `--surface-sunken` is this file's own standing
+   "resting surface, one shade darker" hover idiom (`.pace-ref-step:hover`,
+   `.step-card-confirm-no:hover`) — reused here rather than inventing a
+   third hover language for one more class pair. */
+.button-l2:hover {
+  background: var(--surface-sunken);
+}
+
+.button-l2:disabled {
+  border-color: var(--rule-3);
+  cursor: not-allowed;
+}
+
+/* 3 · commit-in-card — solid ink, mono, closes an editor without leaving
+   the screen (builder step DONE). Ink rather than accent so an in-card
+   confirm can never read as the screen's own L1 (DEVIATIONS.md #1). */
+.button-l3 {
+  min-height: 48px;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  color: var(--on-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.button-l3:hover {
+  background: var(--ink-2);
+  border-color: var(--ink-2);
+}
+
+/* 4 · destructive — surface fill, accent-OUTLINED (never solid: a solid
+   accent block would compete with the happy path, DEVIATIONS.md #2). Last
+   in the stack, under `.action-stack-rule` (Delete workout, Discard at
+   rest). */
+.button-l4 {
+  min-height: 52px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Fix round 1 (F7): darkens border/label to `--accent-hover`, the same
+   token `.button-l4-armed:hover` (below) darkens its solid fill to — one
+   hover vocabulary for both destructive states, outlined or filled. */
+.button-l4:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+/* 4 · armed — "Tap again to discard": fills solid accent, cream label,
+   same shape as `.button-l4`, copy changes at the call site. Auto-disarm
+   timing (blur/4s) is Tasks 2-3's own concern, not this class's. */
+.button-l4-armed {
+  min-height: 52px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.button-l4-armed:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .you {
@@ -333,12 +502,286 @@ button:disabled {
   text-decoration: none;
 }
 
+/* -- Library filter bar, tokens, sheet (Task 4, ui-fix round) -----------
+   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md's "Library (second
+   pass)": retires the eleven-chip ragged wrap (FilterChips.tsx, deleted) for
+   one FILTER ⌄ toggle at rest, active filters collapsing to tokens, and a
+   sheet holding all five groups. Two rows, per the mockup: the toggle plus
+   any tokens (wrapping), then a second row for the count + CLEAR ALL that
+   only appears once something is active — at rest the count instead sits on
+   the SAME row as the toggle (`.library-filter-row .library-count`'s own
+   text-align: right below), exactly the mockup's two states. */
+.library-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.library-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-filter-toggle {
+  flex-shrink: 0;
+  min-height: var(--tap);
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.library-filter-toggle:hover {
+  background: var(--surface-sunken);
+}
+
 .library-count {
+  flex: 1;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--ink-3);
-  margin: 4px 0 12px;
+}
+
+/* At rest (no tokens), the count shares the toggle's own row and reads
+   right-aligned opposite it — the mockup's "1 · AT REST" state. Once
+   filtered, the count moves to `.library-count-row` instead (left-aligned,
+   `flex: 1` there just reserves the space CLEAR ALL doesn't need). */
+.library-filter-row .library-count {
+  text-align: right;
+}
+
+.library-clear-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.library-clear-all:hover {
+  color: var(--accent-hover);
+}
+
+/* Fix round 1 (whole-branch review M2): TokenRow's own row layout — same
+   flex/wrap/gap/align-items shape `.library-filter-row` already used for
+   its own render site (Library.tsx never wrapped TokenRow in anything
+   else), now supplied by the component itself so a caller that renders
+   `<TokenRow>` bare (Today.tsx) still gets a real row instead of
+   unstyled inline content. */
+.token-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* One token per active GROUP (filterTokens.ts), not per band — type-colored
+   for a TYPE token (inline style, per-instance — same idiom as
+   TypeBadge.tsx/PainBar.tsx/ClassificationCard.tsx's own TYPE chip), `--ink`
+   fill for every other kind via this class's own default background. */
+.filter-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: var(--tap);
+  padding-left: 12px;
+  background: var(--ink);
+  border-radius: var(--radius);
+}
+
+.filter-token-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--on-color);
+  white-space: nowrap;
+}
+
+.filter-token-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--on-color);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The sheet: fixed overlay over the list (Library.tsx never routes to it),
+   bottom-weighted so it reads as sliding up from the tab bar. Dismissible by
+   backdrop tap (`.filter-sheet-backdrop`'s own onClick) or the primary
+   button — see FilterSheet.tsx's doc comment for what a BACK navigation
+   does while this is open. */
+.filter-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 26, 23, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 20px calc(var(--tap) + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+}
+
+.filter-sheet {
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.filter-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  border-bottom: 1px solid var(--rule-2);
+  padding-bottom: 6px;
+}
+
+.filter-sheet-title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.filter-sheet-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.filter-sheet-clear:hover {
+  color: var(--accent-hover);
+}
+
+.filter-sheet-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.filter-sheet-group-half {
+  flex: 1;
+}
+
+.filter-sheet-group-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+.filter-sheet-row {
+  display: flex;
+  gap: 6px;
+}
+
+/* Fix round 1 (whole-branch review M1): N-agnostic instead of a fixed set
+   of width variants — `grid-auto-flow: column` lays cells out in a single
+   row, `grid-auto-columns: 1fr` gives each one an equal share of the
+   width, for ANY cell count. Previously this relied on a companion
+   `.filter-sheet-grid-N` class (CellGrid.tsx still emits one, off
+   `cells.length`, for CellGrid.test.tsx's own assertion) supplying
+   `grid-template-columns: repeat(N, 1fr)` — but only `-2`/`-4`/`-5`
+   existed (the Library's own five groups' cell counts), so Today's
+   3-cell DIFFICULTY group (Task 2, 2026-08-04 round) matched no rule at
+   all and fell back to an implicit single column: three stacked
+   full-width bars instead of one row of three, caught live (jsdom has no
+   opinion on layout, only a real render does). The half-width LAST DONE/
+   SOURCE pair (`.filter-sheet-group-half`, `.filter-sheet-row`) still
+   needs no separate variant either — each is its own 2-cell CellGrid
+   inside a flex:1 half-width container, and this rule fills WHATEVER
+   width its own container gives it, same as it always did. */
+.filter-sheet-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 6px;
+}
+
+.filter-sheet-cell {
+  height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+/* Plain ink fill for every group EXCEPT an active TYPE cell, which gets its
+   own type color via an inline style (FilterSheet.tsx's `typeCellStyle`) —
+   an inline style always wins over this rule regardless of specificity, so
+   no `:not()` qualifier is needed here. */
+.filter-sheet-cell[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
+  font-weight: 600;
 }
 
 .library-empty {
@@ -379,21 +822,41 @@ button:disabled {
   cursor: pointer;
 }
 
-.chip[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--on-color);
-  border: none;
+/* Amendment (2026-08-04 PR #50 round), Task 2: the plan line's type-swap
+   chips span the full content width instead of sitting inline at their own
+   `min-width`/`padding` size — a 4-column `1fr` row overriding `.chip-wrap`'s
+   own `display: flex; flex-wrap: wrap` for this one instance (same-
+   specificity single-class selectors, so declaration order alone decides —
+   this rule sits after `.chip-wrap` in the cascade). `.chip`'s own 44px
+   `min-height` is untouched; only the row's layout (each cell an equal
+   1fr share, not its own intrinsic width) changes. */
+.today-type-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 /* Classification card (Task 4, docs/design/builder-redesign/README.md §3):
    one card holding TYPE, DIFFICULTY and EXPECTED PAIN. Deliberately its own
    `.classification-chip*` class family rather than reusing `.chip` above —
-   `.chip[aria-pressed="true"]` fills --accent unconditionally, which is
-   exactly the treatment DIFFICULTY must NOT get (the handoff moves it to
-   ink so accent stays reserved for the in-row unit/pace toggles and Save).
-   A shared base class would have made "don't inherit the accent fill" a
-   thing every future reader has to remember; a separate class makes it
-   structurally impossible. */
+   at the time this was written, `.chip[aria-pressed="true"]` filled
+   --accent unconditionally, which is exactly the treatment DIFFICULTY must
+   NOT get (the handoff moves it to ink so accent stays reserved for the
+   in-row unit/pace toggles and Save). A shared base class would have made
+   "don't inherit the accent fill" a thing every future reader has to
+   remember; a separate class made it structurally impossible. (Fix round 2,
+   whole-branch review Md3: that bare `.chip[aria-pressed="true"]` accent
+   rule is deleted now — Today.tsx's `TodayChip` was its only real consumer,
+   and at the time every real chip either rendered under Today's own
+   `.today-filter-chips` ink override or carried an inline per-type style,
+   so the rule was unreachable in both directions. Task 2, 2026-08-04 round:
+   `.today-filter-chips` itself is gone too — TodayChip's only remaining
+   consumer is the type-swap row, which always carries an inline per-type
+   style, so the same "unreachable either way" conclusion still holds, now
+   for a simpler reason. The separation this comment explains stays the
+   right call regardless: nothing here depends on the deleted rule's
+   specific behaviour, only on DIFFICULTY/PAIN never inheriting `.chip`'s
+   base at all.) */
 .classification-card {
   display: flex;
   flex-direction: column;
@@ -410,12 +873,16 @@ button:disabled {
   gap: 7px;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — 10px mono,
+   inside the blanket "no small mono label reads --ink-4" rule (DESIGN.md's
+   contrast note; index.css's own --ink-4 token comment: 4.48:1 against
+   --surface-sunken, under the 4.5:1 AA floor). */
 .classification-group-label {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 /* EXPECTED PAIN's label row only: space-between, label left, the current
@@ -496,9 +963,10 @@ button:disabled {
   letter-spacing: 0.08em;
 }
 
-/* The one selected-state fill that lives entirely in CSS rather than an
-   inline style (TYPE and PAIN both need a per-instance colour, so those are
-   set inline in ClassificationCard.tsx) — ink, never accent. */
+/* DIFFICULTY's own selected-state fill — ink, never accent. Lives entirely
+   in CSS (no inline style): unlike TYPE (which still needs a per-instance
+   colour set inline in ClassificationCard.tsx, one of four possible type
+   colours), DIFFICULTY only ever fills one colour. */
 .classification-chip-difficulty[aria-pressed="true"] {
   background: var(--ink);
   border-color: var(--ink);
@@ -509,6 +977,19 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-4);
+}
+
+/* Task 1 (ui-fix round): PAIN's selected fill moves off its own per-level
+   ramp colour (DESIGN.md: "Builder's gold pain selection goes") onto the
+   SAME plain ink fill as DIFFICULTY — ClassificationCard.tsx no longer sets
+   any inline style for a selected PAIN chip at all, so this is now the
+   pain group's own version of the rule immediately above. --pain-ramp-1..5
+   (tokens.css) stay defined — LogSession.tsx (Phase 6C, outside this
+   round's touched screens) is still a live consumer of that ramp. */
+.classification-chip-pain[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
 }
 
 .workout-list {
@@ -558,11 +1039,16 @@ button:disabled {
   margin-top: 8px;
 }
 
+/* Fix round 2 (whole-branch review, L1): moved off --ink-4 to --ink-3 —
+   not a contrast failure (--ink-4 measures 5.29:1 on --surface here, clear
+   AA), but e2e/design.spec.ts's assertNoFailingInk4Labels sweep never ran
+   on this screen, so a mono label this small at --ink-4 was a guard gap,
+   not a pinned choice. Library's own describe now carries the sweep too. */
 .workout-row-meta {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .back-link {
@@ -659,11 +1145,15 @@ button:disabled {
   min-height: var(--tap);
 }
 
+/* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — this is an
+   11px mono label, inside the blanket "no small mono label reads --ink-4"
+   rule DESIGN.md's contrast note calls for (index.css's own --ink-4 token
+   comment: 4.48:1 against --surface-sunken, under the 4.5:1 AA floor). */
 .step-row-sub {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--ink-3);
   margin: 4px 0 0;
 }
 
@@ -673,11 +1163,13 @@ button:disabled {
   margin-top: 8px;
 }
 
+/* Task 1 (ui-fix round): same --ink-4 -> --ink-3 sweep as `.step-row-sub`
+   above. */
 .step-reps-marker {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.02em;
-  color: var(--ink-4);
+  color: var(--ink-3);
   padding: 12px 0 0;
   margin: 0;
 }
@@ -693,22 +1185,22 @@ button:disabled {
   color: var(--ink);
 }
 
+/* WorkoutDetail's own top margin under the step list — kept as a second,
+   page-scoped class alongside the shared `.action-stack` (WorkoutDetail.tsx:
+   `className="action-stack workout-detail-actions"`) rather than folded
+   into `.action-stack` itself, since SessionComplete's/ConfirmTargets' own
+   `.action-stack` usages need their own spacing, not this screen's 20px. */
 .workout-detail-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   margin-top: 20px;
 }
 
+/* `display: contents`: OwnerActions' own wrapper stays in the DOM (e2e's
+   ".workout-owner-actions absent for a global workout" check needs an
+   element to assert zero of), but drops out of layout — its Edit link/rule/
+   Delete button become direct flex items of the parent `.action-stack`,
+   sharing its 12px gap, rather than a nested indented group of their own. */
 .workout-owner-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.workout-owner-actions > .button-outline {
-  text-align: center;
+  display: contents;
 }
 
 .section-heading {
@@ -912,15 +1404,37 @@ button:disabled {
 }
 
 /* Quieter than the resume card, deliberately (F2's own decision, still
-   true): no accent fill, no full-width button — just the workout's name and
-   a real, small "Log it" action (Phase 6C Task 2; F2's original placeholder
-   copy, "6C will log it here," is what that action replaces). */
+   true): no accent fill on the row itself — just the workout's name, a
+   real, small "Log it" action (Phase 6C Task 2; F2's original placeholder
+   copy, "6C will log it here," is what that action replaces), and — Task 3
+   (ui-fix round) — a 44×44 accent-outlined ✕ that arms a staged Discard.
+   Bordered and height-fixed (min-height, not padding-derived) so arming
+   (`.today-unlogged-line-armed`) only recolors the border and swaps the
+   row's own children (Today.tsx's `UnloggedRow`) — never its size or its
+   position in the page, per DESIGN.md's own "row height and position don't
+   move." Fix round 1 (reviewer, row chrome vs mockup.html:164-178):
+   `--surface-sunken` fill (the mockup's own `#efeade`, an exact match) and
+   a 52px min-height — this task's own first pass used 64px and the page
+   background, neither of which the mockup actually specifies. */
 .today-unlogged-line {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 8px 12px;
   margin: 0 0 16px;
+}
+
+/* Task 3: arming — border only, same accent the L4-armed button system
+   fills solid elsewhere; this row stays outlined even armed, since filling
+   it solid would compete with the suggestion card right below for
+   attention the way DEVIATIONS.md's #2 already ruled out for L4 itself. */
+.today-unlogged-line-armed {
+  border-color: var(--accent);
 }
 
 .today-unlogged-text {
@@ -929,10 +1443,18 @@ button:disabled {
   margin: 0;
 }
 
-/* An inline-read word styled up to a real 44px tap target — same idiom as
-   `.step-row-no-target a` (a short recovery link inside a sentence-height
-   line), since "Log it" alone is far narrower than 44px without the
-   min-width/padding below. */
+.today-unlogged-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Fix round 1 (reviewer, row chrome vs mockup.html:164-178): "Log it"
+   is the row's OWN L2-geometry control — ink-bordered, surface-filled,
+   44px (the mockup's own literal cell, not this app's full-width 52px
+   `.button-l2` — this row's controls are inline pills, not stack blocks) —
+   not the bare accent-colored text link this task's first pass shipped. */
 .today-unlogged-link {
   display: inline-flex;
   align-items: center;
@@ -940,9 +1462,73 @@ button:disabled {
   min-height: var(--tap);
   min-width: var(--tap);
   padding: 0 12px;
-  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--ink);
   font-weight: 600;
   text-decoration: none;
+}
+
+.today-unlogged-link:hover {
+  background: var(--surface-sunken);
+}
+
+/* Task 3: the row's own destructive control, DEFAULT state — 44×44,
+   accent-outlined (never solid: the same L4 reasoning, DEVIATIONS.md #2).
+   `✕` alone carries no accessible name of its own, hence the button's own
+   `aria-label` at the call site. */
+.today-unlogged-discard {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.today-unlogged-discard:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+/* ARMED state — the ✕ becomes a solid-accent "Tap again" button (DESIGN.md's
+   own words), replacing both the ✕ and "Log it" in the row's contents
+   (`UnloggedRow`'s armed branch renders only this, no Link) rather than
+   sizing to the same 44×44 box: "Tap again" needs real width for its own
+   label, and the row's OUTER box is what stays fixed-size, not this control. */
+.today-unlogged-discard-armed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 16px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--on-color);
+  /* Fix round 1 (reviewer): explicit font, not the UA default — nothing
+     else set one, so this rendered at the browser's own serif default
+     (wide enough to wrap "Tap again" onto two lines in the committed
+     screenshot). `--font-sans`/13px matches the mockup's own armed
+     "Tap again" cell (mockup.html:177) exactly. */
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.today-unlogged-discard-armed:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .today-suggestion-header {
@@ -953,48 +1539,80 @@ button:disabled {
   margin-bottom: 8px;
 }
 
+/* Item 4 (ui-fix round, DESIGN.md): SHUFFLE stops being its own accent-
+   colored species — chip geometry (44px, `--rule-3` border, transparent
+   fill, mono 11/0.14em label) rather than `.button-outline`'s ink-bordered,
+   16px-padded shape. `.button-outline` still supplies the 44px min-height,
+   transparent background and inline-flex centering; only the properties
+   DESIGN.md actually calls out differently are overridden here.
+   Disabled (pool <= 1, `canShuffle` in Today.tsx): `button:disabled`'s
+   already-global `color: var(--ink-5)` and `.button-outline:disabled`'s
+   already-global `border-color: var(--rule-3)` cover the label/border
+   colour on their own — only the DASHED border style is new here.
+
+   Task 2 (2026-08-04 round): FILTER ⌄ now shares this exact class with
+   SHUFFLE (Today.tsx's `.today-suggestion-actions` wrapper holds both) —
+   "the same geometry" the task brief calls for, not a new near-duplicate
+   rule. FILTER ⌄ never sets `disabled`, so the `:disabled` rule below is
+   inert for it — a harmless no-op, not a behaviour it needs to opt out
+   of. */
 .today-shuffle {
   flex-shrink: 0;
-}
-
-/* Fix round 2 (whole-branch review, M4): the nine filter chips used to be
-   flat siblings in one flex-wrap row (plain `.chip-wrap`); grouped into
-   three labelled clusters (DIFFICULTY/TIME/PAIN) now — see Today.tsx's own
-   comment on why. `.today-filter-chips` keeps its name and stays a single
-   element (the e2e visibility check's own selector), it just now stacks
-   three groups vertically instead of laying all nine chips out itself. */
-.today-filter-chips {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.today-filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Same small-mono-caps treatment as `.classification-group-label`
-   (ClassificationCard.tsx) — kept as its own class per this repo's
-   established per-file duplication convention rather than importing a
-   builder-only class into Today, the same reasoning `DIFFICULTY_CHIPS`'s
-   own extraction comment gives for what's worth sharing vs. not. */
-.today-filter-group-label {
-  margin: 0;
+  padding: 0 12px;
+  border-color: var(--rule-3);
+  color: var(--ink-1);
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--ink-4);
+  font-size: 11px;
+  letter-spacing: 0.14em;
 }
 
-/* Each group's own chip row reuses `.chip-wrap` verbatim for the flex/wrap/
-   gap behaviour, but the outer `.today-filter-chips` already spaces the
-   three groups via its own `gap` — an extra `margin-bottom` from
-   `.chip-wrap` here would double up on that spacing. */
-.today-filter-group .chip-wrap {
-  margin-bottom: 0;
+.today-shuffle:hover {
+  border-color: var(--ink);
+}
+
+.today-shuffle:disabled {
+  border-style: dashed;
+}
+
+/* Task 2 (2026-08-04 round): FILTER ⌄ and SHUFFLE ↻ now sit side by side on
+   the suggestion header's right (`.today-suggestion-header` still spaces
+   this wrapper against the header's own label via its own
+   `justify-content: space-between`) — this is the "Today-specific spacing
+   rule" the task's own file list anticipated. */
+.today-suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* CLEAR ALL (Task 2, 2026-08-04 round) — Library's own `.library-clear-all`
+   idiom (44px accent label, no border/fill) duplicated here rather than
+   shared: this repo's established per-file duplication convention for
+   small screen-specific controls (TYPE_COLOR_VAR's own comment names the
+   precedent). Today's placement differs from Library's own (TokenRow's
+   `trailing` slot, immediately after the tokens, not a separate count
+   row) — see Today.tsx's own comment on why CLEAR ALL resets to
+   `filterDefaults` here instead of emptying every filter the way
+   Library's CLEAR ALL does. */
+.today-clear-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.today-clear-all:hover {
+  color: var(--accent-hover);
 }
 
 .today-card {
@@ -1079,11 +1697,15 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — 11px mono,
+   inside the blanket "no small mono label reads --ink-4" rule (DESIGN.md's
+   contrast note; index.css's own --ink-4 token comment: 4.48:1 against
+   --surface-sunken, under the 4.5:1 AA floor). */
 .today-log-meta {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: var(--ink-4);
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
@@ -1314,11 +1936,15 @@ button:disabled {
   justify-content: space-between;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — 10px mono,
+   inside the blanket "no small mono label reads --ink-4" rule (DESIGN.md's
+   contrast note; index.css's own --ink-4 token comment: 4.48:1 against
+   --surface-sunken, under the 4.5:1 AA floor). */
 .builder-steps-header span {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .builder-step-list {
@@ -1364,12 +1990,14 @@ button:disabled {
   gap: 12px;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: same --ink-4 -> --ink-3 rule as
+   `.builder-steps-header span` above. */
 .builder-repeat-label {
   flex: 1;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .builder-repeat-sub {
@@ -1394,11 +2022,13 @@ button:disabled {
   justify-content: space-between;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: same --ink-4 -> --ink-3 rule as
+   `.builder-steps-header span` above. */
 .builder-total-label {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .builder-total-value {
@@ -1418,36 +2048,20 @@ button:disabled {
    The standard 18px on both sides (the plain block rhythm every other pair
    of blocks on this screen already gets) is what actually reads as "its
    own line, directly above the list it precedes" — no closer to STEPS than
-   it is to whatever card sits above it. */
+   it is to whatever card sits above it. Task 1 (ui-fix round) contrast
+   sweep: --ink-3, not --ink-4, same blanket small-mono-label rule as this
+   file's other Builder labels. */
 .builder-warmup-line {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
-.builder-save {
-  display: block;
-  width: 100%;
-  min-height: 62px;
-  flex: none;
-  background: var(--accent);
-  border: none;
-  border-radius: var(--radius);
-  color: var(--on-color);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.builder-save:hover {
-  background: var(--accent-hover);
-}
-
-.builder-save:disabled {
-  background: var(--rule);
-}
+/* Task 1 (ui-fix round): "Save to library stays L1" — this used to be its
+   own bespoke 62px accent button (`.builder-save`); it's now literally the
+   level system's own `.button-l1` (Builder.tsx's className), 56px, with no
+   Builder-specific rule left to duplicate index.css's shared one. */
 
 /* -- Stepper: the shared "− value +" control (Phase 5E Task 3) --------- */
 /* docs/design/builder-redesign/README.md, the "Stepper pattern" paragraph.
@@ -1591,12 +2205,19 @@ button:disabled {
   gap: 8px;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — 10px mono,
+   inside the blanket "no small mono label reads --ink-4" rule (DESIGN.md's
+   contrast note). Shared by both Builder's StepEditor.tsx and Confirm's own
+   ConfirmStepRow, which reuses this exact class. The struck-row override
+   immediately below (`.confirm-step-removed .step-editor-header-label`)
+   already set --ink-3 for the removed state; this base rule now matches it,
+   so a struck row's own colour no longer differs from the base label's. */
 .step-editor-header-label {
   flex: 1;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 /* .confirm-toggle-btn (ConfirmTargets.tsx's REMOVE/RESTORE control) shares
@@ -1646,13 +2267,16 @@ button:disabled {
   gap: 8px;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: same --ink-4 -> --ink-3 rule as
+   `.step-editor-header-label` above (also shared by Builder and Confirm),
+   and same "now matches the struck-row override" note. */
 .step-editor-row-label {
   flex: 0 0 34px;
   width: 34px;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .step-editor-target {
@@ -1707,24 +2331,9 @@ button:disabled {
   min-height: var(--tap);
 }
 
-.step-editor-done {
-  display: block;
-  width: 100%;
-  min-height: var(--tap);
-  background: var(--ink);
-  border: 1px solid var(--ink);
-  border-radius: var(--radius);
-  color: var(--on-color);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  cursor: pointer;
-}
-
-.step-editor-done:hover {
-  background: var(--ink-2);
-  border-color: var(--ink-2);
-}
+/* Task 1 (ui-fix round): DONE's own bespoke `.step-editor-done` class is
+   gone — it's now `.button-l3` (index.css's five-level system block),
+   48px/mono-12/600/0.16em rather than this class's old 44px/mono-11/0.12em. */
 
 /* PaceRefInput (builder/PaceRefInput.tsx) — reused wholesale by StepEditor's
    PACE row (it already clamps its offset to the domain's ±60 bound), just
@@ -1800,8 +2409,13 @@ button:disabled {
   border-right: none;
 }
 
+/* Task 1 (ui-fix round): 2K/6K/MAX/MIN's selected fill moves off --accent
+   onto --ink (DESIGN.md's selected-state fix — "Every other selection ->
+   --ink fill" names 2k/6k/MAX/MIN explicitly). Accent stays reserved for
+   the level-1 action, a resolved split, a destructive control and the
+   active tab mark — never a selected state. */
 .pace-ref-chip[aria-checked="true"] {
-  background: var(--accent);
+  background: var(--ink);
   color: var(--on-color);
 }
 
@@ -1942,8 +2556,11 @@ button:disabled {
   border-right: none;
 }
 
+/* Task 1 (ui-fix round): MIN/M's selected fill moves off --accent onto
+   --ink, same rule and same reason as `.pace-ref-chip[aria-checked="true"]`
+   above (DESIGN.md's selected-state fix names MIN/M explicitly). */
 .duration-input-chip[aria-checked="true"] {
-  background: var(--accent);
+  background: var(--ink);
   color: var(--on-color);
 }
 
@@ -2237,31 +2854,20 @@ button:disabled {
 /* Struck rows stay visible rather than disappearing (binding decision,
    ConfirmTargets.tsx's toggleRemoved comment: only removal has to be
    reversible without surprise, not undiscoverable) — sunken background plus
-   a struck, ink-3 label reads as "excluded" without relying on opacity
-   (which would otherwise put every child's own already-audited contrast
-   pairing back in question at some fractional value). ink-3 on
-   --surface-sunken measures 6.3:1, comfortably past the header label's
-   already-passing ink-4 (5.29:1 on plain --surface). */
+   a struck label reads as "excluded" without relying on opacity (which
+   would otherwise put every child's own already-audited contrast pairing
+   back in question at some fractional value). ink-3 on --surface-sunken
+   measures 6.3:1. Task 1 (ui-fix round): `.step-editor-header-label`'s own
+   base rule (above) moved to --ink-3 too as part of the app-wide small-
+   mono-label sweep, so this override's own job is now ONLY the strikethrough
+   — the colour was a struck-row-specific fix (Phase 6A Task 5) before this
+   task made it the label's default everywhere. */
 .confirm-step-removed {
   background: var(--surface-sunken);
 }
 
 .confirm-step-removed .step-editor-header-label {
-  color: var(--ink-3);
   text-decoration: line-through;
-}
-
-/* Phase 6A Task 5 finding (design sweep's own struck-row axe scan): every
-   step row's DUR/SPM/REPS field label (.step-editor-row-label) is ink-4,
-   which measures 5.29:1 against the ordinary --surface a step row sits on
-   — but a struck row's background is --surface-sunken instead (see
-   .confirm-step-removed above), where ink-4 drops to 4.48:1 and fails
-   WCAG AA's 4.5:1 floor. No prior sweep ever rendered a struck row through
-   axe, so this shipped with Task 4 and went uncaught until this task's
-   dedicated struck-row coverage. Same ink-3 substitution as the header
-   label immediately above (6.3:1 on --surface-sunken). */
-.confirm-step-removed .step-editor-row-label {
-  color: var(--ink-3);
 }
 
 .confirm-toggle-btn.is-removed {
@@ -2269,11 +2875,14 @@ button:disabled {
   border-color: var(--accent);
 }
 
+/* Task 1 (ui-fix round): column, not a row — the recount sits on its own
+   line, the L1 button (`.button-l1`, ConfirmTargets.tsx) full-width BELOW
+   it, matching DESIGN.md's "below the TOTAL line" (was a row with the
+   recount left and a small `.confirm-start` button pinned right). */
 .confirm-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 12px;
   margin-top: 20px;
   padding-top: 14px;
   border-top: 1px solid var(--rule);
@@ -2287,11 +2896,6 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 15px;
   color: var(--ink);
-}
-
-.confirm-start {
-  flex: none;
-  padding: 0 32px;
 }
 
 /* -- Countdown (Phase 6B Task 2) -----------------------------------------
@@ -2419,26 +3023,35 @@ button:disabled {
    handoff §6, verbatim structure — dots, STEP line, 96px numeral, phase bar,
    TARGET SPLIT + RATE cards, UP NEXT, TOTAL LEFT + ruler, controls. Colors
    and fonts via tokens, never the prototype's literal hex. Computed text
-   contrast (this task): timer-name/-end/-phase-label/-total-label (--ink-4
-   on --page) 4.76:1; timer-state (--accent on --page) 5.35:1; the 96px
-   numeral and TOTAL LEFT's value (--ink on --page) far exceeds AA;
-   timer-card-label/-caption (--ink-4 on --surface, the cards' own bg)
-   5.29:1; timer-card-value-accent (--accent on --surface) 5.94:1;
-   timer-upnext-label (--ink-3, NOT --ink-4, on --surface-sunken) 6.30:1 —
-   --ink-4 measures only 4.48:1 there, the SAME already-documented gap
-   ConfirmTargets.tsx's own no-target row hit against the identical
+   contrast (this task): timer-name/-end (--ink-4 on --page, 12px — OUTSIDE
+   Task 1's <=11px small-mono-label sweep below, so still --ink-4) 4.76:1;
+   timer-state (--accent on --page) 5.35:1; the 96px numeral and TOTAL LEFT's
+   value (--ink on --page) far exceeds AA; timer-card-value-accent (--accent
+   on --surface) 5.94:1; timer-upnext-label (--ink-3 on --surface-sunken)
+   6.30:1 — --ink-4 measures only 4.48:1 there, the SAME already-documented
+   gap ConfirmTargets.tsx's own no-target row hit against the identical
    background (docs/design/DEVIATIONS.md); timer-upnext-value (--ink-2 on
    --surface-sunken) 9.16:1; timer-control (--ink-2 on --surface) 10.81:1;
    timer-control-pause/timer-control-next (--on-color on --accent) 5.94:1;
    timer-end-copy (--ink-2 on --surface-sunken, the BaselineEditor-idiom
    panel's own bg, shared by the abandon AND finish confirms) 9.16:1;
    timer-suspect-copy (--ink-2 on --page) 9.74:1. All clear the 4.5:1 AA
-   floor. The ruler labels are a NEW deviation, recorded in DEVIATIONS.md:
-   the handoff's own `#a09a8c` token (--ink-5) measures only 2.48:1 against
-   --page — nowhere close to AA even at large text, since --ink-5 is
+   floor.
+
+   Task 1 (ui-fix round) contrast sweep: timer-phase-label/-total-label
+   (10-11px)/-card-label/-card-caption/-ruler-label all moved from --ink-4 to
+   --ink-3, the blanket "no small (<=11px) mono label reads --ink-4" rule
+   DESIGN.md's contrast note calls for — these previously measured 4.76:1
+   (on --page) or 5.29:1 (on --surface, the cards' own bg), which cleared
+   4.5:1 on THOSE specific backgrounds, but the rule is a flat colour-value
+   ban, not a per-background contrast recomputation, so they moved with
+   every other qualifying label in the app regardless. This also folds in
+   the ruler labels' own prior deviation (below): --ink-4 (4.76:1) had
+   already replaced the handoff's own literal `#a09a8c` (--ink-5, 2.48:1,
+   nowhere close to AA) as a first fix; this task's sweep carries that
+   forward one more step to --ink-3, same as its siblings. --ink-5 stays
    reserved everywhere else in this file for `:disabled` controls
-   (WCAG-exempt), not live informational text — substituted --ink-4 (4.76:1)
-   instead.
+   (WCAG-exempt), never live informational text.
 
    Fix round (spec review): F1/F2 restored ◀/Pause to distance mode — the
    control row is now the SAME 3-column grid for every phase kind, only the
@@ -2574,7 +3187,7 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.16em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .timer-state {
@@ -2634,7 +3247,7 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .timer-card-value {
@@ -2651,7 +3264,7 @@ button:disabled {
 .timer-card-caption {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .timer-upnext {
@@ -2717,7 +3330,7 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .timer-total-value {
@@ -2749,7 +3362,7 @@ button:disabled {
 .timer-ruler-label {
   font-family: var(--font-mono);
   font-size: 9px;
-  color: var(--ink-4);
+  color: var(--ink-3);
   transform: translateX(50%);
 }
 
@@ -2959,14 +3572,16 @@ button:disabled {
    Not a handoff-specified screen (README §7 "Log session" is 6C's own, much
    richer post-workout review — HELD/UNDER/OVER, pain, notes; this is 6B's
    interim hand-off between the live timer and it) — so no mock to match
-   pixel-for-pixel. Reuses `.screen`/`.screen-title`/`.button-primary`
-   verbatim (already AA-verified elsewhere in this file) and every new color
+   pixel-for-pixel. Reuses `.screen`/`.screen-title` verbatim (already
+   AA-verified elsewhere in this file; the action pair below is now the
+   ui-fix round's own `.button-l1`/`.button-l2`, Task 1) and every new color
    pairing below is one of THIS file's own already-computed combinations,
-   not a new one: complete-total-label (--ink-4/--page) 4.76:1, matching
-   timer-name/-phase-label above; complete-total-value (--ink/--page) far
-   exceeds AA, matching the 96/128px numeral; complete-actual-label
-   (--ink-4/--surface) 5.29:1 and complete-actual-value (--accent/--surface)
-   5.94:1, both matching timer-card-label/-value-accent's own cards. */
+   not a new one: complete-total-value (--ink/--page) far exceeds AA,
+   matching the 96/128px numeral; complete-actual-label (--ink-4/--surface)
+   5.29:1 and complete-actual-value (--accent/--surface) 5.94:1, both
+   matching timer-card-label/-value-accent's own cards. complete-total-label
+   moved from --ink-4 to --ink-3 in Task 1's own small-mono-label sweep
+   (below). */
 .session-complete-screen {
   display: flex;
   flex-direction: column;
@@ -2985,9 +3600,55 @@ button:disabled {
    above, for the identical reason — same base formula, same missing
    `.app-shell` tab-bar padding, same 844×420 measurement (438 vs 420
    before, 414 vs 420 after). See that rule's comment for the full
-   derivation; not repeated verbatim here. */
+   derivation; not repeated verbatim here.
+
+   Task 1 (ui-fix round) re-measurement: the two-button half-width row
+   (`.complete-actions`, pre-Task-1) became a full-width L1/L2 stack — 56 +
+   12 (gap) + 52 = 120px tall, ~68px more than the single-row pair it
+   replaced. That alone pushed this screen's landscape content past even
+   this rule's own tightened floor (measured 464 vs the 420 frame). Tightens
+   the screen's own gap and the TOTAL block's padding, landscape-only — the
+   only two numbers on this screen with slack to give back — rather than
+   touching `.action-stack`'s shared 12px gap (a cross-screen constant every
+   later task also relies on) or shrinking the buttons themselves (the
+   level system's own fixed heights).
+
+   Task 3 (ui-fix round) re-measurement: the new Discard block (a rule plus
+   an L4 button, joining the stack under two more of that same shared 12px
+   gap — 1 + 12 + 12 + 52 = 77px) pushed this screen's landscape content
+   past even the Task 1 floor above (measured 493 vs the 420 frame — the
+   reviewer's own F8 note, confirmed).
+
+   Fix round 1 (reviewer M2): the first pass at this capped the screen's
+   own box with `max-height`+`overflow-y:auto` — which made the DOCUMENT-
+   level zero-scroll guard structurally unfalsifiable (it can never fail
+   once the element that would overflow is the one clipping itself) AND
+   left Discard genuinely clipped below the fold with no visible scroll
+   affordance (measured: 399px of real content against the 350px frame,
+   Back to Today cut mid-button in the committed capture). Recovering the
+   ~50px shortfall instead — the option the brief's own words led with
+   ("tighter landscape-only spacing is allowed") — keeps every level-system
+   button at its real, unshrunk height and makes the WHOLE stack visible
+   with no scrolling at all: this rule's own gap trim (4px → 0) is one
+   part of that; `.complete-total`/`.complete-actual-row`/`.complete-actions`
+   carry the rest, in their OWN landscape block further down this file
+   (right after their plain counterparts, not here) — deliberately NOT
+   grouped into this one media query the way the first pass had them:
+   a media-wrapped rule earlier in the file than its own plain,
+   unconditional counterpart of equal specificity LOSES the cascade tie to
+   that later plain rule regardless of the media condition, so those three
+   overrides have to physically sit after their own base rules to take
+   effect at all (see that block's own comment). Re-measured after: the
+   stack's own last child (Discard) sits fully inside the 420px frame with
+   zero px to spare either direction — `design.spec.ts`'s own guard now
+   checks BOTH the document's scrollHeight (still legitimately zero, since
+   nothing overflows to hide behind an inner scroll container) AND
+   Discard's own bounding rect against the viewport, so a future
+   regression that silently reintroduces clipping — document-level scroll
+   or not — fails loudly. */
 @media (orientation: landscape) {
   .session-complete-screen {
+    gap: 0;
     min-height: calc(
       100dvh - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
@@ -3004,11 +3665,13 @@ button:disabled {
   padding: 14px 0;
 }
 
+/* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — same blanket
+   small-mono-label rule as `.today-log-meta` above. */
 .complete-total-label {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .complete-total-value {
@@ -3051,28 +3714,47 @@ button:disabled {
   color: var(--accent);
 }
 
-/* Phase 6C Task 2: "Log this session" (primary, new) sits beside "Back to
-   Today" (demoted from .button-primary to .button-outline — two identical
-   accent-filled buttons side by side would read as two equally-weighted
-   primary actions, and logging is the encouraged one). Same 1:2 flex split
-   as .baseline-actions'/.workout-owner-actions' own Cancel/Confirm row
-   convention, reused rather than re-derived. `.complete-actions` itself
-   carries the `margin-top: auto` `.complete-back` used to own alone, so the
-   pair still pins to the bottom of `.session-complete-screen`'s flex column
-   exactly as before. */
+/* Task 1 (ui-fix round): "Log this session"/"Back to Today" move off the
+   Phase 6C 1:2 half-width flex split (a demoted .button-outline beside a
+   .button-primary) onto the level system's own full-width stack — L1 then
+   L2, `.action-stack`'s 12px gap. `.complete-actions` itself keeps carrying
+   `margin-top: auto` (its pre-existing job: pin the pair to the bottom of
+   `.session-complete-screen`'s flex column) alongside the shared
+   `.action-stack` class, same two-class pattern as WorkoutDetail's own
+   `.action-stack.workout-detail-actions`. */
 .complete-actions {
-  display: flex;
-  gap: 10px;
   margin-top: auto;
 }
 
-.complete-actions .button-outline {
-  flex: 1;
-  text-align: center;
-}
+/* Fix round 1 (reviewer M2): these three overrides MUST come after their
+   own plain counterparts above (`.complete-total`, `.complete-actual-row`,
+   `.complete-actions` itself) in source order — a media-query-wrapped rule
+   is not magically prioritized over an unconditional rule of the same
+   specificity; cascade ties still resolve by which one appears LATER in
+   the file. The first pass at this fix round placed an equivalent block
+   BEFORE these plain rules (in the same spot `.session-complete-screen`'s
+   own landscape override correctly sits, since ITS plain rule is earlier
+   still) — a real bug that would have silently no-opped every one of these
+   three overrides. Verified empirically post-fix via computed
+   `getComputedStyle` reads in the e2e sweep, not just this comment's own
+   reasoning. Together with the `.session-complete-screen` gap trim above,
+   this recovers the ~50px this screen's landscape frame was short by
+   after Task 3's own Discard block landed (reviewer's measured 399px vs a
+   350px frame) — enough for the WHOLE stack, Discard included, to render
+   with zero clipping and zero scroll, at the level system's own real,
+   unshrunk button heights. */
+@media (orientation: landscape) {
+  .complete-total {
+    padding: 2px 0;
+  }
 
-.complete-log {
-  flex: 2;
+  .complete-actual-row {
+    padding: 4px 14px;
+  }
+
+  .complete-actions {
+    gap: 4px;
+  }
 }
 
 /* Log session screen (Phase 6C Task 2, /session/log — the session door).
@@ -3101,11 +3783,15 @@ button:disabled {
   margin: 0 0 16px;
 }
 
+/* Fix round 2 (whole-branch review, L1): moved off --ink-4 to --ink-3 — same
+   guard-gap reasoning as .workout-row-meta above (WorkoutRow.tsx): AA was
+   never actually failing (5.29:1 on --surface), but the Log screen's own
+   describe never ran assertNoFailingInk4Labels either. Log now carries it. */
 .log-paces-label {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .log-paces-value {
@@ -3237,15 +3923,18 @@ button:disabled {
    real control in the app (Discard/Retry/Cancel all use `.button-outline`
    verbatim) — so this row reads as a control on sight, not as a second
    PACES LOCKED-style caption. Toggled ("OUTSIDE THE PLAN — won't advance")
-   still switches to a solid `--accent` border/text — the same "this is a
-   deviation from the default" language `.chip[aria-pressed="true"]`
-   already uses via an accent FILL, though a fill would fight this row's
-   own longer sentence-length copy for legibility, so the accent is
-   applied to the border/text instead. Contrast: ink on surface 17.1:1
-   (default — computed from `--ink` #1b1a17 / `--surface` #fffdf7 via the
-   WCAG relative-luminance formula), accent on surface 5.94:1 (toggled) —
-   both comfortably > 4.5:1. --tap (44px) satisfies the house hit-target
-   floor; `aria-pressed` is unchanged. */
+   used to switch to a solid `--accent` border/text — found in the
+   whole-branch review (Md1) to be the round's own last surviving "accent
+   means selected" use, since `.chip[aria-pressed="true"]`'s own accent fill
+   (the precedent this rule's comment used to cite) is deleted. Fix round 2:
+   moved to the same plain ink fill every other selected state on this
+   round's screens already uses (`.filter-sheet-cell`/`.classification-
+   chip-difficulty`/`.classification-chip-pain[aria-pressed="true"]`) —
+   nothing about this toggle is destructive or a resolved target, so it gets
+   no more claim on accent than DIFFICULTY or PAIN do. Contrast: ink on
+   surface 17.1:1 (default), on-color on ink 17.1:1 (toggled) — both
+   comfortably > 4.5:1. --tap (44px) satisfies the house hit-target floor;
+   `aria-pressed` is unchanged. */
 .log-plan-toggle {
   display: flex;
   align-items: center;
@@ -3266,8 +3955,9 @@ button:disabled {
 }
 
 .log-plan-toggle[aria-pressed="true"] {
-  border: 1px solid var(--accent);
-  color: var(--accent);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
 }
 
 .log-actions {

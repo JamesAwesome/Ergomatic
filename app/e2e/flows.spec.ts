@@ -88,8 +88,8 @@ async function setBaselines(page: Page): Promise<void> {
 /** Raises the freestyle suggestion's time-cap filter to its max (300 min,
  *  data.ts's own ceiling) so a real, non-trivial workout's estimated
  *  duration can never accidentally exclude it from the pool — this spec
- *  doesn't pin which starter workout gets suggested (see the test's own
- *  comment), so nothing here should be able to make that pool empty. */
+ *  doesn't pin which workout gets suggested (see the test's own comment), so
+ *  nothing here should be able to make that pool empty. */
 async function setGenerousTimeCap(page: Page): Promise<void> {
   const result = await page.evaluate(async () => {
     const res = await fetch("/api/prefs", {
@@ -130,7 +130,7 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
 
     // Today's freestyle suggestion is deterministic for a fresh user (every
     // seeded workout ties on "never done", so the stable sort falls back to
-    // the library's own authored order — server/seed/starter.ts's
+    // the library's own authored order — server/seed/library/index.ts's
     // `sortOrder`) but which TITLE that resolves to is a seed-data detail
     // this spec has no business pinning. Read whatever the card actually
     // shows and follow it, the way a rower would.
@@ -154,7 +154,7 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
     await expect(recount).toBeVisible();
     const recountAfterLoad = await recount.textContent();
 
-    // Adjust one duration: every starter workout opens with a warm-up
+    // Adjust one duration: every workout in the library opens with a warm-up
     // (docs/design comment, builderState.ts), so "Row 1 duration" always
     // exists regardless of which workout got suggested. Two 30s presses (=
     // exactly 60s = 1 minute) rather than one: round(x + 1 minute) always
@@ -179,7 +179,7 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
     const recountAfterDuration = await recount.textContent();
     expect(recountAfterDuration).not.toBe(recountAfterLoad);
 
-    // Adjust one SPM: every starter workout has at least one work step
+    // Adjust one SPM: every workout has at least one work step
     // (validateSteps requires it), so some "stroke rate" stepper always
     // exists somewhere on the page, but not at a fixed row index — a reps
     // marker ahead of it shifts the row number per workout.
@@ -222,7 +222,7 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
     const endBox = await endButton.boundingBox();
     expect(endBox!.width).toBeGreaterThanOrEqual(44);
     expect(endBox!.height).toBeGreaterThanOrEqual(44);
-    // Every starter workout opens with a warm-up (this file's own earlier
+    // Every workout in the library opens with a warm-up (this file's own earlier
     // comment, "Adjust one duration"), so the first phase is always step 1
     // of however many — not pinning the total, which varies per workout.
     await expect(page.getByText(/^STEP 1 OF \d+/)).toBeVisible();

@@ -1,5 +1,70 @@
 import type { WorkDuration } from "./types.js";
 
+/** The four duration buckets a workout's estimated minutes falls into —
+ *  originally `src/library/filters.ts`'s own `DurationBucket`/`bucketFor`,
+ *  moved here (Amendment, 2026-08-04 PR #50 round: "TIME unifies on the
+ *  Library's bucket ranges") so `domain/suggest.ts`'s own duration
+ *  predicate can consume the SAME bucket definition Today's filter sheet
+ *  and the Library's both render cells for. The move runs domain-ward, not
+ *  library-ward: `domain/` never imports client code (`src/`), while
+ *  `src/library/filters.ts` already imports `estimateMinutes` from
+ *  `domain/expand.js`, so a client module importing FROM `domain/` is the
+ *  established direction — `filters.ts` re-exports both names unchanged so
+ *  its own (and every other pre-existing) importer needs no update. */
+export type DurationBucket = "<30" | "30-45" | "45-60" | "60+";
+
+// Canonical bucket order — what "contiguous" means for a token's range
+// collapse (src/components/durationTokenLabel.ts) and the order
+// `bucketsForCap` (todayOverrides.ts) returns buckets in.
+export const DURATION_BUCKETS: readonly DurationBucket[] = [
+  "<30",
+  "30-45",
+  "45-60",
+  "60+",
+];
+
+// A bucket's own lower bound in minutes, indexed by DURATION_BUCKETS —
+// `bucketsForCap` (todayOverrides.ts) compares a preference cap against
+// this to decide which buckets that cap's default set includes.
+export const DURATION_LOWER_BOUND: Record<DurationBucket, number> = {
+  "<30": 0,
+  "30-45": 30,
+  "45-60": 45,
+  "60+": 60,
+};
+
+// Boundaries per the handoff: <30, 30-45, 45-60, 60+ — the lower bucket owns
+// its upper boundary (29 is "<30", exactly 30 is "30-45").
+export function bucketFor(minutes: number): DurationBucket {
+  if (minutes < 30) return "<30";
+  if (minutes < 45) return "30-45";
+  if (minutes < 60) return "45-60";
+  return "60+";
+}
+
+/** Maps a raw preference cap (the account's own `preferences.timeCapMinutes`)
+ *  to the set of TIME buckets that cap implies as a default: every bucket
+ *  whose own LOWER bound sits below the cap survives — a 60-min cap keeps
+ *  the first three (`<30/30-45/45-60`, excluding `60+`); anything over 60
+ *  keeps all four (effectively unfiltered); a cap at or under 30 keeps only
+ *  `<30`. There is no bucket boundary for every possible preference value,
+ *  so this is a deliberate approximation, not an exact re-derivation of
+ *  "estMinutes <= pref" at the boundary — the same rounding trade-off the
+ *  single-value `snapCap` chip this replaces (Amendment, 2026-08-04 PR #50
+ *  round) always made.
+ *
+ *  Lives in `domain/` rather than `src/today/todayOverrides.ts` (which
+ *  re-exports it) because it turned out to have TWO real callers needing
+ *  the identical derivation: the client's own Today screen (seeding a
+ *  fresh day's TIME defaults) and `server/routes/data.ts`'s `/api/today`
+ *  route (building `SuggestPrefs` server-side from the same preference
+ *  column) — the same "domain has no client dependencies, both sides can
+ *  import it" reasoning `DurationBucket`/`bucketFor` themselves moved here
+ *  for. */
+export function bucketsForCap(pref: number): DurationBucket[] {
+  return DURATION_BUCKETS.filter((b) => DURATION_LOWER_BOUND[b] < pref);
+}
+
 /** The house time format is elastic positional: seconds are always present,
  *  the hour group appears only when nonzero, and the leading group is never
  *  zero-padded — `0:45`, `20:00`, `1:05:00`, `3:00:00`. Because the rightmost

@@ -17,30 +17,30 @@ function phase(overrides: Partial<EnginePhase>): EnginePhase {
 }
 
 describe("targetSplitDisplay", () => {
-  it("warmup: the label alone ('Easy'), no range", () => {
+  it("warmup: the label alone ('Easy'), no sub-line", () => {
     expect(
       targetSplitDisplay(phase({ type: "warmup", label: "Easy" })),
     ).toStrictEqual({
       main: "Easy",
-      range: null,
+      sub: null,
     });
   });
 
-  it("rest: the label alone ('Rest'), no range", () => {
+  it("rest: the label alone ('Rest'), no sub-line", () => {
     expect(
       targetSplitDisplay(phase({ type: "rest", label: "Rest" })),
     ).toStrictEqual({
       main: "Rest",
-      range: null,
+      sub: null,
     });
   });
 
-  it("test: the label alone ('All out'), no range", () => {
+  it("test: the label alone ('All out'), no sub-line", () => {
     expect(
       targetSplitDisplay(phase({ type: "test", label: "All out" })),
     ).toStrictEqual({
       main: "All out",
-      range: null,
+      sub: null,
     });
   });
 
@@ -53,33 +53,63 @@ describe("targetSplitDisplay", () => {
         label: "ALL OUT",
       }),
     );
-    expect(result).toStrictEqual({ main: "ALL OUT", range: null });
+    expect(result).toStrictEqual({ main: "ALL OUT", sub: null });
   });
 
-  it("split with a non-zero tolerance: the central value, and the range beneath it", () => {
-    // 6k=120, off=16 -> 136 -> fmtSplit "2:16.0"; tol 1 -> "2:15.0–2:17.0"
-    // (draft.test.ts's own pinned number for this exact split).
+  // Ui-fix round, Item 1: the sub-line is now the REF the split was
+  // resolved from, uppercased — not a tolerance band. 6k=120, off=16 ->
+  // 136 -> fmtSplit "2:16.0"; refLabel({base:"6k",off:16}) = "6k +16" ->
+  // uppercased "6K +16" (the design handoff's own literal example).
+  it("split: the exact resolved value, and the REF beneath it, uppercased", () => {
     const result = targetSplitDisplay(
       phase({
         type: "work",
         targetKind: "split",
         targetSplit: 136,
-        label: "2:15.0–2:17.0",
+        ref: { base: "6k", off: 16 },
+        label: "2:16.0",
       }),
     );
-    expect(result).toStrictEqual({ main: "2:16.0", range: "2:15.0–2:17.0" });
+    expect(result).toStrictEqual({ main: "2:16.0", sub: "6K +16" });
   });
 
-  it("split with ZERO tolerance: the range collapses onto the central value — no duplicate line", () => {
+  // A ref with no offset still gets its own sub-line (the base alone) —
+  // there is always something to say about "where this number came from",
+  // never a collapsed/omitted line the way the old tolerance-band branch
+  // dropped it when tol was 0.
+  it("split with a zero-offset ref: the sub-line is the bare base, uppercased", () => {
+    const result = targetSplitDisplay(
+      phase({
+        type: "work",
+        targetKind: "split",
+        targetSplit: 100,
+        ref: { base: "2k", off: 0 },
+        label: "1:40.0",
+      }),
+    );
+    expect(result).toStrictEqual({ main: "1:40.0", sub: "2K" });
+  });
+
+  // Q3 (fix round 1): this is NOT unreachable/defensive — it's the exact
+  // shape of a `v:1` SessionRun frozen before this round shipped `Phase.ref`
+  // at all. `domain/expand.ts`'s own `case "w"` always sets `ref` together
+  // with `targetKind: "split"` for a run built TODAY, but an old stored
+  // record loaded via `run.ts`'s own loose `isSessionRun` validation (which
+  // only checks `v`/top-level shape, never per-phase fields) can genuinely
+  // have `targetKind: "split"` with no `ref` at all. The card degrades to
+  // no sub-line (two lines, not three) rather than crashing — see
+  // Timer.test.tsx's own dedicated legacy-run test for the full timer-level
+  // proof (no crash, two-line card, UP NEXT shows the stored label as-is).
+  it("split with no ref at all (a legacy pre-ref run, not a defensive/unreachable case): no sub-line, never a crash", () => {
     const result = targetSplitDisplay(
       phase({
         type: "work",
         targetKind: "split",
         targetSplit: 136,
-        label: "2:16.0", // toleranceRange's own tol=0 branch: bare fmtSplit
+        label: "2:16.0",
       }),
     );
-    expect(result).toStrictEqual({ main: "2:16.0", range: null });
+    expect(result).toStrictEqual({ main: "2:16.0", sub: null });
   });
 });
 
@@ -109,24 +139,27 @@ describe("rateDisplay", () => {
 });
 
 describe("TimerTargets (component)", () => {
-  it("renders both cards for a split-ref work phase", () => {
+  it("renders both cards for a split-ref work phase, sub-line as the uppercased ref", () => {
     render(
       <TimerTargets
         phase={phase({
           type: "work",
           targetKind: "split",
           targetSplit: 136,
-          label: "2:15.0–2:17.0",
+          ref: { base: "6k", off: 16 },
+          label: "2:16.0",
           spm: 18,
         })}
       />,
     );
     expect(screen.getByText("TARGET SPLIT")).toBeInTheDocument();
     expect(screen.getByText("2:16.0")).toBeInTheDocument();
-    expect(screen.getByText("2:15.0–2:17.0")).toBeInTheDocument();
+    expect(screen.getByText("6K +16")).toBeInTheDocument();
     expect(screen.getByText("RATE")).toBeInTheDocument();
     expect(screen.getByText("18")).toBeInTheDocument();
     expect(screen.getByText("spm")).toBeInTheDocument();
+    // No tolerance band (EN DASH, U+2013) anywhere on the card.
+    expect(screen.queryByText(/–/)).not.toBeInTheDocument();
   });
 
   it("renders 'rate free' with no stray caption for a warm-up phase", () => {

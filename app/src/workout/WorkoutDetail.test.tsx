@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Link,
@@ -52,7 +52,7 @@ const WORKOUT: LibraryWorkout = {
 // A repeat-block workout for the handoff's nudge model: one raw "reps"
 // marker step governs everything after it, so the block is nudged once
 // rather than per-repetition. 2k baseline 1:52.0 (112s); off 0 -> 112s
-// target; tolerance 1 -> 1:51.0-1:53.0. Its work step sits at raw index 1
+// target, shown exact (ui-fix round). Its work step sits at raw index 1
 // — the SAME index as WORKOUT's first nudgeable work step — so the
 // per-workout scoping test below actually exercises the bug (stale nudge
 // state reappearing at a matching index) rather than passing by
@@ -108,7 +108,7 @@ const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 // run is only ever built from an already-started draft).
 function completedRunFor(draft: SessionDraft): SessionRun {
   const now = new Date("2026-08-01T12:00:00.000Z");
-  const built = buildRun(draft, BASELINES, 1, now);
+  const built = buildRun(draft, BASELINES, now);
   const run: SessionRun = {
     ...built,
     index: built.phases.length,
@@ -264,16 +264,17 @@ beforeEach(() => {
 });
 
 describe("WorkoutDetail", () => {
-  it("resolves a work step's target against real baselines into a tolerance range", async () => {
+  it("resolves a work step's target against real baselines into the exact split", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    // Hardcoded expectation (EN DASH, U+2013) — not recomputed via
-    // resolveSplit/toleranceRange, which would make this tautological.
-    expect(screen.getByText("1:59.0–2:01.0")).toBeInTheDocument();
+    // Hardcoded expectation — not recomputed via resolveSplit/fmtSplit,
+    // which would make this tautological. Ui-fix round, Item 1: the exact
+    // split, never a "lo–hi" tolerance band.
+    expect(screen.getByText("2:00.0")).toBeInTheDocument();
   });
 
-  it("shifts the resolved range one second faster after a single ▲ (faster) nudge", async () => {
+  it("shifts the resolved split one second faster after a single ▲ (faster) nudge", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
@@ -281,7 +282,7 @@ describe("WorkoutDetail", () => {
       screen.getAllByRole("button", { name: "Nudge faster" })[0]!,
     );
 
-    expect(screen.getByText("1:58.0–2:00.0")).toBeInTheDocument();
+    expect(screen.getByText("1:59.0")).toBeInTheDocument();
     expect(screen.getByText(/nudged −1s/)).toBeInTheDocument();
   });
 
@@ -294,9 +295,9 @@ describe("WorkoutDetail", () => {
     );
 
     expect(screen.getByText(/nudged \+1s/)).toBeInTheDocument();
-    // Hardcoded expectation (EN DASH, U+2013) — not recomputed via
-    // resolveSplit/toleranceRange, which would make this tautological.
-    expect(screen.getByText("2:00.0–2:02.0")).toBeInTheDocument();
+    // Hardcoded expectation — not recomputed via resolveSplit/fmtSplit,
+    // which would make this tautological.
+    expect(screen.getByText("2:01.0")).toBeInTheDocument();
   });
 
   it("shows the step's stroke rate in the sub-line", async () => {
@@ -613,7 +614,7 @@ describe("WorkoutDetail", () => {
     expect(screen.queryByText(/2′ rest/)).not.toBeInTheDocument();
   });
 
-  it("renders a rest step's label and duration with no target range or nudge controls", async () => {
+  it("renders a rest step's label and duration with no target split or nudge controls", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
@@ -625,14 +626,14 @@ describe("WorkoutDetail", () => {
     expect(
       within(restRow as HTMLElement).queryByRole("button"),
     ).not.toBeInTheDocument();
-    // No target range (EN DASH, U+2013) renders in a rest row — resting has
-    // no pace target to nudge.
+    // No target split (EN DASH, U+2013 — a band would render one) renders
+    // in a rest row — resting has no pace target to nudge.
     expect(
       within(restRow as HTMLElement).queryByText(/–/),
     ).not.toBeInTheDocument();
   });
 
-  it("renders a test step's label with no target range or nudge controls", async () => {
+  it("renders a test step's label with no target split or nudge controls", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
@@ -641,8 +642,8 @@ describe("WorkoutDetail", () => {
     expect(
       within(testRow as HTMLElement).queryByRole("button"),
     ).not.toBeInTheDocument();
-    // No target range (EN DASH, U+2013) renders in a test row — a test
-    // step is all-out effort, not paced to a target.
+    // No target split (EN DASH, U+2013 — a band would render one) renders
+    // in a test row — a test step is all-out effort, not paced to a target.
     expect(
       within(testRow as HTMLElement).queryByText(/–/),
     ).not.toBeInTheDocument();
@@ -654,10 +655,10 @@ describe("WorkoutDetail", () => {
 
     // liveSteps() would have expanded this into 4 separate work rows; the
     // handoff's raw-step model renders the block once with a marker above
-    // it, so there is exactly one range and exactly one pair of nudge
+    // it, so there is exactly one target and exactly one pair of nudge
     // buttons for the whole 4x block.
     expect(screen.getByText("4× the block below")).toBeInTheDocument();
-    expect(screen.getByText("1:51.0–1:53.0")).toBeInTheDocument();
+    expect(screen.getByText("1:52.0")).toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: "Nudge faster" }),
     ).toHaveLength(1);
@@ -672,11 +673,11 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText("4 MIN", { exact: false })).toBeInTheDocument();
 
     // One nudge covers the whole block: clicking the single ▲ moves the
-    // single displayed range, proving it's wired to the marker's raw
+    // single displayed split, proving it's wired to the marker's raw
     // step, not silently a no-op or scoped to one repetition.
     await userEvent.click(screen.getByRole("button", { name: "Nudge faster" }));
-    expect(screen.queryByText("1:51.0–1:53.0")).not.toBeInTheDocument();
-    expect(screen.getByText("1:50.0–1:52.0")).toBeInTheDocument();
+    expect(screen.queryByText("1:52.0")).not.toBeInTheDocument();
+    expect(screen.getByText("1:51.0")).toBeInTheDocument();
   });
 
   it("does not carry nudges from one workout to another when the route id changes without a component remount", async () => {
@@ -691,10 +692,10 @@ describe("WorkoutDetail", () => {
     await userEvent.click(screen.getByRole("link", { name: "Go to w2" }));
 
     // w2's step at the same raw index (its first work step) must render
-    // its neutral, un-nudged range — not w1's leftover nudge re-applied by
+    // its neutral, un-nudged split — not w1's leftover nudge re-applied by
     // index.
     expect(screen.queryByText(/nudged/)).not.toBeInTheDocument();
-    expect(screen.getByText("1:51.0–1:53.0")).toBeInTheDocument();
+    expect(screen.getByText("1:52.0")).toBeInTheDocument();
   });
 
   it("clamps a long run of same-direction nudges at MIN_SPLIT instead of drifting into a nonsense split", async () => {
@@ -704,17 +705,16 @@ describe("WorkoutDetail", () => {
     // 2k baseline is 112s; unclamped, 80 "faster" nudges would drive the
     // resolved split to 112 - 80 = 32s (and further presses toward
     // negative, where fmtSplit renders garbage like "-1:-1.0"). Clamped to
-    // MIN_SPLIT (60s), it should stop dead at "0:59.0–1:01.0" (tolerance 1)
-    // well before that.
+    // MIN_SPLIT (60s), it should stop dead at "1:00.0" well before that.
     const faster = screen.getByRole("button", { name: "Nudge faster" });
     for (let i = 0; i < 80; i++) {
       await userEvent.click(faster);
     }
 
-    expect(screen.getByText("0:59.0–1:01.0")).toBeInTheDocument();
+    expect(screen.getByText("1:00.0")).toBeInTheDocument();
   });
 
-  it("renders Edit and Delete controls for a personal (non-global) workout", async () => {
+  it("renders Edit and Delete workout controls for a personal (non-global) workout", async () => {
     mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetail("/library/w3");
@@ -723,10 +723,12 @@ describe("WorkoutDetail", () => {
       "href",
       "/library/w3/edit",
     );
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Delete workout" }),
+    ).toBeInTheDocument();
   });
 
-  it("renders neither Edit nor Delete for a global workout, since the server 403s its mutations", async () => {
+  it("renders neither Edit nor Delete workout for a global workout, since the server 403s its mutations", async () => {
     mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [WORKOUT]);
     await renderDetail("/library/w1");
@@ -735,45 +737,123 @@ describe("WorkoutDetail", () => {
       screen.queryByRole("link", { name: "Edit" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Delete" }),
+      screen.queryByRole("button", { name: "Delete workout" }),
     ).not.toBeInTheDocument();
   });
 
-  it("asks for confirmation before deleting — the API is not called on the first Delete press", async () => {
+  // Fix round 1 (F2): the old two-button staged-confirm panel (Cancel
+  // beside a second "Delete workout" button) is gone — Delete workout now
+  // arms IN PLACE, the level system's own L4/L4-armed idiom, same shape as
+  // Discard elsewhere in this round. The two-tap safety itself is
+  // unchanged. Fix round 2 (whole-branch review Md5): the retired panel's
+  // own reassurance copy is back too, restored as its own line beneath —
+  // see the test below.
+  it("asks for confirmation before deleting — the API is not called on the first Delete workout press", async () => {
     const api = mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetail("/library/w3");
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
 
     expect(api).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: "Delete workout" }),
+      screen.getByRole("button", { name: "Tap again to delete" }),
     ).toBeInTheDocument();
   });
 
-  it("issues DELETE /api/workouts/:id once the confirmation is pressed", async () => {
+  it("shows the logged-sessions-are-kept reassurance only once armed, not at rest", async () => {
+    mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetail("/library/w3");
+
+    expect(
+      screen.queryByText(/Your logged sessions are kept/),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
+
+    expect(
+      screen.getByText(
+        "Your logged sessions are kept — they keep their own copy of the title and type.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("issues DELETE /api/workouts/:id once the armed 'Tap again to delete' press lands", async () => {
     const api = mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetailWithLibraryRoute("/library/w3");
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Delete workout" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to delete" }),
     );
 
     expect(api).toHaveBeenCalledWith("/api/workouts/w3", { method: "DELETE" });
     expect(await screen.findByText("LIBRARY SCREEN")).toBeInTheDocument();
   });
 
-  it("tells the rower their logged history survives in the delete confirmation copy", async () => {
-    mockApi(() => new Response(null, { status: 204 }));
+  // Same auto-disarm rule Discard uses elsewhere this round (DESIGN.md:
+  // "Auto-disarms on blur or 4s") — proven here via blur, the cheaper of
+  // the two to test (the 4s timer is exercised by its own fake-timers test
+  // below).
+  it("disarms on blur — a second press after focus moves away arms again instead of deleting", async () => {
+    const api = mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetail("/library/w3");
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const del = screen.getByRole("button", { name: "Delete workout" });
+    await userEvent.click(del);
+    expect(
+      screen.getByRole("button", { name: "Tap again to delete" }),
+    ).toBeInTheDocument();
 
-    expect(screen.getByText(/logged sessions are kept/i)).toBeInTheDocument();
+    // Focus moving away — a real Edit click would navigate this test's
+    // single-route render out from under itself, so blur is fired directly
+    // rather than routing through a real navigation.
+    fireEvent.blur(screen.getByRole("button", { name: "Tap again to delete" }));
+    expect(
+      screen.getByRole("button", { name: "Delete workout" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
+    expect(api).not.toHaveBeenCalled();
+  });
+
+  it("disarms after 4 seconds with no second press", async () => {
+    vi.useFakeTimers();
+    try {
+      mockApi(() => new Response(null, { status: 204 }));
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      await renderDetail("/library/w3");
+
+      // fireEvent (not userEvent, which schedules its own real-time delays
+      // that fake timers would otherwise stall) fires the click directly.
+      fireEvent.click(screen.getByRole("button", { name: "Delete workout" }));
+      expect(
+        screen.getByRole("button", { name: "Tap again to delete" }),
+      ).toBeInTheDocument();
+
+      // `act` wraps the fake-timer advance so the auto-disarm timeout's
+      // `setArmed(false)` (called OUTSIDE any React event, from a raw
+      // `setTimeout`) is flushed to the DOM before the next assertion —
+      // same idiom as Countdown.test.tsx's own tick-down test.
+      await act(() => vi.advanceTimersByTimeAsync(4000));
+
+      expect(
+        screen.getByRole("button", { name: "Delete workout" }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // The recorded bug this task round fixes: every ← BACK on this screen was
@@ -860,9 +940,11 @@ describe("WorkoutDetail", () => {
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetailWithState("/library/w3", { from: "/today" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Delete workout" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to delete" }),
     );
 
     expect(api).toHaveBeenCalledWith("/api/workouts/w3", { method: "DELETE" });

@@ -1,6 +1,6 @@
 /* Design tokens — docs/design/README.md §Design tokens. Values are the
-   handoff's, verbatim. accent and pace-tolerance are settings (the handoff
-   calls both configurable), so consume them as variables, never literals. */
+   handoff's, verbatim. accent is a setting (the handoff calls it
+   configurable), so consume it as a variable, never a literal. */
 :root {
   --page: #f4f1e8;
   --surface: #fffdf7;
@@ -10,6 +10,17 @@
      expanded one (which stays --surface) without a border-only change. */
   --surface-collapsed: #fbf9f1;
   --ink: #1b1a17;
+  /* Alias of --ink, not a new colour: docs/design/handoffs/2026-08-03-ui-fix/
+     DESIGN.md (Item 4, SHUFFLE) and this round's own task-1 brief both name
+     `--ink-1` for SHUFFLE's label — a token this file never defined (the
+     ink scale below has always started at unsuffixed `--ink`, then
+     `--ink-2` through `--ink-5`). Added literally rather than silently
+     substituting `--ink` at the one call site, so a future reader of either
+     handoff document finds the name they were given actually resolves.
+     `var(--ink)`, not a duplicated hex literal (fix round 1 hardening) —
+     stays in lockstep with `--ink` itself, the same aliasing `--type-tr`
+     now uses below for the identical reason. */
+  --ink-1: var(--ink);
   --ink-2: #3f3c35;
   --ink-3: #57544c;
   --ink-4: #6f6a5f;
@@ -22,7 +33,16 @@
   --type-o2: #2a6275;
   --type-at: #8a5f18;
   --type-an: #5c4382;
-  --type-tr: #b5341f;
+  /* Fix round 1 (James's ruling): was #b5341f, IDENTICAL to --accent — every
+     TR chip/badge filled with what was structurally "accent", quietly
+     breaking the ui-fix round's own "accent means exactly four things,
+     never selected/never a fifth type" rule for one type out of four. TR
+     now reads as ink everywhere, the same colour --type-test already used
+     (TypeBadge's `.type-badge` pairs it with --on-color text, the identical
+     17.1:1 pairing TEST badges already prove safe) — a deliberate,
+     app-wide repaint of every TR badge/chip (Library rows, LAST THREE,
+     Plan, Today's type-swap chip, Builder's TYPE chip), not collateral. */
+  --type-tr: var(--ink);
   --type-test: #1b1a17;
   --on-color: #fffdf7;
   --pain-empty: #e0dacb;
@@ -50,7 +70,4 @@
   --font-serif: "Newsreader", Georgia, serif;
   --font-sans: "Archivo", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-
-  /* seconds of tolerance either side of a resolved target (settings, 0–3) */
-  --pace-tolerance: 1;
 }
