@@ -100,11 +100,34 @@ function visibleHrefs(): (string | null)[] {
     .map((link) => link.getAttribute("href"));
 }
 
+/** A token's own label text, scoped to `.filter-token-label` — a bare
+ *  `getByText` for e.g. "AT" collides with the filtered row's own
+ *  `.type-badge` once the list is narrowed to that type. */
+function tokenLabel(label: string) {
+  return screen.getByText(label, { selector: ".filter-token-label" });
+}
+
+/** Opens the FILTER sheet — every filter interaction in this suite goes
+ *  through it now that FilterChips.tsx (the old flat chip row) is retired. */
+async function openSheet() {
+  await userEvent.click(screen.getByRole("button", { name: "FILTER ⌄" }));
+}
+
+/** Clicks the sheet's own live-counting primary — its accessible name
+ *  changes with the draft ("Show 12 workouts"), hence the regex. Only valid
+ *  when the draft matches at least one workout; the button is disabled
+ *  ("No workouts match") otherwise, by design (FilterSheet.tsx). */
+async function applySheet() {
+  await userEvent.click(
+    screen.getByRole("button", { name: /^Show \d+ workouts?$/ }),
+  );
+}
+
 beforeEach(() => {
   vi.resetModules();
   // Filters now persist to sessionStorage by design (the filter-BACK fix),
-  // so without this every test would inherit whatever chips the previous
-  // test left active.
+  // so without this every test would inherit whatever the previous test
+  // left active.
   sessionStorage.clear();
 });
 
@@ -141,60 +164,292 @@ describe("Library", () => {
     mockReady();
     await renderLibrary();
 
-    expect(screen.getByText("3 ENTERED")).toBeInTheDocument();
+    expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/375/);
+    expect(document.body.textContent).not.toMatch(/ENTERED/);
   });
 
-  it("narrows to AT rows when the AT chip is clicked, and updates the count", async () => {
-    mockReady();
-    await renderLibrary();
+  describe("FILTER sheet", () => {
+    it("opens on FILTER ⌄, closes on the sheet's own primary, and applies the draft", async () => {
+      mockReady();
+      await renderLibrary();
 
-    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+      const toggle = screen.getByRole("button", { name: "FILTER ⌄" });
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await openSheet();
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
 
-    expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);
-    expect(screen.getByText("1 ENTERED")).toBeInTheDocument();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "AT",
+        }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Show 1 workout" }),
+      ).toBeInTheDocument();
+      await applySheet();
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+    });
+
+    it("dismissing via the backdrop discards the draft — the previously-applied filters are unchanged", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "AT",
+        }),
+      );
+      // The backdrop is the dialog's own parent; clicking it (not the panel)
+      // fires the dismiss handler (FilterSheet.tsx's onClick + stopPropagation
+      // on the inner panel).
+      await userEvent.click(screen.getByRole("dialog").parentElement!);
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      // Nothing was applied — still the full, unfiltered list.
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+      ]);
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+
+    it("dismissing via Escape discards the draft the same as the backdrop", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "AT",
+        }),
+      );
+      await userEvent.keyboard("{Escape}");
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+
+    // Md4 (whole-branch review): the trigger is the element focused right
+    // before the sheet mounts (a real click focuses its own target first),
+    // so FilterSheet.tsx's own "restore whatever had focus before" effect
+    // lands here without Library needing to pass the trigger down at all.
+    it("restores focus to FILTER ⌄ once the sheet closes", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const toggle = screen.getByRole("button", { name: "FILTER ⌄" });
+      await openSheet();
+      expect(toggle).not.toHaveFocus();
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(toggle).toHaveFocus();
+    });
+
+    it("re-opening the sheet seeds the draft from the currently-applied filters, not whatever was left mid-edit last time", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "AT" }),
+      );
+      // Dismiss without applying.
+      await userEvent.keyboard("{Escape}");
+
+      await openSheet();
+      expect(
+        within(dialog()).getByRole("button", { name: "AT" }),
+      ).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("the sheet's own CLEAR resets the draft without closing or applying", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "AT" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Show 1 workout" }),
+      ).toBeInTheDocument();
+
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "CLEAR" }),
+      );
+
+      expect(dialog()).toBeVisible();
+      expect(
+        within(dialog()).getByRole("button", { name: "AT" }),
+      ).toHaveAttribute("aria-pressed", "false");
+      expect(
+        screen.getByRole("button", { name: "Show 3 workouts" }),
+      ).toBeInTheDocument();
+    });
+
+    it("the primary disables and reads 'No workouts match' when the draft matches nothing", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      // AT's only workout is a 30-minute step, which buckets as 30-45 —
+      // <30′ combined with AT matches nothing.
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "AT" }),
+      );
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "<30′" }),
+      );
+
+      const primary = screen.getByRole("button", {
+        name: "No workouts match",
+      });
+      expect(primary).toBeDisabled();
+    });
+
+    it("toggling the same TYPE cell twice in one sheet session clears it (single-select, toggles off)", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      const atCell = within(dialog()).getByRole("button", {
+        name: "AT",
+      });
+      await userEvent.click(atCell);
+      await userEvent.click(atCell);
+      await applySheet();
+
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+      ]);
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+
+    it("narrows to NOT-RECENT rows via LAST DONE 21D+, counting never-done as 21D+", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "21D+",
+        }),
+      );
+      await applySheet();
+
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2", "/library/w-an"]);
+      expect(screen.getByText("2 OF 3 SHOWN")).toBeInTheDocument();
+    });
   });
 
-  it("clicking AT again restores the full list (toggle-off)", async () => {
-    mockReady();
-    await renderLibrary();
-    const atChip = screen.getByRole("button", { name: "AT" });
+  describe("active-filter tokens", () => {
+    it("renders one token per active group and CLEAR ALL, which removes everything", async () => {
+      mockReady();
+      await renderLibrary();
 
-    await userEvent.click(atChip);
-    await userEvent.click(atChip);
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      // AT + PAIN 3 both match w-at (fixture: type AT, pain 3) — two groups
+      // active together, still exactly one result.
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "AT" }),
+      );
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "3" }),
+      );
+      await applySheet();
 
-    expect(visibleHrefs()).toStrictEqual([
-      "/library/w-at",
-      "/library/w-o2",
-      "/library/w-an",
-    ]);
-    expect(screen.getByText("3 ENTERED")).toBeInTheDocument();
+      expect(tokenLabel("AT")).toBeInTheDocument();
+      expect(screen.getByText("PAIN 3")).toBeInTheDocument();
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
+
+      expect(screen.queryByText("PAIN 3")).not.toBeInTheDocument();
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+      ]);
+    });
+
+    it("a token's own ✕ removes exactly that group, leaving the others active", async () => {
+      mockReady();
+      await renderLibrary();
+
+      // Applied in two sheet visits (AT alone, then AT+PAIN 3 together) —
+      // w-at is the fixture's only AT *and* only pain-3 workout, so
+      // selecting both in one draft would still resolve to exactly it, but
+      // going through two visits proves the SECOND apply doesn't clobber
+      // the first group, only adds to it.
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "AT",
+        }),
+      );
+      await applySheet();
+
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "3",
+        }),
+      );
+      await applySheet();
+
+      expect(tokenLabel("AT")).toBeInTheDocument();
+      expect(screen.getByText("PAIN 3")).toBeInTheDocument();
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Remove AT filter" }),
+      );
+
+      expect(
+        screen.queryByText("AT", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("PAIN 3")).toBeInTheDocument();
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);
+    });
   });
 
-  it("ALL clears every active chip and restores the full list", async () => {
+  it("shows the empty state, not a bare list, when a restored filter combination matches nothing", async () => {
+    // The sheet's own primary disables at zero results (FilterSheet.tsx),
+    // so a fresh sheet session can never COMMIT an empty-matching draft —
+    // this state is only reachable via a restored sessionStorage value
+    // (e.g. a BACK return after the matching workout was deleted
+    // elsewhere), which is what this seeds directly.
+    sessionStorage.setItem(
+      "ergomatic.libraryFilters",
+      JSON.stringify({
+        type: "AT",
+        durations: ["<30"],
+        painLevels: [],
+        lastDone: null,
+        source: null,
+      }),
+    );
     mockReady();
     await renderLibrary();
-
-    await userEvent.click(screen.getByRole("button", { name: "AT" }));
-    await userEvent.click(screen.getByRole("button", { name: "PAIN ≤3" }));
-    await userEvent.click(screen.getByRole("button", { name: "RECENT" }));
-    await userEvent.click(screen.getByRole("button", { name: "ALL" }));
-
-    expect(visibleHrefs()).toStrictEqual([
-      "/library/w-at",
-      "/library/w-o2",
-      "/library/w-an",
-    ]);
-  });
-
-  it("shows the empty state, not a bare list, when filters match nothing", async () => {
-    mockReady();
-    await renderLibrary();
-
-    // AT's only workout is a 30-minute step, which buckets as 30-45 — <30′
-    // combined with the AT chip matches nothing.
-    await userEvent.click(screen.getByRole("button", { name: "AT" }));
-    await userEvent.click(screen.getByRole("button", { name: "<30′" }));
 
     expect(screen.getByText(/No workouts match/i)).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
@@ -203,22 +458,12 @@ describe("Library", () => {
       screen.getByRole("button", { name: /clear filters/i }),
     );
 
-    expect(screen.getByText("3 ENTERED")).toBeInTheDocument();
+    expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
     expect(visibleHrefs()).toStrictEqual([
       "/library/w-at",
       "/library/w-o2",
       "/library/w-an",
     ]);
-  });
-
-  it("narrows to NOT RECENT rows when the chip is clicked, counting never-done as not recent", async () => {
-    mockReady();
-    await renderLibrary();
-
-    await userEvent.click(screen.getByRole("button", { name: "NOT RECENT" }));
-
-    expect(visibleHrefs()).toStrictEqual(["/library/w-o2", "/library/w-an"]);
-    expect(screen.getByText("2 ENTERED")).toBeInTheDocument();
   });
 
   it("renders a — duration fallback instead of a bogus number when baselines are unset", async () => {
@@ -283,17 +528,23 @@ describe("Library", () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
-  describe("CUSTOM filter", () => {
-    it("narrows to non-global rows when the CUSTOM chip is clicked, and ALL restores everything", async () => {
+  describe("SOURCE filter", () => {
+    it("narrows to non-global rows via SOURCE CUSTOM, and CLEAR ALL restores everything", async () => {
       mockReady([...WORKOUTS, CUSTOM_WORKOUT]);
       await renderLibrary();
 
-      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "CUSTOM",
+        }),
+      );
+      await applySheet();
 
       expect(visibleHrefs()).toStrictEqual(["/library/w-custom"]);
-      expect(screen.getByText("1 ENTERED")).toBeInTheDocument();
+      expect(screen.getByText("1 OF 4 SHOWN")).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole("button", { name: "ALL" }));
+      await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
 
       expect(visibleHrefs()).toStrictEqual([
         "/library/w-at",
@@ -301,28 +552,44 @@ describe("Library", () => {
         "/library/w-an",
         "/library/w-custom",
       ]);
-      expect(screen.getByText("4 ENTERED")).toBeInTheDocument();
+      expect(screen.getByText("4 WORKOUTS")).toBeInTheDocument();
     });
 
-    it("keeps ALL's pressed state in sync with customOnly (isEmptyFilters)", async () => {
-      mockReady();
+    it("GLOBAL and CUSTOM are mutually exclusive", async () => {
+      mockReady([...WORKOUTS, CUSTOM_WORKOUT]);
       await renderLibrary();
-      const allChip = screen.getByRole("button", { name: "ALL" });
-      expect(allChip).toHaveAttribute("aria-pressed", "true");
 
-      const customChip = screen.getByRole("button", { name: "CUSTOM" });
-      await userEvent.click(customChip);
-      expect(allChip).toHaveAttribute("aria-pressed", "false");
-
-      await userEvent.click(customChip);
-      expect(allChip).toHaveAttribute("aria-pressed", "true");
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      const globalCell = within(dialog()).getByRole("button", {
+        name: "GLOBAL",
+      });
+      const customCell = within(dialog()).getByRole("button", {
+        name: "CUSTOM",
+      });
+      await userEvent.click(globalCell);
+      expect(globalCell).toHaveAttribute("aria-pressed", "true");
+      await userEvent.click(customCell);
+      expect(globalCell).toHaveAttribute("aria-pressed", "false");
+      expect(customCell).toHaveAttribute("aria-pressed", "true");
     });
 
-    it("shows the builder-link empty state when CUSTOM matches nothing", async () => {
+    it("shows the builder-link empty state when a restored SOURCE=custom filter matches nothing", async () => {
+      // Same reasoning as the AT/<30' empty-state test above: the sheet's
+      // own primary would disable at zero custom workouts, so this state is
+      // only reached via a restored sessionStorage value.
+      sessionStorage.setItem(
+        "ergomatic.libraryFilters",
+        JSON.stringify({
+          type: null,
+          durations: [],
+          painLevels: [],
+          lastDone: null,
+          source: "custom",
+        }),
+      );
       mockReady();
       await renderLibrary();
-
-      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
 
       expect(screen.getByText(/No custom workouts yet/i)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "build one" })).toHaveAttribute(
@@ -364,10 +631,19 @@ describe("Library", () => {
     });
 
     it("stamps state={from:'/library'} onto the CUSTOM-empty 'build one' link", async () => {
+      sessionStorage.setItem(
+        "ergomatic.libraryFilters",
+        JSON.stringify({
+          type: null,
+          durations: [],
+          painLevels: [],
+          lastDone: null,
+          source: "custom",
+        }),
+      );
       mockReady();
       await renderLibraryWithProbes();
 
-      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
       await userEvent.click(screen.getByRole("link", { name: "build one" }));
       expect(await screen.findByText("PROBE from=/library")).toBeVisible();
     });
@@ -425,7 +701,7 @@ describe("Library", () => {
       scrollToSpy.mockRestore();
     });
 
-    it("does not restore again on a later re-render once rows are already showing (a filter click doesn't re-scroll)", async () => {
+    it("does not restore again on a later re-render once rows are already showing (a filter change doesn't re-scroll)", async () => {
       sessionStorage.setItem("ergomatic.libraryScroll", String(SAVED_SCROLL_Y));
       const scrollToSpy = vi
         .spyOn(window, "scrollTo")
@@ -436,7 +712,13 @@ describe("Library", () => {
       expect(await screen.findByRole("list")).toBeInTheDocument();
       expect(scrollToSpy).toHaveBeenCalledTimes(1);
 
-      await userEvent.click(screen.getByRole("button", { name: "AT" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "AT",
+        }),
+      );
+      await applySheet();
 
       expect(scrollToSpy).toHaveBeenCalledTimes(1);
       scrollToSpy.mockRestore();
@@ -532,25 +814,22 @@ describe("Library", () => {
   });
 
   describe("filter persistence (bugfix: BACK with filters enabled)", () => {
-    it("mounts with the saved filters applied — chips pressed AND the list already narrowed", async () => {
+    it("mounts with the saved filters applied — the count and list are already narrowed", async () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
           type: "AT",
           durations: [],
-          painMax3: false,
-          recency: null,
-          customOnly: false,
+          painLevels: [],
+          lastDone: null,
+          source: null,
         }),
       );
       mockReady();
       await renderLibrary();
 
-      expect(await screen.findByRole("button", { name: "AT" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
-      expect(screen.getByText("1 ENTERED")).toBeInTheDocument();
+      expect(await screen.findByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      expect(tokenLabel("AT")).toBeInTheDocument();
       expect(screen.getByText("Anaerobic Threshold Blitz")).toBeInTheDocument();
       expect(screen.queryByText("Steady State Cruise")).not.toBeInTheDocument();
     });
@@ -567,9 +846,9 @@ describe("Library", () => {
         JSON.stringify({
           type: "AT",
           durations: [],
-          painMax3: false,
-          recency: null,
-          customOnly: false,
+          painLevels: [],
+          lastDone: null,
+          source: null,
         }),
       );
       let rowsAtRestore: number | null = null;
@@ -594,22 +873,34 @@ describe("Library", () => {
       await renderLibrary();
       await screen.findByRole("list");
 
-      await userEvent.click(screen.getByRole("button", { name: "AT" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "AT",
+        }),
+      );
+      await applySheet();
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
       ).toMatchObject({ type: "AT" });
 
-      await userEvent.click(screen.getByRole("button", { name: "PAIN ≤3" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "3",
+        }),
+      );
+      await applySheet();
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: "AT", painMax3: true });
+      ).toMatchObject({ type: "AT", painLevels: [3] });
 
-      // ALL empties the persisted set too — a BACK after clearing must not
-      // resurrect the cleared chips.
-      await userEvent.click(screen.getByRole("button", { name: "ALL" }));
+      // CLEAR ALL empties the persisted set too — a BACK after clearing
+      // must not resurrect the cleared filters.
+      await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: null, painMax3: false });
+      ).toMatchObject({ type: null, painLevels: [] });
     });
 
     it("ignores a malformed stored value and mounts unfiltered", async () => {
@@ -618,11 +909,28 @@ describe("Library", () => {
       await renderLibrary();
 
       expect(await screen.findByRole("list")).toBeInTheDocument();
-      expect(screen.getByText("3 ENTERED")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "ALL" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+
+    it("ignores a v1-shaped stored value (painMax3/recency/customOnly) and mounts unfiltered", async () => {
+      // The pre-Task-4 shape — falls back to EMPTY_FILTERS the same as any
+      // other malformed record (libraryFilters.ts's own validator never
+      // reads these field names at all).
+      sessionStorage.setItem(
+        "ergomatic.libraryFilters",
+        JSON.stringify({
+          type: "AT",
+          durations: [],
+          painMax3: true,
+          recency: "recent",
+          customOnly: false,
+        }),
       );
+      mockReady();
+      await renderLibrary();
+
+      expect(await screen.findByRole("list")).toBeInTheDocument();
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
     });
   });
 });

@@ -1377,4 +1377,51 @@ describe("GET /api/today", () => {
     expect(res.body.todayCode).toBe(PLANS.head.sessions[0]);
     expect(res.body.planKey).toBe("head");
   });
+
+  // Amendment fix round (L1): pins bucketsForCap's own derivation at the
+  // route level, not just in the client-side unit/client suites —
+  // PREFERENCES_DEFAULTS.timeCapMinutes is 60, and bucketsForCap(60)
+  // (domain/duration.ts) keeps only the first three buckets, excluding
+  // "60+". A workout estimated at EXACTLY 60 minutes buckets as "60+"
+  // (bucketFor's own <60 rule: minutes<60 is false at exactly 60), so it
+  // must be excluded from the pool — the precise boundary this round's
+  // cap-to-bucket derivation turns on. A second, shorter workout of the
+  // same type stays in the filtered pool (non-empty), which is what keeps
+  // suggest()'s own fellBack rule from masking the exclusion by falling
+  // back to the unfiltered type list.
+  it("excludes a workout estimated at exactly the account's 60-min cap from the pool (the bucketsForCap boundary)", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/baselines")).send({
+      k2Seconds: 120,
+      k6Seconds: 130,
+    });
+    const todayCode = PLANS.sprint.sessions[0];
+    const short = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({
+        title: "Well Under The Cap",
+        type: todayCode as "AN" | "O2" | "AT" | "TR",
+      }),
+    );
+    // wu 10' + a 50' work step (fixed `duration: {kind: "time"}`, so its
+    // seconds don't depend on baselines/pace) = exactly 60 minutes total.
+    const atCap = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({
+        title: "Exactly At The Cap",
+        type: todayCode as "AN" | "O2" | "AT" | "TR",
+        steps: [
+          { k: "wu", minutes: 10 },
+          {
+            k: "w",
+            duration: { kind: "time", minutes: 50 },
+            ref: { base: "2k", off: 10 },
+          },
+        ],
+      }),
+    );
+    const res = await asA(request(app).get("/api/today"));
+    expect(res.status).toBe(200);
+    expect(res.body.pool).toContain(short.body.id);
+    expect(res.body.pool).not.toContain(atCap.body.id);
+    expect(res.body.recommendation).toBe(short.body.id);
+  });
 });

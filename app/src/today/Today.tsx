@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
@@ -17,51 +17,80 @@ import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
 import type { PlanCode } from "../../domain/plans.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
+import { useStagedDiscard } from "../session/useStagedDiscard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
   loadTodayOverrides,
   saveTodayOverrides,
-  snapCap,
+  bucketsForCap,
   type TodayOverrides,
 } from "./todayOverrides";
+import {
+  todayFilterTokens,
+  type TodayFilterDefaults,
+} from "./todayFilterTokens";
+import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 import TypeBadge from "../components/TypeBadge";
-import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
+import { TokenRow } from "../components/TokenRow";
 
 // Chip order per the task brief — AN before O2, matching Library's own
-// FilterChips.tsx (docs/design/README.md §Screens → "2. Library": not
-// alphabetical).
+// FilterSheet.tsx TYPE cells (docs/design/README.md §Screens → "2. Library":
+// not alphabetical).
 const TYPE_CHIPS: WorkoutType[] = ["AN", "O2", "AT", "TR"];
 
-// "≤NN′" — Library's own prime-mark idiom for minutes (FilterChips.tsx's
-// DURATION_CHIPS), applied here to an upper-bound cap rather than a range
-// bucket, hence "≤" instead of Library's "<"/"–"/"+".
-const CAP_CHIPS: { value: number | null; label: string }[] = [
-  { value: 30, label: "≤30′" },
-  { value: 45, label: "≤45′" },
-  { value: 60, label: "≤60′" },
-  { value: 90, label: "≤90′" },
-  { value: null, label: "NO CAP" },
-];
+// CSS custom property per workout type — never a raw hex (tokens.css). Kept
+// local rather than shared with ClassificationCard.tsx's own identical map:
+// this repo's established per-file duplication convention (that file's own
+// comment on TYPE_COLOR_VAR explains the precedent — Builder.tsx, PainBar.tsx
+// and TypeBadge.tsx each already keep their own copy).
+const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
+  O2: "--type-o2",
+  AT: "--type-at",
+  AN: "--type-an",
+  TR: "--type-tr",
+};
+
+// The day's "no filter" difficulty baseline (todayFilterTokens.ts's own
+// TodayFilterDefaults, "Active" rule per the collapsible-filter spec) —
+// always the full set, independent of the account's own (possibly
+// narrower) server preference, which only seeds the INITIAL overrides
+// record below, a separate concern.
+const ALL_DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 
 /** Local chip button — same `.chip` class + `aria-pressed` rendering
- *  convention as Library's own FilterChips.tsx `Chip`, not that component
- *  itself: Today's chips have different selection semantics per group
- *  (multi-select difficulties, single-select cap, a toggle, and a type
- *  swap that reads its active state off two different sources). */
+ *  convention Library's own filter controls use, not a shared component.
+ *  Today's only remaining consumer is the type-swap row (Task 2, 2026-08-04
+ *  round: DIFFICULTY/TIME/PAIN's own inline chips moved into
+ *  TodayFilterSheet.tsx's CellGrid instances, which render through
+ *  CellGrid's own cell button, not this one) — every caller here passes
+ *  `typeColorVar`, mirroring ClassificationCard.tsx's own inline-style-
+ *  when-selected treatment for TYPE, so the same chip reads identically
+ *  whether the rower is filtering here or authoring in the builder. */
 function TodayChip({
   label,
   active,
   onClick,
+  typeColorVar,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  typeColorVar?: string;
 }) {
   return (
     <button
       type="button"
       className="chip"
       aria-pressed={active}
+      style={
+        active && typeColorVar
+          ? {
+              background: `var(${typeColorVar})`,
+              borderColor: `var(${typeColorVar})`,
+              color: "var(--on-color)",
+            }
+          : undefined
+      }
       onClick={onClick}
     >
       {label}
@@ -75,8 +104,8 @@ const STALE_DRAFT_MS = 24 * 60 * 60 * 1000;
 // title + "JUL 25 · HELD · 2/10" — a date (not days-ago), the plain word,
 // and the pain figure. The handoff's own "2/10" is its unmodified 1-10
 // scale; docs/design/DEVIATIONS.md's first row establishes Ergomatic's is
-// 1-5 everywhere else (PainBar, WorkoutDetail's "PAIN n/5", the library's
-// "PAIN ≤3" chip) — matching the handoff's literal "/10" here would
+// 1-5 everywhere else (PainBar, WorkoutDetail's "PAIN n/5", Library's own
+// 1-5 PAIN filter cells) — matching the handoff's literal "/10" here would
 // contradict that already-decided, already-documented scale, so this uses
 // "/5" like every other pain display in the app.
 const MONTH_ABBREV = [
@@ -117,15 +146,21 @@ export function elapsedSinceStart(run: SessionRun, now: Date): number {
 // Baselines unset (a brand-new account) means estimateMinutes cannot
 // resolve a single work step's split — it would throw, not return an
 // estimate. The suggestion card still has to render in that state (reason
-// without a target preview), and suggest()/suggestFreestyle()'s time-cap
-// filter needs *some* estMinutes number per entry. Building estMinutes as 0
-// here means the cap filter never excludes an entry for having an
-// "unknowable" duration — 0 is <= any positive cap. The FILTER being
-// harmless this way isn't enough on its own, though: suggest.ts's default
-// reason text used to claim "within your N min cap" unconditionally, which
-// is untrue when every duration fed into it was a placeholder — fixed by
-// passing `durationsUnknown: true` in prefs below, which is domain/suggest.ts's
-// own job to honor (SuggestPrefs' own doc comment explains why).
+// without a target preview), and suggest()/suggestFreestyle()'s duration-
+// bucket filter needs *some* estMinutes number per entry. Building
+// estMinutes as 0 here does NOT by itself make the filter harmless the way
+// it did under the old single-value cap (0 <= any positive cap,
+// unconditionally): `bucketFor(0)` is `"<30"`, a real bucket a narrower
+// `durations` selection (e.g. `["45-60"]`) would legitimately exclude,
+// wrongly treating an UNKNOWABLE duration as a known short one. What
+// actually keeps the filter harmless is passing `durationsUnknown: true`
+// in prefs below — domain/suggest.ts's own `passesDurationFilter` skips
+// the bucket check ENTIRELY when that flag is set, regardless of which
+// bucket the 0 placeholder resolves to (SuggestPrefs' own doc comment
+// spells out why the placeholder value alone can no longer carry this).
+// The same flag also keeps the reason text honest, unchanged from before:
+// without it, the standard/fellback reasons would claim a duration was
+// actually checked when every one fed in was a placeholder.
 function toLibraryEntry(
   w: LibraryWorkout,
   baselines: Baselines | null,
@@ -138,6 +173,59 @@ function toLibraryEntry(
     estMinutes: baselines ? estimateMinutes(w.steps, baselines).minutes : 0,
     lastDoneDaysAgo: w.lastDoneDaysAgo,
   };
+}
+
+/** The suggest()/suggestFreestyle() call TodayView makes for its own
+ *  (applied) `overrides`, extracted as a pure module-scope helper — Task 2
+ *  (2026-08-04 round) needs the EXACT SAME call runnable against
+ *  TodayFilterSheet's in-progress DRAFT too (the sheet's live `Show N
+ *  options` count), and a pure function both call sites can share is
+ *  simpler than lifting suggestion state up out of TodayView. */
+function computeSuggestion(
+  filters: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
+  entries: LibraryEntry[],
+  baselines: Baselines | null,
+  todayCode: PlanCode | null,
+  pickOverride: string | null,
+) {
+  const prefs: SuggestPrefs = {
+    difficulties: filters.difficulties,
+    durations: filters.durations,
+    painLevels: filters.painLevels,
+    // See toLibraryEntry's comment: with no baselines, every entry's
+    // estMinutes is a 0 placeholder. This flag does double duty in
+    // domain/suggest.ts — it skips the duration-bucket FILTER entirely
+    // (not just the reason text) so the placeholder's own bucket
+    // (`bucketFor(0)` is `"<30"`) never wrongly includes or excludes an
+    // unknown-duration entry, and it keeps the reason text from claiming a
+    // duration was actually checked against a real number.
+    durationsUnknown: baselines === null,
+  };
+  // Narrowing on todayCode (rather than a separate boolean) lets TS see
+  // `suggest`'s todayCode argument is non-null in the true branch with no
+  // assertion.
+  return todayCode !== null
+    ? suggest({
+        todayCode,
+        library: entries,
+        prefs,
+        todayPickId: pickOverride ?? undefined,
+      })
+    : suggestFreestyle(entries, prefs, pickOverride ?? undefined);
+}
+
+/** TodayFilterSheet's own live pool count: the same call above, run
+ *  against the sheet's draft rather than the applied overrides, reduced to
+ *  just the pool size the primary button's `Show N options` label needs. */
+function poolCountFor(
+  draft: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
+  entries: LibraryEntry[],
+  baselines: Baselines | null,
+  todayCode: PlanCode | null,
+  pickOverride: string | null,
+): number {
+  return computeSuggestion(draft, entries, baselines, todayCode, pickOverride)
+    .poolIds.length;
 }
 
 export default function Today() {
@@ -259,11 +347,13 @@ export default function Today() {
   // key={} forces a fresh TodayView (and thus fresh pickOverride/overrides/
   // shuffle state) whenever the plan's identity or position changes
   // underneath — same reasoning as WorkoutDetail.tsx's key={workout.id}.
-  // TodayView builds its own SuggestPrefs from the chip overrides below
-  // (Task 2); it still needs the raw server preferences to seed those
-  // overrides' defaults on first mount (snapCap(preferences.timeCapMinutes),
-  // preferences.difficulties) and `baselines` to compute durationsUnknown
-  // itself, so both are passed through rather than a pre-built SuggestPrefs.
+  // TodayView builds its own SuggestPrefs from the sheet-edited overrides
+  // below (Task 2, 2026-08-04 round: FILTER ⌄ + TodayFilterSheet, replacing
+  // the old inline chips); it still needs the raw server preferences to
+  // seed those overrides' defaults on first mount
+  // (bucketsForCap(preferences.timeCapMinutes), preferences.difficulties) and
+  // `baselines` to compute durationsUnknown itself, so both are passed
+  // through rather than a pre-built SuggestPrefs.
   return (
     <TodayView
       key={`${planState.plan.planKey}-${planState.plan.doneN}`}
@@ -292,6 +382,103 @@ function ErrorScreen({
         Retry
       </button>
     </main>
+  );
+}
+
+/** The completed-but-unlogged line's own Discard (Task 3, ui-fix round;
+ *  DESIGN.md "Items 2 + 3" — "Today's unlogged row"). Split out as its own
+ *  component (not inlined in `TodayView`) specifically so its
+ *  `useStagedDiscard`/`dismissed` state lives in a subtree TodayView never
+ *  re-renders as a side effect of — see the render-site comment on why that
+ *  matters for the suggestion card.
+ *
+ *  Arming swaps the ROW'S CONTENTS, not its layout: the DEFAULT state's
+ *  "{title} — unlogged session." line, "Log it" link, and outlined ✕ button
+ *  become the ARMED state's "Discard {title} without logging?" line and a
+ *  single solid-accent "Tap again" button — same `.today-unlogged-line`
+ *  wrapper, same border-box sizing, so the row's height and position never
+ *  move (the mockup's own DEFAULT/ARMED pair, implemented as one row).
+ *  Firing removes the row in place (`dismissed`) with no navigation — unlike
+ *  SessionComplete's/the Log screen's own Discard, which both leave this
+ *  screen entirely. */
+function UnloggedRow({ run }: { run: SessionRun }) {
+  const discard = useStagedDiscard();
+  const [dismissed, setDismissed] = useState(false);
+  const armedButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Fix round 1 (reviewer M1): arming swaps in a STRUCTURALLY DIFFERENT
+  // element (a bare `<button>` replacing a `<div><Link/><button/></div>`),
+  // unlike SessionComplete's own single button whose class/copy just
+  // changes in place — React unmounts the pressed ✕ and mounts a brand-new
+  // "Tap again" node at the same tree position, which does NOT inherit
+  // focus (measured: the real activeElement fell back to `<body>`).
+  // Without an explicit re-focus here, `onBlur` below can never fire from
+  // a real tap-away — nothing is focused for a later blur to leave.
+  // Focusing the new node the instant it mounts restores the same "focus
+  // follows the armed control" behavior SessionComplete/WorkoutDetail get
+  // for free from keeping one DOM node armed in place.
+  useEffect(() => {
+    if (discard.armed) armedButtonRef.current?.focus();
+  }, [discard.armed]);
+
+  if (dismissed) return null;
+
+  function handleClick() {
+    if (discard.armed) {
+      discard.fire();
+      setDismissed(true);
+    } else {
+      discard.arm();
+    }
+  }
+
+  return (
+    <div
+      className={
+        discard.armed
+          ? "today-unlogged-line today-unlogged-line-armed"
+          : "today-unlogged-line"
+      }
+    >
+      {discard.armed ? (
+        <>
+          <p className="today-unlogged-text">
+            Discard <strong>{run.title}</strong> without logging?
+          </p>
+          <button
+            type="button"
+            ref={armedButtonRef}
+            className="today-unlogged-discard-armed"
+            onClick={handleClick}
+            onBlur={discard.disarm}
+          >
+            Tap again
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="today-unlogged-text">
+            <strong>{run.title}</strong> — unlogged session.
+          </p>
+          <div className="today-unlogged-actions">
+            {/* The run record is the source LogSession.tsx itself reads, so
+                this link carries no state/params of its own. */}
+            <Link to="/session/log" className="today-unlogged-link">
+              Log it
+            </Link>
+            <button
+              type="button"
+              className="today-unlogged-discard"
+              onClick={handleClick}
+              onBlur={discard.disarm}
+              aria-label="Discard without logging"
+            >
+              ✕
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -354,10 +541,11 @@ function TodayView({
         doneN: plan.doneN,
         swapType: null,
         difficulties: preferences.difficulties,
-        // Approximates the rower's real preference to the nearest chip —
-        // see snapCap's own doc comment for why this rounds up, never down.
-        capMinutes: snapCap(preferences.timeCapMinutes),
-        painMax3: false,
+        // Approximates the rower's real preference to the buckets it
+        // implies — see bucketsForCap's own doc comment for why this is a
+        // deliberate approximation, not an exact re-derivation.
+        durations: bucketsForCap(preferences.timeCapMinutes),
+        painLevels: [],
       },
   );
 
@@ -380,25 +568,79 @@ function TodayView({
     });
   }
 
-  function handleDifficultyChip(value: Difficulty) {
-    // Multi-select, deselecting every difficulty is allowed by design (the
-    // fellBack pool then applies, with an honest reason) — no "at least one
-    // must stay active" guard, unlike the single-select cap chips below.
-    const difficulties = overrides.difficulties.includes(value)
-      ? overrides.difficulties.filter((d) => d !== value)
-      : [...overrides.difficulties, value];
-    updateOverrides({ ...overrides, difficulties });
+  // Task 2 (2026-08-04 round): the day's pref-derived "no filter" baseline
+  // — consumed by todayFilterTokens() (deviation detection) and CLEAR ALL
+  // below. `difficulties` is the hardcoded all-three set (ALL_DIFFICULTIES,
+  // module scope) per the spec's own "Active" rule, deliberately NOT
+  // `preferences.difficulties` (which only seeds the INITIAL record above
+  // and can itself be a narrower account preference) — see
+  // TodayFilterDefaults' own doc comment.
+  const filterDefaults: TodayFilterDefaults = {
+    difficulties: ALL_DIFFICULTIES,
+    durations: bucketsForCap(preferences.timeCapMinutes),
+  };
+
+  // The FILTER ⌄ sheet's own state: whether it's open, its in-progress
+  // draft (seeded from `overrides` each time it opens — see
+  // `openFilterSheet`), and the button's own ref, which doubles as
+  // SheetShell's focus-restore target (Today.tsx's FILTER ⌄ button below,
+  // not `document.activeElement` — see TodayFilterSheet.tsx's own doc
+  // comment on why).
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [draft, setDraft] = useState<TodayFilterDraft>({
+    difficulties: overrides.difficulties,
+    durations: overrides.durations,
+    painLevels: overrides.painLevels,
+  });
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+
+  function openFilterSheet() {
+    setDraft({
+      difficulties: overrides.difficulties,
+      durations: overrides.durations,
+      painLevels: overrides.painLevels,
+    });
+    setSheetOpen(true);
   }
 
-  function handleCapChip(value: number | null) {
-    // Single-select: unlike toggleType/toggleDuration's "tap again to
-    // clear" idiom, exactly one cap chip (including NO CAP) is always
-    // active, so this always sets rather than toggling.
-    updateOverrides({ ...overrides, capMinutes: value });
+  function applyFilterSheet() {
+    updateOverrides({ ...overrides, ...draft });
+    setSheetOpen(false);
   }
 
-  function handlePainChip() {
-    updateOverrides({ ...overrides, painMax3: !overrides.painMax3 });
+  function dismissFilterSheet() {
+    // The draft is simply never written back — same "closes without
+    // applying" semantics as Library's own FilterSheet.tsx (backdrop tap,
+    // Escape, a tab tap, or a hardware/browser back navigation all unmount
+    // this the same way, since it pushes no history entry of its own).
+    setSheetOpen(false);
+  }
+
+  // Token ✕ / CLEAR ALL apply immediately (no sheet, no confirm) and save
+  // the record — same as a chip tap did before this task's rewiring.
+  function resetFilterGroup(group: "difficulties" | "durations" | "pain") {
+    if (group === "difficulties") {
+      updateOverrides({
+        ...overrides,
+        difficulties: filterDefaults.difficulties,
+      });
+    } else if (group === "durations") {
+      updateOverrides({ ...overrides, durations: filterDefaults.durations });
+    } else {
+      updateOverrides({ ...overrides, painLevels: [] });
+    }
+  }
+
+  // CLEAR ALL resets to the day's pref-derived DEFAULTS, never to empty —
+  // the deliberate divergence from Library's own CLEAR ALL (which empties
+  // every filter), per the collapsible-filter spec's own decision table.
+  function clearAllFilters() {
+    updateOverrides({
+      ...overrides,
+      difficulties: filterDefaults.difficulties,
+      durations: filterDefaults.durations,
+      painLevels: [],
+    });
   }
 
   // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
@@ -416,28 +658,29 @@ function TodayView({
   const todayCode: PlanCode | null =
     prescribedCode !== null ? (overrides.swapType ?? prescribedCode) : null;
 
-  const suggestPrefs: SuggestPrefs = {
-    difficulties: overrides.difficulties,
-    timeCapMinutes: overrides.capMinutes,
-    painMax3: overrides.painMax3,
-    // See toLibraryEntry's comment: with no baselines, every entry's
-    // estMinutes is a 0 placeholder, so the reason text must not claim a
-    // cap was actually checked against a real duration.
-    durationsUnknown: baselines === null,
-  };
+  const suggestion = computeSuggestion(
+    overrides,
+    entries,
+    baselines,
+    todayCode,
+    pickOverride,
+  );
 
-  // Narrowing on todayCode (rather than a separate boolean) lets TS see
-  // `suggest`'s todayCode argument is non-null in the true branch with no
-  // assertion.
-  const suggestion =
-    todayCode !== null
-      ? suggest({
-          todayCode,
-          library: entries,
-          prefs: suggestPrefs,
-          todayPickId: pickOverride ?? undefined,
-        })
-      : suggestFreestyle(entries, suggestPrefs, pickOverride ?? undefined);
+  // TodayFilterSheet's own live count — the SAME call above, run against
+  // the sheet's in-progress draft rather than the applied `overrides`.
+  const draftPoolCount = poolCountFor(
+    draft,
+    entries,
+    baselines,
+    todayCode,
+    pickOverride,
+  );
+
+  const filterTokens = todayFilterTokens(
+    overrides,
+    filterDefaults,
+    resetFilterGroup,
+  );
 
   // The `?? null` is defensive, not reachable from this call site: `entries`
   // (fed to `suggest`/`suggestFreestyle`) is `library.map(toLibraryEntry)`,
@@ -491,7 +734,11 @@ function TodayView({
               chip lights up whichever type the plan actually calls for
               today (TR standing in on a TEST day), and tapping THAT chip
               again clears the swap rather than swapping to itself
-              (handleTypeChip). */}
+              (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
+              `.today-type-chips` (index.css) now lays these out as a
+              4-column 1fr grid spanning the full content width, rather than
+              `.chip-wrap`'s own inline flex-wrap — 44px chip height
+              unchanged, same `.chip`/TodayChip classes. */}
           <div className="chip-wrap today-type-chips">
             {TYPE_CHIPS.map((type) => (
               <TodayChip
@@ -499,6 +746,7 @@ function TodayView({
                 label={type}
                 active={(overrides.swapType ?? effectivePrescribed) === type}
                 onClick={() => handleTypeChip(type)}
+                typeColorVar={TYPE_COLOR_VAR[type]}
               />
             ))}
           </div>
@@ -534,127 +782,91 @@ function TodayView({
           </Link>
         </div>
       )}
-      {run !== null && run.completedAt !== null && (
-        // Quieter than the resume card, deliberately (F2's own call): no
-        // accent banner, just the workout's name plus a real "Log it"
-        // action now that Phase 6C Task 2 has built the screen it points
-        // to — the run record is the source LogSession.tsx itself reads,
-        // so this link carries no state/params of its own.
-        <div className="today-unlogged-line">
-          <p className="today-unlogged-text">
-            <strong>{run.title}</strong> — unlogged session.
-          </p>
-          <Link to="/session/log" className="today-unlogged-link">
-            Log it
-          </Link>
-        </div>
-      )}
+      {/* Quieter than the resume card, deliberately (F2's own call): no
+          accent banner, just the workout's name plus a real "Log it" action
+          (Phase 6C Task 2) and — Task 3 (ui-fix round) — a staged Discard.
+          `UnloggedRow` owns ITS OWN `useStagedDiscard`/dismissed state
+          rather than TodayView reading it: a state change scoped to that
+          child component re-renders only the row, never TodayView itself,
+          which is what keeps `suggestion` (computed in TodayView's own
+          render body below) from ever recomputing — and therefore from
+          ever re-shuffling the suggestion card — as a side effect of
+          arming or firing the discard. */}
+      {run !== null && run.completedAt !== null && <UnloggedRow run={run} />}
 
       <div className="today-suggestion-header">
         <span className="mono-status">
-          {/* usesPlan/freestyle, never pick-state — suggestion.reason already
-              says "YOUR PICK — …" when pickOverride is set, so this label
+          {/* Final fix wave (2026-08-04 round, M2): "SUGGESTED FOR TODAY"
+              wrapped to two lines beside FILTER/SHUFFLE at 390px — "FOR
+              TODAY" was redundant on the Today screen anyway, so the label
+              is just "SUGGESTED" in both modes now (freestyle already used
+              that). Never pick-state — suggestion.reason already says
+              "YOUR PICK — …" when pickOverride is set, so this label
               staying constant avoids saying the same thing twice in two
               different places on the card. */}
-          {suggestion.recommendationId
-            ? usesPlan
-              ? "SUGGESTED FOR TODAY"
-              : "SUGGESTED"
-            : ""}
+          {suggestion.recommendationId ? "SUGGESTED" : ""}
         </span>
-        <button
-          type="button"
-          className="button-outline today-shuffle"
-          onClick={handleShuffle}
-          disabled={!canShuffle}
-        >
-          SHUFFLE ↻
-        </button>
-      </div>
-
-      {/* Filter chips: both modes (plan and freestyle alike narrow the same
-          pool), order per the brief — difficulty (multi) · cap
-          (single-select, exactly one always active) · pain (toggle). Every
-          tap re-runs suggest() above on the next render since they all
-          write into `overrides`, which the suggestion computation reads
-          directly — no separate "apply" step.
-
-          Fix round 2 (whole-branch review, M4): these nine chips used to sit
-          as flat siblings in one `.chip-wrap`, mixing three different
-          selection semantics (multi-select, single-select-exactly-one-
-          always-active, and a plain toggle) behind one visual and one ARIA
-          vocabulary (every chip is `aria-pressed`) with nothing visible
-          distinguishing them — the row also wraps mid-cap-group at 390px,
-          so `HARD` and `≤60′` render pixel-identical despite opposite
-          behaviour. Grouped into three labelled clusters now, the same
-          `.classification-group`/`.classification-group-label` precedent
-          ClassificationCard.tsx uses for its own single-select DIFFICULTY
-          group — visible small mono labels, plus `role="group"` +
-          `aria-labelledby` pointing at each visible label for the
-          accessible name. `.today-filter-chips` itself, and every chip's
-          own class/behaviour, are UNCHANGED — only the wrapping structure
-          around them changed (still a single element with that class,
-          `e2e/today.spec.ts`'s own `.today-filter-chips` visibility check
-          stays a one-element match). */}
-      <div className="today-filter-chips">
-        <div className="today-filter-group">
-          <p
-            className="today-filter-group-label"
-            id="today-filter-difficulty-label"
+        <div className="today-suggestion-actions">
+          {/* Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline
+              chip clusters (Phase 6F, then regrouped by fix round 2) are
+              gone — they now live inside TodayFilterSheet, opened by this
+              chip. Same geometry as SHUFFLE below (`.today-shuffle`, chip-
+              style: 44px, transparent, rule-3 border) since the two now sit
+              side by side on the header's right; `filterButtonRef` doubles
+              as SheetShell's focus-restore target once the sheet closes. */}
+          <button
+            type="button"
+            className="button-outline today-shuffle"
+            aria-haspopup="dialog"
+            aria-expanded={sheetOpen}
+            ref={filterButtonRef}
+            onClick={openFilterSheet}
           >
-            DIFFICULTY
-          </p>
-          <div
-            className="chip-wrap"
-            role="group"
-            aria-labelledby="today-filter-difficulty-label"
+            FILTER ⌄
+          </button>
+          <button
+            type="button"
+            className="button-outline today-shuffle"
+            onClick={handleShuffle}
+            disabled={!canShuffle}
           >
-            {DIFFICULTY_CHIPS.map(({ value, label }) => (
-              <TodayChip
-                key={value}
-                label={label}
-                active={overrides.difficulties.includes(value)}
-                onClick={() => handleDifficultyChip(value)}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="today-filter-group">
-          <p className="today-filter-group-label" id="today-filter-time-label">
-            TIME
-          </p>
-          <div
-            className="chip-wrap"
-            role="group"
-            aria-labelledby="today-filter-time-label"
-          >
-            {CAP_CHIPS.map(({ value, label }) => (
-              <TodayChip
-                key={label}
-                label={label}
-                active={overrides.capMinutes === value}
-                onClick={() => handleCapChip(value)}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="today-filter-group">
-          <p className="today-filter-group-label" id="today-filter-pain-label">
-            PAIN
-          </p>
-          <div
-            className="chip-wrap"
-            role="group"
-            aria-labelledby="today-filter-pain-label"
-          >
-            <TodayChip
-              label="PAIN ≤3"
-              active={overrides.painMax3}
-              onClick={handlePainChip}
-            />
-          </div>
+            SHUFFLE ↻
+          </button>
         </div>
       </div>
+
+      {/* The active-filter tokens, one per DEVIATING group (todayFilterTokens.ts)
+          — renders nothing at all (TokenRow's own null-return) when every
+          group still matches `filterDefaults`, which is Today's rest state.
+          CLEAR ALL only ever appears alongside at least one token (the
+          brief's "only when tokens exist"), and resets to `filterDefaults`
+          rather than to nothing — the deliberate divergence from Library's
+          own CLEAR ALL, which empties every filter instead. */}
+      <TokenRow
+        tokens={filterTokens}
+        trailing={
+          filterTokens.length > 0 ? (
+            <button
+              type="button"
+              className="today-clear-all"
+              onClick={clearAllFilters}
+            >
+              CLEAR ALL
+            </button>
+          ) : undefined
+        }
+      />
+
+      {sheetOpen && (
+        <TodayFilterSheet
+          draft={draft}
+          onChangeDraft={setDraft}
+          poolCount={draftPoolCount}
+          opener={filterButtonRef}
+          onApply={applyFilterSheet}
+          onDismiss={dismissFilterSheet}
+        />
+      )}
 
       {recommended ? (
         <Link

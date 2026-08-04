@@ -312,6 +312,80 @@ export function describeStoreContracts(
         expect(after).toBe((await stores.workouts.listGlobals()).length);
       });
 
+      // Library-converge (2026-08-04 spec): the converge's update primitive.
+      // Global-scoped and MAY write sortOrder — the exact inverse of the
+      // user-scoped update()'s guarantees. A personal id must be
+      // structurally unreachable.
+      it("updateGlobal rewrites a global's content and sortOrder, and cannot touch a personal row", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const g = await stores.seedGlobalWorkout(
+          workoutInput({ title: "Converge Me" }),
+        );
+        const personal = await stores.workouts.create(
+          userId,
+          workoutInput({ title: "Mine, Unmoved" }),
+        );
+
+        const updated = await stores.workouts.updateGlobal(g.id, {
+          ...workoutInput({
+            title: "Converge Me",
+            difficulty: "hard",
+            pain: 5,
+          }),
+          sortOrder: 7,
+        });
+        expect(updated).toMatchObject({
+          id: g.id,
+          title: "Converge Me",
+          difficulty: "hard",
+          pain: 5,
+          sortOrder: 7,
+          isGlobal: true,
+        });
+
+        const stolen = await stores.workouts.updateGlobal(personal.id, {
+          ...workoutInput({ title: "Stolen" }),
+          sortOrder: 1,
+        });
+        expect(stolen).toBeNull();
+        expect(await stores.workouts.get(userId, personal.id)).toMatchObject({
+          title: "Mine, Unmoved",
+          isGlobal: false,
+        });
+      });
+
+      // Library-converge: the converge's targeted delete. [] must be a
+      // no-op, and a personal id in the list must be ignored, not deleted.
+      it("deleteGlobalsByIds removes exactly the named globals, no-ops on [], ignores personal ids", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const before = await stores.workouts.countGlobals();
+        const [doomed, spared] = await stores.workouts.createMany(null, [
+          workoutInput({ title: "Doomed Global" }),
+          workoutInput({ title: "Spared Global" }),
+        ]);
+        const personal = await stores.workouts.create(
+          userId,
+          workoutInput({ title: "Mine, Not Yours" }),
+        );
+
+        await stores.workouts.deleteGlobalsByIds([]);
+        expect(await stores.workouts.countGlobals()).toBe(before + 2);
+
+        await stores.workouts.deleteGlobalsByIds([doomed.id, personal.id]);
+        expect(await stores.workouts.countGlobals()).toBe(before + 1);
+        const titles = (await stores.workouts.listGlobals()).map(
+          (g) => g.title,
+        );
+        expect(titles).toContain("Spared Global");
+        expect(titles).not.toContain("Doomed Global");
+        expect(spared.id).toBeTruthy();
+        expect(await stores.workouts.get(userId, personal.id)).toMatchObject({
+          title: "Mine, Not Yours",
+        });
+      });
+
       // createMany is one transaction in the real store. There are no num
       // clashes left to trigger a rollback, so the guarantee is proved with a
       // genuine failure instead: an out-of-enum `type`, which Postgres

@@ -632,10 +632,186 @@ progress (the swap resets cleanly once that session is logged), and log a
 genuine off-plan or make-up session without moving the plan's counter.
 
 **Next:** a **UI-fix round** (exact targets replace the range displays; a
-drop-X on Today's unlogged line; a discard option on SessionComplete),
-then a **workout-generation phase** (James supplies references; the
-library grows beyond the 35 starters so testers have real content to work
-against), then Phase 7's PM5 integration.
+drop-X on Today's unlogged line; a discard option on SessionComplete; SHUFFLE
+full-width) — in flight on its own `ui-fix-round` branch, ahead of the
+workout-generation phase below — then Phase 7's PM5 integration.
+
+## Phase 6E — Workout library generation
+
+**Status:** Done (2026-08-03, PR #TBD)
+**Goal:** Replace the 35-workout starter library with ~300 original workouts,
+structurally derived (never verbatim) from James's Erg Book photos, so
+TestFlight testers have realistic content instead of a small, well-worn set.
+**Design authority:** `docs/superpowers/specs/2026-08-03-workout-generation-design.md`,
+plan: `docs/superpowers/plans/2026-08-03-workout-generation.md`.
+
+- [x] Offline five-stage pipeline: double-read vision extraction of the book
+      photos → private `originals.json` and a personal originals CSV on
+      James's Desktop (neither enters the repo) → a repo-safe aggregate
+      pattern digest (`app/domain/generation/patterns.json` — per type×duration
+      cell: interval-shape frequencies, work:rest ratio ranges, pace-offset
+      distributions per base, spm bands, warm-up conventions, rep-count
+      ranges; aggregate statistics only, no titles/prose/per-workout rows)
+      → grid-constrained authoring by subagents → a permanent validation
+      gate split across two layers: domain `validate.ts` for base workout
+      validity, and `app/server/seed/library/library.test.ts` for the
+      spm/pain-plausibility bands, structural dedup, easy→hard ordering,
+      and the exact quota grid
+- [x] Exact quota grid, 300 total: O2 90 / AT 75 / TR 75 / AN 60 across five
+      duration bands (<20′ 30, 20–30′ 75, 30–45′ 120, 45–60′ 45, 60′+ 30); a
+      ~320-name weather/atmospheric pool allocated per cell so authoring
+      agents can't collide; an offline no-structure+parameter-clone check
+      against the private originals (can't live in CI — it needs book
+      content — so it ran once during the phase and its result is recorded
+      in the PR)
+- [x] `STARTER_WORKOUTS`/`server/seed/starter.ts` retired entirely;
+      `server/seed/library/{o2,at,tr,an}.ts` hold the 300 as original
+      content, `sortOrder` grouped by type then easy→hard (the same
+      browsing order the 35-workout library used). `seedGlobalLibrary`
+      (`server/seed/seed.ts`) converges the shared global library to the
+      code's set, keyed by title, inside one advisory-locked transaction:
+      content changed → update the existing row in place (its id, and any
+      session-log's link to it, survive); title missing → insert; title
+      removed → delete (`session_logs.workout_id` nulls via
+      `ON DELETE SET NULL` for those rows only); identical state writes
+      nothing — called once at boot, not per-user. (2026-08-04,
+      library-converge: superseded this bullet's original title-set swap,
+      whose gap was that a content-only edit to an already-deployed title
+      never reached the running set until the title itself changed. The
+      converge closes that — content edits now reach a deployed volume on
+      the next boot alone, no reseed dance required — and logs keep their
+      workout link across a content edit; only an actual rename or removal
+      still nulls it.) Personal (non-global) workouts are structurally
+      untouched: globals are structurally un-editable by users (the store's
+      `update()`/`remove()` only ever match rows scoped to a `userId`, never
+      `user_id IS NULL`)
+- [x] Fixtures across the client/server test suites re-anchored from the
+      retired 35-workout set to real entries in the 300 (e.g. "Fork
+      Lightning" for the effort-ref `0:30 @ MAX` shape, "Hoarfrost" for the
+      warm-up-then-split-ref shape, "Filling Low" for the reps-expanded
+      distance shape, "Sea Fret" for the first-sorted global)
+
+**Exit:** MET — new and existing accounts alike see the same generated
+300-workout global library; the seed converge is idempotent (an unchanged
+set no-ops on a second boot), a content-only edit to an existing title
+reaches the running set on the next boot without any title change, and a
+title rename/removal still converges cleanly; personal workouts and their
+logs are structurally unaffected either way. Pending: James's review of the
+generated batch and PR approval before merge (normal SDLC — no merge
+without it).
+
+**Next:** the deferred UI-fix round below (Phase 6F), then Phase 7's PM5
+integration.
+
+## Phase 6F — UI-fix round
+
+**Status:** Done (2026-08-04)
+**Goal:** One button vocabulary instead of two competing ones, exact
+resolved targets everywhere a tolerance band used to show, one voice for
+"discard without logging" across every surface that can strand an unlogged
+session, a Library filter model that scales past nine flat chips, and one
+pain scale on Today matching the Library's own.
+**Design authority:** `docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md`
+(the round's own handoff, now historical record — `docs/design/README.md`
+carries the button table and accent-meanings list forward as standing
+authority; `docs/design/DEVIATIONS.md` records every deviation this round
+added or superseded).
+
+- [x] **Task 1 — the button system**: five levels (`.button-l1`–`.button-l4`/
+      `.button-l4-armed`, `index.css`), replacing the two-idiom
+      `.button-primary`/`.button-outline` vocabulary on every screen this
+      round touched; selected-state color fixed app-wide (type chips fill
+      their own type color everywhere, every other selection fills `--ink`,
+      accent means exactly four things); SHUFFLE re-cut to chip geometry;
+      `--type-tr` de-aliased from `--accent` (fix round 1)
+- [x] **Task 2 — exact targets**: every tolerance-band display
+      (`2:21.0–2:23.0`) becomes the single resolved split, on Detail,
+      Builder's TARGET row, Confirm, and the Timer's UP NEXT/sub-line (the
+      sub-line shows the ref instead, e.g. `6K +16`); `toleranceRange()`
+      itself untouched in the domain
+- [x] **Task 3 — discard, one voice**: `Discard without logging` →
+      `Tap again to discard`, staged identically on Session complete (new
+      level-4 block), Today's unlogged row (a 44×44 accent-outlined ✕ that
+      swaps the row's own contents in place), and the Log screen's existing
+      staged Discard
+- [x] **Task 4 — the Library's second pass**: the eleven-chip ragged wrap
+      and the `ALL` chip retired for one `FILTER ⌄` chip plus a plain count;
+      a sheet (`FilterSheet.tsx`) groups TYPE/TIME/PAIN (4/4/5-cell grids)
+      and LAST DONE/SOURCE (2-cell grids sharing a line) by their actual
+      selection semantics; active filters render back as a token row
+      (`filterTokens.ts`, one token per group, range/list collapsing) with
+      per-token `✕` and a `CLEAR ALL`; PAIN becomes five 1–5 cells,
+      multi-select union, replacing the single `≤3`/`≤5` threshold chip
+- [x] **Task 5 — one pain model**: Today's own PAIN filter becomes the same
+      five-cell multi-select union as the Library's, replacing the old
+      single toggle — the two screens now share one pain-filtering idiom
+- [x] **Task 6 — close-out**: remaining sweeps (armed-state contrast,
+      Library-with-sheet and Today's five-cell PAIN group both re-verified
+      under axe), every touched screen's screenshots re-captured fresh at
+      HEAD, an end-to-end `DEVIATIONS.md` pass (the design's own five
+      mandated rows plus the Library second pass's own — pain union, LAST
+      DONE naming, SOURCE naming, count copy, the FILTER-sheet pattern
+      itself — all verified truthful against shipped code, several stale
+      citations found and corrected), the button table and accent-meanings
+      list graduated into `docs/design/README.md` as standing authority,
+      this ROADMAP entry
+
+**Exit:** MET — one button vocabulary, one pain model, one discard voice,
+and a Library filter model that scales; `docs/design/DEVIATIONS.md` and
+`docs/design/README.md` both read true against the shipped app; full e2e
+green ×2 back-to-back plus unit/client/integration.
+
+**Next:** a follow-on round collapsing Today's own filter chips into the
+same sheet pattern (below), then Phase 7's PM5 integration.
+
+## Phase 6G — Today's collapsible filter
+
+**Status:** Done (2026-08-04)
+**Goal:** Today's three always-on DIFFICULTY/TIME/PAIN chip groups collapse
+into the same `FILTER ⌄` + sheet + tokens pattern the Library got in Phase
+6F, backed by Today's own unchanged state — the type-swap chips stay on the
+plan line, untouched.
+**Design authority:** `docs/superpowers/specs/2026-08-04-today-filter-sheet-design.md`,
+plan: `docs/superpowers/plans/2026-08-04-today-filter-sheet.md`.
+
+- [x] **Task 1 — extract the shared primitives**: `SheetShell.tsx`
+      (backdrop, dialog semantics, focus trap + restore-to-opener),
+      `CellGrid.tsx` (one labelled, `role="group"` cell grid), and
+      `TokenRow.tsx` (the removable-token strip) lifted whole out of the
+      Library's own `FilterSheet.tsx`/`Library.tsx` — a structural no-op:
+      the Library's existing `FilterSheet.test.tsx`/`Library.test.tsx`
+      assertions pass unmodified, proving the re-composition changed
+      nothing about the Library's own behaviour
+- [x] **Task 2 — Today's sheet, tokens, and rewiring**: `TodayFilterSheet.tsx`
+      (the three primitives above, DIFFICULTY/TIME/PAIN CellGrids, no TYPE
+      group) and `todayFilterTokens.ts` (one token per group deviating from
+      the day's pref-derived defaults) replace the three inline chip rows;
+      `Today.tsx` gains a `FILTER ⌄` chip beside `SHUFFLE ↻` and a
+      live-counting `Show N options` primary computed against the sheet's
+      own in-progress draft. `todayOverrides` storage, `suggest()`, and the
+      plan-line type-swap chips: byte-for-byte unchanged
+- [x] **Task 3 — flows, captures, the record**: the round's five
+      expected-red e2e/design sweeps re-routed through the sheet (a PAIN
+      1+2 tap, the freestyle spot-check, the chip-row default-state sweep,
+      the selected-fill-ink sweep, SHUFFLE-disabled's own setup); new
+      coverage for CLEAR ALL restoring the day's defaults (never an empty
+      pool — the deliberate divergence from the Library's own CLEAR ALL)
+      and a single backdrop-tap-discards pin; axe/tap-target/ink-4 sweeps
+      against the sheet open and closed-with-a-token; `today.png`/
+      `today-sheet.png`/`today-filtered.png` recaptured; `DEVIATIONS.md`'s
+      Today filter row rewritten for the sheet plus a new CLEAR ALL row;
+      `README.md` §1 gains a one-sentence pointer at the current pattern
+
+**Exit:** MET — Today reads identically to the Library at rest (one
+`FILTER ⌄` chip, a plain suggestion card, tokens only when something
+deviates); full e2e green ×2 back-to-back plus unit/client/integration;
+zero storage or `suggest()` changes, so every existing `todayOverrides`
+record on a real device stays valid with no migration.
+
+**Next:** Phase 7's PM5 integration. The parametric workout generator
+("Triggered follow-ons" below) is now unblocked — Phase 6E's
+structural-reference pipeline already produced its fixture data — but not
+yet scheduled.
 
 ## Phase 7 — PM5 over Bluetooth
 
@@ -721,5 +897,5 @@ next phase. One line per round, newest first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
-- **Parametric workout generator**: "generate me a 45' AT workout" from the starter library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Still queued behind the UI-fix round and the workout-generation phase above (Phase 6D's own "Next" line), not started. Generation will load richer structural references from the owner's source material (patterns and parameters only — never entries/titles/prose, per the content policy).
+- **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Phase 6F's UI-fix round is done too, so nothing sits ahead of it in the queue any more — not started, but eligible to schedule now, not just eligible in principle.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.

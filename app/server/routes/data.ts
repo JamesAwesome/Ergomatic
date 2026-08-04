@@ -1,5 +1,6 @@
 import { Router, type RequestHandler } from "express";
 import { parseBulk } from "../../domain/bulk.js";
+import { bucketsForCap } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { PLANS, type PlanCode } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
@@ -700,7 +701,12 @@ export function createDataRouter({
       library,
       prefs: {
         difficulties: prefs.difficulties,
-        timeCapMinutes: prefs.timeCapMinutes,
+        // Amendment (2026-08-04 PR #50 round): SuggestPrefs' own TIME field
+        // is now a bucket union, not a single cap — bucketsForCap derives
+        // the same set the client's own Today screen seeds a fresh day's
+        // TIME defaults from (domain/duration.ts's own doc comment on why
+        // this lives in domain/, not client-only code).
+        durations: bucketsForCap(prefs.timeCapMinutes),
       },
     });
 

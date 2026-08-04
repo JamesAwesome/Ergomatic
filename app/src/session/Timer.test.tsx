@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
@@ -16,42 +16,44 @@ import { loadRun, saveRun, type SessionRun } from "./run";
 import { isSuspectActual, totalSessionSeconds } from "./Timer";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
-const TOL = 1;
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
-function starter(title: string) {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   return w;
 }
 
 // The phase-kind matrix fixture — the brief's own "a real starter workout
 // with an added effort step via the draft," extended one further step for
-// distance (no single starter step list otherwise exercises wu/work-split/
-// rest/work-effort/distance all in one run). Doldrums' own real split-ref
-// work step (time, spm 18, its own embedded 3' rest) supplies wu/
+// distance (no single library step list otherwise exercises wu/work-split/
+// rest/work-effort/distance all in one run). Hoarfrost's own real split-ref
+// work step (time, spm 22, its own embedded 5' rest) supplies wu/
 // work-split/rest; a distance split-ref step and an effort-ref step are
 // appended directly onto the draft. The reps marker is deliberately NOT
 // reused here — appending steps after a LIVE "reps" marker would repeat
 // them too (domain/expand.ts's own `liveIndices`), doubling the appended
 // phases for no reason; this fixture wants each kind exactly once.
 //
-// Resulting phases (baselines {k2:100,k6:120}, tol 1):
+// Resulting phases (baselines {k2:100,k6:120}). Ui-fix round, Item
+// 1: the label/UP NEXT value is the EXACT split, never a "lo–hi" band; the
+// TimerTargets sub-line is the ref it was resolved from instead, uppercased
+// (refLabel(ref).toUpperCase()).
 //   0 warmup   240s   "Easy"
-//   1 work     1200s  split  "2:16.0" / "2:15.0–2:17.0"  spm 18
-//   2 rest     180s   "Rest"
-//   3 work     —      distance 500m, split "1:40.0" / "1:39.0–1:41.0"
+//   1 work     720s   split  "2:12.0", ref "6K +12"  spm 22
+//   2 rest     300s   "Rest"
+//   3 work     —      distance 500m, split "1:40.0", ref "2K"
 //   4 work     60s    effort "ALL OUT"
 function kindMatrixDraft(): SessionDraft {
-  const doldrums = starter("Doldrums");
-  const splitWork = doldrums.steps.find((s) => s.k === "w") as Extract<
+  const hoarfrost = library("Hoarfrost");
+  const splitWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
     Step,
     { k: "w" }
   >;
   return buildDraft({
     id: "id-kind-matrix",
-    title: doldrums.title,
-    type: doldrums.type as WorkoutType,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
     steps: [
       { k: "wu", minutes: 4 },
       splitWork,
@@ -69,7 +71,7 @@ function kindMatrixDraft(): SessionDraft {
   });
 }
 
-// No starter workout authors a "test" (open-ended) step (Task 1's own
+// No library workout authors a "test" (open-ended) step (Task 1's own
 // report: none exists in the seeded library) — a hand-built minimal draft,
 // the same exception draft.test.ts's own "Warm-up only" fixture takes.
 function testKindDraft(): SessionDraft {
@@ -90,7 +92,7 @@ function buildAndSaveRun(
   baselines = BASELINES,
 ): SessionRun {
   saveDraft(startDraft(draft));
-  const run = buildRun(draft, baselines, TOL, now);
+  const run = buildRun(draft, baselines, now);
   saveRun(run);
   return run;
 }
@@ -268,21 +270,24 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining
     expect(screen.getByText("Easy")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
-    expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
+    expect(screen.getByText("WORK · 2:12.0")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  it("work (split, time): the resolved central value + range, spm", async () => {
+  it("work (split, time): the exact resolved split + its ref sub-line, spm", async () => {
     mockKeepAwake();
     const run = buildAndSaveRun(kindMatrixDraft());
     runAtIndex(run, 1);
     await renderTimer();
 
     expect(screen.getByText("STEP 2 OF 5 · WORK")).toBeInTheDocument();
-    expect(screen.getByText("20:00")).toBeInTheDocument(); // 1200s remaining
-    expect(screen.getByText("2:16.0")).toBeInTheDocument();
-    expect(screen.getByText("2:15.0–2:17.0")).toBeInTheDocument();
-    expect(screen.getByText("18")).toBeInTheDocument();
+    expect(screen.getByText("12:00")).toBeInTheDocument(); // 720s remaining
+    expect(screen.getByText("2:12.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: the sub-line is the ref, uppercased — not a
+    // tolerance band.
+    expect(screen.getByText("6K +12")).toBeInTheDocument();
+    expect(screen.getByText("22")).toBeInTheDocument();
     expect(screen.getByText("spm")).toBeInTheDocument();
     // Fix round (whole-branch review, F4): a rest phase's own resolved
     // `label` is literally "Rest" (domain/expand.ts), which used to render
@@ -293,19 +298,19 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  // Doldrums' OWN unmodified reps block (`{k:"reps",count:2}` repeating its
+  // Hoarfrost's OWN unmodified reps block (`{k:"reps",count:2}` repeating its
   // one work+rest pair) — the SET N/M segment of the STEP line only ever
   // appears on a phase produced by a live reps marker (domain/expand.ts's
   // own `set` stamping), which `kindMatrixDraft` deliberately avoids
   // reusing (see its own comment) to keep that fixture's phase count exact.
   it("a repeated (SET) phase folds SET i/j into the STEP line", async () => {
     mockKeepAwake();
-    const doldrums = starter("Doldrums");
+    const hoarfrost = library("Hoarfrost");
     const draft = buildDraft({
-      id: "id-doldrums-set",
-      title: doldrums.title,
-      type: doldrums.type as WorkoutType,
-      steps: doldrums.steps,
+      id: "id-hoarfrost-set",
+      title: hoarfrost.title,
+      type: hoarfrost.type as WorkoutType,
+      steps: hoarfrost.steps,
     });
     const run = buildAndSaveRun(draft);
     // Phases: [0 wu, 1 work(set 1/2), 2 rest(set 1/2), 3 work(set 2/2), 4 rest(set 2/2)].
@@ -324,10 +329,11 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     await renderTimer();
 
     expect(screen.getByText("STEP 3 OF 5 · REST")).toBeInTheDocument();
-    expect(screen.getByText("3:00")).toBeInTheDocument(); // 180s remaining
+    expect(screen.getByText("5:00")).toBeInTheDocument(); // 300s remaining
     expect(screen.getByText("Rest")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
-    expect(screen.getByText("WORK · 1:39.0–1:41.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
+    expect(screen.getByText("WORK · 1:40.0")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -340,7 +346,9 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("STEP 4 OF 5 · WORK · 500M")).toBeInTheDocument();
     expect(screen.getByText("0:00")).toBeInTheDocument(); // elapsed, not remaining
     expect(screen.getByText("1:40.0")).toBeInTheDocument();
-    expect(screen.getByText("1:39.0–1:41.0")).toBeInTheDocument();
+    // Ui-fix round, Item 1: the sub-line is the ref, uppercased. off=0 ->
+    // refLabel drops the sign entirely -> just the base, "2K".
+    expect(screen.getByText("2K")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
     expect(screen.getByText("WORK · ALL OUT")).toBeInTheDocument();
     // Fix round (spec review F1/F2): distance mode keeps ◀/Pause — only the
@@ -389,7 +397,9 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       runAtIndex(run, 0); // next=work(split), afterNext=rest
       await renderTimer();
 
-      expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument(); // UP NEXT's own value, unchanged
+      // UP NEXT's own value — exact now (ui-fix round, Item 1), never a
+      // "lo–hi" band.
+      expect(screen.getByText("WORK · 2:12.0")).toBeInTheDocument();
       // Same F4 dedupe as upNextText's own rest-phase case above, applied
       // here via the shared `phaseAnnouncement` helper.
       expect(screen.getByText("then REST")).toBeInTheDocument();
@@ -454,6 +464,69 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
   });
 });
 
+// Q3 (fix round 1): a `v:1` SessionRun written before this task shipped
+// `Phase.ref` has phases with no `ref` field at all, and whatever `label`
+// they were frozen with — for a split-ref phase written before this round,
+// that's still the OLD "lo–hi" tolerance-band string (`run.ts`'s own loose
+// `isSessionRun` validation admits this shape; it never checks per-phase
+// fields). The reviewer traced this safe (no crash, a two-line TARGET
+// SPLIT card, UP NEXT rendering the stored label verbatim) — this pins it
+// directly rather than leaving it an unasserted trace.
+describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  function legacyKindMatrixRun(): SessionRun {
+    const run = buildAndSaveRun(kindMatrixDraft());
+    // Phase 1 is Hoarfrost's own split-ref work step (6k+12). Reshape it
+    // into exactly what a pre-Task-2 `buildRun` would have frozen: no `ref`
+    // at all, and `label` set to the old `toleranceRange(132, 1)` band
+    // string (lo=131 -> "2:11.0", hi=133 -> "2:13.0") instead of the exact
+    // split.
+    const phases = run.phases.map((p, i) => {
+      if (i !== 1) return p;
+      const legacy = { ...p };
+      delete (legacy as { ref?: unknown }).ref;
+      legacy.label = "2:11.0–2:13.0";
+      return legacy;
+    });
+    return { ...run, phases };
+  }
+
+  it("renders the legacy phase's UP NEXT label verbatim (the stored band, not recomputed)", async () => {
+    mockKeepAwake();
+    const run = legacyKindMatrixRun();
+    runAtIndex(run, 0); // warm-up; UP NEXT names phase 1, the legacy phase
+    await renderTimer();
+
+    expect(screen.getByText("STEP 1 OF 5 · WARM-UP")).toBeInTheDocument();
+    // The OLD band string, byte-for-byte, not "WORK · 2:12.0" — this run's
+    // frozen label is never recomputed against the current domain code.
+    expect(screen.getByText("WORK · 2:11.0–2:13.0")).toBeInTheDocument();
+  });
+
+  it("renders the legacy phase itself without crashing: a two-line TARGET SPLIT card (main value from targetSplit, no ref sub-line)", async () => {
+    mockKeepAwake();
+    const run = legacyKindMatrixRun();
+    runAtIndex(run, 1); // the legacy split-ref phase itself
+    await renderTimer();
+
+    expect(screen.getByText("STEP 2 OF 5 · WORK")).toBeInTheDocument();
+    // The main value still resolves — it comes from `targetSplit`
+    // (untouched by the missing `ref`), not from `label` at all.
+    expect(screen.getByText("2:12.0")).toBeInTheDocument();
+    // No ref sub-line (nothing to reconstruct `refLabel` from) and no
+    // leftover band text either — the card degrades to two lines, it
+    // doesn't fall back to showing the old label as a caption.
+    const cards = document.querySelector(".timer-cards")!;
+    expect(cards.textContent).not.toContain("6K");
+    expect(cards.textContent).not.toMatch(/–/);
+    expect(screen.getByText("22")).toBeInTheDocument(); // spm, unaffected
+  });
+});
+
 describe("Timer — controls", () => {
   // `toFake: ["Date"]` only — NOT setTimeout/setInterval: this repo's
   // installed @testing-library/user-event (14.6.1) + vitest (4.1.10)
@@ -478,19 +551,19 @@ describe("Timer — controls", () => {
     runAtIndex(run, 1, FIXED_NOW);
     vi.setSystemTime(new Date(FIXED_NOW.getTime() + 10_000)); // 10s in
     await renderTimer();
-    expect(screen.getByText("19:50")).toBeInTheDocument(); // 1200 - 10
-    // The phase-progress bar's fill: 10s elapsed of the phase's 1200s full
+    expect(screen.getByText("11:50")).toBeInTheDocument(); // 720 - 10
+    // The phase-progress bar's fill: 10s elapsed of the phase's 720s full
     // duration — a genuine non-zero, non-trivial fraction (unlike every
     // phase-kind-rendering test above, which all render at elapsed=0).
     const phaseBarWidth = parseFloat(
       (document.querySelector(".timer-phase-bar span") as HTMLElement).style
         .width,
     );
-    expect(phaseBarWidth).toBeCloseTo((10 / 1200) * 100, 6);
+    expect(phaseBarWidth).toBeCloseTo((10 / 720) * 100, 6);
 
     await userEvent.click(screen.getByRole("button", { name: "Pause" }));
     expect(screen.getByText("PAUSED")).toBeInTheDocument();
-    expect(screen.getByText("19:50")).toBeInTheDocument();
+    expect(screen.getByText("11:50")).toBeInTheDocument();
 
     // Time passes while paused — advancing the frozen clock directly and
     // forcing a repaint via `visibilitychange` exercises the SAME
@@ -501,7 +574,7 @@ describe("Timer — controls", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    expect(screen.getByText("19:50")).toBeInTheDocument(); // still frozen
+    expect(screen.getByText("11:50")).toBeInTheDocument(); // still frozen
 
     await userEvent.click(screen.getByRole("button", { name: "Resume" }));
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
@@ -510,7 +583,7 @@ describe("Timer — controls", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    expect(screen.getByText("19:45")).toBeInTheDocument(); // 1200 - 15
+    expect(screen.getByText("11:45")).toBeInTheDocument(); // 720 - 15
   });
 
   it("◀ rewinds to the previous phase, re-seeding its clock (not partially elapsed)", async () => {
@@ -538,7 +611,7 @@ describe("Timer — controls", () => {
     await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
 
     expect(screen.getByText("STEP 3 OF 5 · REST")).toBeInTheDocument();
-    expect(screen.getByText("3:00")).toBeInTheDocument();
+    expect(screen.getByText("5:00")).toBeInTheDocument();
   });
 
   // Fix round (spec review F5): completion is a documented one-way door
@@ -1001,16 +1074,22 @@ describe("Timer — the repaint loop", () => {
   // `visibilitychange`, not only from the next 1s interval tick.
   it("catches up multiple phases on visibilitychange (a simulated lock)", async () => {
     mockKeepAwake();
-    const mackerelSky = starter("Mackerel Sky");
+    // Diamond Dust: wu 6' + 8'/8'/8' rate-change, no reps/rest — three
+    // SEQUENTIAL time work phases, ideal for the catch-up walk (each
+    // phase's boundary is unambiguous). (Moderate Breeze used to hold this
+    // role; the library rewrite turned it into a reps x8 workout — 17
+    // phases instead of 4 — so this suite re-anchored to Diamond Dust, per
+    // engine.test.ts's own re-anchor for the same reason.)
+    const diamondDust = library("Diamond Dust");
     const draft = buildDraft({
-      id: "id-mackerel",
-      title: mackerelSky.title,
-      type: mackerelSky.type as WorkoutType,
-      steps: mackerelSky.steps,
+      id: "id-diamond-dust",
+      title: diamondDust.title,
+      type: diamondDust.type as WorkoutType,
+      steps: diamondDust.steps,
     });
     const run = buildAndSaveRun(draft);
-    // wu 300s + work1 900s = 1200s boundary; 10s into work2 (index 2).
-    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 1_210_000));
+    // wu 360s + work1 480s = 840s boundary; 130s into work2 (index 2).
+    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 970_000));
     await renderTimer();
 
     // Before any tick fires, the stale phase 0 is still what renders.

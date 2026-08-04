@@ -1,4 +1,3 @@
-import { fmtSplit } from "./format.js";
 import type {
   Baselines,
   PaceRef,
@@ -81,17 +80,4 @@ export function refLabel(ref: PaceRef): string {
   if (ref.off === 0) return ref.base;
   const sign = ref.off < 0 ? "−" : "+";
   return `${ref.base} ${sign}${Math.abs(ref.off)}`;
-}
-
-export function toleranceRange(
-  split: number,
-  tol: number,
-): { lo: number; hi: number; label: string } {
-  const lo = split - tol;
-  const hi = split + tol;
-  return {
-    lo,
-    hi,
-    label: tol === 0 ? fmtSplit(split) : `${fmtSplit(lo)}–${fmtSplit(hi)}`,
-  };
 }

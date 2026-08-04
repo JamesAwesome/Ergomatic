@@ -2,12 +2,12 @@ import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useBaselines } from "../api/useBaselines";
 import { fmtDuration } from "../../domain/duration.js";
+import { fmtSplit } from "../../domain/format.js";
 import {
   effortWord,
   isEffortRef,
   refLabel,
   resolveSplit,
-  toleranceRange,
 } from "../../domain/pace.js";
 import type { Baselines, Step } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
@@ -21,19 +21,6 @@ import {
   withNudge,
   type SessionDraft,
 } from "./draft";
-
-// Copied from WorkoutDetail.tsx's own `readPaceTolerance` — both screens
-// read the same settings-owned custom property, and the function is small
-// enough that a shared module for two callers isn't yet worth the extra
-// indirection. Keep the two in lockstep if either changes.
-function readPaceTolerance(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--pace-tolerance")
-    .trim();
-  const parsed = Number(raw);
-  return raw !== "" && Number.isFinite(parsed) ? parsed : 1;
-}
 
 // The house 30s grid (docs/superpowers spec: "duration steppers (30 s grid
 // on the stepper, the house rule)") for time-based durations (wu/r minutes
@@ -60,8 +47,8 @@ export const METERS_MAX = 42195;
 // from StepEditor.tsx's authoring-time SPM_MIN/MAX (10..60) — the builder
 // permits any legal spm while authoring a workout, but the pre-session
 // confirm step is deliberately narrower: 18-32 is the whole physiological
-// band the seeded library ever prescribes (starter.ts's own comment: "every
-// work step prescribes spm within 18-32").
+// band the seeded library ever prescribes (verified against every work
+// step across the generated 300-workout library, server/seed/library/).
 export const SPM_MIN = 18;
 export const SPM_MAX = 32;
 export const SPM_WAKE = 20;
@@ -290,8 +277,8 @@ export default function ConfirmTargets() {
   // into a delta so the actual mutation still goes through draft.ts's
   // `withNudge` (the module's own sanctioned mutator, which also refuses an
   // effort ref and a non-work index). Unclamped, a repeated nudge could push
-  // a split negative, which the display formatter (fmtSplit, via
-  // toleranceRange) has no sane rendering for.
+  // a split negative, which the display formatter (fmtSplit) has no sane
+  // rendering for.
   function handleNudge(i: number, delta: number) {
     commit((prev) => {
       const step = prev.steps[i];
@@ -335,7 +322,6 @@ export default function ConfirmTargets() {
     navigate("/session/countdown");
   }
 
-  const tolerance = readPaceTolerance();
   const minutes = draftMinutes(draft, baselines);
   const minutesLabel = minutes === null ? "— MIN" : `${minutes} MIN`;
 
@@ -358,7 +344,6 @@ export default function ConfirmTargets() {
             spmOverride={step.k === "w" ? draft.spmOverrides[i] : undefined}
             nudge={draft.nudges[i] ?? 0}
             baselines={baselines}
-            tolerance={tolerance}
             onToggleRemoved={() => toggleRemoved(i)}
             onDurationStep={(delta) => stepDuration(i, delta)}
             onMetersStep={(delta) => stepMeters(i, delta)}
@@ -368,22 +353,23 @@ export default function ConfirmTargets() {
           />
         ))}
       </div>
+      {/* Task 1 (ui-fix round): the small bottom-right START becomes a
+          full-width L1 "Looks right, start" (56px) below the TOTAL line,
+          matching Detail's and Builder's own L1 — `.confirm-footer` moved
+          from a row (recount + button side by side) to a column so the
+          button sits BELOW the recount rather than beside it. */}
       <footer className="confirm-footer">
         <span className="confirm-recount">{minutesLabel}</span>
         {baselines ? (
-          <button
-            type="button"
-            className="button-primary confirm-start"
-            onClick={handleStart}
-          >
-            START
+          <button type="button" className="button-l1" onClick={handleStart}>
+            Looks right, start
           </button>
         ) : (
           // Controller decision (Phase 6B Task 2's own flagged gap):
           // `buildRun` requires a concrete `Baselines` — always, even for a
           // workout with no split-ref step, since it's a fixed 4-arg
           // contract, not a per-workout one. Rather than have Countdown
-          // silently freeze a near-zero split for the one starter/authored
+          // silently freeze a near-zero split for the one library/authored
           // workout that DOES have a split-ref step (the {0,0} dummy this
           // replaces), START is blocked here, at the one place a rower can
           // still act on it — the row-level "no target" idiom already
@@ -411,7 +397,6 @@ function ConfirmStepRow({
   spmOverride,
   nudge,
   baselines,
-  tolerance,
   onToggleRemoved,
   onDurationStep,
   onMetersStep,
@@ -425,7 +410,6 @@ function ConfirmStepRow({
   spmOverride: number | undefined;
   nudge: number;
   baselines: Baselines | null;
-  tolerance: number;
   onToggleRemoved: () => void;
   onDurationStep: (delta: number) => void;
   onMetersStep: (delta: number) => void;
@@ -521,13 +505,10 @@ function ConfirmStepRow({
                 {effortWord(step.ref.effort)}
               </span>
             ) : baselines ? (
+              // Ui-fix round, Item 1: the exact resolved split — a
+              // tolerance band never appears here any more.
               <span className="step-editor-target-value">
-                {
-                  toleranceRange(
-                    resolveSplit(baselines, step.ref, nudge),
-                    tolerance,
-                  ).label
-                }
+                {fmtSplit(resolveSplit(baselines, step.ref, nudge))}
               </span>
             ) : (
               <span className="step-editor-target-value step-editor-no-target">

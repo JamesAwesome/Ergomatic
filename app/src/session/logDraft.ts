@@ -67,9 +67,11 @@ import type { SessionRun } from "./run";
  *  label from that REAL `ref` via the shared `refPaceLabel` helper below —
  *  the exact same function `buildManualLogSteps` uses — so the two doors
  *  literally cannot diverge on a shared workout's label, split-ref or
- *  effort alike. Pinned by a same-workout, both-doors equality test
- *  (Microburst: split + effort + distance steps) in the test file, plus a
- *  removed-step fixture proving the lookup survives a mid-workout removal.
+ *  effort alike. Pinned by a both-doors equality test (`Mixed Kinds`, a
+ *  synthetic draft combining split + effort + distance steps from three
+ *  real library workouts — no single library entry carries all three) in
+ *  the test file, plus a removed-step fixture proving the lookup survives a
+ *  mid-workout removal.
  *
  *  NUDGE FOLD (F2, whole-branch review, Task 2 fix round): the draft's raw
  *  ref's own `off` is NOT what the label uses verbatim when a confirm-time
@@ -86,15 +88,26 @@ import type { SessionRun } from "./run";
  *  and run records are cleared together, only ever by a successful save —
  *  but a defensive path costs little against a half-cleared storage state
  *  and must not crash logging. Falls back to composing from the phase's own
- *  frozen `label`: for an EFFORT phase, `domain/pace.ts`'s `effortFromWord`
+ *  frozen fields: for an EFFORT phase, `domain/pace.ts`'s `effortFromWord`
  *  (F1's original fix, still load-bearing here) inverts `effortWord`'s
  *  frozen "ALL OUT"/"EASY" back to the chip ("MAX"/"MIN") — bijective over
  *  the two-element `Effort` type, so this is a lookup, not a guess. For a
- *  SPLIT-ref phase there's no equivalent inverse (a resolved split number
- *  doesn't uniquely determine which `(base, off)` pair produced it), so the
- *  fallback keeps the phase's own resolved split text (e.g. "2:16.0") —
- *  the one remaining case where a fallback-path label can still differ from
- *  the manual door's, and only when there is no draft to consult at all.
+ *  SPLIT-ref phase (ui-fix round Task 2 fix round, F1b amendment):
+ *  `EnginePhase` now carries the same EFFECTIVE `ref` `targetSplit` was
+ *  resolved from (`domain/expand.ts`'s own `case "w"`, added the same round
+ *  the display-side band was retired), so the fallback reconstructs the
+ *  chip through the SAME `refPaceLabel` helper the preferred path uses —
+ *  byte-identical output for a split-ref phase, not a second format
+ *  (pinned by a dedicated equality test in the test file). The one
+ *  remaining degradation is a LEGACY `v:1` `SessionRun` persisted before
+ *  that field existed at all — `ref` genuinely absent (`isSessionRun`'s own
+ *  loose load-time validation admits it, same as any other additive field
+ *  a stored record predates) — where there is nothing to reconstruct from:
+ *  the fallback keeps that phase's own frozen `label` VERBATIM, whatever
+ *  string it happened to be frozen with (a pre-this-round record still
+ *  carries its old "lo–hi" tolerance-band text). This is the one remaining
+ *  case a fallback-path label can differ from the manual door's, and only
+ *  for a run old enough to predate the `ref` field.
  *
  *  SERVER CONTRACT (Task 1.5 amendment, 2026-08-02 — supersedes what this
  *  paragraph used to say): `server/stores/logs.ts`'s `LogStep` and
@@ -209,8 +222,10 @@ function draftWorkStep(
  *    step (module header's LABEL IDIOM paragraph — byte-identical to
  *    `buildManualLogSteps`'s label for the same step); otherwise the
  *    FALLBACK paragraph's rule (effort: `refLabel({effort:
- *    effortFromWord(phase.label)})`; split-ref: the phase's own frozen,
- *    already-resolved `phase.label`).
+ *    effortFromWord(phase.label)})`; split-ref: `refPaceLabel(duration,
+ *    phase.ref)` when `phase.ref` is present — byte-identical to the
+ *    preferred path — else, only for a legacy pre-ref `SessionRun`, the
+ *    phase's own frozen `label` verbatim).
  *  - `targetSplit`: omitted for an effort phase (5G rule — the frozen number
  *    is `estimationSplit`'s guess, never a real prescription); present
  *    otherwise, straight from the phase (already resolved at `buildRun`
@@ -267,8 +282,14 @@ export function buildLogSteps(
     // when `targetKind === "effort"`, and domain/expand.ts's "case w" sets
     // `label` to exactly `effortWord(ref.effort)` in that case, never any
     // other string) — so it still goes through `refPaceLabel`. A split-ref
-    // phase has no ref to reconstruct at all in the fallback, so it keeps
-    // the phase's own resolved label verbatim instead.
+    // phase now ALSO reconstructs through `refPaceLabel` (ui-fix round
+    // Task 2 fix round, F1b): `phase.ref` carries the same effective ref
+    // `targetSplit` was resolved from, so this composes the identical chip
+    // the preferred path would have — byte-identical, pinned below. Only a
+    // LEGACY phase (a `v:1` run frozen before `ref` existed on
+    // `Phase`/`EnginePhase` at all) has neither a draft nor a `ref` to
+    // reconstruct from; that one case keeps the phase's own frozen `label`
+    // verbatim.
     let label: string;
     if (draftStep !== undefined) {
       // `draft` is guaranteed non-null here: `draftWorkStep` (above) can
@@ -283,7 +304,21 @@ export function buildLogSteps(
       label = refPaceLabel(durationText(phase), {
         effort: effortFromWord(phase.label as "ALL OUT" | "EASY"),
       });
+    } else if (phase.ref !== undefined) {
+      // Ui-fix round Task 2 fix round, F1b: reconstructs the SAME chip the
+      // preferred path would have, since `phase.ref` is already the
+      // EFFECTIVE (nudge-folded) ref — `domain/expand.ts`'s own `case "w"`
+      // sets it from `effectiveSteps`'s output when built via `buildRun`,
+      // the identical value `withEffectiveOff(draftStep.ref, nudge)` above
+      // would compute from the draft side of the same step.
+      label = refPaceLabel(durationText(phase), phase.ref);
     } else {
+      // LEGACY: a `v:1` SessionRun persisted before this field existed on
+      // Phase/EnginePhase at all (`isSessionRun`'s own loose validation
+      // admits it, same as any other additive field an old record
+      // predates). No ref to reconstruct — keeps the phase's own frozen
+      // label verbatim, whatever string it happened to be frozen with (a
+      // pre-this-round record still carries its old tolerance-band text).
       label = `${durationText(phase)} @ ${phase.label}`;
     }
     const step: LogStep = { label };
@@ -320,8 +355,8 @@ export function buildLogSteps(
  *  paragraph — the same one `buildLogSteps` uses whenever its draft lookup
  *  succeeds), matching the detail screen's exact idiom (`StepRow.tsx`'s
  *  `left = `${duration} @ ${refLabel(ref)}``) and the task brief's own
- *  literal examples (`0:30 @ MAX` is Microburst's real effort step, pinned
- *  in the test file).
+ *  literal examples (`0:30 @ MAX` is Fork Lightning's real effort step,
+ *  pinned in the test file).
  *
  *  `liveSteps` (not `phases()`) does the reps-block expansion: it returns
  *  the flat, repeats-expanded `Step[]` (one entry per physical repetition,

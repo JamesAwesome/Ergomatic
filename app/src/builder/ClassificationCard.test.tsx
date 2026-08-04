@@ -177,17 +177,16 @@ describe("ClassificationCard", () => {
       }
     });
 
-    it("fills the selected cell with its own ramp colour and cream text", () => {
+    // Task 1 (ui-fix round): PAIN's selected fill moved off its own
+    // per-level ramp colour onto plain ink (DESIGN.md: "Builder's gold pain
+    // selection goes") — same no-inline-style, ink-only-in-CSS treatment as
+    // DIFFICULTY's own test just above.
+    it("fills the selected chip with ink, not accent or a ramp colour — no inline style", () => {
       setup({ pain: 2 });
       const selected = screen.getByRole("button", { name: "Pain 2" });
-      expect(selected).toHaveAttribute(
-        "style",
-        expect.stringContaining("--pain-ramp-2"),
-      );
-      expect(selected).toHaveAttribute(
-        "style",
-        expect.stringContaining("--on-color"),
-      );
+      expect(selected).toHaveAttribute("aria-pressed", "true");
+      expect(selected).not.toHaveAttribute("style");
+      expect(selected.className).not.toMatch(/accent/i);
       expect(
         screen.getByRole("button", { name: "Pain 1" }),
       ).not.toHaveAttribute("style");

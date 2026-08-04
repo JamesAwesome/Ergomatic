@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { fromWorkout, type BuilderRow } from "./builderState";
 import StepCard from "./StepCard";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 
 // Local row-shape helpers, same convention as builderState.test.ts's own
 // workRow/wuRow/restRow — this file can't import those (not exported), and
@@ -63,7 +63,7 @@ function setup(overrides: Partial<Parameters<typeof StepCard>[0]> = {}) {
     <StepCard
       index={0}
       row={workRow()}
-      splitLabel="2:11.0–2:13.0"
+      splitLabel="2:12.0"
       typeColorVar="--type-o2"
       onExpand={onExpand}
       onDuplicate={onDuplicate}
@@ -79,7 +79,7 @@ describe("StepCard", () => {
     setup({ index: 2 });
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("20:00 @ 6k +10")).toBeInTheDocument();
-    expect(screen.getByText("2:11.0–2:13.0")).toBeInTheDocument();
+    expect(screen.getByText("2:12.0")).toBeInTheDocument();
     expect(screen.getByText("20 spm · rest 1:30")).toBeInTheDocument();
   });
 
@@ -146,7 +146,7 @@ describe("StepCard", () => {
 
   it("renders nothing in the split area — not a stray dash — when splitLabel is null", () => {
     setup({ splitLabel: null });
-    expect(screen.queryByText("2:11.0–2:13.0")).not.toBeInTheDocument();
+    expect(screen.queryByText("2:12.0")).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
     expect(screen.queryByText("-")).not.toBeInTheDocument();
   });
@@ -170,8 +170,9 @@ describe("StepCard", () => {
   // r row (no spm/rest fields of their own), but `.step-card-sub` used to
   // render unconditionally regardless — a focusable button with no text
   // content and no aria-label, which axe's button-name rule (WCAG 4.1.2)
-  // flags. Every starter workout opens with a `wu`, so this fired on the
-  // edit screen for essentially every workout a rower didn't hand-author.
+  // flags. Every seeded library workout opens with a `wu`, so this fired on
+  // the edit screen for essentially every workout a rower didn't
+  // hand-author.
   // Assert the button is entirely absent, not just visually empty — an
   // empty-but-present button would still fail the same audit.
   it("renders no sub-summary button at all for a warm-up row (no accessible name to give it)", () => {
@@ -197,19 +198,20 @@ describe("StepCard", () => {
   // Review fix wave: `stepToRow` writes `row.rest` in the clock form, but
   // `restSecondsFromRow` used to still parse it with a bare `Number(...)` —
   // `Number("3:00")` is NaN, so a real stored workout's rest sub-summary
-  // rendered "18 spm · rest NaN:NaN". A fixture built by hand (bare-decimal
-  // "1.5") never exercised this path; a real starter workout does. Doldrums
-  // (server/seed/starter.ts) is the exact shape the reviewer rendered to
-  // find the bug: a `w` step with `restMinutes: 3`.
-  it("renders a real stored workout's rest sub-summary as a real value, not NaN:NaN (Doldrums)", () => {
-    const doldrums = STARTER_WORKOUTS.find((w) => w.title === "Doldrums");
-    if (!doldrums) throw new Error("fixture workout 'Doldrums' not found");
-    const form = fromWorkout(doldrums);
+  // rendered "22 spm · rest NaN:NaN". A fixture built by hand (bare-decimal
+  // "1.5") never exercised this path; a real library workout does. Hoarfrost
+  // (server/seed/library/o2.ts) is the exact shape the reviewer rendered to
+  // find the bug: a `w` step with `restMinutes: 5`.
+  it("renders a real stored workout's rest sub-summary as a real value, not NaN:NaN (Hoarfrost)", () => {
+    const hoarfrost = LIBRARY_WORKOUTS.find((w) => w.title === "Hoarfrost");
+    if (!hoarfrost) throw new Error("fixture workout 'Hoarfrost' not found");
+    const form = fromWorkout(hoarfrost);
     const workRowFromStore = form.rows.find((r) => r.kind === "w");
     if (!workRowFromStore) throw new Error("expected a work row");
 
     setup({ row: workRowFromStore });
-    expect(screen.getByText("18 spm · rest 3:00")).toBeInTheDocument();
+    // Hoarfrost's work step: spm 22, restMinutes 5 (rest 5:00 as a clock).
+    expect(screen.getByText("22 spm · rest 5:00")).toBeInTheDocument();
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 });

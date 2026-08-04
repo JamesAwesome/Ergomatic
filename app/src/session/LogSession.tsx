@@ -25,6 +25,7 @@ import {
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
+import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 
@@ -36,15 +37,17 @@ const HELD_OPTIONS: { value: HeldResult; label: string }[] = [
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
 
-// Duplicated from ClassificationCard.tsx's own `PAIN_RAMP_VAR`, matching
-// this repo's established convention of keeping this tiny 5-entry map local
-// to each file that needs it rather than importing it (ClassificationCard's
-// own header comment on this: "Kept local ... matching the existing
-// duplication convention"). The task brief calls for the Log screen's own
-// pain picker to follow ClassificationCard's numeral-cell pattern, which
-// this reuses down to the exact CSS classes (`.classification-*`) — only
-// this color map is re-declared, the same way every other file that paints
-// a pain ramp does.
+// Originally duplicated from ClassificationCard.tsx's own `PAIN_RAMP_VAR`,
+// matching this repo's established convention of keeping this tiny 5-entry
+// map local to each file that needs it rather than importing it. The
+// ui-fix round's Task 1 later moved ClassificationCard.tsx's own selected
+// PAIN chip off this ramp onto plain ink (DESIGN.md: "Builder's gold pain
+// selection goes" — this screen wasn't touched that round, so its own
+// per-level ramp fill is unchanged) — this map and the `.classification-*`
+// CSS classes it paints are still shared with (not owned by)
+// ClassificationCard.tsx's own `.classification-chip-pain[aria-pressed=
+// "true"]` rule, which this screen's inline style always overrides
+// regardless of which one is "true" today.
 const PAIN_RAMP_VAR: Record<(typeof PAIN_LEVELS)[number], string> = {
   1: "--pain-ramp-1",
   2: "--pain-ramp-2",
@@ -87,10 +90,11 @@ const PAIN_RAMP_VAR: Record<(typeof PAIN_LEVELS)[number], string> = {
  *  entirely rather than fabricating a number from the rower's current
  *  baseline, which would have nothing to do with what this particular run
  *  actually locked (an earlier version of this panel rendered a literal
- *  "—" for the missing half instead — found, in review, to be what EVERY
- *  real session would show, since no starter workout references both
- *  bases; see `pacesLockedText`'s own doc comment). `draft` should be the
- *  caller's
+ *  "—" for the missing half instead — found, in review, to be what almost
+ *  every real session would show, since (post the taste pass, 9b9fde5, which
+ *  converted AT's last remaining 2k-base refs to 6k) no seeded library
+ *  workout references both bases; see `pacesLockedText`'s own doc comment).
+ *  `draft` should be the caller's
  *  match-checked draft (null when missing or foreign — see LogSession's own
  *  `matchedDraft`), never a draft this run wasn't built from: `rawOff`/
  *  `nudge` from the WRONG workout's steps would silently reconstruct a
@@ -130,13 +134,21 @@ function lockedBaseline(
 /** F1 (whole-branch review, Task 2 fix round): renders ONLY the bases the
  *  workout's own steps actually reference — never a bare dash. The
  *  original two-slot "2K … · 6K …" layout (matching README.md §7's own
- *  literal mock) was checked against all 35 seeded starters and found to
- *  be unconditionally wrong in production: not one references both "2k"
- *  and "6k" in the same workout (16 are 2k-only, 18 are 6k-only, and
- *  Microburst references neither at all) — so the two-slot layout would
- *  show a permanent dash for one half of EVERY real session logged,
- *  violating the house "never a bare dash" rule this screen's own per-step
- *  list already honors. `null` (both bases absent — an all-effort workout,
+ *  literal mock) was checked against all 35 seeded starters (this repo's
+ *  original starter library, later retired at Phase 6E for a generated
+ *  300-workout one) and found to be unconditionally wrong in production:
+ *  not one referenced both "2k" and "6k" in the same workout (16 were
+ *  2k-only, 18 were 6k-only, and Microburst referenced neither at all) — so
+ *  the two-slot layout would show a permanent dash for one half of every
+ *  real session logged (the generated library keeps to one base per
+ *  workout exclusively — the taste pass, 9b9fde5, converted AT's last
+ *  remaining 2k-base refs to 6k, so zero of its 300 entries mix both;
+ *  before that pass, 3 did), violating the house "never a bare dash" rule
+ *  this screen's own per-step list already honors. The two-slot form still
+ *  renders correctly when both bases ARE present (see the dedicated test
+ *  that pins this — a synthetic fixture, since the generated library no
+ *  longer has a real example). `null`
+ *  (both bases absent — an all-effort workout,
  *  or a mismatched/missing draft with nothing to reconstruct) means there
  *  is nothing honest to show at all; the caller omits the whole panel
  *  rather than rendering an empty "PACES LOCKED AT" label with no value.
@@ -647,7 +659,15 @@ function SessionDoorLog() {
     clearRun();
     navigate("/today");
   });
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  // Task 3 (ui-fix round): the two-button `.baseline-confirm` side panel
+  // this discard used to open is gone — replaced by the shared
+  // `useStagedDiscard` machine and the level system's own in-place L4/
+  // L4-armed idiom (WorkoutDetail.tsx's Delete workout, SessionComplete.tsx's
+  // own new Discard), so all three of the app's staged-discard controls now
+  // share one look AND one implementation. Behaviour is unchanged: still a
+  // two-tap confirm, still clears both records with no POST, still lands on
+  // /today.
+  const discard = useStagedDiscard();
 
   // No run record, or a run that isn't actually complete yet (a direct/deep
   // nav here mid-session) — same guard SessionComplete.tsx's own screen
@@ -736,10 +756,17 @@ function SessionDoorLog() {
     });
   }
 
-  function handleDiscard() {
-    clearDraft();
-    clearRun();
-    navigate("/today");
+  // Same two-tap shape as WorkoutDetail.tsx's OwnerActions `handleClick` and
+  // SessionComplete.tsx's own new `handleDiscardClick`: the first press
+  // arms, the second (only reachable while `armed`) fires the shared
+  // discard and navigates.
+  function handleDiscardClick() {
+    if (discard.armed) {
+      discard.fire();
+      navigate("/today");
+    } else {
+      discard.arm();
+    }
   }
 
   return (
@@ -765,42 +792,14 @@ function SessionDoorLog() {
       onSave={handleSave}
       backFallback="/today"
       discardSlot={
-        !confirmingDiscard ? (
-          <button
-            type="button"
-            className="button-outline"
-            onClick={() => setConfirmingDiscard(true)}
-          >
-            Discard without logging
-          </button>
-        ) : (
-          // Staged-confirm idiom (src/you/BaselineEditor.tsx, also
-          // WorkoutDetail.tsx's OwnerActions delete flow): the destructive
-          // action never fires on the first press. Reuses `.baseline-*`
-          // classes verbatim, same as every other staged confirm in the app.
-          <div className="baseline-confirm">
-            <p className="baseline-confirm-line">
-              Discard this session without logging it? This can&rsquo;t be
-              undone.
-            </p>
-            <div className="baseline-actions">
-              <button
-                type="button"
-                className="button-outline"
-                onClick={() => setConfirmingDiscard(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="button-primary"
-                onClick={handleDiscard}
-              >
-                Discard session
-              </button>
-            </div>
-          </div>
-        )
+        <button
+          type="button"
+          className={discard.armed ? "button-l4-armed" : "button-l4"}
+          onClick={handleDiscardClick}
+          onBlur={discard.disarm}
+        >
+          {discard.armed ? "Tap again to discard" : "Discard without logging"}
+        </button>
       }
     />
   );

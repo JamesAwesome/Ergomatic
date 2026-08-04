@@ -3,8 +3,8 @@ import { PAIN_WORDS, TYPE_WORDS } from "./builderState";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 
 // Chip order per docs/design/README.md §Screens -> "2. Library" (AN before
-// O2 — not alphabetical), matching src/library/FilterChips.tsx and
-// Builder.tsx's own (pre-redesign) TYPE_CHIPS.
+// O2 — not alphabetical), matching src/library/FilterSheet.tsx's TYPE cells
+// and Builder.tsx's own (pre-redesign) TYPE_CHIPS.
 const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
   { type: "AN", label: "AN" },
   { type: "O2", label: "O2" },
@@ -24,40 +24,34 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
 };
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
-type PainLevel = (typeof PAIN_LEVELS)[number];
-
-// Selected pain-cell fill var per level — the handoff's pain ramp
-// (docs/design/builder-redesign/README.md §3), added to tokens.css as its
-// own named properties. Originally kept distinct from PainPicker.tsx's own
-// --pain-N/--pain-N-fill tokens (the two ramps' hexes disagreed and
-// PainPicker was still Builder.tsx's live consumer at the time this file
-// was written) — Phase 5E Task 5 wired this card into Builder.tsx in
-// PainPicker's place and deleted PainPicker.tsx/its tokens entirely (grepped
-// first: nothing else, including Phase 6's not-yet-built log screen,
-// imported it), leaving --pain-ramp-N as the sole surviving pain palette.
-const PAIN_RAMP_VAR: Record<PainLevel, string> = {
-  1: "--pain-ramp-1",
-  2: "--pain-ramp-2",
-  3: "--pain-ramp-3",
-  4: "--pain-ramp-4",
-  5: "--pain-ramp-5",
-};
 
 /** The classification card (docs/design/builder-redesign/README.md §3): one
  *  card holding TYPE, DIFFICULTY and EXPECTED PAIN so the three metadata
  *  pickers read as a single unit instead of three loose strips.
  *
- *  Two departures the handoff calls out explicitly:
- *  - PAIN drops the ink-stroke face graphics from the deleted
- *    PainPicker.tsx — numerals only, with the current level's word
- *    (PAIN_WORDS) rendered opposite the group label instead.
- *  - DIFFICULTY's selected fill moves off --accent onto --ink, so accent
- *    stays reserved for the in-row unit/pace toggles and Save. Enforced
- *    structurally here: `.classification-chip-difficulty` is a distinct
- *    class from the pre-existing `.chip` (whose `[aria-pressed="true"]`
- *    rule fills accent), and the selected DIFFICULTY chip carries no inline
- *    style at all — the ink fill lives entirely in one CSS rule that never
- *    references --accent (see index.css).
+ *  Selected-state fills (docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md,
+ *  ui-fix round Task 1 — supersedes this card's original handoff, which had
+ *  PAIN filling its own per-level ramp colour):
+ *  - TYPE fills the selected chip with THAT TYPE'S OWN colour (`TYPE_COLOR_
+ *    VAR`, set inline below) — the one selection on this screen accent is
+ *    never allowed to mean, and the one place a per-instance colour is
+ *    unavoidable (four different types, four different fills).
+ *  - DIFFICULTY and PAIN both fill plain ink, never accent, so accent stays
+ *    reserved for the in-row unit/pace toggles and Save. Enforced
+ *    structurally: `.classification-chip-difficulty`/`-pain` are distinct
+ *    classes from the pre-existing `.chip` (whose `[aria-pressed="true"]`
+ *    rule fills accent), and neither selected chip carries an inline style
+ *    at all — the ink fill lives entirely in two CSS rules that never
+ *    reference --accent (see index.css). PAIN's own per-level ramp colour
+ *    (`--pain-ramp-1..5`, tokens.css) is no longer used here at all — it was
+ *    DESIGN.md's own "Builder's gold pain selection goes" finding, since
+ *    ramp-3 IS the AT type colour and briefly made a pain level read as a
+ *    type. LogSession.tsx (a different, untouched-this-round screen) is
+ *    still a live consumer of that same ramp.
+ *
+ *  Also, PAIN drops the ink-stroke face graphics from the deleted
+ *  PainPicker.tsx — numerals only, with the current level's word
+ *  (PAIN_WORDS) rendered opposite the group label instead.
  *
  *  A third addition, mid-phase (James's request, not the original handoff):
  *  TYPE gets the same treatment as PAIN — a short summary word (TYPE_WORDS)
@@ -155,15 +149,6 @@ export default function ClassificationCard({
                 aria-pressed={selected}
                 aria-label={`Pain ${level}`}
                 className="classification-chip classification-chip-pain"
-                style={
-                  selected
-                    ? {
-                        background: `var(${PAIN_RAMP_VAR[level]})`,
-                        borderColor: `var(${PAIN_RAMP_VAR[level]})`,
-                        color: "var(--on-color)",
-                      }
-                    : undefined
-                }
                 onClick={() => onPainChange(level)}
               >
                 {level}

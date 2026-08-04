@@ -4,7 +4,8 @@ import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
 import { useWorkouts } from "../api/useWorkouts";
-import { effortWord, resolveSplit, toleranceRange } from "../../domain/pace.js";
+import { effortWord, resolveSplit } from "../../domain/pace.js";
+import { fmtSplit } from "../../domain/format.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
 import BackLink from "../shell/BackLink";
 import ClassificationCard from "./ClassificationCard";
@@ -41,13 +42,13 @@ import Stepper from "./Stepper";
 function splitLabelFor(
   row: BuilderRow,
   baselines: Baselines | null,
-  tolerance: number,
 ): string | null {
   if (row.refEffort) return effortWord(row.refEffort);
   if (baselines === null) return null;
   const ref: PaceRef = { base: row.refBase, off: row.refOff };
   const resolved = resolveSplit(baselines, ref);
-  return toleranceRange(resolved, tolerance).label;
+  // Ui-fix round, Item 1: the exact resolved split, not a tolerance band.
+  return fmtSplit(resolved);
 }
 
 export interface BuilderEditMode {
@@ -66,19 +67,6 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   AN: "--type-an",
   TR: "--type-tr",
 };
-
-// Duplicated from WorkoutDetail.tsx rather than extracted to a shared
-// module — out of scope for this screen. Reads the settings custom
-// property once, at mount; a future settings screen changing it at runtime
-// wouldn't propagate without a remount, same known limitation as there.
-function readPaceTolerance(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--pace-tolerance")
-    .trim();
-  const parsed = Number(raw);
-  return raw !== "" && Number.isFinite(parsed) ? parsed : 1;
-}
 
 // Minutes (possibly fractional) -> "M:SS", e.g. 7 -> "7:00", 7.4667 -> "7:28".
 function fmtMinutes(minutes: number): string {
@@ -128,7 +116,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tolerance] = useState(readPaceTolerance);
   // Bumped on every AUTO NAME press so repeated presses cycle through the
   // name pool instead of re-offering the same candidate — generateName is
   // pure, so without this the button would be a no-op after the first click.
@@ -437,9 +424,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         <div className="builder-step-list">
           {form.rows.map((row, index) => {
             const splitLabel =
-              row.kind === "w"
-                ? splitLabelFor(row, baselines, tolerance)
-                : null;
+              row.kind === "w" ? splitLabelFor(row, baselines) : null;
             return row.id === editing ? (
               <StepEditor
                 key={row.id}
@@ -520,7 +505,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
 
       <button
         type="button"
-        className="builder-save"
+        className="button-l1"
         onClick={handleSave}
         disabled={saving}
       >

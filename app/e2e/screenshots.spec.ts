@@ -15,8 +15,8 @@ const SCREENSHOT_BASELINES = { k2Seconds: 112.0, k6Seconds: 122.0 };
 
 /**
  * Sets baselines for the signed-in user so screenshots show the product's
- * real numbers (durations, resolved target ranges) instead of the
- * no-baselines fallback ("—" / "no target"). Driven via an in-page fetch
+ * real numbers (durations, resolved targets) instead of the no-baselines
+ * fallback ("—" / "no target"). Driven via an in-page fetch
  * (real Chromium networking), not `page.request`: the api container runs
  * with NODE_ENV=production, so the session cookie is Set-Cookie'd with
  * `Secure` — Chromium exempts http://127.0.0.1 from that (the loopback
@@ -178,6 +178,14 @@ test("signin", async ({ page }) => {
 // above already carries a scar for. This capture seeds a plan and real
 // history first specifically so it never reduces to that empty/loading
 // state again.
+//
+// Task 3 (2026-08-04 round): three captures from one continuous flow — the
+// same "multiple screenshots per test" idiom the "library" test below (and
+// "today-unlogged" above it in history) already uses — now that DIFFICULTY/
+// TIME/PAIN live behind a FILTER ⌄ sheet instead of always-on chip rows.
+// `today.png` is the REST state (FILTER ⌄ beside SHUFFLE, no chip groups on
+// screen); `today-sheet.png` and `today-filtered.png` mirror
+// `library-sheet.png`/`library-filtered.png`'s own open/applied pair.
 test("today", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-today@e2e.test",
@@ -191,9 +199,79 @@ test("today", async ({ page }) => {
   // Today shows "LOADING…" until all five of its data hooks resolve — wait
   // for the suggested-workout card itself before shooting.
   await page.locator(".today-card").waitFor();
+
+  // REST: FILTER ⌄ beside SHUFFLE, no DIFFICULTY/TIME/PAIN chip groups on
+  // the screen itself.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today.png"),
   });
+
+  // SHEET: open, all three groups (DIFFICULTY/TIME/PAIN), and the live-
+  // counting primary (`Show N options`). Deselecting HARD is a real,
+  // visible DIFFICULTY deviation with zero risk of a zero-result pool — the
+  // 300-workout library's own O2 quota (today's sprint-plan code) has no
+  // HARD entries at all (design.spec.ts's own SHUFFLE-disabled comment).
+  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "HARD", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: /^Show \d+ options?$/ }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-sheet.png"),
+  });
+
+  // FILTERED: applied — the DIFFICULTY token ("EASY–MEDIUM") and CLEAR ALL.
+  await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+  await expect(page.locator(".filter-token")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-filtered.png"),
+  });
+});
+
+// Task 3 (ui-fix round): the unlogged row's own staged Discard — a real
+// timer run driven to /session/complete, then a bare `/today` nav WITHOUT
+// logging it, is the only way to land a completed-but-unlogged run record
+// (same "drive the real flow" idiom the "session-complete"/"log-session"
+// captures above already use). Two captures, DEFAULT and ARMED, matching
+// the design mockup's own labelled pair — `today-unlogged` doubles as the
+// pair's shared setup since Playwright screenshots are just PNG writes, not
+// a separate render each time.
+test("today-unlogged", async ({ page }) => {
+  const title = "Screenshot Unlogged Row Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-unlogged@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await importBulk(page, [`${title} | AN | easy | 1`, "w 0:03 6k"].join("\n"));
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await page.getByRole("button", { name: "Back to Today" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.getByText(/unlogged session/i)).toBeVisible();
+
+  // DEFAULT: title + "unlogged session.", Log it, and the outlined ✕.
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-unlogged.png"),
+  });
+
+  // ARMED: the same row's contents swapped in place — border to accent,
+  // the discard question, and a solid "Tap again" replacing Log it/✕.
+  await page.getByRole("button", { name: "Discard without logging" }).click();
+  await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-unlogged-armed.png"),
+  });
+
+  await cleanupByTitle(page, title);
 });
 
 test("plan", async ({ page }) => {
@@ -214,6 +292,12 @@ test("plan", async ({ page }) => {
   });
 });
 
+// Task 4 (ui-fix round): three captures from one continuous flow — the same
+// "multiple screenshots per test" idiom "today-unlogged" above uses for its
+// DEFAULT/ARMED pair. `library.png` is now the REST state proper (DESIGN.md's
+// own "1 · AT REST" — FILTER ⌄ + a plain count, no tokens), so the CUSTOM
+// badge showcase this test always did moves to `library-filtered.png`
+// instead of being baked into the rest capture.
 test("library", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-library@e2e.test",
@@ -222,11 +306,11 @@ test("library", async ({ page }) => {
   await setBaselines(page);
 
   // Phase 5H: personal (non-global) workouts now wear a CUSTOM badge on
-  // the library row's second line. Every seeded starter workout is
-  // global, so without authoring one of its own first, this capture would
-  // never show the badge at all — same reasoning as "workout-detail"'s
-  // own builder-authored personal workout below. Simplest valid form:
-  // title + pain + one row's duration.
+  // the library row's second line. Every seeded library workout is
+  // global, so without authoring one of its own first, no capture below
+  // would ever show the badge at all — same reasoning as "workout-detail"'s
+  // own builder-authored personal workout further down. Simplest valid
+  // form: title + pain + one row's duration.
   const customTitle = "Screenshot Custom Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(customTitle);
@@ -240,18 +324,63 @@ test("library", async ({ page }) => {
   // page.goto only waits for the navigation's load event, not that — wait
   // for a real row so the screenshot isn't just the loading state.
   await page.locator(".workout-row").first().waitFor();
-  // The library sorts the 36 global starter workouts ahead of a single
-  // freshly-authored personal one, so it lands well past the first
-  // viewport-height screen — the CUSTOM filter chip (Phase 5H) isolates it
-  // so the committed capture actually shows the badge, not just a taller
-  // "N ENTERED" count.
-  await page.getByRole("button", { name: "CUSTOM", exact: true }).click();
-  await expect(page.locator(".workout-row-custom").first()).toBeVisible();
+
+  // REST: FILTER ⌄ + "N WORKOUTS", no tokens.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library.png"),
   });
 
+  // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
+  // live-counting singular-aware "Show 1 workout" primary (fix round 2,
+  // whole-branch review M2) is the point of this capture.
+  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "CUSTOM", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Show 1 workout" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-sheet.png"),
+  });
+
+  // FILTERED: applied — the SOURCE token, the narrowed count, and (the
+  // library sorts the 36 global starter workouts ahead of the one
+  // freshly-authored personal one, so filtering is what actually gets the
+  // CUSTOM badge into frame) the isolated custom row.
+  await page.getByRole("button", { name: "Show 1 workout" }).click();
+  await expect(page.locator(".workout-row-custom").first()).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-filtered.png"),
+  });
+
   await cleanupByTitle(page, customTitle);
+});
+
+// Phase 6E fix round: "library.png" above deliberately captures the
+// Phase 5H CUSTOM-filter single-row state, so it never shows what the
+// screen actually looks like for the vast majority of visits — the
+// unfiltered list of the real generated 300. This capture is that missing
+// state: no CUSTOM filter, scrolled to the top, so the committed image
+// shows genuine library rows (sorted O2-first, "Sea Fret" leading per
+// ROADMAP.md's Phase 6E entry) and the real "300 ENTERED" count header,
+// not a single custom row against a near-empty background.
+test("library-seeded", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-library-seeded@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+
+  await page.goto("/library");
+  // Same "LOADING…" race as the "library" capture above — wait for a real
+  // row before shooting.
+  await page.locator(".workout-row").first().waitFor();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-seeded.png"),
+  });
 });
 
 /** Test-only cleanup: finds the signed-in user's own workout with the given
@@ -291,7 +420,7 @@ test("workout-detail", async ({ page }) => {
 
   // A personal (non-global) workout, authored through the builder like the
   // "builder" capture below — WorkoutDetail.tsx renders Edit/Delete only
-  // for `!workout.isGlobal`, and every seeded starter workout is global, so
+  // for `!workout.isGlobal`, and every seeded library workout is global, so
   // the previous version of this capture (the library's first row) never
   // showed Task 8's owner-action styling fix at all. This replaces that
   // capture rather than adding a second one: a screenshot of a *global*
@@ -376,8 +505,8 @@ test("confirm", async ({ page }) => {
   ).toBeVisible();
 
   // Fix (final whole-branch review): four step-editor rows plus the header
-  // push `.confirm-footer` (the recount + START — the screen's one
-  // load-bearing control) below the 390×844 viewport, so a viewport-only
+  // push `.confirm-footer` (the recount + "Looks right, start" — the
+  // screen's one L1) below the 390×844 viewport, so a viewport-only
   // capture used to cut it off entirely. Same fullPage + fixed-tabbar
   // neutralizer as "builder" above, for the same reason: a fullPage
   // capture on a document taller than the viewport stitches the fixed
@@ -525,7 +654,7 @@ test("builder", async ({ page }) => {
   // accordion invariant this whole redesign exists to prove, captured live
   // before any save. Every collapsed row resolves a target (five splits
   // against the set baselines, one effort word for the MAX row); the open
-  // row shows its own resolved range in the TARGET strip instead.
+  // row shows its own resolved (exact) split in the TARGET strip instead.
   await expect(page.locator(".step-card")).toHaveCount(6);
   await expect(page.locator(".step-card-split")).toHaveCount(6);
   await expect(page.locator(".step-editor")).toHaveCount(1);
@@ -657,7 +786,7 @@ test("countdown", async ({ page }) => {
   });
   await setBaselines(page);
   // A warm-up-first, three-step ladder — the realistic shape the seeded
-  // starter library itself uses (CLAUDE.md's own "test against a realistic
+  // library itself uses (CLAUDE.md's own "test against a realistic
   // fixture" rule), not a single bare work step. The countdown's own
   // next-phase line reads the CURRENT (warm-up) phase's resolved label —
   // "Easy" — the same never-a-dash word every warm-up phase resolves to.
@@ -788,6 +917,50 @@ test("session-complete", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// Task 3 (ui-fix round): the new Discard without logging block (rule + L4)
+// pushed this screen's landscape content past its own tight budget (the
+// reviewer's own F8 note) — index.css's landscape media query for
+// `.session-complete-screen`/`.complete-actions` was retuned to fit it; this
+// capture is the visual record of that fit, same idiom as "timer-landscape"
+// above.
+test("session-complete-landscape", async ({ page }) => {
+  const title = "Screenshot Session Complete Landscape Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-session-complete-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await importBulk(
+    page,
+    [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+  await expect(page.getByText("STEP 2 OF 2 · WORK · 100M")).toBeVisible({
+    timeout: 6000,
+  });
+  await page.waitForTimeout(20_000);
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await expect(page.getByText("Finish this session?")).toBeVisible();
+  await page.getByRole("button", { name: "Finish session" }).click();
+  await expect(page).toHaveURL(/\/session\/complete$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.locator(".complete-actual-row")).toHaveCount(1);
+  // The handoff's own landscape reference frame.
+  await page.setViewportSize({ width: 844, height: 420 });
+  await expect(
+    page.getByRole("button", { name: "Discard without logging" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "session-complete-landscape.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
 test("log-session", async ({ page }) => {
   test.setTimeout(90_000); // a real 60s step, not this file's usual ~3s ones
   const title = "Screenshot Log Session Workout";
@@ -798,11 +971,14 @@ test("log-session", async ({ page }) => {
   await setBaselines(page);
   // F1 (whole-branch review): the FIRST capture used two split-ref steps
   // (one "2k", one "6k") to show the PACES LOCKED panel's own two-slot
-  // form — but 0 of the 35 seeded starters ever reference both bases in
-  // one workout (16 are 2k-only, 18 are 6k-only, and Microburst references
-  // neither), so that shape can't happen in production and the panel
-  // NEVER actually renders both. This capture uses a REAL single-base
-  // shape instead — one 60-SECOND (not an artificially tiny 3s) split-ref
+  // form — but ZERO of the library's 300 generated workouts reference both
+  // bases in one workout (LogSession.tsx's own reconciled comment, Task
+  // 11/12; the taste pass, 9b9fde5, converted AT's last remaining 2k-base
+  // refs to 6k — 3 workouts mixed both before that pass), so that shape
+  // never occurs in production and the panel showing both is a
+  // synthetic-fixture-only case, not something a real session hits. This
+  // capture uses a REAL single-base shape instead — one 60-SECOND (not an
+  // artificially tiny 3s) split-ref
   // TIME step at "6k" (off 0) — so the TOTAL reads as a genuine non-zero
   // "1 MIN" rather than the earlier capture's misleading "0 MIN", and the
   // PACES LOCKED panel shows only the 6K half, matching what an actual

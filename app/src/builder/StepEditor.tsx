@@ -44,8 +44,8 @@ function clampSpm(n: number): number | undefined {
  *  handoff, which models only work steps) get a minutes-only editor: just
  *  the header, DUR and DONE, since those rows have no pace ref, spm or rest
  *  concept of their own (see builderState.ts's stepSummary/stepSubSummary
- *  comments) and the 35 starter workouts plus anything bulk-imported can
- *  contain them.
+ *  comments) and every seeded library workout plus anything bulk-imported
+ *  can contain them.
  *
  *  Replaces StepRowEditor.tsx (deleted this task) — DUR reuses
  *  DurationInput and PACE reuses PaceRefInput wholesale (both already
@@ -71,14 +71,15 @@ export default function StepEditor({
 }: {
   row: BuilderRow;
   index: number;
-  // Pre-computed resolved range (e.g. "2:11.0–2:13.0"), an effort word
-  // ("ALL OUT"/"EASY"), or null when baselines are unknown — this component
-  // does no pace math of its own, same convention as StepCard.tsx's own
-  // splitLabel prop. Builder's splitLabelFor is the one place that branches
-  // on row.refEffort: an effort target renders even when baselines are
-  // unset (a word needs no resolution, unlike a split range), which is a
-  // deliberate difference from a split row's null/"no target" case below —
-  // not an oversight that a future baselines check should "fix".
+  // Pre-computed exact resolved split (e.g. "2:12.0" — ui-fix round, Item
+  // 1: never a tolerance band), an effort word ("ALL OUT"/"EASY"), or null
+  // when baselines are unknown — this component does no pace math of its
+  // own, same convention as StepCard.tsx's own splitLabel prop. Builder's
+  // splitLabelFor is the one place that branches on row.refEffort: an
+  // effort target renders even when baselines are unset (a word needs no
+  // resolution, unlike a split target), which is a deliberate difference
+  // from a split row's null/"no target" case below — not an oversight that
+  // a future baselines check should "fix".
   splitLabel: string | null;
   onChange: (patch: Partial<BuilderRow>) => void;
   onDuplicate: () => void;
@@ -278,7 +279,12 @@ export default function StepEditor({
         </div>
       )}
 
-      <button type="button" className="step-editor-done" onClick={onDone}>
+      {/* Task 1 (ui-fix round): DONE is a NAMED level (L3, commit-in-card)
+          — solid ink, mono 12/600, 0.16em, 48px. It "was already black"
+          (DESIGN.md) via the pre-Task-1 `.step-editor-done` class; this is
+          that same look, formalized into the level system's own shared
+          class rather than a StepEditor-only one-off. */}
+      <button type="button" className="button-l3" onClick={onDone}>
         DONE
       </button>
     </div>
