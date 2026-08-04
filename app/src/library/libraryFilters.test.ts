@@ -6,6 +6,7 @@ import {
   loadLibraryFilters,
   saveLibraryFilters,
 } from "./libraryFilters";
+import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 
 const FULL: Filters = {
   type: "AT",
@@ -110,6 +111,35 @@ describe("libraryFilters", () => {
       JSON.stringify({ ...FULL, painLevels: [5, 5, 4] }),
     );
     expect(loadLibraryFilters().painLevels).toStrictEqual([5, 4]);
+  });
+
+  // L5 (whole-branch review): libraryScroll's own saved position was
+  // measured against whatever list the REJECTED filters record was
+  // showing, not the wider EMPTY_FILTERS list this fallback produces —
+  // restoring it against the wrong list is exactly the failure the two
+  // files being a matched pair (see LIBRARY_FILTERS_KEY's own comment
+  // above) exists to prevent.
+  it("clears a stale libraryScroll when the stored filters record is rejected (v1 shape, malformed, etc.)", () => {
+    saveLibraryScroll(1200);
+    sessionStorage.setItem(LIBRARY_FILTERS_KEY, JSON.stringify(V1_RECORD));
+
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
+    expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBeNull();
+  });
+
+  it("leaves libraryScroll untouched when nothing is stored at all — a fresh visit, not a rejection", () => {
+    saveLibraryScroll(1200);
+
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
+    expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("1200");
+  });
+
+  it("leaves libraryScroll untouched when a valid filters record loads successfully", () => {
+    saveLibraryScroll(1200);
+    saveLibraryFilters(FULL);
+
+    expect(loadLibraryFilters()).toStrictEqual(FULL);
+    expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("1200");
   });
 
   it("clearLibraryFilters removes the stored value", () => {

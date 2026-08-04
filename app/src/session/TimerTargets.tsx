@@ -16,10 +16,10 @@ import type { EnginePhase } from "./engine";
  *  - `"split"`: the resolved EXACT split (`fmtSplit(phase.targetSplit)`) as
  *    the main value, with the REF it was resolved from (`refLabel(phase.ref)`,
  *    uppercased — e.g. `"6K +16"`) as the line beneath. Ui-fix round, Item 1:
- *    this used to be the tolerance-range label (`domain/pace.ts`'s
- *    `toleranceRange`, a "lo–hi" string, or the bare central value once tol
- *    hit 0) — retired in favour of "where did this number come from," which
- *    the band never answered and the ref does. `phase.ref` is only absent
+ *    this used to be a tolerance-range label (a "lo–hi" string, or the bare
+ *    central value once tol hit 0) — retired in favour of "where did this
+ *    number come from," which the band never answered and the ref does.
+ *    `phase.ref` is only absent
  *    for a LEGACY `v:1` `SessionRun` frozen before this field existed on
  *    `Phase`/`EnginePhase` at all (`domain/expand.ts`'s own `case "w"`
  *    always sets both together for a run built today; an old stored

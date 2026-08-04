@@ -131,7 +131,7 @@ random other member of `pool`. Changing the preference chips clears `todayPick`.
 | rule | `#d8d3c4` | card borders |
 | rule-2 | `#ded8c9` | dividers, bar tracks |
 | rule-3 | `#c9c3b2` | control borders |
-| accent (TR) | `#b5341f` | primary action, resolved target, destructive control, active tab mark — no longer "active state" generically; see "Accent meaning" below (ui-fix round) |
+| accent | `#b5341f` | primary action, resolved target, destructive control, active tab mark — no longer "active state" generically, and no longer TR's own colour either (`--type-tr` now aliases `--ink`, fix round 1); see "Accent meaning" below (ui-fix round) |
 | accent-hover | `#9c2c19` | pressed/hover |
 | type O2 | `#2a6275` | aerobic |
 | type AT | `#8a5f18` | anaerobic threshold |
@@ -188,9 +188,9 @@ It no longer means "selected." Every other selected state (difficulty, time
 cap, pain, MIN/M, 2k/6k/MAX/MIN, HELD/UNDER/OVER) fills `--ink` with a cream
 label. Type chips are the one exception to the ink rule: they always fill
 their own type color (`--type-an`/`--type-o2`/`--type-at`, `--type-tr` =
-`--accent`) whether the rower is filtering (Today) or authoring (Builder) —
-identical chip either way. Inactive control, any group: transparent fill,
-`--rule-3` border, `--ink-3` label.
+`--ink`, fix round 1 — see `DEVIATIONS.md`) whether the rower is filtering
+(Today) or authoring (Builder) — identical chip either way. Inactive
+control, any group: transparent fill, `--rule-3` border, `--ink-3` label.
 
 ### Typography
 - **Newsreader** (serif, 500) — screen titles 31px, workout titles 26px, detail 33px,
@@ -214,6 +214,11 @@ identical chip either way. Inactive control, any group: transparent fill,
 ---
 
 ## Screens
+
+> Frozen handoff record — this section describes screen states as they
+> stood at hand-off time and is not re-verified against the shipped app
+> line by line. Where it's gone stale, `docs/design/DEVIATIONS.md` is the
+> current-state authority, not this prose (whole-branch review Md6).
 
 ### 1. Today
 Purpose: open the app, see what to row, start or log it.

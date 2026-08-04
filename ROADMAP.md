@@ -692,9 +692,10 @@ personal workouts and their logs are structurally unaffected by a swap.
 Pending: James's review of the generated batch and PR approval before merge
 (normal SDLC — no merge without it).
 
-**Next:** the deferred UI-fix round above, then Phase 7's PM5 integration.
+**Next:** the deferred UI-fix round below (Phase 6F), then Phase 7's PM5
+integration.
 
-## Phase 6E — UI-fix round
+## Phase 6F — UI-fix round
 
 **Status:** Done (2026-08-04)
 **Goal:** One button vocabulary instead of two competing ones, exact
@@ -752,9 +753,10 @@ and a Library filter model that scales; `docs/design/DEVIATIONS.md` and
 `docs/design/README.md` both read true against the shipped app; full e2e
 green ×2 back-to-back plus unit/client/integration.
 
-**Next:** a **workout-generation phase** (James supplies references; the
-library grows beyond the 35 starters so testers have real content to work
-against), then Phase 7's PM5 integration.
+**Next:** Phase 7's PM5 integration. The parametric workout generator
+("Triggered follow-ons" below) is now unblocked — Phase 6E's
+structural-reference pipeline already produced its fixture data — but not
+yet scheduled.
 
 ## Phase 7 — PM5 over Bluetooth
 
@@ -840,5 +842,5 @@ next phase. One line per round, newest first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
-- **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Still queued behind the UI-fix round (ROADMAP's Phase 6D "Next" line), not started — what remains is the runtime generator itself, not the data it would draw from.
+- **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Phase 6F's UI-fix round is done too, so nothing sits ahead of it in the queue any more — not started, but eligible to schedule now, not just eligible in principle.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.

@@ -47,9 +47,7 @@ function splitLabelFor(
   if (baselines === null) return null;
   const ref: PaceRef = { base: row.refBase, off: row.refOff };
   const resolved = resolveSplit(baselines, ref);
-  // Ui-fix round, Item 1: the exact resolved split, not a tolerance band —
-  // `toleranceRange()` stays in the domain, this display call site just
-  // stopped calling it.
+  // Ui-fix round, Item 1: the exact resolved split, not a tolerance band.
   return fmtSplit(resolved);
 }
 

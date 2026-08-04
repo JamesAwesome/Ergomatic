@@ -32,7 +32,7 @@ function openFilterSheet(page: Page) {
  *  draft ("Show 12 workouts"), hence the regex. Commits the draft and
  *  closes the sheet. */
 function applyFilterSheet(page: Page) {
-  return page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
+  return page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
 }
 
 test.describe("library list", () => {

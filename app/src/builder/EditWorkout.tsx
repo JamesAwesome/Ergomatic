@@ -10,8 +10,8 @@ import {
 
 // Loading/error/404 states mirror WorkoutDetail.tsx's — deliberately
 // duplicated rather than extracted, the same "not worth a shared helper for
-// this small a screen count" call `Countdown.tsx`'s own `readPaceTolerance`
-// comment makes for an unrelated one-liner.
+// this small a screen count" call this codebase makes elsewhere for other
+// one-liners.
 export default function EditWorkout() {
   const { id } = useParams();
   const workoutsState = useWorkouts();

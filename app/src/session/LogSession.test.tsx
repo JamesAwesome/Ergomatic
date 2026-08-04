@@ -23,7 +23,6 @@ import { formatLogDate } from "./logDraft";
 import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
-const TOL = 1;
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
 function library(title: string) {
@@ -79,7 +78,7 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
   });
   const started = startDraft(draft);
   saveDraft(started);
-  const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+  const built = buildRun(started, BASELINES, FIXED_NOW);
   const distanceIndex = built.phases.length - 1;
   const completedAt = new Date(
     FIXED_NOW.getTime() + 30 * 60 * 1000,
@@ -412,7 +411,7 @@ describe("LogSession: prefill from a real completed run", () => {
     });
     const started = startDraft(draft);
     saveDraft(started);
-    const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+    const built = buildRun(started, BASELINES, FIXED_NOW);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -450,7 +449,7 @@ describe("LogSession: prefill from a real completed run", () => {
     const nudged = withNudge(base, 1, 5);
     const started = startDraft(nudged);
     saveDraft(started);
-    const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+    const built = buildRun(started, BASELINES, FIXED_NOW);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -496,7 +495,7 @@ describe("LogSession: prefill from a real completed run", () => {
     });
     const started = startDraft(draft);
     saveDraft(started);
-    const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+    const built = buildRun(started, BASELINES, FIXED_NOW);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -764,7 +763,7 @@ describe("LogSession: save", () => {
     });
     const started = startDraft(draft);
     saveDraft(started);
-    const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+    const built = buildRun(started, BASELINES, FIXED_NOW);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -827,7 +826,7 @@ describe("LogSession: save", () => {
     });
     const started = startDraft(draft);
     saveDraft(started);
-    const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+    const built = buildRun(started, BASELINES, FIXED_NOW);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,

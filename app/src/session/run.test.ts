@@ -29,7 +29,7 @@ function addSeconds(d: Date, s: number): Date {
 }
 
 function freshRun(): SessionRun {
-  return buildRun(fillingLowDraft(`fl-${Math.random()}`), baselines, 3, t0);
+  return buildRun(fillingLowDraft(`fl-${Math.random()}`), baselines, t0);
 }
 
 // A phase with no `set` (no reps marker active, e.g. warmup) still carries

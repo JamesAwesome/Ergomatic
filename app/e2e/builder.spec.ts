@@ -114,9 +114,8 @@ test.describe("authoring loop", () => {
 
     // With a 6k baseline of 122.0s: 122 - 2 = 120.0 -> "2:00.0" exact
     // (ui-fix round, Item 1: the tolerance band retired from every display
-    // call site — --pace-tolerance still exists for the domain's own
-    // toleranceRange, but no screen shows it any more). The builder
-    // resolves this live (StepEditor.tsx's TARGET strip), before any save —
+    // call site). The builder resolves this live (StepEditor.tsx's TARGET
+    // strip), before any save —
     // check it here too, not just on the post-save detail screen below, so
     // a failure here (bad live math) isn't confused with a failure there
     // (bad round-trip through the API).

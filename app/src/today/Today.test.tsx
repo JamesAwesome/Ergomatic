@@ -1113,7 +1113,7 @@ function liveRunFor(startedAt: Date): SessionRun {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  return buildRun(draft, RESUME_BASELINES, 1, startedAt);
+  return buildRun(draft, RESUME_BASELINES, startedAt);
 }
 
 describe("Today (F2: session resume / unlogged)", () => {

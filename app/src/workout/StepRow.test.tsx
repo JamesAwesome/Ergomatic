@@ -106,9 +106,8 @@ describe("StepRow durations (house clock format)", () => {
   });
 
   // Ui-fix round, Item 1: the target sits as the single exact resolved
-  // split — never a "lo–hi" tolerance band — regardless of what
-  // --pace-tolerance is set to (this component no longer even takes a
-  // tolerance prop; StepRow.tsx's own toleranceRange call site was
+  // split — never a "lo–hi" tolerance band (this component no longer even
+  // takes a tolerance prop; StepRow.tsx's own toleranceRange call site was
   // deleted, not just fed a zero). 6k=122, off=4, nudge=0 -> 126 ->
   // fmtSplit(126) = "2:06.0".
   it("shows the exact resolved split, never a tolerance band", () => {

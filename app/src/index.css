@@ -803,21 +803,23 @@ button:disabled {
   cursor: pointer;
 }
 
-.chip[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--on-color);
-  border: none;
-}
-
 /* Classification card (Task 4, docs/design/builder-redesign/README.md §3):
    one card holding TYPE, DIFFICULTY and EXPECTED PAIN. Deliberately its own
    `.classification-chip*` class family rather than reusing `.chip` above —
-   `.chip[aria-pressed="true"]` fills --accent unconditionally, which is
-   exactly the treatment DIFFICULTY must NOT get (the handoff moves it to
-   ink so accent stays reserved for the in-row unit/pace toggles and Save).
-   A shared base class would have made "don't inherit the accent fill" a
-   thing every future reader has to remember; a separate class makes it
-   structurally impossible. */
+   at the time this was written, `.chip[aria-pressed="true"]` filled
+   --accent unconditionally, which is exactly the treatment DIFFICULTY must
+   NOT get (the handoff moves it to ink so accent stays reserved for the
+   in-row unit/pace toggles and Save). A shared base class would have made
+   "don't inherit the accent fill" a thing every future reader has to
+   remember; a separate class made it structurally impossible. (Fix round 2,
+   whole-branch review Md3: that bare `.chip[aria-pressed="true"]` accent
+   rule is deleted now — Today.tsx's `TodayChip` was its only real consumer,
+   and every real chip either renders under `.today-filter-chips`'s own ink
+   override or carries an inline per-type style, so the rule was
+   unreachable in both directions. The separation this comment explains
+   stays the right call regardless: nothing here depends on the deleted
+   rule's specific behaviour, only on DIFFICULTY/PAIN never inheriting
+   `.chip`'s base at all.) */
 .classification-card {
   display: flex;
   flex-direction: column;
@@ -1000,11 +1002,16 @@ button:disabled {
   margin-top: 8px;
 }
 
+/* Fix round 2 (whole-branch review, L1): moved off --ink-4 to --ink-3 —
+   not a contrast failure (--ink-4 measures 5.29:1 on --surface here, clear
+   AA), but e2e/design.spec.ts's assertNoFailingInk4Labels sweep never ran
+   on this screen, so a mono label this small at --ink-4 was a guard gap,
+   not a pinned choice. Library's own describe now carries the sweep too. */
 .workout-row-meta {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .back-link {
@@ -1539,16 +1546,32 @@ button:disabled {
 
 /* Task 1 (ui-fix round): DIFFICULTY/TIME/PAIN's own selected fill — ink,
    never accent (DESIGN.md's selected-state fix). Scoped under
-   `.today-filter-chips` rather than touching the bare `.chip[aria-pressed=
-   "true"]` rule above: that rule is also Library's own FilterChips.tsx
-   selected fill, which this round's brief explicitly leaves untouched
-   ("the Library and Plan screens... not touched by request"). The
-   type-swap chips (`.today-type-chips`, above `.today-filter-chips` in the
-   DOM) never match this selector at all — they carry their own inline
-   per-type style (Today.tsx's `typeColorVar`), which always wins over any
-   class rule regardless of specificity. */
+   `.today-filter-chips` rather than as a bare `.chip[aria-pressed="true"]`
+   rule: Library's own equivalent selected fill lives entirely in
+   `FilterSheet.tsx`'s `.filter-sheet-cell[aria-pressed="true"]` (a
+   different class family, Task 4, ui-fix round — the flat `FilterChips.tsx`
+   row this comment used to describe is deleted), so scoping here rather
+   than touching a shared bare-`.chip` rule was never about leaving Library
+   alone — it's that no rule needs to reach both screens at once. (Fix round
+   2, whole-branch review M3: the bare `.chip[aria-pressed="true"]` rule
+   this comment used to reference is itself deleted now, per Md3 — it had
+   no reachable consumer once every real `.chip` fell under either this
+   scoped rule or Today's own inline per-type style.) The type-swap
+   chips (`.today-type-chips`, above `.today-filter-chips` in the DOM) never
+   match this selector at all — they carry their own inline per-type style
+   (Today.tsx's `typeColorVar`), which always wins over any class rule
+   regardless of specificity.
+   `color`/`border` are stated explicitly here, not left to inherit from
+   `.chip`'s own base rule (`color: var(--ink-3)`, a 1px `--rule-3` border):
+   the deleted bare rule used to supply the on-color text and border reset
+   for EVERY pressed chip, and dropping it without restating those two
+   properties here left a real regression — axe caught `--ink-3` on `--ink`
+   at 2.3:1, nowhere near the 4.5:1 floor (whole-branch review fix wave,
+   caught by the e2e run this same wave required). */
 .today-filter-chips .chip[aria-pressed="true"] {
   background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
 }
 
 .today-filter-group {
@@ -3749,11 +3772,15 @@ button:disabled {
   margin: 0 0 16px;
 }
 
+/* Fix round 2 (whole-branch review, L1): moved off --ink-4 to --ink-3 — same
+   guard-gap reasoning as .workout-row-meta above (WorkoutRow.tsx): AA was
+   never actually failing (5.29:1 on --surface), but the Log screen's own
+   describe never ran assertNoFailingInk4Labels either. Log now carries it. */
 .log-paces-label {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .log-paces-value {
@@ -3885,15 +3912,18 @@ button:disabled {
    real control in the app (Discard/Retry/Cancel all use `.button-outline`
    verbatim) — so this row reads as a control on sight, not as a second
    PACES LOCKED-style caption. Toggled ("OUTSIDE THE PLAN — won't advance")
-   still switches to a solid `--accent` border/text — the same "this is a
-   deviation from the default" language `.chip[aria-pressed="true"]`
-   already uses via an accent FILL, though a fill would fight this row's
-   own longer sentence-length copy for legibility, so the accent is
-   applied to the border/text instead. Contrast: ink on surface 17.1:1
-   (default — computed from `--ink` #1b1a17 / `--surface` #fffdf7 via the
-   WCAG relative-luminance formula), accent on surface 5.94:1 (toggled) —
-   both comfortably > 4.5:1. --tap (44px) satisfies the house hit-target
-   floor; `aria-pressed` is unchanged. */
+   used to switch to a solid `--accent` border/text — found in the
+   whole-branch review (Md1) to be the round's own last surviving "accent
+   means selected" use, since `.chip[aria-pressed="true"]`'s own accent fill
+   (the precedent this rule's comment used to cite) is deleted. Fix round 2:
+   moved to the same plain ink fill every other selected state on this
+   round's screens already uses (`.filter-sheet-cell`/`.classification-
+   chip-difficulty`/`.classification-chip-pain[aria-pressed="true"]`) —
+   nothing about this toggle is destructive or a resolved target, so it gets
+   no more claim on accent than DIFFICULTY or PAIN do. Contrast: ink on
+   surface 17.1:1 (default), on-color on ink 17.1:1 (toggled) — both
+   comfortably > 4.5:1. --tap (44px) satisfies the house hit-target floor;
+   `aria-pressed` is unchanged. */
 .log-plan-toggle {
   display: flex;
   align-items: center;
@@ -3914,8 +3944,9 @@ button:disabled {
 }
 
 .log-plan-toggle[aria-pressed="true"] {
-  border: 1px solid var(--accent);
-  color: var(--accent);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
 }
 
 .log-actions {

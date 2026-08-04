@@ -296,14 +296,15 @@ test("library", async ({ page }) => {
   });
 
   // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
-  // live-counting "Show 1 workouts" primary is the point of this capture.
+  // live-counting singular-aware "Show 1 workout" primary (fix round 2,
+  // whole-branch review M2) is the point of this capture.
   await page.getByRole("button", { name: "FILTER ⌄" }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "CUSTOM", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Show 1 workouts" }),
+    page.getByRole("button", { name: "Show 1 workout" }),
   ).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-sheet.png"),
@@ -313,7 +314,7 @@ test("library", async ({ page }) => {
   // library sorts the 36 global starter workouts ahead of the one
   // freshly-authored personal one, so filtering is what actually gets the
   // CUSTOM badge into frame) the isolated custom row.
-  await page.getByRole("button", { name: "Show 1 workouts" }).click();
+  await page.getByRole("button", { name: "Show 1 workout" }).click();
   await expect(page.locator(".workout-row-custom").first()).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-filtered.png"),
