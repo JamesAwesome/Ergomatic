@@ -47,7 +47,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
   }
 
   // logs has no get-by-id; list() (scoped per user, per stores/logs.ts) is
-  // the store's own lookup pattern, reused from the swap test above.
+  // the store's own lookup pattern, reused from the converge cases below.
   async function findLog(userId: string, logId: string) {
     return (await logs.list(userId, 50)).find((l) => l.id === logId);
   }
