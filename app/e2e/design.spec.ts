@@ -491,9 +491,9 @@ test.describe("library screen", () => {
 
   // Fix round 1 (F1, James's ruling): `--type-tr` used to be the IDENTICAL
   // hex to `--accent` — every TR badge/chip filled with what was
-  // structurally "accent". A fresh account's 35 seeded starters
-  // (server/seed/starter.ts) always include several TR workouts, so this
-  // pins the resolved colour on a REAL `.type-badge` here, not just the
+  // structurally "accent". A fresh account's 300-workout generated library
+  // (server/seed/library/index.ts) always include several TR workouts, so
+  // this pins the resolved colour on a REAL `.type-badge` here, not just the
   // chip contexts (Today/Builder, asserted in their own describes) — the
   // same `.type-badge` class Library/Plan/Today's LAST THREE all share.
   // `--on-color` text on `--ink` background measures 17.1:1, the identical
@@ -947,9 +947,10 @@ test.describe("today screen (plan active, logs present)", () => {
 
   // Item 4 (DESIGN.md): SHUFFLE stops being "its own species" — 44px chip
   // geometry, transparent fill, mono 11/0.14em ink-1 label, 1px rule-3
-  // border, parked right of the header label (unchanged position). Pool
-  // has 35 starters minus the difficulty/cap/pain filters, comfortably >1
-  // member with this describe's fixture, so SHUFFLE is enabled here.
+  // border, parked right of the header label (unchanged position). Pool is
+  // the day's O2 entries from the 300-workout library, unfiltered
+  // (difficulty/cap/pain all at their default, unset state) — comfortably
+  // >1 member with this describe's fixture, so SHUFFLE is enabled here.
   test("SHUFFLE re-cut to chip geometry: 44px, transparent, mono ink-1 label, rule-3 border", async ({
     page,
   }) => {
@@ -978,14 +979,26 @@ test.describe("today screen (plan active, logs present)", () => {
   // Fix round 1 (F4): SHUFFLE's disabled state (pool <= 1) — ink-5 label,
   // DASHED rule-3 border, no grey fill — computed, not just `toBeDisabled`.
   // This describe's fixture is sprint/doneN=0 (O2 for today, DESIGN_
-  // BASELINES {k2Seconds:100, k6Seconds:120}). Narrowing to HARD-only +
-  // <=60' leaves exactly ONE O2 match: High Pressure (baseline-independent,
-  // time-based: 5' wu + 3x(20' + 3' rest) = 74') is excluded by the cap,
-  // Jet Stream (10000m @ 6k+8 = 128s/500m -> 2560s work + 5' wu = ~48') is
-  // the sole survivor — server/seed/starter.ts's only two O2 HARD entries.
+  // BASELINES {k2Seconds:100, k6Seconds:120}). Rebase seed-math note
+  // (2026-08-04): the 300-workout library has ZERO O2/HARD entries at all
+  // (aerobic-base work is never authored "hard" — see library.test.ts's own
+  // PAIN_BY_TYPE/PAIN_BY_DIFF bands), so a natural pool-of-one no longer
+  // exists the way the old 35-starter library's "High Pressure"/"Jet
+  // Stream" pair once provided one. Built here instead: one personal O2/
+  // HARD workout under the 60' cap, via bulk import — with zero global O2/
+  // HARD entries to join it, narrowing to HARD-only + <=60' leaves exactly
+  // this one row.
   test("SHUFFLE disabled (pool of 1): ink-5 label, dashed rule-3 border, no fill", async ({
     page,
   }) => {
+    const soloTitle = "Design Sweep Solo O2 Hard";
+    await importBulk(
+      page,
+      [`${soloTitle} | O2 | hard | 4`, "wu 5", "w 20:00 6k+10 @20"].join("\n"),
+    );
+    await page.goto("/today");
+    await expect(page.locator(".today-card")).toBeVisible();
+
     await page.getByRole("button", { name: "EASY", exact: true }).click();
     await page.getByRole("button", { name: "MEDIUM", exact: true }).click();
     await page.getByRole("button", { name: "≤60′", exact: true }).click();
@@ -1005,6 +1018,8 @@ test.describe("today screen (plan active, logs present)", () => {
     expect(styles.borderColor).toBe("rgb(201, 195, 178)"); // --rule-3
     expect(styles.borderStyle).toBe("dashed");
     expect(styles.color).toBe("rgb(160, 154, 140)"); // --ink-5
+
+    await cleanupByTitle(page, soloTitle);
   });
 });
 
