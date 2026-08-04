@@ -125,11 +125,25 @@ async function startAndSkipCountdown(page: Page): Promise<void> {
  *  that type first makes a personal fixture imported right after this call
  *  the SOLE never-done entry of that type, and therefore its guaranteed top
  *  pick — the only way to make the filter chips' own effect deterministic
- *  without hardcoding which seeded workout happens to sort first. Each POST
- *  also bumps `plan_state.done_n` (`stores/logs.ts`'s own unconditional
- *  bump); harmless here since every caller of this helper chooses/resets a
- *  plan afterward, which always re-zeroes it regardless of what it was
- *  bumped to meanwhile. */
+ *  without hardcoding which seeded workout happens to sort first.
+ *
+ *  Cost control (the 35→300 seed made the naive form ~90 sequential POSTs
+ *  per call, every run):
+ *  - Only NEVER-DONE globals are logged — the list payload already carries
+ *    `lastDoneDaysAgo`, and any non-null value loses the tie to a fresh
+ *    personal fixture just the same, so rows neutralized by an earlier run
+ *    against this fixed account are skipped for free. First run per
+ *    account/type pays the full quota; every later run pays ~zero, and the
+ *    stray-row accumulation in the shared e2e DB is capped at one log per
+ *    global per account instead of growing per run.
+ *  - POSTs go out in concurrent batches of 10 — order is irrelevant here
+ *    (all that matters is non-null recency), and `advancesPlan: false`
+ *    (below) removes the one shared row the old sequential loop was
+ *    implicitly serializing on.
+ *  - Each POST carries `advancesPlan: false`, so `plan_state.done_n` is
+ *    untouched — the old form's per-POST bump (and the "harmless because
+ *    every caller resets the plan afterward" caveat that had to excuse it)
+ *    is gone. */
 async function neutralizeGlobalRecency(
   page: Page,
   type: string,
@@ -141,23 +155,34 @@ async function neutralizeGlobalRecency(
       id: string;
       type: string;
       isGlobal: boolean;
+      lastDoneDaysAgo: number | null;
     }>;
-    const targets = workouts.filter((w) => w.isGlobal && w.type === t);
-    for (const w of targets) {
-      const res = await fetch("/api/logs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workoutId: w.id,
-          workoutTitle: "neutralized for recency",
-          workoutType: t,
-          held: "held",
-          pain: 1,
-          notes: null,
-          steps: [{ label: "Work" }],
-        }),
-      });
-      if (!res.ok) return { ok: false, status: res.status };
+    const targets = workouts.filter(
+      (w) => w.isGlobal && w.type === t && w.lastDoneDaysAgo === null,
+    );
+    const BATCH = 10;
+    for (let i = 0; i < targets.length; i += BATCH) {
+      const batch = targets.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map((w) =>
+          fetch("/api/logs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              workoutId: w.id,
+              workoutTitle: "neutralized for recency",
+              workoutType: t,
+              held: "held",
+              pain: 1,
+              notes: null,
+              steps: [{ label: "Work" }],
+              advancesPlan: false,
+            }),
+          }),
+        ),
+      );
+      const failed = results.find((res) => !res.ok);
+      if (failed) return { ok: false, status: failed.status };
     }
     return { ok: true, status: 200 };
   }, type);
