@@ -1,5 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { WorkoutType } from "../../domain/types.js";
+import { CellGrid } from "../components/CellGrid";
+import { SheetShell } from "../components/SheetShell";
 import {
   RECENCY_BOUNDARY_DAYS,
   clearFilters,
@@ -47,6 +49,11 @@ function typeCellStyle(active: boolean, type: WorkoutType) {
   return { background: v, borderColor: v, color: "var(--on-color)" };
 }
 
+// The one h2 in this sheet — SheetShell points its own `aria-labelledby` at
+// this id rather than taking the title text itself, so it stays completely
+// unaware of what a caller's title even says.
+const TITLE_ID = "filter-sheet-title";
+
 /**
  * The FILTER sheet (Task 4, ui-fix round — DESIGN.md's "Library, second
  * pass"): slides up over the list (not a route — Library.tsx never pushes
@@ -66,6 +73,12 @@ function typeCellStyle(active: boolean, type: WorkoutType) {
  * behaviour to the one exit the mockup doesn't enumerate, rather than
  * inventing a history-trap (push-a-state-and-intercept-popstate) this
  * codebase has no other precedent for.
+ *
+ * The dialog machinery itself (backdrop, `role="dialog"`, the focus
+ * trap/restore) lives in SheetShell now (extracted for Today's own
+ * collapsible filter sheet, task-1 of the 2026-08-04 round) — this
+ * component supplies only the five filter groups and the resultCount-driven
+ * primary button, via SheetShell's `children`/`primary` props.
  */
 export default function FilterSheet({
   draft,
@@ -80,198 +93,122 @@ export default function FilterSheet({
   onApply: () => void;
   onDismiss: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  // Md4 (whole-branch review): `role="dialog"`/`aria-modal="true"` used to
-  // ship with no focus management at all — the codebase's first such
-  // element, asserting to assistive tech that everything outside is inert
-  // while the list and tab bar stayed genuinely focusable/clickable behind
-  // it. Every button here is a real `<button>` (no links, inputs, or other
-  // focusable element kinds), so `querySelectorAll("button")` is the
-  // complete, correctly-ordered focusable set with no extra filtering
-  // needed — kept as a small helper rather than a library so a future group
-  // added to this sheet is included automatically as long as it's a button.
-  function focusableElements(): HTMLElement[] {
-    const dialog = dialogRef.current;
-    if (!dialog) return [];
-    return Array.from(dialog.querySelectorAll<HTMLElement>("button"));
-  }
-
-  // Moves focus into the sheet on mount (the first control, CLEAR) and
-  // restores it to whatever had focus immediately before — Library.tsx's
-  // own `FILTER ⌄` trigger, in the one path this sheet is ever opened
-  // from, captured here rather than passed as a prop so this component
-  // stays correct regardless of what eventually opens it.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    focusableElements()[0]?.focus();
-    return () => {
-      previouslyFocused?.focus?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onDismiss();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      // Containment, not a full roving-tabindex implementation: every
-      // in-between Tab press is left to the browser's own default focus
-      // order (which already visits every button here top-to-bottom), and
-      // only the two ends wrap — Tab past the last control lands back on
-      // the first, Shift+Tab before the first lands on the last, so the
-      // sheet never leaks focus onto the list or tab bar it visually
-      // covers while `aria-modal="true"` claims they're inert.
-      const focusable = focusableElements();
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onDismiss]);
+  // Captured at first render — before SheetShell's own mount effect can
+  // move focus into the dialog — so this is "whatever had focus right
+  // before the sheet opened," the same value the pre-extraction version
+  // captured inside its own mount effect (nothing moves focus in between).
+  const openerRef = useRef<HTMLElement | null>(
+    document.activeElement as HTMLElement | null,
+  );
 
   return (
-    <div className="filter-sheet-backdrop" onClick={onDismiss}>
-      <div
-        ref={dialogRef}
-        className="filter-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Filter"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="filter-sheet-header">
-          <h2 className="filter-sheet-title">Filter</h2>
-          <button
-            type="button"
-            className="filter-sheet-clear"
-            onClick={() => onChangeDraft(clearFilters())}
-          >
-            CLEAR
-          </button>
-        </div>
-
-        <div className="filter-sheet-group">
-          <span className="filter-sheet-group-label">TYPE</span>
-          <div className="filter-sheet-grid filter-sheet-grid-4">
-            {TYPE_CHIPS.map(({ type, label }) => {
-              const active = draft.type === type;
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  className="filter-sheet-cell"
-                  aria-pressed={active}
-                  style={typeCellStyle(active, type)}
-                  onClick={() => onChangeDraft(toggleType(draft, type))}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="filter-sheet-group">
-          <span className="filter-sheet-group-label">TIME</span>
-          <div className="filter-sheet-grid filter-sheet-grid-4">
-            {DURATION_CHIPS.map(({ bucket, label }) => (
-              <button
-                key={bucket}
-                type="button"
-                className="filter-sheet-cell"
-                aria-pressed={draft.durations.includes(bucket)}
-                onClick={() => onChangeDraft(toggleDuration(draft, bucket))}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="filter-sheet-group">
-          <span className="filter-sheet-group-label">PAIN</span>
-          <div className="filter-sheet-grid filter-sheet-grid-5">
-            {PAIN_LEVELS.map((level) => (
-              <button
-                key={level}
-                type="button"
-                className="filter-sheet-cell"
-                aria-pressed={draft.painLevels.includes(level)}
-                onClick={() => onChangeDraft(togglePainLevel(draft, level))}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="filter-sheet-row">
-          <div className="filter-sheet-group filter-sheet-group-half">
-            <span className="filter-sheet-group-label">LAST DONE</span>
-            <div className="filter-sheet-grid filter-sheet-grid-2">
-              <button
-                type="button"
-                className="filter-sheet-cell"
-                aria-pressed={draft.lastDone === "under21"}
-                onClick={() => onChangeDraft(setLastDone(draft, "under21"))}
-              >
-                &lt;{RECENCY_BOUNDARY_DAYS}D
-              </button>
-              <button
-                type="button"
-                className="filter-sheet-cell"
-                aria-pressed={draft.lastDone === "over21"}
-                onClick={() => onChangeDraft(setLastDone(draft, "over21"))}
-              >
-                {RECENCY_BOUNDARY_DAYS}D+
-              </button>
-            </div>
-          </div>
-          <div className="filter-sheet-group filter-sheet-group-half">
-            <span className="filter-sheet-group-label">SOURCE</span>
-            <div className="filter-sheet-grid filter-sheet-grid-2">
-              <button
-                type="button"
-                className="filter-sheet-cell"
-                aria-pressed={draft.source === "global"}
-                onClick={() => onChangeDraft(setSource(draft, "global"))}
-              >
-                GLOBAL
-              </button>
-              <button
-                type="button"
-                className="filter-sheet-cell"
-                aria-pressed={draft.source === "custom"}
-                onClick={() => onChangeDraft(setSource(draft, "custom"))}
-              >
-                CUSTOM
-              </button>
-            </div>
-          </div>
-        </div>
-
+    <SheetShell
+      open
+      titleId={TITLE_ID}
+      onDismiss={onDismiss}
+      opener={openerRef}
+      primary={{
+        label:
+          resultCount === 0
+            ? "No workouts match"
+            : `Show ${resultCount} workout${resultCount === 1 ? "" : "s"}`,
+        disabled: resultCount === 0,
+        onPress: onApply,
+      }}
+    >
+      <div className="filter-sheet-header">
+        <h2 id={TITLE_ID} className="filter-sheet-title">
+          Filter
+        </h2>
         <button
           type="button"
-          className="button-l1"
-          disabled={resultCount === 0}
-          onClick={onApply}
+          className="filter-sheet-clear"
+          onClick={() => onChangeDraft(clearFilters())}
         >
-          {resultCount === 0
-            ? "No workouts match"
-            : `Show ${resultCount} workout${resultCount === 1 ? "" : "s"}`}
+          CLEAR
         </button>
       </div>
-    </div>
+
+      <CellGrid
+        label="TYPE"
+        cells={TYPE_CHIPS.map(({ type, label }) => {
+          const active = draft.type === type;
+          return {
+            value: type,
+            label,
+            pressed: active,
+            style: typeCellStyle(active, type),
+          };
+        })}
+        onToggle={(value) =>
+          onChangeDraft(toggleType(draft, value as WorkoutType))
+        }
+      />
+
+      <CellGrid
+        label="TIME"
+        cells={DURATION_CHIPS.map(({ bucket, label }) => ({
+          value: bucket,
+          label,
+          pressed: draft.durations.includes(bucket),
+        }))}
+        onToggle={(value) =>
+          onChangeDraft(toggleDuration(draft, value as DurationBucket))
+        }
+      />
+
+      <CellGrid
+        label="PAIN"
+        cells={PAIN_LEVELS.map((level) => ({
+          value: String(level),
+          label: String(level),
+          pressed: draft.painLevels.includes(level),
+        }))}
+        onToggle={(value) =>
+          onChangeDraft(togglePainLevel(draft, Number(value)))
+        }
+      />
+
+      <div className="filter-sheet-row">
+        <CellGrid
+          className="filter-sheet-group-half"
+          label="LAST DONE"
+          cells={[
+            {
+              value: "under21",
+              label: `<${RECENCY_BOUNDARY_DAYS}D`,
+              pressed: draft.lastDone === "under21",
+            },
+            {
+              value: "over21",
+              label: `${RECENCY_BOUNDARY_DAYS}D+`,
+              pressed: draft.lastDone === "over21",
+            },
+          ]}
+          onToggle={(value) =>
+            onChangeDraft(setLastDone(draft, value as "under21" | "over21"))
+          }
+        />
+        <CellGrid
+          className="filter-sheet-group-half"
+          label="SOURCE"
+          cells={[
+            {
+              value: "global",
+              label: "GLOBAL",
+              pressed: draft.source === "global",
+            },
+            {
+              value: "custom",
+              label: "CUSTOM",
+              pressed: draft.source === "custom",
+            },
+          ]}
+          onToggle={(value) =>
+            onChangeDraft(setSource(draft, value as "global" | "custom"))
+          }
+        />
+      </div>
+    </SheetShell>
   );
 }

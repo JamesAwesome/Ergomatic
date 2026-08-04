@@ -5,8 +5,9 @@ import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { applyFilters, clearFilters, type Filters } from "./filters";
-import { filterTokens, type Token } from "./filterTokens";
+import { filterTokens } from "./filterTokens";
 import FilterSheet from "./FilterSheet";
+import { TokenRow, type Token } from "../components/TokenRow";
 import { loadLibraryFilters, saveLibraryFilters } from "./libraryFilters";
 import { loadLibraryScroll, saveLibraryScroll } from "./libraryScroll";
 import WorkoutRow from "./WorkoutRow";
@@ -52,36 +53,28 @@ function Header() {
   );
 }
 
-/** One active-filter token: a colored pill (type-colored for a TYPE token,
- *  `--ink` for every other kind — DESIGN.md's selected-state rule extended
- *  to tokens) plus its own 44×44 ✕ that clears exactly that group. */
-function FilterToken({
-  token,
-  onRemove,
-}: {
-  token: Token;
-  onRemove: () => void;
-}) {
-  const style =
-    token.kind === "type"
-      ? (() => {
-          const v = `var(${TYPE_COLOR_VAR[token.label as WorkoutType]})`;
-          return { background: v };
-        })()
-      : undefined;
-  return (
-    <span className="filter-token" style={style}>
-      <span className="filter-token-label">{token.label}</span>
-      <button
-        type="button"
-        className="filter-token-remove"
-        aria-label={`Remove ${token.label} filter`}
-        onClick={onRemove}
-      >
-        ✕
-      </button>
-    </span>
-  );
+/** filterTokens.ts's own Token (`{kind, label, clear}`, one per active
+ *  GROUP) adapted to TokenRow's `{key, label, onClear, fill}` shape — the
+ *  two don't share a type: filterTokens.ts's `clear` takes the CURRENT
+ *  Filters (so a token stays correct after a later, unrelated change),
+ *  while TokenRow's `onClear` is a plain callback with no arguments. `fill`
+ *  carries a TYPE token's own `--type-*` color through as TokenRow's
+ *  per-instance inline override (DESIGN.md's selected-state rule extended
+ *  to tokens); every other kind leaves TokenRow's `--ink` default alone. */
+function toRowTokens(
+  tokens: ReturnType<typeof filterTokens>,
+  filters: Filters,
+  onRemove: (next: Filters) => void,
+): Token[] {
+  return tokens.map((token) => ({
+    key: token.kind,
+    label: token.label,
+    onClear: () => onRemove(token.clear(filters)),
+    fill:
+      token.kind === "type"
+        ? `var(${TYPE_COLOR_VAR[token.label as WorkoutType]})`
+        : undefined,
+  }));
 }
 
 export default function Library() {
@@ -272,13 +265,7 @@ export default function Library() {
           >
             FILTER ⌄
           </button>
-          {tokens.map((token) => (
-            <FilterToken
-              key={token.kind}
-              token={token}
-              onRemove={() => setFilters(token.clear(filters))}
-            />
-          ))}
+          <TokenRow tokens={toRowTokens(tokens, filters, setFilters)} />
           {!hasFilters && (
             <span className="library-count">{total} WORKOUTS</span>
           )}
