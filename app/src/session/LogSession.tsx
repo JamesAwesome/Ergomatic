@@ -25,6 +25,7 @@ import {
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
+import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 
@@ -658,7 +659,15 @@ function SessionDoorLog() {
     clearRun();
     navigate("/today");
   });
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  // Task 3 (ui-fix round): the two-button `.baseline-confirm` side panel
+  // this discard used to open is gone — replaced by the shared
+  // `useStagedDiscard` machine and the level system's own in-place L4/
+  // L4-armed idiom (WorkoutDetail.tsx's Delete workout, SessionComplete.tsx's
+  // own new Discard), so all three of the app's staged-discard controls now
+  // share one look AND one implementation. Behaviour is unchanged: still a
+  // two-tap confirm, still clears both records with no POST, still lands on
+  // /today.
+  const discard = useStagedDiscard();
 
   // No run record, or a run that isn't actually complete yet (a direct/deep
   // nav here mid-session) — same guard SessionComplete.tsx's own screen
@@ -747,10 +756,17 @@ function SessionDoorLog() {
     });
   }
 
-  function handleDiscard() {
-    clearDraft();
-    clearRun();
-    navigate("/today");
+  // Same two-tap shape as WorkoutDetail.tsx's OwnerActions `handleClick` and
+  // SessionComplete.tsx's own new `handleDiscardClick`: the first press
+  // arms, the second (only reachable while `armed`) fires the shared
+  // discard and navigates.
+  function handleDiscardClick() {
+    if (discard.armed) {
+      discard.fire();
+      navigate("/today");
+    } else {
+      discard.arm();
+    }
   }
 
   return (
@@ -776,42 +792,14 @@ function SessionDoorLog() {
       onSave={handleSave}
       backFallback="/today"
       discardSlot={
-        !confirmingDiscard ? (
-          <button
-            type="button"
-            className="button-outline"
-            onClick={() => setConfirmingDiscard(true)}
-          >
-            Discard without logging
-          </button>
-        ) : (
-          // Staged-confirm idiom (src/you/BaselineEditor.tsx, also
-          // WorkoutDetail.tsx's OwnerActions delete flow): the destructive
-          // action never fires on the first press. Reuses `.baseline-*`
-          // classes verbatim, same as every other staged confirm in the app.
-          <div className="baseline-confirm">
-            <p className="baseline-confirm-line">
-              Discard this session without logging it? This can&rsquo;t be
-              undone.
-            </p>
-            <div className="baseline-actions">
-              <button
-                type="button"
-                className="button-outline"
-                onClick={() => setConfirmingDiscard(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="button-primary"
-                onClick={handleDiscard}
-              >
-                Discard session
-              </button>
-            </div>
-          </div>
-        )
+        <button
+          type="button"
+          className={discard.armed ? "button-l4-armed" : "button-l4"}
+          onClick={handleDiscardClick}
+          onBlur={discard.disarm}
+        >
+          {discard.armed ? "Tap again to discard" : "Discard without logging"}
+        </button>
       }
     />
   );

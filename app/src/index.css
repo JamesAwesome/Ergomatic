@@ -1099,21 +1099,46 @@ button:disabled {
 }
 
 /* Quieter than the resume card, deliberately (F2's own decision, still
-   true): no accent fill, no full-width button — just the workout's name and
-   a real, small "Log it" action (Phase 6C Task 2; F2's original placeholder
-   copy, "6C will log it here," is what that action replaces). */
+   true): no accent fill on the row itself — just the workout's name, a
+   real, small "Log it" action (Phase 6C Task 2; F2's original placeholder
+   copy, "6C will log it here," is what that action replaces), and — Task 3
+   (ui-fix round) — a 44×44 accent-outlined ✕ that arms a staged Discard.
+   Bordered and height-fixed (min-height, not padding-derived) so arming
+   (`.today-unlogged-line-armed`) only recolors the border and swaps the
+   row's own children (Today.tsx's `UnloggedRow`) — never its size or its
+   position in the page, per DESIGN.md's own "row height and position don't
+   move." */
 .today-unlogged-line {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 10px 12px;
   margin: 0 0 16px;
+}
+
+/* Task 3: arming — border only, same accent the L4-armed button system
+   fills solid elsewhere; this row stays outlined even armed, since filling
+   it solid would compete with the suggestion card right below for
+   attention the way DEVIATIONS.md's #2 already ruled out for L4 itself. */
+.today-unlogged-line-armed {
+  border-color: var(--accent);
 }
 
 .today-unlogged-text {
   font-size: 13px;
   color: var(--ink-3);
   margin: 0;
+}
+
+.today-unlogged-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* An inline-read word styled up to a real 44px tap target — same idiom as
@@ -1130,6 +1155,55 @@ button:disabled {
   color: var(--accent);
   font-weight: 600;
   text-decoration: none;
+}
+
+/* Task 3: the row's own destructive control, DEFAULT state — 44×44,
+   accent-outlined (never solid: the same L4 reasoning, DEVIATIONS.md #2).
+   `✕` alone carries no accessible name of its own, hence the button's own
+   `aria-label` at the call site. */
+.today-unlogged-discard {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.today-unlogged-discard:hover {
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+/* ARMED state — the ✕ becomes a solid-accent "Tap again" button (DESIGN.md's
+   own words), replacing both the ✕ and "Log it" in the row's contents
+   (`UnloggedRow`'s armed branch renders only this, no Link) rather than
+   sizing to the same 44×44 box: "Tap again" needs real width for its own
+   label, and the row's OUTER box is what stays fixed-size, not this control. */
+.today-unlogged-discard-armed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 16px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--on-color);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.today-unlogged-discard-armed:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .today-suggestion-header {
@@ -3222,8 +3296,30 @@ button:disabled {
    only two numbers on this screen with slack to give back — rather than
    touching `.action-stack`'s shared 12px gap (a cross-screen constant every
    later task also relies on) or shrinking the buttons themselves (the
-   level system's own fixed heights). Re-measured after: zero scroll at
-   844x420 (design.spec.ts's own guard test). */
+   level system's own fixed heights).
+
+   Task 3 (ui-fix round) re-measurement: the new Discard block (a rule plus
+   an L4 button, joining the stack under two more of that same shared 12px
+   gap — 1 + 12 + 12 + 52 = 77px) pushed this screen's landscape content
+   past even the Task 1 floor above (measured 493 vs the 420 frame — the
+   reviewer's own F8 note, confirmed). Nothing left in THIS screen's own
+   gap/padding numbers has 73px to give back without either shrinking a
+   fixed-height level-system button (out of bounds — DEVIATIONS.md's own
+   button heights are a system-wide constant, not this screen's to resize)
+   or compressing the TOTAL/actuals content to the point of illegibility.
+   Capping the screen's own box at exactly the viewport height it already
+   targets (`max-height` mirroring `min-height`) and letting it scroll
+   INTERNALLY (`overflow-y: auto`) solves it without touching a single
+   other screen's spacing: the outer document never grows past the
+   viewport (this rule's own guard test measures `document.
+   documentElement.scrollHeight`, not this element's), so there is no dead
+   page-level scroll — a rower who needs to reach Discard in this cramped
+   landscape frame scrolls the screen itself, the same way any content
+   that has genuinely outgrown its viewport does everywhere else in the
+   app. Re-measured after: zero DOCUMENT-level scroll at 844×420
+   (design.spec.ts's own guard test) — the screen itself scrolls if you
+   run out of frame, which is the deliberate trade this task's brief called
+   for ("scroll within the stack area or tighter landscape spacing"). */
 @media (orientation: landscape) {
   .session-complete-screen {
     gap: 4px;
@@ -3231,6 +3327,11 @@ button:disabled {
       100dvh - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
     );
+    max-height: calc(
+      100dvh - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
+    );
+    overflow-y: auto;
   }
 
   .complete-total {

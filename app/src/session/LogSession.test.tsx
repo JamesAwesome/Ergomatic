@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -1058,10 +1058,17 @@ describe("LogSession: save", () => {
   });
 });
 
+// Task 3 (ui-fix round): the old two-button `.baseline-confirm` side panel
+// (a separate "Discard session"/"Cancel" pair) is gone — Discard now arms
+// IN PLACE, the level system's own L4/L4-armed idiom (`useStagedDiscard`),
+// same shape WorkoutDetail.tsx's own Delete workout and SessionComplete.tsx's
+// new Discard both use. The two-tap safety itself, and the clear-both-
+// records-then-navigate behaviour, are unchanged.
 describe("LogSession: staged discard", () => {
-  it("stages a confirm on the first press; Cancel restores the plain button without clearing anything", async () => {
+  it("arms on the first press without clearing anything or firing a network request", async () => {
     buildSessionFixture();
     mockWorkouts([]);
+    const apiFn = mockApi(() => new Response(null, { status: 204 }));
     await renderLog();
     await screen.findByText("AUG 1 · 30 MIN");
 
@@ -1069,22 +1076,46 @@ describe("LogSession: staged discard", () => {
       screen.getByRole("button", { name: "Discard without logging" }),
     );
     expect(
-      screen.getByRole("button", { name: "Discard session" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     ).toBeInTheDocument();
+    expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
-
-    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      screen.queryByRole("button", { name: "Discard session" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Discard without logging" }),
-    ).toBeInTheDocument();
+    expect(apiFn).not.toHaveBeenCalled();
   });
 
-  it("clears both records and navigates to /today only once the staged press is confirmed", async () => {
+  it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
     buildSessionFixture();
     mockWorkouts([]);
+    const apiFn = mockApi(() => new Response(null, { status: 204 }));
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    const discardBtn = screen.getByRole("button", {
+      name: "Discard without logging",
+    });
+    await userEvent.click(discardBtn);
+    expect(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    ).toBeInTheDocument();
+
+    fireEvent.blur(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+    expect(apiFn).not.toHaveBeenCalled();
+    expect(loadRun()).not.toBeNull();
+  });
+
+  it("clears both records and navigates to /today only once the armed press lands — with no POST ever fired", async () => {
+    buildSessionFixture();
+    mockWorkouts([]);
+    const apiFn = mockApi(() => new Response(null, { status: 204 }));
     await renderLog();
     await screen.findByText("AUG 1 · 30 MIN");
 
@@ -1092,12 +1123,13 @@ describe("LogSession: staged discard", () => {
       screen.getByRole("button", { name: "Discard without logging" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard session" }),
+      screen.getByRole("button", { name: "Tap again to discard" }),
     );
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
+    expect(apiFn).not.toHaveBeenCalled();
   });
 });
 
