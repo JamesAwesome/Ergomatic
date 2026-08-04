@@ -30,8 +30,11 @@ const QUOTA: Record<WorkoutType, Record<Band, number>> = {
 };
 
 // Authoring bands from the starter library's conventions (starter.ts header).
+// O2 widened at James's review (2026-08-03): mode 22, with 18 and 26
+// reserved for ladder extremes. Guidance on when to use the extremes lives
+// with the authors, not here — this gate only checks the bounds.
 const SPM: Record<WorkoutType, [number, number]> = {
-  O2: [18, 22],
+  O2: [18, 26],
   AT: [22, 26],
   TR: [24, 28],
   AN: [26, 32],
@@ -85,6 +88,23 @@ describe("LIBRARY_WORKOUTS", () => {
         expect(
           s.spm !== undefined && s.spm >= lo && s.spm <= hi,
           `${w.title}: spm ${s.spm}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("prescribes nothing faster than 2k-4 as a split — beyond that is max", () => {
+    // James's line between a prescribable split and just saying max: the
+    // book uses 2k-4 commonly, -5..-7 vanishingly rarely. Anything faster
+    // than 2k-4 should be an EffortRef ({effort:"max"}), not a SplitRef.
+    for (const w of LIBRARY_WORKOUTS) {
+      const workSteps = w.steps.filter((s) => s.k === "w");
+      for (const s of workSteps) {
+        const isSplit = "base" in s.ref && s.ref.base === "2k";
+        const off = "base" in s.ref ? s.ref.off : undefined;
+        expect(
+          !isSplit || (off ?? -Infinity) >= -4,
+          `${w.title}: 2k${off}`,
         ).toBe(true);
       }
     }
