@@ -1758,10 +1758,11 @@ test.describe("log session screen (session door)", () => {
     // "2k" at all, so that half is OMITTED entirely (not a "2K —" dash).
     // This fixture is a bulk-imported synthetic (single 6k-only step) that
     // deliberately doesn't mix bases, to prove the OMIT branch directly —
-    // most of the library doesn't either (only 3 of the 300 generated
-    // workouts reference both bases, per Task 11/12's LogSession.tsx and
-    // DEVIATIONS.md reconciliation), but this test never depends on a real
-    // seeded workout's shape.
+    // none of the library's workouts do either (zero of the 300 generated
+    // workouts reference both bases post the taste pass, 9b9fde5 — 3 did
+    // before it — per Task 11/12's LogSession.tsx and DEVIATIONS.md
+    // reconciliation), but this test never depends on a real seeded
+    // workout's shape.
     await expect(page.locator(".log-paces-value")).toHaveText("6K 2:00.0");
     await expect(page.locator(".log-step-row")).toHaveCount(1);
     // 118.0s target (120 - 2), shown as the frozen split this step was

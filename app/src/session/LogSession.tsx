@@ -88,8 +88,9 @@ const PAIN_RAMP_VAR: Record<(typeof PAIN_LEVELS)[number], string> = {
  *  baseline, which would have nothing to do with what this particular run
  *  actually locked (an earlier version of this panel rendered a literal
  *  "—" for the missing half instead — found, in review, to be what almost
- *  every real session would show, since almost no seeded library workout
- *  references both bases; see `pacesLockedText`'s own doc comment).
+ *  every real session would show, since (post the taste pass, 9b9fde5, which
+ *  converted AT's last remaining 2k-base refs to 6k) no seeded library
+ *  workout references both bases; see `pacesLockedText`'s own doc comment).
  *  `draft` should be the caller's
  *  match-checked draft (null when missing or foreign — see LogSession's own
  *  `matchedDraft`), never a draft this run wasn't built from: `rawOff`/
@@ -135,13 +136,15 @@ function lockedBaseline(
  *  300-workout one) and found to be unconditionally wrong in production:
  *  not one referenced both "2k" and "6k" in the same workout (16 were
  *  2k-only, 18 were 6k-only, and Microburst referenced neither at all) — so
- *  the two-slot layout would show a permanent dash for one half of almost
- *  every real session logged (the generated library still overwhelmingly
- *  keeps to one base per workout — only 3 of its 300 entries mix both —
- *  but is no longer exactly zero, hence "almost"), violating the house
- *  "never a bare dash" rule this screen's own per-step list already
- *  honors. The two-slot form still renders correctly for one of those rare
- *  both-bases workouts (see the dedicated test that pins this). `null`
+ *  the two-slot layout would show a permanent dash for one half of every
+ *  real session logged (the generated library keeps to one base per
+ *  workout exclusively — the taste pass, 9b9fde5, converted AT's last
+ *  remaining 2k-base refs to 6k, so zero of its 300 entries mix both;
+ *  before that pass, 3 did), violating the house "never a bare dash" rule
+ *  this screen's own per-step list already honors. The two-slot form still
+ *  renders correctly when both bases ARE present (see the dedicated test
+ *  that pins this — a synthetic fixture, since the generated library no
+ *  longer has a real example). `null`
  *  (both bases absent — an all-effort workout,
  *  or a mismatched/missing draft with nothing to reconstruct) means there
  *  is nothing honest to show at all; the caller omits the whole panel

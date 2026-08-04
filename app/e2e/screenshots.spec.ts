@@ -823,11 +823,13 @@ test("log-session", async ({ page }) => {
   await setBaselines(page);
   // F1 (whole-branch review): the FIRST capture used two split-ref steps
   // (one "2k", one "6k") to show the PACES LOCKED panel's own two-slot
-  // form — but only 3 of the library's 300 generated workouts ever
-  // reference both bases in one workout (LogSession.tsx's own reconciled
-  // comment, Task 11/12), so that shape is rare enough in production that
-  // the panel showing both is the exception, not the rule. This capture
-  // uses a REAL single-base shape instead — one 60-SECOND (not an
+  // form — but ZERO of the library's 300 generated workouts reference both
+  // bases in one workout (LogSession.tsx's own reconciled comment, Task
+  // 11/12; the taste pass, 9b9fde5, converted AT's last remaining 2k-base
+  // refs to 6k — 3 workouts mixed both before that pass), so that shape
+  // never occurs in production and the panel showing both is a
+  // synthetic-fixture-only case, not something a real session hits. This
+  // capture uses a REAL single-base shape instead — one 60-SECOND (not an
   // artificially tiny 3s) split-ref
   // TIME step at "6k" (off 0) — so the TOTAL reads as a genuine non-zero
   // "1 MIN" rather than the earlier capture's misleading "0 MIN", and the
