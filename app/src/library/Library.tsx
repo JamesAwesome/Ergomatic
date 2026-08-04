@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
-import type { Baselines } from "../../domain/types.js";
+import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { applyFilters, clearFilters, type Filters } from "./filters";
-import FilterChips from "./FilterChips";
+import { filterTokens, type Token } from "./filterTokens";
+import FilterSheet from "./FilterSheet";
 import { loadLibraryFilters, saveLibraryFilters } from "./libraryFilters";
 import { loadLibraryScroll, saveLibraryScroll } from "./libraryScroll";
 import WorkoutRow from "./WorkoutRow";
@@ -15,6 +16,17 @@ import WorkoutRow from "./WorkoutRow";
 // that window — so the FINAL scroll position before the rower stops always
 // gets written, not just whichever one happened to land on a 100ms tick.
 const SCROLL_SAVE_THROTTLE_MS = 100;
+
+// CSS custom property per workout type — never a raw hex (tokens.css). Kept
+// local per this repo's established per-file duplication convention
+// (TypeBadge.tsx's own comment names the precedent) rather than importing
+// FilterSheet.tsx's identical map.
+const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
+  O2: "--type-o2",
+  AT: "--type-at",
+  AN: "--type-an",
+  TR: "--type-tr",
+};
 
 function Header() {
   return (
@@ -40,6 +52,38 @@ function Header() {
   );
 }
 
+/** One active-filter token: a colored pill (type-colored for a TYPE token,
+ *  `--ink` for every other kind — DESIGN.md's selected-state rule extended
+ *  to tokens) plus its own 44×44 ✕ that clears exactly that group. */
+function FilterToken({
+  token,
+  onRemove,
+}: {
+  token: Token;
+  onRemove: () => void;
+}) {
+  const style =
+    token.kind === "type"
+      ? (() => {
+          const v = `var(${TYPE_COLOR_VAR[token.label as WorkoutType]})`;
+          return { background: v };
+        })()
+      : undefined;
+  return (
+    <span className="filter-token" style={style}>
+      <span className="filter-token-label">{token.label}</span>
+      <button
+        type="button"
+        className="filter-token-remove"
+        aria-label={`Remove ${token.label} filter`}
+        onClick={onRemove}
+      >
+        ✕
+      </button>
+    </span>
+  );
+}
+
 export default function Library() {
   const workoutsState = useWorkouts();
   const baselinesState = useBaselines();
@@ -51,6 +95,15 @@ export default function Library() {
   // fetch), that first ready render would be the unfiltered list and the
   // restored position would land on the wrong rows.
   const [filters, setFilters] = useState<Filters>(loadLibraryFilters);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // The sheet's own scratch copy — nothing here reaches `filters` (or its
+  // sessionStorage persistence) until "Show N workouts" commits it. Opening
+  // the sheet seeds this from the currently-applied `filters`; every other
+  // way out (backdrop tap, Escape, a tab tap, a hardware/browser back
+  // navigation — none of which push a route for the sheet to intercept)
+  // just unmounts it with the draft discarded. See FilterSheet.tsx's own
+  // doc comment for the BACK-with-sheet-open decision this implements.
+  const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const restoredScrollRef = useRef(false);
   // The list only has HEIGHT once both hooks land on "ready" — the same
   // condition every render branch below keys off (loading/error branches
@@ -115,7 +168,7 @@ export default function Library() {
   }, [filters]);
 
   // Restores at most once per mount (`restoredScrollRef`) — without the
-  // guard, a later re-render caused by e.g. a filter click would re-fire
+  // guard, a later re-render caused by e.g. a filter change would re-fire
   // this effect (rowsReady stays true) and yank the rower back to the
   // saved position mid-browse. `useLayoutEffect`, not `useEffect`: the
   // scroll must land before the browser paints the restored frame, or the
@@ -181,17 +234,83 @@ export default function Library() {
         }
       : null;
 
+  const total = workoutsState.workouts.length;
   const visible = applyFilters(workoutsState.workouts, filters, baselines);
+  const tokens = filterTokens(filters);
+  const hasFilters = tokens.length > 0;
+  const draftCount = applyFilters(
+    workoutsState.workouts,
+    draftFilters,
+    baselines,
+  ).length;
+
+  function openSheet() {
+    setDraftFilters(filters);
+    setSheetOpen(true);
+  }
+
+  function applySheet() {
+    setFilters(draftFilters);
+    setSheetOpen(false);
+  }
+
+  function dismissSheet() {
+    setSheetOpen(false);
+  }
 
   return (
     <main className="screen">
       <Header />
-      <p className="library-count">{visible.length} ENTERED</p>
-      <FilterChips filters={filters} onChange={setFilters} />
+      <div className="library-filter-bar">
+        <div className="library-filter-row">
+          <button
+            type="button"
+            className="library-filter-toggle"
+            aria-haspopup="dialog"
+            aria-expanded={sheetOpen}
+            onClick={openSheet}
+          >
+            FILTER ⌄
+          </button>
+          {tokens.map((token) => (
+            <FilterToken
+              key={token.kind}
+              token={token}
+              onRemove={() => setFilters(token.clear(filters))}
+            />
+          ))}
+          {!hasFilters && (
+            <span className="library-count">{total} WORKOUTS</span>
+          )}
+        </div>
+        {hasFilters && (
+          <div className="library-count-row">
+            <span className="library-count">
+              {visible.length} OF {total} SHOWN
+            </span>
+            <button
+              type="button"
+              className="library-clear-all"
+              onClick={() => setFilters(clearFilters())}
+            >
+              CLEAR ALL
+            </button>
+          </div>
+        )}
+      </div>
+      {sheetOpen && (
+        <FilterSheet
+          draft={draftFilters}
+          onChangeDraft={setDraftFilters}
+          resultCount={draftCount}
+          onApply={applySheet}
+          onDismiss={dismissSheet}
+        />
+      )}
       {visible.length === 0 ? (
         <div className="library-empty">
           <p>No workouts match these filters.</p>
-          {filters.customOnly && (
+          {filters.source === "custom" && (
             <p>
               No custom workouts yet —{" "}
               <Link

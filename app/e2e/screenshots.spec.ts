@@ -257,6 +257,12 @@ test("plan", async ({ page }) => {
   });
 });
 
+// Task 4 (ui-fix round): three captures from one continuous flow — the same
+// "multiple screenshots per test" idiom "today-unlogged" above uses for its
+// DEFAULT/ARMED pair. `library.png` is now the REST state proper (DESIGN.md's
+// own "1 · AT REST" — FILTER ⌄ + a plain count, no tokens), so the CUSTOM
+// badge showcase this test always did moves to `library-filtered.png`
+// instead of being baked into the rest capture.
 test("library", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-library@e2e.test",
@@ -266,10 +272,10 @@ test("library", async ({ page }) => {
 
   // Phase 5H: personal (non-global) workouts now wear a CUSTOM badge on
   // the library row's second line. Every seeded library workout is
-  // global, so without authoring one of its own first, this capture would
-  // never show the badge at all — same reasoning as "workout-detail"'s
-  // own builder-authored personal workout below. Simplest valid form:
-  // title + pain + one row's duration.
+  // global, so without authoring one of its own first, no capture below
+  // would ever show the badge at all — same reasoning as "workout-detail"'s
+  // own builder-authored personal workout further down. Simplest valid
+  // form: title + pain + one row's duration.
   const customTitle = "Screenshot Custom Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(customTitle);
@@ -283,15 +289,34 @@ test("library", async ({ page }) => {
   // page.goto only waits for the navigation's load event, not that — wait
   // for a real row so the screenshot isn't just the loading state.
   await page.locator(".workout-row").first().waitFor();
-  // The library sorts the 300 global library workouts ahead of a single
-  // freshly-authored personal one, so it lands well past the first
-  // viewport-height screen — the CUSTOM filter chip (Phase 5H) isolates it
-  // so the committed capture actually shows the badge, not just a taller
-  // "N ENTERED" count.
-  await page.getByRole("button", { name: "CUSTOM", exact: true }).click();
-  await expect(page.locator(".workout-row-custom").first()).toBeVisible();
+
+  // REST: FILTER ⌄ + "N WORKOUTS", no tokens.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library.png"),
+  });
+
+  // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
+  // live-counting "Show 1 workouts" primary is the point of this capture.
+  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "CUSTOM", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Show 1 workouts" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-sheet.png"),
+  });
+
+  // FILTERED: applied — the SOURCE token, the narrowed count, and (the
+  // library sorts the 36 global starter workouts ahead of the one
+  // freshly-authored personal one, so filtering is what actually gets the
+  // CUSTOM badge into frame) the isolated custom row.
+  await page.getByRole("button", { name: "Show 1 workouts" }).click();
+  await expect(page.locator(".workout-row-custom").first()).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-filtered.png"),
   });
 
   await cleanupByTitle(page, customTitle);
