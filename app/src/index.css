@@ -590,6 +590,19 @@ button:disabled {
   color: var(--accent-hover);
 }
 
+/* Fix round 1 (whole-branch review M2): TokenRow's own row layout — same
+   flex/wrap/gap/align-items shape `.library-filter-row` already used for
+   its own render site (Library.tsx never wrapped TokenRow in anything
+   else), now supplied by the component itself so a caller that renders
+   `<TokenRow>` bare (Today.tsx) still gets a real row instead of
+   unstyled inline content. */
+.token-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 /* One token per active GROUP (filterTokens.ts), not per band — type-colored
    for a TYPE token (inline style, per-instance — same idiom as
    TypeBadge.tsx/PainBar.tsx/ClassificationCard.tsx's own TYPE chip), `--ink`
@@ -721,21 +734,27 @@ button:disabled {
   gap: 6px;
 }
 
+/* Fix round 1 (whole-branch review M1): N-agnostic instead of a fixed set
+   of width variants — `grid-auto-flow: column` lays cells out in a single
+   row, `grid-auto-columns: 1fr` gives each one an equal share of the
+   width, for ANY cell count. Previously this relied on a companion
+   `.filter-sheet-grid-N` class (CellGrid.tsx still emits one, off
+   `cells.length`, for CellGrid.test.tsx's own assertion) supplying
+   `grid-template-columns: repeat(N, 1fr)` — but only `-2`/`-4`/`-5`
+   existed (the Library's own five groups' cell counts), so Today's
+   3-cell DIFFICULTY group (Task 2, 2026-08-04 round) matched no rule at
+   all and fell back to an implicit single column: three stacked
+   full-width bars instead of one row of three, caught live (jsdom has no
+   opinion on layout, only a real render does). The half-width LAST DONE/
+   SOURCE pair (`.filter-sheet-group-half`, `.filter-sheet-row`) still
+   needs no separate variant either — each is its own 2-cell CellGrid
+   inside a flex:1 half-width container, and this rule fills WHATEVER
+   width its own container gives it, same as it always did. */
 .filter-sheet-grid {
   display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 6px;
-}
-
-.filter-sheet-grid-2 {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.filter-sheet-grid-4 {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-.filter-sheet-grid-5 {
-  grid-template-columns: repeat(5, 1fr);
 }
 
 .filter-sheet-cell {
