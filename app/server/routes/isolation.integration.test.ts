@@ -493,7 +493,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     expect(preC.status).toBe(200);
     expect(preC.body.todayCode).toBe("O2");
     // globalWorkoutId (captured in the very first test above) is
-    // "Sea Fret", type O2, difficulty easy, 18 minutes — already
+    // "Sea Fret", type O2, difficulty easy, 15 minutes — already
     // known to sit inside C/D's default prefs filters (all difficulties,
     // 60 min cap), so it's in the O2 pool for a totally fresh account too.
     expect(preC.body.pool).toContain(globalWorkoutId);

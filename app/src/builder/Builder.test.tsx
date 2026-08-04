@@ -960,7 +960,7 @@ describe("Builder", () => {
 
   // Task 4: an effort row's TARGET reads the effort word — and, unlike a
   // split row, doesn't need baselines to do it (a word needs no resolution).
-  // Real library workout (Sea Fret: [wu 6', w 12' @ 6k+15]), not a
+  // Real library workout (Sea Fret: [wu 5', 2×4' @ 6k+12]), not a
   // hand-built fixture — its one work step's ref is patched to MAX before
   // going through the real edit-mode load path (fromWorkout), matching the
   // ledger's "test against a realistic fixture" rule.

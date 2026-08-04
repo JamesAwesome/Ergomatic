@@ -110,6 +110,38 @@ describe("LIBRARY_WORKOUTS", () => {
     }
   });
 
+  it("keeps 6k work at +12 or faster — slower is only a float between real work", () => {
+    // James's calibration (2026-08-03): the book's aerobic prescriptions
+    // concentrate at 6k+0..+10; its rare +14-and-slower usages are recovery
+    // floats inside hard sessions, never the session's own pace. So a 6k
+    // offset of +13..+16 must be a designated float — the same workout must
+    // hold a work step (2k or 6k base) resolving at least 6 s/500m faster —
+    // and nothing anywhere sits slower than +16.
+    for (const w of LIBRARY_WORKOUTS) {
+      const workSteps = w.steps.filter((s) => s.k === "w");
+      // Each work step's split at the nominal baselines (2k = 112+off,
+      // 6k = 122+off); effort steps carry no split and can't relieve a float.
+      const splits = workSteps.map((s) =>
+        "base" in s.ref
+          ? (s.ref.base === "2k" ? BASELINES.k2Seconds : BASELINES.k6Seconds) +
+            s.ref.off
+          : null,
+      );
+      workSteps.forEach((s, i) => {
+        const off =
+          "base" in s.ref && s.ref.base === "6k" ? s.ref.off : -Infinity;
+        const mySplit = splits[i] ?? -Infinity;
+        const hasFasterWork = splits.some(
+          (r) => r !== null && r <= mySplit - 6,
+        );
+        expect(
+          off < 13 || (off <= 16 && hasFasterWork),
+          `${w.title}: 6k+${off}`,
+        ).toBe(true);
+      });
+    }
+  });
+
   it("prescribes spm on every work step", () => {
     for (const w of LIBRARY_WORKOUTS) {
       const workSteps = w.steps.filter((s) => s.k === "w");

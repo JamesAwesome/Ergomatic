@@ -4,15 +4,17 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // easy→hard. Rewritten after James's content review: variety comes from
 // structure (interval sets, pyramids, ladders, rate-change pieces), not
 // ±1' tweaks; continuous singles are held to the genuinely long rows.
-// Conventions: 6k-base pace only, steady work at 6k+6..+16 with brief
-// tempo touches down to 6k+4; spm 22 is the mode with 20–24 the steady
-// range, 18 only as a ladder's bottom rung and 26 only as a ladder's
-// top; time-computable totals end in 0 or 5. Ordering here IS the
-// library browsing order within the type block.
+// Conventions: 6k-base pace only, steady work at 6k+8..+12 with firmer
+// pieces down to 6k+4; 6k+13..+16 only as a designated float — relief
+// beside work at least 6 s/500m faster, never a prescription of its
+// own (James's offset calibration, 2026-08-03); spm 22 is the mode with
+// 20–24 the steady range, 18 only as a ladder's bottom rung and 26
+// only as a ladder's top; time-computable totals end in 0 or 5.
+// Ordering here IS the library browsing order within the type block.
 export const O2_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------- easy / pain 1
   {
-    // O2: 2×4' at 6k+14 with 1' rest — eight easy minutes, already broken.
+    // O2: 2×4' at 6k+12 with 1' rest — eight easy minutes, already broken.
     title: "Sea Fret",
     type: "O2",
     difficulty: "easy",
@@ -23,7 +25,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 22,
         restMinutes: 1,
       },
@@ -168,7 +170,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: rate change — 10' at spm 20 then 10' at spm 22, same 6k+13 pace throughout.
+    // O2: rate change — 10' at spm 20 then 10' at spm 22, same 6k+12 pace throughout.
     title: "Flat Calm",
     type: "O2",
     difficulty: "easy",
@@ -178,19 +180,19 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 22,
       },
     ],
   },
   {
-    // O2: 2×10' at 6k+13 with 1' rest — broken steady state for new aerobic legs.
+    // O2: 2×10' at 6k+12 with 1' rest — broken steady state for new aerobic legs.
     title: "Horse Latitudes",
     type: "O2",
     difficulty: "easy",
@@ -201,7 +203,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 21,
         restMinutes: 1,
       },
@@ -329,7 +331,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 4'-6'-8'-6'-4' pyramid squeezing 6k+14 → +10 with 1' rests — the middle is the test.
+    // O2: 4'-6'-8'-6'-4' pyramid squeezing 6k+12 → +10 with 1' rests — the middle is the test.
     title: "Ground Fog",
     type: "O2",
     difficulty: "easy",
@@ -339,14 +341,14 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 21,
         restMinutes: 1,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 6 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 11 },
         spm: 22,
         restMinutes: 1,
       },
@@ -360,14 +362,14 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 6 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 11 },
         spm: 22,
         restMinutes: 1,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 21,
       },
     ],
@@ -467,7 +469,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 6'/9'/12' ascending ladder, 6k+14 → +10, 1:30 rests — longest piece last.
+    // O2: 6'/9'/12' ascending ladder, 6k+12 → +10, 1:30 rests — longest piece last.
     title: "Tule Fog",
     type: "O2",
     difficulty: "easy",
@@ -477,14 +479,14 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 6 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
         restMinutes: 1.5,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 9 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 11 },
         spm: 21,
         restMinutes: 1.5,
       },
@@ -497,7 +499,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 12'/9'/6'/3' descending ladder, 6k+14 → +8, rests shrinking 1:30/1:00/0:30.
+    // O2: 12'/9'/6'/3' descending ladder, 6k+12 → +8, rests shrinking 1:30/1:00/0:30.
     title: "Ice Fog",
     type: "O2",
     difficulty: "easy",
@@ -507,14 +509,14 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
         restMinutes: 1.5,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 9 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 11 },
         spm: 21,
         restMinutes: 1,
       },
@@ -618,7 +620,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 15' at 6k+13, 3' off, 12' at 6k+11 — two long pieces, barely stepped.
+    // O2: 15' at 6k+12, 3' off, 12' at 6k+10 — two long pieces, barely stepped.
     title: "Moonbow",
     type: "O2",
     difficulty: "easy",
@@ -628,20 +630,20 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 15 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 21,
       },
       { k: "r", minutes: 3 },
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
-        ref: { base: "6k", off: 11 },
+        ref: { base: "6k", off: 10 },
         spm: 22,
       },
     ],
   },
   {
-    // O2: 40' continuous at 6k+14 — the first genuinely long unbroken row here.
+    // O2: 40' continuous at 6k+12 — the first genuinely long unbroken row here.
     title: "Fine Weather",
     type: "O2",
     difficulty: "easy",
@@ -651,13 +653,13 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 40 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
     ],
   },
   {
-    // O2: 2×18' at 6k+13 with 2' rest — sit-time split just once.
+    // O2: 2×18' at 6k+12 with 2' rest — sit-time split just once.
     title: "Fair Weather",
     type: "O2",
     difficulty: "easy",
@@ -668,14 +670,14 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 18 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 21,
         restMinutes: 2,
       },
     ],
   },
   {
-    // O2: rate change — 4×(5' at spm 22 + 5' at spm 24) unbroken, 6k+13 throughout.
+    // O2: rate change — 4×(5' at spm 22 + 5' at spm 24) unbroken, 6k+12 throughout.
     title: "Moon Halo",
     type: "O2",
     difficulty: "easy",
@@ -686,19 +688,19 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 22,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 24,
       },
     ],
   },
   {
-    // O2: 3×12' at 6k+13 with 2' rest — a big aerobic block in three sittings.
+    // O2: 3×12' at 6k+12 with 2' rest — a big aerobic block in three sittings.
     title: "Alpenglow",
     type: "O2",
     difficulty: "easy",
@@ -709,7 +711,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 21,
         restMinutes: 2,
       },
@@ -732,7 +734,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 60' continuous at 6k+15 — the hour, kept honest by nothing but patience.
+    // O2: 60' continuous at 6k+12 — the hour, kept honest by nothing but patience.
     title: "Glass Sea",
     type: "O2",
     difficulty: "easy",
@@ -742,13 +744,13 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 60 },
-        ref: { base: "6k", off: 15 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
     ],
   },
   {
-    // O2: 30' at 6k+14, 5' light paddle, 25' at 6k+11 — an hour with a soft hinge.
+    // O2: 30' at 6k+12, 5' light paddle, 25' at 6k+10 — an hour with a soft hinge.
     title: "Fog Bow",
     type: "O2",
     difficulty: "easy",
@@ -758,7 +760,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 30 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
       {
@@ -770,13 +772,13 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 25 },
-        ref: { base: "6k", off: 11 },
+        ref: { base: "6k", off: 10 },
         spm: 22,
       },
     ],
   },
   {
-    // O2: 70' continuous at 6k+16 — the longest easy row in the block. Just sit.
+    // O2: 70' continuous at 6k+12 — the longest easy row in the block. Just sit.
     title: "Fair Wind",
     type: "O2",
     difficulty: "easy",
@@ -786,7 +788,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 70 },
-        ref: { base: "6k", off: 16 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
     ],
@@ -1314,7 +1316,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 10' at 6k+8 first, 3' off, then 22' settled at 6k+13 — tempo before volume.
+    // O2: 10' at 6k+8 first, 3' off, then 22' settled at 6k+12 — tempo before volume.
     title: "Favonius",
     type: "O2",
     difficulty: "medium",
@@ -1331,7 +1333,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 22 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
     ],
@@ -1433,7 +1435,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 15'/12'/9'/6' descending, 6k+14 → +8, rests shrinking 2:30/1:30/1:00.
+    // O2: 15'/12'/9'/6' descending, 6k+12 → +6, rests shrinking 2:30/1:30/1:00.
     title: "Stratus",
     type: "O2",
     difficulty: "medium",
@@ -1443,28 +1445,28 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 15 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
         restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 10 },
         spm: 21,
         restMinutes: 1.5,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 9 },
-        ref: { base: "6k", off: 10 },
+        ref: { base: "6k", off: 8 },
         spm: 22,
         restMinutes: 1,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 6 },
-        ref: { base: "6k", off: 8 },
+        ref: { base: "6k", off: 6 },
         spm: 23,
       },
     ],
@@ -1486,7 +1488,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 35' at 6k+13, 4' off, 15' at 6k+9 — one big body, one firm coda.
+    // O2: 35' at 6k+12, 4' off, 15' at 6k+9 — one big body, one firm coda.
     title: "Nimbostratus",
     type: "O2",
     difficulty: "medium",
@@ -1496,7 +1498,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 35 },
-        ref: { base: "6k", off: 13 },
+        ref: { base: "6k", off: 12 },
         spm: 21,
       },
       { k: "r", minutes: 4 },
@@ -1533,7 +1535,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 15,000 m continuous at 6k+14 — a serious distance sit, nothing clever.
+    // O2: 15,000 m continuous at 6k+12 — a serious distance sit, nothing clever.
     title: "Morning Mist",
     type: "O2",
     difficulty: "medium",
@@ -1543,7 +1545,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "distance", meters: 15000 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
     ],
@@ -2183,7 +2185,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: half marathon — 21,097 m continuous at 6k+14. Patience, not power.
+    // O2: half marathon — 21,097 m continuous at 6k+12. Patience, not power.
     title: "Graupel",
     type: "O2",
     difficulty: "medium",
@@ -2193,7 +2195,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "distance", meters: 21097 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
     ],
@@ -2215,7 +2217,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 10'-15'-20'-15'-10' pyramid, unbroken, 6k+14 → +10 → +14 — seventy minutes, one arc.
+    // O2: 10'-15'-20'-15'-10' pyramid, unbroken, 6k+12 → +10 → +12 — seventy minutes, one arc.
     title: "Virga",
     type: "O2",
     difficulty: "medium",
@@ -2225,13 +2227,13 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 15 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 11 },
         spm: 21,
       },
       {
@@ -2243,13 +2245,13 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 15 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 11 },
         spm: 21,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
-        ref: { base: "6k", off: 14 },
+        ref: { base: "6k", off: 12 },
         spm: 20,
       },
     ],
