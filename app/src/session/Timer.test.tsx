@@ -16,7 +16,6 @@ import { loadRun, saveRun, type SessionRun } from "./run";
 import { isSuspectActual, totalSessionSeconds } from "./Timer";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
-const TOL = 1;
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
 function library(title: string) {
@@ -36,7 +35,7 @@ function library(title: string) {
 // them too (domain/expand.ts's own `liveIndices`), doubling the appended
 // phases for no reason; this fixture wants each kind exactly once.
 //
-// Resulting phases (baselines {k2:100,k6:120}, tol 1). Ui-fix round, Item
+// Resulting phases (baselines {k2:100,k6:120}). Ui-fix round, Item
 // 1: the label/UP NEXT value is the EXACT split, never a "lo–hi" band; the
 // TimerTargets sub-line is the ref it was resolved from instead, uppercased
 // (refLabel(ref).toUpperCase()).
@@ -93,7 +92,7 @@ function buildAndSaveRun(
   baselines = BASELINES,
 ): SessionRun {
   saveDraft(startDraft(draft));
-  const run = buildRun(draft, baselines, TOL, now);
+  const run = buildRun(draft, baselines, now);
   saveRun(run);
   return run;
 }

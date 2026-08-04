@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { WorkoutType } from "../../domain/types.js";
 import {
+  RECENCY_BOUNDARY_DAYS,
   clearFilters,
   setLastDone,
   setSource,
@@ -79,9 +80,61 @@ export default function FilterSheet({
   onApply: () => void;
   onDismiss: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Md4 (whole-branch review): `role="dialog"`/`aria-modal="true"` used to
+  // ship with no focus management at all — the codebase's first such
+  // element, asserting to assistive tech that everything outside is inert
+  // while the list and tab bar stayed genuinely focusable/clickable behind
+  // it. Every button here is a real `<button>` (no links, inputs, or other
+  // focusable element kinds), so `querySelectorAll("button")` is the
+  // complete, correctly-ordered focusable set with no extra filtering
+  // needed — kept as a small helper rather than a library so a future group
+  // added to this sheet is included automatically as long as it's a button.
+  function focusableElements(): HTMLElement[] {
+    const dialog = dialogRef.current;
+    if (!dialog) return [];
+    return Array.from(dialog.querySelectorAll<HTMLElement>("button"));
+  }
+
+  // Moves focus into the sheet on mount (the first control, CLEAR) and
+  // restores it to whatever had focus immediately before — Library.tsx's
+  // own `FILTER ⌄` trigger, in the one path this sheet is ever opened
+  // from, captured here rather than passed as a prop so this component
+  // stays correct regardless of what eventually opens it.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    focusableElements()[0]?.focus();
+    return () => {
+      previouslyFocused?.focus?.();
+    };
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onDismiss();
+      if (e.key === "Escape") {
+        onDismiss();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      // Containment, not a full roving-tabindex implementation: every
+      // in-between Tab press is left to the browser's own default focus
+      // order (which already visits every button here top-to-bottom), and
+      // only the two ends wrap — Tab past the last control lands back on
+      // the first, Shift+Tab before the first lands on the last, so the
+      // sheet never leaks focus onto the list or tab bar it visually
+      // covers while `aria-modal="true"` claims they're inert.
+      const focusable = focusableElements();
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -90,6 +143,7 @@ export default function FilterSheet({
   return (
     <div className="filter-sheet-backdrop" onClick={onDismiss}>
       <div
+        ref={dialogRef}
         className="filter-sheet"
         role="dialog"
         aria-modal="true"
@@ -172,7 +226,7 @@ export default function FilterSheet({
                 aria-pressed={draft.lastDone === "under21"}
                 onClick={() => onChangeDraft(setLastDone(draft, "under21"))}
               >
-                &lt;21D
+                &lt;{RECENCY_BOUNDARY_DAYS}D
               </button>
               <button
                 type="button"
@@ -180,7 +234,7 @@ export default function FilterSheet({
                 aria-pressed={draft.lastDone === "over21"}
                 onClick={() => onChangeDraft(setLastDone(draft, "over21"))}
               >
-                21D+
+                {RECENCY_BOUNDARY_DAYS}D+
               </button>
             </div>
           </div>
@@ -215,7 +269,7 @@ export default function FilterSheet({
         >
           {resultCount === 0
             ? "No workouts match"
-            : `Show ${resultCount} workouts`}
+            : `Show ${resultCount} workout${resultCount === 1 ? "" : "s"}`}
         </button>
       </div>
     </div>

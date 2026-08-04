@@ -34,9 +34,7 @@ export interface Phase {
   // `upNextText`/`thenNextText` read `EnginePhase.label` straight
   // through, and `logDraft.ts`'s `buildLogSteps` fallback path composes a
   // LogStep's label from it too), and the round's own rule is that no
-  // display surface shows a band any more. `toleranceRange()` itself is
-  // untouched and still lives in `pace.ts`; see this module's own
-  // `phases()` doc comment on its now-otherwise-unused `tol` parameter.
+  // display surface shows a band any more.
   label: string;
   set?: { index: number; of: number };
   // The index in the `steps` array PASSED TO `phases()` (before this
@@ -99,23 +97,7 @@ export function phaseSeconds(
   return null;
 }
 
-// `_tol` (ui-fix round): this used to size the "lo–hi" band `case "w"`'s
-// split branch put into `label` (`toleranceRange(split, tol).label`).
-// Every display call site the label ever reached has been retired to the
-// exact split instead, and `toleranceRange()`'s `.lo`/`.hi` have no other
-// consumer left in this codebase — a repo-wide search at the time of this
-// change found none — so the parameter is genuinely inert inside this
-// function's own body now. Kept (not dropped) rather than removing it and
-// updating the three call sites (`engine.ts`'s `buildRun`, this module's
-// own `estimateMinutes`, and every test file constructing a `phases()`
-// call with a tolerance argument) that already pass a tolerance value here
-// — that's a real signature-simplification opportunity, flagged in the
-// task report rather than done silently as a wider-than-scoped change.
-export function phases(
-  steps: Step[],
-  baselines: Baselines,
-  _tol: number,
-): Phase[] {
+export function phases(steps: Step[], baselines: Baselines): Phase[] {
   const idx = steps.findIndex((s) => s.k === "reps");
   const marker =
     idx === -1 ? null : (steps[idx] as Extract<Step, { k: "reps" }>);
@@ -212,7 +194,7 @@ export function estimateMinutes(
 ): { minutes: number; estimated: boolean } {
   let seconds = 0;
   let estimated = false;
-  for (const p of phases(steps, baselines, 0)) {
+  for (const p of phases(steps, baselines)) {
     const s = phaseSeconds(p);
     if (s === null) continue;
     if (p.seconds === undefined) estimated = true;

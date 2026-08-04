@@ -24,7 +24,7 @@ export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
  *  nudges into each work step's `ref.off`/`spm` (see draft.ts's own header
  *  comment on why that's the same math as a "real" nudge) — so the run's
  *  targets match exactly what Confirm displayed, not the raw authored
- *  steps. `baselines`/`tol` resolve every split ONCE, here; the frozen
+ *  steps. `baselines` resolve every split ONCE, here; the frozen
  *  `targetSplit`/`label` never change even if the rower's baselines change
  *  mid-run. Pure given `now`: two calls with identical arguments produce
  *  deep-equal records (byte-stable), since nothing here reads the clock or
@@ -49,12 +49,11 @@ export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
 export function buildRun(
   draft: SessionDraft,
   baselines: Baselines,
-  tol: number,
   now: Date,
 ): SessionRun {
   const effective = effectiveSteps(draft);
   const rawSteps = effective.map((e) => e.step);
-  const enginePhases: EnginePhase[] = phases(rawSteps, baselines, tol).map(
+  const enginePhases: EnginePhase[] = phases(rawSteps, baselines).map(
     (phase) => {
       const { originalStepIndex, ...rest } = phase;
       return {

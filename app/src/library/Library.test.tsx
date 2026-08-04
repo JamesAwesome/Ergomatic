@@ -119,7 +119,7 @@ async function openSheet() {
  *  ("No workouts match") otherwise, by design (FilterSheet.tsx). */
 async function applySheet() {
   await userEvent.click(
-    screen.getByRole("button", { name: /^Show \d+ workouts$/ }),
+    screen.getByRole("button", { name: /^Show \d+ workouts?$/ }),
   );
 }
 
@@ -186,7 +186,7 @@ describe("Library", () => {
         }),
       );
       expect(
-        screen.getByRole("button", { name: "Show 1 workouts" }),
+        screen.getByRole("button", { name: "Show 1 workout" }),
       ).toBeInTheDocument();
       await applySheet();
 
@@ -237,6 +237,24 @@ describe("Library", () => {
       expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
     });
 
+    // Md4 (whole-branch review): the trigger is the element focused right
+    // before the sheet mounts (a real click focuses its own target first),
+    // so FilterSheet.tsx's own "restore whatever had focus before" effect
+    // lands here without Library needing to pass the trigger down at all.
+    it("restores focus to FILTER ⌄ once the sheet closes", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const toggle = screen.getByRole("button", { name: "FILTER ⌄" });
+      await openSheet();
+      expect(toggle).not.toHaveFocus();
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(toggle).toHaveFocus();
+    });
+
     it("re-opening the sheet seeds the draft from the currently-applied filters, not whatever was left mid-edit last time", async () => {
       mockReady();
       await renderLibrary();
@@ -265,7 +283,7 @@ describe("Library", () => {
         within(dialog()).getByRole("button", { name: "AT" }),
       );
       expect(
-        screen.getByRole("button", { name: "Show 1 workouts" }),
+        screen.getByRole("button", { name: "Show 1 workout" }),
       ).toBeInTheDocument();
 
       await userEvent.click(

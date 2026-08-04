@@ -17,13 +17,13 @@ describe("liveSteps", () => {
 
 describe("phases", () => {
   it("expands the interval ladder to 25 phases / 50 minutes", () => {
-    const p = phases(intervalLadder.steps, B, 1);
+    const p = phases(intervalLadder.steps, B);
     expect(p).toHaveLength(25);
     const totalSeconds = p.reduce((s, ph) => s + (ph.seconds ?? 0), 0);
     expect(totalSeconds).toBe(50 * 60);
   });
   it("inserts a rest phase after attached-rest work steps", () => {
-    const p = phases(distanceRepeats.steps, B, 1);
+    const p = phases(distanceRepeats.steps, B);
     // wu + 5 × (work-distance + rest)
     expect(p).toHaveLength(1 + 10);
     expect(p[1]).toMatchObject({
@@ -34,12 +34,12 @@ describe("phases", () => {
     expect(p[2]).toMatchObject({ type: "rest", seconds: 300 });
   });
   it("labels non-work phases with words, never a bare dash", () => {
-    const p = phases(intervalLadder.steps, B, 1);
+    const p = phases(intervalLadder.steps, B);
     expect(p[0].label).toBe("Easy");
     expect(p.at(-1)!.label).toBe("Rest");
   });
   it("marks set membership on repeated steps", () => {
-    const p = phases(intervalLadder.steps, B, 1);
+    const p = phases(intervalLadder.steps, B);
     expect(p[1].set).toStrictEqual({ index: 1, of: 4 });
     expect(p.at(-1)!.set).toStrictEqual({ index: 4, of: 4 });
   });
@@ -48,7 +48,7 @@ describe("phases", () => {
       { k: "wu" as const, minutes: 5 },
       { k: "test" as const, label: "2k test" },
     ];
-    const p = phases(steps, B, 1);
+    const p = phases(steps, B);
     expect(p).toHaveLength(2);
     expect(p[1]).toStrictEqual({
       type: "test",
@@ -59,7 +59,7 @@ describe("phases", () => {
   });
 
   it("attributes the same originalStepIndex to every repeated occurrence of a reps block (interval ladder: 5 work + 1 rest, x4)", () => {
-    const p = phases(intervalLadder.steps, B, 1);
+    const p = phases(intervalLadder.steps, B);
     expect(p[0]!.originalStepIndex).toBe(0); // the warmup, index 0
     // Steps 2..7 (5 w's + 1 r) form the repeated block; every one of the 4
     // cycles must attribute back to those SAME original indices, not to
@@ -71,7 +71,7 @@ describe("phases", () => {
   });
 
   it("shares one originalStepIndex between a work phase and its auto-inserted rest (distance repeats)", () => {
-    const p = phases(distanceRepeats.steps, B, 1);
+    const p = phases(distanceRepeats.steps, B);
     expect(p[1]!.originalStepIndex).toBe(2); // the "w" step, index 2
     expect(p[2]!.originalStepIndex).toBe(2); // its auto-inserted rest — SAME step
   });
@@ -97,7 +97,7 @@ describe("phases", () => {
       },
       { k: "r", minutes: 2 },
     ];
-    const p = phases(steps, B, 1);
+    const p = phases(steps, B);
     expect(p.map((ph) => ph.type)).toStrictEqual(["warmup", "work", "rest"]);
     expect(p[2]!.originalStepIndex).toBe(2); // the authored "r" step, not shifted
   });
@@ -113,7 +113,6 @@ describe("phases", () => {
         },
       ],
       { k2Seconds: 112, k6Seconds: 122 },
-      1,
     );
     expect(phases_[0]).toMatchObject({
       type: "work",
@@ -135,14 +134,13 @@ describe("phases", () => {
         },
       ],
       { k2Seconds: 112, k6Seconds: 122 },
-      1,
     );
     expect(phases_[0]).toMatchObject({
       targetKind: "split",
       targetSplit: 120,
       ref,
     });
-    // Exact — never a "lo–hi" band, regardless of the tol argument (1 here).
+    // Exact — never a "lo–hi" band.
     expect(phases_[0]!.label).toBe("2:00.0");
     expect(phases_[0]!.label).not.toContain("–");
   });
@@ -157,7 +155,6 @@ describe("phases", () => {
         },
       ],
       { k2Seconds: 112, k6Seconds: 122 },
-      1,
     );
     expect(phases_[0]!.targetKind).toBe("effort");
     expect(phases_[0]!.ref).toBeUndefined();
@@ -217,7 +214,7 @@ describe("phaseSeconds", () => {
   });
 
   it("also works against a real phases() output, not just a hand-built shape (real-fixture parity)", () => {
-    const p = phases(distanceRepeats.steps, B, 1);
+    const p = phases(distanceRepeats.steps, B);
     expect(phaseSeconds(p[0]!)).toBe(600); // the 10' warmup
     expect(phaseSeconds(p[1]!)).toBe(540); // 2500m @ 108 s/500m -> 5*108
   });

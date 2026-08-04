@@ -10,7 +10,6 @@ import { saveRun, type SessionRun } from "./run";
 import { actualRows, totalElapsedSeconds } from "./SessionComplete";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
-const TOL = 1;
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
 function library(title: string) {
@@ -49,7 +48,7 @@ function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   });
   const started = startDraft(draft);
   saveDraft(started);
-  const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+  const built = buildRun(started, BASELINES, FIXED_NOW);
   const distanceIndex = built.phases.length - 1;
   // Completion is a CONSTRUCTION here, not a derivation — engine.test.ts and
   // Timer.test.tsx already own proving tick/advance walk to this state
@@ -105,7 +104,7 @@ function multiActualDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   });
   const started = startDraft(draft);
   saveDraft(started);
-  const built = buildRun(started, BASELINES, TOL, FIXED_NOW);
+  const built = buildRun(started, BASELINES, FIXED_NOW);
   // Phases: 0 warmup, 1 work (2000m), 2 work (6000m).
   const completedAt = new Date(
     FIXED_NOW.getTime() + 40 * 60 * 1000,

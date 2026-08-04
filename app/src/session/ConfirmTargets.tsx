@@ -506,8 +506,7 @@ function ConfirmStepRow({
               </span>
             ) : baselines ? (
               // Ui-fix round, Item 1: the exact resolved split — a
-              // tolerance band never appears here any more, though
-              // `toleranceRange()` itself is unchanged in the domain.
+              // tolerance band never appears here any more.
               <span className="step-editor-target-value">
                 {fmtSplit(resolveSplit(baselines, step.ref, nudge))}
               </span>

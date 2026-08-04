@@ -1,4 +1,8 @@
-import type { DurationBucket, Filters } from "./filters";
+import {
+  RECENCY_BOUNDARY_DAYS,
+  type DurationBucket,
+  type Filters,
+} from "./filters";
 
 // One token per active GROUP, not per selected band — DESIGN.md's own rule
 // ("the header count counts tokens, so the row and the count never
@@ -107,7 +111,10 @@ export function filterTokens(f: Filters): Token[] {
   if (f.lastDone !== null) {
     tokens.push({
       kind: "lastDone",
-      label: f.lastDone === "under21" ? "<21D" : "21D+",
+      label:
+        f.lastDone === "under21"
+          ? `<${RECENCY_BOUNDARY_DAYS}D`
+          : `${RECENCY_BOUNDARY_DAYS}D+`,
       clear: (current) => ({ ...current, lastDone: null }),
     });
   }

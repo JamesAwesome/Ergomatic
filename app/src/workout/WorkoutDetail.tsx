@@ -426,6 +426,18 @@ function OwnerActions({
         Edit
       </Link>
       <hr className="action-stack-rule" />
+      {/* Fix round 2 (whole-branch review Md5): the retired two-button
+          panel's own reassurance line — session_logs.workout_id nulls on
+          delete and each log keeps its own frozen title/type, so a
+          rower's history survives this regardless — is back here, shown
+          only at the moment of the actual destructive decision (armed,
+          one tap from firing) rather than permanently above the stack. */}
+      {armed && (
+        <p className="baseline-confirm-line">
+          Your logged sessions are kept — they keep their own copy of the title
+          and type.
+        </p>
+      )}
       <button
         type="button"
         className={armed ? "button-l4-armed" : "button-l4"}

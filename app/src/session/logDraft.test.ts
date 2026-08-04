@@ -63,7 +63,6 @@ const NOW = new Date("2026-08-02T12:00:00.000Z");
 
 function runFor(
   title: string,
-  tol: number,
   overrides: Partial<SessionRun> = {},
 ): { draft: SessionDraft; run: SessionRun } {
   const w = library(title);
@@ -73,7 +72,7 @@ function runFor(
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const built = buildRun(draft, BASELINES, tol, NOW);
+  const built = buildRun(draft, BASELINES, NOW);
   return { draft, run: { ...built, index: built.phases.length, ...overrides } };
 }
 
@@ -88,7 +87,7 @@ describe("buildLogSteps", () => {
     // baselines.k2Seconds = 100 (irrelevant here — never surfaced). ref
     // {effort:"max"} -> refLabel = "MAX". duration = fmtDuration(0.5) =
     // "0:30".
-    const { draft, run } = runFor("Fork Lightning", 3, {
+    const { draft, run } = runFor("Fork Lightning", {
       completedAt: NOW.toISOString(),
     });
     expect(run.phases).toHaveLength(21);
@@ -105,7 +104,7 @@ describe("buildLogSteps", () => {
   });
 
   it("F1: Fork Lightning's effort step logs the IDENTICAL label through either door", () => {
-    const { draft, run } = runFor("Fork Lightning", 3, {
+    const { draft, run } = runFor("Fork Lightning", {
       completedAt: NOW.toISOString(),
     });
     const runDoorLabels = buildLogSteps(run, draft).map((s) => s.label);
@@ -137,7 +136,7 @@ describe("buildLogSteps", () => {
       type: "AT",
       steps,
     });
-    const built = buildRun(draft, BASELINES, 3, NOW);
+    const built = buildRun(draft, BASELINES, NOW);
     // 1 warmup + (work+rest)*3 (every source step carries its own
     // restMinutes) = 7 phases; work at 1, 3, 5.
     expect(built.phases).toHaveLength(7);
@@ -174,7 +173,7 @@ describe("buildLogSteps", () => {
       }),
       removed: [2],
     };
-    const built = buildRun(draft, BASELINES, 0, NOW);
+    const built = buildRun(draft, BASELINES, NOW);
     expect(built.phases.map((p) => p.type)).toStrictEqual([
       "warmup",
       "work",
@@ -217,7 +216,7 @@ describe("buildLogSteps", () => {
       ],
     });
     const nudged = withNudge(draft, 0, 2); // +2s confirm-time nudge
-    const built = buildRun(nudged, baselines, 0, NOW);
+    const built = buildRun(nudged, baselines, NOW);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -269,7 +268,7 @@ describe("buildLogSteps", () => {
       ],
     });
     const nudged = withNudge(draft, 1, 2); // +2s confirm-time nudge on originalIndex 1
-    const built = buildRun(nudged, baselines, 0, NOW);
+    const built = buildRun(nudged, baselines, NOW);
     // The misalignment this fixture depends on, asserted directly: the
     // nudged step is `run.phases[2]` (after the first work phase and its
     // auto-inserted rest at positions 0/1) but `draft.steps[1]`.
@@ -308,7 +307,7 @@ describe("buildLogSteps", () => {
       steps: [splitWork],
     });
     // No withNudge call at all — draft.nudges stays `{}`.
-    const built = buildRun(draft, BASELINES, 0, NOW);
+    const built = buildRun(draft, BASELINES, NOW);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -326,7 +325,7 @@ describe("buildLogSteps", () => {
     // wu(8') + w{10000m @ 6k+12, spm 20} -> phases: [warmup, work]. draft's
     // real ref {base:"6k", off:12} -> refLabel "6k +12". Elapsed 2500s on
     // 10000m -> splitSeconds = (2500/10000)*500 = 125.0 exactly.
-    const { draft, run } = runFor("Calm Sea", 0, {
+    const { draft, run } = runFor("Calm Sea", {
       completedAt: new Date(NOW.getTime() + 2500 * 1000).toISOString(),
       actuals: {
         1: {
@@ -351,7 +350,7 @@ describe("buildLogSteps", () => {
   });
 
   it("Calm Sea: no recorded actual on a distance phase means the split was DISCARDED — absence, not an assumed/zero value", () => {
-    const { draft, run } = runFor("Calm Sea", 0, {
+    const { draft, run } = runFor("Calm Sea", {
       completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
       actuals: {},
     });
@@ -369,7 +368,7 @@ describe("buildLogSteps", () => {
     // Reps 1 & 3 (positions 1 & 5) kept: 850/2000*500 = 212.5,
     // 800/2000*500 = 200.0. Rep 2 (position 3) discarded (no actuals
     // entry).
-    const { draft, run } = runFor("Filling Low", 0, {
+    const { draft, run } = runFor("Filling Low", {
       completedAt: new Date(NOW.getTime() + 35 * 60 * 1000).toISOString(),
       actuals: {
         1: {
@@ -420,7 +419,7 @@ describe("buildLogSteps", () => {
     // wu(6') + reps(2) x [w{12min @ 6k+12, spm 22, rest 5'}] -> 5 phases;
     // work at 1,3. draft's real ref {base:"6k", off:12} -> refLabel
     // "6k +12"; fmtDuration(12) = "12:00".
-    const { draft, run } = runFor("Hoarfrost", 0, {
+    const { draft, run } = runFor("Hoarfrost", {
       completedAt: new Date(NOW.getTime() + 46 * 60 * 1000).toISOString(),
       actuals: {},
     });
@@ -459,7 +458,7 @@ describe("buildLogSteps", () => {
         },
       ],
     });
-    const run = buildRun(draft, BASELINES, 0, NOW);
+    const run = buildRun(draft, BASELINES, NOW);
     const completed: SessionRun = {
       ...run,
       index: run.phases.length,
@@ -478,7 +477,7 @@ describe("buildLogSteps", () => {
 
   describe("fallback path (no usable draft — module header's FALLBACK paragraph)", () => {
     it("draft null: an effort phase STILL reaches the chip via effortFromWord's inverse (F1's original fix, still load-bearing when there is truly no draft)", () => {
-      const { run } = runFor("Fork Lightning", 3, {
+      const { run } = runFor("Fork Lightning", {
         completedAt: NOW.toISOString(),
       });
       const steps = buildLogSteps(run, null);
@@ -502,7 +501,7 @@ describe("buildLogSteps", () => {
     // survives for a genuinely LEGACY run with no `ref` field at all — see
     // the dedicated describe block below.
     it("draft null: a split-ref phase reconstructs the SAME ref chip the preferred path would have (byte-identical, not the old resolved-split fallback)", () => {
-      const { run } = runFor("Calm Sea", 0, {
+      const { run } = runFor("Calm Sea", {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
       });
@@ -512,7 +511,7 @@ describe("buildLogSteps", () => {
     });
 
     it('a mismatched/stale draft (originalIndex doesn\'t land on a real "w" step) falls back safely to the SAME ref chip instead of crashing or mislabeling', () => {
-      const { run } = runFor("Calm Sea", 0, {
+      const { run } = runFor("Calm Sea", {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
       });
@@ -540,11 +539,11 @@ describe("buildLogSteps", () => {
     // for — the SAME run's SAME split-ref phase, labeled once through the
     // preferred (real-draft) path and once through the fallback
     // (draft-null) path, must produce the identical string. Hoarfrost (not
-    // Calm Sea) here so this also exercises a TIME-kind work step with a
-    // non-zero tolerance and an embedded rest — a different shape than the
-    // distance fixture above, same guarantee.
+    // Calm Sea) here so this also exercises a TIME-kind work step with an
+    // embedded rest — a different shape than the distance fixture above,
+    // same guarantee.
     it("preferred and fallback paths compose byte-identical labels for the same split-ref phase", () => {
-      const { draft, run } = runFor("Hoarfrost", 1, {
+      const { draft, run } = runFor("Hoarfrost", {
         completedAt: new Date(NOW.getTime() + 60 * 60 * 1000).toISOString(),
       });
       const viaDraft = buildLogSteps(run, draft);
@@ -572,7 +571,7 @@ describe("buildLogSteps", () => {
   // "nothing to reconstruct from" fallback branch.
   describe("legacy pre-ref SessionRun (Q3: a v:1 run frozen before Phase.ref existed)", () => {
     it("draft null, phase.ref absent: keeps the phase's own frozen label verbatim, band string and all", () => {
-      const { run } = runFor("Calm Sea", 1, {
+      const { run } = runFor("Calm Sea", {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
       });
@@ -611,7 +610,7 @@ describe("buildLogSteps", () => {
         type: "O2",
         steps: [{ k: "test", label: "2k test" }],
       });
-      const built = buildRun(draft, BASELINES, 1, NOW);
+      const built = buildRun(draft, BASELINES, NOW);
       const run: SessionRun = {
         ...built,
         index: built.phases.length,
@@ -634,7 +633,7 @@ describe("buildLogSteps", () => {
         type: "O2",
         steps: [{ k: "test", label: "6k test" }, distanceWork],
       });
-      const built = buildRun(draft, BASELINES, 0, NOW);
+      const built = buildRun(draft, BASELINES, NOW);
       const run: SessionRun = {
         ...built,
         index: built.phases.length,
@@ -658,7 +657,7 @@ describe("buildLogSteps", () => {
         type: "O2",
         steps: [{ k: "test", label: "2k test" }],
       });
-      const built = buildRun(draft, BASELINES, 1, NOW);
+      const built = buildRun(draft, BASELINES, NOW);
       const run: SessionRun = {
         ...built,
         index: built.phases.length,
@@ -824,7 +823,7 @@ describe("logTotals", () => {
     // 46 exactly, not the workout's PROGRAMMED length (6 + 2*(12+5) = 40
     // minutes) — a real session can run long or short of its own estimate,
     // and the Log screen is recording what happened, not the plan.
-    const { run } = runFor("Hoarfrost", 0, {
+    const { run } = runFor("Hoarfrost", {
       completedAt: new Date(NOW.getTime() + 46 * 60 * 1000).toISOString(),
     });
     expect(logTotals(run)).toStrictEqual({
@@ -834,14 +833,14 @@ describe("logTotals", () => {
   });
 
   it("rounds a fractional minute to the nearest whole minute", () => {
-    const { run } = runFor("Calm Sea", 0, {
+    const { run } = runFor("Calm Sea", {
       completedAt: new Date(NOW.getTime() + 90 * 1000).toISOString(), // 1.5 min
     });
     expect(logTotals(run).totalMinutes).toBe(2); // round(1.5) -> 2
   });
 
   it("an incomplete run (completedAt null) reads as 0 minutes and falls back to startedAt for the date, never reading the system clock", () => {
-    const { run } = runFor("Calm Sea", 0, { completedAt: null });
+    const { run } = runFor("Calm Sea", { completedAt: null });
     expect(logTotals(run)).toStrictEqual({
       dateLabel: "AUG 2", // NOW itself, run.startedAt === NOW.toISOString()
       totalMinutes: 0,

@@ -8,22 +8,6 @@ import { buildRun } from "./engine";
 import { cancelStart, loadDraft, saveDraft, type SessionDraft } from "./draft";
 import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
 
-// Ui-fix round Task 2 removed the WorkoutDetail.tsx/Builder.tsx/
-// ConfirmTargets.tsx copies of this same one-liner (their own displayed
-// targets went exact and stopped needing a tolerance value at all) — this
-// is now the ONLY reader of --pace-tolerance left in the client, feeding
-// buildRun's own `tol` argument (still part of `phases()`'s signature, even
-// though nothing in its body currently consumes it for display purposes —
-// see domain/expand.ts's own comment on that parameter).
-function readPaceTolerance(): number {
-  if (typeof window === "undefined") return 1;
-  const raw = getComputedStyle(document.documentElement)
-    .getPropertyValue("--pace-tolerance")
-    .trim();
-  const parsed = Number(raw);
-  return raw !== "" && Number.isFinite(parsed) ? parsed : 1;
-}
-
 // The countdown's own timing state: `total` is the configured length
 // (preferences.countdownSeconds), `startedAtMs` is the wall-clock instant
 // (Date.now(), NOT the component's mount time — see the build effect below)
@@ -205,7 +189,7 @@ export default function Countdown() {
     // preferences fetch took) — otherwise the very first "ready" render
     // could read fewer seconds remaining than `countdownSeconds`, or even a
     // negative elapsed if an earlier `nowMs` predates `startedAtMs`.
-    const run = buildRun(draft, baselines, readPaceTolerance(), now);
+    const run = buildRun(draft, baselines, now);
     saveRun(run);
     void Promise.resolve().then(() => {
       setBuilt({

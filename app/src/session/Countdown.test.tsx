@@ -415,7 +415,6 @@ describe("hasRunProgress", () => {
   const BASE_RUN = buildRun(
     hoarfrostDraft(),
     BASELINES,
-    1,
     new Date("2026-08-01T12:00:00.000Z"),
   );
 
@@ -462,7 +461,7 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
     const draft = hoarfrostDraft();
     saveDraft(draft);
     const progressed: SessionRun = {
-      ...buildRun(draft, BASELINES, 1, new Date()),
+      ...buildRun(draft, BASELINES, new Date()),
       index: 1,
     };
     const saveRunSpy = vi.fn(() => true);
@@ -482,7 +481,7 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
   it("redirects to /session/run without rebuilding when the existing run is already complete", async () => {
     const draft = hoarfrostDraft();
     saveDraft(draft);
-    const built = buildRun(draft, BASELINES, 1, new Date());
+    const built = buildRun(draft, BASELINES, new Date());
     const completed: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -509,7 +508,7 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
     // of hasRunProgress's three signals — exactly what Countdown's OWN
     // first mount leaves behind, and what a reload immediately afterward
     // would see. Resilience 4 still requires this to rebuild, not redirect.
-    saveRun(buildRun(draft, BASELINES, 1, new Date()));
+    saveRun(buildRun(draft, BASELINES, new Date()));
     mockAdapters();
     await renderCountdown();
 

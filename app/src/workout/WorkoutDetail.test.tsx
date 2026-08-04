@@ -108,7 +108,7 @@ const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 // run is only ever built from an already-started draft).
 function completedRunFor(draft: SessionDraft): SessionRun {
   const now = new Date("2026-08-01T12:00:00.000Z");
-  const built = buildRun(draft, BASELINES, 1, now);
+  const built = buildRun(draft, BASELINES, now);
   const run: SessionRun = {
     ...built,
     index: built.phases.length,
@@ -744,8 +744,10 @@ describe("WorkoutDetail", () => {
   // Fix round 1 (F2): the old two-button staged-confirm panel (Cancel
   // beside a second "Delete workout" button) is gone — Delete workout now
   // arms IN PLACE, the level system's own L4/L4-armed idiom, same shape as
-  // Discard elsewhere in this round. No side panel means no separate
-  // reassurance copy either; the two-tap safety itself is unchanged.
+  // Discard elsewhere in this round. The two-tap safety itself is
+  // unchanged. Fix round 2 (whole-branch review Md5): the retired panel's
+  // own reassurance copy is back too, restored as its own line beneath —
+  // see the test below.
   it("asks for confirmation before deleting — the API is not called on the first Delete workout press", async () => {
     const api = mockApi(() => new Response(null, { status: 204 }));
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
@@ -758,6 +760,26 @@ describe("WorkoutDetail", () => {
     expect(api).not.toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: "Tap again to delete" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the logged-sessions-are-kept reassurance only once armed, not at rest", async () => {
+    mockApi(() => new Response(null, { status: 204 }));
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetail("/library/w3");
+
+    expect(
+      screen.queryByText(/Your logged sessions are kept/),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete workout" }),
+    );
+
+    expect(
+      screen.getByText(
+        "Your logged sessions are kept — they keep their own copy of the title and type.",
+      ),
     ).toBeInTheDocument();
   });
 

@@ -16,7 +16,7 @@ function renderSheet(
   const onChangeDraft = overrides.onChangeDraft ?? vi.fn();
   const onApply = overrides.onApply ?? vi.fn();
   const onDismiss = overrides.onDismiss ?? vi.fn();
-  render(
+  const { unmount } = render(
     <FilterSheet
       draft={overrides.draft ?? EMPTY_FILTERS}
       onChangeDraft={onChangeDraft}
@@ -25,7 +25,7 @@ function renderSheet(
       onDismiss={onDismiss}
     />,
   );
-  return { onChangeDraft, onApply, onDismiss };
+  return { onChangeDraft, onApply, onDismiss, unmount };
 }
 
 describe("FilterSheet", () => {
@@ -200,6 +200,18 @@ describe("FilterSheet", () => {
     expect(onApply).toHaveBeenCalledTimes(1);
   });
 
+  // Fix round 2 (whole-branch review M2): "Show 1 workouts" shipped
+  // unconditionally plural — this pins the singular-aware copy.
+  it("the primary reads the singular 'Show 1 workout' at resultCount 1", () => {
+    renderSheet({ resultCount: 1 });
+    expect(
+      screen.getByRole("button", { name: "Show 1 workout" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Show 1 workouts" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("the primary reads 'No workouts match' and disables at resultCount 0", () => {
     renderSheet({ resultCount: 0 });
     expect(
@@ -230,5 +242,44 @@ describe("FilterSheet", () => {
     const { onDismiss } = renderSheet();
     await userEvent.keyboard("{Enter}");
     expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  // Md4 (whole-branch review): this was the codebase's first `role="dialog"`
+  // with no focus management at all — `aria-modal="true"` asserted to
+  // assistive tech that everything outside was inert while the list and tab
+  // bar behind it stayed genuinely focusable. These three pin the fix.
+  describe("focus management (Md4)", () => {
+    it("moves focus into the sheet on open — the first control, CLEAR", () => {
+      renderSheet();
+      expect(screen.getByRole("button", { name: "CLEAR" })).toHaveFocus();
+    });
+
+    it("restores focus to whatever had focus before the sheet opened, once it closes", () => {
+      render(<button type="button">trigger</button>);
+      const trigger = screen.getByRole("button", { name: "trigger" });
+      trigger.focus();
+      expect(trigger).toHaveFocus();
+
+      const { unmount } = renderSheet();
+      expect(trigger).not.toHaveFocus();
+      unmount();
+
+      expect(trigger).toHaveFocus();
+    });
+
+    it("Tab from the last control wraps to the first; Shift+Tab from the first wraps to the last", async () => {
+      renderSheet();
+      const clear = screen.getByRole("button", { name: "CLEAR" });
+      const primary = screen.getByRole("button", {
+        name: /^Show \d+ workouts?$/,
+      });
+      expect(clear).toHaveFocus();
+
+      await userEvent.tab({ shift: true });
+      expect(primary).toHaveFocus();
+
+      await userEvent.tab();
+      expect(clear).toHaveFocus();
+    });
   });
 });

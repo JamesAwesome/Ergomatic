@@ -77,8 +77,12 @@ export function bucketFor(minutes: number): DurationBucket {
 // filters.test.ts's "never-done" case, not an oversight, and reused as-is
 // for the LAST DONE `under21`/`over21` pair below: never-done workouts land
 // in `21D+`, the same "not recent" bucket they've always belonged to.
-// Exported: FilterSheet.tsx's live count and filterTokens.ts's LAST DONE
-// label both need the identical rule the list itself filters by.
+// Exported for filters.test.ts's direct unit coverage — applyFilters below,
+// in this same module, is the one real caller. Neither FilterSheet.tsx nor
+// filterTokens.ts imports this: FilterSheet.tsx takes a pre-computed
+// resultCount prop, and filterTokens.ts's own LAST DONE label derives from
+// `Filters.lastDone` (the already-applied filter value), never from a raw
+// `lastDoneDaysAgo` this function would need to re-derive it from.
 export function isRecent(lastDoneDaysAgo: number | null): boolean {
   return lastDoneDaysAgo !== null && lastDoneDaysAgo < RECENCY_BOUNDARY_DAYS;
 }

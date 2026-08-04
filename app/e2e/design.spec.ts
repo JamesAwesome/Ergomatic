@@ -379,6 +379,18 @@ test.describe("library screen", () => {
     await assertNoA11yViolations(page);
   });
 
+  // L1 (whole-branch review): this describe renders `.workout-row-meta`
+  // (11px mono), a guard-gap the ink-4 sweep never covered on this screen.
+  // Waits for a real row first — unlike every other describe this sweep
+  // runs in, this one's own `beforeEach` only navigates (no locator-based
+  // wait), so the workouts fetch can still be in flight when a raw
+  // `page.evaluate()` (no auto-wait, unlike a locator action) would
+  // otherwise run against a still-empty list.
+  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
+    await page.locator(".workout-row").first().waitFor();
+    await assertNoFailingInk4Labels(page);
+  });
+
   // Task 6 (ui-fix round, close-out): this axe scan used to exist only as a
   // one-off manual probe run by Task 4's own reviewer (N5: "I ran axe
   // (wcag2a+wcag2aa) against the open sheet and against a filtered token
@@ -407,7 +419,7 @@ test.describe("library screen", () => {
       .getByRole("dialog")
       .getByRole("button", { name: "O2", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
+    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
     await expect(
       page.locator(".filter-token", { hasText: "O2" }),
     ).toBeVisible();
@@ -432,7 +444,7 @@ test.describe("library screen", () => {
       .getByRole("dialog")
       .getByRole("button", { name: "O2", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
+    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
 
     const tokenBg = await page
       .locator(".filter-token", { hasText: "O2" })
@@ -449,7 +461,7 @@ test.describe("library screen", () => {
       .getByRole("dialog")
       .getByRole("button", { name: "21D+", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
+    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
 
     const tokenBg = await page
       .locator(".filter-token", { hasText: "21D+" })
@@ -2582,6 +2594,12 @@ test.describe("log session screen (session door)", () => {
     await assertNoA11yViolations(page);
   });
 
+  // L1 (whole-branch review): this describe renders `.log-paces-label`
+  // (10px mono), a guard-gap the ink-4 sweep never covered on this screen.
+  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
   test("no tab bar on this session route", async ({ page }) => {
     await expect(page.locator(".tabbar")).toHaveCount(0);
   });
@@ -2714,6 +2732,12 @@ test.describe("log session screen (manual door)", () => {
     await assertNoA11yViolations(page);
   });
 
+  // L1 (whole-branch review): this describe renders `.log-paces-label`
+  // (10px mono), a guard-gap the ink-4 sweep never covered on this screen.
+  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+
   // Unlike the session door (which hides the tab bar as the same full-bleed
   // holder family as /session/complete), this route keeps its tab bar
   // visible — corrected by the whole-branch review (IMP-2): this comment
@@ -2834,6 +2858,23 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
       page,
     }) => {
       await assertNoA11yViolations(page);
+    });
+
+    // Fix round 2 (whole-branch review, Md1): OUTSIDE THE PLAN's own
+    // selected fill used to switch to an accent border/text — the round's
+    // last surviving "accent means selected" use. Now the same plain ink
+    // fill every other selected state uses, never pinned by a computed-style
+    // assertion before this one.
+    test("the toggled state fills ink, not accent", async ({ page }) => {
+      const toggle = page.getByRole("button", {
+        name: "OUTSIDE THE PLAN — won't advance",
+      });
+      const styles = await toggle.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { background: s.backgroundColor, color: s.color };
+      });
+      expect(styles.background).toBe("rgb(27, 26, 23)"); // --ink
+      expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
     });
   });
 });

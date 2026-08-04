@@ -46,7 +46,6 @@ function draftInputFor(title: string, id: string) {
 }
 
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
-const tol = 3;
 const t0 = new Date("2026-08-01T12:00:00.000Z");
 
 function addSeconds(d: Date, s: number): Date {
@@ -55,17 +54,17 @@ function addSeconds(d: Date, s: number): Date {
 
 function fillingLowRun(now = t0): SessionRun {
   const d = buildDraft(draftInputFor("Filling Low", `fl-${Math.random()}`));
-  return buildRun(d, baselines, tol, now);
+  return buildRun(d, baselines, now);
 }
 
 function calmSeaRun(now = t0): SessionRun {
   const d = buildDraft(draftInputFor("Calm Sea", `cs-${Math.random()}`));
-  return buildRun(d, baselines, tol, now);
+  return buildRun(d, baselines, now);
 }
 
 function diamondDustRun(now = t0): SessionRun {
   const d = buildDraft(draftInputFor("Diamond Dust", `dd-${Math.random()}`));
-  return buildRun(d, baselines, tol, now);
+  return buildRun(d, baselines, now);
 }
 
 describe("buildRun", () => {
@@ -119,15 +118,15 @@ describe("buildRun", () => {
   // so a stray `?? null`/`?? ""` fallback couldn't pass this by accident.
   it("stamps workoutId and title straight from the draft (F3a)", () => {
     const d = buildDraft(draftInputFor("Filling Low", "fl-titled"));
-    const run = buildRun(d, baselines, tol, t0);
+    const run = buildRun(d, baselines, t0);
     expect(run.workoutId).toBe("fl-titled");
     expect(run.title).toBe("Filling Low");
   });
 
   it("is byte-stable across two calls with identical inputs", () => {
     const d = buildDraft(draftInputFor("Filling Low", "fl-stable"));
-    const a = buildRun(d, baselines, tol, t0);
-    const b = buildRun(d, baselines, tol, new Date(t0.getTime()));
+    const a = buildRun(d, baselines, t0);
+    const b = buildRun(d, baselines, new Date(t0.getTime()));
     expect(a).toStrictEqual(b);
   });
 
@@ -138,7 +137,7 @@ describe("buildRun", () => {
       ...withNudge(d, workIndex, -5),
       spmOverrides: { [workIndex]: 99 },
     };
-    const run = buildRun(nudged, baselines, tol, t0);
+    const run = buildRun(nudged, baselines, t0);
     const work = run.phases.find((p) => p.type === "work")!;
     expect(work.targetSplit).toBe(127); // 132 unnudged -> 127 after -5
     expect(work.spm).toBe(99);
@@ -147,7 +146,7 @@ describe("buildRun", () => {
 
   it("carries an effort phase's label and targetKind through unchanged (Fork Lightning: ALL OUT)", () => {
     const d = buildDraft(draftInputFor("Fork Lightning", "fk-1"));
-    const run = buildRun(d, baselines, tol, t0);
+    const run = buildRun(d, baselines, t0);
     const work = run.phases.find((p) => p.type === "work")!;
     expect(work.label).toBe("ALL OUT");
     expect(work.targetKind).toBe("effort");
@@ -170,7 +169,7 @@ describe("buildRun", () => {
       createdAt: t0.toISOString(),
       startedAt: null,
     };
-    const run = buildRun(d, baselines, tol, t0);
+    const run = buildRun(d, baselines, t0);
     expect(run.phases).toHaveLength(2);
     expect(run.phases[1]).toMatchObject({
       type: "test",
@@ -210,7 +209,7 @@ describe("buildRun", () => {
       createdAt: t0.toISOString(),
       startedAt: null,
     };
-    const run = buildRun(d, baselines, tol, t0);
+    const run = buildRun(d, baselines, t0);
     expect(run.phases.map((p) => p.type)).toStrictEqual([
       "warmup",
       "work",
@@ -548,7 +547,7 @@ describe("totalRemainingSeconds", () => {
       createdAt: t0.toISOString(),
       startedAt: null,
     };
-    const run = buildRun(d, baselines, tol, t0);
+    const run = buildRun(d, baselines, t0);
     // Only the 60s warmup counts; the open-ended test phase adds nothing.
     expect(totalRemainingSeconds(run, t0)).toBe(60);
   });

@@ -1,5 +1,6 @@
 import { EMPTY_FILTERS, type DurationBucket, type Filters } from "./filters";
 import type { WorkoutType } from "../../domain/types.js";
+import { clearLibraryScroll } from "./libraryScroll";
 
 /** sessionStorage key for Library's active filters. Same lifecycle as
  *  LIBRARY_SCROLL_KEY (libraryScroll.ts) and cleared at the same single
@@ -89,7 +90,21 @@ export function loadLibraryFilters(): Filters {
   try {
     const raw = sessionStorage.getItem(LIBRARY_FILTERS_KEY);
     if (raw === null) return { ...EMPTY_FILTERS };
-    return parseFilters(raw) ?? { ...EMPTY_FILTERS };
+    const parsed = parseFilters(raw);
+    if (parsed === null) {
+      // Whole-branch review L5: a rejected record (malformed, or a
+      // pre-Task-4 v1 shape) falls back to EMPTY_FILTERS, a WIDER list than
+      // whatever was showing when libraryScroll.ts's own saved position was
+      // measured — restoring that position against the wrong list is
+      // exactly the failure this pair of files exists to prevent (see this
+      // file's own LIBRARY_FILTERS_KEY comment above). Only reachable here,
+      // not on the `raw === null` branch above: a genuinely fresh visit
+      // (nothing ever stored) has no scroll position to desync in the
+      // first place.
+      clearLibraryScroll();
+      return { ...EMPTY_FILTERS };
+    }
+    return parsed;
   } catch {
     return { ...EMPTY_FILTERS };
   }
