@@ -9,7 +9,7 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // library browsing order within the type block.
 export const AT_WORKOUTS: WorkoutInput[] = [
   {
-    // AT: 10' continuous at 6k+4 — the shortest threshold piece in the block.
+    // AT: 10' continuous at 6k+4 — one short threshold piece, in and out.
     title: "Occluded Front",
     type: "AT",
     difficulty: "easy",
@@ -757,7 +757,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 2'-4'-6'-4'-2' pyramid at 6k+3 with 1.5' rests — 18' of work.
+    // AT: 2'-4'-6'-4'-2' pyramid at 6k+3, each rest sized to the rung it follows — 18' of work.
     title: "Long Wave",
     type: "AT",
     difficulty: "medium",
@@ -769,7 +769,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 2 },
         ref: { base: "6k", off: 3 },
         spm: 25,
-        restMinutes: 1.5,
+        restMinutes: 1,
       },
       {
         k: "w",
@@ -783,7 +783,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 3 },
         spm: 23,
-        restMinutes: 1.5,
+        restMinutes: 2,
       },
       {
         k: "w",
@@ -921,7 +921,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 12' at 2k+12 then 3×2' at 6k+0 — long sustained block, sharp coda.
+    // AT: 12' at 6k+2 then 3×2' at 6k+0 — long sustained block, sharp coda.
     title: "Inversion Layer",
     type: "AT",
     difficulty: "medium",
@@ -931,7 +931,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
-        ref: { base: "2k", off: 12 },
+        ref: { base: "6k", off: 2 },
         spm: 23,
         restMinutes: 3,
       },
@@ -1165,7 +1165,8 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 2'/5'/8'/5'/2' pyramid — fastest at the ends, longest in the middle.
+    // AT: 2'/5'/8'/5'/2' pyramid, easing out to 6k+4 then sharpening home to
+    // 6k-1 — the second half is the honest one.
     title: "Occlusion Point",
     type: "AT",
     difficulty: "medium",
@@ -1196,14 +1197,14 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
-        ref: { base: "6k", off: 2 },
-        spm: 24,
+        ref: { base: "6k", off: 1 },
+        spm: 25,
         restMinutes: 1.5,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
-        ref: { base: "6k", off: 0 },
+        ref: { base: "6k", off: -1 },
         spm: 26,
       },
     ],
@@ -1762,7 +1763,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 30' continuous at 2k+11 — half an hour at the line, unbroken.
+    // AT: 30' continuous at 6k+3 — half an hour of threshold, unbroken.
     title: "Jet Streak",
     type: "AT",
     difficulty: "hard",
@@ -1772,7 +1773,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 30 },
-        ref: { base: "2k", off: 11 },
+        ref: { base: "6k", off: 3 },
         spm: 24,
       },
     ],
@@ -1824,7 +1825,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 20' at 2k+12 then 3×4' at 6k pace — a long piece, then three fast.
+    // AT: 20' at 6k+2 then 3×4' at 6k pace — a long piece, then three fast.
     title: "Barber",
     type: "AT",
     difficulty: "hard",
@@ -1834,7 +1835,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 20 },
-        ref: { base: "2k", off: 12 },
+        ref: { base: "6k", off: 2 },
         spm: 23,
         restMinutes: 5,
       },
@@ -1849,7 +1850,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 8×4' at 6k+1 with 1' rest — the densest way to 32' of threshold.
+    // AT: 8×4' at 6k+1 with 1' rest — 32' of threshold with hardly a seam.
     title: "Subsidence Inversion",
     type: "AT",
     difficulty: "hard",
@@ -1954,7 +1955,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 12×2' at 6k-3 with 1.5' rest — the densest set in the block.
+    // AT: 12×2' at 6k-3 with 1.5' rest — twenty-four minutes above the line, two at a time.
     title: "Bora",
     type: "AT",
     difficulty: "hard",
@@ -2009,27 +2010,27 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 30' at 2k+13 then 4×5' at 6k+1 — the long block first, on purpose.
+    // AT: 25' at 6k+4 then 4×4' at 6k+1 — the long block first, on purpose.
     title: "Warm Core",
     type: "AT",
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 7 },
+      { k: "wu", minutes: 9 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 30 },
-        ref: { base: "2k", off: 13 },
-        spm: 22,
+        duration: { kind: "time", minutes: 25 },
+        ref: { base: "6k", off: 4 },
+        spm: 23,
         restMinutes: 5,
       },
       { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 4 },
         ref: { base: "6k", off: 1 },
         spm: 25,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },

@@ -4,7 +4,7 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // easy→hard. Rewritten after James's content review: variety comes from
 // structure (interval sets, pyramids, ladders, rate-change pieces), not
 // ±1' tweaks; continuous singles are held to the genuinely long rows.
-// Conventions: 6k-base pace only, steady work at 6k+6..+18 with brief
+// Conventions: 6k-base pace only, steady work at 6k+6..+16 with brief
 // tempo touches down to 6k+4; spm 22 is the mode with 20–24 the steady
 // range, 18 only as a ladder's bottom rung and 26 only as a ladder's
 // top; time-computable totals end in 0 or 5. Ordering here IS the
@@ -12,7 +12,7 @@ import type { WorkoutInput } from "../../../domain/types.js";
 export const O2_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------- easy / pain 1
   {
-    // O2: 2×4' at 6k+14 with 1' rest — the shortest session here, already broken.
+    // O2: 2×4' at 6k+14 with 1' rest — eight easy minutes, already broken.
     title: "Sea Fret",
     type: "O2",
     difficulty: "easy",
@@ -244,20 +244,39 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 4×4' at 6k+10 with 1' rest — a compact interval dose.
+    // O2: 4×4' at 6k+10 with 1' rest, the rate climbing 21→24 — same pace, more life each rep.
     title: "Slack Water",
     type: "O2",
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 5 },
-      { k: "reps", count: 4 },
+      { k: "wu", minutes: 6 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { base: "6k", off: 10 },
+        spm: 21,
+        restMinutes: 1,
+      },
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
         ref: { base: "6k", off: 10 },
         spm: 22,
         restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { base: "6k", off: 10 },
+        spm: 23,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { base: "6k", off: 10 },
+        spm: 24,
       },
     ],
   },
@@ -310,7 +329,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 4'-6'-8'-6'-4' pyramid at 6k+12 with 1' rests — the middle is the test.
+    // O2: 4'-6'-8'-6'-4' pyramid squeezing 6k+14 → +10 with 1' rests — the middle is the test.
     title: "Ground Fog",
     type: "O2",
     difficulty: "easy",
@@ -320,8 +339,8 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
-        ref: { base: "6k", off: 12 },
-        spm: 22,
+        ref: { base: "6k", off: 14 },
+        spm: 21,
         restMinutes: 1,
       },
       {
@@ -334,7 +353,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 8 },
-        ref: { base: "6k", off: 12 },
+        ref: { base: "6k", off: 10 },
         spm: 22,
         restMinutes: 1,
       },
@@ -348,8 +367,8 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
-        ref: { base: "6k", off: 12 },
-        spm: 22,
+        ref: { base: "6k", off: 14 },
+        spm: 21,
       },
     ],
   },
@@ -1005,7 +1024,8 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: rate change — 3×(5' at spm 22 + 5' at spm 24) unbroken, 6k+10 throughout.
+    // O2: rate change — 3×(6' at spm 22 + 4' at spm 24) unbroken, 6k+10 throughout —
+    // the lift comes late in each third.
     title: "Green Flash",
     type: "O2",
     difficulty: "medium",
@@ -1015,13 +1035,13 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 3 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 10 },
         spm: 22,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 4 },
         ref: { base: "6k", off: 10 },
         spm: 24,
       },
@@ -1212,7 +1232,8 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: rate change — 6' blocks at spm 20/22/24/22/20, 6k+12 — a rate pyramid.
+    // O2: rate-and-length pyramid — 4'/6'/10'/6'/4' at 6k+12, spm 20/22/24/22/20 —
+    // the middle is both longest and liveliest.
     title: "Meltemi",
     type: "O2",
     difficulty: "medium",
@@ -1221,7 +1242,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       { k: "wu", minutes: 5 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 6 },
+        duration: { kind: "time", minutes: 4 },
         ref: { base: "6k", off: 12 },
         spm: 20,
       },
@@ -1233,7 +1254,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 6 },
+        duration: { kind: "time", minutes: 10 },
         ref: { base: "6k", off: 12 },
         spm: 24,
       },
@@ -1245,7 +1266,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 6 },
+        duration: { kind: "time", minutes: 4 },
         ref: { base: "6k", off: 12 },
         spm: 20,
       },
@@ -1449,7 +1470,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 50' continuous at 6k+12 — long and even; the middle twenty are the point.
+    // O2: 50' continuous at 6k+11 — long, even, and a shade firmer than it looks.
     title: "Altostratus",
     type: "O2",
     difficulty: "medium",
@@ -1459,8 +1480,8 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "time", minutes: 50 },
-        ref: { base: "6k", off: 12 },
-        spm: 21,
+        ref: { base: "6k", off: 11 },
+        spm: 22,
       },
     ],
   },
@@ -2275,7 +2296,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 6×10' at 6k+10 with 2' rest — the biggest interval session in the block.
+    // O2: 6×10' at 6k+10 with 2' rest — an hour of firm work in six sittings.
     title: "April Shower",
     type: "O2",
     difficulty: "medium",

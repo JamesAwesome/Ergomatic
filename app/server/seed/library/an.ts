@@ -14,7 +14,7 @@ import type { WorkoutInput } from "../../../domain/types.js";
 export const AN_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------- medium, pain 3 (1–11)
   {
-    // AN: 5×30 s at 2k-3 with 1:3 rest — the smallest honest anaerobic dose.
+    // AN: 5×30 s at 2k-3 with 1:3 rest — five short strikes with room to breathe between them.
     title: "Scud Cloud",
     type: "AN",
     difficulty: "medium",
@@ -86,7 +86,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 30/45/60/45/30 s pyramid at 2k-4, easing to 2k-3 at the apex — the block's smallest pyramid.
+    // AN: 30/45/60/45/30 s pyramid at 2k-4, easing to 2k-3 at the apex — up to a minute and back, quickly.
     title: "Beaver Tail",
     type: "AN",
     difficulty: "medium",
@@ -457,8 +457,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 6×250 m at 2k-4 with ~1:2.2 rest — a long distance rep for anaerobic
-    // work, though not the longest here (Plow Wind and Hail Shaft both run 300 m).
+    // AN: 6×250 m at 2k-4 with ~1:2.2 rest — six fast quarter-Ks on real recovery.
     title: "Bow Echo",
     type: "AN",
     difficulty: "medium",
@@ -552,19 +551,41 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: one 2' piece at 2k-3 off a 20' warm-up — the whole session is a single strike; the rest is preparation for it.
-    title: "Lightning Strike",
+    // AN: 2 rounds of 4×45 s at 2k-3 — quick rest inside the round, a real one between.
+    title: "Wind Gust",
     type: "AN",
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 20 },
+      { k: "wu", minutes: 5 },
+      { k: "reps", count: 2 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 0.75 },
         ref: { base: "2k", off: -3 },
-        spm: 30,
-        restMinutes: 3,
+        spm: 28,
+        restMinutes: 1.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.75 },
+        ref: { base: "2k", off: -3 },
+        spm: 28,
+        restMinutes: 1.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.75 },
+        ref: { base: "2k", off: -3 },
+        spm: 28,
+        restMinutes: 1.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 0.75 },
+        ref: { base: "2k", off: -3 },
+        spm: 28,
+        restMinutes: 3.25,
       },
     ],
   },
@@ -749,20 +770,48 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 10×250 m at 2k-4 with ~1:2.2 rest — 2500 m of anaerobic work, one hailstone at a time.
+    // AN: 2 volleys of 5×250 m at 2k-4 — 90 s inside the volley, 4' between them.
     title: "Hailstorm",
     type: "AN",
     difficulty: "hard",
     pain: 4,
     steps: [
       { k: "wu", minutes: 10 },
-      { k: "reps", count: 10 },
+      { k: "reps", count: 2 },
       {
         k: "w",
         duration: { kind: "distance", meters: 250 },
         ref: { base: "2k", off: -4 },
         spm: 30,
-        restMinutes: 2,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 250 },
+        ref: { base: "2k", off: -4 },
+        spm: 30,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 250 },
+        ref: { base: "2k", off: -4 },
+        spm: 30,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 250 },
+        ref: { base: "2k", off: -4 },
+        spm: 30,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 250 },
+        ref: { base: "2k", off: -4 },
+        spm: 30,
+        restMinutes: 4,
       },
     ],
   },
@@ -825,9 +874,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 4 rounds of a 60/45/30 s descending ladder (2k-4 → max); rest
-    // tapers within the round then resets longer before the next round
-    // starts — a repeating ladder instead of one flat rep count.
+    // AN: 4 rounds of 60/45/30 s, 2k-4 down to max — the reps shrink, the rest resets, four times through.
     title: "Satellite Tornado",
     type: "AN",
     difficulty: "hard",
@@ -897,8 +944,8 @@ export const AN_WORKOUTS: WorkoutInput[] = [
 
   // -------------------------------------------------- hard, pain 5 (34–60)
   {
-    // AN: 3×45 s all out with 1:3 rest — three reps is not a small session when every one is emptied.
-    title: "Wind Gust",
+    // AN: 3×45 s all out with 1:3 rest — three strikes, every one emptied to ground.
+    title: "Lightning Strike",
     type: "AN",
     difficulty: "hard",
     pain: 5,
@@ -1033,7 +1080,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 12×30 s all out with 1:2 rest — twelve maximal bursts on the shortest rest in the block.
+    // AN: 12×30 s all out with 1:2 rest — the reps arrive faster than the recovery can.
     title: "Landspout",
     type: "AN",
     difficulty: "hard",
@@ -1051,20 +1098,20 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 5×90 s at 2k-4 with 1:1 rest — equal work and rest at a fast split; the visibility goes first.
+    // AN: 5×90 s at 2k-4 with ~1:1.7 rest — long reps at a fast split; the visibility goes first.
     title: "Whiteout",
     type: "AN",
     difficulty: "hard",
     pain: 5,
     steps: [
-      { k: "wu", minutes: 10 },
+      { k: "wu", minutes: 5 },
       { k: "reps", count: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1.5 },
         ref: { base: "2k", off: -4 },
         spm: 30,
-        restMinutes: 1.5,
+        restMinutes: 2.5,
       },
     ],
   },
@@ -1101,8 +1148,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 4×(75 s + 30 s) all out, generous rest after each — a long strike
-    // and a short one, paired and repeated, instead of one flat rep length.
+    // AN: 4 rounds of 75 s + 30 s all out — empty the long one, then answer the short one.
     title: "Giant Hail",
     type: "AN",
     difficulty: "hard",
@@ -1246,7 +1292,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 10×60 s at 2k-4 with 1' rest — the classic minute-on/minute-off, prescribed at a split that keeps it repeatable.
+    // AN: 10×60 s at 2k-4 with 1:2 rest — ten fast minutes, each one paid for before the next.
     title: "Mesocyclone",
     type: "AN",
     difficulty: "hard",
@@ -1259,14 +1305,12 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 1 },
         ref: { base: "2k", off: -4 },
         spm: 30,
-        restMinutes: 1,
+        restMinutes: 2,
       },
     ],
   },
   {
-    // AN: 5×(60 s + 30 s) all out, generous rest after each — wide,
-    // slow-moving, and the short second strike in every round is the part
-    // that takes everything with it.
+    // AN: 5 rounds of 60 s + 30 s all out — a full minute emptied, then a sprint on top of it.
     title: "Wedge Tornado",
     type: "AN",
     difficulty: "hard",
@@ -1291,9 +1335,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 30/45/60/45/30 s all-out pyramid, generous rest throughout — thin,
-    // fast and far more violent than it looks on paper, building to one
-    // longer strike in the middle and back down.
+    // AN: 30/45/60/45/30 s all-out pyramid on long rests — climb to a full minute and back down, every rep maximal.
     title: "Rope Tornado",
     type: "AN",
     difficulty: "hard",
@@ -1431,7 +1473,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 4 waves of 3×60 s all out — a minute of rest inside the wave, a longer one between waves.
+    // AN: 4 waves of 90/60/30 s all out — each wave shrinks as it breaks, then the longer sit.
     title: "Tornado Outbreak",
     type: "AN",
     difficulty: "hard",
@@ -1441,9 +1483,9 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 1.5 },
         ref: { effort: "max" },
-        spm: 32,
+        spm: 31,
         restMinutes: 1,
       },
       {
@@ -1455,7 +1497,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
         restMinutes: 2.5,
@@ -1524,9 +1566,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 2 rounds of a 75/60/45/30 s all-out descending ladder off a 20'
-    // warm-up, generous rest scaling down with the reps — deepening fast,
-    // and it does not let up.
+    // AN: 2 rounds of 75/60/45/30 s all out off a 20' warm-up — the reps shrink and the rest shrinks with them.
     title: "Bomb Cyclone",
     type: "AN",
     difficulty: "hard",

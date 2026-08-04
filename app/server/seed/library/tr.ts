@@ -253,20 +253,39 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 4×500 m on 2' rest at 2k+4 — the classic set, eased in.
+    // TR: 4×500 m descending 2k+6 → 2k+3 — each one a second quicker, each rest a little longer.
     title: "Following Swell",
     type: "TR",
     difficulty: "easy",
     pain: 2,
     steps: [
       { k: "wu", minutes: 8 },
-      { k: "reps", count: 4 },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 500 },
+        ref: { base: "2k", off: 6 },
+        spm: 24,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 500 },
+        ref: { base: "2k", off: 5 },
+        spm: 25,
+        restMinutes: 2,
+      },
       {
         k: "w",
         duration: { kind: "distance", meters: 500 },
         ref: { base: "2k", off: 4 },
         spm: 25,
-        restMinutes: 2,
+        restMinutes: 2.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 500 },
+        ref: { base: "2k", off: 3 },
+        spm: 26,
       },
     ],
   },
@@ -446,14 +465,21 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 5×2' at 2k+2 with equal rest — the first set that actually asks for pace.
+    // TR: 5×2' at 2k+2, rate climbing 25→28 with the rest growing to match —
+    // the pace holds while the rate does the asking.
     title: "Strong Breeze",
     type: "TR",
     difficulty: "medium",
     pain: 3,
     steps: [
       { k: "wu", minutes: 5 },
-      { k: "reps", count: 5 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { base: "2k", off: 2 },
+        spm: 25,
+        restMinutes: 2,
+      },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -461,23 +487,43 @@ export const TR_WORKOUTS: WorkoutInput[] = [
         spm: 26,
         restMinutes: 2,
       },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { base: "2k", off: 2 },
+        spm: 26,
+        restMinutes: 3,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { base: "2k", off: 2 },
+        spm: 27,
+        restMinutes: 3,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { base: "2k", off: 2 },
+        spm: 28,
+      },
     ],
   },
   {
-    // TR: 8×1' at 2k+1 with 1:1.5 rest — eight sharp minutes, barely off race pace.
+    // TR: 10×1' at 2k+2 on 1:1 — the minute repeat grows up: more reps, less room.
     title: "Fresh Gale",
     type: "TR",
     difficulty: "medium",
     pain: 3,
     steps: [
       { k: "wu", minutes: 5 },
-      { k: "reps", count: 8 },
+      { k: "reps", count: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
-        ref: { base: "2k", off: 1 },
+        ref: { base: "2k", off: 2 },
         spm: 27,
-        restMinutes: 1.5,
+        restMinutes: 1,
       },
     ],
   },
@@ -901,20 +947,39 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 4×1000 m at 2k+2 with full rest — the classic 1k repeat, rest bought honestly.
+    // TR: 4×1000 m descending 2k+4 → 2k+1 with 3:30 rest — the 1k repeat as a negative split.
     title: "Humboldt Current",
     type: "TR",
     difficulty: "medium",
     pain: 4,
     steps: [
       { k: "wu", minutes: 8 },
-      { k: "reps", count: 4 },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 1000 },
+        ref: { base: "2k", off: 4 },
+        spm: 25,
+        restMinutes: 3.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 1000 },
+        ref: { base: "2k", off: 3 },
+        spm: 26,
+        restMinutes: 3.5,
+      },
       {
         k: "w",
         duration: { kind: "distance", meters: 1000 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 4,
+        restMinutes: 3.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 1000 },
+        ref: { base: "2k", off: 1 },
+        spm: 27,
       },
     ],
   },
@@ -973,20 +1038,27 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 8×2' at 2k+1 with equal rest — sixteen minutes just off pace, in even bites.
+    // TR: 4 pairs of 2' — one at 2k+3, one at 2k+1, the short rest after the easier rep.
     title: "Levanter",
     type: "TR",
     difficulty: "medium",
     pain: 4,
     steps: [
       { k: "wu", minutes: 8 },
-      { k: "reps", count: 8 },
+      { k: "reps", count: 4 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { base: "2k", off: 3 },
+        spm: 26,
+        restMinutes: 1.5,
+      },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
         ref: { base: "2k", off: 1 },
         spm: 27,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },
@@ -1625,7 +1697,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     title: "Falkland Current",
     type: "TR",
     difficulty: "hard",
-    pain: 4,
+    pain: 5,
     steps: [
       { k: "wu", minutes: 8 },
       { k: "reps", count: 4 },
@@ -1826,7 +1898,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 8×1000 m at 2k+4 on 1' rest — the community-canon volume set; the rest is the hard part.
+    // TR: 8×1000 m at 2k+8 on 1' rest — the community-canon volume set; the pace eased to pay for the missing rest.
     title: "Polar Blast",
     type: "TR",
     difficulty: "hard",
@@ -1837,7 +1909,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "distance", meters: 1000 },
-        ref: { base: "2k", off: 4 },
+        ref: { base: "2k", off: 8 },
         spm: 25,
         restMinutes: 1,
       },
@@ -1917,7 +1989,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 4×6' at 2k+2 with equal rest — the longest reps here, at a pace that notices.
+    // TR: 4×6' at 2k+2 with equal rest — long clock reps at a pace that notices.
     title: "Lodos",
     type: "TR",
     difficulty: "hard",
@@ -1935,7 +2007,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 500-1000-1500-2000-1500-1000-500 m pyramid at 2k+3 — 8 km with a 2k in the middle.
+    // TR: 500-1000-1500-2000-1500-1000-500 m pyramid at 2k+5 — 8 km with a 2k in the middle.
     title: "Grec",
     type: "TR",
     difficulty: "hard",
@@ -1945,49 +2017,49 @@ export const TR_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "distance", meters: 500 },
-        ref: { base: "2k", off: 3 },
+        ref: { base: "2k", off: 5 },
         spm: 26,
         restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "distance", meters: 1000 },
-        ref: { base: "2k", off: 3 },
+        ref: { base: "2k", off: 5 },
         spm: 25,
         restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "distance", meters: 1500 },
-        ref: { base: "2k", off: 3 },
+        ref: { base: "2k", off: 5 },
         spm: 25,
         restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
-        ref: { base: "2k", off: 3 },
+        ref: { base: "2k", off: 5 },
         spm: 25,
         restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "distance", meters: 1500 },
-        ref: { base: "2k", off: 3 },
+        ref: { base: "2k", off: 5 },
         spm: 25,
         restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "distance", meters: 1000 },
-        ref: { base: "2k", off: 3 },
+        ref: { base: "2k", off: 5 },
         spm: 26,
         restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "distance", meters: 500 },
-        ref: { base: "2k", off: 3 },
+        ref: { base: "2k", off: 5 },
         spm: 27,
       },
     ],
@@ -2157,7 +2229,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 6×2000 m at 2k+4 on 2' rest — the six-by-2k grinder, 12 km at one pace.
+    // TR: 6×2000 m at 2k+6 on 5' rest — the six-by-2k grinder, 12 km bought with real recovery.
     title: "Roaring Forties",
     type: "TR",
     difficulty: "hard",
@@ -2168,9 +2240,9 @@ export const TR_WORKOUTS: WorkoutInput[] = [
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
-        ref: { base: "2k", off: 4 },
+        ref: { base: "2k", off: 6 },
         spm: 24,
-        restMinutes: 2,
+        restMinutes: 5,
       },
     ],
   },
