@@ -1107,16 +1107,20 @@ button:disabled {
    (`.today-unlogged-line-armed`) only recolors the border and swaps the
    row's own children (Today.tsx's `UnloggedRow`) — never its size or its
    position in the page, per DESIGN.md's own "row height and position don't
-   move." */
+   move." Fix round 1 (reviewer, row chrome vs mockup.html:164-178):
+   `--surface-sunken` fill (the mockup's own `#efeade`, an exact match) and
+   a 52px min-height — this task's own first pass used 64px and the page
+   background, neither of which the mockup actually specifies. */
 .today-unlogged-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 64px;
+  min-height: 52px;
+  background: var(--surface-sunken);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 8px 12px;
   margin: 0 0 16px;
 }
 
@@ -1141,10 +1145,11 @@ button:disabled {
   flex-shrink: 0;
 }
 
-/* An inline-read word styled up to a real 44px tap target — same idiom as
-   `.step-row-no-target a` (a short recovery link inside a sentence-height
-   line), since "Log it" alone is far narrower than 44px without the
-   min-width/padding below. */
+/* Fix round 1 (reviewer, row chrome vs mockup.html:164-178): "Log it"
+   is the row's OWN L2-geometry control — ink-bordered, surface-filled,
+   44px (the mockup's own literal cell, not this app's full-width 52px
+   `.button-l2` — this row's controls are inline pills, not stack blocks) —
+   not the bare accent-colored text link this task's first pass shipped. */
 .today-unlogged-link {
   display: inline-flex;
   align-items: center;
@@ -1152,9 +1157,16 @@ button:disabled {
   min-height: var(--tap);
   min-width: var(--tap);
   padding: 0 12px;
-  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--ink);
   font-weight: 600;
   text-decoration: none;
+}
+
+.today-unlogged-link:hover {
+  background: var(--surface-sunken);
 }
 
 /* Task 3: the row's own destructive control, DEFAULT state — 44×44,
@@ -1197,7 +1209,15 @@ button:disabled {
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   color: var(--on-color);
+  /* Fix round 1 (reviewer): explicit font, not the UA default — nothing
+     else set one, so this rendered at the browser's own serif default
+     (wide enough to wrap "Tap again" onto two lines in the committed
+     screenshot). `--font-sans`/13px matches the mockup's own armed
+     "Tap again" cell (mockup.html:177) exactly. */
+  font-family: var(--font-sans);
+  font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -3302,40 +3322,42 @@ button:disabled {
    an L4 button, joining the stack under two more of that same shared 12px
    gap — 1 + 12 + 12 + 52 = 77px) pushed this screen's landscape content
    past even the Task 1 floor above (measured 493 vs the 420 frame — the
-   reviewer's own F8 note, confirmed). Nothing left in THIS screen's own
-   gap/padding numbers has 73px to give back without either shrinking a
-   fixed-height level-system button (out of bounds — DEVIATIONS.md's own
-   button heights are a system-wide constant, not this screen's to resize)
-   or compressing the TOTAL/actuals content to the point of illegibility.
-   Capping the screen's own box at exactly the viewport height it already
-   targets (`max-height` mirroring `min-height`) and letting it scroll
-   INTERNALLY (`overflow-y: auto`) solves it without touching a single
-   other screen's spacing: the outer document never grows past the
-   viewport (this rule's own guard test measures `document.
-   documentElement.scrollHeight`, not this element's), so there is no dead
-   page-level scroll — a rower who needs to reach Discard in this cramped
-   landscape frame scrolls the screen itself, the same way any content
-   that has genuinely outgrown its viewport does everywhere else in the
-   app. Re-measured after: zero DOCUMENT-level scroll at 844×420
-   (design.spec.ts's own guard test) — the screen itself scrolls if you
-   run out of frame, which is the deliberate trade this task's brief called
-   for ("scroll within the stack area or tighter landscape spacing"). */
+   reviewer's own F8 note, confirmed).
+
+   Fix round 1 (reviewer M2): the first pass at this capped the screen's
+   own box with `max-height`+`overflow-y:auto` — which made the DOCUMENT-
+   level zero-scroll guard structurally unfalsifiable (it can never fail
+   once the element that would overflow is the one clipping itself) AND
+   left Discard genuinely clipped below the fold with no visible scroll
+   affordance (measured: 399px of real content against the 350px frame,
+   Back to Today cut mid-button in the committed capture). Recovering the
+   ~50px shortfall instead — the option the brief's own words led with
+   ("tighter landscape-only spacing is allowed") — keeps every level-system
+   button at its real, unshrunk height and makes the WHOLE stack visible
+   with no scrolling at all: this rule's own gap trim (4px → 0) is one
+   part of that; `.complete-total`/`.complete-actual-row`/`.complete-actions`
+   carry the rest, in their OWN landscape block further down this file
+   (right after their plain counterparts, not here) — deliberately NOT
+   grouped into this one media query the way the first pass had them:
+   a media-wrapped rule earlier in the file than its own plain,
+   unconditional counterpart of equal specificity LOSES the cascade tie to
+   that later plain rule regardless of the media condition, so those three
+   overrides have to physically sit after their own base rules to take
+   effect at all (see that block's own comment). Re-measured after: the
+   stack's own last child (Discard) sits fully inside the 420px frame with
+   zero px to spare either direction — `design.spec.ts`'s own guard now
+   checks BOTH the document's scrollHeight (still legitimately zero, since
+   nothing overflows to hide behind an inner scroll container) AND
+   Discard's own bounding rect against the viewport, so a future
+   regression that silently reintroduces clipping — document-level scroll
+   or not — fails loudly. */
 @media (orientation: landscape) {
   .session-complete-screen {
-    gap: 4px;
+    gap: 0;
     min-height: calc(
       100dvh - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
     );
-    max-height: calc(
-      100dvh - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
-    );
-    overflow-y: auto;
-  }
-
-  .complete-total {
-    padding: 6px 0;
   }
 }
 
@@ -3407,6 +3429,37 @@ button:disabled {
    `.action-stack.workout-detail-actions`. */
 .complete-actions {
   margin-top: auto;
+}
+
+/* Fix round 1 (reviewer M2): these three overrides MUST come after their
+   own plain counterparts above (`.complete-total`, `.complete-actual-row`,
+   `.complete-actions` itself) in source order — a media-query-wrapped rule
+   is not magically prioritized over an unconditional rule of the same
+   specificity; cascade ties still resolve by which one appears LATER in
+   the file. The first pass at this fix round placed an equivalent block
+   BEFORE these plain rules (in the same spot `.session-complete-screen`'s
+   own landscape override correctly sits, since ITS plain rule is earlier
+   still) — a real bug that would have silently no-opped every one of these
+   three overrides. Verified empirically post-fix via computed
+   `getComputedStyle` reads in the e2e sweep, not just this comment's own
+   reasoning. Together with the `.session-complete-screen` gap trim above,
+   this recovers the ~50px this screen's landscape frame was short by
+   after Task 3's own Discard block landed (reviewer's measured 399px vs a
+   350px frame) — enough for the WHOLE stack, Discard included, to render
+   with zero clipping and zero scroll, at the level system's own real,
+   unshrunk button heights. */
+@media (orientation: landscape) {
+  .complete-total {
+    padding: 2px 0;
+  }
+
+  .complete-actual-row {
+    padding: 4px 14px;
+  }
+
+  .complete-actions {
+    gap: 4px;
+  }
 }
 
 /* Log session screen (Phase 6C Task 2, /session/log — the session door).

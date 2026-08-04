@@ -1064,11 +1064,19 @@ describe("LogSession: save", () => {
 // same shape WorkoutDetail.tsx's own Delete workout and SessionComplete.tsx's
 // new Discard both use. The two-tap safety itself, and the clear-both-
 // records-then-navigate behaviour, are unchanged.
+// Fix round 1 (reviewer, smaller item): these three used to spy the `api`
+// module wrapper (`mockApi`/`apiFn`) — a WEAKER proof than the other two
+// surfaces' own discard tests (SessionComplete.test.tsx/Today.test.tsx),
+// which both spy `globalThis.fetch` directly and would catch a stray call
+// that bypassed `api()` entirely. `usePlan`/`useWorkouts`/`useBaselines`
+// are all mocked away elsewhere in this file (module-level `vi.doMock`,
+// `mockWorkouts`), so nothing else in this render path ever reaches the
+// real `fetch` either — aligning to the same spy the other two surfaces use.
 describe("LogSession: staged discard", () => {
   it("arms on the first press without clearing anything or firing a network request", async () => {
     buildSessionFixture();
     mockWorkouts([]);
-    const apiFn = mockApi(() => new Response(null, { status: 204 }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderLog();
     await screen.findByText("AUG 1 · 30 MIN");
 
@@ -1080,13 +1088,13 @@ describe("LogSession: staged discard", () => {
     ).toBeInTheDocument();
     expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
-    expect(apiFn).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
     buildSessionFixture();
     mockWorkouts([]);
-    const apiFn = mockApi(() => new Response(null, { status: 204 }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderLog();
     await screen.findByText("AUG 1 · 30 MIN");
 
@@ -1108,14 +1116,14 @@ describe("LogSession: staged discard", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Discard without logging" }),
     );
-    expect(apiFn).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(loadRun()).not.toBeNull();
   });
 
   it("clears both records and navigates to /today only once the armed press lands — with no POST ever fired", async () => {
     buildSessionFixture();
     mockWorkouts([]);
-    const apiFn = mockApi(() => new Response(null, { status: 204 }));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderLog();
     await screen.findByText("AUG 1 · 30 MIN");
 
@@ -1129,7 +1137,7 @@ describe("LogSession: staged discard", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
-    expect(apiFn).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

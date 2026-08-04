@@ -1115,6 +1115,26 @@ describe("Today (F2: session resume / unlogged)", () => {
     );
   });
 
+  // Fix round 1 (reviewer, smaller item): the ✕/staged-Discard control only
+  // ever renders from `run.completedAt !== null` at the render SITE
+  // (Today.tsx's own `{run !== null && run.completedAt !== null &&
+  // <UnloggedRow run={run} />}`) — a structural guard, never previously
+  // pinned by a rendering test against the LIVE-run branch specifically.
+  it("renders no Discard/✕ control at all while the run is still live (completedAt null) — only the resume card gets one", async () => {
+    const startedAt = new Date("2026-08-01T11:50:00.000Z");
+    localStorage.setItem(RUN_KEY, JSON.stringify(liveRunFor(startedAt)));
+    mockReady();
+    await renderToday();
+
+    expect(screen.getByText("SESSION IN PROGRESS")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /discard/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".today-unlogged-line"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a quieter line naming the workout, with a real Log it action, when the run is already complete (completed-but-unlogged)", async () => {
     const built = liveRunFor(new Date("2026-08-01T11:00:00.000Z"));
     const run: SessionRun = {
@@ -1210,7 +1230,20 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     );
   });
 
-  it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
+  // Fix round 1 (reviewer M1): arming swaps in a STRUCTURALLY DIFFERENT
+  // element (a bare `<button>` replacing a `<div><Link/><button/></div>`) —
+  // a real browser does NOT carry focus to the new node, so without
+  // Today.tsx's own explicit re-focus (a `useEffect` keyed on
+  // `discard.armed`), nothing is ever actually focused here, and a real
+  // blur can never fire. The original version of this test used
+  // `fireEvent.blur`, a synthetic dispatch that fires on its target
+  // REGARDLESS of whether that target was ever the real `activeElement` —
+  // it passed even with the re-focus fix reverted, proving nothing about
+  // real user behavior. This version asserts `document.activeElement`
+  // directly (load-bearing: this is what would have caught the bug), then
+  // calls the real `.blur()` DOM method, which is a spec'd no-op unless its
+  // target genuinely IS the focused element.
+  it("disarms on blur — a REAL focus/blur round trip, not a synthetic event", async () => {
     const run = unloggedRunFor(
       new Date("2026-08-01T11:00:00.000Z"),
       new Date("2026-08-01T11:40:00.000Z"),
@@ -1222,7 +1255,10 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Discard without logging" }),
     );
-    fireEvent.blur(screen.getByRole("button", { name: "Tap again" }));
+    const armed = screen.getByRole("button", { name: "Tap again" });
+    expect(document.activeElement).toBe(armed);
+
+    act(() => armed.blur());
 
     expect(
       screen.getByRole("button", { name: "Discard without logging" }),

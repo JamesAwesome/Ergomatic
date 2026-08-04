@@ -1021,18 +1021,35 @@ test.describe("today screen (unlogged session row)", () => {
     expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
   });
 
-  test("disarms on blur — a second press after focus moves away arms again instead of discarding", async ({
+  // Fix round 1 (reviewer M1): the original version of this test asserted
+  // with Playwright's default 5s `expect` timeout — LONGER than the 4s
+  // auto-disarm timer, so it stayed a false green even with `onBlur`
+  // deleted entirely (the timeout alone would flip the button back before
+  // the 5s poll gave up). Two changes make this load-bearing: (1) a real
+  // focus check BEFORE blurring — `el.blur()` (called via `.evaluate`,
+  // below) is a spec'd no-op unless `el` genuinely is
+  // `document.activeElement`, so asserting that first is what actually
+  // proves the row's own re-focus-on-arm fix is wired, not just that SOME
+  // path eventually flips the copy back; (2) a ≤1s assertion timeout, well
+  // under the 4s auto-disarm, so a real regression can't hide behind the
+  // timer firing first.
+  test("disarms on a REAL blur — not a synthetic event, and faster than the 4s auto-disarm timer could account for", async ({
     page,
   }) => {
     await page.getByRole("button", { name: "Discard without logging" }).click();
     const armed = page.getByRole("button", { name: "Tap again" });
     await expect(armed).toBeVisible();
 
+    const armedIsFocused = await armed.evaluate(
+      (el) => el === document.activeElement,
+    );
+    expect(armedIsFocused).toBe(true);
+
     await armed.evaluate((el) => (el as HTMLElement).blur());
 
     await expect(
       page.getByRole("button", { name: "Discard without logging" }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 1000 });
   });
 
   // A real 4s wait (no fake timers in an e2e context) — the machine's own
@@ -2336,15 +2353,46 @@ test.describe("session complete screen (with a recorded actual)", () => {
   // Final-review triage item (see the countdown describe's identical test
   // above for the full derivation): `.session-complete-screen` shared
   // `.countdown-screen`'s own pre-fix landscape min-height formula.
-  test("no dead vertical scroll at 844x420 (the same fix Timer's own landscape layout needed)", async ({
+  //
+  // Fix round 1 (reviewer M2): the bare document-level check below is
+  // structurally UNFALSIFIABLE the instant `.session-complete-screen`
+  // itself gets an inner `overflow-y: auto` (exactly what this fix round's
+  // first pass shipped, to make the OUTER document's own scrollHeight
+  // artificially always equal its clientHeight) — it would keep passing
+  // even while Discard sits entirely below the fold inside that inner
+  // scroll container, which is exactly what happened. Two more checks make
+  // this test actually bite: the screen element's OWN scrollHeight vs its
+  // own clientHeight (catches an inner scroll container directly, not just
+  // the document that wraps it), and a bounding-rect check on the stack's
+  // own LAST child (Discard) — the control most likely to clip first —
+  // confirming it renders fully inside the 420px frame with nothing to
+  // scroll to reach it.
+  test("no dead vertical scroll at 844x420, and Discard (the stack's last child) renders fully in-frame with nothing to scroll", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 844, height: 420 });
+
     const overflow = await page.evaluate(() => ({
       scrollHeight: document.documentElement.scrollHeight,
       clientHeight: document.documentElement.clientHeight,
     }));
     expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+
+    const screenOverflow = await page
+      .locator(".session-complete-screen")
+      .evaluate((el) => ({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      }));
+    expect(screenOverflow.scrollHeight).toBeLessThanOrEqual(
+      screenOverflow.clientHeight,
+    );
+
+    const discard = page.getByRole("button", {
+      name: "Discard without logging",
+    });
+    const box = (await discard.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(420);
   });
 
   // Task 1 (ui-fix round): the two half-width side-by-side buttons become

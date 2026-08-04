@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
@@ -347,6 +347,22 @@ function ErrorScreen({
 function UnloggedRow({ run }: { run: SessionRun }) {
   const discard = useStagedDiscard();
   const [dismissed, setDismissed] = useState(false);
+  const armedButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Fix round 1 (reviewer M1): arming swaps in a STRUCTURALLY DIFFERENT
+  // element (a bare `<button>` replacing a `<div><Link/><button/></div>`),
+  // unlike SessionComplete's own single button whose class/copy just
+  // changes in place — React unmounts the pressed ✕ and mounts a brand-new
+  // "Tap again" node at the same tree position, which does NOT inherit
+  // focus (measured: the real activeElement fell back to `<body>`).
+  // Without an explicit re-focus here, `onBlur` below can never fire from
+  // a real tap-away — nothing is focused for a later blur to leave.
+  // Focusing the new node the instant it mounts restores the same "focus
+  // follows the armed control" behavior SessionComplete/WorkoutDetail get
+  // for free from keeping one DOM node armed in place.
+  useEffect(() => {
+    if (discard.armed) armedButtonRef.current?.focus();
+  }, [discard.armed]);
 
   if (dismissed) return null;
 
@@ -374,6 +390,7 @@ function UnloggedRow({ run }: { run: SessionRun }) {
           </p>
           <button
             type="button"
+            ref={armedButtonRef}
             className="today-unlogged-discard-armed"
             onClick={handleClick}
             onBlur={discard.disarm}
