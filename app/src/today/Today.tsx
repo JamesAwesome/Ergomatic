@@ -146,15 +146,21 @@ export function elapsedSinceStart(run: SessionRun, now: Date): number {
 // Baselines unset (a brand-new account) means estimateMinutes cannot
 // resolve a single work step's split — it would throw, not return an
 // estimate. The suggestion card still has to render in that state (reason
-// without a target preview), and suggest()/suggestFreestyle()'s time-cap
-// filter needs *some* estMinutes number per entry. Building estMinutes as 0
-// here means the cap filter never excludes an entry for having an
-// "unknowable" duration — 0 is <= any positive cap. The FILTER being
-// harmless this way isn't enough on its own, though: suggest.ts's default
-// reason text used to claim "within your N min cap" unconditionally, which
-// is untrue when every duration fed into it was a placeholder — fixed by
-// passing `durationsUnknown: true` in prefs below, which is domain/suggest.ts's
-// own job to honor (SuggestPrefs' own doc comment explains why).
+// without a target preview), and suggest()/suggestFreestyle()'s duration-
+// bucket filter needs *some* estMinutes number per entry. Building
+// estMinutes as 0 here does NOT by itself make the filter harmless the way
+// it did under the old single-value cap (0 <= any positive cap,
+// unconditionally): `bucketFor(0)` is `"<30"`, a real bucket a narrower
+// `durations` selection (e.g. `["45-60"]`) would legitimately exclude,
+// wrongly treating an UNKNOWABLE duration as a known short one. What
+// actually keeps the filter harmless is passing `durationsUnknown: true`
+// in prefs below — domain/suggest.ts's own `passesDurationFilter` skips
+// the bucket check ENTIRELY when that flag is set, regardless of which
+// bucket the 0 placeholder resolves to (SuggestPrefs' own doc comment
+// spells out why the placeholder value alone can no longer carry this).
+// The same flag also keeps the reason text honest, unchanged from before:
+// without it, the standard/fellback reasons would claim a duration was
+// actually checked when every one fed in was a placeholder.
 function toLibraryEntry(
   w: LibraryWorkout,
   baselines: Baselines | null,
@@ -187,8 +193,12 @@ function computeSuggestion(
     durations: filters.durations,
     painLevels: filters.painLevels,
     // See toLibraryEntry's comment: with no baselines, every entry's
-    // estMinutes is a 0 placeholder, so the reason text must not claim a
-    // cap was actually checked against a real duration.
+    // estMinutes is a 0 placeholder. This flag does double duty in
+    // domain/suggest.ts — it skips the duration-bucket FILTER entirely
+    // (not just the reason text) so the placeholder's own bucket
+    // (`bucketFor(0)` is `"<30"`) never wrongly includes or excludes an
+    // unknown-duration entry, and it keeps the reason text from claiming a
+    // duration was actually checked against a real number.
     durationsUnknown: baselines === null,
   };
   // Narrowing on todayCode (rather than a separate boolean) lets TS see

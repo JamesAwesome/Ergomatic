@@ -1,6 +1,9 @@
 import type { RefObject } from "react";
 import type { Difficulty } from "../../domain/types.js";
-import type { DurationBucket } from "../../domain/duration.js";
+import {
+  DURATION_BUCKETS,
+  type DurationBucket,
+} from "../../domain/duration.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
@@ -115,11 +118,21 @@ export default function TodayFilterSheet({
         }))}
         onToggle={(value) => {
           const bucket = value as DurationBucket;
+          const next = draft.durations.includes(bucket)
+            ? draft.durations.filter((d) => d !== bucket)
+            : [...draft.durations, bucket];
           onChangeDraft({
             ...draft,
-            durations: draft.durations.includes(bucket)
-              ? draft.durations.filter((d) => d !== bucket)
-              : [...draft.durations, bucket],
+            // Normalised to DURATION_BUCKETS' own canonical order at
+            // toggle time (fix round, L2) — appending the newly-toggled
+            // bucket to the end (`[...draft.durations, bucket]`) let the
+            // draft, and therefore the saved record, hold a non-canonical
+            // sequence (e.g. selecting 60+ before <30 stored `["60+",
+            // "<30"]`) until the NEXT load re-sorted it via todayOverrides
+            // .ts's own parser. Filtering the canonical order down to
+            // what's present both de-dupes and sorts in one step, the same
+            // technique that parser already uses.
+            durations: DURATION_BUCKETS.filter((b) => next.includes(b)),
           });
         }}
       />
