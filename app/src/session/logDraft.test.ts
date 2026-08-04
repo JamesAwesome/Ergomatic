@@ -323,7 +323,7 @@ describe("buildLogSteps", () => {
   });
 
   it("Calm Sea: a kept stopwatch actual passes through unchanged, keeping meters (not seconds)", () => {
-    // wu(8') + w{10000m @ 6k+12, spm 21} -> phases: [warmup, work]. draft's
+    // wu(8') + w{10000m @ 6k+12, spm 20} -> phases: [warmup, work]. draft's
     // real ref {base:"6k", off:12} -> refLabel "6k +12". Elapsed 2500s on
     // 10000m -> splitSeconds = (2500/10000)*500 = 125.0 exactly.
     const { draft, run } = runFor("Calm Sea", 0, {
@@ -344,7 +344,7 @@ describe("buildLogSteps", () => {
         targetSplit: 132,
         actualSplit: 125,
         actualSource: "stopwatch",
-        spm: 21,
+        spm: 20,
         meters: 10000,
       },
     ]);
@@ -357,12 +357,12 @@ describe("buildLogSteps", () => {
     });
     const steps = buildLogSteps(run, draft);
     expect(steps).toStrictEqual([
-      { label: "10000 m @ 6k +12", targetSplit: 132, spm: 21, meters: 10000 },
+      { label: "10000 m @ 6k +12", targetSplit: 132, spm: 20, meters: 10000 },
     ]);
   });
 
   it("Filling Low: wu and the auto-inserted rest phases never become LogSteps, even inside a reps-marker block; kept and discarded actuals interleave correctly by position", () => {
-    // wu(8') + reps(3) x [w{2000m @ 6k+4, spm 23, rest 3'}] -> 1 + 3*(work+
+    // wu(8') + reps(3) x [w{2000m @ 6k+4, spm 22, rest 3'}] -> 1 + 3*(work+
     // rest) = 7 phases; work at 1,3,5. draft's real ref {base:"6k",
     // off:4} -> refLabel "6k +4" for every occurrence (same authored step,
     // repeated by the reps marker — originalIndex is identical for all 3).
@@ -401,16 +401,16 @@ describe("buildLogSteps", () => {
         targetSplit: 124,
         actualSplit: 212.5,
         actualSource: "stopwatch",
-        spm: 23,
+        spm: 22,
         meters: 2000,
       },
-      { label, targetSplit: 124, spm: 23, meters: 2000 },
+      { label, targetSplit: 124, spm: 22, meters: 2000 },
       {
         label,
         targetSplit: 124,
         actualSplit: 200,
         actualSource: "stopwatch",
-        spm: 23,
+        spm: 22,
         meters: 2000,
       },
     ]);
@@ -500,7 +500,7 @@ describe("buildLogSteps", () => {
       // toleranceRange(132, tol=0).label = fmtSplit(132) = "2:12.0" — the
       // pre-F1b resolved-split text, not "6k +12".
       expect(buildLogSteps(run, null)).toStrictEqual([
-        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 21, meters: 10000 },
+        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 20, meters: 10000 },
       ]);
     });
 
@@ -523,7 +523,7 @@ describe("buildLogSteps", () => {
         ],
       });
       expect(buildLogSteps(run, wrongDraft)).toStrictEqual([
-        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 21, meters: 10000 },
+        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 20, meters: 10000 },
       ]);
     });
   });
@@ -640,7 +640,7 @@ describe("buildManualLogSteps", () => {
         targetSplit: 124,
         actualSplit: 124,
         actualSource: "assumed",
-        spm: 23,
+        spm: 22,
         meters: 2000,
       });
     }
@@ -672,7 +672,7 @@ describe("buildManualLogSteps", () => {
         targetSplit: 104, // 100 + 4
         actualSplit: 104,
         actualSource: "assumed",
-        spm: 25,
+        spm: 24,
         meters: 500,
       },
       {
@@ -688,7 +688,7 @@ describe("buildManualLogSteps", () => {
         targetSplit: 100, // off 0 -> refLabel drops the sign entirely
         actualSplit: 100,
         actualSource: "assumed",
-        spm: 27,
+        spm: 28,
         meters: 500,
       },
       {
@@ -741,7 +741,7 @@ describe("buildManualLogSteps", () => {
         targetSplit: 132,
         actualSplit: 132,
         actualSource: "assumed",
-        spm: 21,
+        spm: 20,
         meters: 10000,
       });
     });

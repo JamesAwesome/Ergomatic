@@ -85,7 +85,7 @@ describe("buildRun", () => {
       meters: 2000,
       targetKind: "split",
       targetSplit: 124, // 120 (k6Seconds) + 4 (off)
-      spm: 23,
+      spm: 22,
       set: { index: 1, of: 3 },
       originalIndex: 2, // the ORIGINAL draft index of the "w" step
     });

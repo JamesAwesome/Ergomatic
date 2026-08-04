@@ -93,6 +93,21 @@ describe("LIBRARY_WORKOUTS", () => {
     }
   });
 
+  it("calls every rate in twos — stroke rates are even", () => {
+    // Rowing rates are called in twos (16/18/…/32); the reference material
+    // is 94% even and every Concept2 reference is all-even. Odd rates read
+    // as typos on the water and on the erg.
+    for (const w of LIBRARY_WORKOUTS) {
+      const workSteps = w.steps.filter((s) => s.k === "w");
+      for (const s of workSteps) {
+        expect(
+          s.spm !== undefined && s.spm % 2 === 0,
+          `${w.title}: spm ${s.spm}`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("prescribes nothing faster than 2k-4 as a split — beyond that is max", () => {
     // James's line between a prescribable split and just saying max: the
     // book uses 2k-4 commonly, -5..-7 vanishingly rarely. Anything faster
