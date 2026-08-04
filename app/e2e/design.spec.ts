@@ -825,13 +825,18 @@ test.describe("today screen (plan active, logs present)", () => {
   // matches the server preferences it was derived from on first mount
   // (todayOverrides.ts's own fallback — DESIGN_BASELINES' fixture never
   // touches /api/prefs, so this is the server's own default row: every
-  // difficulty, a 60-min cap, no pain filter) — and the swap chips read the
-  // plan's own prescribed type with nothing swapped yet.
+  // difficulty, a 60-min cap's own bucket set, no pain filter) — and the
+  // swap chips read the plan's own prescribed type with nothing swapped
+  // yet.
   //
   // Task 3 (2026-08-04 round): DIFFICULTY/TIME/PAIN no longer render inline
   // — the FILTER ⌄ sheet has to be opened first to reach them; the O2/AN/
   // AT/TR type-swap chips are untouched (they stay on the plan line, never
   // moved into the sheet).
+  //
+  // Amendment (2026-08-04 PR #50 round): TIME's default is the bucket SET
+  // `bucketsForCap(60)` derives (the first three buckets), not a single
+  // cap chip.
   test("the chip row's default aria-pressed state matches the unmodified server preferences", async ({
     page,
   }) => {
@@ -842,14 +847,14 @@ test.describe("today screen (plan active, logs present)", () => {
         dialog.getByRole("button", { name: label, exact: true }),
       ).toHaveAttribute("aria-pressed", "true");
     }
-    await expect(
-      dialog.getByRole("button", { name: "≤60′", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
-    for (const label of ["≤30′", "≤45′", "≤90′", "NO CAP"]) {
+    for (const label of ["<30′", "30–45′", "45–60′"]) {
       await expect(
         dialog.getByRole("button", { name: label, exact: true }),
-      ).toHaveAttribute("aria-pressed", "false");
+      ).toHaveAttribute("aria-pressed", "true");
     }
+    await expect(
+      dialog.getByRole("button", { name: "60′+", exact: true }),
+    ).toHaveAttribute("aria-pressed", "false");
     const painGroup = dialog.getByRole("group", { name: "PAIN" });
     for (const level of ["1", "2", "3", "4", "5"]) {
       await expect(
@@ -891,6 +896,42 @@ test.describe("today screen (plan active, logs present)", () => {
     await expect(o2Chip).toHaveAttribute("aria-pressed", "true");
     await expect(atChip).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator(".today-plan-line")).not.toContainText("→");
+  });
+
+  // Amendment (2026-08-04 PR #50 round), Task 2: the four type-swap chips
+  // now span the plan line's full content width as a 4-column 1fr grid
+  // (`.today-type-chips`, index.css) instead of sitting left-packed at
+  // their own intrinsic `.chip` width inside a flex-wrap row. Verified via
+  // real bounding boxes (jsdom has no layout engine) — all four chips are
+  // near-equal width (a 1fr share each) and the row's total span (first
+  // chip's left edge to last chip's right edge) reaches the container's
+  // own width, proving they stretch rather than merely sit side by side.
+  test("the type-swap chips span the full row as a 4-column grid, not left-packed intrinsic widths", async ({
+    page,
+  }) => {
+    const chips = await page
+      .locator(".today-type-chips .chip")
+      .evaluateAll((els) =>
+        els.map((el) => el.getBoundingClientRect().toJSON()),
+      );
+    expect(chips).toHaveLength(4);
+
+    const rowBox = (await page.locator(".today-type-chips").boundingBox())!;
+
+    // Every cell within a few px of an equal 1fr share of the row.
+    const expectedWidth = rowBox.width / 4;
+    for (const box of chips) {
+      expect(Math.abs(box.width - expectedWidth)).toBeLessThan(6);
+    }
+
+    // The row itself spans (within a couple px) the full width Today's
+    // other full-width controls (e.g. the suggestion card) also use —
+    // proof this is a stretching grid, not four chips merely sitting next
+    // to each other at their own content width (which left a visible gap
+    // on the right at 390px before this task).
+    const firstLeft = chips[0]!.x;
+    const lastRight = chips[3]!.x + chips[3]!.width;
+    expect(lastRight - firstLeft).toBeGreaterThan(rowBox.width - 4);
   });
 
   // Task 1 (ui-fix round): "the fix for Today vs Builder" — a selected type
@@ -945,11 +986,14 @@ test.describe("today screen (plan active, logs present)", () => {
     );
     expect(easyBg).toBe("rgb(27, 26, 23)"); // --ink
 
-    const capChip = dialog.getByRole("button", { name: "≤60′", exact: true });
-    const capBg = await capChip.evaluate(
+    const timeChip = dialog.getByRole("button", {
+      name: "45–60′",
+      exact: true,
+    });
+    const timeBg = await timeChip.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    expect(capBg).toBe("rgb(27, 26, 23)"); // --ink
+    expect(timeBg).toBe("rgb(27, 26, 23)"); // --ink
 
     const painCell = dialog
       .getByRole("group", { name: "PAIN" })
@@ -1016,16 +1060,15 @@ test.describe("today screen (plan active, logs present)", () => {
     await expect(page.locator(".today-card")).toBeVisible();
 
     // Task 3 (2026-08-04 round): the setup that narrows to this solo
-    // fixture moves through the FILTER sheet — EASY/MEDIUM/≤60′ no longer
-    // render inline. ≤60′ is already the default cap (server preference
-    // 60, snapCap unchanged) — re-clicking it is a harmless no-op, kept for
-    // the same "explicitly narrow to HARD + ≤60′" clarity the original
-    // setup had.
+    // fixture moves through the FILTER sheet — EASY/MEDIUM no longer
+    // render inline. Amendment (2026-08-04 PR #50 round): TIME's default
+    // (bucketsForCap(60) — the first three buckets) already covers this
+    // fixture's 25-min estimate (wu 5 + 20:00 work), so no TIME cell needs
+    // touching at all to narrow to HARD alone.
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "EASY", exact: true }).click();
     await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
-    await dialog.getByRole("button", { name: "≤60′", exact: true }).click();
     await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
 
     const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });

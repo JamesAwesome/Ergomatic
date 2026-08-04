@@ -1,7 +1,9 @@
 import { useRef } from "react";
 import type { WorkoutType } from "../../domain/types.js";
+import type { DurationBucket } from "../../domain/duration.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
+import { DURATION_CHIPS } from "../components/durationChips";
 import {
   RECENCY_BOUNDARY_DAYS,
   clearFilters,
@@ -10,7 +12,6 @@ import {
   toggleDuration,
   togglePainLevel,
   toggleType,
-  type DurationBucket,
   type Filters,
 } from "./filters";
 
@@ -21,13 +22,6 @@ const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
   { type: "O2", label: "O2" },
   { type: "AT", label: "AT" },
   { type: "TR", label: "TR" },
-];
-
-const DURATION_CHIPS: { bucket: DurationBucket; label: string }[] = [
-  { bucket: "<30", label: "<30′" },
-  { bucket: "30-45", label: "30–45′" },
-  { bucket: "45-60", label: "45–60′" },
-  { bucket: "60+", label: "60′+" },
 ];
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5];

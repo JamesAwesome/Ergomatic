@@ -1,5 +1,6 @@
 import type { Difficulty, WorkoutType } from "./types.js";
 import type { PlanCode } from "./plans.js";
+import { bucketFor, type DurationBucket } from "./duration.js";
 
 export interface LibraryEntry {
   id: string;
@@ -12,20 +13,29 @@ export interface LibraryEntry {
 
 export interface SuggestPrefs {
   difficulties: Difficulty[];
-  // `null` means capless — no cap was set, so the cap clause is skipped
-  // entirely rather than compared against a sentinel value.
-  timeCapMinutes: number | null;
+  // A union, not a threshold — mirrors the Library's own duration-bucket
+  // filter (`src/library/filters.ts`'s `Filters.durations`, same
+  // `DurationBucket`/`bucketFor` from `domain/duration.ts`): when non-empty
+  // (and known — see `durationsUnknown` below), only entries whose
+  // `estMinutes` bucket is IN this set survive. Empty/undefined means
+  // "off" — every duration passes, identical to Library's own semantics.
+  // Amendment (2026-08-04 PR #50 round): replaces the old
+  // `timeCapMinutes: number | null` single-value cap — Today's TIME group
+  // is now the Library's own four buckets, multi-select, not a cap.
+  durations?: DurationBucket[];
   // Set when the caller could not compute a real `estMinutes` for any
   // library entry (no baselines yet — the standing convention is every
-  // entry gets `estMinutes: 0` in that case, purely so the time-cap filter
-  // below never rejects an entry over an unknowable duration). That
+  // entry gets `estMinutes: 0` in that case, purely so the duration filter
+  // below never rejects an entry over an unknowable duration — `bucketFor(0)`
+  // is always `"<30"`, so an unknown-duration entry only survives when
+  // `"<30"` is itself in `durations`, or `durations` is empty/unset). That
   // workaround keeps the FILTER honest but not the REASON text: without
-  // this flag, the standard/fellback reasons below claim a cap was
-  // actually checked ("within your N min cap", "difficulty/time filters")
-  // when every duration was a placeholder. Set true and both reasons drop
-  // any mention of time/cap instead of asserting something never verified.
-  // `timeCapMinutes: null` takes the same no-cap-claim branch for the same
-  // reason: nothing was actually checked either way.
+  // this flag, the standard/fellback reasons below claim a duration was
+  // actually checked ("difficulty/time filters") when every duration was a
+  // placeholder. Set true and both reasons drop any mention of time
+  // instead of asserting something never verified. An empty/unset
+  // `durations` takes the same no-claim branch for the same reason:
+  // nothing was actually checked either way.
   durationsUnknown?: boolean;
   // A union, not a threshold — mirrors Library's own `Filters.painLevels`
   // (src/library/filters.ts): when non-empty, only entries whose `pain` is
@@ -47,7 +57,7 @@ export interface Suggestion {
   recommendationId: string | null;
   reason: string;
   poolIds: string[];
-  fellBack: boolean; // difficulty/cap/pain filters matched nothing; pool is the unfiltered type list
+  fellBack: boolean; // difficulty/time/pain filters matched nothing; pool is the unfiltered type list
 }
 
 /** Never-done (null) sorts first; otherwise most days-ago (least recently
@@ -69,27 +79,42 @@ function recencyPhrase(days: number | null): string {
 /** Shared by `suggest`/`suggestFreestyle` — the two were textually
  *  identical here before `durationsUnknown` existed, and duplicating the
  *  new branch a second time was the exact way this class of "the reason
- *  says something no caller checked" bug would recur. */
+ *  says something no caller checked" bug would recur.
+ *
+ *  Amendment (2026-08-04 PR #50 round): the standard (non-fellback) reason
+ *  no longer has a cap clause to append at all — "within your N min cap"
+ *  named a single threshold value that a bucket UNION has no equivalent
+ *  for (which bucket would it even name?). The plain "Least recently done
+ *  (…)." is now the standard reason unconditionally; only the FELLBACK
+ *  reason still names which dimensions were checked, `time` among them
+ *  when the duration union was actually active. */
 function buildReason(
   picked: LibraryEntry,
   pickOverride: LibraryEntry | undefined,
   fellBack: boolean,
   prefs: SuggestPrefs,
 ): string {
-  const capChecked = prefs.timeCapMinutes !== null && !prefs.durationsUnknown;
+  const timeChecked = !!prefs.durations?.length && !prefs.durationsUnknown;
   if (pickOverride) {
     return `YOUR PICK — last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   if (fellBack) {
     const parts = ["difficulty"];
-    if (capChecked) parts.push("time");
+    if (timeChecked) parts.push("time");
     if (prefs.painLevels?.length) parts.push("pain");
     return `Nothing fit your ${parts.join("/")} filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
-  if (!capChecked) {
-    return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
-  }
-  return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}) within your ${prefs.timeCapMinutes} min cap.`;
+  return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
+}
+
+/** The duration-union clause shared by `suggest`/`suggestFreestyle`'s own
+ *  filter predicates: skipped (never excludes) whenever `durations` is
+ *  empty/unset or `durationsUnknown` is set, otherwise an entry survives
+ *  only when its own `bucketFor(estMinutes)` is IN the union — mirrors the
+ *  Library's own `applyFilters` (`src/library/filters.ts`) exactly. */
+function passesDurationFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
+  if (!prefs.durations?.length || prefs.durationsUnknown) return true;
+  return prefs.durations.includes(bucketFor(e.estMinutes));
 }
 
 export function suggest(input: SuggestInput): Suggestion {
@@ -100,7 +125,7 @@ export function suggest(input: SuggestInput): Suggestion {
   const filtered = typeMatched.filter(
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
-      (prefs.timeCapMinutes === null || e.estMinutes <= prefs.timeCapMinutes) &&
+      passesDurationFilter(e, prefs) &&
       (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)),
   );
 
@@ -139,7 +164,7 @@ export function suggestFreestyle(
   const filtered = library.filter(
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
-      (prefs.timeCapMinutes === null || e.estMinutes <= prefs.timeCapMinutes) &&
+      passesDurationFilter(e, prefs) &&
       (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)),
   );
 

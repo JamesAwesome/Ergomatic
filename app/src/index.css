@@ -784,26 +784,6 @@ button:disabled {
   font-weight: 600;
 }
 
-/* Final fix wave (2026-08-04 round, M1): Today's TIME group is the only
-   `.filter-sheet-grid` in the app whose 5 equal-share columns (fix round
-   1's `grid-auto-columns: 1fr`) have to hold a genuinely wide label —
-   "NO CAP" — at 390px; Library's own 5-cell PAIN group lands on the same
-   column math but only ever holds single digits. Scoped to
-   `TodayFilterSheet.tsx`'s own `className="filter-sheet-group-time"`
-   (CellGrid's existing passthrough, same mechanism `.filter-sheet-group-
-   half` already uses) rather than to `.filter-sheet-grid-5` — the latter
-   is shared with Library's PAIN group (m8: it's cell-count-derived, not
-   group-derived) and would resize PAIN's cells too. `white-space: nowrap`
-   plus one step down in size/tracking is enough for "NO CAP" to clear the
-   ~60px column at 390px without breaking `.filter-sheet-cell`'s own
-   `height: var(--tap)` — verified against a live capture, not eyeballed. */
-.filter-sheet-group-time .filter-sheet-cell {
-  padding: 0 2px;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-
 .library-empty {
   padding: 24px 0;
   color: var(--ink-3);
@@ -840,6 +820,20 @@ button:disabled {
   font-size: 11px;
   letter-spacing: 0.06em;
   cursor: pointer;
+}
+
+/* Amendment (2026-08-04 PR #50 round), Task 2: the plan line's type-swap
+   chips span the full content width instead of sitting inline at their own
+   `min-width`/`padding` size — a 4-column `1fr` row overriding `.chip-wrap`'s
+   own `display: flex; flex-wrap: wrap` for this one instance (same-
+   specificity single-class selectors, so declaration order alone decides —
+   this rule sits after `.chip-wrap` in the cascade). `.chip`'s own 44px
+   `min-height` is untouched; only the row's layout (each cell an equal
+   1fr share, not its own intrinsic width) changes. */
+.today-type-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 /* Classification card (Task 4, docs/design/builder-redesign/README.md §3):

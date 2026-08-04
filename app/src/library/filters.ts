@@ -1,9 +1,16 @@
 import { estimateMinutes } from "../../domain/expand.js";
+import { bucketFor, type DurationBucket } from "../../domain/duration.js";
 import type { Baselines } from "../../domain/types.js";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { WorkoutType } from "../../domain/types.js";
 
-export type DurationBucket = "<30" | "30-45" | "45-60" | "60+";
+// Re-exported for every pre-existing importer (filterTokens.ts, FilterSheet.tsx,
+// libraryFilters.ts, filters.test.ts) — moved into domain/duration.ts
+// (Amendment, 2026-08-04 PR #50 round) so domain/suggest.ts's own duration
+// predicate can share the identical bucket definition, but nothing here
+// needs to change its own import path.
+export type { DurationBucket };
+export { bucketFor };
 
 // v2 shape (Task 4, ui-fix round — DESIGN.md's "Library, second pass"):
 // PAIN moves from a single `painMax3` threshold toggle to a 1–5 multi-select
@@ -62,15 +69,6 @@ export function setSource(f: Filters, value: "global" | "custom"): Filters {
 
 export function clearFilters(): Filters {
   return { ...EMPTY_FILTERS };
-}
-
-// Boundaries per the handoff: <30, 30-45, 45-60, 60+ — the lower bucket owns
-// its upper boundary (29 is "<30", exactly 30 is "30-45").
-export function bucketFor(minutes: number): DurationBucket {
-  if (minutes < 30) return "<30";
-  if (minutes < 45) return "30-45";
-  if (minutes < 60) return "45-60";
-  return "60+";
 }
 
 // Never-done (`lastDoneDaysAgo === null`) counts as NOT recent — pinned by

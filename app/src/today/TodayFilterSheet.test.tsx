@@ -6,7 +6,7 @@ import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 
 const EMPTY_DRAFT: TodayFilterDraft = {
   difficulties: [],
-  capMinutes: 60,
+  durations: ["<30", "30-45", "45-60"],
   painLevels: [],
 };
 
@@ -85,7 +85,7 @@ describe("TodayFilterSheet", () => {
     for (const label of ["EASY", "MEDIUM", "HARD"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
-    for (const label of ["≤30′", "≤45′", "≤60′", "≤90′", "NO CAP"]) {
+    for (const label of ["<30′", "30–45′", "45–60′", "60′+"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
     for (const level of ["1", "2", "3", "4", "5"]) {
@@ -123,7 +123,7 @@ describe("TodayFilterSheet", () => {
     renderSheet({
       draft: {
         difficulties: ["easy", "hard"],
-        capMinutes: 45,
+        durations: ["30-45", "60+"],
         painLevels: [2, 4],
       },
     });
@@ -139,13 +139,21 @@ describe("TodayFilterSheet", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "≤45′" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "30–45′" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "≤60′" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "<30′" })).toHaveAttribute(
       "aria-pressed",
       "false",
+    );
+    expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "60′+" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
     expect(screen.getByRole("button", { name: "2" })).toHaveAttribute(
       "aria-pressed",
@@ -185,37 +193,41 @@ describe("TodayFilterSheet", () => {
     });
   });
 
-  describe("TIME (single-select, exactly one always active)", () => {
-    it("clicking a different cap cell SETS the draft's capMinutes", async () => {
+  // Amendment (2026-08-04 PR #50 round): TIME unifies on the Library's own
+  // bucket UNION — the old cap single-select ("exactly one always active")
+  // is gone; clicking a cell now toggles it independently, same union
+  // semantics as DIFFICULTY/PAIN above.
+  describe("TIME (multi-select union)", () => {
+    it("clicking an unselected bucket adds it to the union", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, capMinutes: 60 },
+        draft: { ...EMPTY_DRAFT, durations: ["<30"] },
       });
-      await userEvent.click(screen.getByRole("button", { name: "≤30′" }));
+      await userEvent.click(screen.getByRole("button", { name: "60′+" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        capMinutes: 30,
+        durations: ["<30", "60+"],
       });
     });
 
-    it("clicking NO CAP sets capMinutes to null", async () => {
+    it("clicking an already-selected bucket removes it (deselecting every bucket is allowed — TIME off)", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, capMinutes: 60 },
+        draft: { ...EMPTY_DRAFT, durations: ["<30"] },
       });
-      await userEvent.click(screen.getByRole("button", { name: "NO CAP" }));
+      await userEvent.click(screen.getByRole("button", { name: "<30′" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        capMinutes: null,
+        durations: [],
       });
     });
 
-    it("clicking the already-active cell re-sets the same value (no toggle-to-clear idiom)", async () => {
+    it("selecting every bucket leaves all four active — a real (if functionally inert) union", async () => {
       const { onChangeDraft } = renderSheet({
-        draft: { ...EMPTY_DRAFT, capMinutes: 60 },
+        draft: { ...EMPTY_DRAFT, durations: ["<30", "30-45", "45-60"] },
       });
-      await userEvent.click(screen.getByRole("button", { name: "≤60′" }));
+      await userEvent.click(screen.getByRole("button", { name: "60′+" }));
       expect(onChangeDraft).toHaveBeenCalledWith({
         ...EMPTY_DRAFT,
-        capMinutes: 60,
+        durations: ["<30", "30-45", "45-60", "60+"],
       });
     });
   });

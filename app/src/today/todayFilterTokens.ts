@@ -1,5 +1,7 @@
 import type { Difficulty } from "../../domain/types.js";
+import type { DurationBucket } from "../../domain/duration.js";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
+import { collapseDurations } from "../components/durationTokenLabel";
 import type { Token } from "../components/TokenRow";
 import type { TodayOverrides } from "./todayOverrides";
 
@@ -12,28 +14,35 @@ import type { TodayOverrides } from "./todayOverrides";
  * subset — Today.tsx's INITIAL overrides record seeds from
  * `preferences.difficulties` for that separate concern: what a fresh
  * day's record starts as, not what counts as "unfiltered" here).
- * `capMinutes` is the account's cap preference snapped to the nearest chip
- * (`snapCap`, todayOverrides.ts).
+ * `durations` is the account's cap preference expanded to the buckets it
+ * implies (`bucketsForCap`, todayOverrides.ts) — Amendment (2026-08-04
+ * PR #50 round) replaces the old single-cap `capMinutes` default with this
+ * bucket SET.
  */
 export interface TodayFilterDefaults {
   difficulties: Difficulty[];
-  capMinutes: number | null;
+  durations: DurationBucket[];
 }
 
-// "≤NN′" — Today's own cap labels. TodayFilterSheet.tsx keeps an identical
-// copy for the sheet's TIME cells rather than importing this one: this
-// repo's established per-file duplication convention for small display
-// maps (TYPE_COLOR_VAR's own comment, Today.tsx/FilterSheet.tsx, names the
-// precedent).
-const CAP_LABEL: Record<number, string> = {
-  30: "≤30′",
-  45: "≤45′",
-  60: "≤60′",
-  90: "≤90′",
-};
+// Empty durations is reachable two ways that must render two DIFFERENT
+// token labels despite behaving identically in suggest() (both = no
+// filtering, domain/suggest.ts's own predicate): explicitly selecting every
+// bucket reads as its own contiguous-range label
+// (`collapseDurations` below, e.g. "<30′–60′+"), but a genuinely EMPTY
+// selection has no bucket to name at all — this is that label. Only
+// rendered when empty deviates from a non-empty default (a narrower-than-
+// all-four default, e.g. a 60-min account preference), since an all-four
+// default matching an all-four override is no deviation and renders no
+// token either way.
+const NO_TIME_FILTER_LABEL = "ANY TIME";
 
-function capLabel(minutes: number | null): string {
-  return minutes === null ? "NO CAP" : CAP_LABEL[minutes];
+/** Set equality, order-independent — todayOverrides.ts's own parser
+ *  de-dupes/canonically-orders `durations` on load and the sheet's own
+ *  toggle logic never introduces a duplicate, so a plain length +
+ *  membership check is enough (no defensive de-dupe needed here). */
+function sameDurationSet(a: DurationBucket[], b: DurationBucket[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((v) => b.includes(v));
 }
 
 /** Set equality, order-independent — todayOverrides.ts's own parser
@@ -77,9 +86,11 @@ function collapseDifficulties(values: Difficulty[]): string {
     : `${DIFFICULTY_CHIPS[first].label}–${DIFFICULTY_CHIPS[last].label}`;
 }
 
-/** Library's filterTokens.ts's own pain collapse, copied verbatim — same
- *  per-file duplication convention as CAP_LABEL above, not a shared
- *  import. */
+/** Library's filterTokens.ts's own pain collapse, copied verbatim — this
+ *  repo's established per-file duplication convention for small display
+ *  maps (unlike TIME's own collapse above, PAIN's shape never drifted
+ *  between the two screens the way TIME's cap-vs-bucket-union split did,
+ *  so there's no equivalent pressure to genuinely share this one). */
 function collapsePain(levels: number[]): string {
   const sorted = [...levels].sort((a, b) => a - b);
   const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
@@ -100,9 +111,9 @@ function collapsePain(levels: number[]): string {
  * committed `Filters` write.
  */
 export function todayFilterTokens(
-  overrides: Pick<TodayOverrides, "difficulties" | "capMinutes" | "painLevels">,
+  overrides: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
   defaults: TodayFilterDefaults,
-  onReset: (group: "difficulties" | "cap" | "pain") => void,
+  onReset: (group: "difficulties" | "durations" | "pain") => void,
 ): Token[] {
   const tokens: Token[] = [];
 
@@ -114,11 +125,14 @@ export function todayFilterTokens(
     });
   }
 
-  if (overrides.capMinutes !== defaults.capMinutes) {
+  if (!sameDurationSet(overrides.durations, defaults.durations)) {
     tokens.push({
-      key: "cap",
-      label: capLabel(overrides.capMinutes),
-      onClear: () => onReset("cap"),
+      key: "durations",
+      label:
+        overrides.durations.length === 0
+          ? NO_TIME_FILTER_LABEL
+          : collapseDurations(overrides.durations),
+      onClear: () => onReset("durations"),
     });
   }
 
