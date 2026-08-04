@@ -480,15 +480,16 @@ describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
 
   function legacyKindMatrixRun(): SessionRun {
     const run = buildAndSaveRun(kindMatrixDraft());
-    // Phase 1 is Doldrums' own split-ref work step (6k+16). Reshape it into
-    // exactly what a pre-Task-2 `buildRun` would have frozen: no `ref` at
-    // all, and `label` set to the old `toleranceRange(136, 1)` band string
-    // (lo=135 -> "2:15.0", hi=137 -> "2:17.0") instead of the exact split.
+    // Phase 1 is Hoarfrost's own split-ref work step (6k+12). Reshape it
+    // into exactly what a pre-Task-2 `buildRun` would have frozen: no `ref`
+    // at all, and `label` set to the old `toleranceRange(132, 1)` band
+    // string (lo=131 -> "2:11.0", hi=133 -> "2:13.0") instead of the exact
+    // split.
     const phases = run.phases.map((p, i) => {
       if (i !== 1) return p;
       const legacy = { ...p };
       delete (legacy as { ref?: unknown }).ref;
-      legacy.label = "2:15.0–2:17.0";
+      legacy.label = "2:11.0–2:13.0";
       return legacy;
     });
     return { ...run, phases };
@@ -501,9 +502,9 @@ describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
     await renderTimer();
 
     expect(screen.getByText("STEP 1 OF 5 · WARM-UP")).toBeInTheDocument();
-    // The OLD band string, byte-for-byte, not "WORK · 2:16.0" — this run's
+    // The OLD band string, byte-for-byte, not "WORK · 2:12.0" — this run's
     // frozen label is never recomputed against the current domain code.
-    expect(screen.getByText("WORK · 2:15.0–2:17.0")).toBeInTheDocument();
+    expect(screen.getByText("WORK · 2:11.0–2:13.0")).toBeInTheDocument();
   });
 
   it("renders the legacy phase itself without crashing: a two-line TARGET SPLIT card (main value from targetSplit, no ref sub-line)", async () => {
@@ -515,14 +516,14 @@ describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
     expect(screen.getByText("STEP 2 OF 5 · WORK")).toBeInTheDocument();
     // The main value still resolves — it comes from `targetSplit`
     // (untouched by the missing `ref`), not from `label` at all.
-    expect(screen.getByText("2:16.0")).toBeInTheDocument();
+    expect(screen.getByText("2:12.0")).toBeInTheDocument();
     // No ref sub-line (nothing to reconstruct `refLabel` from) and no
     // leftover band text either — the card degrades to two lines, it
     // doesn't fall back to showing the old label as a caption.
     const cards = document.querySelector(".timer-cards")!;
     expect(cards.textContent).not.toContain("6K");
     expect(cards.textContent).not.toMatch(/–/);
-    expect(screen.getByText("18")).toBeInTheDocument(); // spm, unaffected
+    expect(screen.getByText("22")).toBeInTheDocument(); // spm, unaffected
   });
 });
 

@@ -1243,7 +1243,7 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     // The row's contents swap — title, ✕, and "Log it" are all replaced by
     // the armed copy, not merely joined by it.
     expect(document.querySelector(".today-unlogged-text")?.textContent).toBe(
-      "Discard Cold Front without logging?",
+      "Discard Filling Low without logging?",
     );
     expect(
       screen.getByRole("button", { name: "Tap again" }),

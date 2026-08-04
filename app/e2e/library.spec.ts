@@ -54,7 +54,9 @@ test.describe("library list", () => {
     // (e.g. a quota bug shipping 5 rows) without re-pinning the exact count.
     expect(count).toBeGreaterThan(250);
     await expect(rows).toHaveCount(count);
-    await expect(page.locator(".library-count")).toHaveText(`${count} WORKOUTS`);
+    await expect(page.locator(".library-count")).toHaveText(
+      `${count} WORKOUTS`,
+    );
   });
 
   test("a TYPE cell narrows the list via the sheet, and CLEAR ALL restores it", async ({
