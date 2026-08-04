@@ -29,8 +29,8 @@ import TypeBadge from "../components/TypeBadge";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 
 // Chip order per the task brief — AN before O2, matching Library's own
-// FilterChips.tsx (docs/design/README.md §Screens → "2. Library": not
-// alphabetical).
+// FilterSheet.tsx TYPE cells (docs/design/README.md §Screens → "2. Library":
+// not alphabetical).
 const TYPE_CHIPS: WorkoutType[] = ["AN", "O2", "AT", "TR"];
 
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept
@@ -45,7 +45,7 @@ const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   TR: "--type-tr",
 };
 
-// "≤NN′" — Library's own prime-mark idiom for minutes (FilterChips.tsx's
+// "≤NN′" — Library's own prime-mark idiom for minutes (FilterSheet.tsx's
 // DURATION_CHIPS), applied here to an upper-bound cap rather than a range
 // bucket, hence "≤" instead of Library's "<"/"–"/"+".
 const CAP_CHIPS: { value: number | null; label: string }[] = [
@@ -57,8 +57,8 @@ const CAP_CHIPS: { value: number | null; label: string }[] = [
 ];
 
 /** Local chip button — same `.chip` class + `aria-pressed` rendering
- *  convention as Library's own FilterChips.tsx `Chip`, not that component
- *  itself: Today's chips have different selection semantics per group
+ *  convention Library's own filter controls use, not a shared component:
+ *  Today's chips have different selection semantics per group
  *  (multi-select difficulties, single-select cap, a toggle, and a type
  *  swap that reads its active state off two different sources).
  *

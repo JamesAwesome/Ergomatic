@@ -3,8 +3,8 @@ import { PAIN_WORDS, TYPE_WORDS } from "./builderState";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 
 // Chip order per docs/design/README.md §Screens -> "2. Library" (AN before
-// O2 — not alphabetical), matching src/library/FilterChips.tsx and
-// Builder.tsx's own (pre-redesign) TYPE_CHIPS.
+// O2 — not alphabetical), matching src/library/FilterSheet.tsx's TYPE cells
+// and Builder.tsx's own (pre-redesign) TYPE_CHIPS.
 const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
   { type: "AN", label: "AN" },
   { type: "O2", label: "O2" },
