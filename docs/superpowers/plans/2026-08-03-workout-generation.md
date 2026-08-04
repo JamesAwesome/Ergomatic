@@ -47,18 +47,18 @@ Card record schema (exact):
 
 ```json
 {
-  "photo": "IMG_6597.jpeg",
-  "bookNum": 8,
-  "title": "Manatee",
+  "photo": "IMG_0000.jpeg",
+  "bookNum": 999,
+  "title": "Example Card",
   "section": "Introductory",
   "typeChip": "AN",
   "painChip": 2,
-  "totalChipMinutes": 20.5,
+  "totalChipMinutes": 22,
   "steps": [
     { "k": "wu", "minutes": 10 },
     { "k": "reps", "count": 6 },
-    { "k": "w", "duration": { "kind": "time", "minutes": 0.5 },
-      "ref": { "effort": "max" }, "spm": 30, "restMinutes": 1.5 }
+    { "k": "w", "duration": { "kind": "time", "minutes": 1 },
+      "ref": { "effort": "max" }, "spm": 30, "restMinutes": 1 }
   ],
   "rawText": null
 }
@@ -80,7 +80,7 @@ Read /Users/james/projects/github/jamesawesome/Ergomatic/.claude/agent-briefing.
 You are transcribing workout cards from photos of a printed rowing training
 book, for structural-reference use by the book's owner. The photos are
 sideways (rotate mentally 90°); each shows a two-page spread of "cards".
-Each card has: a number+title heading (e.g. "8. Manatee"), a warm-up line,
+Each card has: a number+title heading (e.g. "999. Example Card"), a warm-up line,
 one or more work/rest lines, and chips along its edge: total minutes
 (e.g. "20.5 min."), a section chip (Intro/Short/Medium/Long/Advanced...),
 a pain number (1–5), and a type chip (O2/AT/TR/AN).

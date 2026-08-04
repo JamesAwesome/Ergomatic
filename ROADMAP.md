@@ -633,8 +633,8 @@ genuine off-plan or make-up session without moving the plan's counter.
 
 **Next:** a **UI-fix round** (exact targets replace the range displays; a
 drop-X on Today's unlogged line; a discard option on SessionComplete; SHUFFLE
-full-width) — queued ahead of the workout-generation phase below but not yet
-started — then Phase 7's PM5 integration.
+full-width) — in flight on its own `ui-fix-round` branch, ahead of the
+workout-generation phase below — then Phase 7's PM5 integration.
 
 ## Phase 6E — Workout library generation
 
@@ -653,8 +653,10 @@ plan: `docs/superpowers/plans/2026-08-03-workout-generation.md`.
       distributions per base, spm bands, warm-up conventions, rep-count
       ranges; aggregate statistics only, no titles/prose/per-workout rows)
       → grid-constrained authoring by subagents → a permanent validation
-      gate (domain `validate.ts`, duration/spm/rep-count/pain-plausibility
-      checks, structural dedup within the 300, quota exactly satisfied)
+      gate split across two layers: domain `validate.ts` for base workout
+      validity, and `app/server/seed/library/library.test.ts` for the
+      spm/pain-plausibility bands, structural dedup, easy→hard ordering,
+      and the exact quota grid
 - [x] Exact quota grid, 300 total: O2 90 / AT 75 / TR 75 / AN 60 across five
       duration bands (<20′ 30, 20–30′ 75, 30–45′ 120, 45–60′ 45, 60′+ 30); a
       ~320-name weather/atmospheric pool allocated per cell so authoring
@@ -673,9 +675,10 @@ plan: `docs/superpowers/plans/2026-08-03-workout-generation.md`.
       boot, not per-user. The swap nulls `session_logs.workout_id`
       (`ON DELETE SET NULL`) — logs keep their rows and lose the workout
       link; accepted at TestFlight scale, called out in the PR. Personal
-      (non-global) workouts are structurally untouched, and a seeded
-      workout the user has since edited counts as custom (kept, not
-      swapped)
+      (non-global) workouts are structurally untouched: globals are
+      structurally un-editable (the store's `update()`/`remove()` only ever
+      match rows scoped to a `userId`, never `user_id IS NULL`), so there is
+      no "edited-seeded" state for the swap to distinguish or mis-swap
 - [x] Fixtures across the client/server test suites re-anchored from the
       retired 35-workout set to real entries in the 300 (e.g. "Fork
       Lightning" for the effort-ref `0:30 @ MAX` shape, "Hoarfrost" for the

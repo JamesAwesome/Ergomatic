@@ -48,8 +48,8 @@ photos → EXTRACT → originals.json (private) → DIGEST → patterns.json (re
 Subagents read photo batches and emit one JSON record per workout: book number,
 title, section, type chip, pain chip, total-minutes chip, and steps pre-mapped to
 domain shapes (`SplitRef`/`EffortRef`, spm, reps, rest), plus a `rawText` field
-for prescriptions the step grammar cannot express (e.g. "30-second bursts at max
-rating every 5'") — those are kept as text, never force-fitted. A second
+for prescriptions the step grammar cannot express (e.g. "descending rest every
+third rep, ~10s less each time") — those are kept as text, never force-fitted. A second
 independent pass re-reads every photo; a script diffs the two passes and flags
 disagreements for a third read. Integrity checks:
 

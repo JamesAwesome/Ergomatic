@@ -131,7 +131,7 @@ function lockedBaseline(
  *  workout's own steps actually reference — never a bare dash. The
  *  original two-slot "2K … · 6K …" layout (matching README.md §7's own
  *  literal mock) was checked against all 35 seeded starters (this repo's
- *  original starter library, later retired at Phase 7 for a generated
+ *  original starter library, later retired at Phase 6E for a generated
  *  300-workout one) and found to be unconditionally wrong in production:
  *  not one referenced both "2k" and "6k" in the same workout (16 were
  *  2k-only, 18 were 6k-only, and Microburst referenced neither at all) — so

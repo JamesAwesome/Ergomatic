@@ -254,6 +254,31 @@ test("library", async ({ page }) => {
   await cleanupByTitle(page, customTitle);
 });
 
+// Phase 6E fix round: "library.png" above deliberately captures the
+// Phase 5H CUSTOM-filter single-row state, so it never shows what the
+// screen actually looks like for the vast majority of visits — the
+// unfiltered list of the real generated 300. This capture is that missing
+// state: no CUSTOM filter, scrolled to the top, so the committed image
+// shows genuine library rows (sorted O2-first, "Sea Fret" leading per
+// ROADMAP.md's Phase 6E entry) and the real "300 ENTERED" count header,
+// not a single custom row against a near-empty background.
+test("library-seeded", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-library-seeded@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+
+  await page.goto("/library");
+  // Same "LOADING…" race as the "library" capture above — wait for a real
+  // row before shooting.
+  await page.locator(".workout-row").first().waitFor();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-seeded.png"),
+  });
+});
+
 /** Test-only cleanup: finds the signed-in user's own workout with the given
  *  title via the real API and deletes it. Duplicated from e2e/design.spec.ts
  *  / e2e/builder.spec.ts's own `cleanupByTitle` rather than shared — same
