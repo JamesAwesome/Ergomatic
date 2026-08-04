@@ -379,20 +379,47 @@ test.describe("library screen", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("body background and the active filter chip match the token palette", async ({
-    page,
-  }) => {
+  test("body background matches the token palette", async ({ page }) => {
     const bodyBg = await page.evaluate(
       () => getComputedStyle(document.body).backgroundColor,
     );
     expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
+  });
 
-    // No filters applied on first load, so the "ALL" chip is the active
-    // (aria-pressed) one — see FilterChips.tsx's isEmptyFilters.
-    const allChipBg = await page
-      .getByRole("button", { name: "ALL", exact: true })
+  // Task 4 (ui-fix round): a TYPE token fills with its own type colour, the
+  // same selected-state rule DESIGN.md extends from chips to tokens — never
+  // a flat accent regardless of which type is active.
+  test("a TYPE token fills with its own type colour, not accent", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "O2", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
+
+    const tokenBg = await page
+      .locator(".filter-token", { hasText: "O2" })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(allChipBg).toBe("rgb(181, 52, 31)"); // --accent
+    expect(tokenBg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+  });
+
+  // Task 4 (ui-fix round): every other token kind fills plain ink.
+  test("a non-TYPE token (e.g. LAST DONE) fills ink, not accent", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "21D+", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
+
+    const tokenBg = await page
+      .locator(".filter-token", { hasText: "21D+" })
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(tokenBg).toBe("rgb(27, 26, 23)"); // --ink
   });
 
   // iOS device report, 2026-08-01: long-pressing a filter chip or a
@@ -400,13 +427,13 @@ test.describe("library screen", () => {
   // Translate) — WKWebView treats button/link text as selectable unless
   // told otherwise. Chromium can only assert the computed style; the
   // callout behaviour itself is verified on device (see index.css).
-  test("the filter chip and workout row resist the iOS text-selection callout", async ({
+  test("the FILTER toggle and workout row resist the iOS text-selection callout", async ({
     page,
   }) => {
-    const chipSelect = await page
-      .getByRole("button", { name: "ALL", exact: true })
+    const toggleSelect = await page
+      .getByRole("button", { name: "FILTER ⌄" })
       .evaluate((el) => getComputedStyle(el).userSelect);
-    expect(chipSelect).toBe("none");
+    expect(toggleSelect).toBe("none");
 
     const rowSelect = await page
       .locator(".workout-row")

@@ -11,6 +11,7 @@ export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
 const TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
 const BUCKETS: readonly DurationBucket[] = ["<30", "30-45", "45-60", "60+"];
+const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
 function isWorkoutType(v: unknown): v is WorkoutType {
   return typeof v === "string" && (TYPES as readonly string[]).includes(v);
@@ -20,9 +21,18 @@ function isBucket(v: unknown): v is DurationBucket {
   return typeof v === "string" && (BUCKETS as readonly string[]).includes(v);
 }
 
+function isPainLevel(v: unknown): v is number {
+  return typeof v === "number" && PAIN_LEVELS.includes(v);
+}
+
 /** Strict shape check — a stored value that predates a future Filters
  *  change (or was hand-edited) must come back `null`, never a Filters with
- *  a hole in it: applyFilters trusts every field. */
+ *  a hole in it: applyFilters trusts every field. This is also, by
+ *  construction, the fix for a v1-shaped record left over from before Task 4
+ *  (ui-fix round): v1's fields were `painMax3`/`recency`/`customOnly`, none
+ *  of which this parser reads, so a v1 record fails the v2 checks below on
+ *  every field but `type`/`durations` and falls back to EMPTY_FILTERS whole
+ *  — never a v2 Filters half-populated from v1 data. */
 function parseFilters(raw: string): Filters | null {
   let parsed: unknown;
   try {
@@ -36,24 +46,29 @@ function parseFilters(raw: string): Filters | null {
   const f = parsed as Record<string, unknown>;
   if (f.type !== null && !isWorkoutType(f.type)) return null;
   if (!Array.isArray(f.durations) || !f.durations.every(isBucket)) return null;
-  if (typeof f.painMax3 !== "boolean") return null;
-  if (
-    f.recency !== null &&
-    f.recency !== "recent" &&
-    f.recency !== "not-recent"
-  )
+  if (!Array.isArray(f.painLevels) || !f.painLevels.every(isPainLevel)) {
     return null;
-  if (typeof f.customOnly !== "boolean") return null;
+  }
+  if (
+    f.lastDone !== null &&
+    f.lastDone !== "under21" &&
+    f.lastDone !== "over21"
+  ) {
+    return null;
+  }
+  if (f.source !== null && f.source !== "global" && f.source !== "custom") {
+    return null;
+  }
   return {
     type: f.type,
-    // De-duped defensively: toggleDuration can never produce a duplicate,
-    // but a tampered/legacy stored value could, and .includes-based chip
-    // state plus bucket matching both silently tolerate dupes — better to
-    // normalise here than trust storage.
+    // De-duped defensively: toggleDuration/togglePainLevel can never
+    // produce a duplicate, but a tampered/legacy stored value could, and
+    // .includes-based state plus bucket/level matching both silently
+    // tolerate dupes — better to normalise here than trust storage.
     durations: [...new Set(f.durations)],
-    painMax3: f.painMax3,
-    recency: f.recency,
-    customOnly: f.customOnly,
+    painLevels: [...new Set(f.painLevels)],
+    lastDone: f.lastDone,
+    source: f.source,
   };
 }
 

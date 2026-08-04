@@ -37,7 +37,12 @@
    hyperlinks (e.g.
    StepEditor.tsx/StepRow.tsx's "Set baselines") — those read as ordinary
    body-copy links, not chrome controls, and a copy/look-up callout on
-   link text is normal iOS behaviour there. */
+   link text is normal iOS behaviour there. `.filter-token` (Task 4, ui-fix
+   round) joins the list for the same reason `.chip` is here: it's a chrome
+   pill representing an active filter, not body copy, even though the pill
+   itself isn't the clickable element — its nested `.filter-token-remove` is
+   a real `<button>`, already covered below; this entry is only for the
+   pill's own label text. */
 button,
 [role="radio"],
 .chip,
@@ -54,6 +59,7 @@ span.stepper-value,
 .button-l3,
 .button-l4,
 .button-l4-armed,
+.filter-token,
 .tab {
   user-select: none;
   -webkit-user-select: none;
@@ -496,12 +502,267 @@ button:disabled {
   text-decoration: none;
 }
 
+/* -- Library filter bar, tokens, sheet (Task 4, ui-fix round) -----------
+   docs/design/handoffs/2026-08-03-ui-fix/DESIGN.md's "Library (second
+   pass)": retires the eleven-chip ragged wrap (FilterChips.tsx, deleted) for
+   one FILTER ⌄ toggle at rest, active filters collapsing to tokens, and a
+   sheet holding all five groups. Two rows, per the mockup: the toggle plus
+   any tokens (wrapping), then a second row for the count + CLEAR ALL that
+   only appears once something is active — at rest the count instead sits on
+   the SAME row as the toggle (`.library-filter-row .library-count`'s own
+   text-align: right below), exactly the mockup's two states. */
+.library-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.library-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.library-count-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-filter-toggle {
+  flex-shrink: 0;
+  min-height: var(--tap);
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.library-filter-toggle:hover {
+  background: var(--surface-sunken);
+}
+
 .library-count {
+  flex: 1;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--ink-3);
-  margin: 4px 0 12px;
+}
+
+/* At rest (no tokens), the count shares the toggle's own row and reads
+   right-aligned opposite it — the mockup's "1 · AT REST" state. Once
+   filtered, the count moves to `.library-count-row` instead (left-aligned,
+   `flex: 1` there just reserves the space CLEAR ALL doesn't need). */
+.library-filter-row .library-count {
+  text-align: right;
+}
+
+.library-clear-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.library-clear-all:hover {
+  color: var(--accent-hover);
+}
+
+/* One token per active GROUP (filterTokens.ts), not per band — type-colored
+   for a TYPE token (inline style, per-instance — same idiom as
+   TypeBadge.tsx/PainBar.tsx/ClassificationCard.tsx's own TYPE chip), `--ink`
+   fill for every other kind via this class's own default background. */
+.filter-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: var(--tap);
+  padding-left: 12px;
+  background: var(--ink);
+  border-radius: var(--radius);
+}
+
+.filter-token-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--on-color);
+  white-space: nowrap;
+}
+
+.filter-token-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--on-color);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The sheet: fixed overlay over the list (Library.tsx never routes to it),
+   bottom-weighted so it reads as sliding up from the tab bar. Dismissible by
+   backdrop tap (`.filter-sheet-backdrop`'s own onClick) or the primary
+   button — see FilterSheet.tsx's doc comment for what a BACK navigation
+   does while this is open. */
+.filter-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 26, 23, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 20px calc(var(--tap) + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+}
+
+.filter-sheet {
+  width: 100%;
+  max-width: 440px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.filter-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  border-bottom: 1px solid var(--rule-2);
+  padding-bottom: 6px;
+}
+
+.filter-sheet-title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.filter-sheet-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.filter-sheet-clear:hover {
+  color: var(--accent-hover);
+}
+
+.filter-sheet-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.filter-sheet-group-half {
+  flex: 1;
+}
+
+.filter-sheet-group-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+.filter-sheet-row {
+  display: flex;
+  gap: 6px;
+}
+
+.filter-sheet-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.filter-sheet-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.filter-sheet-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.filter-sheet-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.filter-sheet-cell {
+  height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--rule-3);
+  border-radius: var(--radius);
+  color: var(--ink-3);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+/* Plain ink fill for every group EXCEPT an active TYPE cell, which gets its
+   own type color via an inline style (FilterSheet.tsx's `typeCellStyle`) —
+   an inline style always wins over this rule regardless of specificity, so
+   no `:not()` qualifier is needed here. */
+.filter-sheet-cell[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
+  font-weight: 600;
 }
 
 .library-empty {

@@ -12,12 +12,27 @@ import { signInViaBackdoor } from "./helpers";
 // workout-generation phase, up from an original 35) and its exact count
 // isn't this suite's concern, so nothing here hardcodes it. `.library-count`
 // only renders once both workouts and baselines have resolved (Library.tsx
-// shows "LOADING…" until then), so waiting for it to match `/^\d+ ENTERED$/`
+// shows "LOADING…" until then), so waiting for it to match `/^\d+ WORKOUTS$/`
 // doubles as this suite's "the list finished loading" signal — the same
 // auto-retry a `toHaveCount(35)` used to provide, without pinning a number
-// that drifts every time the library is regenerated.
+// that drifts every time the library is regenerated. (Task 4, ui-fix round,
+// retired the literal word "ENTERED" for "WORKOUTS" — DEVIATIONS.md.)
 async function waitForLibraryLoaded(page: Page): Promise<void> {
-  await expect(page.locator(".library-count")).toHaveText(/^\d+ ENTERED$/);
+  await expect(page.locator(".library-count")).toHaveText(/^\d+ WORKOUTS$/);
+}
+
+/** Opens the FILTER sheet — every filter interaction below goes through it
+ *  now that the old flat chip row (FilterChips.tsx) is retired (Task 4,
+ *  ui-fix round). */
+function openFilterSheet(page: Page) {
+  return page.getByRole("button", { name: "FILTER ⌄" }).click();
+}
+
+/** The sheet's own live-counting primary — accessible name changes with the
+ *  draft ("Show 12 workouts"), hence the regex. Commits the draft and
+ *  closes the sheet. */
+function applyFilterSheet(page: Page) {
+  return page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
 }
 
 test.describe("library list", () => {
@@ -39,10 +54,12 @@ test.describe("library list", () => {
     // (e.g. a quota bug shipping 5 rows) without re-pinning the exact count.
     expect(count).toBeGreaterThan(250);
     await expect(rows).toHaveCount(count);
-    await expect(page.locator(".library-count")).toHaveText(`${count} ENTERED`);
+    await expect(page.locator(".library-count")).toHaveText(`${count} WORKOUTS`);
   });
 
-  test("a type chip narrows the list and ALL restores it", async ({ page }) => {
+  test("a TYPE cell narrows the list via the sheet, and CLEAR ALL restores it", async ({
+    page,
+  }) => {
     const rows = page.locator(".workout-row");
     // Anchor on load completion first, via the header text rather than a
     // hardcoded total (see `waitForLibraryLoaded`) — a bare `.count()`
@@ -54,19 +71,31 @@ test.describe("library list", () => {
     // The library has 90 O2 / 75 AT / 75 TR / 60 AN workouts
     // (server/seed/library/index.ts's quota grid) — a proper, non-trivial
     // subset either way of the whole library.
-    await page.getByRole("button", { name: "AN", exact: true }).click();
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "AN", exact: true })
+      .click();
+    await applyFilterSheet(page);
+
     await expect(rows).not.toHaveCount(initialCount);
     const filteredCount = await rows.count();
     expect(filteredCount).toBeGreaterThan(0);
     expect(filteredCount).toBeLessThan(initialCount);
     await expect(page.locator(".library-count")).toHaveText(
-      `${filteredCount} ENTERED`,
+      `${filteredCount} OF ${initialCount} SHOWN`,
     );
+    // Scoped to the token's own label (not a bare page-wide text query):
+    // every visible row also wears an "AN" type badge once filtered, which
+    // would otherwise make this a strict-mode-violating multi-match.
+    await expect(
+      page.locator(".filter-token-label", { hasText: "AN" }),
+    ).toBeVisible();
 
-    await page.getByRole("button", { name: "ALL", exact: true }).click();
+    await page.getByRole("button", { name: "CLEAR ALL" }).click();
     await expect(rows).toHaveCount(initialCount);
     await expect(page.locator(".library-count")).toHaveText(
-      `${initialCount} ENTERED`,
+      `${initialCount} WORKOUTS`,
     );
   });
 
@@ -166,23 +195,33 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
       .toBeLessThanOrEqual(50);
   });
 
-  test("BACK with filters enabled keeps the chips active and restores against the FILTERED list; a fresh tab tap forgets both", async ({
+  test("BACK with filters enabled keeps the tokens active and restores against the FILTERED list; a fresh tab tap forgets both", async ({
     page,
   }) => {
     // The device bug this pins: filters lived in component state, so a
-    // BACK return remounted Library unfiltered — the chips were gone and
-    // the restored scroll position (measured against the shorter filtered
-    // list) landed on the wrong rows.
-    // PAIN ≤3 keeps a majority but not all of the library (per-workout pain
-    // values are spread 1–5, server/seed/library/index.ts) — genuinely
-    // narrowed, yet still several viewports deep, so "restored against the
-    // filtered list" and "restored to the top" stay unambiguously different
-    // outcomes.
+    // BACK return remounted Library unfiltered — the filter row was gone
+    // and the restored scroll position (measured against the shorter
+    // filtered list) landed on the wrong rows.
+    // PAIN 1, 2, 3 (via the sheet) keeps a genuine subset of the library
+    // (per-workout pain values are spread 1–5, server/seed/library/index.ts)
+    // — narrowed enough, yet still several viewports deep, so "restored
+    // against the filtered list" and "restored to the top" stay
+    // unambiguously different outcomes. Task 4 (ui-fix round) replaces the
+    // old single PAIN ≤3 chip with a 1–5 multi-select, contiguous-collapsing
+    // to one "PAIN 1–3" token — reached through the sheet.
     const rows = page.locator(".workout-row");
     const fullCount = await rows.count();
-    const painChip = page.getByRole("button", { name: "PAIN ≤3" });
-    await painChip.click();
-    await expect(painChip).toHaveAttribute("aria-pressed", "true");
+    await openFilterSheet(page);
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "1", exact: true }).click();
+    await dialog.getByRole("button", { name: "2", exact: true }).click();
+    await dialog.getByRole("button", { name: "3", exact: true }).click();
+    await applyFilterSheet(page);
+
+    const painToken = page.locator(".filter-token-label", {
+      hasText: "PAIN 1–3",
+    });
+    await expect(painToken).toBeVisible();
     const filteredCount = await rows.count();
     expect(filteredCount).toBeGreaterThan(0);
     expect(filteredCount).toBeLessThan(fullCount);
@@ -199,10 +238,10 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
 
     await page.getByRole("link", { name: "← BACK" }).click();
 
-    // Filters survive the round trip: chip still pressed, count still the
+    // Filters survive the round trip: the token is back, count still the
     // filtered one — asserted BEFORE the scroll check because the restore
     // is only correct if it happened against this narrowed list.
-    await expect(painChip).toHaveAttribute("aria-pressed", "true");
+    await expect(painToken).toBeVisible();
     await expect(rows).toHaveCount(filteredCount);
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
@@ -214,7 +253,7 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     await page.getByRole("link", { name: "LIBRARY" }).click();
     await waitForLibraryLoaded(page);
     await expect(rows).toHaveCount(fullCount);
-    await expect(painChip).toHaveAttribute("aria-pressed", "false");
+    await expect(painToken).not.toBeVisible();
     await expect
       .poll(() => page.evaluate(() => window.scrollY))
       .toBeLessThanOrEqual(50);
@@ -324,8 +363,8 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
   }
 }
 
-test.describe("CUSTOM filter", () => {
-  test("tapping CUSTOM narrows to an authored workout, and ALL restores the full library", async ({
+test.describe("SOURCE filter", () => {
+  test("selecting CUSTOM narrows to an authored workout, and CLEAR ALL restores the full library", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -344,7 +383,7 @@ test.describe("CUSTOM filter", () => {
 
     // Author a workout through the builder (same minimal single-row flow as
     // builder.spec.ts's exit-criterion test) — it lands in the library as
-    // `isGlobal: false`, the only kind CUSTOM should surface.
+    // `isGlobal: false`, the only kind SOURCE=custom should surface.
     await page.goto("/library/new");
     await page.getByLabel("Title").fill(title);
     await page.getByRole("button", { name: "Pain 3" }).click();
@@ -355,7 +394,12 @@ test.describe("CUSTOM filter", () => {
     await page.goto("/library");
     await expect(rows).toHaveCount(baselineCount + 1);
 
-    await page.getByRole("button", { name: "CUSTOM", exact: true }).click();
+    await openFilterSheet(page);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "CUSTOM", exact: true })
+      .click();
+    await applyFilterSheet(page);
 
     await expect(rows).toHaveCount(1);
     await expect(rows.first().locator(".workout-row-title")).toHaveText(title);
@@ -363,7 +407,7 @@ test.describe("CUSTOM filter", () => {
       "CUSTOM",
     );
 
-    await page.getByRole("button", { name: "ALL", exact: true }).click();
+    await page.getByRole("button", { name: "CLEAR ALL" }).click();
     await expect(rows).toHaveCount(baselineCount + 1);
 
     await cleanupByTitle(page, title);
