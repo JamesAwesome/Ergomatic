@@ -231,11 +231,11 @@ describe("TodayFilterSheet", () => {
       expect(onApply).toHaveBeenCalledTimes(1);
     });
 
-    it("reads the singular 'Show 1 option' at poolCount 1", () => {
+    it("reads the singular 'Show 1 option' at poolCount 1, and is NOT disabled there (only 0 disables)", () => {
       renderSheet({ poolCount: 1 });
-      expect(
-        screen.getByRole("button", { name: "Show 1 option" }),
-      ).toBeInTheDocument();
+      const primary = screen.getByRole("button", { name: "Show 1 option" });
+      expect(primary).toBeInTheDocument();
+      expect(primary).not.toBeDisabled();
       expect(
         screen.queryByRole("button", { name: "Show 1 options" }),
       ).not.toBeInTheDocument();
