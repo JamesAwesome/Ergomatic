@@ -198,10 +198,10 @@ describe("StepCard", () => {
   // Review fix wave: `stepToRow` writes `row.rest` in the clock form, but
   // `restSecondsFromRow` used to still parse it with a bare `Number(...)` —
   // `Number("3:00")` is NaN, so a real stored workout's rest sub-summary
-  // rendered "19 spm · rest NaN:NaN". A fixture built by hand (bare-decimal
+  // rendered "22 spm · rest NaN:NaN". A fixture built by hand (bare-decimal
   // "1.5") never exercised this path; a real library workout does. Hoarfrost
   // (server/seed/library/o2.ts) is the exact shape the reviewer rendered to
-  // find the bug: a `w` step with `restMinutes: 3`.
+  // find the bug: a `w` step with `restMinutes: 5`.
   it("renders a real stored workout's rest sub-summary as a real value, not NaN:NaN (Hoarfrost)", () => {
     const hoarfrost = LIBRARY_WORKOUTS.find((w) => w.title === "Hoarfrost");
     if (!hoarfrost) throw new Error("fixture workout 'Hoarfrost' not found");
@@ -210,8 +210,8 @@ describe("StepCard", () => {
     if (!workRowFromStore) throw new Error("expected a work row");
 
     setup({ row: workRowFromStore });
-    // Hoarfrost's work step: spm 19, restMinutes 3 (rest 3:00 as a clock).
-    expect(screen.getByText("19 spm · rest 3:00")).toBeInTheDocument();
+    // Hoarfrost's work step: spm 22, restMinutes 5 (rest 5:00 as a clock).
+    expect(screen.getByText("22 spm · rest 5:00")).toBeInTheDocument();
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 });

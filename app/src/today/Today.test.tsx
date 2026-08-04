@@ -233,8 +233,9 @@ describe("Today (plan mode)", () => {
   it("renders a resolved duration preview when baselines exist", async () => {
     mockReady();
     await renderToday();
-    // Stationary Front: wu 5' + 12' continuous work, no reps/rest = 17' total.
-    expect(screen.getByText("17′")).toBeVisible();
+    // Stationary Front: wu 5' + 3×3' work + 2×0.5' rest (no rest after the
+    // last rung) = 5 + 9 + 1 = 15' total.
+    expect(screen.getByText("15′")).toBeVisible();
   });
 
   it("still renders the card, without a duration preview, when baselines are unset — and the reason never claims a cap that was never checked", async () => {

@@ -1195,7 +1195,7 @@ describe("rest seconds bridge", () => {
   // through fromWorkout, not a hand-built row — the exact shape (stepToRow
   // writing restMinutes as a clock string) that hid the NaN bricking bug
   // Task 4's fix wave found. "Slack Tide" carries both spm and restMinutes
-  // on its one work step (spm 19, restMinutes 2 -> "2:00" -> 120s).
+  // on its one work step (spm 22, restMinutes 1 -> "1:00" -> 60s).
   it("reads rest correctly off a real library workout pushed through fromWorkout", () => {
     const slackTide = LIBRARY_WORKOUTS.find((w) => w.title === "Slack Tide");
     if (!slackTide) throw new Error("fixture not found");
@@ -1203,15 +1203,15 @@ describe("rest seconds bridge", () => {
     const workStep = form.rows.find((r) => r.kind === "w");
     if (!workStep) throw new Error("expected a work row");
 
-    expect(workStep.rest).toBe("2:00");
-    expect(workStep.spm).toBe("19");
-    expect(restSecondsFromRow(workStep)).toBe(120);
+    expect(workStep.rest).toBe("1:00");
+    expect(workStep.spm).toBe("22");
+    expect(restSecondsFromRow(workStep)).toBe(60);
 
     // One tap of REST − still produces a valid, saveable clock string —
-    // the exact seam ("2:00" parsed with `Number()`) that used to write
-    // the literal string "NaN" into the row. 120 - 30 (REST_STEP_SECONDS) = 90s = "1:30".
-    const stepped = rowWithRestSeconds(workStep, 120 - REST_STEP_SECONDS);
-    expect(stepped.rest).toBe("1:30");
+    // the exact seam ("1:00" parsed with `Number()`) that used to write
+    // the literal string "NaN" into the row. 60 - 30 (REST_STEP_SECONDS) = 30s = "0:30".
+    const stepped = rowWithRestSeconds(workStep, 60 - REST_STEP_SECONDS);
+    expect(stepped.rest).toBe("0:30");
     const out = toSteps({ ...form, rows: [stepped] });
     expect(out.ok).toBe(true);
   });

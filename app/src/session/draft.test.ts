@@ -20,8 +20,11 @@ import {
 // (app/server/seed/library/index.ts) rather than hand-built minimums.
 // - Fork Lightning (AN): the effort-ref fixture — `ref: { effort: "max" }` —
 //   proving nudges refuse an entry for it.
-// - Meltemi (O2): the distance fixture — a single 10,000 m work step —
-//   proving draftMinutes needs baselines and pins an exact total.
+// - Calm Sea (O2): the distance fixture — a single 10,000 m work step —
+//   proving draftMinutes needs baselines and pins an exact total. (Meltemi
+//   used to hold this role; the library rewrite turned it into a 5-phase
+//   TIME workout with no distance step at all, so this suite re-anchored to
+//   Calm Sea — same 10,000 m distance, minimizing drift elsewhere.)
 // - Hoarfrost (O2): the reps-marker fixture — `{ k: "reps", count: 2 }` —
 //   proving draftSteps keeps the marker so estimateMinutes still expands it.
 function library(title: string) {
@@ -39,13 +42,13 @@ const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 
 describe("buildDraft", () => {
   it("builds a v1 draft with defaults from a real library workout", () => {
-    const meltemi = library("Meltemi");
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi"));
+    const calmsea = library("Calm Sea");
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea"));
     expect(d.v).toBe(1);
-    expect(d.workoutId).toBe("id-meltemi");
-    expect(d.title).toBe("Meltemi");
+    expect(d.workoutId).toBe("id-calmsea");
+    expect(d.title).toBe("Calm Sea");
     expect(d.type).toBe("O2");
-    expect(d.steps).toStrictEqual(meltemi.steps);
+    expect(d.steps).toStrictEqual(calmsea.steps);
     expect(d.nudges).toStrictEqual({});
     expect(d.spmOverrides).toStrictEqual({});
     expect(d.removed).toStrictEqual([]);
@@ -54,15 +57,15 @@ describe("buildDraft", () => {
   });
 
   it("deep-copies steps so mutating the draft never touches the library workout", () => {
-    const meltemi = library("Meltemi");
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-2"));
-    expect(d.steps).not.toBe(meltemi.steps);
+    const calmsea = library("Calm Sea");
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-2"));
+    expect(d.steps).not.toBe(calmsea.steps);
     const draftWork = d.steps.find((s) => s.k === "w") as Extract<
       Step,
       { k: "w" }
     >;
     draftWork.spm = 999;
-    const libraryWork = meltemi.steps.find((s) => s.k === "w") as Extract<
+    const libraryWork = calmsea.steps.find((s) => s.k === "w") as Extract<
       Step,
       { k: "w" }
     >;
@@ -95,12 +98,12 @@ describe("draftSteps", () => {
   });
 
   it("folds a split-ref work step's nudge into its ref.off", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-nudge"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-nudge"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const nudged = withNudge(d, workIndex, -5);
     const steps = draftSteps(nudged);
     const work = steps[workIndex] as Extract<Step, { k: "w" }>;
-    expect(work.ref).toStrictEqual({ base: "6k", off: 8 }); // 13 + (-5)
+    expect(work.ref).toStrictEqual({ base: "6k", off: 7 }); // 12 + (-5)
   });
 });
 
@@ -142,15 +145,15 @@ describe("effectiveSteps", () => {
 });
 
 describe("draftMinutes", () => {
-  it("computes an exact pinned total for a distance workout (Meltemi) given baselines", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-3"));
-    // wu 10' (600s) + 10,000m @ 6k+13 = 133 s/500m -> 20 * 133 = 2660s.
-    // total 3260s -> round(3260/60) = 54.
-    expect(draftMinutes(d, baselines)).toBe(54);
+  it("computes an exact pinned total for a distance workout (Calm Sea) given baselines", () => {
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-3"));
+    // wu 8' (480s) + 10,000m @ 6k+12 = 132 s/500m -> 20 * 132 = 2640s.
+    // total 3120s -> round(3120/60) = 52.
+    expect(draftMinutes(d, baselines)).toBe(52);
   });
 
   it("returns null for a distance workout when baselines are absent", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-4"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-4"));
     expect(draftMinutes(d, null)).toBeNull();
   });
 
@@ -186,9 +189,10 @@ describe("draftMinutes", () => {
 
   it("computes an exact pinned total for an effort-ref workout (Fork Lightning) given baselines", () => {
     const d = buildDraft(draftInputFor("Fork Lightning", "id-fork-lightning"));
-    // wu 10' (600s) + 10 * (30s work + 75s rest) = 600 + 1050 = 1650s ->
-    // 1650/60 = 27.5 -> 28 (Math.round rounds .5 up).
-    expect(draftMinutes(d, baselines)).toBe(28);
+    // wu 5' (300s) + reps(5) x [w1{30s work + 45s rest} + w2{30s work +
+    // 135s rest}] = 5 * (30+45+30+135) = 5*240 = 1200s. total 1500s ->
+    // 1500/60 = 25 exactly.
+    expect(draftMinutes(d, baselines)).toBe(25);
   });
 
   // F1 fix (final whole-branch review): draftMinutes used to price the
@@ -196,25 +200,25 @@ describe("draftMinutes", () => {
   // moved the resolved range shown on its own row but never touched the
   // Confirm footer's minute recount, because draftMinutes called
   // estimateMinutes over draftSteps(d) while draftSteps folded SPM
-  // overrides but not nudges. (The reviewer's exact probe: nudging
-  // Meltemi's split step should move its 54-ish minute recount; instead it
-  // read the same number before and after.) Pinned here with a nudge big
-  // enough to cross a rounding boundary, so a fix that folds the nudge in
-  // but gets the sign or magnitude wrong would still fail this.
+  // overrides but not nudges. (The reviewer's exact probe: nudging a
+  // distance step's split should move its minute recount; instead it read
+  // the same number before and after.) Pinned here with a nudge big enough
+  // to actually change the recount, so a fix that folds the nudge in but
+  // gets the sign or magnitude wrong would still fail this.
   it("prices a nudge into the recount for a distance workout (the exact case a prior version silently ignored)", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-priced"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-priced"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
-    // Unnudged: wu 10' (600s) + 10,000m @ 6k+13 = 133 s/500m -> 20*133 =
-    // 2660s; total 3260s -> round(3260/60) = 54 (same pinned total as the
-    // earlier "exact pinned total" test above — this test's whole point is
-    // the BEFORE/AFTER delta, not a fresh number).
-    expect(draftMinutes(d, baselines)).toBe(54);
+    // Unnudged: wu 8' (480s) + 10,000m @ 6k+12 = 132 s/500m -> 20*132 =
+    // 2640s; total 3120s -> round(3120/60) = 52 exactly (same pinned total
+    // as the earlier "exact pinned total" test above — this test's whole
+    // point is the BEFORE/AFTER delta, not a fresh number).
+    expect(draftMinutes(d, baselines)).toBe(52);
 
-    // -5s/500m nudge: split becomes 128 -> 20*128 = 2560s; total 3160s ->
-    // round(3160/60) = 53 exactly. A version that ignores nudges would
-    // still report 54 here.
+    // -5s/500m nudge: split becomes 127 -> 20*127 = 2540s; total 3020s ->
+    // round(3020/60) = 50 exactly. A version that ignores nudges would
+    // still report 52 here.
     const nudged = withNudge(d, workIndex, -5);
-    expect(draftMinutes(nudged, baselines)).toBe(53);
+    expect(draftMinutes(nudged, baselines)).toBe(50);
   });
 });
 
@@ -230,7 +234,7 @@ describe("withNudge", () => {
   });
 
   it("nudges a split-ref work step cumulatively (Meltemi)", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-5"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-5"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     const once = withNudge(d, workIndex, 3);
     expect(once.nudges[workIndex]).toBe(3);
@@ -239,7 +243,7 @@ describe("withNudge", () => {
   });
 
   it("no-ops on a non-work step index and on an out-of-range index", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-6"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-6"));
     const wuIndex = d.steps.findIndex((s) => s.k === "wu");
     expect(withNudge(d, wuIndex, 1)).toBe(d);
     expect(withNudge(d, 999, 1)).toBe(d);
@@ -291,26 +295,26 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(loaded!.nudges).toStrictEqual({});
     const effective = draftSteps(loaded!);
     expect(effective.some((s) => s.k === "wu")).toBe(false);
-    // 28 total minus the removed 10' warmup: 10*(30s+75s) = 1050s -> 17.5 ->
-    // 18.
-    expect(draftMinutes(loaded!, baselines)).toBe(18);
+    // 25 total minus the removed 5' warmup (300s): 1500 - 300 = 1200s ->
+    // 1200/60 = 20 exactly.
+    expect(draftMinutes(loaded!, baselines)).toBe(20);
   });
 
-  it("round-trips a Meltemi (distance) draft byte-identical with a nudge applied", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-7"));
+  it("round-trips a Calm Sea (distance) draft byte-identical with a nudge applied", () => {
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-7"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
-    // -5, not -1: a -1 nudge (133 -> 132 s/500m) still rounds to the same
-    // 54-minute total as unnudged (3240/60 = 54 exactly), so it would pass
+    // -5, not -1: a -1 nudge (132 -> 131 s/500m) still rounds to the same
+    // 52-minute total as unnudged (3100/60 = 51.67 -> 52), so it would pass
     // whether or not draftMinutes actually priced the nudge in — exactly
     // the gap the F1 fix ("prices a nudge into the recount…" test above)
-    // was found through. -5 crosses the rounding boundary (54 -> 53), so
-    // this round trip also proves the nudge survived storage AND still
-    // prices correctly after a reload.
+    // was found through. -5 changes the total (52 -> 50), so this round
+    // trip also proves the nudge survived storage AND still prices
+    // correctly after a reload.
     const nudged = withNudge(d, workIndex, -5);
     expect(saveDraft(nudged)).toBe(true);
     const loaded = loadDraft();
     expect(loaded).toStrictEqual(nudged);
-    expect(draftMinutes(loaded!, baselines)).toBe(53);
+    expect(draftMinutes(loaded!, baselines)).toBe(50);
     expect(draftMinutes(loaded!, null)).toBeNull();
   });
 
@@ -321,7 +325,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(loaded).toStrictEqual(d);
     const steps = draftSteps(loaded!);
     expect(steps.some((s) => s.k === "reps")).toBe(true);
-    // wu 10' (600s) + 2 * (12' work + 3' rest) = 600 + 1800 = 2400s -> 40.
+    // wu 6' (360s) + 2 * (12' work + 5' rest) = 360 + 2040 = 2400s -> 40.
     expect(draftMinutes(loaded!, baselines)).toBe(40);
   });
 
@@ -336,7 +340,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null and clears the key for an unknown version", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-8"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-8"));
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, v: 2 }));
     expect(loadDraft()).toBeNull();
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
@@ -366,7 +370,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null for v:1 with steps/removed as the wrong shape (an object, not an array)", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-malformed"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-malformed"));
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({ ...d, steps: {}, removed: {} }),
@@ -376,7 +380,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null for v:1 with nudges/spmOverrides as the wrong shape (an array, not a record)", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-malformed-2"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-malformed-2"));
     localStorage.setItem(
       DRAFT_KEY,
       JSON.stringify({ ...d, nudges: [], spmOverrides: [] }),
@@ -386,14 +390,14 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 
   it("returns null for v:1 with a non-string title", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-malformed-3"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-malformed-3"));
     localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, title: 42 }));
     expect(loadDraft()).toBeNull();
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
   });
 
   it("clearDraft removes the stored draft", () => {
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-9"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-9"));
     saveDraft(d);
     clearDraft();
     expect(loadDraft()).toBeNull();
@@ -406,7 +410,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
       .mockImplementation(() => {
         throw new DOMException("quota exceeded", "QuotaExceededError");
       });
-    const d = buildDraft(draftInputFor("Meltemi", "id-meltemi-10"));
+    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-10"));
     expect(() => saveDraft(d)).not.toThrow();
     expect(saveDraft(d)).toBe(false);
     spy.mockRestore();

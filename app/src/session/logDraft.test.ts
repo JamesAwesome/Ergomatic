@@ -16,19 +16,29 @@ import { buildLogSteps, buildManualLogSteps, logTotals } from "./logDraft";
 //     reps of a 0.5-minute piece — the task brief's own `0:30 @ MAX` example
 //     is this exact step, and (F1/F1b review) both doors must render it
 //     identically.
-//   - Meltemi (O2): a single, non-repeated DISTANCE work step (10000m) — the
+//   - Calm Sea (O2): a single, non-repeated DISTANCE work step (10000m) — the
 //     kept-vs-discarded stopwatch-actual fixture, and (F1b) the
-//     mismatched/no-draft fallback fixture.
+//     mismatched/no-draft fallback fixture. (Meltemi used to hold this role;
+//     the library rewrite turned it into a 5-phase TIME workout with no
+//     distance step at all, so this suite re-anchored to Calm Sea — same
+//     10,000 m distance, matching draft.test.ts/engine.test.ts.)
 //   - Filling Low (AT): wu + a reps-marker block of 3x2000m @ 6k+4 with 3'
 //     auto-rest — proves wu/rest/reps-marker never leak into the LogStep
 //     list even when the workout actually has them.
-//   - Hoarfrost (O2): wu + a reps-marker block of 2x12' @ 6k+12 with 3' rest —
+//   - Hoarfrost (O2): wu + a reps-marker block of 2x12' @ 6k+12 with 5' rest —
 //     a split-ref TIME work step, for the "completed time phase -> assumed"
 //     rule (the engine never records an actuals entry for a time phase at
 //     all, so this fixture needs no special-casing to hit that branch).
-//   - Falkland Current (TR): three SEQUENTIAL distance steps at 2k+2 / 2k+0 /
-//     2k-2 — no reps marker, covers all three `refLabel` sign branches for
-//     the manual builder, and (F1b) the removed-step draft-lookup fixture.
+//   - Cross Sea (TR): four SEQUENTIAL distance steps at 2k+4 / 2k+2 / 2k+0 /
+//     2k-2 — no reps marker, covers all three `refLabel` sign branches
+//     (positive/zero/negative) for the manual builder. (Falkland Current
+//     used to hold this role with exactly three steps at 2k+2/2k+0/2k-2; the
+//     rewrite turned it into a single step repeated x4 via a reps marker, so
+//     this suite re-anchored to Cross Sea, the closest equivalent shape.)
+//   - Gyre (TR): three SEQUENTIAL distance steps at 2k+5 / 2k+3 / 2k+1, no
+//     reps marker, rest after the first two but none after the third — the
+//     (F1b) removed-step draft-lookup fixture. (Also re-anchored off Falkland
+//     Current for the same reason as Cross Sea above.)
 function library(title: string) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
@@ -69,13 +79,15 @@ function runFor(
 
 describe("buildLogSteps", () => {
   it("Fork Lightning: 10 effort work phases each omit targetSplit/actualSplit/actualSource entirely (5G rule); label carries the chip word straight from the draft's real ref (F1b's primary, draft-based path)", () => {
-    // wu(10') + reps(10) x [w{0.5min, effort:max, spm:32, rest 1.25'}] ->
-    // 1 warmup + 10*(work+rest) = 21 phases; work at positions
-    // 1,3,5,7,9,11,13,15,17,19. estimationSplit(max) = baselines.k2Seconds
-    // = 100 (irrelevant here — never surfaced). draft.steps[originalIndex]
-    // for every work phase is the SAME authored step (Fork Lightning's sole
-    // "w" step, repeated via the reps marker), ref {effort:"max"} ->
-    // refLabel = "MAX". duration = fmtDuration(0.5) = "0:30".
+    // wu(5') + reps(5) x [w1{0.5min, effort:max, spm:32, rest .75'} +
+    // w2{0.5min, effort:max, spm:32, rest 2.25'}] -> 1 warmup + 5*(w1+r1+w2+
+    // r2) = 21 phases; work at positions 1,3,5,7,9,11,13,15,17,19. Both
+    // authored "w" steps carry the identical effort ref/spm/duration, so
+    // every work phase's LogStep is identical even though originalIndex
+    // alternates between the two (2 and 3). estimationSplit(max) =
+    // baselines.k2Seconds = 100 (irrelevant here — never surfaced). ref
+    // {effort:"max"} -> refLabel = "MAX". duration = fmtDuration(0.5) =
+    // "0:30".
     const { draft, run } = runFor("Fork Lightning", 3, {
       completedAt: NOW.toISOString(),
     });
@@ -148,16 +160,17 @@ describe("buildLogSteps", () => {
   });
 
   it("F1b: a removed step doesn't shift the surviving phases' draft lookup — indexing is by originalIndex, not position, so it survives a removed sibling", () => {
-    // Falkland Current: wu(0) + w1(1, 2000m@2k+2) + w2(2, 1000m@2k+0) +
-    // w3(3, 500m@2k-2), no reps marker. Removing w2 (index 2) must not
-    // shift w3's lookup down to index 2 (w2's OWN ref) — it has to stay 3.
-    const nor = library("Falkland Current");
+    // Gyre: wu(0) + w1(1, 750m@2k+5, rest 2') + w2(2, 500m@2k+3, rest 2') +
+    // w3(3, 250m@2k+1, no rest), no reps marker. Removing w2 (index 2) must
+    // not shift w3's lookup down to index 2 (w2's OWN ref) — it has to
+    // stay 3.
+    const gyre = library("Gyre");
     const draft: SessionDraft = {
       ...buildDraft({
         id: "id-removed",
-        title: nor.title,
-        type: nor.type as WorkoutType,
-        steps: nor.steps,
+        title: gyre.title,
+        type: gyre.type as WorkoutType,
+        steps: gyre.steps,
       }),
       removed: [2],
     };
@@ -181,8 +194,8 @@ describe("buildLogSteps", () => {
       completedAt: NOW.toISOString(),
     };
     expect(buildLogSteps(run, draft).map((s) => s.label)).toStrictEqual([
-      "2000 m @ 2k +2", // w1 (index 1) — untouched by w2's removal
-      "500 m @ 2k −2", // w3 (index 3) — NOT w2's "1000 m @ 2k" (index 2)
+      "750 m @ 2k +5", // w1 (index 1) — untouched by w2's removal
+      "250 m @ 2k +1", // w3 (index 3) — NOT w2's "500 m @ 2k +3" (index 2)
     ]);
   });
 
@@ -309,11 +322,11 @@ describe("buildLogSteps", () => {
     expect(runDoorLabel).toBe(manualDoorLabel);
   });
 
-  it("Meltemi: a kept stopwatch actual passes through unchanged, keeping meters (not seconds)", () => {
-    // wu(10') + w{10000m @ 6k+13, spm 19} -> phases: [warmup, work]. draft's
-    // real ref {base:"6k", off:13} -> refLabel "6k +13". Elapsed 2500s on
+  it("Calm Sea: a kept stopwatch actual passes through unchanged, keeping meters (not seconds)", () => {
+    // wu(8') + w{10000m @ 6k+12, spm 21} -> phases: [warmup, work]. draft's
+    // real ref {base:"6k", off:12} -> refLabel "6k +12". Elapsed 2500s on
     // 10000m -> splitSeconds = (2500/10000)*500 = 125.0 exactly.
-    const { draft, run } = runFor("Meltemi", 0, {
+    const { draft, run } = runFor("Calm Sea", 0, {
       completedAt: new Date(NOW.getTime() + 2500 * 1000).toISOString(),
       actuals: {
         1: {
@@ -323,28 +336,28 @@ describe("buildLogSteps", () => {
         },
       },
     });
-    expect(run.phases[1]).toMatchObject({ meters: 10000, targetSplit: 133 });
+    expect(run.phases[1]).toMatchObject({ meters: 10000, targetSplit: 132 });
     const steps = buildLogSteps(run, draft);
     expect(steps).toStrictEqual([
       {
-        label: "10000 m @ 6k +13",
-        targetSplit: 133,
+        label: "10000 m @ 6k +12",
+        targetSplit: 132,
         actualSplit: 125,
         actualSource: "stopwatch",
-        spm: 19,
+        spm: 21,
         meters: 10000,
       },
     ]);
   });
 
-  it("Meltemi: no recorded actual on a distance phase means the split was DISCARDED — absence, not an assumed/zero value", () => {
-    const { draft, run } = runFor("Meltemi", 0, {
+  it("Calm Sea: no recorded actual on a distance phase means the split was DISCARDED — absence, not an assumed/zero value", () => {
+    const { draft, run } = runFor("Calm Sea", 0, {
       completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
       actuals: {},
     });
     const steps = buildLogSteps(run, draft);
     expect(steps).toStrictEqual([
-      { label: "10000 m @ 6k +13", targetSplit: 133, spm: 19, meters: 10000 },
+      { label: "10000 m @ 6k +12", targetSplit: 132, spm: 21, meters: 10000 },
     ]);
   });
 
@@ -404,7 +417,7 @@ describe("buildLogSteps", () => {
   });
 
   it("Hoarfrost: a completed split-ref TIME phase gets actualSplit = targetSplit, actualSource 'assumed' — the engine never records a real actual for a time phase at all", () => {
-    // wu(10') + reps(2) x [w{12min @ 6k+12, spm 19, rest 3'}] -> 5 phases;
+    // wu(6') + reps(2) x [w{12min @ 6k+12, spm 22, rest 5'}] -> 5 phases;
     // work at 1,3. draft's real ref {base:"6k", off:12} -> refLabel
     // "6k +12"; fmtDuration(12) = "12:00".
     const { draft, run } = runFor("Hoarfrost", 0, {
@@ -419,7 +432,7 @@ describe("buildLogSteps", () => {
         targetSplit: 132,
         actualSplit: 132,
         actualSource: "assumed",
-        spm: 19,
+        spm: 22,
         seconds: 720,
       },
       {
@@ -427,7 +440,7 @@ describe("buildLogSteps", () => {
         targetSplit: 132,
         actualSplit: 132,
         actualSource: "assumed",
-        spm: 19,
+        spm: 22,
         seconds: 720,
       },
     ]);
@@ -480,24 +493,24 @@ describe("buildLogSteps", () => {
     });
 
     it("draft null: a split-ref phase falls back to the phase's own resolved split text — the one case where a fallback label can still differ from the manual door's", () => {
-      const { run } = runFor("Meltemi", 0, {
+      const { run } = runFor("Calm Sea", 0, {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
       });
-      // toleranceRange(133, tol=0).label = fmtSplit(133) = "2:13.0" — the
-      // pre-F1b resolved-split text, not "6k +13".
+      // toleranceRange(132, tol=0).label = fmtSplit(132) = "2:12.0" — the
+      // pre-F1b resolved-split text, not "6k +12".
       expect(buildLogSteps(run, null)).toStrictEqual([
-        { label: "10000 m @ 2:13.0", targetSplit: 133, spm: 19, meters: 10000 },
+        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 21, meters: 10000 },
       ]);
     });
 
     it('a mismatched/stale draft (originalIndex doesn\'t land on a real "w" step) falls back safely instead of crashing or mislabeling', () => {
-      const { run } = runFor("Meltemi", 0, {
+      const { run } = runFor("Calm Sea", 0, {
         completedAt: new Date(NOW.getTime() + 2560 * 1000).toISOString(),
         actuals: {},
       });
       // A draft that does NOT match this run at all: its steps[1] (the
-      // index Meltemi's work phase's originalIndex points at) is a
+      // index Calm Sea's work phase's originalIndex points at) is a
       // second warm-up, not a "w" step — draftWorkStep must return
       // undefined here, not throw, not silently mislabel.
       const wrongDraft = buildDraft({
@@ -510,7 +523,7 @@ describe("buildLogSteps", () => {
         ],
       });
       expect(buildLogSteps(run, wrongDraft)).toStrictEqual([
-        { label: "10000 m @ 2:13.0", targetSplit: 133, spm: 19, meters: 10000 },
+        { label: "10000 m @ 2:12.0", targetSplit: 132, spm: 21, meters: 10000 },
       ]);
     });
   });
@@ -541,8 +554,8 @@ describe("buildLogSteps", () => {
     });
 
     it("a test step mixed with a real work step keeps the draft's own ORIGINAL label ('6k test'), not the phase's frozen generic 'All out'", () => {
-      const meltemi = library("Meltemi");
-      const distanceWork = meltemi.steps.find((s) => s.k === "w") as Extract<
+      const calmSea = library("Calm Sea");
+      const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
         Step,
         { k: "w" }
       >;
@@ -563,10 +576,10 @@ describe("buildLogSteps", () => {
       expect(steps).toHaveLength(2);
       expect(steps[0]).toStrictEqual({ label: "6k test" });
       // The real work step is unaffected by the test step's presence —
-      // same chip-idiom label ("6k +13") this file's other draft-based
+      // same chip-idiom label ("6k +12") this file's other draft-based
       // tests already pin.
-      expect(steps[1]!.label).toBe("10000 m @ 6k +13");
-      expect(steps[1]!.targetSplit).toBe(133);
+      expect(steps[1]!.label).toBe("10000 m @ 6k +12");
+      expect(steps[1]!.targetSplit).toBe(132);
     });
 
     it("with no draft at all, a test phase falls back to its own frozen 'All out' label rather than crashing", () => {
@@ -644,31 +657,39 @@ describe("buildManualLogSteps", () => {
         targetSplit: 132,
         actualSplit: 132,
         actualSource: "assumed",
-        spm: 19,
+        spm: 22,
         seconds: 720,
       });
     }
   });
 
-  it("Falkland Current: no reps marker, three sequential steps cover all three refLabel sign branches (+2, ±0, -2)", () => {
-    const w = library("Falkland Current");
+  it("Cross Sea: no reps marker, four sequential steps cover all three refLabel sign branches (+4, +2, ±0, -2)", () => {
+    const w = library("Cross Sea");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
     expect(steps).toStrictEqual([
       {
-        label: "2000 m @ 2k +2",
+        label: "500 m @ 2k +4",
+        targetSplit: 104, // 100 + 4
+        actualSplit: 104,
+        actualSource: "assumed",
+        spm: 25,
+        meters: 500,
+      },
+      {
+        label: "500 m @ 2k +2",
         targetSplit: 102, // 100 + 2
         actualSplit: 102,
         actualSource: "assumed",
         spm: 26,
-        meters: 2000,
+        meters: 500,
       },
       {
-        label: "1000 m @ 2k",
+        label: "500 m @ 2k",
         targetSplit: 100, // off 0 -> refLabel drops the sign entirely
         actualSplit: 100,
         actualSource: "assumed",
         spm: 27,
-        meters: 1000,
+        meters: 500,
       },
       {
         label: "500 m @ 2k −2", // U+2212 MINUS SIGN, matching refLabel/StepRow's convention
@@ -706,8 +727,8 @@ describe("buildManualLogSteps", () => {
     });
 
     it("a test step keeps its own ORIGINAL authored label alongside a real work step — simpler than the session door's own version, since this builder always has the real Step object in hand, no phase/draft indirection", () => {
-      const meltemi = library("Meltemi");
-      const distanceWork = meltemi.steps.find((s) => s.k === "w") as Extract<
+      const calmSea = library("Calm Sea");
+      const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
         Step,
         { k: "w" }
       >;
@@ -716,11 +737,11 @@ describe("buildManualLogSteps", () => {
       expect(built).toHaveLength(2);
       expect(built[0]).toStrictEqual({ label: "6k test" });
       expect(built[1]).toStrictEqual({
-        label: "10000 m @ 6k +13",
-        targetSplit: 133,
-        actualSplit: 133,
+        label: "10000 m @ 6k +12",
+        targetSplit: 132,
+        actualSplit: 132,
         actualSource: "assumed",
-        spm: 19,
+        spm: 21,
         meters: 10000,
       });
     });
@@ -730,7 +751,7 @@ describe("buildManualLogSteps", () => {
 describe("logTotals", () => {
   it("Hoarfrost: dateLabel is the house 'JUL 25' format read from completedAt, totalMinutes is the REAL wall-clock length rounded to the nearest minute", () => {
     // completedAt = startedAt + 46 real minutes (2760s) -> round(2760/60) =
-    // 46 exactly, not the workout's PROGRAMMED length (10 + 2*(12+3) = 40
+    // 46 exactly, not the workout's PROGRAMMED length (6 + 2*(12+5) = 40
     // minutes) — a real session can run long or short of its own estimate,
     // and the Log screen is recording what happened, not the plan.
     const { run } = runFor("Hoarfrost", 0, {
@@ -743,14 +764,14 @@ describe("logTotals", () => {
   });
 
   it("rounds a fractional minute to the nearest whole minute", () => {
-    const { run } = runFor("Meltemi", 0, {
+    const { run } = runFor("Calm Sea", 0, {
       completedAt: new Date(NOW.getTime() + 90 * 1000).toISOString(), // 1.5 min
     });
     expect(logTotals(run).totalMinutes).toBe(2); // round(1.5) -> 2
   });
 
   it("an incomplete run (completedAt null) reads as 0 minutes and falls back to startedAt for the date, never reading the system clock", () => {
-    const { run } = runFor("Meltemi", 0, { completedAt: null });
+    const { run } = runFor("Calm Sea", 0, { completedAt: null });
     expect(logTotals(run)).toStrictEqual({
       dateLabel: "AUG 2", // NOW itself, run.startedAt === NOW.toISOString()
       totalMinutes: 0,

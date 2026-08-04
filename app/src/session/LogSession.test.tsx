@@ -33,8 +33,8 @@ function library(title: string) {
 }
 
 /** A real, mixed-kind fixture — Hoarfrost's own time/split work step (6k+12,
- *  restMinutes 3 — its auto-inserted rest phase) plus Meltemi's own
- *  distance/split work step (6k+13), assembled from two real library
+ *  restMinutes 5 — its auto-inserted rest phase) plus Calm Sea's own
+ *  distance/split work step (6k+12), assembled from two real library
  *  workouts' own step OBJECTS rather than a hand-built minimum (the same
  *  "no single library workout has this shape" idiom Task 1's own F1b test
  *  used). The reps marker Hoarfrost is normally authored with is
@@ -42,7 +42,7 @@ function library(title: string) {
  *  `completeDraftAndRun` does the same for the identical reason: a live
  *  reps marker would repeat the APPENDED distance step too, which isn't the
  *  shape this fixture wants. Phases: 0 warm-up, 1 work (time, 6k+12), 2
- *  rest (3'), 3 work (distance, 6k+13) — the LAST phase gets a real
+ *  rest (5'), 3 work (distance, 6k+12) — the LAST phase gets a real
  *  recorded (stopwatch) actual; the time phase never does (the engine only
  *  ever records one for a distance phase), so this fixture covers BOTH of
  *  `buildLogSteps`' actual rules in one run. */
@@ -65,8 +65,8 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
     Step,
     { k: "w" }
   >;
-  const meltemi = library("Meltemi");
-  const distanceWork = meltemi.steps.find((s) => s.k === "w") as Extract<
+  const calmSea = library("Calm Sea");
+  const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
     Step,
     { k: "w" }
   >;
@@ -90,7 +90,7 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
     completedAt,
     actuals: {
       // 2500s / 10000m * 500 = 125.0s exactly — deliberately NOT equal to
-      // the 133s target, so a stopwatch actual reads as genuinely
+      // the 132s target, so a stopwatch actual reads as genuinely
       // different information, not a repeat of the target line.
       [distanceIndex]: {
         elapsedSeconds: 2500,
@@ -178,7 +178,7 @@ function activePlan(overrides: Partial<PlanData> = {}): PlanData {
 
 // A real, mixed-kind fixture for the manual door — the SAME two library
 // workouts' own work steps `buildSessionFixture` above assembles (Hoarfrost's
-// time/split step, restMinutes 3; Meltemi's distance/split step), reused
+// time/split step, restMinutes 5; Calm Sea's distance/split step), reused
 // here rather than a hand-built minimum (this file's own established "no
 // single library workout has this shape" idiom). Unlike `buildSessionFixture`,
 // this never touches the draft/run stores at all — the manual door has no
@@ -189,8 +189,8 @@ function manualWorkoutFixture(id = "id-manual-fixture"): LibraryWorkout {
     Step,
     { k: "w" }
   >;
-  const meltemi = library("Meltemi");
-  const distanceWork = meltemi.steps.find((s) => s.k === "w") as Extract<
+  const calmSea = library("Calm Sea");
+  const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
     Step,
     { k: "w" }
   >;
@@ -353,9 +353,9 @@ describe("LogSession: prefill from a real completed run", () => {
     expect(rows[0]).toHaveTextContent("2:12.0");
     expect(rows[0]).not.toHaveTextContent("ACTUAL");
     // Row 2: the distance/split step — a REAL stopwatch actual (125.0s)
-    // that differs from the 133.0s target earns its own ACTUAL line.
-    expect(rows[1]).toHaveTextContent("10000 m @ 6k +13");
-    expect(rows[1]).toHaveTextContent("2:13.0");
+    // that differs from the 132.0s target earns its own ACTUAL line.
+    expect(rows[1]).toHaveTextContent("10000 m @ 6k +12");
+    expect(rows[1]).toHaveTextContent("2:12.0");
     expect(rows[1]).toHaveTextContent("ACTUAL 2:05.0");
 
     // EXPECTED N/5 — Hoarfrost's own `pain` (2), sourced via useWorkouts by
@@ -602,11 +602,13 @@ describe("LogSession: the ledger residual (workoutId mismatch)", () => {
     expect(rows).toHaveLength(2);
     // Fallback label: the phase's own frozen (already-resolved) label, not
     // the draft's chip idiom — proves the mismatch guard actually changed
-    // behavior rather than passing vacuously. targetSplit 132 (Hoarfrost)
-    // and 133 (Meltemi) at TOL=1 -> toleranceRange labels "2:11.0–2:13.0"
-    // and "2:12.0–2:14.0".
+    // behavior rather than passing vacuously. targetSplit 132 for BOTH
+    // Hoarfrost (6k+12) and Calm Sea (6k+12, same offset) at TOL=1 ->
+    // toleranceRange labels "2:11.0–2:13.0" for each — the point here is
+    // the fallback FORMAT (a resolved range, not the "@ 6k +12" chip idiom
+    // the matched-draft tests pin), not that the two rows differ.
     expect(rows[0]).toHaveTextContent("12:00 @ 2:11.0–2:13.0");
-    expect(rows[1]).toHaveTextContent("10000 m @ 2:12.0–2:14.0");
+    expect(rows[1]).toHaveTextContent("10000 m @ 2:11.0–2:13.0");
   });
 });
 
@@ -733,7 +735,7 @@ describe("LogSession: save", () => {
   // value (already unit-pinned in logDraft.test.ts) — proving the 5G
   // omission rules survive all the way to the bytes on the wire, not just
   // to an in-memory object a later step might still widen. Real library
-  // workouts' own step OBJECTS (Fork Lightning's effort step, Meltemi's
+  // workouts' own step OBJECTS (Fork Lightning's effort step, Calm Sea's
   // distance step), assembled directly (no reps marker, no wu) — same "real
   // step objects, synthetic combination" idiom `buildSessionFixture`'s own
   // doc comment establishes — with `actuals: {}` so the distance phase reads
@@ -745,8 +747,8 @@ describe("LogSession: save", () => {
       Step,
       { k: "w" }
     >;
-    const meltemi = library("Meltemi");
-    const distanceWork = meltemi.steps.find((s) => s.k === "w") as Extract<
+    const calmSea = library("Calm Sea");
+    const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
       Step,
       { k: "w" }
     >;
@@ -1109,7 +1111,10 @@ describe("LogSession: staged discard", () => {
 // worth it for a header line whose wall-clock risk (a run straddling
 // midnight) is negligible for a test suite that completes in well under a
 // second.
-const MANUAL_TOTAL_LABEL = `${formatLogDate(new Date().toISOString())} · 63 MIN`;
+// wu 4' (240s) + Hoarfrost's time work (12' = 720s) + its own restMinutes
+// (5' = 300s) + Calm Sea's distance work (10,000m @ 6k+12 = 132 s/500m ->
+// 20*132 = 2640s) = 3900s -> 65 MIN exactly.
+const MANUAL_TOTAL_LABEL = `${formatLogDate(new Date().toISOString())} · 65 MIN`;
 
 describe("LogSession: the manual door (Task 3)", () => {
   it("shows the title, type badge, TODAY's date + the estimated total, the PACES LOCKED panel (referenced bases only), the per-step list with every actual 'assumed', and EXPECTED N/5 — with no Discard button at all", async () => {
@@ -1122,8 +1127,8 @@ describe("LogSession: the manual door (Task 3)", () => {
       await screen.findByRole("heading", { name: "Log Hoarfrost" }),
     ).toBeInTheDocument();
     expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
-    // estimateMinutes over wu(4') + work(12') + auto rest(3') +
-    // distance(10000m @ 133s/500m = 2660s) = 3800s -> 63.33' rounds to 63
+    // estimateMinutes over wu(4') + work(12') + auto rest(5') +
+    // distance(10000m @ 132s/500m = 2640s) = 3900s -> 65 exactly
     // (verified independently against domain/expand.ts's own
     // estimateMinutes before writing this number in).
     expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
@@ -1146,10 +1151,10 @@ describe("LogSession: the manual door (Task 3)", () => {
     // Manual-door actuals are ALWAYS "assumed" (buildManualLogSteps' own
     // rule) — never a second ACTUAL line, unlike a real stopwatch reading.
     expect(rows[0]).not.toHaveTextContent("ACTUAL");
-    // Row 2: Meltemi's own distance/split step (120 + 13 = 133 ->
-    // "2:13.0") — also "assumed", also no ACTUAL line.
-    expect(rows[1]).toHaveTextContent("10000 m @ 6k +13");
-    expect(rows[1]).toHaveTextContent("2:13.0");
+    // Row 2: Calm Sea's own distance/split step (120 + 12 = 132 ->
+    // "2:12.0") — also "assumed", also no ACTUAL line.
+    expect(rows[1]).toHaveTextContent("10000 m @ 6k +12");
+    expect(rows[1]).toHaveTextContent("2:12.0");
     expect(rows[1]).not.toHaveTextContent("ACTUAL");
 
     // EXPECTED N/5 — Hoarfrost's own `pain` (2), read straight off the

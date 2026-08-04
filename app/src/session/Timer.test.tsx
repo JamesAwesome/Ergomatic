@@ -29,7 +29,7 @@ function library(title: string) {
 // with an added effort step via the draft," extended one further step for
 // distance (no single library step list otherwise exercises wu/work-split/
 // rest/work-effort/distance all in one run). Hoarfrost's own real split-ref
-// work step (time, spm 19, its own embedded 3' rest) supplies wu/
+// work step (time, spm 22, its own embedded 5' rest) supplies wu/
 // work-split/rest; a distance split-ref step and an effort-ref step are
 // appended directly onto the draft. The reps marker is deliberately NOT
 // reused here — appending steps after a LIVE "reps" marker would repeat
@@ -38,8 +38,8 @@ function library(title: string) {
 //
 // Resulting phases (baselines {k2:100,k6:120}, tol 1):
 //   0 warmup   240s   "Easy"
-//   1 work     720s   split  "2:12.0" / "2:11.0–2:13.0"  spm 19
-//   2 rest     180s   "Rest"
+//   1 work     720s   split  "2:12.0" / "2:11.0–2:13.0"  spm 22
+//   2 rest     300s   "Rest"
 //   3 work     —      distance 500m, split "1:40.0" / "1:39.0–1:41.0"
 //   4 work     60s    effort "ALL OUT"
 function kindMatrixDraft(): SessionDraft {
@@ -282,7 +282,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("12:00")).toBeInTheDocument(); // 720s remaining
     expect(screen.getByText("2:12.0")).toBeInTheDocument();
     expect(screen.getByText("2:11.0–2:13.0")).toBeInTheDocument();
-    expect(screen.getByText("19")).toBeInTheDocument();
+    expect(screen.getByText("22")).toBeInTheDocument();
     expect(screen.getByText("spm")).toBeInTheDocument();
     // Fix round (whole-branch review, F4): a rest phase's own resolved
     // `label` is literally "Rest" (domain/expand.ts), which used to render
@@ -324,7 +324,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     await renderTimer();
 
     expect(screen.getByText("STEP 3 OF 5 · REST")).toBeInTheDocument();
-    expect(screen.getByText("3:00")).toBeInTheDocument(); // 180s remaining
+    expect(screen.getByText("5:00")).toBeInTheDocument(); // 300s remaining
     expect(screen.getByText("Rest")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
     expect(screen.getByText("WORK · 1:39.0–1:41.0")).toBeInTheDocument();
@@ -538,7 +538,7 @@ describe("Timer — controls", () => {
     await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
 
     expect(screen.getByText("STEP 3 OF 5 · REST")).toBeInTheDocument();
-    expect(screen.getByText("3:00")).toBeInTheDocument();
+    expect(screen.getByText("5:00")).toBeInTheDocument();
   });
 
   // Fix round (spec review F5): completion is a documented one-way door
@@ -1001,15 +1001,21 @@ describe("Timer — the repaint loop", () => {
   // `visibilitychange`, not only from the next 1s interval tick.
   it("catches up multiple phases on visibilitychange (a simulated lock)", async () => {
     mockKeepAwake();
-    const moderateBreeze = library("Moderate Breeze");
+    // Diamond Dust: wu 6' + 8'/8'/8' rate-change, no reps/rest — three
+    // SEQUENTIAL time work phases, ideal for the catch-up walk (each
+    // phase's boundary is unambiguous). (Moderate Breeze used to hold this
+    // role; the library rewrite turned it into a reps x8 workout — 17
+    // phases instead of 4 — so this suite re-anchored to Diamond Dust, per
+    // engine.test.ts's own re-anchor for the same reason.)
+    const diamondDust = library("Diamond Dust");
     const draft = buildDraft({
-      id: "id-moderate-breeze",
-      title: moderateBreeze.title,
-      type: moderateBreeze.type as WorkoutType,
-      steps: moderateBreeze.steps,
+      id: "id-diamond-dust",
+      title: diamondDust.title,
+      type: diamondDust.type as WorkoutType,
+      steps: diamondDust.steps,
     });
     const run = buildAndSaveRun(draft);
-    // wu 600s + work1 360s = 960s boundary; 10s into work2 (index 2).
+    // wu 360s + work1 480s = 840s boundary; 130s into work2 (index 2).
     runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 970_000));
     await renderTimer();
 

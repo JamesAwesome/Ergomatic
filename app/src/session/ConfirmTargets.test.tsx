@@ -23,12 +23,19 @@ import {
 // (app/server/seed/library/index.ts), matching draft.test.ts's own choices
 // so the pinned minute totals here are the exact same already-verified
 // numbers.
-// - Hoarfrost (O2): wu 10' + reps×2 marker + one split-ref work step (19
-//   spm, 6k+12, 3' embedded rest) — the reps-marker fixture.
-// - Meltemi (O2): wu 10' + a single 10,000 m distance work step — the
-//   distance-duration-stepper fixture.
-// - Fork Lightning (AN): wu 10' + reps×10 marker + an EFFORT-ref work step —
-//   the no-nudge/effort-word fixture.
+// - Hoarfrost (O2): wu 6' + reps×2 marker + one split-ref work step (22
+//   spm, 6k+12, 5' embedded rest) — the reps-marker fixture.
+// - Calm Sea (O2): wu 8' + a single 10,000 m distance work step — the
+//   distance-duration-stepper fixture. (Meltemi used to hold this role; the
+//   library rewrite turned it into a 5-phase TIME workout with no distance
+//   step at all, so this suite re-anchored to Calm Sea — same 10,000 m
+//   distance, matching draft.test.ts/engine.test.ts/logDraft.test.ts.)
+// - Heat Lightning (AN): wu 10' + reps×10 marker + an EFFORT-ref work step —
+//   the no-nudge/effort-word fixture. (Fork Lightning used to hold this
+//   role; the rewrite turned its reps block into TWO alternating work
+//   steps, which renders as two separate editable rows here and breaks the
+//   "exactly one ALL OUT row" assumption this test makes, so this suite
+//   re-anchored to Heat Lightning, which still has a single repeated step.)
 function library(title: string) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
@@ -199,7 +206,7 @@ describe("ConfirmTargets", () => {
 
   it("a distance work step's duration stepper steps by 100m in both directions", async () => {
     mockBaselines();
-    seedDraft("Meltemi");
+    seedDraft("Calm Sea");
     await renderConfirm();
 
     const group = screen.getByRole("group", { name: "Row 2 duration" });
@@ -218,21 +225,21 @@ describe("ConfirmTargets", () => {
 
   it("the SPM stepper wakes from the step's own spm, not always 20, in both directions", async () => {
     mockBaselines();
-    seedDraft("Hoarfrost"); // the work step carries spm: 19
+    seedDraft("Hoarfrost"); // the work step carries spm: 22
     await renderConfirm();
 
     const group = screen.getByRole("group", { name: "Row 3 stroke rate" });
-    expect(within(group).getByText("19")).toBeInTheDocument();
+    expect(within(group).getByText("22")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 3 stroke rate up" }),
     );
-    expect(within(group).getByText("20")).toBeInTheDocument();
+    expect(within(group).getByText("23")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 3 stroke rate down" }),
     );
-    expect(within(group).getByText("19")).toBeInTheDocument();
+    expect(within(group).getByText("22")).toBeInTheDocument();
   });
 
   it("the SPM stepper wakes at 20 when the step carries no spm of its own", async () => {
@@ -278,8 +285,8 @@ describe("ConfirmTargets", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Row 2 reps up" }),
     );
-    // wu 10' + 3 * (12' + 3') = 600 + 2700 = 3300s -> 55.
-    expect(screen.getByText("55 MIN")).toBeInTheDocument();
+    // wu 6' + 3 * (12' + 5') = 360 + 3060 = 3420s -> 57.
+    expect(screen.getByText("57 MIN")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 2 reps down" }),
@@ -299,8 +306,8 @@ describe("ConfirmTargets", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove Row 1" }));
 
     expect(warmupRow).toHaveClass("confirm-step-removed");
-    // 2 * (12' + 3') = 30, the warm-up's 10' dropped out.
-    expect(screen.getByText("30 MIN")).toBeInTheDocument();
+    // 2 * (12' + 5') = 34, the warm-up's 6' dropped out.
+    expect(screen.getByText("34 MIN")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Restore Row 1" }),
     ).toBeInTheDocument();
@@ -443,7 +450,7 @@ describe("ConfirmTargets", () => {
 
   it("an effort-ref step shows its effort word with no nudge control anywhere on that row", async () => {
     mockBaselines();
-    seedDraft("Fork Lightning");
+    seedDraft("Heat Lightning");
     await renderConfirm();
 
     // Header label and the TARGET row both read the effort word — the
