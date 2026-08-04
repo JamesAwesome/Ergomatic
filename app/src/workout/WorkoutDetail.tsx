@@ -10,6 +10,7 @@ import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import { buildDraft, loadDraft, saveDraft } from "../session/draft";
 import { clearRun, loadRun } from "../session/run";
+import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
@@ -324,13 +325,6 @@ function WorkoutDetailView({
     </main>
   );
 }
-
-// How long an armed destructive control stays armed before silently
-// disarming (DESIGN.md's own copy: "Auto-disarms on blur or 4s") — shared
-// by every armed control this round introduces (Delete workout here;
-// Discard, Tasks 2-3), so a rower's "tap again" window is the same
-// everywhere it appears.
-const ARM_TIMEOUT_MS = 4000;
 
 function OwnerActions({
   workoutId,

@@ -447,6 +447,65 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
 
     await cleanupByTitle(page, title);
   });
+
+  // Task 3 (ui-fix round): SessionComplete's own new Discard without
+  // logging — clears the run/draft records with no POST, lands on Today
+  // with neither an unlogged line NOR an advanced plan counter (only a
+  // real logged session advances `doneN`, via POST /api/logs — this never
+  // fires one).
+  test("SessionComplete's Discard without logging clears the records and never posts a log — Today shows no unlogged line and the plan counter is unchanged", async ({
+    page,
+  }) => {
+    const title = "Tiny E2E Complete Discard";
+    await signInViaBackdoor(page, {
+      email: "session-complete-discard@e2e.test",
+      name: "Session Complete Discard Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 0:03 6k"].join("\n"),
+    );
+
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+
+    // Staged — the first press only arms the L4 button, nothing clears yet.
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    const runMidStage = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runMidStage).not.toBeNull();
+
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).toBeNull();
+    const draftAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    expect(draftAfter).toBeNull();
+
+    // No unlogged line — there's no completed-but-unlogged run left to show.
+    await expect(page.getByText(/unlogged session/i)).toHaveCount(0);
+    // The plan's own session counter never moved — discarding is not
+    // logging, so `doneN` was never touched.
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "SESSION 1 OF 84",
+    );
+    // LAST THREE never shows this workout — discarding never POSTs a log.
+    await expect(
+      page.locator(".today-log-row").filter({ hasText: title }),
+    ).toHaveCount(0);
+
+    await cleanupByTitle(page, title);
+  });
 });
 
 test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
@@ -577,14 +636,15 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await page.getByRole("link", { name: "Log this session" }).click();
     await expect(page).toHaveURL(/\/session\/log$/);
 
-    // Staged — the first press only reveals the confirm, nothing clears yet.
+    // Staged — the first press only arms the L4 button in place (same
+    // in-place idiom as WorkoutDetail's Delete workout), nothing clears yet.
     await page.getByRole("button", { name: "Discard without logging" }).click();
     const runMidStage = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
     );
     expect(runMidStage).not.toBeNull();
 
-    await page.getByRole("button", { name: "Discard session" }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
     await expect(page).toHaveURL(/\/today$/);
 
     const runAfter = await page.evaluate(() =>

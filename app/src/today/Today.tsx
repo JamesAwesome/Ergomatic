@@ -17,6 +17,7 @@ import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
 import type { PlanCode } from "../../domain/plans.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
+import { useStagedDiscard } from "../session/useStagedDiscard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
   loadTodayOverrides,
@@ -327,6 +328,86 @@ function ErrorScreen({
   );
 }
 
+/** The completed-but-unlogged line's own Discard (Task 3, ui-fix round;
+ *  DESIGN.md "Items 2 + 3" — "Today's unlogged row"). Split out as its own
+ *  component (not inlined in `TodayView`) specifically so its
+ *  `useStagedDiscard`/`dismissed` state lives in a subtree TodayView never
+ *  re-renders as a side effect of — see the render-site comment on why that
+ *  matters for the suggestion card.
+ *
+ *  Arming swaps the ROW'S CONTENTS, not its layout: the DEFAULT state's
+ *  "{title} — unlogged session." line, "Log it" link, and outlined ✕ button
+ *  become the ARMED state's "Discard {title} without logging?" line and a
+ *  single solid-accent "Tap again" button — same `.today-unlogged-line`
+ *  wrapper, same border-box sizing, so the row's height and position never
+ *  move (the mockup's own DEFAULT/ARMED pair, implemented as one row).
+ *  Firing removes the row in place (`dismissed`) with no navigation — unlike
+ *  SessionComplete's/the Log screen's own Discard, which both leave this
+ *  screen entirely. */
+function UnloggedRow({ run }: { run: SessionRun }) {
+  const discard = useStagedDiscard();
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) return null;
+
+  function handleClick() {
+    if (discard.armed) {
+      discard.fire();
+      setDismissed(true);
+    } else {
+      discard.arm();
+    }
+  }
+
+  return (
+    <div
+      className={
+        discard.armed
+          ? "today-unlogged-line today-unlogged-line-armed"
+          : "today-unlogged-line"
+      }
+    >
+      {discard.armed ? (
+        <>
+          <p className="today-unlogged-text">
+            Discard <strong>{run.title}</strong> without logging?
+          </p>
+          <button
+            type="button"
+            className="today-unlogged-discard-armed"
+            onClick={handleClick}
+            onBlur={discard.disarm}
+          >
+            Tap again
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="today-unlogged-text">
+            <strong>{run.title}</strong> — unlogged session.
+          </p>
+          <div className="today-unlogged-actions">
+            {/* The run record is the source LogSession.tsx itself reads, so
+                this link carries no state/params of its own. */}
+            <Link to="/session/log" className="today-unlogged-link">
+              Log it
+            </Link>
+            <button
+              type="button"
+              className="today-unlogged-discard"
+              onClick={handleClick}
+              onBlur={discard.disarm}
+              aria-label="Discard without logging"
+            >
+              ✕
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TodayView({
   library,
   baselines,
@@ -567,21 +648,17 @@ function TodayView({
           </Link>
         </div>
       )}
-      {run !== null && run.completedAt !== null && (
-        // Quieter than the resume card, deliberately (F2's own call): no
-        // accent banner, just the workout's name plus a real "Log it"
-        // action now that Phase 6C Task 2 has built the screen it points
-        // to — the run record is the source LogSession.tsx itself reads,
-        // so this link carries no state/params of its own.
-        <div className="today-unlogged-line">
-          <p className="today-unlogged-text">
-            <strong>{run.title}</strong> — unlogged session.
-          </p>
-          <Link to="/session/log" className="today-unlogged-link">
-            Log it
-          </Link>
-        </div>
-      )}
+      {/* Quieter than the resume card, deliberately (F2's own call): no
+          accent banner, just the workout's name plus a real "Log it" action
+          (Phase 6C Task 2) and — Task 3 (ui-fix round) — a staged Discard.
+          `UnloggedRow` owns ITS OWN `useStagedDiscard`/dismissed state
+          rather than TodayView reading it: a state change scoped to that
+          child component re-renders only the row, never TodayView itself,
+          which is what keeps `suggestion` (computed in TodayView's own
+          render body below) from ever recomputing — and therefore from
+          ever re-shuffling the suggestion card — as a side effect of
+          arming or firing the discard. */}
+      {run !== null && run.completedAt !== null && <UnloggedRow run={run} />}
 
       <div className="today-suggestion-header">
         <span className="mono-status">

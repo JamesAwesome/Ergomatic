@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -1150,6 +1150,152 @@ describe("Today (F2: session resume / unlogged)", () => {
     expect(
       screen.queryByRole("link", { name: "Resume session" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+// Task 3 (ui-fix round): the unlogged line's own staged Discard —
+// DESIGN.md's "Today's unlogged row" — a 44×44 accent-outlined ✕ that arms
+// IN PLACE (border → accent, text → "Discard {title} without logging?", ✕
+// → solid accent "Tap again"), fires with no navigation, and must never
+// disturb the suggestion card underneath.
+function unloggedRunFor(startedAt: Date, completedAt: Date): SessionRun {
+  const built = liveRunFor(startedAt);
+  return {
+    ...built,
+    index: built.phases.length,
+    completedAt: completedAt.toISOString(),
+  };
+}
+
+describe("Today (Task 3: unlogged row's staged Discard)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("arms on the first ✕ press, swapping the row's contents in place, without touching the suggestion card underneath", async () => {
+    const run = unloggedRunFor(
+      new Date("2026-08-01T11:00:00.000Z"),
+      new Date("2026-08-01T11:40:00.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    await renderToday();
+
+    const cardBefore = document.querySelector(".today-card-title")?.innerHTML;
+    expect(cardBefore).toBeTruthy();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+
+    // The row's contents swap — title, ✕, and "Log it" are all replaced by
+    // the armed copy, not merely joined by it.
+    expect(document.querySelector(".today-unlogged-text")?.textContent).toBe(
+      "Discard Cold Front without logging?",
+    );
+    expect(
+      screen.getByRole("button", { name: "Tap again" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Log it" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Discard without logging" }),
+    ).not.toBeInTheDocument();
+
+    // The suggestion card is byte-identical — arming the row re-rendered
+    // only `UnloggedRow`'s own subtree, never `TodayView`.
+    expect(document.querySelector(".today-card-title")?.innerHTML).toBe(
+      cardBefore,
+    );
+  });
+
+  it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
+    const run = unloggedRunFor(
+      new Date("2026-08-01T11:00:00.000Z"),
+      new Date("2026-08-01T11:40:00.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    await renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+    fireEvent.blur(screen.getByRole("button", { name: "Tap again" }));
+
+    expect(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem(RUN_KEY)).not.toBeNull();
+  });
+
+  it("disarms automatically 4 seconds after arming with no second press", async () => {
+    const run = unloggedRunFor(
+      new Date("2026-08-01T11:00:00.000Z"),
+      new Date("2026-08-01T11:40:00.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    await renderToday();
+    vi.useFakeTimers();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Tap again" }),
+    ).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(4000));
+
+    expect(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    ).toBeInTheDocument();
+  });
+
+  it("firing the armed row clears the run/draft records with no fetch, removes the row in place with no navigation, and leaves the suggestion card exactly as it was", async () => {
+    const run = unloggedRunFor(
+      new Date("2026-08-01T11:00:00.000Z"),
+      new Date("2026-08-01T11:40:00.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(run));
+    mockReady();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await renderToday();
+
+    const cardBefore = document.querySelector(".today-card-title")?.innerHTML;
+    const cardHrefBefore = document
+      .querySelector(".today-card")
+      ?.getAttribute("href");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Tap again" }));
+
+    // Gone in place — no "unlogged session" line, no armed controls, and
+    // still on Today (no navigation at all, unlike SessionComplete's/the Log
+    // screen's own Discard, which both leave the screen).
+    expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /discard/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
+
+    const { loadRun } = await import("../session/run");
+    const { loadDraft } = await import("../session/draft");
+    expect(loadRun()).toBeNull();
+    expect(loadDraft()).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // The suggestion card underneath never re-shuffled.
+    expect(document.querySelector(".today-card-title")?.innerHTML).toBe(
+      cardBefore,
+    );
+    expect(document.querySelector(".today-card")?.getAttribute("href")).toBe(
+      cardHrefBefore,
+    );
   });
 });
 

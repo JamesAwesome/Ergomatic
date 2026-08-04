@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -355,5 +355,102 @@ describe("SessionComplete", () => {
     const run = loadRun();
     expect(run).not.toBeNull();
     expect(run!.completedAt).not.toBeNull();
+  });
+
+  // Task 3 (ui-fix round): a third action, Discard without logging (L4/
+  // L4-armed, `useStagedDiscard`), joins the stack under a rule — same
+  // in-place two-tap idiom WorkoutDetail.tsx's own Delete workout uses.
+  describe("Discard without logging", () => {
+    it("arms on the first press without clearing anything or firing a network request", async () => {
+      mockKeepAwake();
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      ).toBeInTheDocument();
+      const { loadDraft } = await import("./draft");
+      const { loadRun } = await import("./run");
+      expect(loadDraft()).not.toBeNull();
+      expect(loadRun()).not.toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
+      mockKeepAwake();
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+      fireEvent.blur(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      ).toBeInTheDocument();
+    });
+
+    it("disarms automatically 4 seconds after arming with no second press", async () => {
+      mockKeepAwake();
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+      // Fake timers only AFTER the render above has resolved — RTL's own
+      // `findByText` polls via a real `setTimeout` internally (same reason
+      // WorkoutDetail.test.tsx's identical fake-timers test never awaits a
+      // `findBy*` once fake timers are active, only synchronous `getByRole`
+      // calls from here on).
+      vi.useFakeTimers();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      ).toBeInTheDocument();
+
+      // `act` wraps the fake-timer advance so the auto-disarm timeout's
+      // `setArmed(false)` (called OUTSIDE any React event, from a raw
+      // `setTimeout`) is flushed to the DOM before the next assertion — same
+      // idiom as WorkoutDetail.test.tsx's own identical test.
+      await act(() => vi.advanceTimersByTimeAsync(4000));
+
+      expect(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      ).toBeInTheDocument();
+    });
+
+    it("clears both records, navigates to /today, and never fires a network request once the armed press lands", async () => {
+      mockKeepAwake();
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      const user = userEvent.setup();
+      completeDraftAndRun();
+      await renderComplete();
+      await screen.findByText("TOTAL");
+
+      await user.click(
+        screen.getByRole("button", { name: "Discard without logging" }),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Tap again to discard" }),
+      );
+
+      expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+      const { loadDraft } = await import("./draft");
+      const { loadRun } = await import("./run");
+      expect(loadDraft()).toBeNull();
+      expect(loadRun()).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
   });
 });

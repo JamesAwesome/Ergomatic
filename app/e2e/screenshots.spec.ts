@@ -196,6 +196,49 @@ test("today", async ({ page }) => {
   });
 });
 
+// Task 3 (ui-fix round): the unlogged row's own staged Discard — a real
+// timer run driven to /session/complete, then a bare `/today` nav WITHOUT
+// logging it, is the only way to land a completed-but-unlogged run record
+// (same "drive the real flow" idiom the "session-complete"/"log-session"
+// captures above already use). Two captures, DEFAULT and ARMED, matching
+// the design mockup's own labelled pair — `today-unlogged` doubles as the
+// pair's shared setup since Playwright screenshots are just PNG writes, not
+// a separate render each time.
+test("today-unlogged", async ({ page }) => {
+  const title = "Screenshot Unlogged Row Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-unlogged@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await importBulk(page, [`${title} | AN | easy | 1`, "w 0:03 6k"].join("\n"));
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await page.getByRole("button", { name: "Back to Today" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.getByText(/unlogged session/i)).toBeVisible();
+
+  // DEFAULT: title + "unlogged session.", Log it, and the outlined ✕.
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-unlogged.png"),
+  });
+
+  // ARMED: the same row's contents swapped in place — border to accent,
+  // the discard question, and a solid "Tap again" replacing Log it/✕.
+  await page.getByRole("button", { name: "Discard without logging" }).click();
+  await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-unlogged-armed.png"),
+  });
+
+  await cleanupByTitle(page, title);
+});
+
 test("plan", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-plan@e2e.test",
@@ -809,6 +852,50 @@ test("session-complete", async ({ page }) => {
   await expect(page.locator(".complete-actual-row")).toHaveCount(1);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "session-complete.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+// Task 3 (ui-fix round): the new Discard without logging block (rule + L4)
+// pushed this screen's landscape content past its own tight budget (the
+// reviewer's own F8 note) — index.css's landscape media query for
+// `.session-complete-screen`/`.complete-actions` was retuned to fit it; this
+// capture is the visual record of that fit, same idiom as "timer-landscape"
+// above.
+test("session-complete-landscape", async ({ page }) => {
+  const title = "Screenshot Session Complete Landscape Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-session-complete-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await importBulk(
+    page,
+    [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "START" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+  await expect(page.getByText("STEP 2 OF 2 · WORK · 100M")).toBeVisible({
+    timeout: 6000,
+  });
+  await page.waitForTimeout(20_000);
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await expect(page.getByText("Finish this session?")).toBeVisible();
+  await page.getByRole("button", { name: "Finish session" }).click();
+  await expect(page).toHaveURL(/\/session\/complete$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.locator(".complete-actual-row")).toHaveCount(1);
+  // The handoff's own landscape reference frame.
+  await page.setViewportSize({ width: 844, height: 420 });
+  await expect(
+    page.getByRole("button", { name: "Discard without logging" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "session-complete-landscape.png"),
   });
   await cleanupByTitle(page, title);
 });

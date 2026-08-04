@@ -929,6 +929,163 @@ test.describe("today screen (plan active, logs present)", () => {
   });
 });
 
+// Task 3 (ui-fix round): Today's unlogged row gains a 44×44 accent-outlined
+// ✕ that arms IN PLACE — a real timer run driven all the way to
+// /session/complete, then a bare `/today` nav WITHOUT ever logging it, is
+// the only way to land a completed-but-unlogged run record here (same
+// "drive the real flow" idiom as e2e/session.spec.ts's own discard test).
+test.describe("today screen (unlogged session row)", () => {
+  const title = "Design Unlogged Row Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-unlogged-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Unlogged Tester",
+    });
+    await setBaselines(page);
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 0:03 6k"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    await page.getByRole("button", { name: "Back to Today" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(page.getByText(/unlogged session/i)).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // The DEFAULT state's own ✕ — outlined, never solid (DEVIATIONS.md #2).
+  test("the row's ✕ is 44x44 and accent-outlined at rest", async ({ page }) => {
+    const discardBtn = page.getByRole("button", {
+      name: "Discard without logging",
+    });
+    const box = (await discardBtn.boundingBox())!;
+    expect(box.width).toBe(44);
+    expect(box.height).toBe(44);
+    const styles = await discardBtn.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, borderColor: s.borderColor };
+    });
+    expect(styles.background).toBe("rgba(0, 0, 0, 0)"); // no fill
+    expect(styles.borderColor).toBe("rgb(181, 52, 31)"); // --accent
+  });
+
+  // Arming swaps the ROW's CONTENTS, not its layout (DESIGN.md's own words):
+  // border -> accent, text -> "Discard {title} without logging?", ✕ ->
+  // solid accent "Tap again" — and the row's own box stays the same size and
+  // position throughout.
+  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+    page,
+  }) => {
+    const row = page.locator(".today-unlogged-line");
+    const boxBefore = (await row.boundingBox())!;
+
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await page.mouse.move(0, 0);
+
+    await expect(row).toHaveClass(/today-unlogged-line-armed/);
+    const rowBorderColor = await row.evaluate(
+      (el) => getComputedStyle(el).borderColor,
+    );
+    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    await expect(
+      page.getByText(`Discard ${title} without logging?`),
+    ).toBeVisible();
+    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgainStyles = await tapAgain.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+    // "Log it" is gone while armed — replaced, not merely joined.
+    await expect(page.getByRole("link", { name: "Log it" })).toHaveCount(0);
+
+    const boxAfter = (await row.boundingBox())!;
+    expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
+    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
+  });
+
+  test("disarms on blur — a second press after focus moves away arms again instead of discarding", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    const armed = page.getByRole("button", { name: "Tap again" });
+    await expect(armed).toBeVisible();
+
+    await armed.evaluate((el) => (el as HTMLElement).blur());
+
+    await expect(
+      page.getByRole("button", { name: "Discard without logging" }),
+    ).toBeVisible();
+  });
+
+  // A real 4s wait (no fake timers in an e2e context) — the machine's own
+  // arm/disarm-timeout logic is proven fast, with fake timers, in
+  // useStagedDiscard.test.ts; this only proves it's actually WIRED to the
+  // real row, end to end.
+  test("arms, waits 4s with no second press, and disarms automatically — with the run record still intact", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await expect(page.getByRole("button", { name: "Tap again" })).toBeVisible();
+
+    await page.waitForTimeout(4200);
+
+    await expect(
+      page.getByRole("button", { name: "Discard without logging" }),
+    ).toBeVisible();
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).not.toBeNull();
+  });
+
+  // arm -> tap -> gone: the row disappears in place with no navigation, and
+  // clears both records with no POST.
+  test("a second press while armed fires the discard — the row disappears in place, no navigation, both records cleared, no POST", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Discard without logging" }).click();
+    await page.getByRole("button", { name: "Tap again" }).click();
+
+    await expect(page.getByText(/unlogged session/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+    // Still on Today — unlike SessionComplete's/the Log screen's own
+    // Discard, this one never navigates anywhere.
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runAfter).toBeNull();
+    const draftAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionDraft"),
+    );
+    expect(draftAfter).toBeNull();
+    // LAST THREE never shows this workout — discarding never POSTs a log.
+    await expect(
+      page.locator(".today-log-row").filter({ hasText: title }),
+    ).toHaveCount(0);
+  });
+});
+
 test.describe("plan screen (a plan active)", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await signInViaBackdoor(page, {
@@ -2219,6 +2376,49 @@ test.describe("session complete screen (with a recorded actual)", () => {
     // `.button-primary` block surviving elsewhere on the same screen.
     await expect(page.locator(".button-primary")).toHaveCount(0);
   });
+
+  // Task 3 (ui-fix round): a third action, Discard without logging
+  // (L4/L4-armed), joins the stack under a rule below Back to Today — same
+  // in-place two-tap idiom as WorkoutDetail's own Delete workout above.
+  test("Discard without logging sits under a rule below Back to Today, and arms in place (solid accent, 'Tap again to discard')", async ({
+    page,
+  }) => {
+    const stack = page.locator(".action-stack.complete-actions");
+    const discard = page.getByRole("button", {
+      name: "Discard without logging",
+    });
+    await expect(discard).toHaveClass("button-l4");
+
+    const rule = stack.locator(".action-stack-rule");
+    await expect(rule).toHaveCount(1);
+    const backToToday = page.getByRole("button", { name: "Back to Today" });
+    const backBox = (await backToToday.boundingBox())!;
+    const ruleBox = (await rule.boundingBox())!;
+    const discardBoxBefore = (await discard.boundingBox())!;
+    expect(Math.round(ruleBox.y - (backBox.y + backBox.height))).toBe(12);
+    expect(Math.round(discardBoxBefore.y - (ruleBox.y + ruleBox.height))).toBe(
+      12,
+    );
+
+    await discard.click();
+    // Same reasoning as WorkoutDetail's identical assertion: move the
+    // pointer off the button first so `:hover`'s own `--accent-hover` fill
+    // doesn't mask the armed state's resting `--accent` one.
+    await page.mouse.move(0, 0);
+    const armed = page.getByRole("button", { name: "Tap again to discard" });
+    await expect(armed).toHaveClass("button-l4-armed");
+    const armedStyles = await armed.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(armedStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(armedStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+
+    await armed.evaluate((el) => (el as HTMLElement).blur());
+    await expect(
+      page.getByRole("button", { name: "Discard without logging" }),
+    ).toBeVisible();
+  });
 });
 
 // Phase 6C (Task 2): the Log screen (session door). Reaches it through the
@@ -2316,16 +2516,17 @@ test.describe("log session screen (session door)", () => {
     expect(height).toBe("54px");
   });
 
-  // The staged Discard idiom (BaselineEditor.tsx's own `.baseline-confirm`/
-  // `.baseline-actions`) gets its own sweep with the panel open, same
-  // pattern as the timer screen's three staged-confirm describes below.
+  // Task 3 (ui-fix round): the old `.baseline-confirm` side panel is gone —
+  // Discard now arms in place, the level system's own L4/L4-armed idiom
+  // (same shape WorkoutDetail's own Delete workout and SessionComplete's own
+  // Discard both use) — this sweep runs with the button already armed.
   test.describe("Discard staged", () => {
     test.beforeEach(async ({ page }) => {
       await page
         .getByRole("button", { name: "Discard without logging" })
         .click();
       await expect(
-        page.getByRole("button", { name: "Discard session" }),
+        page.getByRole("button", { name: "Tap again to discard" }),
       ).toBeVisible();
     });
 
@@ -2337,6 +2538,20 @@ test.describe("log session screen (session door)", () => {
 
     test("zero WCAG 2A/2AA violations", async ({ page }) => {
       await assertNoA11yViolations(page);
+    });
+
+    test("armed fills solid accent, cream label — the same L4-armed look as WorkoutDetail's Delete and SessionComplete's Discard", async ({
+      page,
+    }) => {
+      const armed = page.getByRole("button", { name: "Tap again to discard" });
+      await expect(armed).toHaveClass("button-l4-armed");
+      await page.mouse.move(0, 0);
+      const styles = await armed.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { background: s.backgroundColor, color: s.color };
+      });
+      expect(styles.background).toBe("rgb(181, 52, 31)"); // --accent
+      expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
     });
   });
 });
