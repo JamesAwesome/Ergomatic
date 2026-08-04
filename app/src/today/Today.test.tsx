@@ -203,6 +203,24 @@ function cardLinkTo(id: string): HTMLElement | undefined {
     .find((a) => a.getAttribute("href") === `/library/${id}`);
 }
 
+// Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN moved off the screen and
+// into TodayFilterSheet — every assertion that used to read a chip's
+// `aria-pressed` straight off the page now has to open the sheet first.
+async function openFilterSheet() {
+  await userEvent.click(screen.getByRole("button", { name: "FILTER ⌄" }));
+}
+
+// CellGrid (Task 1's extraction, consumed verbatim here) renders each
+// group's label as a plain visible `<span class="filter-sheet-group-
+// label">`, not an ARIA `role="group"` — so a group's own cells are
+// scoped by walking up from that visible label rather than
+// `getByRole("group", {name})`, unlike Today's pre-Task-2 hand-rolled
+// chip groups (which added `role="group"` themselves). See the "visible
+// label" test below for the full note on this behaviour change.
+function sheetGroup(label: string): HTMLElement {
+  return screen.getByText(label).closest(".filter-sheet-group") as HTMLElement;
+}
+
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
@@ -410,6 +428,7 @@ describe("Today (overrides: init from preferences)", () => {
     async (timeCapMinutes, label) => {
       mockReady({ preferences: { ...DEFAULT_PREFS, timeCapMinutes } });
       await renderToday();
+      await openFilterSheet();
       expect(screen.getByRole("button", { name: label })).toHaveAttribute(
         "aria-pressed",
         "true",
@@ -420,6 +439,7 @@ describe("Today (overrides: init from preferences)", () => {
   it("defaults difficulties to every preference value and every pain cell to off", async () => {
     mockReady();
     await renderToday();
+    await openFilterSheet();
     expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -432,7 +452,7 @@ describe("Today (overrides: init from preferences)", () => {
       "aria-pressed",
       "true",
     );
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const painGroup = sheetGroup("PAIN");
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
         within(painGroup).getByRole("button", { name: level }),
@@ -455,6 +475,7 @@ describe("Today (overrides: stored record wins over preferences)", () => {
     localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(stored));
     mockReady();
     await renderToday();
+    await openFilterSheet();
 
     expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
       "aria-pressed",
@@ -468,7 +489,7 @@ describe("Today (overrides: stored record wins over preferences)", () => {
       "aria-pressed",
       "true",
     );
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const painGroup = sheetGroup("PAIN");
     for (const level of ["1", "2", "3"]) {
       expect(
         within(painGroup).getByRole("button", { name: level }),
@@ -487,8 +508,69 @@ describe("Today (overrides: stored record wins over preferences)", () => {
   });
 });
 
-describe("Today (filter chips: live narrowing)", () => {
-  it("deselecting EASY changes the reason to a fellback explanation without changing the pick (deselecting every difficulty is allowed)", async () => {
+// Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline chip
+// groups are gone — narrowing now happens inside TodayFilterSheet against
+// a DRAFT, committed only by its own "Show N options" button. A second,
+// richer AT pool (Occluded Front/Stationary Front both pain 2, Filling Low
+// pain 3 — a real library fixture, `fromWorkout`-style, per this repo's
+// realistic-fixtures convention) lets a PAIN filter narrow the pool to
+// exactly one entry without tripping suggest.ts's fellBack rule (which
+// reverts to the full type-matched list whenever a filter would otherwise
+// leave zero matches — the two pain-2 fixtures alone would trigger it).
+const FILLING_LOW = libraryEntry("Filling Low", "w-fillinglow-2", 5);
+
+describe("Today (FILTER sheet)", () => {
+  it("chips are gone at rest; FILTER ⌄ is the only control on the header's right besides SHUFFLE", async () => {
+    mockReady();
+    await renderToday();
+    for (const label of [
+      "EASY",
+      "MEDIUM",
+      "HARD",
+      "≤30′",
+      "≤45′",
+      "≤60′",
+      "≤90′",
+      "NO CAP",
+    ]) {
+      expect(
+        screen.queryByRole("button", { name: label }),
+      ).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("group", { name: "PAIN" }),
+    ).not.toBeInTheDocument();
+    const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
+    expect(filterButton).toBeVisible();
+    expect(filterButton).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens on FILTER ⌄ click, holding DIFFICULTY/TIME/PAIN seeded from the applied overrides", async () => {
+    mockReady();
+    await renderToday();
+    const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
+    await userEvent.click(filterButton);
+
+    expect(filterButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
+    for (const label of ["DIFFICULTY", "TIME", "PAIN"]) {
+      expect(screen.getByText(label)).toBeVisible();
+    }
+    // Seeded from DEFAULT_PREFS (every difficulty, 60-min cap, no pain
+    // filter) — the same values the "init from preferences" describe pins.
+    for (const label of ["EASY", "MEDIUM", "HARD"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    expect(screen.getByRole("button", { name: "≤60′" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("draft edits inside the sheet don't touch the applied overrides until Apply", async () => {
     mockReady();
     await renderToday();
     expect(
@@ -496,29 +578,89 @@ describe("Today (filter chips: live narrowing)", () => {
     ).toBeVisible();
     expect(screen.getByText(/Least recently done/)).toBeVisible();
 
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    // The card underneath is untouched by the mid-edit draft — still the
+    // pre-edit pick and reason, the sheet just happens to be drawn over it.
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+    expect(screen.getByText(/Least recently done/)).toBeVisible();
+    // No record has ever been written at all yet (this mount never applied
+    // a type swap or the sheet) — the draft edit above didn't create one
+    // either, the strongest proof it never touched storage.
+    expect(localStorage.getItem(TODAY_OVERRIDES_KEY)).toBeNull();
+  });
+
+  it("dismissing (Escape) drops the draft — reopening the sheet shows the untouched, previously-applied overrides", async () => {
+    mockReady();
+    await renderToday();
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "EASY" }));
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(localStorage.getItem(TODAY_OVERRIDES_KEY)).toBeNull();
+
+    await openFilterSheet();
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("Apply commits the draft, narrows the card, and closes the sheet", async () => {
+    mockReady();
+    await renderToday();
+    await openFilterSheet();
     const easyChip = screen.getByRole("button", { name: "EASY" });
     await userEvent.click(easyChip);
 
+    const primary = screen.getByRole("button", { name: /^Show \d+ options?$/ });
+    await userEvent.click(primary);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // Same pick (the fellback pool is still the full AT list, sorted the
-    // same way) — only the REASON narrows to say nothing matched.
+    // same way — every fixture here is "easy") — the REASON narrows to say
+    // nothing matched, and the change is now the SAVED record.
     expect(
       screen.getByRole("heading", { name: "Stationary Front" }),
     ).toBeVisible();
     expect(screen.getByText(/Nothing fit your difficulty/)).toBeVisible();
-    expect(easyChip).toHaveAttribute("aria-pressed", "false");
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ difficulties: ["medium", "hard"] });
 
-    // Re-selecting EASY (the multi-select's "add back" branch, distinct
-    // from the "remove" branch just exercised above) restores the normal
-    // least-recently-done reason.
-    await userEvent.click(easyChip);
-    expect(easyChip).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/Least recently done/)).toBeVisible();
+    await openFilterSheet();
+    expect(easyChip).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("PAIN cells are a multi-select union, independent of the difficulty/cap chips", async () => {
+  it("focus returns to FILTER ⌄ once the sheet closes via Apply", async () => {
     mockReady();
     await renderToday();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
+    await userEvent.click(filterButton);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+    );
+    expect(filterButton).toHaveFocus();
+    expect(filterButton).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("PAIN cells are a multi-select union inside the sheet, independent of DIFFICULTY/TIME", async () => {
+    mockReady();
+    await renderToday();
+    await openFilterSheet();
+    const painGroup = sheetGroup("PAIN");
     const cell1 = within(painGroup).getByRole("button", { name: "1" });
     const cell2 = within(painGroup).getByRole("button", { name: "2" });
     expect(cell1).toHaveAttribute("aria-pressed", "false");
@@ -540,9 +682,10 @@ describe("Today (filter chips: live narrowing)", () => {
     expect(cell2).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("cap chips are single-select: exactly one is ever active", async () => {
+  it("TIME cells are single-select: exactly one is ever active", async () => {
     mockReady();
     await renderToday();
+    await openFilterSheet();
     expect(screen.getByRole("button", { name: "≤60′" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -569,47 +712,240 @@ describe("Today (filter chips: live narrowing)", () => {
     );
   });
 
-  // Fix round 2 (whole-branch review, M4): the nine chips used to sit as
-  // flat siblings with no visible grouping — `HARD` and `≤60′` rendered
-  // pixel-identical despite opposite selection semantics (multi-select vs.
-  // single-select-exactly-one-always-active). Each cluster now has a
-  // visible mono label AND an accessible group name (`role="group"` +
-  // `aria-labelledby` pointing at that same visible label) — this pins
-  // both, and that each group actually contains the chips it claims to.
-  it("each filter cluster has a visible group label wired to an accessible group name", async () => {
+  // Note: CellGrid (Task 1's extraction, consumed verbatim) renders each
+  // group's label as a plain visible `<span>`, not an ARIA `role="group"`/
+  // `aria-labelledby` pairing — matching Library's own FilterSheet groups
+  // exactly (which never had one either). This is a real accessible-name
+  // regression versus Today's pre-Task-2 hand-rolled chip groups (fix
+  // round 2, whole-branch review M4, added `role="group"` specifically for
+  // Today); flagged in this task's report rather than silently patched
+  // into the shared component. `sheetGroup()` below scopes by the visible
+  // label's DOM ancestor instead of an accessible group name.
+  it("each sheet group has its own visible label, grouping its own cells", async () => {
     mockReady();
     await renderToday();
+    await openFilterSheet();
 
-    const difficultyGroup = screen.getByRole("group", { name: "DIFFICULTY" });
     expect(screen.getByText("DIFFICULTY")).toBeVisible();
     expect(
-      within(difficultyGroup).getByRole("button", { name: "EASY" }),
+      within(sheetGroup("DIFFICULTY")).getByRole("button", { name: "EASY" }),
     ).toBeInTheDocument();
 
-    const timeGroup = screen.getByRole("group", { name: "TIME" });
     expect(screen.getByText("TIME")).toBeVisible();
     expect(
-      within(timeGroup).getByRole("button", { name: "≤60′" }),
+      within(sheetGroup("TIME")).getByRole("button", { name: "≤60′" }),
     ).toBeInTheDocument();
 
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
     expect(screen.getByText("PAIN")).toBeVisible();
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(
-        within(painGroup).getByRole("button", { name: level }),
+        within(sheetGroup("PAIN")).getByRole("button", { name: level }),
       ).toBeInTheDocument();
     }
+  });
+
+  // A richer pool (see FILLING_LOW's own comment above) lets a PAIN filter
+  // narrow to exactly ONE entry without suggest.ts's fellBack rule
+  // reverting it back to the full list — proves the live count AND the
+  // singular copy AND that the card the count promised is the card Apply
+  // actually shows.
+  describe("live count, singular copy, and the card it promises", () => {
+    it("the primary's live count matches the draft pool, and the card matches it 1:1 once applied", async () => {
+      mockReady({ workouts: [ISOBAR, WARM_FRONT, FILLING_LOW] });
+      await renderToday();
+      await openFilterSheet();
+
+      const painGroup = sheetGroup("PAIN");
+      await userEvent.click(
+        within(painGroup).getByRole("button", { name: "3" }),
+      );
+
+      // Singular-aware copy — Filling Low (pain 3) is the sole survivor.
+      expect(
+        screen.getByRole("button", { name: "Show 1 option" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Show 1 options" }),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Show 1 option" }),
+      );
+      expect(
+        screen.getByRole("heading", { name: "Filling Low" }),
+      ).toBeVisible();
+    });
+  });
+
+  // Domain note (suggest.ts's own fellBack rule): narrowing difficulties/
+  // pain to a combination that matches nothing among the current TYPE
+  // never actually zeros the pool on its own — it falls back to the full
+  // type-matched list instead (a real, if functionally inert, "nothing
+  // fit your filters" state). The only way the pool genuinely reaches zero
+  // is when the type itself has no library entries at all — this reuses
+  // that same swapped-to-an-empty-type scenario the "type-swap chips"
+  // describe below also exercises, from the sheet's own side.
+  it("disables the primary at a genuinely empty draft pool (swapped to a type absent from the library)", async () => {
+    mockReady();
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "AN" }));
+    expect(screen.getByText("No AN sessions in your library.")).toBeVisible();
+
+    await openFilterSheet();
+    expect(
+      screen.getByRole("button", { name: "Show 0 options" }),
+    ).toBeDisabled();
+  });
+});
+
+describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
+  it("shows no tokens and no CLEAR ALL at the pref-derived default (cap-at-default shows none)", async () => {
+    mockReady();
+    await renderToday();
+    expect(document.querySelector(".filter-token")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "CLEAR ALL" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a deviating group renders its own token, and that token's ✕ resets only its own group, saved immediately", async () => {
+    mockReady();
+    await renderToday();
+
+    // Two deviations at once: DIFFICULTY narrowed AND a PAIN filter set.
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    const painGroup = sheetGroup("PAIN");
+    await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+    );
+
+    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("PAIN 2")).toBeVisible();
+
+    // Clearing PAIN's own token only resets painLevels — DIFFICULTY's own
+    // deviation (and its token) survives untouched.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove PAIN 2 filter" }),
+    );
+    expect(screen.queryByText("PAIN 2")).not.toBeInTheDocument();
+    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ difficulties: ["easy", "medium"], painLevels: [] });
+  });
+
+  it("clearing a DIFFICULTY token resets only difficulties, leaving a co-existing cap deviation untouched", async () => {
+    mockReady();
+    await renderToday();
+
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "≤30′" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+    );
+    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("≤30′")).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove EASY–MEDIUM filter" }),
+    );
+    expect(screen.queryByText("EASY–MEDIUM")).not.toBeInTheDocument();
+    expect(screen.getByText("≤30′")).toBeVisible();
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({
+      difficulties: ["easy", "medium", "hard"],
+      capMinutes: 30,
+    });
+  });
+
+  it("clearing a TIME (cap) token resets only capMinutes, leaving a co-existing difficulty deviation untouched", async () => {
+    mockReady();
+    await renderToday();
+
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "≤30′" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+    );
+    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("≤30′")).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove ≤30′ filter" }),
+    );
+    expect(screen.queryByText("≤30′")).not.toBeInTheDocument();
+    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ difficulties: ["easy", "medium"], capMinutes: 60 });
+  });
+
+  it("CLEAR ALL restores every group to the pref-derived defaults (not empty) and saves that record", async () => {
+    mockReady();
+    await renderToday();
+
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(screen.getByRole("button", { name: "≤30′" }));
+    const painGroup = sheetGroup("PAIN");
+    await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+    );
+    expect(
+      screen.getByRole("button", { name: "CLEAR ALL" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
+
+    expect(document.querySelector(".filter-token")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "CLEAR ALL" }),
+    ).not.toBeInTheDocument();
+    const saved = JSON.parse(
+      localStorage.getItem(TODAY_OVERRIDES_KEY)!,
+    ) as TodayOverrides;
+    expect(saved.difficulties).toStrictEqual(
+      expect.arrayContaining(["easy", "medium", "hard"]),
+    );
+    expect(saved.difficulties).toHaveLength(3);
+    expect(saved.capMinutes).toBe(60); // snapCap(DEFAULT_PREFS.timeCapMinutes)
+    expect(saved.painLevels).toStrictEqual([]);
+
+    await openFilterSheet();
+    for (const label of ["EASY", "MEDIUM", "HARD"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    }
+    expect(screen.getByRole("button", { name: "≤60′" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });
 
 describe("Today (overrides: persistence and invalidation)", () => {
-  it("persists a type swap and a filter chip change across a same-context remount", async () => {
+  it("persists a type swap and a filter sheet change across a same-context remount", async () => {
     mockReady();
     const first = await renderToday();
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
     // Every difficulty is active by default (DEFAULT_PREFS), so this
-    // deselects HARD rather than selecting it — the change under test.
+    // deselects HARD rather than selecting it — the change under test,
+    // applied via the sheet (Task 2 — HARD is no longer a top-level chip).
+    await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+    );
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
     // Same-day "reload": unmount and mount fresh, mirroring the SHUFFLE
@@ -622,6 +958,7 @@ describe("Today (overrides: persistence and invalidation)", () => {
       await screen.findByRole("heading", { name: "Sea Fret" }),
     ).toBeVisible();
     expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
+    await openFilterSheet();
     expect(screen.getByRole("button", { name: "HARD" })).toHaveAttribute(
       "aria-pressed",
       "false",
@@ -662,7 +999,7 @@ describe("Today (overrides: persistence and invalidation)", () => {
 });
 
 describe("Today (type-swap chips)", () => {
-  it("hides the type-swap chips in freestyle mode but keeps the filter chips", async () => {
+  it("hides the type-swap chips in freestyle mode but keeps the FILTER sheet available", async () => {
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
     for (const type of ["AN", "O2", "AT", "TR"] as const) {
@@ -670,9 +1007,10 @@ describe("Today (type-swap chips)", () => {
         screen.queryByRole("button", { name: type }),
       ).not.toBeInTheDocument();
     }
+    await openFilterSheet();
     expect(screen.getByRole("button", { name: "EASY" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "≤60′" })).toBeInTheDocument();
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const painGroup = sheetGroup("PAIN");
     expect(
       within(painGroup).getByRole("button", { name: "1" }),
     ).toBeInTheDocument();
@@ -799,7 +1137,7 @@ describe("Today (type-swap chips)", () => {
     );
   });
 
-  it("swapping to a type with nothing in the library shows the existing empty-pool card, with chips still interactive", async () => {
+  it("swapping to a type with nothing in the library shows the existing empty-pool card, with the sheet's own cells still interactive", async () => {
     mockReady();
     await renderToday();
     await userEvent.click(screen.getByRole("button", { name: "AN" }));
@@ -808,9 +1146,12 @@ describe("Today (type-swap chips)", () => {
     const buildLink = screen.getByRole("link", { name: /build a workout/i });
     expect(buildLink).toHaveAttribute("href", "/library/new");
 
-    // Chips remain interactive against the empty pool — toggling one still
-    // flips its own pressed state rather than becoming inert/disabled.
-    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    // The sheet's own cells remain interactive against the empty pool —
+    // toggling one still flips its own pressed state rather than becoming
+    // inert/disabled (only the primary button itself disables, at a
+    // genuinely empty count — see the "Today (FILTER sheet)" describe).
+    await openFilterSheet();
+    const painGroup = sheetGroup("PAIN");
     const painCell = within(painGroup).getByRole("button", { name: "1" });
     await userEvent.click(painCell);
     expect(painCell).toHaveAttribute("aria-pressed", "true");

@@ -814,12 +814,16 @@ button:disabled {
    remember; a separate class made it structurally impossible. (Fix round 2,
    whole-branch review Md3: that bare `.chip[aria-pressed="true"]` accent
    rule is deleted now — Today.tsx's `TodayChip` was its only real consumer,
-   and every real chip either renders under `.today-filter-chips`'s own ink
-   override or carries an inline per-type style, so the rule was
-   unreachable in both directions. The separation this comment explains
-   stays the right call regardless: nothing here depends on the deleted
-   rule's specific behaviour, only on DIFFICULTY/PAIN never inheriting
-   `.chip`'s base at all.) */
+   and at the time every real chip either rendered under Today's own
+   `.today-filter-chips` ink override or carried an inline per-type style,
+   so the rule was unreachable in both directions. Task 2, 2026-08-04 round:
+   `.today-filter-chips` itself is gone too — TodayChip's only remaining
+   consumer is the type-swap row, which always carries an inline per-type
+   style, so the same "unreachable either way" conclusion still holds, now
+   for a simpler reason. The separation this comment explains stays the
+   right call regardless: nothing here depends on the deleted rule's
+   specific behaviour, only on DIFFICULTY/PAIN never inheriting `.chip`'s
+   base at all.) */
 .classification-card {
   display: flex;
   flex-direction: column;
@@ -1505,14 +1509,20 @@ button:disabled {
 /* Item 4 (ui-fix round, DESIGN.md): SHUFFLE stops being its own accent-
    colored species — chip geometry (44px, `--rule-3` border, transparent
    fill, mono 11/0.14em label) rather than `.button-outline`'s ink-bordered,
-   16px-padded shape. `.button-outline` (Today.tsx's className stays
-   "button-outline today-shuffle" — no JSX change) still supplies the 44px
-   min-height, transparent background and inline-flex centering; only the
-   properties DESIGN.md actually calls out differently are overridden here.
+   16px-padded shape. `.button-outline` still supplies the 44px min-height,
+   transparent background and inline-flex centering; only the properties
+   DESIGN.md actually calls out differently are overridden here.
    Disabled (pool <= 1, `canShuffle` in Today.tsx): `button:disabled`'s
    already-global `color: var(--ink-5)` and `.button-outline:disabled`'s
    already-global `border-color: var(--rule-3)` cover the label/border
-   colour on their own — only the DASHED border style is new here. */
+   colour on their own — only the DASHED border style is new here.
+
+   Task 2 (2026-08-04 round): FILTER ⌄ now shares this exact class with
+   SHUFFLE (Today.tsx's `.today-suggestion-actions` wrapper holds both) —
+   "the same geometry" the task brief calls for, not a new near-duplicate
+   rule. FILTER ⌄ never sets `disabled`, so the `:disabled` rule below is
+   inert for it — a harmless no-op, not a behaviour it needs to opt out
+   of. */
 .today-shuffle {
   flex-shrink: 0;
   padding: 0 12px;
@@ -1531,77 +1541,45 @@ button:disabled {
   border-style: dashed;
 }
 
-/* Fix round 2 (whole-branch review, M4): the nine filter chips used to be
-   flat siblings in one flex-wrap row (plain `.chip-wrap`); grouped into
-   three labelled clusters (DIFFICULTY/TIME/PAIN) now — see Today.tsx's own
-   comment on why. `.today-filter-chips` keeps its name and stays a single
-   element (the e2e visibility check's own selector), it just now stacks
-   three groups vertically instead of laying all nine chips out itself. */
-.today-filter-chips {
+/* Task 2 (2026-08-04 round): FILTER ⌄ and SHUFFLE ↻ now sit side by side on
+   the suggestion header's right (`.today-suggestion-header` still spaces
+   this wrapper against the header's own label via its own
+   `justify-content: space-between`) — this is the "Today-specific spacing
+   rule" the task's own file list anticipated. */
+.today-suggestion-actions {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
+  align-items: center;
+  gap: 8px;
 }
 
-/* Task 1 (ui-fix round): DIFFICULTY/TIME/PAIN's own selected fill — ink,
-   never accent (DESIGN.md's selected-state fix). Scoped under
-   `.today-filter-chips` rather than as a bare `.chip[aria-pressed="true"]`
-   rule: Library's own equivalent selected fill lives entirely in
-   `FilterSheet.tsx`'s `.filter-sheet-cell[aria-pressed="true"]` (a
-   different class family, Task 4, ui-fix round — the flat `FilterChips.tsx`
-   row this comment used to describe is deleted), so scoping here rather
-   than touching a shared bare-`.chip` rule was never about leaving Library
-   alone — it's that no rule needs to reach both screens at once. (Fix round
-   2, whole-branch review M3: the bare `.chip[aria-pressed="true"]` rule
-   this comment used to reference is itself deleted now, per Md3 — it had
-   no reachable consumer once every real `.chip` fell under either this
-   scoped rule or Today's own inline per-type style.) The type-swap
-   chips (`.today-type-chips`, above `.today-filter-chips` in the DOM) never
-   match this selector at all — they carry their own inline per-type style
-   (Today.tsx's `typeColorVar`), which always wins over any class rule
-   regardless of specificity.
-   `color`/`border` are stated explicitly here, not left to inherit from
-   `.chip`'s own base rule (`color: var(--ink-3)`, a 1px `--rule-3` border):
-   the deleted bare rule used to supply the on-color text and border reset
-   for EVERY pressed chip, and dropping it without restating those two
-   properties here left a real regression — axe caught `--ink-3` on `--ink`
-   at 2.3:1, nowhere near the 4.5:1 floor (whole-branch review fix wave,
-   caught by the e2e run this same wave required). */
-.today-filter-chips .chip[aria-pressed="true"] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--on-color);
-}
-
-.today-filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Same small-mono-caps treatment as `.classification-group-label`
-   (ClassificationCard.tsx) — kept as its own class per this repo's
-   established per-file duplication convention rather than importing a
-   builder-only class into Today, the same reasoning `DIFFICULTY_CHIPS`'s
-   own extraction comment gives for what's worth sharing vs. not. Task 1
-   (ui-fix round): --ink-3, not --ink-4 — the blanket small-mono-label sweep
-   DESIGN.md's contrast note calls for (index.css's own --ink-4 token
-   comment: 4.48:1 against --surface-sunken, under the 4.5:1 AA floor). */
-.today-filter-group-label {
-  margin: 0;
+/* CLEAR ALL (Task 2, 2026-08-04 round) — Library's own `.library-clear-all`
+   idiom (44px accent label, no border/fill) duplicated here rather than
+   shared: this repo's established per-file duplication convention for
+   small screen-specific controls (TYPE_COLOR_VAR's own comment names the
+   precedent). Today's placement differs from Library's own (TokenRow's
+   `trailing` slot, immediately after the tokens, not a separate count
+   row) — see Today.tsx's own comment on why CLEAR ALL resets to
+   `filterDefaults` here instead of emptying every filter the way
+   Library's CLEAR ALL does. */
+.today-clear-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
 }
 
-/* Each group's own chip row reuses `.chip-wrap` verbatim for the flex/wrap/
-   gap behaviour, but the outer `.today-filter-chips` already spaces the
-   three groups via its own `gap` — an extra `margin-bottom` from
-   `.chip-wrap` here would double up on that spacing. */
-.today-filter-group .chip-wrap {
-  margin-bottom: 0;
+.today-clear-all:hover {
+  color: var(--accent-hover);
 }
 
 .today-card {
