@@ -175,7 +175,7 @@ test.describe("Today enhancements: visible filter chips", () => {
     await cleanupByTitle(page, lowPainTitle);
   });
 
-  test("tap PAIN ≤3 -> the suggestion card changes (a real title swap); reload -> chips and card unchanged", async ({
+  test("tap PAIN cells 1+2 -> the suggestion card changes (a real title swap); reload -> cells and card unchanged", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -192,7 +192,7 @@ test.describe("Today enhancements: visible filter chips", () => {
     // Imported in this order deliberately: creation order is the tie-break
     // among the two (both never-done, same difficulty/cap) — the
     // HIGH-pain one, created first, is the pre-filter pick; the LOW-pain
-    // one only surfaces once PAIN ≤3 excludes the high-pain one.
+    // one only surfaces once the 1+2 pain union excludes the high-pain one.
     await importBulk(
       page,
       [`${highPainTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
@@ -215,22 +215,34 @@ test.describe("Today enhancements: visible filter chips", () => {
     // never-done tie.
     await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
 
-    const painChip = page.getByRole("button", { name: "PAIN ≤3", exact: true });
-    await expect(painChip).toHaveAttribute("aria-pressed", "false");
-    await painChip.click();
-    await expect(painChip).toHaveAttribute("aria-pressed", "true");
+    const painGroup = page.getByRole("group", { name: "PAIN" });
+    const cell1 = painGroup.getByRole("button", { name: "1", exact: true });
+    const cell2 = painGroup.getByRole("button", { name: "2", exact: true });
+    await expect(cell1).toHaveAttribute("aria-pressed", "false");
+    await expect(cell2).toHaveAttribute("aria-pressed", "false");
+    // Union, not a single tap: [1] alone would still exclude the pain-2
+    // fixture along with the pain-5 one, so both cells have to go active
+    // before the low-pain fixture (pain 2) is the sole survivor.
+    await cell1.click();
+    await cell2.click();
+    await expect(cell1).toHaveAttribute("aria-pressed", "true");
+    await expect(cell2).toHaveAttribute("aria-pressed", "true");
 
     // A real, provable change: the recommendation itself swapped to the
     // low-pain fixture now that the high-pain one is filtered out.
     await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
 
     // Reload: the override persists (same day, same planKey/doneN) — the
-    // chip stays pressed and the card stays on the filtered pick, not back
+    // cells stay pressed and the card stays on the filtered pick, not back
     // to the pre-filter default.
     await page.reload();
     await expect(page.locator(".today-card")).toBeVisible();
+    const painGroupAfterReload = page.getByRole("group", { name: "PAIN" });
     await expect(
-      page.getByRole("button", { name: "PAIN ≤3", exact: true }),
+      painGroupAfterReload.getByRole("button", { name: "1", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      painGroupAfterReload.getByRole("button", { name: "2", exact: true }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
   });
@@ -435,8 +447,9 @@ test.describe("Today enhancements: freestyle spot-check", () => {
     await expect(
       page.getByRole("button", { name: "EASY", exact: true }),
     ).toBeVisible();
+    const painGroup = page.getByRole("group", { name: "PAIN" });
     await expect(
-      page.getByRole("button", { name: "PAIN ≤3", exact: true }),
+      painGroup.getByRole("button", { name: "1", exact: true }),
     ).toBeVisible();
 
     // No plan active — nothing to swap away from, so the type-swap chip

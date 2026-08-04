@@ -417,7 +417,7 @@ describe("Today (overrides: init from preferences)", () => {
     },
   );
 
-  it("defaults difficulties to every preference value and pain filter to off", async () => {
+  it("defaults difficulties to every preference value and every pain cell to off", async () => {
     mockReady();
     await renderToday();
     expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
@@ -432,10 +432,12 @@ describe("Today (overrides: init from preferences)", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "PAIN ≤3" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    for (const level of ["1", "2", "3", "4", "5"]) {
+      expect(
+        within(painGroup).getByRole("button", { name: level }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
   });
 });
 
@@ -448,7 +450,7 @@ describe("Today (overrides: stored record wins over preferences)", () => {
       swapType: null,
       difficulties: ["hard"],
       capMinutes: 30,
-      painMax3: true,
+      painLevels: [1, 2, 3],
     };
     localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(stored));
     mockReady();
@@ -466,10 +468,17 @@ describe("Today (overrides: stored record wins over preferences)", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "PAIN ≤3" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    for (const level of ["1", "2", "3"]) {
+      expect(
+        within(painGroup).getByRole("button", { name: level }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+    for (const level of ["4", "5"]) {
+      expect(
+        within(painGroup).getByRole("button", { name: level }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
     // Every fixture workout is "easy" difficulty (see the fixtures' own
     // comment) — none match the stored "hard"-only filter, so the fellback
     // reason proves the STORED record drove suggest(), not the 60-min/
@@ -506,13 +515,29 @@ describe("Today (filter chips: live narrowing)", () => {
     expect(screen.getByText(/Least recently done/)).toBeVisible();
   });
 
-  it("PAIN ≤3 toggles independently of the difficulty/cap chips", async () => {
+  it("PAIN cells are a multi-select union, independent of the difficulty/cap chips", async () => {
     mockReady();
     await renderToday();
-    const painChip = screen.getByRole("button", { name: "PAIN ≤3" });
-    expect(painChip).toHaveAttribute("aria-pressed", "false");
-    await userEvent.click(painChip);
-    expect(painChip).toHaveAttribute("aria-pressed", "true");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const cell1 = within(painGroup).getByRole("button", { name: "1" });
+    const cell2 = within(painGroup).getByRole("button", { name: "2" });
+    expect(cell1).toHaveAttribute("aria-pressed", "false");
+    expect(cell2).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(cell1);
+    expect(cell1).toHaveAttribute("aria-pressed", "true");
+    expect(cell2).toHaveAttribute("aria-pressed", "false");
+
+    // Adding a second cell to the union leaves the first one active — this
+    // is a union, not a single-select swap.
+    await userEvent.click(cell2);
+    expect(cell1).toHaveAttribute("aria-pressed", "true");
+    expect(cell2).toHaveAttribute("aria-pressed", "true");
+
+    // Removing one leaves the other in the union.
+    await userEvent.click(cell1);
+    expect(cell1).toHaveAttribute("aria-pressed", "false");
+    expect(cell2).toHaveAttribute("aria-pressed", "true");
   });
 
   it("cap chips are single-select: exactly one is ever active", async () => {
@@ -569,9 +594,11 @@ describe("Today (filter chips: live narrowing)", () => {
 
     const painGroup = screen.getByRole("group", { name: "PAIN" });
     expect(screen.getByText("PAIN")).toBeVisible();
-    expect(
-      within(painGroup).getByRole("button", { name: "PAIN ≤3" }),
-    ).toBeInTheDocument();
+    for (const level of ["1", "2", "3", "4", "5"]) {
+      expect(
+        within(painGroup).getByRole("button", { name: level }),
+      ).toBeInTheDocument();
+    }
   });
 });
 
@@ -645,7 +672,10 @@ describe("Today (type-swap chips)", () => {
     }
     expect(screen.getByRole("button", { name: "EASY" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "≤60′" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "PAIN ≤3" })).toBeInTheDocument();
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    expect(
+      within(painGroup).getByRole("button", { name: "1" }),
+    ).toBeInTheDocument();
   });
 
   it("swapping the type chip changes the pool and the plan line shows PRESCRIBED → SWAPPED", async () => {
@@ -780,9 +810,10 @@ describe("Today (type-swap chips)", () => {
 
     // Chips remain interactive against the empty pool — toggling one still
     // flips its own pressed state rather than becoming inert/disabled.
-    const painChip = screen.getByRole("button", { name: "PAIN ≤3" });
-    await userEvent.click(painChip);
-    expect(painChip).toHaveAttribute("aria-pressed", "true");
+    const painGroup = screen.getByRole("group", { name: "PAIN" });
+    const painCell = within(painGroup).getByRole("button", { name: "1" });
+    await userEvent.click(painCell);
+    expect(painCell).toHaveAttribute("aria-pressed", "true");
   });
 
   // Pins suggest.ts's own pick-lookup fallback (suggest.ts:117-120,
@@ -816,8 +847,9 @@ describe("Today (LAST THREE)", () => {
   // 2/10" — "/5" here, not the handoff's literal "/10", because
   // docs/design/DEVIATIONS.md's first row already establishes Ergomatic's
   // pain scale is 1-5 everywhere else in the app (PainBar, WorkoutDetail,
-  // the library's "PAIN ≤3" chip); matching the handoff's "/10" verbatim
-  // would contradict that already-decided, already-documented deviation.
+  // Library's own 1-5 PAIN filter cells); matching the handoff's "/10"
+  // verbatim would contradict that already-decided, already-documented
+  // deviation.
   it("renders title, calendar date, the held/under/over word, and pain /5 per log", async () => {
     mockReady();
     await renderToday();

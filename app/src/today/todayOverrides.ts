@@ -23,11 +23,15 @@ export interface TodayOverrides {
   swapType: WorkoutType | null; // null = no swap
   difficulties: Difficulty[];
   capMinutes: number | null; // null = NO CAP
-  painMax3: boolean;
+  // A union, not a threshold — Task 5 (ui-fix round) replaces the old
+  // `painMax3` boolean with the same 1-5 multi-select shape Library's own
+  // `Filters.painLevels` (src/library/filters.ts) settled on. Empty = off.
+  painLevels: number[];
 }
 
 const TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
 const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
+const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 // The Today filter row's only five cap values (`≤30′ ≤45′ ≤60′ ≤90′ NO
 // CAP`) — shared between `parseOverrides`' validation below and `snapCap`
 // further down, so the two can never drift apart into "a value a stored
@@ -48,10 +52,22 @@ function isCapMinutes(v: unknown): v is number | null {
   return v === null || (CAP_STEPS as readonly number[]).includes(v as number);
 }
 
+function isPainLevel(v: unknown): v is number {
+  return typeof v === "number" && PAIN_LEVELS.includes(v);
+}
+
 /** Strict shape check, same discipline as libraryFilters.ts's parseFilters
  *  — a stored value that predates a future TodayOverrides change (or was
  *  hand-edited) must come back `null`, never an object with a hole in it:
- *  every field here is trusted as-is by TodayView/suggest. */
+ *  every field here is trusted as-is by TodayView/suggest. This is also,
+ *  by construction, the fix for a pre-Task-5 (ui-fix round) v1 record: v1's
+ *  pain field was `painMax3: boolean`, which this parser never reads —
+ *  `Array.isArray(o.painLevels)` is false for a record that never had a
+ *  `painLevels` field at all, so a v1 record fails whole and falls back to
+ *  `null`, never a v2 object half-populated from v1 data (unlike
+ *  libraryFilters.ts's v1/v2 pair, every OTHER field here kept its name
+ *  across the shape change, so `painLevels` alone is what has to catch
+ *  it). */
 function parseOverrides(raw: string): TodayOverrides | null {
   let parsed: unknown;
   try {
@@ -71,7 +87,9 @@ function parseOverrides(raw: string): TodayOverrides | null {
     return null;
   }
   if (!isCapMinutes(o.capMinutes)) return null;
-  if (typeof o.painMax3 !== "boolean") return null;
+  if (!Array.isArray(o.painLevels) || !o.painLevels.every(isPainLevel)) {
+    return null;
+  }
   return {
     date: o.date,
     planKey: o.planKey,
@@ -82,7 +100,12 @@ function parseOverrides(raw: string): TodayOverrides | null {
     // tampered/legacy stored value could.
     difficulties: [...new Set(o.difficulties)],
     capMinutes: o.capMinutes,
-    painMax3: o.painMax3,
+    // De-duped AND sorted (unlike difficulties/durations elsewhere, which
+    // only de-dupe): the five pain cells render in a fixed 1-5 order, so
+    // normalising the stored order here keeps a round-tripped value's
+    // `.includes` checks and any future ordered rendering off this array
+    // agreeing with what the cells themselves would produce.
+    painLevels: [...new Set(o.painLevels)].sort((a, b) => a - b),
   };
 }
 

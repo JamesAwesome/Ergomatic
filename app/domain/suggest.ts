@@ -27,9 +27,13 @@ export interface SuggestPrefs {
   // `timeCapMinutes: null` takes the same no-cap-claim branch for the same
   // reason: nothing was actually checked either way.
   durationsUnknown?: boolean;
-  // When true, entries with `pain > 3` are filtered out and the reason
-  // text says so.
-  painMax3?: boolean;
+  // A union, not a threshold — mirrors Library's own `Filters.painLevels`
+  // (src/library/filters.ts): when non-empty, only entries whose `pain` is
+  // IN this set survive. Empty/undefined means "off" — every pain level
+  // passes, and (same honesty rule as the rest of this interface) the
+  // reason text below never claims a pain filter was checked when it
+  // wasn't.
+  painLevels?: number[];
 }
 
 export interface SuggestInput {
@@ -79,7 +83,7 @@ function buildReason(
   if (fellBack) {
     const parts = ["difficulty"];
     if (capChecked) parts.push("time");
-    if (prefs.painMax3) parts.push("pain");
+    if (prefs.painLevels?.length) parts.push("pain");
     return `Nothing fit your ${parts.join("/")} filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   if (!capChecked) {
@@ -97,7 +101,7 @@ export function suggest(input: SuggestInput): Suggestion {
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
       (prefs.timeCapMinutes === null || e.estMinutes <= prefs.timeCapMinutes) &&
-      (!prefs.painMax3 || e.pain <= 3),
+      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)),
   );
 
   const fellBack = typeMatched.length > 0 && filtered.length === 0;
@@ -136,7 +140,7 @@ export function suggestFreestyle(
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
       (prefs.timeCapMinutes === null || e.estMinutes <= prefs.timeCapMinutes) &&
-      (!prefs.painMax3 || e.pain <= 3),
+      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)),
   );
 
   const fellBack = library.length > 0 && filtered.length === 0;
