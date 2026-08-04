@@ -221,6 +221,9 @@ control, any group: transparent fill, `--rule-3` border, `--ink-3` label.
 > current-state authority, not this prose (whole-branch review Md6).
 
 ### 1. Today
+> Current: DIFFICULTY/TIME/PAIN narrow the suggestion through a `FILTER ⌄`
+> sheet, not inline chips on this screen — see `docs/design/DEVIATIONS.md`.
+
 Purpose: open the app, see what to row, start or log it.
 - **Header** (2px bottom rule): "SESSION 12 OF 84" mono 11px / "Today" Newsreader 31px;
   right column mono 11px "2k 1:52.0 / 6k 2:02.0".
