@@ -142,11 +142,16 @@ async function seedLogs(page: Page, count: number): Promise<void> {
 }
 
 /** Navigates to a workout's detail screen by title via the real API list —
- *  used to reach Fork Lightning (server/seed/library/an.ts), one of the
- *  library's effort-ref AN workouts (`{effort:"max"}`, reps×10, 0:30 work,
- *  spm 32 — see Task 11's fixture-anchor mapping; the old 35-workout library
- *  had exactly one such workout, Microburst, but the 300-workout library has
- *  38), without hardcoding its seeded id. */
+ *  used to reach Heat Lightning (server/seed/library/an.ts), one of the
+ *  library's effort-ref AN workouts (`{effort:"max"}`, reps×10, a single
+ *  repeated work step per rep, spm 32 — see Task 11's fixture-anchor
+ *  mapping; the old 35-workout library had exactly one such workout,
+ *  Microburst, but the current 300-workout library has 43. Fork Lightning
+ *  used to hold this anchor role, but the content rewrite (a62c33f) turned
+ *  its reps block into TWO alternating work steps, which breaks the
+ *  "exactly one ALL OUT row" assumption this file's confirm-targets sweep
+ *  makes (same reason `ConfirmTargets.test.tsx` re-anchored) — without
+ *  hardcoding its seeded id. */
 async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
   const workout = await page.evaluate(async (t) => {
     const res = await fetch("/api/workouts");
@@ -667,25 +672,31 @@ test.describe("plan screen (a plan active)", () => {
   });
 });
 
-// The confirm sweep's own fixture: Fork Lightning (server/seed/library/an.ts)
+// The confirm sweep's own fixture: Heat Lightning (server/seed/library/an.ts)
 // is an AN-hard workout with an effort-ref work step (`{effort:"max"}`) AND
 // a reps marker (reps×10) — the no-nudge, no-remove-on-the-marker layout
 // that a split-only workout (e.g. any other library entry) never renders at
 // all. In the old 35-workout library, Microburst was the sole such workout;
-// Fork Lightning is Task 11's chosen replacement anchor (same shape: 0:30
-// work, effort:max, spm 32). Sweeping only a split-ref confirm screen would
-// repeat exactly the "every test built the same shape" blind spot this
-// task's brief calls out.
-test.describe("confirm targets screen (effort step present — Fork Lightning)", () => {
+// Task 11 originally anchored this sweep to Fork Lightning (same shape: 0:30
+// work, effort:max, spm 32), but the content rewrite (a62c33f) turned Fork
+// Lightning's reps block into TWO alternating work steps — both rendering
+// their own "ALL OUT" TARGET-strip row — which breaks this test's own
+// `expect(effortWord).toBeVisible()` single-match assumption (strict-mode
+// violation on 2 elements). Re-anchored to Heat Lightning, which still has a
+// single repeated work step (distance-ref 150 m, effort:max, spm 32) — the
+// same re-anchor `ConfirmTargets.test.tsx` made for the identical reason.
+// Sweeping only a split-ref confirm screen would repeat exactly the "every
+// test built the same shape" blind spot this task's brief calls out.
+test.describe("confirm targets screen (effort step present — Heat Lightning)", () => {
   test.beforeEach(async ({ page }, testInfo) => {
     await signInViaBackdoor(page, {
       email: `design-confirm-${testInfo.parallelIndex}@e2e.test`,
       name: "Design Confirm Tester",
     });
     await setBaselines(page);
-    await gotoWorkoutByTitle(page, "Fork Lightning");
+    await gotoWorkoutByTitle(page, "Heat Lightning");
     await expect(page.locator("h1.workout-detail-title")).toHaveText(
-      "Fork Lightning",
+      "Heat Lightning",
     );
     await page.getByRole("button", { name: "Start" }).click();
     await expect(page).toHaveURL(/\/session\/confirm$/);
