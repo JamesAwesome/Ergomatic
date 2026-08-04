@@ -312,27 +312,77 @@ export function describeStoreContracts(
         expect(after).toBe((await stores.workouts.listGlobals()).length);
       });
 
-      // Task 9: deleteGlobals is the seed-reconcile's swap primitive (see
-      // app/server/seed/seed.ts, Task 10) — it must clear every global row
-      // and leave personal rows completely untouched.
-      it("deleteGlobals empties the global library and leaves personal workouts alone", async () => {
+      // Library-converge (2026-08-04 spec): the converge's update primitive.
+      // Global-scoped and MAY write sortOrder — the exact inverse of the
+      // user-scoped update()'s guarantees. A personal id must be
+      // structurally unreachable.
+      it("updateGlobal rewrites a global's content and sortOrder, and cannot touch a personal row", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
-        await stores.workouts.createMany(null, [
-          workoutInput({ title: "Global One" }),
-          workoutInput({ title: "Global Two" }),
+        const g = await stores.seedGlobalWorkout(
+          workoutInput({ title: "Converge Me" }),
+        );
+        const personal = await stores.workouts.create(
+          userId,
+          workoutInput({ title: "Mine, Unmoved" }),
+        );
+
+        const updated = await stores.workouts.updateGlobal(g.id, {
+          ...workoutInput({
+            title: "Converge Me",
+            difficulty: "hard",
+            pain: 5,
+          }),
+          sortOrder: 7,
+        });
+        expect(updated).toMatchObject({
+          id: g.id,
+          title: "Converge Me",
+          difficulty: "hard",
+          pain: 5,
+          sortOrder: 7,
+          isGlobal: true,
+        });
+
+        const stolen = await stores.workouts.updateGlobal(personal.id, {
+          ...workoutInput({ title: "Stolen" }),
+          sortOrder: 1,
+        });
+        expect(stolen).toBeNull();
+        expect(await stores.workouts.get(userId, personal.id)).toMatchObject({
+          title: "Mine, Unmoved",
+          isGlobal: false,
+        });
+      });
+
+      // Library-converge: the converge's targeted delete. [] must be a
+      // no-op, and a personal id in the list must be ignored, not deleted.
+      it("deleteGlobalsByIds removes exactly the named globals, no-ops on [], ignores personal ids", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const before = await stores.workouts.countGlobals();
+        const [doomed, spared] = await stores.workouts.createMany(null, [
+          workoutInput({ title: "Doomed Global" }),
+          workoutInput({ title: "Spared Global" }),
         ]);
         const personal = await stores.workouts.create(
           userId,
-          workoutInput({ title: "Mine, Survives" }),
+          workoutInput({ title: "Mine, Not Yours" }),
         );
 
-        await stores.workouts.deleteGlobals();
+        await stores.workouts.deleteGlobalsByIds([]);
+        expect(await stores.workouts.countGlobals()).toBe(before + 2);
 
-        expect(await stores.workouts.countGlobals()).toBe(0);
+        await stores.workouts.deleteGlobalsByIds([doomed.id, personal.id]);
+        expect(await stores.workouts.countGlobals()).toBe(before + 1);
+        const titles = (await stores.workouts.listGlobals()).map(
+          (g) => g.title,
+        );
+        expect(titles).toContain("Spared Global");
+        expect(titles).not.toContain("Doomed Global");
+        expect(spared.id).toBeTruthy();
         expect(await stores.workouts.get(userId, personal.id)).toMatchObject({
-          title: "Mine, Survives",
-          isGlobal: false,
+          title: "Mine, Not Yours",
         });
       });
 

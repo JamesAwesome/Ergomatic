@@ -668,17 +668,23 @@ plan: `docs/superpowers/plans/2026-08-03-workout-generation.md`.
       `server/seed/library/{o2,at,tr,an}.ts` hold the 300 as original
       content, `sortOrder` grouped by type then easy→hard (the same
       browsing order the 35-workout library used). `seedGlobalLibrary`
-      (`server/seed/seed.ts`) reconciles the shared global library to the
-      code's set inside one advisory-locked transaction: no globals →
-      insert; the running title-set already matches → no-op; anything else
-      → swap (delete all globals, insert the current 300) — called once at
-      boot, not per-user. The swap nulls `session_logs.workout_id`
-      (`ON DELETE SET NULL`) — logs keep their rows and lose the workout
-      link; accepted at TestFlight scale, called out in the PR. Personal
-      (non-global) workouts are structurally untouched: globals are
-      structurally un-editable (the store's `update()`/`remove()` only ever
-      match rows scoped to a `userId`, never `user_id IS NULL`), so there is
-      no "edited-seeded" state for the swap to distinguish or mis-swap
+      (`server/seed/seed.ts`) converges the shared global library to the
+      code's set, keyed by title, inside one advisory-locked transaction:
+      content changed → update the existing row in place (its id, and any
+      session-log's link to it, survive); title missing → insert; title
+      removed → delete (`session_logs.workout_id` nulls via
+      `ON DELETE SET NULL` for those rows only); identical state writes
+      nothing — called once at boot, not per-user. (2026-08-04,
+      library-converge: superseded this bullet's original title-set swap,
+      whose gap was that a content-only edit to an already-deployed title
+      never reached the running set until the title itself changed. The
+      converge closes that — content edits now reach a deployed volume on
+      the next boot alone, no reseed dance required — and logs keep their
+      workout link across a content edit; only an actual rename or removal
+      still nulls it.) Personal (non-global) workouts are structurally
+      untouched: globals are structurally un-editable by users (the store's
+      `update()`/`remove()` only ever match rows scoped to a `userId`, never
+      `user_id IS NULL`)
 - [x] Fixtures across the client/server test suites re-anchored from the
       retired 35-workout set to real entries in the 300 (e.g. "Fork
       Lightning" for the effort-ref `0:30 @ MAX` shape, "Hoarfrost" for the
@@ -686,11 +692,13 @@ plan: `docs/superpowers/plans/2026-08-03-workout-generation.md`.
       distance shape, "Sea Fret" for the first-sorted global)
 
 **Exit:** MET — new and existing accounts alike see the same generated
-300-workout global library; the seed reconcile is idempotent (an unchanged
-set no-ops on a second boot) and swaps cleanly when the code's set changes;
-personal workouts and their logs are structurally unaffected by a swap.
-Pending: James's review of the generated batch and PR approval before merge
-(normal SDLC — no merge without it).
+300-workout global library; the seed converge is idempotent (an unchanged
+set no-ops on a second boot), a content-only edit to an existing title
+reaches the running set on the next boot without any title change, and a
+title rename/removal still converges cleanly; personal workouts and their
+logs are structurally unaffected either way. Pending: James's review of the
+generated batch and PR approval before merge (normal SDLC — no merge
+without it).
 
 **Next:** the deferred UI-fix round below (Phase 6F), then Phase 7's PM5
 integration.
