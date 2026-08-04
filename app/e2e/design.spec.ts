@@ -379,6 +379,41 @@ test.describe("library screen", () => {
     await assertNoA11yViolations(page);
   });
 
+  // Task 6 (ui-fix round, close-out): this axe scan used to exist only as a
+  // one-off manual probe run by Task 4's own reviewer (N5: "I ran axe
+  // (wcag2a+wcag2aa) against the open sheet and against a filtered token
+  // row: zero violations in both") — never codified as a structural test, so
+  // nothing would have caught a future regression here. This is that
+  // codification, against the SAME two states the reviewer checked by hand:
+  // the sheet open (FilterSheet.tsx's `role="dialog"`/`aria-modal="true"`,
+  // the first such element in the codebase, per N5) and a filtered token
+  // row. N5's own separate finding — `aria-modal="true"` with no focus trap
+  // or focus restore — is a real, accepted Minor gap axe cannot see either
+  // way; recorded, not fixed here (out of this task's scope; see the task-4
+  // review for the full writeup).
+  test("zero WCAG 2A/2AA violations with the FILTER sheet open", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
+  test("zero WCAG 2A/2AA violations with an active filter token on screen", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "O2", exact: true })
+      .click();
+    await page.getByRole("button", { name: /^Show \d+ workouts$/ }).click();
+    await expect(
+      page.locator(".filter-token", { hasText: "O2" }),
+    ).toBeVisible();
+    await assertNoA11yViolations(page);
+  });
+
   test("body background matches the token palette", async ({ page }) => {
     const bodyBg = await page.evaluate(
       () => getComputedStyle(document.body).backgroundColor,
