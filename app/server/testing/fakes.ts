@@ -227,6 +227,32 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     async deleteGlobals() {
       globals.clear();
     },
+    // Mirrors the real store's updateGlobal: globals bucket only, sortOrder
+    // writable, personal rows unreachable (they live in byUser).
+    async updateGlobal(
+      id: string,
+      input: NewWorkoutInput & { sortOrder: number },
+    ) {
+      const existing = globals.get(id);
+      if (!existing) return null;
+      const row: WorkoutRow = {
+        ...existing,
+        title: input.title,
+        type: input.type,
+        difficulty: input.difficulty,
+        pain: input.pain,
+        steps: input.steps,
+        sortOrder: input.sortOrder,
+        updatedAt: new Date(),
+      };
+      globals.set(id, row);
+      return withIsGlobal(row);
+    },
+    // Mirrors deleteGlobalsByIds: targeted, [] no-op, personal ids ignored
+    // (they never live in `globals` in the first place).
+    async deleteGlobalsByIds(ids: string[]) {
+      for (const id of ids) globals.delete(id);
+    },
     // Test-only seam: the real store's globals come from seedGlobalLibrary
     // at boot, never through this router. Injects a global row directly.
     _seedGlobal(input: NewWorkoutInput) {

@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { workouts } from "../db/schema.js";
 import type { WorkoutInput } from "../../domain/types.js";
@@ -179,6 +179,40 @@ export function createWorkoutsStore(db: Db) {
     // ON DELETE SET NULL. Personal rows are untouched by construction.
     async deleteGlobals(): Promise<void> {
       await db.delete(workouts).where(isNull(workouts.userId));
+    },
+
+    // Seed-converge only (see app/server/seed/seed.ts): a global-scoped
+    // update that MAY write sortOrder — the exact inverse of update()'s
+    // guarantees above. `user_id IS NULL` scoping makes a personal row
+    // structurally unreachable, same technique as update()'s inverse.
+    async updateGlobal(
+      id: string,
+      input: WorkoutInput & { sortOrder: number },
+    ) {
+      const [row] = await db
+        .update(workouts)
+        .set({
+          title: input.title,
+          type: input.type,
+          difficulty: input.difficulty,
+          pain: input.pain,
+          steps: input.steps,
+          sortOrder: input.sortOrder,
+          updatedAt: new Date(),
+        })
+        .where(and(isNull(workouts.userId), eq(workouts.id, id)))
+        .returning();
+      return row ? withIsGlobal(row) : null;
+    },
+
+    // Seed-converge only: removes exactly the given global rows. [] is a
+    // no-op without a database round-trip. Personal ids are ignored by the
+    // `user_id IS NULL` scope, never deleted.
+    async deleteGlobalsByIds(ids: string[]): Promise<void> {
+      if (ids.length === 0) return;
+      await db
+        .delete(workouts)
+        .where(and(isNull(workouts.userId), inArray(workouts.id, ids)));
     },
   };
 }
