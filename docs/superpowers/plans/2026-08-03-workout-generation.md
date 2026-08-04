@@ -82,7 +82,7 @@ book, for structural-reference use by the book's owner. The photos are
 sideways (rotate mentally 90°); each shows a two-page spread of "cards".
 Each card has: a number+title heading (e.g. "999. Example Card"), a warm-up line,
 one or more work/rest lines, and chips along its edge: total minutes
-(e.g. "20.5 min."), a section chip (Intro/Short/Medium/Long/Advanced...),
+(e.g. "22 min."), a section chip (Intro/Short/Medium/Long/Advanced...),
 a pain number (1–5), and a type chip (O2/AT/TR/AN).
 
 For EACH photo below: use the Read tool on the file, transcribe EVERY card
@@ -104,8 +104,8 @@ containing a JSON array of records with this exact schema:
 
 Mapping conventions:
 - "10' easy warm up" → {"k":"wu","minutes":10}
-- "6x 0.5' at max power @ 30 SPM, 1.5' rest" →
-  {"k":"reps","count":6}, then the work step with "restMinutes": 1.5
+- "6x 1' at max power @ 30 SPM, 1' rest" →
+  {"k":"reps","count":6}, then the work step with "restMinutes": 1
 - per-rep rest ("1' rest in between") goes on the work step's restMinutes;
   a single mid-workout break is a standalone "r" step
 - "at 2k pace -1" → {"base":"2k","off":-1}; "at 6k pace +18" →
