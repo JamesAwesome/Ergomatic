@@ -781,15 +781,15 @@ function TodayView({
 
       <div className="today-suggestion-header">
         <span className="mono-status">
-          {/* usesPlan/freestyle, never pick-state — suggestion.reason already
-              says "YOUR PICK — …" when pickOverride is set, so this label
+          {/* Final fix wave (2026-08-04 round, M2): "SUGGESTED FOR TODAY"
+              wrapped to two lines beside FILTER/SHUFFLE at 390px — "FOR
+              TODAY" was redundant on the Today screen anyway, so the label
+              is just "SUGGESTED" in both modes now (freestyle already used
+              that). Never pick-state — suggestion.reason already says
+              "YOUR PICK — …" when pickOverride is set, so this label
               staying constant avoids saying the same thing twice in two
               different places on the card. */}
-          {suggestion.recommendationId
-            ? usesPlan
-              ? "SUGGESTED FOR TODAY"
-              : "SUGGESTED"
-            : ""}
+          {suggestion.recommendationId ? "SUGGESTED" : ""}
         </span>
         <div className="today-suggestion-actions">
           {/* Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline

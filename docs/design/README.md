@@ -110,7 +110,7 @@ pool      = library.filter(type === todayCode)
             || (empty → unfiltered type list)
 rec       = todayPick ?? pool[0]
 ```
-Badge reads SUGGESTED FOR TODAY, or YOUR PICK when `todayPick` is set. SHUFFLE picks a
+Badge reads SUGGESTED, or YOUR PICK when `todayPick` is set. SHUFFLE picks a
 random other member of `pool`. Changing the preference chips clears `todayPick`.
 
 ---

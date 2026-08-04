@@ -1,7 +1,7 @@
 import type { Difficulty, WorkoutType } from "../../domain/types.js";
 
 /** localStorage key for Today's client-side filter/swap overrides — visible,
- *  rower-editable narrowing of what SUGGESTED FOR TODAY considers, layered
+ *  rower-editable narrowing of what the Today suggestion considers, layered
  *  on top of the server's own preferences (Task 1's `SuggestPrefs`) without
  *  writing back to them. Same storage (localStorage, not sessionStorage) and
  *  the same `{date, planKey, doneN}` invalidation contract as todayPick.ts's

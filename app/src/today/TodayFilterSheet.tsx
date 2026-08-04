@@ -111,6 +111,17 @@ export default function TodayFilterSheet({
 
       <CellGrid
         label="TIME"
+        // Final fix wave (2026-08-04 round, M1): scoped to this group alone
+        // via CellGrid's own `className` passthrough (already used by
+        // Library's LAST DONE/SOURCE half-width pair) — "NO CAP" is the one
+        // label in the whole app that doesn't fit a filter-sheet-cell's
+        // equal-fifth share of the 390px sheet width (index.css's own
+        // `.filter-sheet-group-time` rule). Library's 5-cell PAIN group
+        // shares the same `filter-sheet-grid-5` class (cell-count-derived,
+        // m8) but single digits never need it, so scoping to this group by
+        // name — not by cell count — keeps Library's rendering byte-for-
+        // byte unchanged.
+        className="filter-sheet-group-time"
         cells={CAP_CHIPS.map(({ value, label }) => ({
           value: value === null ? "none" : String(value),
           label,
