@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { buildDraft } from "./draft";
 import { buildRun, pause, advance, nextDistance } from "./engine";
 import { saveRun, loadRun, clearRun, RUN_KEY, type SessionRun } from "./run";
 import { saveDraft, loadDraft, DRAFT_KEY } from "./draft";
 
-// Realistic fixture, per repo convention: Cold Front (AT) — wu 5' +
-// 4x2000m @ 6k+1 with 5' rest — the same reps-expanded distance workout
+// Realistic fixture, per repo convention: Filling Low (AT) — wu 8' +
+// 3x2000m @ 6k+4 with 3' rest — the same reps-expanded distance workout
 // engine.test.ts uses, so a run built from it exercises actuals, set
 // numbering, and originalIndex in one realistic shape.
-function coldFrontDraft(id: string) {
-  const w = STARTER_WORKOUTS.find((s) => s.title === "Cold Front");
-  if (!w) throw new Error("missing starter fixture: Cold Front");
+function fillingLowDraft(id: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+  if (!w) throw new Error("missing library fixture: Filling Low");
   return buildDraft({
     id,
     title: w.title,
@@ -29,7 +29,7 @@ function addSeconds(d: Date, s: number): Date {
 }
 
 function freshRun(): SessionRun {
-  return buildRun(coldFrontDraft(`cf-${Math.random()}`), baselines, 3, t0);
+  return buildRun(fillingLowDraft(`fl-${Math.random()}`), baselines, 3, t0);
 }
 
 // A phase with no `set` (no reps marker active, e.g. warmup) still carries
@@ -67,7 +67,8 @@ describe("saveRun / loadRun / clearRun", () => {
   });
 
   it("round-trips a completed run", () => {
-    const run = { ...freshRun(), index: 8 }; // the last phase
+    // Filling Low: wu + 3x(work,rest) = 1 + 6 = 7 phases, indices 0..6.
+    const run = { ...freshRun(), index: 6 }; // the last phase
     const completed = advance(run, addSeconds(t0, 1000));
     expect(saveRun(completed)).toBe(true);
     const loaded = loadRun();
@@ -89,7 +90,7 @@ describe("saveRun / loadRun / clearRun", () => {
   // survives untouched.
   it("resilience 5: returns null and clears the key for an unknown version, leaving the DRAFT untouched", () => {
     const run = freshRun();
-    const draft = coldFrontDraft("cf-draft-survives");
+    const draft = fillingLowDraft("fl-draft-survives");
     saveDraft(draft);
     localStorage.setItem(RUN_KEY, JSON.stringify({ ...run, v: 2 }));
 

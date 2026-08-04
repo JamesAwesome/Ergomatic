@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { LibraryWorkout } from "../api/useWorkouts";
 
 // The recorded bug this task round fixes, exercised end to end through the
@@ -24,12 +24,12 @@ import type { LibraryWorkout } from "../api/useWorkouts";
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 function personalWorkout(title: string, id: string): LibraryWorkout {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   // isGlobal: false — Edit/Delete (OwnerActions) only render for a workout
-  // the rower owns; a starter's real, already-reviewed step shape (rather
-  // than a hand-built minimum) is what a realistic PERSONAL workout would
-  // still look like content-wise.
+  // the rower owns; a library entry's real, already-reviewed step shape
+  // (rather than a hand-built minimum) is what a realistic PERSONAL workout
+  // would still look like content-wise.
   return {
     id,
     title: w.title,
@@ -42,7 +42,7 @@ function personalWorkout(title: string, id: string): LibraryWorkout {
   };
 }
 
-const WORKOUT = personalWorkout("Zephyr", "w1");
+const WORKOUT = personalWorkout("Sea Fret", "w1");
 
 function mockHooks() {
   vi.doMock("../api/useWorkouts", () => ({
@@ -89,9 +89,9 @@ describe("history-aware BACK: the full Today -> detail -> edit round trip", () =
 
     // Today -> detail, carrying state={from:"/today"} (Today.tsx's own
     // suggestion-card Link).
-    await userEvent.click(screen.getByRole("link", { name: /Zephyr/ }));
+    await userEvent.click(screen.getByRole("link", { name: /Sea Fret/ }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Zephyr" }),
+      await screen.findByRole("heading", { level: 1, name: "Sea Fret" }),
     ).toBeVisible();
 
     // detail -> edit, forwarding detail's OWN received `from` ("/today"),
@@ -106,7 +106,7 @@ describe("history-aware BACK: the full Today -> detail -> edit round trip", () =
     // page (Builder.tsx, edit mode), forwarding the origin it received.
     await userEvent.click(screen.getByRole("link", { name: "← BACK" }));
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Zephyr" }),
+      await screen.findByRole("heading", { level: 1, name: "Sea Fret" }),
     ).toBeVisible();
 
     // Second BACK: detail's own BackLink now has the forwarded "/today" to

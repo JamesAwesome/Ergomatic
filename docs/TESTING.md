@@ -300,8 +300,9 @@ codebase has shipped were fixture failures, not logic failures:
   all, and a collapsed warm-up card rendered a focusable button with no
   accessible name on essentially every stored workout.
 
-**The rule:** prefer the real thing. Use `STARTER_WORKOUTS`, a workout produced
-by `fromWorkout` from stored steps, or a fully populated form — not a
+**The rule:** prefer the real thing. Use `LIBRARY_WORKOUTS`
+(`app/server/seed/library`), a workout produced by `fromWorkout` from stored
+steps, or a fully populated form — not a
 hand-built minimum. When a code path is reachable only by data you don't
 normally author (a warm-up row, a bulk-imported shape, an unset baseline),
 that path is *more* likely to be wrong, not less, because nothing else

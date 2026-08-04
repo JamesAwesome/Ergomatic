@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { resolveSplit, toleranceRange } from "../../domain/pace.js";
 import type { WorkoutType } from "../../domain/types.js";
 import {
@@ -19,23 +19,31 @@ import {
   snapDurationSeconds,
 } from "./ConfirmTargets";
 
-// Realistic fixtures, per repo convention: real starter workouts
-// (app/server/seed/starter.ts), matching draft.test.ts's own choices so the
-// pinned minute totals here are the exact same already-verified numbers.
-// - Doldrums (O2): wu 4' + reps×2 marker + one split-ref work step (18 spm,
-//   6k+16, 3' embedded rest) — the reps-marker fixture.
-// - Jet Stream (O2): wu 5' + a single 10,000 m distance work step — the
-//   distance-duration-stepper fixture.
-// - Microburst (AN): wu 5' + reps×10 marker + an EFFORT-ref work step — the
-//   no-nudge/effort-word fixture.
-function starter(title: string) {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+// Realistic fixtures, per repo convention: real library workouts
+// (app/server/seed/library/index.ts), matching draft.test.ts's own choices
+// so the pinned minute totals here are the exact same already-verified
+// numbers.
+// - Hoarfrost (O2): wu 6' + reps×2 marker + one split-ref work step (22
+//   spm, 6k+12, 5' embedded rest) — the reps-marker fixture.
+// - Calm Sea (O2): wu 8' + a single 10,000 m distance work step — the
+//   distance-duration-stepper fixture. (Meltemi used to hold this role; the
+//   library rewrite turned it into a 5-phase TIME workout with no distance
+//   step at all, so this suite re-anchored to Calm Sea — same 10,000 m
+//   distance, matching draft.test.ts/engine.test.ts/logDraft.test.ts.)
+// - Heat Lightning (AN): wu 10' + reps×10 marker + an EFFORT-ref work step —
+//   the no-nudge/effort-word fixture. (Fork Lightning used to hold this
+//   role; the rewrite turned its reps block into TWO alternating work
+//   steps, which renders as two separate editable rows here and breaks the
+//   "exactly one ALL OUT row" assumption this test makes, so this suite
+//   re-anchored to Heat Lightning, which still has a single repeated step.)
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   return w;
 }
 
 function seedDraft(title: string, id = `id-${title}`): SessionDraft {
-  const w = starter(title);
+  const w = library(title);
   const draft = buildDraft({
     id,
     title: w.title,
@@ -95,13 +103,13 @@ describe("ConfirmTargets", () => {
   // the exact shape the real START button produces.
   it("redirects to /session/run instead of re-rendering when the draft is already STARTED", async () => {
     mockBaselines();
-    const d = seedDraft("Doldrums");
+    const d = seedDraft("Hoarfrost");
     saveDraft(startDraft(d));
     await renderConfirm();
 
     expect(await screen.findByText("RUN SCREEN")).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Doldrums" }),
+      screen.queryByRole("heading", { name: "Hoarfrost" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "START" }),
@@ -112,7 +120,7 @@ describe("ConfirmTargets", () => {
     vi.doMock("../api/useBaselines", () => ({
       useBaselines: () => ({ state: "loading" }),
     }));
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     expect(screen.getByText("LOADING…")).toBeInTheDocument();
@@ -123,7 +131,7 @@ describe("ConfirmTargets", () => {
     vi.doMock("../api/useBaselines", () => ({
       useBaselines: () => ({ state: "error", retry }),
     }));
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -132,26 +140,26 @@ describe("ConfirmTargets", () => {
 
   it("renders the draft's title, type badge, and initial recount", async () => {
     mockBaselines();
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     expect(
-      screen.getByRole("heading", { name: "Doldrums" }),
+      screen.getByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
     expect(screen.getByText("O2")).toBeInTheDocument();
-    // wu 4' (240s) + 2 * (20' work + 3' rest) = 3000s -> 50 (draft.test.ts's
+    // wu 10' (600s) + 2 * (12' work + 3' rest) = 2400s -> 40 (draft.test.ts's
     // own pinned total for this exact fixture/baseline pair).
-    expect(screen.getByText("50 MIN")).toBeInTheDocument();
+    expect(screen.getByText("40 MIN")).toBeInTheDocument();
   });
 
   it("shows an em-dash recount and a no-target fallback with no baselines, and hides every nudge control", async () => {
     mockBaselines(NO_BASELINES);
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     expect(screen.getByText("— MIN")).toBeInTheDocument();
     // Two "no target" idioms now render with no baselines: the row-level
-    // one (Doldrums' split-ref work step) and the footer's own (below) —
+    // one (Hoarfrost's split-ref work step) and the footer's own (below) —
     // both the same idiom, different scope.
     expect(screen.getAllByText("no target")).toHaveLength(2);
     expect(
@@ -166,7 +174,7 @@ describe("ConfirmTargets", () => {
   // real run from.
   it("blocks START and shows the no-target idiom with a /you link when baselines are unset", async () => {
     mockBaselines(NO_BASELINES);
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     expect(
@@ -182,23 +190,23 @@ describe("ConfirmTargets", () => {
 
   it("the work step's duration stepper snaps by 30s and moves the footer recount", async () => {
     mockBaselines();
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
-    expect(screen.getByText("50 MIN")).toBeInTheDocument();
+    expect(screen.getByText("40 MIN")).toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Row 3 duration down" }),
     );
 
     const group = screen.getByRole("group", { name: "Row 3 duration" });
-    expect(within(group).getByText("19:30")).toBeInTheDocument();
-    // Removing 30s from each of the 2 reps: 50 - 1 = 49.
-    expect(screen.getByText("49 MIN")).toBeInTheDocument();
+    expect(within(group).getByText("11:30")).toBeInTheDocument();
+    // Removing 30s from each of the 2 reps: 40 - 1 = 39.
+    expect(screen.getByText("39 MIN")).toBeInTheDocument();
   });
 
   it("a distance work step's duration stepper steps by 100m in both directions", async () => {
     mockBaselines();
-    seedDraft("Jet Stream");
+    seedDraft("Calm Sea");
     await renderConfirm();
 
     const group = screen.getByRole("group", { name: "Row 2 duration" });
@@ -217,21 +225,21 @@ describe("ConfirmTargets", () => {
 
   it("the SPM stepper wakes from the step's own spm, not always 20, in both directions", async () => {
     mockBaselines();
-    seedDraft("Doldrums"); // the work step carries spm: 18
+    seedDraft("Hoarfrost"); // the work step carries spm: 22
     await renderConfirm();
 
     const group = screen.getByRole("group", { name: "Row 3 stroke rate" });
-    expect(within(group).getByText("18")).toBeInTheDocument();
+    expect(within(group).getByText("22")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 3 stroke rate up" }),
     );
-    expect(within(group).getByText("19")).toBeInTheDocument();
+    expect(within(group).getByText("23")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 3 stroke rate down" }),
     );
-    expect(within(group).getByText("18")).toBeInTheDocument();
+    expect(within(group).getByText("22")).toBeInTheDocument();
   });
 
   it("the SPM stepper wakes at 20 when the step carries no spm of its own", async () => {
@@ -263,7 +271,7 @@ describe("ConfirmTargets", () => {
 
   it("the reps marker gets a rep stepper, no remove/restore control, and its count moves the recount", async () => {
     mockBaselines();
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     const markerRow = screen.getByText(/REPEAT/).closest(".step-editor");
@@ -277,18 +285,18 @@ describe("ConfirmTargets", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Row 2 reps up" }),
     );
-    // wu 4' + 3 * (20' + 3') = 240 + 4140 = 4380s -> 73.
-    expect(screen.getByText("73 MIN")).toBeInTheDocument();
+    // wu 6' + 3 * (12' + 5') = 360 + 3060 = 3420s -> 57.
+    expect(screen.getByText("57 MIN")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Row 2 reps down" }),
     );
-    expect(screen.getByText("50 MIN")).toBeInTheDocument();
+    expect(screen.getByText("40 MIN")).toBeInTheDocument();
   });
 
   it("removing a row excludes it from the recount, strikes it visibly, and restoring undoes both", async () => {
     mockBaselines();
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     const warmupRow = screen.getByText(/WARM-UP/).closest(".step-editor");
@@ -298,8 +306,8 @@ describe("ConfirmTargets", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove Row 1" }));
 
     expect(warmupRow).toHaveClass("confirm-step-removed");
-    // 2 * (20' + 3') = 46, the warm-up's 4' dropped out.
-    expect(screen.getByText("46 MIN")).toBeInTheDocument();
+    // 2 * (12' + 5') = 34, the warm-up's 6' dropped out.
+    expect(screen.getByText("34 MIN")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Restore Row 1" }),
     ).toBeInTheDocument();
@@ -309,12 +317,12 @@ describe("ConfirmTargets", () => {
     );
 
     expect(warmupRow).not.toHaveClass("confirm-step-removed");
-    expect(screen.getByText("50 MIN")).toBeInTheDocument();
+    expect(screen.getByText("40 MIN")).toBeInTheDocument();
   });
 
   it("removing two rows exercises the removed-index sort with a real multi-element array", async () => {
     mockBaselines();
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     await userEvent.click(screen.getByRole("button", { name: "Remove Row 1" }));
@@ -331,15 +339,15 @@ describe("ConfirmTargets", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Restore Row 1" }),
     );
-    expect(screen.getByText("50 MIN")).toBeInTheDocument();
+    expect(screen.getByText("40 MIN")).toBeInTheDocument();
   });
 
   it("nudging a split step's target updates the resolved range shown in both directions, clamped to a real split", async () => {
     mockBaselines();
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
-    const ref = { base: "6k" as const, off: 16 };
+    const ref = { base: "6k" as const, off: 12 };
     const before = toleranceRange(resolveSplit(BASELINES, ref, 0), 1).label;
     expect(screen.getByText(before)).toBeInTheDocument();
 
@@ -358,7 +366,7 @@ describe("ConfirmTargets", () => {
     expect(screen.queryByText(after)).not.toBeInTheDocument();
   });
 
-  // Hand-built rather than a starter fixture: no seeded workout carries a
+  // Hand-built rather than a library fixture: no seeded workout carries a
   // standalone "r" step (rest is always embedded in a "w" step's own
   // restMinutes — see draft.test.ts's own fixture notes) or a "test" step
   // (validateSteps permits both; the builder just never authors either), so
@@ -442,7 +450,7 @@ describe("ConfirmTargets", () => {
 
   it("an effort-ref step shows its effort word with no nudge control anywhere on that row", async () => {
     mockBaselines();
-    seedDraft("Microburst");
+    seedDraft("Heat Lightning");
     await renderConfirm();
 
     // Header label and the TARGET row both read the effort word — the
@@ -457,7 +465,7 @@ describe("ConfirmTargets", () => {
 
   it("START stamps startedAt, saves the draft, and navigates to /session/countdown", async () => {
     mockBaselines();
-    seedDraft("Doldrums");
+    seedDraft("Hoarfrost");
     await renderConfirm();
 
     await userEvent.click(screen.getByRole("button", { name: "START" }));

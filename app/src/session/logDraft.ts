@@ -67,9 +67,11 @@ import type { SessionRun } from "./run";
  *  label from that REAL `ref` via the shared `refPaceLabel` helper below —
  *  the exact same function `buildManualLogSteps` uses — so the two doors
  *  literally cannot diverge on a shared workout's label, split-ref or
- *  effort alike. Pinned by a same-workout, both-doors equality test
- *  (Microburst: split + effort + distance steps) in the test file, plus a
- *  removed-step fixture proving the lookup survives a mid-workout removal.
+ *  effort alike. Pinned by a both-doors equality test (`Mixed Kinds`, a
+ *  synthetic draft combining split + effort + distance steps from three
+ *  real library workouts — no single library entry carries all three) in
+ *  the test file, plus a removed-step fixture proving the lookup survives a
+ *  mid-workout removal.
  *
  *  NUDGE FOLD (F2, whole-branch review, Task 2 fix round): the draft's raw
  *  ref's own `off` is NOT what the label uses verbatim when a confirm-time
@@ -320,8 +322,8 @@ export function buildLogSteps(
  *  paragraph — the same one `buildLogSteps` uses whenever its draft lookup
  *  succeeds), matching the detail screen's exact idiom (`StepRow.tsx`'s
  *  `left = `${duration} @ ${refLabel(ref)}``) and the task brief's own
- *  literal examples (`0:30 @ MAX` is Microburst's real effort step, pinned
- *  in the test file).
+ *  literal examples (`0:30 @ MAX` is Fork Lightning's real effort step,
+ *  pinned in the test file).
  *
  *  `liveSteps` (not `phases()`) does the reps-block expansion: it returns
  *  the flat, repeats-expanded `Step[]` (one entry per physical repetition,

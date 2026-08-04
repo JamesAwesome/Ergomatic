@@ -44,8 +44,8 @@ function clampSpm(n: number): number | undefined {
  *  handoff, which models only work steps) get a minutes-only editor: just
  *  the header, DUR and DONE, since those rows have no pace ref, spm or rest
  *  concept of their own (see builderState.ts's stepSummary/stepSubSummary
- *  comments) and the 35 starter workouts plus anything bulk-imported can
- *  contain them.
+ *  comments) and every seeded library workout plus anything bulk-imported
+ *  can contain them.
  *
  *  Replaces StepRowEditor.tsx (deleted this task) — DUR reuses
  *  DurationInput and PACE reuses PaceRefInput wholesale (both already

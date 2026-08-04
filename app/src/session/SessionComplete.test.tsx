@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { STARTER_WORKOUTS } from "../../server/seed/starter";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import { buildDraft, saveDraft, startDraft, type SessionDraft } from "./draft";
 import { buildRun, type EnginePhase } from "./engine";
@@ -13,13 +13,13 @@ const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const TOL = 1;
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
 
-function starter(title: string) {
-  const w = STARTER_WORKOUTS.find((s) => s.title === title);
-  if (!w) throw new Error(`missing starter fixture: ${title}`);
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   return w;
 }
 
-// A real starter workout (Doldrums: wu + a split-ref work/rest pair, per
+// A real library workout (Hoarfrost: wu + a split-ref work/rest pair, per
 // repo convention — not a hand-built minimum) with ONE distance step
 // appended directly (not after its own live "reps" marker, which would
 // repeat it too — the same "reps marker deliberately not reused" call
@@ -28,15 +28,15 @@ function starter(title: string) {
 // LAST phase is the one this module's own actuals list has anything to show
 // for, since 6B's engine only ever records an actual for a distance phase.
 function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
-  const doldrums = starter("Doldrums");
-  const splitWork = doldrums.steps.find((s) => s.k === "w") as Extract<
+  const hoarfrost = library("Hoarfrost");
+  const splitWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
     Step,
     { k: "w" }
   >;
   const draft = buildDraft({
     id: "id-complete-fixture",
-    title: doldrums.title,
-    type: doldrums.type as WorkoutType,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
     steps: [
       { k: "wu", minutes: 4 },
       splitWork,
@@ -247,7 +247,7 @@ describe("SessionComplete", () => {
 
   it("redirects to /today when there's no run record", async () => {
     mockKeepAwake();
-    saveDraft(startDraft(buildDraft({ ...starter("Doldrums"), id: "id-x" })));
+    saveDraft(startDraft(buildDraft({ ...library("Hoarfrost"), id: "id-x" })));
     await renderComplete();
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
   });

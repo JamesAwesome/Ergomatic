@@ -116,15 +116,16 @@ async function startAndSkipCountdown(page: Page): Promise<void> {
  *  `lastDoneDaysAgo`) via a genuine logged session against each one's own
  *  id. `suggest()`'s tie-break sorts never-done (`null`) entries strictly
  *  before ANY done entry regardless of how many days ago (`byLeastRecently
- *  Done`), but a brand-new account's 8-10 seeded starters of a given type
- *  are ALSO all never-done — and `stores/workouts.ts`'s own `list()` orders
+ *  Done`), but a brand-new account's 60-90 seeded global workouts of a given
+ *  type (server/seed/library/index.ts's quota grid: O2 90 / AT 75 / TR 75 /
+ *  AN 60) are ALSO all never-done — and `stores/workouts.ts`'s own `list()` orders
  *  globals ahead of personal rows unconditionally, so a fresh personal
  *  fixture of the same type would otherwise never win the recency tie no
  *  matter what its own difficulty/pain/cap says. Logging every global of
  *  that type first makes a personal fixture imported right after this call
  *  the SOLE never-done entry of that type, and therefore its guaranteed top
  *  pick — the only way to make the filter chips' own effect deterministic
- *  without hardcoding which seeded starter happens to sort first. Each POST
+ *  without hardcoding which seeded workout happens to sort first. Each POST
  *  also bumps `plan_state.done_n` (`stores/logs.ts`'s own unconditional
  *  bump); harmless here since every caller of this helper chooses/resets a
  *  plan afterward, which always re-zeroes it regardless of what it was
@@ -182,10 +183,10 @@ test.describe("Today enhancements: visible filter chips", () => {
       name: "Today Filters Tester",
     });
     await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
-    // Neutralize the 10 seeded global O2 starters (sprint's own doneN=0
+    // Neutralize the 90 seeded global O2 workouts (sprint's own doneN=0
     // code is "O2" — SPRINT_WEEKS week 0, index 0) so the two personal
     // fixtures below are the only never-done O2 entries, and therefore
-    // deterministically win the recency tie regardless of the starters'
+    // deterministically win the recency tie regardless of the library's
     // own authored order.
     await neutralizeGlobalRecency(page, "O2");
     // Imported in this order deliberately: creation order is the tie-break
@@ -250,7 +251,7 @@ test.describe("Today enhancements: the type-swap loop", () => {
       name: "Today Swap Tester",
     });
     await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
-    // Neutralize the 8 seeded global AN starters so this fixture (also AN)
+    // Neutralize the 60 seeded global AN workouts so this fixture (also AN)
     // is the sole never-done AN entry, and therefore the guaranteed pick
     // once the type chip swaps the pool to AN — same reasoning as the
     // filters describe block above.

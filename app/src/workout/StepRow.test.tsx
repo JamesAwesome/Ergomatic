@@ -75,9 +75,9 @@ describe("StepRow durations (house clock format)", () => {
     );
   });
 
-  // Realistic fixture: "Tailwind" (app/server/seed/starter.ts) — a real
-  // seeded AT workout's work step: 5' at 6k+4, 23 spm, 2.5' rest between
-  // reps. Exercises the composed left-hand label ("5:00 @ 6k +4") together
+  // Realistic fixture: "Pressure Ridge" (app/server/seed/library/at.ts) — a
+  // real seeded AT workout's work step: 3' at 6k+2, 23 spm, 1' rest between
+  // reps. Exercises the composed left-hand label ("3:00 @ 6k +2") together
   // with the rest sub-line, both from real production data rather than a
   // hand-built minimal fixture.
   //
@@ -92,10 +92,10 @@ describe("StepRow durations (house clock format)", () => {
       <StepRow
         step={{
           k: "w",
-          duration: { kind: "time", minutes: 5 },
-          ref: { base: "6k", off: 4 },
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "6k", off: 2 },
           spm: 23,
-          restMinutes: 2.5,
+          restMinutes: 1,
         }}
         baselines={BASELINES}
         tolerance={1}
@@ -104,19 +104,19 @@ describe("StepRow durations (house clock format)", () => {
       />,
     );
 
-    const label = screen.getByText("5:00 @ 6k +4");
-    expect(label).toHaveAccessibleName("5 minutes at 6k +4");
+    const label = screen.getByText("3:00 @ 6k +2");
+    expect(label).toHaveAccessibleName("3 minutes at 6k +2");
     expect(screen.getByText(/23 spm/)).toBeInTheDocument();
-    expect(screen.getByText(/2:30 rest/)).toBeInTheDocument();
+    expect(screen.getByText(/1:00 rest/)).toBeInTheDocument();
   });
 });
 
 describe("StepRow effort refs (Phase 5G)", () => {
-  // Realistic fixture: "Microburst" (app/server/seed/starter.ts, AN, 10x30s).
-  // This is now that workout's step verbatim — Task 6's seed audit converted
-  // its ref from the stand-in `{ base: "2k", off: -5 }` to `{ effort: "max" }`
-  // (it is the library's only effort step), so what a reader actually sees on
-  // the detail screen for a seeded workout is exactly what this asserts.
+  // Realistic fixture: "Fork Lightning" (app/server/seed/library/an.ts,
+  // AN, 10x30s effort-ref). This is that workout's step verbatim — one of
+  // the generated library's many effort-ref AN entries — so what a reader
+  // actually sees on the detail screen for a seeded workout is exactly what
+  // this asserts.
   it("renders an effort step's word where the range sits, with no nudges", () => {
     renderStep(
       <StepRow
@@ -125,7 +125,7 @@ describe("StepRow effort refs (Phase 5G)", () => {
           duration: { kind: "time", minutes: 0.5 },
           ref: { effort: "max" },
           spm: 32,
-          restMinutes: 2.5,
+          restMinutes: 1.25,
         }}
         baselines={BASELINES}
         tolerance={1}

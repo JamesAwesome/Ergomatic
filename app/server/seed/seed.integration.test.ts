@@ -9,8 +9,9 @@ import { createDb, type Db } from "../db/index.js";
 import { workouts } from "../db/schema.js";
 import { createUserStore, type UserStore } from "../auth/users.js";
 import { createWorkoutsStore, type WorkoutsStore } from "../stores/workouts.js";
+import { createLogsStore, type LogsStore } from "../stores/logs.js";
 import { seedGlobalLibrary, SEED_LOCK_KEY } from "./seed.js";
-import { STARTER_WORKOUTS } from "./starter.js";
+import { LIBRARY_WORKOUTS } from "./library/index.js";
 
 describe("seedGlobalLibrary against real Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -18,6 +19,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
   let db: Db;
   let users: UserStore;
   let wk: WorkoutsStore;
+  let logs: LogsStore;
 
   beforeAll(async () => {
     container = await new PostgreSqlContainer("postgres:18.4").start();
@@ -25,6 +27,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
     await migrate(db, { migrationsFolder: "drizzle" });
     users = createUserStore(db);
     wk = createWorkoutsStore(db);
+    logs = createLogsStore(db);
   });
 
   afterAll(async () => {
@@ -32,23 +35,31 @@ describe("seedGlobalLibrary against real Postgres", () => {
     await container.stop().catch(() => {});
   });
 
-  it("seeds all STARTER_WORKOUTS as global (user_id null), source starter, on a fresh DB", async () => {
+  it("seeds all LIBRARY_WORKOUTS as global (user_id null), source starter, on a fresh DB", async () => {
     await seedGlobalLibrary(db);
 
     const globals = await wk.listGlobals();
-    expect(globals).toHaveLength(STARTER_WORKOUTS.length);
+    expect(globals).toHaveLength(LIBRARY_WORKOUTS.length);
+    expect(globals).toHaveLength(300);
     expect(globals.every((w) => w.userId === null)).toBe(true);
     expect(globals.every((w) => w.isGlobal === true)).toBe(true);
     expect(globals.every((w) => w.source === "starter")).toBe(true);
     expect(globals.map((w) => w.sortOrder)).toStrictEqual(
-      STARTER_WORKOUTS.map((w) => w.sortOrder).sort((a, b) => a - b),
+      LIBRARY_WORKOUTS.map((w) => w.sortOrder).sort((a, b) => a - b),
     );
   });
 
-  it("a second call is idempotent: still exactly the starter count, no duplicates", async () => {
+  it("running seedGlobalLibrary twice from empty produces the identical set of global ids (match ⇒ no-op, no churn)", async () => {
+    await db.delete(workouts);
+
     await seedGlobalLibrary(db);
+    const idsAfterFirst = (await wk.listGlobals()).map((w) => w.id).sort();
+    expect(idsAfterFirst).toHaveLength(LIBRARY_WORKOUTS.length);
+
     await seedGlobalLibrary(db);
-    expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length);
+    const idsAfterSecond = (await wk.listGlobals()).map((w) => w.id).sort();
+
+    expect(idsAfterSecond).toStrictEqual(idsAfterFirst);
   });
 
   it("is visible to any user (new or old) via list(), without per-user seeding", async () => {
@@ -66,38 +77,100 @@ describe("seedGlobalLibrary against real Postgres", () => {
 
     const listBefore = await wk.list(before.id);
     const listAfter = await wk.list(after.id);
-    expect(listBefore).toHaveLength(STARTER_WORKOUTS.length);
-    expect(listAfter).toHaveLength(STARTER_WORKOUTS.length);
+    expect(listBefore).toHaveLength(LIBRARY_WORKOUTS.length);
+    expect(listAfter).toHaveLength(LIBRARY_WORKOUTS.length);
     expect(listBefore.every((w) => w.isGlobal)).toBe(true);
     expect(listAfter.every((w) => w.isGlobal)).toBe(true);
   });
 
-  it("does not seed when globals already exist even if inserted by other means (idempotent on countGlobals > 0)", async () => {
-    await seedGlobalLibrary(db);
-    const countAfterFirst = await wk.countGlobals();
-    expect(countAfterFirst).toBe(STARTER_WORKOUTS.length);
+  // Reconcile semantics (this task): a global set that no longer matches
+  // LIBRARY_WORKOUTS' title set — e.g. the retired 35-workout library still
+  // sitting in a deployed DB — gets swapped wholesale rather than left alone.
+  // Starts from a deliberately reset table so the "old" globals are the ONLY
+  // globals present, standing in for a pre-migration production DB.
+  it("swap: a mismatched global set is replaced wholesale; session logs keep their row with workoutId nulled, personal workouts are untouched", async () => {
+    await db.delete(workouts);
 
-    // A manual extra global row (simulating some other origin) still blocks
-    // re-seeding entirely — the rule is "any globals at all", not "exactly
-    // the starter count".
-    await wk.createMany(null, [
+    const user = await users.createUser({
+      googleSub: "swap-test",
+      email: "swap@x.com",
+      name: "Swap Tester",
+    });
+
+    const [oldA] = await wk.createMany(null, [
       {
-        sortOrder: 99999,
-        title: "Manually added",
+        sortOrder: 1,
+        title: "Old Ghost",
         type: "AT",
         difficulty: "medium",
         pain: 2,
         source: "starter",
         steps: [],
       },
+      {
+        sortOrder: 2,
+        title: "Old Relic",
+        type: "O2",
+        difficulty: "easy",
+        pain: 1,
+        source: "starter",
+        steps: [],
+      },
+      {
+        sortOrder: 3,
+        title: "Old Fossil",
+        type: "TR",
+        difficulty: "hard",
+        pain: 4,
+        source: "starter",
+        steps: [],
+      },
     ]);
+
+    const personal = await wk.create(user.id, {
+      title: "My Own Row",
+      type: "AN",
+      difficulty: "hard",
+      pain: 3,
+      source: "user",
+      steps: [],
+    });
+
+    const { id: logId } = await logs.create(user.id, {
+      workoutId: oldA.id,
+      workoutTitle: oldA.title,
+      workoutType: oldA.type,
+      baselineK2: null,
+      baselineK6: null,
+      held: "held",
+      pain: 2,
+      notes: null,
+      steps: [],
+      advancesPlan: false,
+    });
+
     await seedGlobalLibrary(db);
-    expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length + 1);
+
+    const globalsAfter = await wk.listGlobals();
+    expect(globalsAfter).toHaveLength(LIBRARY_WORKOUTS.length);
+    const titlesAfter = new Set(globalsAfter.map((w) => w.title));
+    expect(titlesAfter.has("Old Ghost")).toBe(false);
+    expect(titlesAfter.has("Old Relic")).toBe(false);
+    expect(titlesAfter.has("Old Fossil")).toBe(false);
+
+    const logRow = (await logs.list(user.id, 10)).find((l) => l.id === logId);
+    expect(logRow).toBeDefined();
+    expect(logRow!.workoutId).toBeNull();
+
+    const personalAfter = await wk.get(user.id, personal.id);
+    expect(personalAfter).not.toBeNull();
+    expect(personalAfter!.title).toBe("My Own Row");
+    expect(personalAfter!.isGlobal).toBe(false);
   });
 
-  // seedGlobalLibrary's check-then-insert is not atomic on its own: two
-  // booters can both observe zero globals and both attempt the insert. Until
-  // 2026-07-30 the two partial unique indexes on `num` stopped the loser's
+  // seedGlobalLibrary's check-then-reconcile is not atomic on its own: two
+  // booters can both observe a mismatch and both attempt the swap. Until
+  // 2026-07-30 the two partial unique indexes on `num` stopped a losing
   // write from landing; those went with the column, so the mutual exclusion
   // is now a transaction-scoped advisory lock inside seedGlobalLibrary
   // (SEED_LOCK_KEY, exported from seed.ts for exactly this test).
@@ -139,7 +212,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       await seeding;
 
       expect(settled).toBe(true);
-      expect(await wk.countGlobals()).toBe(STARTER_WORKOUTS.length);
+      expect(await wk.countGlobals()).toBe(LIBRARY_WORKOUTS.length);
     } finally {
       lockClient.release();
     }

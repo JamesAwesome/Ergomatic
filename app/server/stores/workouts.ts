@@ -173,6 +173,13 @@ export function createWorkoutsStore(db: Db) {
         .where(isNull(workouts.userId));
       return rows.length;
     },
+
+    // Seed-reconcile only (see seed.ts): removes every global row. Session
+    // logs referencing them keep their rows — session_logs.workout_id is
+    // ON DELETE SET NULL. Personal rows are untouched by construction.
+    async deleteGlobals(): Promise<void> {
+      await db.delete(workouts).where(isNull(workouts.userId));
+    },
   };
 }
 
