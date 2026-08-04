@@ -128,3 +128,31 @@ must not change), any storage shape change, server, suggest() logic.
 - CLEAR ALL restores the day's defaults and says so in DEVIATIONS.
 - The Library's sheet behaves byte-identically on its extracted shell.
 - Full gates; three Today captures reviewed.
+
+## Amendment (2026-08-04, PR #50 feedback — James)
+
+1. **TIME unifies on the Library's bucket ranges.** The cap single-select
+   (≤30′…NO CAP) dies; Today's TIME group becomes the Library's four
+   bucket cells (`<30′ 30–45′ 45–60′ 60′+`), multi-select union, `[]` =
+   off. Consequences, all in-branch:
+   - `SuggestPrefs.timeCapMinutes: number | null` is REPLACED by
+     `durations?: DurationBucket[]` — the predicate mirrors the
+     Library's (`bucketFor(estMinutes) ∈ durations` when non-empty and
+     durations are known; skipped otherwise). The standard reason's
+     "within your N min cap" sentence dies with the cap — the plain
+     "Least recently done (…)" form is always used, and the fellBack
+     wording names `time` when the union is active (the honesty rule
+     unchanged in spirit).
+   - `todayOverrides` v3: `capMinutes` → `durations: DurationBucket[]`
+     (validated against the bucket set, de-duped; the v2 shape falls
+     back — same contract as every prior bump). `snapCap` is REPLACED by
+     `bucketsForCap(prefCap)`: the buckets whose LOWER bound is below
+     the pref's cap (cap 60 → the first three; cap > 60 → all four =
+     effectively unfiltered; cap ≤ 30 → `<30′` only). Defaults/deviation
+     /CLEAR ALL all operate on that derived set.
+   - Tokens: the TIME token uses the Library's range-collapse rules
+     verbatim (`<30′–45–60′` style contiguous collapse; the shared
+     collapse helper should now genuinely be shared, not parallel).
+2. **The plan line's type-swap chips span the full screen width** — the
+   four cells stretch as a 4-column 1fr row (44px height unchanged),
+   instead of sitting inline at content width.
