@@ -174,13 +174,6 @@ export function createWorkoutsStore(db: Db) {
       return rows.length;
     },
 
-    // Seed-reconcile only (see seed.ts): removes every global row. Session
-    // logs referencing them keep their rows — session_logs.workout_id is
-    // ON DELETE SET NULL. Personal rows are untouched by construction.
-    async deleteGlobals(): Promise<void> {
-      await db.delete(workouts).where(isNull(workouts.userId));
-    },
-
     // Seed-converge only (see app/server/seed/seed.ts): a global-scoped
     // update that MAY write sortOrder — the exact inverse of update()'s
     // guarantees above. `user_id IS NULL` scoping makes a personal row

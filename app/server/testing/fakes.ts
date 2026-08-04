@@ -222,11 +222,6 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
     async countGlobals() {
       return globals.size;
     },
-    // Mirrors the real store's deleteGlobals (app/server/stores/workouts.ts):
-    // wipes the global bucket only, never touches `byUser`.
-    async deleteGlobals() {
-      globals.clear();
-    },
     // Mirrors the real store's updateGlobal: globals bucket only, sortOrder
     // writable, personal rows unreachable (they live in byUser).
     async updateGlobal(
