@@ -22,7 +22,7 @@ import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
   loadTodayOverrides,
   saveTodayOverrides,
-  snapCap,
+  bucketsForCap,
   type TodayOverrides,
 } from "./todayOverrides";
 import {
@@ -176,7 +176,7 @@ function toLibraryEntry(
  *  options` count), and a pure function both call sites can share is
  *  simpler than lifting suggestion state up out of TodayView. */
 function computeSuggestion(
-  filters: Pick<TodayOverrides, "difficulties" | "capMinutes" | "painLevels">,
+  filters: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
   entries: LibraryEntry[],
   baselines: Baselines | null,
   todayCode: PlanCode | null,
@@ -184,7 +184,7 @@ function computeSuggestion(
 ) {
   const prefs: SuggestPrefs = {
     difficulties: filters.difficulties,
-    timeCapMinutes: filters.capMinutes,
+    durations: filters.durations,
     painLevels: filters.painLevels,
     // See toLibraryEntry's comment: with no baselines, every entry's
     // estMinutes is a 0 placeholder, so the reason text must not claim a
@@ -208,7 +208,7 @@ function computeSuggestion(
  *  against the sheet's draft rather than the applied overrides, reduced to
  *  just the pool size the primary button's `Show N options` label needs. */
 function poolCountFor(
-  draft: Pick<TodayOverrides, "difficulties" | "capMinutes" | "painLevels">,
+  draft: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
   entries: LibraryEntry[],
   baselines: Baselines | null,
   todayCode: PlanCode | null,
@@ -341,7 +341,7 @@ export default function Today() {
   // below (Task 2, 2026-08-04 round: FILTER ⌄ + TodayFilterSheet, replacing
   // the old inline chips); it still needs the raw server preferences to
   // seed those overrides' defaults on first mount
-  // (snapCap(preferences.timeCapMinutes), preferences.difficulties) and
+  // (bucketsForCap(preferences.timeCapMinutes), preferences.difficulties) and
   // `baselines` to compute durationsUnknown itself, so both are passed
   // through rather than a pre-built SuggestPrefs.
   return (
@@ -531,9 +531,10 @@ function TodayView({
         doneN: plan.doneN,
         swapType: null,
         difficulties: preferences.difficulties,
-        // Approximates the rower's real preference to the nearest chip —
-        // see snapCap's own doc comment for why this rounds up, never down.
-        capMinutes: snapCap(preferences.timeCapMinutes),
+        // Approximates the rower's real preference to the buckets it
+        // implies — see bucketsForCap's own doc comment for why this is a
+        // deliberate approximation, not an exact re-derivation.
+        durations: bucketsForCap(preferences.timeCapMinutes),
         painLevels: [],
       },
   );
@@ -566,7 +567,7 @@ function TodayView({
   // TodayFilterDefaults' own doc comment.
   const filterDefaults: TodayFilterDefaults = {
     difficulties: ALL_DIFFICULTIES,
-    capMinutes: snapCap(preferences.timeCapMinutes),
+    durations: bucketsForCap(preferences.timeCapMinutes),
   };
 
   // The FILTER ⌄ sheet's own state: whether it's open, its in-progress
@@ -578,7 +579,7 @@ function TodayView({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draft, setDraft] = useState<TodayFilterDraft>({
     difficulties: overrides.difficulties,
-    capMinutes: overrides.capMinutes,
+    durations: overrides.durations,
     painLevels: overrides.painLevels,
   });
   const filterButtonRef = useRef<HTMLButtonElement>(null);
@@ -586,7 +587,7 @@ function TodayView({
   function openFilterSheet() {
     setDraft({
       difficulties: overrides.difficulties,
-      capMinutes: overrides.capMinutes,
+      durations: overrides.durations,
       painLevels: overrides.painLevels,
     });
     setSheetOpen(true);
@@ -607,14 +608,14 @@ function TodayView({
 
   // Token ✕ / CLEAR ALL apply immediately (no sheet, no confirm) and save
   // the record — same as a chip tap did before this task's rewiring.
-  function resetFilterGroup(group: "difficulties" | "cap" | "pain") {
+  function resetFilterGroup(group: "difficulties" | "durations" | "pain") {
     if (group === "difficulties") {
       updateOverrides({
         ...overrides,
         difficulties: filterDefaults.difficulties,
       });
-    } else if (group === "cap") {
-      updateOverrides({ ...overrides, capMinutes: filterDefaults.capMinutes });
+    } else if (group === "durations") {
+      updateOverrides({ ...overrides, durations: filterDefaults.durations });
     } else {
       updateOverrides({ ...overrides, painLevels: [] });
     }
@@ -627,7 +628,7 @@ function TodayView({
     updateOverrides({
       ...overrides,
       difficulties: filterDefaults.difficulties,
-      capMinutes: filterDefaults.capMinutes,
+      durations: filterDefaults.durations,
       painLevels: [],
     });
   }
@@ -723,7 +724,11 @@ function TodayView({
               chip lights up whichever type the plan actually calls for
               today (TR standing in on a TEST day), and tapping THAT chip
               again clears the swap rather than swapping to itself
-              (handleTypeChip). */}
+              (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
+              `.today-type-chips` (index.css) now lays these out as a
+              4-column 1fr grid spanning the full content width, rather than
+              `.chip-wrap`'s own inline flex-wrap — 44px chip height
+              unchanged, same `.chip`/TodayChip classes. */}
           <div className="chip-wrap today-type-chips">
             {TYPE_CHIPS.map((type) => (
               <TodayChip

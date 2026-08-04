@@ -3,7 +3,7 @@ import {
   TODAY_OVERRIDES_KEY,
   loadTodayOverrides,
   saveTodayOverrides,
-  snapCap,
+  bucketsForCap,
   type TodayOverrides,
 } from "./todayOverrides";
 
@@ -13,7 +13,7 @@ const FULL: TodayOverrides = {
   doneN: 11,
   swapType: "AT",
   difficulties: ["easy", "hard"],
-  capMinutes: 45,
+  durations: ["<30", "45-60"],
   painLevels: [1, 3, 5],
 };
 
@@ -21,7 +21,7 @@ const FULL: TodayOverrides = {
 // across the change, only the pain field's shape/name differ (`painMax3`
 // boolean here vs. `painLevels: number[]` now) — this is exactly the
 // record a rower's browser could still be holding in localStorage from
-// before this round shipped. Kept verbatim as a fixture rather than
+// before that round shipped. Kept verbatim as a fixture rather than
 // derived from FULL (TodayOverrides no longer has a `painMax3` field to
 // spread it from).
 const V1_RECORD = {
@@ -32,6 +32,21 @@ const V1_RECORD = {
   difficulties: ["easy", "hard"],
   capMinutes: 45,
   painMax3: true,
+};
+
+// The v2 shape (Task 5 through the pre-Amendment 2026-08-04 round): every
+// field but TIME kept its name — `capMinutes: number | null` is where
+// `durations: DurationBucket[]` now lives. This is exactly the record a
+// rower's browser could still be holding in localStorage from before the
+// Amendment shipped (a single-value cap, not a bucket array).
+const V2_RECORD = {
+  date: "2026-08-01",
+  planKey: "sprint",
+  doneN: 11,
+  swapType: "AT",
+  difficulties: ["easy", "hard"],
+  capMinutes: 45,
+  painLevels: [1, 3, 5],
 };
 
 beforeEach(() => localStorage.clear());
@@ -55,10 +70,23 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
     );
   });
 
-  it("round-trips capMinutes: null (NO CAP), not treating it as unset", () => {
-    const noCap: TodayOverrides = { ...FULL, capMinutes: null };
-    saveTodayOverrides(noCap);
-    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(noCap);
+  it("round-trips durations: [] (TIME off), not treating it as unset", () => {
+    const noTimeFilter: TodayOverrides = { ...FULL, durations: [] };
+    saveTodayOverrides(noTimeFilter);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(
+      noTimeFilter,
+    );
+  });
+
+  it("round-trips every bucket selected (durations: all four)", () => {
+    const allBuckets: TodayOverrides = {
+      ...FULL,
+      durations: ["<30", "30-45", "45-60", "60+"],
+    };
+    saveTodayOverrides(allBuckets);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(
+      allBuckets,
+    );
   });
 
   it("round-trips swapType: null (no swap) and an empty difficulties array", () => {
@@ -107,6 +135,26 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
     ).toStrictEqual(["easy", "hard"]);
   });
 
+  it("de-dupes duplicated durations from a tampered value", () => {
+    localStorage.setItem(
+      TODAY_OVERRIDES_KEY,
+      JSON.stringify({ ...FULL, durations: ["<30", "<30", "45-60"] }),
+    );
+    expect(
+      loadTodayOverrides("2026-08-01", "sprint", 11)?.durations,
+    ).toStrictEqual(["<30", "45-60"]);
+  });
+
+  it("canonically orders an out-of-order stored durations value (DURATION_BUCKETS' own order)", () => {
+    localStorage.setItem(
+      TODAY_OVERRIDES_KEY,
+      JSON.stringify({ ...FULL, durations: ["60+", "<30", "30-45"] }),
+    );
+    expect(
+      loadTodayOverrides("2026-08-01", "sprint", 11)?.durations,
+    ).toStrictEqual(["<30", "30-45", "60+"]);
+  });
+
   it("de-dupes duplicated pain levels from a tampered value", () => {
     localStorage.setItem(
       TODAY_OVERRIDES_KEY,
@@ -149,31 +197,19 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
         "unknown difficulty value",
         JSON.stringify({ ...FULL, difficulties: ["extreme"] }),
       ],
+      ["durations not an array", JSON.stringify({ ...FULL, durations: "<30" })],
       [
-        // Validation accepts ONLY the five values a cap chip can actually
-        // render (30/45/60/90/null) — not merely "a positive finite
-        // number" — so a value that would leave zero cap chips active
-        // (the "exactly one is always active" invariant broken) can never
-        // survive a load. 37 is the review's own probe value: finite,
-        // positive, and still correctly rejected.
-        "capMinutes not one of the five chip values (e.g. 37)",
-        JSON.stringify({ ...FULL, capMinutes: 37 }),
+        "durations contains an unknown bucket value",
+        JSON.stringify({ ...FULL, durations: ["<30", "90+"] }),
       ],
       [
-        "capMinutes zero (not a chip value either)",
-        JSON.stringify({ ...FULL, capMinutes: 0 }),
+        // The pre-Amendment single-cap value (a number, not a bucket
+        // string) — proves a v2-shaped `capMinutes: 45` sitting where
+        // `durations` now lives is rejected as a malformed `durations`,
+        // not silently coerced.
+        "durations contains a number (the old capMinutes shape)",
+        JSON.stringify({ ...FULL, durations: [45] }),
       ],
-      ["capMinutes negative", JSON.stringify({ ...FULL, capMinutes: -30 })],
-      [
-        // JSON.stringify(Infinity) itself serialises to `null` (a VALID no-
-        // cap value), so this has to hand-craft raw JSON text containing a
-        // numeric literal that overflows to Infinity on parse (`1e400` is
-        // valid JSON syntax) to actually exercise the guard against a
-        // capMinutes value outside the five chip values.
-        "capMinutes overflows to Infinity on parse (e.g. 1e400)",
-        JSON.stringify(FULL).replace('"capMinutes":45', '"capMinutes":1e400'),
-      ],
-      ["capMinutes wrong shape", JSON.stringify({ ...FULL, capMinutes: "45" })],
       ["painLevels not an array", JSON.stringify({ ...FULL, painLevels: 3 })],
       [
         "painLevels contains an out-of-range level",
@@ -187,7 +223,7 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
         "missing field",
         JSON.stringify({ date: "2026-08-01", planKey: "sprint", doneN: 11 }),
       ],
-      // The pre-Task-5 (ui-fix round) shape: every field but the pain one
+      // The pre-Task-5 (ui-fix round) v1 shape: every field but the pain one
       // has the same name/type as v2, but `painMax3` isn't `painLevels` —
       // Array.isArray(undefined) is false, so this fails the array check
       // above and is rejected whole, never half-applied under the new
@@ -196,6 +232,17 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
       [
         "a v1-shaped record (painMax3, not painLevels)",
         JSON.stringify(V1_RECORD),
+      ],
+      // The pre-Amendment (2026-08-04 PR #50 round) v2 shape: every field
+      // but TIME has the same name/type as v3, but `capMinutes` isn't
+      // `durations` — Array.isArray(undefined) is false for a record that
+      // never had a `durations` field at all, so a v2 record ALSO fails
+      // the array check above and is rejected whole, never half-applied
+      // under the new field name (same contract the v1 row above already
+      // proves for the pain field's own earlier rename).
+      [
+        "a v2-shaped record (capMinutes, not durations)",
+        JSON.stringify(V2_RECORD),
       ],
     ])("%s", (_name, raw) => {
       store(raw);
@@ -228,22 +275,22 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
   });
 });
 
-describe("snapCap", () => {
-  it("returns the pref itself when it lands exactly on a chip", () => {
-    expect(snapCap(60)).toBe(60);
-    expect(snapCap(45)).toBe(45);
-    expect(snapCap(30)).toBe(30);
-    expect(snapCap(90)).toBe(90);
+describe("bucketsForCap", () => {
+  it("a 60-min cap keeps the first three buckets, excluding 60+", () => {
+    expect(bucketsForCap(60)).toStrictEqual(["<30", "30-45", "45-60"]);
   });
 
-  it("rounds up to the next chip when pref falls between two", () => {
-    expect(snapCap(40)).toBe(45);
-    expect(snapCap(50)).toBe(60);
-    expect(snapCap(1)).toBe(30);
+  it("a cap over 60 keeps all four buckets (effectively unfiltered)", () => {
+    expect(bucketsForCap(90)).toStrictEqual(["<30", "30-45", "45-60", "60+"]);
+    expect(bucketsForCap(61)).toStrictEqual(["<30", "30-45", "45-60", "60+"]);
   });
 
-  it("returns null (NO CAP) when pref exceeds every chip", () => {
-    expect(snapCap(100)).toBeNull();
-    expect(snapCap(91)).toBeNull();
+  it("a cap at or under 30 keeps only <30", () => {
+    expect(bucketsForCap(30)).toStrictEqual(["<30"]);
+    expect(bucketsForCap(1)).toStrictEqual(["<30"]);
+  });
+
+  it("a cap of 45 keeps the first two buckets (lower bound strictly below the cap)", () => {
+    expect(bucketsForCap(45)).toStrictEqual(["<30", "30-45"]);
   });
 });

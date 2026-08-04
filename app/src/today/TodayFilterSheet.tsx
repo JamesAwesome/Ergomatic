@@ -1,8 +1,10 @@
 import type { RefObject } from "react";
 import type { Difficulty } from "../../domain/types.js";
+import type { DurationBucket } from "../../domain/duration.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
+import { DURATION_CHIPS } from "../components/durationChips";
 import type { TodayOverrides } from "./todayOverrides";
 
 /** The sheet's own scratch copy of the three fields it edits — a subset of
@@ -10,21 +12,8 @@ import type { TodayOverrides } from "./todayOverrides";
  *  none of this sheet's business). */
 export type TodayFilterDraft = Pick<
   TodayOverrides,
-  "difficulties" | "capMinutes" | "painLevels"
+  "difficulties" | "durations" | "painLevels"
 >;
-
-// Today's own cap chips — TIME is a single-select (exactly one always
-// active), unlike Library's own duration UNION. Kept as a local copy per
-// this repo's established per-file duplication convention rather than
-// importing todayFilterTokens.ts's identical label set (TYPE_COLOR_VAR's
-// own comment names the precedent).
-const CAP_CHIPS: { value: number | null; label: string }[] = [
-  { value: 30, label: "≤30′" },
-  { value: 45, label: "≤45′" },
-  { value: 60, label: "≤60′" },
-  { value: 90, label: "≤90′" },
-  { value: null, label: "NO CAP" },
-];
 
 // PAIN's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
 // PAIN_LEVELS) — a local copy per the same duplication convention.
@@ -38,7 +27,7 @@ const TITLE_ID = "today-filter-sheet-title";
  * Today's own FILTER sheet: slides up over the screen (Today.tsx never
  * pushes history for it — same BACK-with-sheet-open decision as Library's
  * FilterSheet.tsx, documented there). Operates entirely on a DRAFT copy of
- * `{difficulties, capMinutes, painLevels}` that the caller owns
+ * `{difficulties, durations, painLevels}` that the caller owns
  * (`draft`/`onChangeDraft`); nothing here writes to Today's actually-
  * applied `TodayOverrides` record directly. `onApply` commits the draft
  * (Today.tsx's own merge-and-save); `onDismiss` (backdrop tap, Escape, or
@@ -47,6 +36,14 @@ const TITLE_ID = "today-filter-sheet-title";
  * No TYPE group here — the type-swap chips stay on the plan line
  * (Today.tsx, untouched by this task): the swap picks the pool, the sheet
  * only narrows it.
+ *
+ * TIME (Amendment, 2026-08-04 PR #50 round): unified onto the Library's own
+ * four duration buckets (`DURATION_CHIPS`, `src/components/durationChips.ts`),
+ * multi-select union — the old cap single-select (`≤30′…NO CAP`, exactly
+ * one always active) is gone entirely, along with the `filter-sheet-group-
+ * time` CSS special-case its "NO CAP" label alone needed (index.css): every
+ * TIME cell now renders the identical bucket label the Library's own TIME
+ * group already proved fits the 390px sheet width.
  *
  * The dialog machinery (backdrop, `role="dialog"`, the focus trap/restore)
  * lives in SheetShell (extracted from Library's FilterSheet.tsx, Task 1 of
@@ -111,28 +108,20 @@ export default function TodayFilterSheet({
 
       <CellGrid
         label="TIME"
-        // Final fix wave (2026-08-04 round, M1): scoped to this group alone
-        // via CellGrid's own `className` passthrough (already used by
-        // Library's LAST DONE/SOURCE half-width pair) — "NO CAP" is the one
-        // label in the whole app that doesn't fit a filter-sheet-cell's
-        // equal-fifth share of the 390px sheet width (index.css's own
-        // `.filter-sheet-group-time` rule). Library's 5-cell PAIN group
-        // shares the same `filter-sheet-grid-5` class (cell-count-derived,
-        // m8) but single digits never need it, so scoping to this group by
-        // name — not by cell count — keeps Library's rendering byte-for-
-        // byte unchanged.
-        className="filter-sheet-group-time"
-        cells={CAP_CHIPS.map(({ value, label }) => ({
-          value: value === null ? "none" : String(value),
+        cells={DURATION_CHIPS.map(({ bucket, label }) => ({
+          value: bucket,
           label,
-          pressed: draft.capMinutes === value,
+          pressed: draft.durations.includes(bucket),
         }))}
-        onToggle={(value) =>
+        onToggle={(value) => {
+          const bucket = value as DurationBucket;
           onChangeDraft({
             ...draft,
-            capMinutes: value === "none" ? null : Number(value),
-          })
-        }
+            durations: draft.durations.includes(bucket)
+              ? draft.durations.filter((d) => d !== bucket)
+              : [...draft.durations, bucket],
+          });
+        }}
       />
 
       <CellGrid

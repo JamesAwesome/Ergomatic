@@ -1,8 +1,5 @@
-import {
-  RECENCY_BOUNDARY_DAYS,
-  type DurationBucket,
-  type Filters,
-} from "./filters";
+import { RECENCY_BOUNDARY_DAYS, type Filters } from "./filters";
+import { collapseDurations } from "../components/durationTokenLabel";
 
 // One token per active GROUP, not per selected band — DESIGN.md's own rule
 // ("the header count counts tokens, so the row and the count never
@@ -17,54 +14,6 @@ export interface Token {
   kind: TokenKind;
   label: string;
   clear(f: Filters): Filters;
-}
-
-// Bucket order defines what "contiguous" means for the collapse rule below —
-// duplicated from FilterSheet.tsx's own cell order rather than shared, this
-// repo's established per-file-duplication convention for small display maps
-// (TypeBadge.tsx's own TYPE_COLOR_VAR comment names the precedent).
-const DURATION_ORDER: readonly DurationBucket[] = [
-  "<30",
-  "30-45",
-  "45-60",
-  "60+",
-];
-
-const DURATION_LABEL: Record<DurationBucket, string> = {
-  "<30": "<30′",
-  "30-45": "30–45′",
-  "45-60": "45–60′",
-  "60+": "60′+",
-};
-
-// A bucket's own minute boundaries, indexed the same as DURATION_ORDER — used
-// only to compose a MERGED range label for a contiguous run longer than one
-// bucket (a single selected bucket just reuses its own DURATION_LABEL
-// verbatim, which already reads identically to what this would produce).
-const LOWER_BOUND: readonly (string | null)[] = [null, "30", "45", "60"];
-const UPPER_BOUND: readonly (string | null)[] = ["30", "45", "60", null];
-
-function collapseDurations(durations: DurationBucket[]): string {
-  const indices = durations
-    .map((d) => DURATION_ORDER.indexOf(d))
-    .sort((a, b) => a - b);
-  const contiguous = indices.every(
-    (idx, i) => i === 0 || idx === indices[i - 1] + 1,
-  );
-  if (!contiguous) {
-    return indices.map((i) => DURATION_LABEL[DURATION_ORDER[i]]).join(", ");
-  }
-  const first = indices[0];
-  const last = indices[indices.length - 1];
-  if (first === last) return DURATION_LABEL[DURATION_ORDER[first]];
-  const includesUnder = first === 0;
-  const includesPlus = last === DURATION_ORDER.length - 1;
-  // Both ends selected as part of one contiguous run means every bucket is
-  // in — a real (if functionally inert) active filter state, not an error.
-  if (includesUnder && includesPlus) return "<30′–60′+";
-  if (includesUnder) return `<${UPPER_BOUND[last]}′`;
-  if (includesPlus) return `${LOWER_BOUND[first]}′+`;
-  return `${LOWER_BOUND[first]}–${UPPER_BOUND[last]}′`;
 }
 
 function collapsePain(levels: number[]): string {
