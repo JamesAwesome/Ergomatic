@@ -1,5 +1,8 @@
-import type { DurationBucket } from "../../domain/duration.js";
-import { DURATION_CHIPS } from "./durationChips";
+import {
+  DURATION_BUCKETS,
+  type DurationBucket,
+} from "../../domain/duration.js";
+import { DURATION_LABEL } from "./durationChips";
 
 /** Genuinely shared now (Amendment, 2026-08-04 PR #50 round) — originally
  *  `src/library/filterTokens.ts`'s own private `collapseDurations`, the
@@ -11,19 +14,21 @@ import { DURATION_CHIPS } from "./durationChips";
  *  this move is explicit that a second hand-kept copy is the wrong answer
  *  here. The Library's own `filterTokens.test.ts` exercises this
  *  unmodified through `filterTokens()` — extracting the implementation
- *  changes nothing about its inputs/outputs. */
-const DURATION_ORDER: readonly DurationBucket[] = DURATION_CHIPS.map(
-  (c) => c.bucket,
-);
+ *  changes nothing about its inputs/outputs.
+ *
+ *  Fix round (N2): what "contiguous" means below reads `domain/duration
+ *  .ts`'s own `DURATION_BUCKETS` directly, rather than re-deriving a
+ *  second "canonical order" from `DURATION_CHIPS` (which is itself now
+ *  built FROM `DURATION_BUCKETS` — see that file's own comment). One
+ *  fewer hop to the one real source of the order. `DURATION_LABEL` (the
+ *  bucket -> display-label map) still comes from `durationChips.ts`, the
+ *  one place that owns it. */
 
-const DURATION_LABEL: Record<DurationBucket, string> = Object.fromEntries(
-  DURATION_CHIPS.map((c) => [c.bucket, c.label]),
-) as Record<DurationBucket, string>;
-
-// A bucket's own minute boundaries, indexed the same as DURATION_ORDER — used
-// only to compose a MERGED range label for a contiguous run longer than one
-// bucket (a single selected bucket just reuses its own DURATION_LABEL
-// verbatim, which already reads identically to what this would produce).
+// A bucket's own minute boundaries, indexed the same as DURATION_BUCKETS —
+// used only to compose a MERGED range label for a contiguous run longer
+// than one bucket (a single selected bucket just reuses its own
+// DURATION_LABEL verbatim, which already reads identically to what this
+// would produce).
 const LOWER_BOUND: readonly (string | null)[] = [null, "30", "45", "60"];
 const UPPER_BOUND: readonly (string | null)[] = ["30", "45", "60", null];
 
@@ -37,19 +42,19 @@ const UPPER_BOUND: readonly (string | null)[] = ["30", "45", "60", null];
  *  function is never called with one. */
 export function collapseDurations(durations: DurationBucket[]): string {
   const indices = durations
-    .map((d) => DURATION_ORDER.indexOf(d))
+    .map((d) => DURATION_BUCKETS.indexOf(d))
     .sort((a, b) => a - b);
   const contiguous = indices.every(
     (idx, i) => i === 0 || idx === indices[i - 1] + 1,
   );
   if (!contiguous) {
-    return indices.map((i) => DURATION_LABEL[DURATION_ORDER[i]]).join(", ");
+    return indices.map((i) => DURATION_LABEL[DURATION_BUCKETS[i]]).join(", ");
   }
   const first = indices[0];
   const last = indices[indices.length - 1];
-  if (first === last) return DURATION_LABEL[DURATION_ORDER[first]];
+  if (first === last) return DURATION_LABEL[DURATION_BUCKETS[first]];
   const includesUnder = first === 0;
-  const includesPlus = last === DURATION_ORDER.length - 1;
+  const includesPlus = last === DURATION_BUCKETS.length - 1;
   // Both ends selected as part of one contiguous run means every bucket is
   // in — a real (if functionally inert) active filter state, not an error.
   if (includesUnder && includesPlus) return "<30′–60′+";

@@ -230,6 +230,26 @@ describe("TodayFilterSheet", () => {
         durations: ["<30", "30-45", "45-60", "60+"],
       });
     });
+
+    // Fix round (L2): adding out of canonical order used to append the
+    // newly-toggled bucket to the end of the array
+    // (`[...draft.durations, bucket]`), so selecting 60′+ BEFORE <30′
+    // stored `["60+", "<30"]` — a non-canonical sequence that only
+    // resolved back to order on the NEXT load (todayOverrides.ts's own
+    // parser re-sorts on the way in). Toggling now normalises to
+    // DURATION_BUCKETS' own canonical order immediately, so the draft
+    // (and therefore whatever gets saved) never holds that sequence even
+    // transiently.
+    it("adding a bucket out of canonical order normalises the draft to DURATION_BUCKETS' own order", async () => {
+      const { onChangeDraft } = renderSheet({
+        draft: { ...EMPTY_DRAFT, durations: ["60+"] },
+      });
+      await userEvent.click(screen.getByRole("button", { name: "<30′" }));
+      expect(onChangeDraft).toHaveBeenCalledWith({
+        ...EMPTY_DRAFT,
+        durations: ["<30", "60+"],
+      });
+    });
   });
 
   describe("PAIN (multi-select union)", () => {

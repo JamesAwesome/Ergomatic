@@ -25,17 +25,28 @@ export interface SuggestPrefs {
   durations?: DurationBucket[];
   // Set when the caller could not compute a real `estMinutes` for any
   // library entry (no baselines yet — the standing convention is every
-  // entry gets `estMinutes: 0` in that case, purely so the duration filter
-  // below never rejects an entry over an unknowable duration — `bucketFor(0)`
-  // is always `"<30"`, so an unknown-duration entry only survives when
-  // `"<30"` is itself in `durations`, or `durations` is empty/unset). That
-  // workaround keeps the FILTER honest but not the REASON text: without
-  // this flag, the standard/fellback reasons below claim a duration was
-  // actually checked ("difficulty/time filters") when every duration was a
-  // placeholder. Set true and both reasons drop any mention of time
-  // instead of asserting something never verified. An empty/unset
-  // `durations` takes the same no-claim branch for the same reason:
-  // nothing was actually checked either way.
+  // entry gets `estMinutes: 0` in that case). This flag GATES THE FILTER
+  // ITSELF, not merely the reason text: `passesDurationFilter` (below)
+  // skips the bucket-membership check entirely whenever this is true,
+  // regardless of which bucket the 0 placeholder would resolve to.
+  // `bucketFor(0)` is always `"<30"` — without this flag, a `durations`
+  // union that happens to include `"<30"` would wrongly let every
+  // unknown-duration entry through (a coincidence, not a real match), and
+  // a union that EXCLUDES `"<30"` (e.g. `["45-60"]`) would wrongly reject
+  // every one of them (treating "unknowable" as "known short"). Under the
+  // old single-value cap this replaced, the 0 placeholder alone was
+  // sufficient to keep the filter harmless (`0 <= any positive cap`
+  // unconditionally); a bucket UNION has no such universal member, so this
+  // flag — not the placeholder value — is what actually keeps the filter
+  // harmless now. It also still keeps the REASON text honest: without it,
+  // the standard/fellback reasons below would claim a duration was
+  // actually checked ("difficulty/time filters") when every duration fed
+  // in was a placeholder. Set true and both reasons drop any mention of
+  // time instead of asserting something never verified. An empty/unset
+  // `durations` takes the same no-claim branch for the REASON text, but —
+  // unlike this flag — doesn't need to gate the FILTER specially: an empty
+  // union already means "off" on its own, independent of what any single
+  // entry's estMinutes happens to be.
   durationsUnknown?: boolean;
   // A union, not a threshold — mirrors Library's own `Filters.painLevels`
   // (src/library/filters.ts): when non-empty, only entries whose `pain` is
