@@ -67,7 +67,24 @@ export type MonitorEvent =
 
 export interface MonitorDriver {
   readonly capabilities: MonitorCapabilities;
-  program(p: WorkoutProgram): Promise<void>; // multi-frame, ack-gated (§3); typed ProgramRejection
+  /**
+   * Programs `p` onto the monitor: multi-frame, ack-gated (§3), typed
+   * `ProgramRejection` on failure. `src/monitor/driver.ts`'s implementation
+   * clears, sends, then VERIFIES from the machine's own reported state
+   * before resolving — the ack alone is not sufficient evidence of success
+   * (hardware observed the identical ack byte for both a real program and
+   * a complete no-op).
+   *
+   * DESTRUCTIVE FACT, observed on real hardware (docs/monitor/
+   * pm5-interface-notes.md §18): the PM accepts a program ONLY when
+   * nothing is currently loaded — programming over an existing loaded
+   * workout is REJECTED **and WIPES what was loaded**. A failed call to
+   * this method can therefore cost the rower whatever workout was already
+   * on the monitor, not merely fail to add a new one. Callers MUST warn
+   * the rower BEFORE calling this, never react to a rejection afterward —
+   * by the time this rejects, the previous workout may already be gone.
+   */
+  program(p: WorkoutProgram): Promise<void>;
   terminate(): Promise<void>; // the documented terminate command — no start() exists
   events: (cb: (e: MonitorEvent) => void) => () => void;
   disconnect(): Promise<void>;
