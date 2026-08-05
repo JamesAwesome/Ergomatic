@@ -7,16 +7,26 @@
 // type, `EnginePhase`, lives in `app/src/session/engine.ts` — src, not
 // domain — so this module cannot import it directly (the import-direction
 // rule the whole phase is built on). Instead it declares `CompiledPhase`:
-// the STRUCTURAL subset of `EnginePhase` this compiler actually reads. Every
+// the STRUCTURAL subset of `EnginePhase` this compiler's contract needs
+// (`originalIndex` is carried for contract completeness — see its own field
+// comment — even though `compileProgram`'s body never reads it). Every
 // field below exists on `EnginePhase` with the same type, so an
 // `EnginePhase[]` is assignable to `CompiledPhase[]` with no adapter or
 // cast — callers in src/ (Task 3+) pass `EnginePhase[]` straight through.
-// The compatibility contract is enforced at compile time, not just
-// documented: `app/src/monitor/enginePhase.compileCompat.test.ts` (the
-// client project, since it imports src/session/engine.ts) asserts
-// `EnginePhase` satisfies this shape — if a future edit to `Phase`/
-// `EnginePhase` drops or retypes one of these fields, THAT file fails to
-// typecheck, not this one, and not at runtime.
+//
+// The compatibility contract is enforced at compile time by TWO checks in
+// `app/src/monitor/enginePhase.compileCompat.test.ts` (the client project,
+// since it needs both src/session/engine.ts's `EnginePhase` and this
+// file's `CompiledPhase`), because they catch different drift classes: the
+// assignment check (`EnginePhase[]` into a `CompiledPhase[]`-typed binding)
+// catches a TYPE change on a field both sides already agree exists, but is
+// blind to a field being dropped entirely — every field below except
+// `type`/`originalIndex` is optional on `CompiledPhase`, so `EnginePhase`
+// entirely missing an optional field (e.g. `targetKind`, the H8
+// discriminant) would STILL satisfy the assignment. The second check (a
+// `keyof EnginePhase` membership assertion) catches exactly that: it fails
+// to typecheck the moment a field this compiler's contract names is no
+// longer a key of `EnginePhase` at all, regardless of optionality.
 export interface CompiledPhase {
   /** Mirrors `Phase["type"]` (`domain/expand.ts`). "warmup" and "test" carry
    *  no target/spm — see the field comments below for how each type's
@@ -44,11 +54,20 @@ export interface CompiledPhase {
   /** Display-only stroke rate. See `ProgramInterval.displaySpm`'s own
    *  comment for why this never reaches the wire. */
   spm?: number;
-  /** Position in the `phases` array `compileProgram` was called with — NOT
-   *  a draft/step index. Kept on the input shape so a future caller (a
-   *  driver or screen) can correlate a `CompileError.phaseIndex` or a
-   *  compiled interval back to the phase that produced it without a
-   *  separate side table. */
+  /** The ORIGINAL DRAFT STEP index this phase was expanded from — mirrors
+   *  `EnginePhase.originalIndex` (`src/session/engine.ts`) exactly, NOT a
+   *  position in the `phases` array passed to `compileProgram`. A reps
+   *  block's every repeated phase carries the SAME `originalIndex` (they
+   *  came from one authored step); a work step's auto-inserted rest phase
+   *  shares its work phase's `originalIndex` too (see `EnginePhase`'s own
+   *  header comment) — Tidal Bore's five identical 1'-work-phases-plus-rest
+   *  in `domain/monitor/program.test.ts` all trace back to originalIndex 2.
+   *  `compileProgram` itself never reads this field — it exists purely to
+   *  keep `CompiledPhase` a complete structural match for `EnginePhase`
+   *  (see the module header comment and the field-existence check in
+   *  `app/src/monitor/enginePhase.compileCompat.test.ts`), for a future
+   *  caller (a driver or screen) that needs to correlate a compiled
+   *  interval back to the authored step it came from. */
   originalIndex: number;
 }
 
@@ -118,12 +137,19 @@ export type CompileError = {
     // nearest legal value; always this error instead.
     | "unrepresentable-value";
   message: string;
-  /** Index into the `phases` array passed to `compileProgram` — i.e.
-   *  `CompiledPhase.originalIndex` of the phase that triggered the error.
-   *  `null` for a workout-level violation with no single offending phase
-   *  ("no-work" has none by definition; "too-many-intervals" is reported at
-   *  the phase that pushed the count over the limit when one exists, but
-   *  see that branch's own comment). */
+  /** Position in the `phases` ARRAY passed to `compileProgram` — the loop
+   *  counter, NOT `CompiledPhase.originalIndex`. The two diverge whenever
+   *  more than one phase shares an `originalIndex` (a reps block's
+   *  repeated occurrences; a work step's auto-inserted rest phase shares
+   *  its work phase's `originalIndex` too — see `CompiledPhase.
+   *  originalIndex`'s own comment): the array position of the SPECIFIC
+   *  phase that triggered the error is what a screen needs to highlight,
+   *  and that is unambiguous only as a position in `phases`, never as
+   *  `originalIndex`. `compileProgram` never reads `originalIndex` at all;
+   *  every `phaseIndex` below is the loop variable `i`. `null` for a
+   *  workout-level violation with no single offending phase ("no-work" has
+   *  none by definition; "too-many-intervals" is reported at the phase
+   *  that pushed the count over the limit when one exists). */
   phaseIndex: number | null;
 };
 
@@ -143,21 +169,26 @@ const MAX_REST_SECONDS = 9 * 60 + 55;
 const MAX_INTERVALS = 50;
 
 /** Tolerance for "is this raw value already a whole second" — matches
- *  `domain/validate.ts`'s own `wholeSecond` admission check (1e-6), which
- *  exists for the identical reason: `minutes * 60` does not always land on
- *  an exact integer in floating point (e.g. `31/60*60 === 31.000000000000004`)
- *  even though the authored value IS a whole second. This is a
- *  floating-point-noise tolerance, not a document fact — the underlying
- *  wire fact (the PM's duration fields are whole-second integers) is
- *  Table 19 (interface-notes.md §8). A raw value further than this from an
- *  integer is a genuinely fractional second, not noise, and is rejected as
- *  `unrepresentable-value` rather than rounded away. */
+ *  `domain/validate.ts`'s own `wholeSecond` admission check EXACTLY,
+ *  including its strict `<` (not `<=`): `wholeSecond` rejects a value
+ *  exactly `1e-6` away from an integer, so this must too, or a value
+ *  `validate.ts` would refuse to save could still compile here. Exists for
+ *  the identical reason `wholeSecond` does: `minutes * 60` does not always
+ *  land on an exact integer in floating point (e.g.
+ *  `31/60*60 === 31.000000000000004`) even though the authored value IS a
+ *  whole second. This is a floating-point-noise tolerance, not a document
+ *  fact — the underlying wire fact (the PM's duration fields are
+ *  whole-second integers) is Table 19 (interface-notes.md §8). A raw value
+ *  `WHOLE_SECOND_EPSILON` or further from an integer is a genuinely
+ *  fractional second, not noise, and is rejected as `unrepresentable-value`
+ *  rather than rounded away. */
 const WHOLE_SECOND_EPSILON = 1e-6;
 
-/** Rounds `raw` seconds to the nearest whole second IF it is already within
- *  `WHOLE_SECOND_EPSILON` of one (floating-point noise only); returns `null`
- *  otherwise so the caller can raise `unrepresentable-value` instead of
- *  silently clamping a genuinely fractional value. This is the ONLY
+/** Rounds `raw` seconds to the nearest whole second IF it is strictly
+ *  within `WHOLE_SECOND_EPSILON` of one (floating-point noise only, per the
+ *  constant's own comment on matching `wholeSecond`'s strict `<`); returns
+ *  `null` otherwise so the caller can raise `unrepresentable-value` instead
+ *  of silently clamping a genuinely fractional value. This is the ONLY
  *  rounding this module performs — distance values are checked with
  *  `Number.isInteger` directly (see `compileProgram`), never rounded,
  *  because `domain/types.ts`'s `WorkDuration` already requires distance
@@ -166,7 +197,7 @@ const WHOLE_SECOND_EPSILON = 1e-6;
  *  it. */
 function representableSeconds(raw: number): number | null {
   const rounded = Math.round(raw);
-  return Math.abs(raw - rounded) <= WHOLE_SECOND_EPSILON ? rounded : null;
+  return Math.abs(raw - rounded) < WHOLE_SECOND_EPSILON ? rounded : null;
 }
 
 /**
@@ -218,6 +249,20 @@ function representableSeconds(raw: number): number | null {
  * an authored integer). A value that fails either check produces
  * `unrepresentable-value` — it is never rounded to the nearest legal value,
  * floored, or otherwise silently altered.
+ *
+ * **Check ordering and first-error-wins**: this function returns at most
+ * ONE `CompileError` per call — the first phase (left to right) that
+ * violates any rule, never an accumulated list of every problem in a
+ * workout. Within a single non-rest phase, `unrepresentable-value` and
+ * `interval-too-short` are both evaluated BEFORE `too-many-intervals`
+ * (the length/representability of phase `i` is checked before `i` is
+ * counted toward the 50-interval cap) — a phase that is both too short AND
+ * would be the 51st interval reports `interval-too-short`, never
+ * `too-many-intervals`. Within a rest phase, `leading-rest` is checked
+ * before the rest's own value is even parsed (nothing to round or bound
+ * when there is no interval to attach it to), then representability, then
+ * the new negative-rest guard, then `rest-too-long` — see the branch's own
+ * comments for why each precedes the next.
  */
 export function compileProgram(
   phases: CompiledPhase[],
@@ -248,6 +293,19 @@ export function compileProgram(
         return {
           code: "unrepresentable-value",
           message: `A rest of ${phase.seconds}s isn't a whole second — the PM5 can't program it.`,
+          phaseIndex: i,
+        };
+      }
+      // Table 19's rest minimum is :00 (interface-notes.md §8) — there is
+      // no negative rest on the wire. Unreachable from `validate.ts`-checked
+      // data today, but `CompiledPhase` is a public shape any caller can
+      // construct, and Task 3 encodes `restSeconds` straight onto the wire
+      // — this rejects rather than silently flooring to 0, matching this
+      // module's own "never clamp" rule for every other value it checks.
+      if (restSeconds < 0) {
+        return {
+          code: "unrepresentable-value",
+          message: `A rest of ${restSeconds}s is negative — the PM5's minimum rest is :00.`,
           phaseIndex: i,
         };
       }

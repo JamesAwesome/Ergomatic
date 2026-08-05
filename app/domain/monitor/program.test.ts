@@ -443,6 +443,33 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     });
   });
 
+  it("a value exactly AT the epsilon boundary is unrepresentable — strict <, matching validate.ts's wholeSecond exactly (Task 2 review, L1)", () => {
+    // A rest of exactly 1e-6 seconds is the clean case: round(1e-6) is 0,
+    // so the diff IS the epsilon constant itself, bit-for-bit (verified —
+    // for a nonzero base, `(base + 1e-6) - base` lands a hair off 1e-6 in
+    // either direction due to floating rounding, which would already fail
+    // both `<` and `<=` and so wouldn't distinguish this fix from the bug).
+    // If this were wrongly treated as representable, it would fold in as a
+    // silent, meaningless 0s rest. `domain/validate.ts`'s `wholeSecond` uses
+    // strict `<` and would refuse to save a value exactly this far from
+    // whole; this compiler must refuse it too, not silently admit it.
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 110,
+        seconds: 120,
+        originalIndex: 0,
+      },
+      { type: "rest", seconds: 1e-6, originalIndex: 1 },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      code: "unrepresentable-value",
+      message: expect.any(String),
+      phaseIndex: 1,
+    });
+  });
+
   it("float noise just OUTSIDE tolerance is unrepresentable, not silently rounded", () => {
     const raw = 21 - 2e-6;
     const phases: CompiledPhase[] = [
@@ -506,6 +533,52 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
         originalIndex: 0,
       },
       { type: "rest", seconds: 60.5, originalIndex: 1 },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      code: "unrepresentable-value",
+      message: expect.any(String),
+      phaseIndex: 1,
+    });
+  });
+});
+
+describe("compileProgram: negative rest is guarded (Table 19's :00 minimum, Task 2 review L2)", () => {
+  it("a rest of -60s (representable, but negative) is rejected, not silently folded through", () => {
+    // A rest phase attached to a real preceding interval — not a leading
+    // rest, which would be caught earlier and for a different reason.
+    // Before this fix, a negative rest folded straight through into
+    // ProgramInterval.restSeconds with no guard at all; Task 3 encodes that
+    // field onto the wire, so a negative value must never reach it.
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 110,
+        seconds: 120,
+        originalIndex: 0,
+      },
+      { type: "rest", seconds: -60, originalIndex: 1 },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      code: "unrepresentable-value",
+      message: expect.any(String),
+      phaseIndex: 1,
+    });
+  });
+
+  it("a negative SUM after folding a valid rest onto a negative one is also rejected", () => {
+    // Guards against a mutant that only checks the FIRST rest phase in a
+    // fold chain rather than every individual rest phase's own value.
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 110,
+        seconds: 120,
+        originalIndex: 0,
+      },
+      { type: "rest", seconds: -30, originalIndex: 1 },
+      { type: "rest", seconds: 10, originalIndex: 1 },
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
