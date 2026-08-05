@@ -187,6 +187,7 @@ export function createPm5Driver(
   // are independently-incrementing per interface-notes.md §15 #1/#8 — this
   // driver correlates them but does not assume they can't skew).
   let lastFrameIntervalIndex: number | null = null;
+  let lastLoggedFrameState: MonitorFrame["state"] | null = null;
   const seen = { general: false, as1: false, as2: false, asSplit: false };
   const listeners = new Set<(e: MonitorEvent) => void>();
   let pendingAck: ((outcome: PendingAckOutcome) => void) | null = null;
@@ -344,6 +345,8 @@ export function createPm5Driver(
     emit({ kind: "disconnected", reason });
   });
 
+  const seenCharacteristics = new Set<string>();
+
   function mergeStatus<T extends object>(
     uuid: string,
     characteristic: Pm5ParseError["characteristic"],
@@ -352,6 +355,19 @@ export function createPm5Driver(
   ): void {
     t.subscribe(uuid, (bytes) => {
       if (terminalLatched) return;
+      // Laptop session 1 (interface-notes.md §18): a real two-interval
+      // workout crossed a real boundary and NO intervalComplete fired, and
+      // the log could not say whether 0x0037 never arrived or arrived and
+      // was discarded — the two have completely different fixes. Record
+      // the FIRST arrival of every characteristic (proves the subscription
+      // is live) and EVERY arrival of the two interval-data ones (they are
+      // boundary-rare, so they cannot flood the ring the way 0x0031 did).
+      if (!seenCharacteristics.has(characteristic)) {
+        seenCharacteristics.add(characteristic);
+        log.record("notify-first", `${characteristic} (${bytes.length}B)`);
+      } else if (characteristic === "0x0037" || characteristic === "0x0038") {
+        log.record("notify", `${characteristic} ${toHex(bytes)}`);
+      }
       const decoded = decode(bytes);
       if ("error" in decoded) {
         // The parse length guards return typed errors — logged, never
@@ -425,7 +441,21 @@ export function createPm5Driver(
       intervalRemaining: computeRemainingForFrame(base),
     };
     lastFrameIntervalIndex = frame.intervalIndex;
-    log.record("frame", `state=${frame.state} elapsed=${frame.elapsedSeconds}`);
+    // Log a frame ONLY when the machine's state word changes. Observed in
+    // the first laptop session (interface-notes.md §18, 2026-08-05): status
+    // notifications arrive ~2/second, so recording every one evicted the
+    // whole programming trace — the write/ack pairs the log exists for —
+    // from the 500-entry ring inside about four minutes. A trace that
+    // cannot survive a warm-up is not observability. State transitions are
+    // the frame-side fact worth keeping; the live values belong to the
+    // `frame` EVENT (below), which every pane already consumes.
+    if (frame.state !== lastLoggedFrameState) {
+      lastLoggedFrameState = frame.state;
+      log.record(
+        "frame",
+        `state=${frame.state} elapsed=${frame.elapsedSeconds} distance=${frame.distanceMeters}`,
+      );
+    }
     emit({ kind: "frame", frame });
 
     // Terminal-state latching (Task 3 review): once finished/terminated

@@ -25,6 +25,7 @@ import {
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
   CONTROL_SERVICE_UUID,
+  DEVICE_INFO_SERVICE_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   ROWING_SERVICE_UUID,
@@ -71,7 +72,7 @@ interface BluetoothDevice extends EventTarget {
 }
 
 interface BluetoothRequestDeviceOptions {
-  filters: Array<{ services: string[] }>;
+  filters: Array<{ services?: string[]; namePrefix?: string }>;
   optionalServices?: string[];
 }
 
@@ -177,9 +178,27 @@ export function createWebBluetoothTransport(): Transport {
           "webBluetooth: navigator.bluetooth is unavailable — Chromium only (design spec's own research note)",
         );
       }
+      // Chrome's picker matches filters against ADVERTISED UUIDs only.
+      // Filtering on the rowing service (0x0030) alone left the picker
+      // scanning forever against a real PM5 (interface-notes.md §18,
+      // 2026-08-05) — that service is not advertised. Both filters below
+      // are kept because the observation cannot say which one matched. The
+      // rowing service exists on the device but is invisible until after
+      // the GATT connection, so filtering on it left the picker scanning
+      // forever (interface-notes.md §18, 2026-08-05). The name prefix is a
+      // deliberate second filter (filters are OR'd): every PM5 names itself
+      // "PM5 <serial>", so discovery survives a firmware revision that
+      // changes the advertising set.
       device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [ROWING_SERVICE_UUID] }],
-        optionalServices: [CONTROL_SERVICE_UUID, ROWING_SERVICE_UUID],
+        filters: [
+          { services: [DEVICE_INFO_SERVICE_UUID] },
+          { namePrefix: "PM5" },
+        ],
+        optionalServices: [
+          DEVICE_INFO_SERVICE_UUID,
+          CONTROL_SERVICE_UUID,
+          ROWING_SERVICE_UUID,
+        ],
       });
       return [{ id: device.id, name: device.name ?? "PM5" }];
     },
@@ -196,6 +215,23 @@ export function createWebBluetoothTransport(): Transport {
       // A fresh connection never inherits a stale flag from a PRIOR one
       // (M-2's own comment on the variable above).
       callerInitiatedDisconnect = false;
+      // Every cached characteristic from a PRIOR connection is dead the
+      // moment that connection drops — Chrome invalidates the objects and
+      // throws `InvalidStateError: Characteristic ... is no longer valid.
+      // Remember to retrieve the characteristic again after reconnecting.`
+      // Observed in the first laptop session (interface-notes.md §18,
+      // 2026-08-05): after a disconnect/reconnect every write failed on the
+      // stale handle, which would have broken the driver's whole reconnect
+      // path — the one place `Transport` is REQUIRED to keep working — on
+      // real hardware while passing every test in CI. Clearing here (not in
+      // `disconnect()`) also covers the drops we never initiated.
+      characteristics.clear();
+      // Idempotent: a second connect() on the same device would otherwise
+      // stack a duplicate listener and fire `onDisconnect` twice per drop.
+      device.removeEventListener(
+        "gattserverdisconnected",
+        handleGattServerDisconnected,
+      );
       device.addEventListener(
         "gattserverdisconnected",
         handleGattServerDisconnected,

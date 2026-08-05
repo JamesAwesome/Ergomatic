@@ -73,6 +73,20 @@ const MANY_PROGRAM: WorkoutProgram = {
 /** §17 item 6 (no wipe/reset): program this straight after MANY_PROGRAM
  *  without power-cycling — a stale tail shows up as intervals 4..25
  *  surviving on the monitor. */
+/** Laptop session 1 discriminator: TWO TIME intervals. The one program the
+ *  PM accepted was a single TIME interval; every rejected one was DISTANCE.
+ *  This separates "multi-interval is broken" from "distance encoding is
+ *  broken" — they were confounded until now. */
+const TWO_TIME_PROGRAM: WorkoutProgram = {
+  intervals: Array.from({ length: 2 }, () => ({
+    kind: "time" as const,
+    value: 60,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 30,
+  })),
+};
+
 const SHORT_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 3 }, () => ({
     kind: "distance" as const,
@@ -181,6 +195,8 @@ const REMOTE: Record<string, () => void | Promise<void>> = {
     programNamed("program(no-target, §17 #4)", NO_TARGET_PROGRAM),
   "program-many": () =>
     programNamed("program(25 intervals, §17 #5)", MANY_PROGRAM),
+  "program-two-time": () =>
+    programNamed("program(2 TIME intervals, discriminator)", TWO_TIME_PROGRAM),
   "program-short": () =>
     programNamed("program(3 intervals, §17 #6)", SHORT_PROGRAM),
   terminate,
