@@ -5,9 +5,10 @@
 // commands written to the control characteristic (0x0021/0x0022) — a
 // different data path, but still Concept2-byte-level knowledge, so it
 // lives in pm5/ alongside the codec that builds the commands being acked
-// (interface-notes.md §16, M5). Both the driver (reading acks) and the
-// fake transport (building synthetic acks, both a later task) need this —
-// pm5/ is the only home of Concept2 bytes (design spec §Layering).
+// (interface-notes.md §16, M5). Both `src/monitor/driver.ts` (reading
+// acks) and `src/monitor/transports/fake.ts` (building synthetic acks)
+// need this — pm5/ is the only home of Concept2 bytes (design spec
+// §Layering).
 //
 // domain/monitor/** imports nothing from src/.
 
@@ -90,9 +91,9 @@ export function parseCsafeResponse(frame: Uint8Array): CsafeResponse {
  * `chunkFrames` for that, the same composable step `pm5/commands.ts` uses)
  * for `commandIds` under the 0x76 wrapper — the inverse of
  * `parseCsafeResponse`'s wrapper branch, mirroring R2/R4 exactly
- * (interface-notes.md §16). For the fake transport (a later task) to
- * answer `pm5/commands.ts`'s writes without needing its own copy of the
- * wrapper format.
+ * (interface-notes.md §16). For `src/monitor/transports/fake.ts` to answer
+ * `pm5/commands.ts`'s writes without needing its own copy of the wrapper
+ * format.
  */
 export function buildAckFrame(
   status: CsafeResponseStatus,

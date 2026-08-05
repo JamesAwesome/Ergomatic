@@ -13,7 +13,7 @@
  *  (interface-notes.md §9). Lowercase: UUIDs are case-insensitive
  *  (RFC 4122; the doc itself prints them uppercase), and lowercase matches
  *  the `navigator.bluetooth`/`@capacitor-community/bluetooth-le` examples
- *  a later task's transports are written against. */
+ *  `webBluetooth.ts`/`capacitorBle.ts` are written against. */
 function pm5Uuid(handle: number): string {
   const hex = handle.toString(16).padStart(4, "0");
   return `ce06${hex}-43e5-11e4-916c-0800200c9a66`;

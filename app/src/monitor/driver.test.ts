@@ -708,6 +708,57 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
         ),
     ).toBe(true);
   });
+
+  it("M-3 (final-review, empirically proven): a second terminate() call after 'terminated' has already latched resolves via the disconnect hatch, even though the ack-timeout hatch is disabled post-terminal", async () => {
+    // ackTimeout is configured but deliberately never saves the day here —
+    // `mergeStatus`'s own `if (terminalLatched) return` stops every
+    // GENERAL_STATUS notification before it ever reaches the tick counter,
+    // regardless of how much virtual time passes, once terminalLatched is
+    // set. This test proves BOTH halves of the empirically-proven bug: the
+    // ack-timeout hatch stays disabled (5000ms of ticks change nothing) AND
+    // the disconnect hatch — broken before this fix — now resolves it.
+    const fake = createFakeTransport({ program: MINIMAL_PROGRAM });
+    const log = createEventLog();
+    const driver = createPm5Driver(fake, log, { ackTimeout: { ticks: 1 } });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    await driver.program(MINIMAL_PROGRAM);
+    await driver.terminate();
+    expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+
+    // A second terminate() call after the terminal state has already
+    // latched (a plausible 7B cleanup path — e.g. calling terminate()
+    // defensively on unmount). The fake's own ack is withheld
+    // (injectTimeout) so this reproduces the empirically-proven hang:
+    // neither escape hatch fires on its own once this write goes out.
+    fake.injectTimeout();
+    const pending = driver.terminate();
+
+    fake.tick(5000); // the ack-timeout hatch: disabled post-terminal, proven inert
+    let settled = false;
+    void pending.catch(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    // The disconnect hatch must still resolve it — this is the fix.
+    fake.injectDisconnect();
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("disconnected");
+      expect((err as ProgramRejectionError).atFrame).toBe(0);
+      return true;
+    });
+
+    // Still no 'disconnected' MonitorEvent — post-terminal disconnects stay
+    // silent to any listener, unchanged from the existing "no 'disconnected'
+    // event fires" test above.
+    expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(0);
+  });
 });
 
 describe("createPm5Driver: NAK during programming", () => {

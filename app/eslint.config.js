@@ -72,7 +72,14 @@ export default tseslint.config(
       // allowed, same native-first reasoning as `src/adapters/**` above,
       // just organized under `src/monitor/` instead since these two files
       // are Transport implementations, not general platform adapters.
-      "src/monitor/transports/**",
+      // Named individually (final-review L-5), matching vitest.config.ts's
+      // own coverage-exclude list exactly — a bare `src/monitor/
+      // transports/**` glob silently exempted `fake.ts` too (harmless
+      // today; it imports no Capacitor) and would invisibly exempt any
+      // FUTURE file dropped into this directory, including the new dev-lab
+      // harness's own imports.
+      "src/monitor/transports/capacitorBle.ts",
+      "src/monitor/transports/webBluetooth.ts",
       "src/**/*.test.{ts,tsx}",
     ],
     rules: {

@@ -879,9 +879,13 @@ gate, and not required for 7A's own exit.
 **Exit:** MET — every domain/driver behavior the design spec names has a
 passing test (100% on `domain/monitor/**` and on `src/monitor/
 monitorRun.ts`); the fake transport proves the full program → run →
-terminate arc against the exact bytes a real PM5 would exchange; the two
-coexistence guards (cross-clear, `anyLiveSession`) are pinned for 7B to
-wire mechanically.
+terminate arc against the exact bytes a real PM5 would exchange; the
+cross-clear guard and `anyLiveSession()`'s own truth table are pinned. **Not
+every guard wires onto `anyLiveSession()` mechanically** (final-review
+M-1, correcting this section's own prior claim): two guards need the
+UNLOGGED distinction the function deliberately collapses and must keep
+reading `loadRun()`/`loadMonitorRun()` directly — see Phase 7B's own
+bullet below before wiring any guard.
 
 ## Phase 7B — PM5 connected surface
 
@@ -898,17 +902,37 @@ reconciled against 7A's shipped types before this phase starts.
 - [ ] Live actual pace vs target range + live stroke rate vs prescribed SPM
       in the timer, fed by `MonitorDriver`'s `frame` events; distance steps
       auto-advance on `intervalComplete`
+- [ ] **Guard wiring is NOT uniform (final-review M-1 — read before touching
+      any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** Most guards that
+      only need "is anything live, and on which side" migrate onto
+      `src/monitor/monitorRun.ts`'s `anyLiveSession()` mechanically, as
+      7A's design spec §6 describes. Two do NOT, because they need the
+      UNLOGGED distinction `anyLiveSession()` deliberately collapses to
+      "none": WorkoutDetail's unlogged-run staged confirm (the 6B F5
+      fix — a completed-but-unlogged prior session is exactly what its
+      "Replace" warning is FOR) and Today's cold-start stale-draft-discard
+      guard (already correctly reading `loadMonitorRun()` directly, with
+      its own comment explaining why — that code is 7A's reference
+      pattern for this phase's own new guard). Routing either through
+      `anyLiveSession()` silently downgrades "unlogged" to "none" and
+      reintroduces the F5 data-loss class (a real, previously-shipped bug:
+      a stale run record silently discarded instead of protected). When
+      adding a NEW guard, ask "does this care about unlogged specifically,
+      or just live-vs-not" before picking which of the two patterns to
+      follow.
 - [ ] The reverse cross-clear direction: `buildRun`/`saveRun`
       (`session/run.ts`) clears an existing live `MonitorRun` the same way
       `createMonitorRun` already clears a `SessionRun` — 7A shipped only
       its own half (`src/monitor/monitorRun.ts`'s own header comment names
       this as a documented 7B obligation)
 - [ ] The James laptop-vs-real-PM5 session
-      (`docs/monitor/pm5-interface-notes.md` §17's runsheet): the three
-      checksum errata, the interval-numbering base, multi-frame
-      programming retention, and the rest of its eleven items, resolved
-      against a real PM5 via `webBluetooth.ts` before this phase's own
-      codec assumptions go further untested
+      (`docs/monitor/pm5-interface-notes.md` §17's runsheet, now a runnable
+      setup + expected/observed checklist with its own entry point,
+      `app/scripts/pm5-lab.ts`/`.html`): the three checksum errata, the
+      interval-numbering base, multi-frame programming retention, and the
+      rest of its eleven items, resolved against a real PM5 via
+      `webBluetooth.ts` before this phase's own codec assumptions go
+      further untested; results append to §18
 - [ ] Full behavior tested against the fake transport in CI; the laptop
       session above is this phase's live-hardware verification, never a CI
       gate

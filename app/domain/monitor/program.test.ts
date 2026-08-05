@@ -174,7 +174,12 @@ describe("compileProgram: rest folding (H7)", () => {
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "leading-rest",
-      message: expect.any(String),
+      // M-8 (final-review): every CompileError.message pinned exactly, not
+      // expect.any(String) — spec §1 requires copy-ready strings a screen
+      // can show verbatim; "" would have passed every one of these 19
+      // assertions before this fix.
+      message:
+        "This workout starts with rest before any work — the PM5 has no way to program a rest before the first interval.",
       phaseIndex: 0,
     });
   });
@@ -236,7 +241,7 @@ describe("compileProgram: interval-too-short (Table 19, :20 / 100m)", () => {
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "interval-too-short",
-      message: expect.any(String),
+      message: "An interval of 19s is shorter than the PM5's minimum of :20.",
       phaseIndex: 0,
     });
   });
@@ -267,7 +272,7 @@ describe("compileProgram: interval-too-short (Table 19, :20 / 100m)", () => {
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "interval-too-short",
-      message: expect.any(String),
+      message: "An interval of 99m is shorter than the PM5's minimum of 100 m.",
       phaseIndex: 0,
     });
   });
@@ -301,7 +306,7 @@ describe("compileProgram: rest-too-long (Table 19, 9:55 = 595s, not 10:00)", () 
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "rest-too-long",
-      message: expect.any(String),
+      message: "A rest of 596s exceeds the PM5's maximum rest of 9:55.",
       phaseIndex: 1,
     });
   });
@@ -344,7 +349,7 @@ describe("compileProgram: rest-too-long (Table 19, 9:55 = 595s, not 10:00)", () 
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "rest-too-long",
-      message: expect.any(String),
+      message: "A rest of 600s exceeds the PM5's maximum rest of 9:55.",
       phaseIndex: 2,
     });
   });
@@ -361,7 +366,8 @@ describe("compileProgram: too-many-intervals (Table 19, max 50)", () => {
     const phases = Array.from({ length: 51 }, (_, i) => fillerWorkPhase(i));
     expect(compileProgram(phases)).toStrictEqual({
       code: "too-many-intervals",
-      message: expect.any(String),
+      message:
+        "This workout has more than 50 intervals — the PM5 supports at most 50.",
       phaseIndex: 50,
     });
   });
@@ -371,7 +377,7 @@ describe("compileProgram: no-work", () => {
   it("an empty phase list is no-work", () => {
     expect(compileProgram([])).toStrictEqual({
       code: "no-work",
-      message: expect.any(String),
+      message: "This workout has no work intervals to program.",
       phaseIndex: null,
     });
   });
@@ -394,7 +400,8 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     const phases = toCompiledPhases([testPhase]);
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message:
+        "An open-ended (all-out/test) interval has no fixed time or distance — the PM5 requires one to program a workout.",
       phaseIndex: 0,
     });
   });
@@ -411,7 +418,8 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message:
+        "An interval of 20.5s isn't a whole second — the PM5 can't program it.",
       phaseIndex: 0,
     });
   });
@@ -421,6 +429,40 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     // Math.floor of this value is 20 — a floor-instead-of-round mutant
     // would compile this to a 20s interval instead of 21s.
     const raw = 21 - 9e-7;
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 110,
+        seconds: raw,
+        originalIndex: 0,
+      },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      intervals: [
+        {
+          kind: "time",
+          value: 21,
+          targetSplit: 110,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    });
+  });
+
+  it("float noise ABOVE an integer also compiles to it (M-7: kills a Math.round -> Math.ceil mutant the 'below' fixtures above cannot)", () => {
+    // Every existing fixture in this file (21-9e-7, 21-2e-6, 20.5, 1e-6) has
+    // its noise BELOW an integer, where Math.round and Math.ceil AGREE
+    // (both give 21 for 20.9999991) — a round->ceil mutant survives the
+    // entire suite despite this module's own header comment naming the
+    // REAL-WORLD case as noise ABOVE an integer
+    // (`31/60*60 === 31.000000000000004`). 21+9e-7 is exactly that shape:
+    // Math.round(21.0000009) is 21 (correct — nearest integer), but
+    // Math.ceil(21.0000009) is 22 (rounds UP over the boundary it hasn't
+    // reached), which then fails the epsilon check against the raw value
+    // and wrongly reports unrepresentable-value instead of compiling.
+    const raw = 21 + 9e-7;
     const phases: CompiledPhase[] = [
       {
         type: "work",
@@ -465,7 +507,8 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message:
+        "A rest of 0.000001s isn't a whole second — the PM5 can't program it.",
       phaseIndex: 1,
     });
   });
@@ -483,7 +526,8 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message:
+        "An interval of 20.999998s isn't a whole second — the PM5 can't program it.",
       phaseIndex: 0,
     });
   });
@@ -500,7 +544,8 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message:
+        "An interval of 500.5m isn't a whole meter — the PM5 can't program it.",
       phaseIndex: 0,
     });
   });
@@ -518,7 +563,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message: "A rest phase has no duration to program.",
       phaseIndex: 1,
     });
   });
@@ -536,8 +581,39 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message:
+        "A rest of 60.5s isn't a whole second — the PM5 can't program it.",
       phaseIndex: 1,
+    });
+  });
+
+  it("a rest of exactly 0 seconds compiles — Table 19's own documented minimum, not an error (L-9: kills a restSeconds < 0 -> <= 0 mutant)", () => {
+    // Under a `< 0` -> `<= 0` mutant, a legal :00 rest (Table 19's own
+    // documented minimum, §8) would be wrongly rejected as negative — no
+    // fixture anywhere else in this file uses a 0-second rest (none can
+    // arise from the seeds either: `expand.ts`'s auto-rest only fires when
+    // `restMinutes` is truthy), so this is the one fixture that
+    // distinguishes the two.
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 110,
+        seconds: 120,
+        originalIndex: 0,
+      },
+      { type: "rest", seconds: 0, originalIndex: 1 },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      intervals: [
+        {
+          kind: "time",
+          value: 120,
+          targetSplit: 110,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
     });
   });
 });
@@ -561,7 +637,7 @@ describe("compileProgram: negative rest is guarded (Table 19's :00 minimum, Task
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message: "A rest of -60s is negative — the PM5's minimum rest is :00.",
       phaseIndex: 1,
     });
   });
@@ -591,7 +667,7 @@ describe("compileProgram: negative rest is guarded (Table 19's :00 minimum, Task
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: expect.any(String),
+      message: "A rest of -30s is negative — the PM5's minimum rest is :00.",
       phaseIndex: 2,
     });
   });
@@ -640,6 +716,82 @@ describe("compileProgram: effort discriminant (H8), isolated", () => {
           value: 30,
           targetSplit: 87,
           displaySpm: 30,
+          restSeconds: 0,
+        },
+      ],
+    });
+  });
+});
+
+describe("compileProgram: targetSplit representability (M-9, final-review)", () => {
+  // Realistic fixture (briefing rule): `domain/pace.ts`'s `resolveSplit` can
+  // genuinely produce a fractional split (a baseline + an arbitrary
+  // `2k+1.5`-style offset + a session-only preview nudge), unlike
+  // duration/rest, which only ever carry whole seconds by construction —
+  // this is the one path that reaches this compiler with a fractional
+  // number in `targetSplit`.
+  it("a fractional targetSplit (a real 2k+1.5-style offset) is unrepresentable, never silently truncated onto the wire", () => {
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 106.5,
+        seconds: 120,
+        originalIndex: 0,
+      },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      code: "unrepresentable-value",
+      message:
+        "A target pace of 106.5s/500m isn't a whole second — the PM5 can't program it.",
+      phaseIndex: 0,
+    });
+  });
+
+  it("float noise on targetSplit within tolerance still rounds (uses the same representableSeconds as value/restSeconds)", () => {
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 106 - 9e-7,
+        seconds: 120,
+        originalIndex: 0,
+      },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      intervals: [
+        {
+          kind: "time",
+          value: 120,
+          targetSplit: 106,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    });
+  });
+
+  it("an 'effort' phase's fractional targetSplit is never even checked — it nulls out before representability matters", () => {
+    // Guards against a naive "always validate targetSplit" implementation
+    // that would reject a display-only ESTIMATE (domain/pace.ts's
+    // estimationSplit, which can itself be fractional) even though H8 says
+    // it never reaches the wire at all.
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "effort",
+        targetSplit: 100.7,
+        seconds: 30,
+        originalIndex: 0,
+      },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
+      intervals: [
+        {
+          kind: "time",
+          value: 30,
+          targetSplit: null,
+          displaySpm: null,
           restSeconds: 0,
         },
       ],

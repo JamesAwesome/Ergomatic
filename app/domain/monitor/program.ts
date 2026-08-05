@@ -214,7 +214,16 @@ function representableSeconds(raw: number): number | null {
  * (summed into that interval's `restSeconds`, so two or more consecutive
  * rest phases merge into one number), or, if no interval has been emitted
  * yet, is rejected as `leading-rest`. This is why `restSeconds` lives on
- * `ProgramInterval` rather than existing as its own interval kind.
+ * `ProgramInterval` rather than existing as its own interval kind. No
+ * special case exists for whether the interval this folds onto is the
+ * workout's LAST one — a `[work, rest]` input compiles to one interval
+ * whose `restSeconds` is nonzero with nothing after it, and
+ * `pm5/commands.ts` programs that interval's `SET_RESTDURATION` exactly
+ * like any other, immediately followed by the trailing `SET_SCREENSTATE`.
+ * This shape is untested against any CSAFE-doc worked example (every one of
+ * them ends on a work interval) despite being common (161 of the 300 seeded
+ * library workouts compile this way) — flagged for the laptop session,
+ * `docs/monitor/pm5-interface-notes.md` §15 #9/§17 item 10.
  *
  * **Effort vs. split targets** (H8): a "split" work phase's `targetSplit`
  * is a real, user-chosen pace and is programmed as-is. An "effort" work
@@ -263,7 +272,12 @@ function representableSeconds(raw: number): number | null {
  * before the rest's own value is even parsed (nothing to round or bound
  * when there is no interval to attach it to), then representability, then
  * the new negative-rest guard, then `rest-too-long` — see the branch's own
- * comments for why each precedes the next.
+ * comments for why each precedes the next. `targetSplit`'s own
+ * representability check (M-9) is a DELIBERATE exception to "length/
+ * representability before the cap": it runs AFTER `too-many-intervals`,
+ * since an unrepresentable pace is a property of an interval whose own
+ * length and count are already known to be fine, not a shape question that
+ * should preempt the count check.
  */
 export function compileProgram(
   phases: CompiledPhase[],
@@ -389,8 +403,39 @@ export function compileProgram(
     // — an "effort" phase's targetSplit IS a real number (a display
     // estimate), and programming it as a hard target would turn every
     // "ALL OUT"/"EASY" step into a fabricated pace.
-    const targetSplit =
-      phase.targetKind === "effort" ? null : (phase.targetSplit ?? null);
+    //
+    // M-9 (final-review, whole-branch): a "split" phase's targetSplit gets
+    // the SAME whole-second representability contract `value`/`restSeconds`
+    // already get (`representableSeconds`) — deliberately checked here,
+    // AFTER interval-too-short/too-many-intervals (an unrepresentable pace
+    // is a secondary property of an interval whose own length/count is
+    // already known to be fine, not a disqualifying shape question the
+    // check-ordering comment above governs), but still before this phase is
+    // ever pushed. Without this, `commands.ts`'s `SET_TARGETPACETIME`
+    // encoder (`paceSeconds * TARGET_PACE_SCALE`, fed straight into `be32`)
+    // would receive a non-integer and either throw its own defensive
+    // `Pm5EncodeError` or, before that guard existed, silently TRUNCATE via
+    // `>>>` — either way breaking the "never silently truncate" rule every
+    // other field in this module already holds. Reachable in practice:
+    // `domain/pace.ts`'s `resolveSplit` (a baseline + an arbitrary
+    // `2k+1.5`-style offset + a session-only preview nudge, none of them
+    // integer-constrained on input) can produce a genuinely fractional
+    // split, unlike duration/rest, which only ever carry whole seconds by
+    // construction upstream.
+    let targetSplit: number | null;
+    if (phase.targetKind === "effort" || phase.targetSplit === undefined) {
+      targetSplit = null;
+    } else {
+      const roundedSplit = representableSeconds(phase.targetSplit);
+      if (roundedSplit === null) {
+        return {
+          code: "unrepresentable-value",
+          message: `A target pace of ${phase.targetSplit}s/500m isn't a whole second — the PM5 can't program it.`,
+          phaseIndex: i,
+        };
+      }
+      targetSplit = roundedSplit;
+    }
     const displaySpm = phase.spm ?? null;
 
     intervals.push({ kind, value, targetSplit, displaySpm, restSeconds: 0 });

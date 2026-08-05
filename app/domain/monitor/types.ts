@@ -1,6 +1,6 @@
 // The monitor seam: the normalized types every consumer above the PM5 codec
-// sees, plus the radio abstraction the driver (a later task) is built
-// against. Nothing below this file's Transport/DiscoveredMonitor pair is
+// sees, plus the radio abstraction the driver (`src/monitor/driver.ts`) is
+// built against. Nothing below this file's Transport/DiscoveredMonitor pair is
 // PM5-specific — `pm5/` translates the wire into these shapes; a second
 // monitor brand would enter through the same seam.
 //
@@ -91,13 +91,13 @@ export interface DiscoveredMonitor {
 }
 
 /**
- * The radio abstraction every implementation (the fake, `webBluetooth.ts`,
- * `capacitorBle.ts` — all later tasks) satisfies. `pm5/commands.ts` already
- * chunks CSAFE frames to the BLE write budget (framer.ts's `chunkFrames`,
- * <=20 bytes) and `pm5/framer.ts`'s `reassemble()` already un-chunks
- * response bytes back into frames — `Transport` itself moves raw bytes only
- * and knows nothing about CSAFE, ack-gating, or the PM5 at all (that
- * knowledge lives in the driver, a later task, and in `pm5/`).
+ * The radio abstraction every implementation (`src/monitor/transports/
+ * fake.ts`, `webBluetooth.ts`, `capacitorBle.ts`) satisfies. `pm5/commands.ts`
+ * already chunks CSAFE frames to the BLE write budget (framer.ts's
+ * `chunkFrames`, <=20 bytes) and `pm5/framer.ts`'s `reassemble()` already
+ * un-chunks response bytes back into frames — `Transport` itself moves raw
+ * bytes only and knows nothing about CSAFE, ack-gating, or the PM5 at all
+ * (that knowledge lives in `src/monitor/driver.ts` and in `pm5/`).
  */
 export interface Transport {
   scan(): Promise<DiscoveredMonitor[]>;

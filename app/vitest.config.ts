@@ -53,6 +53,14 @@ export default defineConfig({
         // on-device plugin wrappers.
         "src/monitor/transports/capacitorBle.ts",
         "src/monitor/transports/webBluetooth.ts",
+        // Final-review M-5: the laptop-session dev harness — a Chrome-only
+        // entry point wiring the two adapters above to a real driver, no
+        // product UI, nothing this gate can run headlessly against either.
+        // Joins the same "compile-tested shapes" boundary the two
+        // Transport adapters already draw (the `include` glob above never
+        // reaches `scripts/**` in the first place; listed here anyway for
+        // the same reason the two adapters are — explicit, not implicit).
+        "scripts/pm5-lab.ts",
         "src/platform.ts",
         "server/index.ts",
         "server/testDeps.ts",
