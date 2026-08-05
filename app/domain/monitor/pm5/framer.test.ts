@@ -84,6 +84,40 @@ describe("packPayload", () => {
     expect(frames.length).toBeLessThanOrEqual(10);
   });
 
+  it("packs a payload that lands EXACTLY on the 120-byte budget into a single frame (boundary: total===120 must fit, not only total<120)", () => {
+    // 117 unstuffed bytes of 0x01: content stuffed length 117, checksum
+    // (XOR of 117 ones = 0x01, not a flag byte) stuffed length 1, plus the
+    // 2 wrapper bytes = exactly 120. A `>=` off-by-one in the budget
+    // comparison would split this into two frames instead of one.
+    const payload = Uint8Array.from(new Array(117).fill(0x01));
+    const frames = packPayload(payload);
+    expect(frames.length).toBe(1);
+    expect(frames[0].length).toBe(120);
+    expect(unwrapPayload(frames[0])).toStrictEqual(Array.from(payload));
+  });
+
+  it("rejects a byte whose running checksum only becomes a flag value AFTER that byte, when accepting it would push the (correctly re-stuffed) checksum over budget", () => {
+    // 115 zero bytes + 0x10 => running checksum 0x10 (not a flag, 1
+    // stuffed byte) at content length 116. The 117th byte, 0xE0, is
+    // itself non-flag (1 stuffed byte) but XORs the running checksum to
+    // 0xF0 — a flag value needing 2 stuffed bytes. Neither byte 116 nor
+    // byte 117 is individually a flag value; only the CHECKSUM, after
+    // byte 117, is. A packer that reuses the checksum's stuffed length
+    // from before this byte (or hardcodes it to 1) would accept byte 117
+    // and emit a 121-byte frame — one over budget. The correct packer
+    // must re-derive the checksum's stuffed length from the CANDIDATE
+    // checksum (post this byte), not the checksum as it stood before.
+    const payload = Uint8Array.from([...new Array(115).fill(0x00), 0x10, 0xe0]);
+    expect(payload.length).toBe(117);
+    const frames = packPayload(payload);
+    for (const frame of frames) {
+      expect(frame.length).toBeLessThanOrEqual(120);
+    }
+    expect(frames.flatMap((f) => unwrapPayload(f))).toStrictEqual(
+      Array.from(payload),
+    );
+  });
+
   it("a single frame's payload never straddles: concatenating frame payloads reproduces payload byte order exactly", () => {
     const payload = Uint8Array.from({ length: 50 }, (_, i) => i);
     const frames = packPayload(payload);
@@ -171,6 +205,23 @@ describe("reassemble", () => {
         Array.from(frames[i]),
       );
     }
+  });
+
+  it("treats the byte immediately after a stuff flag as an opaque code, even when that byte's raw value equals the stop flag", () => {
+    // A corrupted/garbled stream: 0xF3 followed by a byte that happens to
+    // equal STOP_FLAG (0xF2) — not a real stop flag, just whatever landed
+    // in the "code" position. reassemble must consume it as part of the
+    // stuff pair (skip 2) and keep scanning for the REAL stop flag,
+    // rather than terminating the frame right there. This is the
+    // distinguishing case for the stuff-pair-skip logic: a byte-by-byte
+    // scan that does not treat the code byte as opaque would stop one
+    // byte early and hand parseFrame a truncated, wrong frame instead of
+    // the frame that lets parseFrame itself report "unknown-stuff-code".
+    const buffer = Uint8Array.from([0xf1, 0x00, 0xf3, 0xf2, 0x00, 0xf2]);
+    const r = reassemble();
+    const result = r.push(buffer);
+    expect(result).not.toBeNull();
+    expect(Array.from(result as Uint8Array)).toStrictEqual(Array.from(buffer));
   });
 
   it("does not mistake a stuffed stop-flag byte pair (0xF3 0x02) inside the payload for the real stop flag", () => {
