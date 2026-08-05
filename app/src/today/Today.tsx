@@ -172,6 +172,11 @@ function toLibraryEntry(
     pain: w.pain,
     estMinutes: baselines ? estimateMinutes(w.steps, baselines).minutes : 0,
     lastDoneDaysAgo: w.lastDoneDaysAgo,
+    // Round 2 (2026-08-04): passed straight through so domain/suggest.ts's
+    // own SOURCE predicate can tell a global (starter-library) entry apart
+    // from a personal one — mirrors the Library's own LibraryWorkout.isGlobal
+    // exactly.
+    isGlobal: w.isGlobal,
   };
 }
 
@@ -182,7 +187,10 @@ function toLibraryEntry(
  *  options` count), and a pure function both call sites can share is
  *  simpler than lifting suggestion state up out of TodayView. */
 function computeSuggestion(
-  filters: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
+  filters: Pick<
+    TodayOverrides,
+    "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
+  >,
   entries: LibraryEntry[],
   baselines: Baselines | null,
   todayCode: PlanCode | null,
@@ -192,6 +200,12 @@ function computeSuggestion(
     difficulties: filters.difficulties,
     durations: filters.durations,
     painLevels: filters.painLevels,
+    // Round 2 (2026-08-04): the two new dims — see domain/suggest.ts's own
+    // SuggestPrefs doc comment for why they're optional there (the server's
+    // /api/today route has no equivalent) even though Today always sets a
+    // real value (possibly null) here.
+    lastDone: filters.lastDone,
+    source: filters.source,
     // See toLibraryEntry's comment: with no baselines, every entry's
     // estMinutes is a 0 placeholder. This flag does double duty in
     // domain/suggest.ts — it skips the duration-bucket FILTER entirely
@@ -216,9 +230,14 @@ function computeSuggestion(
 
 /** TodayFilterSheet's own live pool count: the same call above, run
  *  against the sheet's draft rather than the applied overrides, reduced to
- *  just the pool size the primary button's `Show N options` label needs. */
+ *  just the pool size — the count TodayFilterSheet's own live-count caption
+ *  renders (Revision, mid-round: the primary button itself is now the
+ *  constant "Apply Filter", no count of its own). */
 function poolCountFor(
-  draft: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
+  draft: Pick<
+    TodayOverrides,
+    "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
+  >,
   entries: LibraryEntry[],
   baselines: Baselines | null,
   todayCode: PlanCode | null,
@@ -546,6 +565,11 @@ function TodayView({
         // deliberate approximation, not an exact re-derivation.
         durations: bucketsForCap(preferences.timeCapMinutes),
         painLevels: [],
+        // Round 2 (2026-08-04): both default to null ("off") — neither has
+        // an account-level preference to seed from, unlike
+        // difficulties/durations above.
+        lastDone: null,
+        source: null,
       },
   );
 
@@ -591,6 +615,8 @@ function TodayView({
     difficulties: overrides.difficulties,
     durations: overrides.durations,
     painLevels: overrides.painLevels,
+    lastDone: overrides.lastDone,
+    source: overrides.source,
   });
   const filterButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -599,6 +625,8 @@ function TodayView({
       difficulties: overrides.difficulties,
       durations: overrides.durations,
       painLevels: overrides.painLevels,
+      lastDone: overrides.lastDone,
+      source: overrides.source,
     });
     setSheetOpen(true);
   }
@@ -618,7 +646,9 @@ function TodayView({
 
   // Token ✕ / CLEAR ALL apply immediately (no sheet, no confirm) and save
   // the record — same as a chip tap did before this task's rewiring.
-  function resetFilterGroup(group: "difficulties" | "durations" | "pain") {
+  function resetFilterGroup(
+    group: "difficulties" | "durations" | "pain" | "lastDone" | "source",
+  ) {
     if (group === "difficulties") {
       updateOverrides({
         ...overrides,
@@ -626,20 +656,29 @@ function TodayView({
       });
     } else if (group === "durations") {
       updateOverrides({ ...overrides, durations: filterDefaults.durations });
-    } else {
+    } else if (group === "pain") {
       updateOverrides({ ...overrides, painLevels: [] });
+    } else if (group === "lastDone") {
+      updateOverrides({ ...overrides, lastDone: null });
+    } else {
+      updateOverrides({ ...overrides, source: null });
     }
   }
 
   // CLEAR ALL resets to the day's pref-derived DEFAULTS, never to empty —
   // the deliberate divergence from Library's own CLEAR ALL (which empties
   // every filter), per the collapsible-filter spec's own decision table.
+  // lastDone/source (Round 2) have no pref-derived default to fall back to
+  // (unlike difficulties/durations) — both simply reset to null, the same
+  // "off" value they start the day at.
   function clearAllFilters() {
     updateOverrides({
       ...overrides,
       difficulties: filterDefaults.difficulties,
       durations: filterDefaults.durations,
       painLevels: [],
+      lastDone: null,
+      source: null,
     });
   }
 

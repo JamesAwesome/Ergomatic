@@ -8,6 +8,7 @@ const w = (id: string, over: object = {}) => ({
   pain: 3,
   estMinutes: 45,
   lastDoneDaysAgo: 10 as number | null,
+  isGlobal: true,
   ...over,
 });
 const prefs = {
@@ -506,6 +507,229 @@ describe("suggest", () => {
       expect(r.reason).toBe(
         "Nothing fit your difficulty/time filters — closest match, last done 33 days ago.",
       );
+    });
+  });
+
+  // Round 2 (2026-08-04): LAST DONE — mirrors src/library/filters.test.ts's
+  // own "splits recency at the boundary via lastDone, counting never-done as
+  // over21" case, at the suggest()/predicate level.
+  describe("LAST DONE filter", () => {
+    it("under21 keeps only recent entries, excluding a stale one and a never-done one", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], lastDone: "under21" },
+        library: [
+          w("fresh", { lastDoneDaysAgo: 20 }),
+          w("stale", { lastDoneDaysAgo: 21 }),
+          w("never", { lastDoneDaysAgo: null }),
+        ],
+      });
+      expect(r.poolIds).toStrictEqual(["fresh"]);
+    });
+
+    it("over21 keeps stale AND never-done entries — never-done is pinned as 'not recent'", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], lastDone: "over21" },
+        library: [
+          w("fresh", { lastDoneDaysAgo: 20 }),
+          w("stale", { lastDoneDaysAgo: 21 }),
+          w("never", { lastDoneDaysAgo: null }),
+        ],
+      });
+      expect(new Set(r.poolIds)).toStrictEqual(new Set(["stale", "never"]));
+    });
+
+    it("null/undefined is off — every entry passes regardless of recency", () => {
+      const lib = [
+        w("fresh", { lastDoneDaysAgo: 1 }),
+        w("never", { lastDoneDaysAgo: null }),
+      ];
+      const withNull = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], lastDone: null },
+        library: lib,
+      });
+      const withUnset = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"] },
+        library: lib,
+      });
+      expect(new Set(withNull.poolIds)).toStrictEqual(
+        new Set(["fresh", "never"]),
+      );
+      expect(withNull).toStrictEqual(withUnset);
+    });
+
+    it("falls back to the unfiltered type pool when lastDone excludes everything, and names 'recency' in the reason", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], lastDone: "under21" },
+        library: [w("only", { lastDoneDaysAgo: 40 })],
+      });
+      expect(r.fellBack).toBe(true);
+      expect(r.poolIds).toStrictEqual(["only"]);
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/recency filters — closest match, last done 40 days ago.",
+      );
+    });
+  });
+
+  // Round 2 (2026-08-04): SOURCE — mirrors filters.test.ts's own "keeps only
+  // non-global/global workouts" pair, at the suggest()/predicate level.
+  describe("SOURCE filter", () => {
+    it("custom keeps only non-global entries", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: "custom" },
+        library: [
+          w("mine", { isGlobal: false, lastDoneDaysAgo: 5 }),
+          w("seeded", { isGlobal: true, lastDoneDaysAgo: 50 }),
+        ],
+      });
+      expect(r.poolIds).toStrictEqual(["mine"]);
+    });
+
+    it("global keeps only global entries", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: "global" },
+        library: [
+          w("mine", { isGlobal: false, lastDoneDaysAgo: 5 }),
+          w("seeded", { isGlobal: true, lastDoneDaysAgo: 50 }),
+        ],
+      });
+      expect(r.poolIds).toStrictEqual(["seeded"]);
+    });
+
+    it("null/undefined is off — every entry passes regardless of source", () => {
+      const lib = [
+        w("mine", { isGlobal: false, lastDoneDaysAgo: 5 }),
+        w("seeded", { isGlobal: true, lastDoneDaysAgo: 50 }),
+      ];
+      const withNull = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: null },
+        library: lib,
+      });
+      const withUnset = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"] },
+        library: lib,
+      });
+      expect(new Set(withNull.poolIds)).toStrictEqual(
+        new Set(["mine", "seeded"]),
+      );
+      expect(withNull).toStrictEqual(withUnset);
+    });
+
+    it("falls back to the unfiltered type pool when source excludes everything, and names 'source' in the reason", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: "custom" },
+        library: [w("only", { isGlobal: true, lastDoneDaysAgo: 40 })],
+      });
+      expect(r.fellBack).toBe(true);
+      expect(r.poolIds).toStrictEqual(["only"]);
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/source filters — closest match, last done 40 days ago.",
+      );
+    });
+
+    it("both recency and source active and both real: fellback names difficulty/recency/source in that order", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: {
+          difficulties: ["easy"],
+          lastDone: "under21",
+          source: "custom",
+        },
+        library: [
+          w("only", {
+            difficulty: "hard",
+            isGlobal: true,
+            lastDoneDaysAgo: 40,
+          }),
+        ],
+      });
+      expect(r.reason).toBe(
+        "Nothing fit your difficulty/recency/source filters — closest match, last done 40 days ago.",
+      );
+    });
+
+    it("AND-combines with an existing dimension (source narrows within the difficulty match, not instead of it)", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: "custom" },
+        library: [
+          w("mine-medium", {
+            isGlobal: false,
+            difficulty: "medium",
+            lastDoneDaysAgo: 5,
+          }),
+          w("mine-hard", {
+            isGlobal: false,
+            difficulty: "hard",
+            lastDoneDaysAgo: 5,
+          }),
+          w("seeded-medium", {
+            isGlobal: true,
+            difficulty: "medium",
+            lastDoneDaysAgo: 50,
+          }),
+        ],
+      });
+      expect(r.poolIds).toStrictEqual(["mine-medium"]);
+    });
+  });
+
+  // Revision (mid-round, James): the button's copy dropped the live count,
+  // but the underlying "keep-or-move" mechanic it used to promise (Apply
+  // narrows the pool; a shown pick that still matches STAYS, one that no
+  // longer matches MOVES to the new pool's own top choice) has to keep
+  // holding regardless of which dimension changed. `suggest`'s own
+  // `pickOverride ?? sorted[0]` (this file, above) is generic across every
+  // filter dimension — these two cases exercise it specifically through the
+  // two dimensions THIS round adds (SOURCE), proving the mechanic wasn't
+  // accidentally narrowed to only the pre-existing dimensions.
+  describe("keep-or-move: the shown pick vs. a newly applied filter", () => {
+    it("a pick that still matches the newly applied filter is KEPT, not replaced by sorted[0]", () => {
+      const library = [
+        w("shown", { isGlobal: false, lastDoneDaysAgo: 5 }),
+        w("would-otherwise-win", { isGlobal: false, lastDoneDaysAgo: 90 }),
+      ];
+      // Sanity: without the pick override, the least-recently-done entry
+      // would win — proves the KEPT result below isn't just "happens to be
+      // sorted[0] anyway."
+      const unpicked = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: "custom" },
+        library,
+      });
+      expect(unpicked.recommendationId).toBe("would-otherwise-win");
+
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: "custom" },
+        library,
+        todayPickId: "shown",
+      });
+      expect(r.recommendationId).toBe("shown");
+      expect(r.reason).toMatch(/your pick/i);
+    });
+
+    it("a pick EXCLUDED by the newly applied filter MOVES to the new pool's own sorted[0]", () => {
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["medium"], source: "custom" },
+        library: [
+          w("shown-but-now-excluded", { isGlobal: true, lastDoneDaysAgo: 1 }),
+          w("new-top-choice", { isGlobal: false, lastDoneDaysAgo: 90 }),
+        ],
+        todayPickId: "shown-but-now-excluded",
+      });
+      expect(r.recommendationId).toBe("new-top-choice");
+      expect(r.reason).not.toMatch(/your pick/i);
     });
   });
 });

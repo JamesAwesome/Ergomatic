@@ -694,6 +694,10 @@ export function createDataRouter({
       pain: w.pain,
       estMinutes: estimateMinutes(w.steps as Step[], baselines).minutes,
       lastDoneDaysAgo: lastDone[w.id] ?? null,
+      // Round 2 (2026-08-04): LibraryEntry.isGlobal is required, mirroring
+      // `w.isGlobal` from `stores.workouts.list()` (server/stores/workouts.ts's
+      // own `withIsGlobal`) exactly.
+      isGlobal: w.isGlobal,
     }));
 
     const suggestion = suggest({
@@ -707,6 +711,11 @@ export function createDataRouter({
         // TIME defaults from (domain/duration.ts's own doc comment on why
         // this lives in domain/, not client-only code).
         durations: bucketsForCap(prefs.timeCapMinutes),
+        // Round 2 (2026-08-04): lastDone/source are deliberately OMITTED
+        // here, not set to null — server-side suggestions have no
+        // client-side overrides to derive a LAST DONE/SOURCE preference
+        // from at all (both are optional on SuggestPrefs for exactly this
+        // reason; see that interface's own doc comment).
       },
     });
 

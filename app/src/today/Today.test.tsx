@@ -46,6 +46,18 @@ const ISOBAR = libraryEntry("Occluded Front", "w-isobar", 10);
 const WARM_FRONT = libraryEntry("Stationary Front", "w-warmfront", 20);
 const TAILWIND = libraryEntry("Pressure Ridge", "w-tailwind", 15);
 
+// Round 2 (2026-08-04): a personal (isGlobal: false) fixture, same
+// realistic-library-workout convention as the global fixtures above — used
+// by the SOURCE=CUSTOM tests below.
+const PERSONAL_GRADIENT: LibraryWorkout = {
+  ...libraryEntry("Gradient Wind", "w-gradientwind-personal", 12),
+  isGlobal: false,
+};
+// A genuinely STALE (>=21 days) AT/easy fixture — every other AT fixture
+// above is under the 21-day recency boundary, so LAST DONE=21D+ needs its
+// own entry to actually keep something rather than falling back.
+const STALE_FRONT = libraryEntry("Barometric Low", "w-stalefront", 25);
+
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 const DEFAULT_PREFS = {
@@ -472,6 +484,8 @@ describe("Today (overrides: stored record wins over preferences)", () => {
       difficulties: ["hard"],
       durations: ["<30"],
       painLevels: [1, 2, 3],
+      lastDone: null,
+      source: null,
     };
     localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(stored));
     mockReady();
@@ -515,7 +529,9 @@ describe("Today (overrides: stored record wins over preferences)", () => {
 
 // Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline chip
 // groups are gone — narrowing now happens inside TodayFilterSheet against
-// a DRAFT, committed only by its own "Show N options" button. A second,
+// a DRAFT, committed only by its own "Apply Filter" button (Revision,
+// mid-Round-2: the count that used to live in this button's own copy now
+// lives in a caption above it). A second,
 // richer AT pool (Occluded Front/Stationary Front both pain 2, Filling Low
 // pain 3 — a real library fixture, `fromWorkout`-style, per this repo's
 // realistic-fixtures convention) lets a PAIN filter narrow the pool to
@@ -549,7 +565,7 @@ describe("Today (FILTER sheet)", () => {
     expect(filterButton).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("opens on FILTER ⌄ click, holding DIFFICULTY/TIME/PAIN seeded from the applied overrides", async () => {
+  it("opens on FILTER ⌄ click, holding DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE seeded from the applied overrides", async () => {
     mockReady();
     await renderToday();
     const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
@@ -557,7 +573,7 @@ describe("Today (FILTER sheet)", () => {
 
     expect(filterButton).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN"]) {
+    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
     // Seeded from DEFAULT_PREFS (every difficulty, a 60-min cap's own
@@ -579,6 +595,84 @@ describe("Today (FILTER sheet)", () => {
       "aria-pressed",
       "false",
     );
+    // Round 2 (2026-08-04): both new dims default to null — neither cell
+    // of either pair starts pressed (no account preference seeds them, per
+    // Today.tsx's own fresh-day initial state).
+    for (const label of ["<21D", "21D+", "GLOBAL", "CUSTOM"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    }
+  });
+
+  // Round 2 (2026-08-04): SOURCE=CUSTOM narrows the pool to personal
+  // (non-global) entries only — a real, provable pick swap, mirroring the
+  // existing PAIN-filter integration test's own "a real title swap" style.
+  it("applying SOURCE=CUSTOM narrows the pool to the personal fixture alone, swapping the recommendation", async () => {
+    mockReady({ workouts: [ISOBAR, WARM_FRONT, PERSONAL_GRADIENT] });
+    await renderToday();
+    // Pre-filter: ISOBAR (10 days ago) is least-recently-done among the
+    // three AT entries (WARM_FRONT 20, PERSONAL_GRADIENT 12) — wait, most
+    // days ago wins (least recently done), so WARM_FRONT (20) is actually
+    // the pre-filter pick.
+    expect(
+      screen.getByRole("heading", { name: "Stationary Front" }),
+    ).toBeVisible();
+
+    await openFilterSheet();
+    const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
+    await userEvent.click(
+      within(sourceGroup).getByRole("button", { name: "CUSTOM" }),
+    );
+    expect(screen.getByText("1 OPTION")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
+
+    expect(
+      screen.getByRole("heading", { name: "Gradient Wind" }),
+    ).toBeVisible();
+    expect(screen.getByText("CUSTOM")).toBeVisible();
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ source: "custom" });
+  });
+
+  it("applying LAST DONE=21D+ excludes a recent entry, keeps a stale one, and swaps the recommendation; the token clears it back to null", async () => {
+    mockReady({ workouts: [ISOBAR, STALE_FRONT] });
+    await renderToday();
+    // Pre-filter: ISOBAR (10 days ago) loses the least-recently-done
+    // tie-break to STALE_FRONT (25 days ago) already — the fixture choice
+    // below re-confirms that via a real title assertion before filtering.
+    expect(
+      screen.getByRole("heading", { name: "Barometric Low" }),
+    ).toBeVisible();
+
+    await openFilterSheet();
+    const lastDoneGroup = screen.getByRole("group", { name: "LAST DONE" });
+    await userEvent.click(
+      within(lastDoneGroup).getByRole("button", { name: "21D+" }),
+    );
+    expect(screen.getByText("1 OPTION")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
+
+    // Still Barometric Low (it was already the pick, and it still matches
+    // 21D+) — proves the filter narrowed the pool without needing to MOVE
+    // the card in this particular case.
+    expect(
+      screen.getByRole("heading", { name: "Barometric Low" }),
+    ).toBeVisible();
+    expect(screen.getByText("21D+")).toBeVisible();
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ lastDone: "over21" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove 21D+ filter" }),
+    );
+    expect(screen.queryByText("21D+")).not.toBeInTheDocument();
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({ lastDone: null });
   });
 
   it("draft edits inside the sheet don't touch the applied overrides until Apply", async () => {
@@ -636,7 +730,7 @@ describe("Today (FILTER sheet)", () => {
     const easyChip = screen.getByRole("button", { name: "EASY" });
     await userEvent.click(easyChip);
 
-    const primary = screen.getByRole("button", { name: /^Show \d+ options?$/ });
+    const primary = screen.getByRole("button", { name: "Apply Filter" });
     await userEvent.click(primary);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -674,9 +768,7 @@ describe("Today (FILTER sheet)", () => {
     // only saved record until something else writes it.
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(
       JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
     ).toMatchObject({ difficulties: ["easy", "medium"] });
@@ -727,9 +819,7 @@ describe("Today (FILTER sheet)", () => {
     await renderToday();
     const filterButton = screen.getByRole("button", { name: "FILTER ⌄" });
     await userEvent.click(filterButton);
-    await userEvent.click(
-      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(filterButton).toHaveFocus();
     expect(filterButton).toHaveAttribute("aria-expanded", "false");
   });
@@ -841,11 +931,12 @@ describe("Today (FILTER sheet)", () => {
 
   // A richer pool (see FILLING_LOW's own comment above) lets a PAIN filter
   // narrow to exactly ONE entry without suggest.ts's fellBack rule
-  // reverting it back to the full list — proves the live count AND the
-  // singular copy AND that the card the count promised is the card Apply
-  // actually shows.
-  describe("live count, singular copy, and the card it promises", () => {
-    it("the primary's live count matches the draft pool, and the card matches it 1:1 once applied", async () => {
+  // reverting it back to the full list — proves the live count caption AND
+  // the singular copy AND that the card the count promised is the card
+  // Apply actually shows. Revision (mid-round): the count moved off the
+  // button (now the constant "Apply Filter") onto its own caption.
+  describe("live count caption, singular copy, and the card it promises", () => {
+    it("the caption's live count matches the draft pool, and the card matches it 1:1 once applied", async () => {
       mockReady({ workouts: [ISOBAR, WARM_FRONT, FILLING_LOW] });
       await renderToday();
       await openFilterSheet();
@@ -855,17 +946,15 @@ describe("Today (FILTER sheet)", () => {
         within(painGroup).getByRole("button", { name: "3" }),
       );
 
-      // Singular-aware copy — Filling Low (pain 3) is the sole survivor.
-      expect(
-        screen.getByRole("button", { name: "Show 1 option" }),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByRole("button", { name: "Show 1 options" }),
-      ).not.toBeInTheDocument();
+      // Singular-aware caption copy — Filling Low (pain 3) is the sole
+      // survivor. The button itself is the constant "Apply Filter"
+      // regardless of count.
+      expect(screen.getByText("1 OPTION")).toBeVisible();
+      expect(screen.queryByText("1 OPTIONS")).not.toBeInTheDocument();
+      const primary = screen.getByRole("button", { name: "Apply Filter" });
+      expect(primary).not.toBeDisabled();
 
-      await userEvent.click(
-        screen.getByRole("button", { name: "Show 1 option" }),
-      );
+      await userEvent.click(primary);
       expect(
         screen.getByRole("heading", { name: "Filling Low" }),
       ).toBeVisible();
@@ -880,16 +969,15 @@ describe("Today (FILTER sheet)", () => {
   // is when the type itself has no library entries at all — this reuses
   // that same swapped-to-an-empty-type scenario the "type-swap chips"
   // describe below also exercises, from the sheet's own side.
-  it("disables the primary at a genuinely empty draft pool (swapped to a type absent from the library)", async () => {
+  it("disables the primary at a genuinely empty draft pool (swapped to a type absent from the library), with the caption reading 0 OPTIONS", async () => {
     mockReady();
     await renderToday();
     await userEvent.click(screen.getByRole("button", { name: "AN" }));
     expect(screen.getByText("No AN sessions in your library.")).toBeVisible();
 
     await openFilterSheet();
-    expect(
-      screen.getByRole("button", { name: "Show 0 options" }),
-    ).toBeDisabled();
+    expect(screen.getByText("0 OPTIONS")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Apply Filter" })).toBeDisabled();
   });
 });
 
@@ -912,9 +1000,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
     const painGroup = screen.getByRole("group", { name: "PAIN" });
     await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
 
     expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
     expect(screen.getByText("PAIN 2")).toBeVisible();
@@ -941,9 +1027,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
     await userEvent.click(screen.getByRole("button", { name: "60′+" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
     expect(screen.getByText("<30′–60′+")).toBeVisible();
 
@@ -967,9 +1051,7 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
     await userEvent.click(screen.getByRole("button", { name: "60′+" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
     expect(screen.getByText("<30′–60′+")).toBeVisible();
 
@@ -986,7 +1068,38 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     });
   });
 
-  it("CLEAR ALL restores every group to the pref-derived defaults (not empty) and saves that record", async () => {
+  // Round 2 (2026-08-04): the SOURCE token's own ✕ resets exactly
+  // `source: null` — Today.tsx's `resetFilterGroup`'s own final `else`
+  // branch (the LAST DONE branch is exercised by the SOURCE=CUSTOM
+  // integration test's own "Remove 21D+ filter" step above).
+  it("clearing a SOURCE token resets only source, leaving a co-existing difficulty deviation untouched", async () => {
+    mockReady();
+    await renderToday();
+
+    await openFilterSheet();
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
+    const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
+    await userEvent.click(
+      within(sourceGroup).getByRole("button", { name: "GLOBAL" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
+    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(screen.getByText("GLOBAL")).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove GLOBAL filter" }),
+    );
+    expect(screen.queryByText("GLOBAL")).not.toBeInTheDocument();
+    expect(screen.getByText("EASY–MEDIUM")).toBeVisible();
+    expect(
+      JSON.parse(localStorage.getItem(TODAY_OVERRIDES_KEY)!) as TodayOverrides,
+    ).toMatchObject({
+      difficulties: ["easy", "medium"],
+      source: null,
+    });
+  });
+
+  it("CLEAR ALL restores every group to the pref-derived defaults (not empty), resets lastDone/source to null, and saves that record", async () => {
     mockReady();
     await renderToday();
 
@@ -995,12 +1108,23 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     await userEvent.click(screen.getByRole("button", { name: "60′+" }));
     const painGroup = screen.getByRole("group", { name: "PAIN" });
     await userEvent.click(within(painGroup).getByRole("button", { name: "2" }));
+    // Round 2 (2026-08-04): push LAST DONE/SOURCE off-default too — CLEAR
+    // ALL's own null/null reset (Today.tsx's clearAllFilters) has to cover
+    // these two exactly like the pre-existing three.
+    const lastDoneGroup = screen.getByRole("group", { name: "LAST DONE" });
     await userEvent.click(
-      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
+      within(lastDoneGroup).getByRole("button", { name: "<21D" }),
     );
+    const sourceGroup = screen.getByRole("group", { name: "SOURCE" });
+    await userEvent.click(
+      within(sourceGroup).getByRole("button", { name: "GLOBAL" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(
       screen.getByRole("button", { name: "CLEAR ALL" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("<21D")).toBeVisible();
+    expect(screen.getByText("GLOBAL")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
 
@@ -1022,6 +1146,8 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
     );
     expect(saved.durations).toHaveLength(3);
     expect(saved.painLevels).toStrictEqual([]);
+    expect(saved.lastDone).toBeNull();
+    expect(saved.source).toBeNull();
 
     await openFilterSheet();
     for (const label of ["EASY", "MEDIUM", "HARD"]) {
@@ -1040,6 +1166,12 @@ describe("Today (filter tokens: deviation, per-token clear, CLEAR ALL)", () => {
       "aria-pressed",
       "false",
     );
+    for (const label of ["<21D", "21D+", "GLOBAL", "CUSTOM"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    }
   });
 });
 
@@ -1055,9 +1187,7 @@ describe("Today (overrides: persistence and invalidation)", () => {
     // applied via the sheet (Task 2 — HARD is no longer a top-level chip).
     await openFilterSheet();
     await userEvent.click(screen.getByRole("button", { name: "HARD" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: /^Show \d+ options?$/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
     // Same-day "reload": unmount and mount fresh, mirroring the SHUFFLE

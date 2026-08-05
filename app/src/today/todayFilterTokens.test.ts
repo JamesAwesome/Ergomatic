@@ -22,7 +22,13 @@ describe("todayFilterTokens", () => {
   it("returns no tokens when overrides match defaults exactly", () => {
     const onReset = vi.fn();
     const tokens = todayFilterTokens(
-      { difficulties: ALL_THREE, durations: FIRST_THREE, painLevels: [] },
+      {
+        difficulties: ALL_THREE,
+        durations: FIRST_THREE,
+        painLevels: [],
+        lastDone: null,
+        source: null,
+      },
       DEFAULTS,
       onReset,
     );
@@ -35,6 +41,8 @@ describe("todayFilterTokens", () => {
         difficulties: ["hard", "easy", "medium"],
         durations: FIRST_THREE,
         painLevels: [],
+        lastDone: null,
+        source: null,
       },
       DEFAULTS,
       vi.fn(),
@@ -48,6 +56,8 @@ describe("todayFilterTokens", () => {
         difficulties: ALL_THREE,
         durations: ["45-60", "<30", "30-45"],
         painLevels: [],
+        lastDone: null,
+        source: null,
       },
       DEFAULTS,
       vi.fn(),
@@ -57,7 +67,13 @@ describe("todayFilterTokens", () => {
 
   it("emits tokens in DIFFICULTY/TIME/PAIN order regardless of which fields deviate", () => {
     const tokens = todayFilterTokens(
-      { difficulties: ["easy"], durations: ["<30"], painLevels: [2] },
+      {
+        difficulties: ["easy"],
+        durations: ["<30"],
+        painLevels: [2],
+        lastDone: null,
+        source: null,
+      },
       DEFAULTS,
       vi.fn(),
     );
@@ -71,7 +87,13 @@ describe("todayFilterTokens", () => {
   describe("difficulty deviation", () => {
     it("emits only a difficulties token when durations/pain still match defaults", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ["easy"], durations: FIRST_THREE, painLevels: [] },
+        {
+          difficulties: ["easy"],
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -81,7 +103,13 @@ describe("todayFilterTokens", () => {
 
     it("a single selected difficulty reads its own bare label", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ["easy"], durations: FIRST_THREE, painLevels: [] },
+        {
+          difficulties: ["easy"],
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -94,6 +122,8 @@ describe("todayFilterTokens", () => {
           difficulties: ["medium", "easy"],
           durations: FIRST_THREE,
           painLevels: [],
+          lastDone: null,
+          source: null,
         },
         DEFAULTS,
         vi.fn(),
@@ -107,6 +137,8 @@ describe("todayFilterTokens", () => {
           difficulties: ["hard", "easy"],
           durations: FIRST_THREE,
           painLevels: [],
+          lastDone: null,
+          source: null,
         },
         DEFAULTS,
         vi.fn(),
@@ -116,7 +148,13 @@ describe("todayFilterTokens", () => {
 
     it("every difficulty deselected reads NONE, not an empty label", () => {
       const tokens = todayFilterTokens(
-        { difficulties: [], durations: FIRST_THREE, painLevels: [] },
+        {
+          difficulties: [],
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -129,6 +167,8 @@ describe("todayFilterTokens", () => {
           difficulties: ["easy", "medium"],
           durations: FIRST_THREE,
           painLevels: [],
+          lastDone: null,
+          source: null,
         },
         DEFAULTS,
         vi.fn(),
@@ -142,6 +182,8 @@ describe("todayFilterTokens", () => {
           difficulties: ["easy", "hard"],
           durations: FIRST_THREE,
           painLevels: [],
+          lastDone: null,
+          source: null,
         },
         { difficulties: ["easy", "medium"], durations: FIRST_THREE },
         vi.fn(),
@@ -153,7 +195,13 @@ describe("todayFilterTokens", () => {
     it("onClear fires onReset('difficulties')", () => {
       const onReset = vi.fn();
       const tokens = todayFilterTokens(
-        { difficulties: ["easy"], durations: FIRST_THREE, painLevels: [] },
+        {
+          difficulties: ["easy"],
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         onReset,
       );
@@ -165,7 +213,13 @@ describe("todayFilterTokens", () => {
   describe("duration (TIME) deviation", () => {
     it("a single narrower bucket than the default reads its own range label", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ALL_THREE, durations: ["<30"], painLevels: [] },
+        {
+          difficulties: ALL_THREE,
+          durations: ["<30"],
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -180,6 +234,8 @@ describe("todayFilterTokens", () => {
           difficulties: ALL_THREE,
           durations: ["<30", "60+"],
           painLevels: [],
+          lastDone: null,
+          source: null,
         },
         DEFAULTS,
         vi.fn(),
@@ -197,7 +253,13 @@ describe("todayFilterTokens", () => {
         durations: ALL_FOUR,
       };
       const tokens = todayFilterTokens(
-        { difficulties: ["easy"], durations: ALL_FOUR, painLevels: [] },
+        {
+          difficulties: ["easy"],
+          durations: ALL_FOUR,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         uncapped,
         vi.fn(),
       );
@@ -209,7 +271,13 @@ describe("todayFilterTokens", () => {
     // and its own label reads as the full contiguous range, not "ANY TIME".
     it("all four buckets selected, widening past a narrower default, deviates and reads the full range", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ALL_THREE, durations: ALL_FOUR, painLevels: [] },
+        {
+          difficulties: ALL_THREE,
+          durations: ALL_FOUR,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -225,7 +293,13 @@ describe("todayFilterTokens", () => {
     // label at all.
     it("an empty selection deviating from a non-empty default reads ANY TIME, not a range label", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ALL_THREE, durations: [], painLevels: [] },
+        {
+          difficulties: ALL_THREE,
+          durations: [],
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -240,7 +314,13 @@ describe("todayFilterTokens", () => {
         durations: [],
       };
       const tokens = todayFilterTokens(
-        { difficulties: ["easy"], durations: [], painLevels: [] },
+        {
+          difficulties: ["easy"],
+          durations: [],
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         empty,
         vi.fn(),
       );
@@ -249,7 +329,13 @@ describe("todayFilterTokens", () => {
 
     it("durations-at-default (both FIRST_THREE) shows no duration token", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ["easy"], durations: FIRST_THREE, painLevels: [] },
+        {
+          difficulties: ["easy"],
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -259,7 +345,13 @@ describe("todayFilterTokens", () => {
     it("onClear fires onReset('durations')", () => {
       const onReset = vi.fn();
       const tokens = todayFilterTokens(
-        { difficulties: ALL_THREE, durations: ["<30"], painLevels: [] },
+        {
+          difficulties: ALL_THREE,
+          durations: ["<30"],
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         onReset,
       );
@@ -271,7 +363,13 @@ describe("todayFilterTokens", () => {
   describe("pain deviation", () => {
     it("emits no pain token when painLevels is empty", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ALL_THREE, durations: FIRST_THREE, painLevels: [] },
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -280,7 +378,13 @@ describe("todayFilterTokens", () => {
 
     it("a single level reads PAIN n", () => {
       const tokens = todayFilterTokens(
-        { difficulties: ALL_THREE, durations: FIRST_THREE, painLevels: [3] },
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [3],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         vi.fn(),
       );
@@ -293,6 +397,8 @@ describe("todayFilterTokens", () => {
           difficulties: ALL_THREE,
           durations: FIRST_THREE,
           painLevels: [5, 4],
+          lastDone: null,
+          source: null,
         },
         DEFAULTS,
         vi.fn(),
@@ -306,6 +412,8 @@ describe("todayFilterTokens", () => {
           difficulties: ALL_THREE,
           durations: FIRST_THREE,
           painLevels: [1, 2, 3],
+          lastDone: null,
+          source: null,
         },
         DEFAULTS,
         vi.fn(),
@@ -319,6 +427,8 @@ describe("todayFilterTokens", () => {
           difficulties: ALL_THREE,
           durations: FIRST_THREE,
           painLevels: [1, 4],
+          lastDone: null,
+          source: null,
         },
         DEFAULTS,
         vi.fn(),
@@ -329,7 +439,13 @@ describe("todayFilterTokens", () => {
     it("onClear fires onReset('pain')", () => {
       const onReset = vi.fn();
       const tokens = todayFilterTokens(
-        { difficulties: ALL_THREE, durations: FIRST_THREE, painLevels: [2] },
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [2],
+          lastDone: null,
+          source: null,
+        },
         DEFAULTS,
         onReset,
       );
@@ -338,19 +454,186 @@ describe("todayFilterTokens", () => {
     });
   });
 
-  it("each token's clear resets exactly its own group when all three deviate", () => {
+  // Round 2 (2026-08-04): LAST DONE/SOURCE both default to null
+  // unconditionally (no `defaults` comparison the way DIFFICULTY/TIME get)
+  // — "deviates" is simply "is not null", the same shape PAIN's own
+  // `length > 0` check already uses.
+  describe("lastDone (LAST DONE) deviation", () => {
+    it("emits no lastDone token when null (off)", () => {
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
+        DEFAULTS,
+        vi.fn(),
+      );
+      expect(tokens.map((t) => t.key)).not.toContain("lastDone");
+    });
+
+    it("under21 reads <21D", () => {
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: "under21",
+          source: null,
+        },
+        DEFAULTS,
+        vi.fn(),
+      );
+      expect(tokens).toStrictEqual([
+        { key: "lastDone", label: "<21D", onClear: expect.any(Function) },
+      ]);
+    });
+
+    it("over21 reads 21D+", () => {
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: "over21",
+          source: null,
+        },
+        DEFAULTS,
+        vi.fn(),
+      );
+      expect(tokens[0].label).toBe("21D+");
+    });
+
+    it("onClear fires onReset('lastDone')", () => {
+      const onReset = vi.fn();
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: "under21",
+          source: null,
+        },
+        DEFAULTS,
+        onReset,
+      );
+      tokens[0].onClear();
+      expect(onReset).toHaveBeenCalledExactlyOnceWith("lastDone");
+    });
+  });
+
+  describe("source (SOURCE) deviation", () => {
+    it("emits no source token when null (off)", () => {
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: null,
+        },
+        DEFAULTS,
+        vi.fn(),
+      );
+      expect(tokens.map((t) => t.key)).not.toContain("source");
+    });
+
+    it("custom reads CUSTOM", () => {
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: "custom",
+        },
+        DEFAULTS,
+        vi.fn(),
+      );
+      expect(tokens).toStrictEqual([
+        { key: "source", label: "CUSTOM", onClear: expect.any(Function) },
+      ]);
+    });
+
+    it("global reads GLOBAL", () => {
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: "global",
+        },
+        DEFAULTS,
+        vi.fn(),
+      );
+      expect(tokens[0].label).toBe("GLOBAL");
+    });
+
+    it("onClear fires onReset('source')", () => {
+      const onReset = vi.fn();
+      const tokens = todayFilterTokens(
+        {
+          difficulties: ALL_THREE,
+          durations: FIRST_THREE,
+          painLevels: [],
+          lastDone: null,
+          source: "custom",
+        },
+        DEFAULTS,
+        onReset,
+      );
+      tokens[0].onClear();
+      expect(onReset).toHaveBeenCalledExactlyOnceWith("source");
+    });
+  });
+
+  it("emits tokens in DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE order when all five deviate", () => {
+    const tokens = todayFilterTokens(
+      {
+        difficulties: ["easy"],
+        durations: ["<30"],
+        painLevels: [2],
+        lastDone: "under21",
+        source: "custom",
+      },
+      DEFAULTS,
+      vi.fn(),
+    );
+    expect(tokens.map((t) => t.key)).toStrictEqual([
+      "difficulties",
+      "durations",
+      "pain",
+      "lastDone",
+      "source",
+    ]);
+  });
+
+  it("each token's clear resets exactly its own group when all five deviate", () => {
     const onReset = vi.fn();
     const tokens = todayFilterTokens(
-      { difficulties: ["hard"], durations: ["<30"], painLevels: [1, 2] },
+      {
+        difficulties: ["hard"],
+        durations: ["<30"],
+        painLevels: [1, 2],
+        lastDone: "under21",
+        source: "custom",
+      },
       DEFAULTS,
       onReset,
     );
-    expect(tokens).toHaveLength(3);
+    expect(tokens).toHaveLength(5);
     tokens.find((t) => t.key === "difficulties")!.onClear();
     tokens.find((t) => t.key === "durations")!.onClear();
     tokens.find((t) => t.key === "pain")!.onClear();
+    tokens.find((t) => t.key === "lastDone")!.onClear();
+    tokens.find((t) => t.key === "source")!.onClear();
     expect(onReset).toHaveBeenNthCalledWith(1, "difficulties");
     expect(onReset).toHaveBeenNthCalledWith(2, "durations");
     expect(onReset).toHaveBeenNthCalledWith(3, "pain");
+    expect(onReset).toHaveBeenNthCalledWith(4, "lastDone");
+    expect(onReset).toHaveBeenNthCalledWith(5, "source");
   });
 });

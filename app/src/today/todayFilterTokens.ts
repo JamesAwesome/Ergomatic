@@ -1,5 +1,6 @@
 import type { Difficulty } from "../../domain/types.js";
 import type { DurationBucket } from "../../domain/duration.js";
+import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 import { collapseDurations } from "../components/durationTokenLabel";
 import type { Token } from "../components/TokenRow";
@@ -102,18 +103,28 @@ function collapsePain(levels: number[]): string {
 
 /**
  * Today's overrides -> the active tokens row, in the sheet's own group
- * order (DIFFICULTY, TIME, PAIN) — one token per group that DEVIATES from
- * `defaults`, never one per selected value (mirrors Library's
- * filterTokens.ts "the header count counts tokens" rule). `onReset` fires
- * with which group to reset; this module has no storage/save knowledge of
- * its own — Today.tsx owns turning a reset into a saved record, exactly
- * like Library.tsx owns turning filterTokens.ts's own `clear` into a
- * committed `Filters` write.
+ * order (DIFFICULTY, TIME, PAIN, LAST DONE, SOURCE) — one token per group
+ * that DEVIATES from `defaults`, never one per selected value (mirrors
+ * Library's filterTokens.ts "the header count counts tokens" rule).
+ * `onReset` fires with which group to reset; this module has no
+ * storage/save knowledge of its own — Today.tsx owns turning a reset into a
+ * saved record, exactly like Library.tsx owns turning filterTokens.ts's own
+ * `clear` into a committed `Filters` write.
+ *
+ * LAST DONE/SOURCE (Round 2, 2026-08-04) don't need a `defaults` comparison
+ * the way DIFFICULTY/TIME do — both default to `null` unconditionally (the
+ * spec's own "no token until set" rule), so "deviates" is simply "is not
+ * null", identical to PAIN's own `length > 0` check just below.
  */
 export function todayFilterTokens(
-  overrides: Pick<TodayOverrides, "difficulties" | "durations" | "painLevels">,
+  overrides: Pick<
+    TodayOverrides,
+    "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
+  >,
   defaults: TodayFilterDefaults,
-  onReset: (group: "difficulties" | "durations" | "pain") => void,
+  onReset: (
+    group: "difficulties" | "durations" | "pain" | "lastDone" | "source",
+  ) => void,
 ): Token[] {
   const tokens: Token[] = [];
 
@@ -141,6 +152,25 @@ export function todayFilterTokens(
       key: "pain",
       label: collapsePain(overrides.painLevels),
       onClear: () => onReset("pain"),
+    });
+  }
+
+  if (overrides.lastDone !== null) {
+    tokens.push({
+      key: "lastDone",
+      label:
+        overrides.lastDone === "under21"
+          ? `<${RECENCY_BOUNDARY_DAYS}D`
+          : `${RECENCY_BOUNDARY_DAYS}D+`,
+      onClear: () => onReset("lastDone"),
+    });
+  }
+
+  if (overrides.source !== null) {
+    tokens.push({
+      key: "source",
+      label: overrides.source === "custom" ? "CUSTOM" : "GLOBAL",
+      onClear: () => onReset("source"),
     });
   }
 

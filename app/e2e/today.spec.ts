@@ -26,11 +26,19 @@ function openFilterSheet(page: Page) {
   return page.getByRole("button", { name: "FILTER ⌄" }).click();
 }
 
-/** The sheet's own live-counting primary — accessible name changes with the
- *  draft (`Show N options`/`Show 1 option`), hence the regex. Commits the
- *  draft and closes the sheet. */
+/** The sheet's own primary — a constant "Apply Filter" (Revision, mid-round:
+ *  the live count moved off this button's own copy onto a caption above it,
+ *  `todayFilterSheetCount` below). Commits the draft and closes the sheet. */
 function applyFilterSheet(page: Page) {
-  return page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+  return page.getByRole("button", { name: "Apply Filter" }).click();
+}
+
+/** The sheet's own live-counting caption (`N OPTIONS`/`1 OPTION`) — the
+ *  Revision's replacement for the count the primary button's copy used to
+ *  carry ("Show N options"). Locates by class rather than text so callers
+ *  can assert its CONTENTS without knowing the exact count in advance. */
+function filterSheetCount(page: Page) {
+  return page.locator(".today-filter-sheet-count");
 }
 
 async function setBaselines(
@@ -300,6 +308,100 @@ test.describe("Today enhancements: visible filter chips", () => {
   });
 });
 
+// Round 2 (2026-08-04): the LAST DONE/SOURCE groups join DIFFICULTY/TIME/
+// PAIN in the sheet, and the primary button's copy settled on the constant
+// "Apply Filter" (Revision, mid-round) with the live count moved to its own
+// caption. This single continuous flow covers three things at once, per
+// the round's own testing note: a real SOURCE=CUSTOM filter (the personal
+// fixtures ARE the pool, the caption's count is honest, not hardcoded), the
+// KEEP half of the revision's "keep-or-move" requirement (the shown pick
+// still matches SOURCE=CUSTOM, so Apply leaves it in place), and the MOVE
+// half (a second, PAIN-based filter then excludes that same pick, so Apply
+// swaps the card to the one custom fixture that still matches).
+test.describe("Today enhancements: SOURCE=CUSTOM and the keep-or-move guarantee", () => {
+  const highPainTitle = "Today Source Custom High Pain E2E";
+  const lowPainTitle = "Today Source Custom Low Pain E2E";
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, highPainTitle);
+    await cleanupByTitle(page, lowPainTitle);
+  });
+
+  test("SOURCE=CUSTOM narrows to the two personal fixtures with an honest count; the pick stays while it still matches, then moves once PAIN excludes it", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-source-custom@e2e.test",
+      name: "Today Source Custom Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // Same neutralize-then-import idiom as the PAIN-filter test above:
+    // makes these two personal fixtures the only never-done O2 entries, so
+    // the pre-filter pick (creation order: high-pain first) is deterministic.
+    await neutralizeGlobalRecency(page, "O2");
+    await importBulk(
+      page,
+      [`${highPainTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
+    );
+    await importBulk(
+      page,
+      [`${lowPainTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+    );
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+
+    await page.goto("/today");
+    await expect(page.locator(".today-card")).toBeVisible();
+    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+
+    // SOURCE=CUSTOM: both personal fixtures pass (neither is global), and
+    // nothing else in this fresh account's library is personal — the
+    // caption's count is a real, honest 2, not a hardcoded label.
+    await openFilterSheet(page);
+    const dialog = page.getByRole("dialog");
+    const sourceGroup = dialog.getByRole("group", { name: "SOURCE" });
+    const customCell = sourceGroup.getByRole("button", {
+      name: "CUSTOM",
+      exact: true,
+    });
+    await expect(customCell).toHaveAttribute("aria-pressed", "false");
+    await customCell.click();
+    await expect(customCell).toHaveAttribute("aria-pressed", "true");
+    await expect(filterSheetCount(page)).toHaveText("2 OPTIONS");
+    // The button copy itself, asserted directly rather than only through
+    // the `applyFilterSheet` helper — Revision (mid-round): the constant
+    // "Apply Filter", no count, no Show/Shuffle wording.
+    await expect(
+      page.getByRole("button", { name: "Apply Filter" }),
+    ).toBeVisible();
+    await applyFilterSheet(page);
+
+    // KEEP: the high-pain fixture still matches SOURCE=CUSTOM (it's
+    // personal), so Apply leaves the shown card exactly where it was —
+    // proving the filter narrowed the POOL without disturbing a pick that's
+    // still valid in it.
+    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(
+      page.locator(".filter-token", { hasText: "CUSTOM" }),
+    ).toBeVisible();
+
+    // MOVE: a second filter (PAIN 1+2) now excludes the shown high-pain
+    // pick specifically — Apply has to swap the card to the one surviving
+    // fixture (low-pain), not merely narrow silently while leaving a
+    // now-invalid pick on screen.
+    await openFilterSheet(page);
+    const painGroup = page.getByRole("dialog").getByRole("group", {
+      name: "PAIN",
+    });
+    await painGroup.getByRole("button", { name: "1", exact: true }).click();
+    await painGroup.getByRole("button", { name: "2", exact: true }).click();
+    await expect(filterSheetCount(page)).toHaveText("1 OPTION");
+    await applyFilterSheet(page);
+
+    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+  });
+});
+
 test.describe("Today enhancements: the type-swap loop", () => {
   const title = "Today Swap Tiny AN E2E";
 
@@ -485,9 +587,10 @@ test.describe("Today enhancements: the swap x outside-plan composition seam", ()
 test.describe("Today enhancements: freestyle spot-check", () => {
   // Task 3 (2026-08-04 round): the flat filter chip row is gone — a
   // freestyle (no-plan) user sees the same FILTER ⌄ chip a plan-driven
-  // Today does, and opening it shows all three groups (DIFFICULTY/TIME/
-  // PAIN), same as under a plan (the sheet has no notion of a plan at all).
-  test("a no-plan user sees FILTER ⌄ and its sheet's three groups, but no type chips", async ({
+  // Today does, and opening it shows every group the sheet has (the sheet
+  // has no notion of a plan at all). Round 2 (2026-08-04) adds LAST DONE/
+  // SOURCE to that same unconditional set — five groups now, not three.
+  test("a no-plan user sees FILTER ⌄ and all five of its sheet's groups, but no type chips", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -507,6 +610,10 @@ test.describe("Today enhancements: freestyle spot-check", () => {
     ).toBeVisible();
     await expect(dialog.getByRole("group", { name: "TIME" })).toBeVisible();
     await expect(dialog.getByRole("group", { name: "PAIN" })).toBeVisible();
+    await expect(
+      dialog.getByRole("group", { name: "LAST DONE" }),
+    ).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "SOURCE" })).toBeVisible();
     const painGroup = dialog.getByRole("group", { name: "PAIN" });
     await expect(
       painGroup.getByRole("button", { name: "1", exact: true }),
