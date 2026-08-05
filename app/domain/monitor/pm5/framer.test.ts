@@ -22,10 +22,9 @@ describe("packPayload", () => {
     expect(unwrapPayload(frames[0])).toStrictEqual(Array.from(payload));
   });
 
-  it("packs an empty payload into a single (checksum-only) frame", () => {
+  it("packs an empty payload into zero frames (an empty CSAFE frame is meaningless — nothing to program, nothing to ack)", () => {
     const frames = packPayload(Uint8Array.from([]));
-    expect(frames.length).toBe(1);
-    expect(unwrapPayload(frames[0])).toStrictEqual([]);
+    expect(frames).toStrictEqual([]);
   });
 
   it("never exceeds the 120-byte post-stuffing frame budget for a plain (unstuffed) 657-byte payload (Sea Smoke-sized)", () => {
@@ -243,8 +242,18 @@ describe("reassemble", () => {
   });
 
   it("discards leading noise before the first start flag", () => {
+    // The second noise byte is deliberately 0xF3 (the stuff flag): if the
+    // leading-noise trim were ever removed (a mutant that starts scanning
+    // from index 0 of the raw buffer instead of trimming to the first
+    // start flag), the scan would treat this 0xF3 as a stuff flag and
+    // skip the NEXT byte (buffer[2], the real 0xF1) as an opaque stuff
+    // code — silently skipping past the real start flag instead of
+    // finding it. Noise of two arbitrary non-flag bytes (e.g. 0x99, 0x88)
+    // can't distinguish "trim happened" from "trim was removed", because
+    // a byte-by-byte scan without any trim at all still eventually walks
+    // past two ordinary bytes and finds the same start flag by accident.
     const frame = Uint8Array.from([0xf1, 0x00, 0x42, 0x42, 0xf2]);
-    const noisy = Uint8Array.from([0x99, 0x88, ...frame]);
+    const noisy = Uint8Array.from([0x99, 0xf3, ...frame]);
     const r = reassemble();
     const result = r.push(noisy);
     expect(result).not.toBeNull();
@@ -279,6 +288,89 @@ describe("reassemble", () => {
   it("returns null while waiting for a start flag that never comes", () => {
     const r = reassemble();
     expect(r.push(Uint8Array.from([0x00, 0x01, 0x02]))).toBeNull();
+  });
+
+  it("caps an open (unclosed) frame at 120 bytes and resyncs, rather than growing the buffer without bound (the reviewer's missing-stop-flag probe shape)", () => {
+    // A garbled/corrupted stream: a start flag followed by thousands of
+    // non-flag bytes with no stop flag anywhere near — and then, far
+    // beyond the 120-byte frame cap, a byte that happens to have the
+    // stop-flag value purely by coincidence. Before the cap existed,
+    // reassemble() would keep scanning (and the internal buffer would
+    // keep growing) until it hit that stray byte, then return a
+    // thousands-of-bytes "frame" — which parseFrame would go on to
+    // reject, but only after the buffer had already grown unbounded.
+    // With the cap, the open frame is dropped at the 120-byte boundary,
+    // long before the stray byte is ever reached, and this push must
+    // return null (nothing salvageable yet), not a giant frame.
+    const garbage = new Array(5000).fill(0x00);
+    garbage[5003] = 0xf2; // a stray, coincidental "stop flag" value byte
+    const probe = Uint8Array.from([0xf1, ...garbage]);
+    const r = reassemble();
+    const result = r.push(probe);
+    expect(result).toBeNull();
+  });
+
+  it("a real frame following a dropped over-budget open frame is still found on a later push", () => {
+    const tooLong = Uint8Array.from([0xf1, ...new Array(150).fill(0x00)]); // no stop flag, 151 bytes
+    const real = Uint8Array.from([0xf1, 0x01, 0x02, 0xf2]);
+    const r = reassemble();
+    expect(r.push(tooLong)).toBeNull();
+    const result = r.push(real);
+    expect(result).not.toBeNull();
+    expect(Array.from(result as Uint8Array)).toStrictEqual(Array.from(real));
+  });
+
+  it("a frame that closes at exactly 120 bytes total is NOT dropped — the cap is 'over 120', not 'at 120'", () => {
+    // 119 bytes buffered so far (start flag + 118 more), no stop flag yet
+    // — still within budget, since the very next byte closing the frame
+    // (making a 120-byte total frame) is exactly at the cap, not over it.
+    // Dropping one byte too early (an off-by-one in the OTHER direction
+    // from the reviewer's probe) would discard a legitimate in-flight
+    // frame whose stop flag is the very next byte.
+    const openPrefix = Uint8Array.from([0xf1, ...new Array(118).fill(0x00)]);
+    expect(openPrefix.length).toBe(119);
+    const r = reassemble();
+    expect(r.push(openPrefix)).toBeNull();
+    // Completing it with the next byte as the stop flag makes a 120-byte
+    // total frame — must still work, proving the frame was retained, not
+    // dropped, right up to and including the cap.
+    const completed = r.push(Uint8Array.from([0xf2]));
+    expect(completed).not.toBeNull();
+    const expectedFrame = Uint8Array.from([
+      0xf1,
+      ...new Array(118).fill(0x00),
+      0xf2,
+    ]);
+    expect(expectedFrame.length).toBe(120);
+    expect(Array.from(completed as Uint8Array)).toStrictEqual(
+      Array.from(expectedFrame),
+    );
+  });
+
+  it("when an over-budget open frame is dropped, a fresh start flag already present LATER in the same buffer is found immediately (no extra push needed)", () => {
+    // The over-long garbage run contains a second start flag partway
+    // through, followed by a real, well-formed frame — all delivered in
+    // one push. Dropping the first (over-budget) open frame must resync
+    // to that embedded start flag and find the real frame right away,
+    // not only on some later push.
+    const garbage = new Array(150).fill(0x00); // 150 > MAX_FRAME_BYTES, no stop flag in it
+    const real = [0xf1, 0x01, 0x02, 0xf2];
+    const probe = Uint8Array.from([0xf1, ...garbage, ...real]);
+    const r = reassemble();
+    const result = r.push(probe);
+    expect(result).not.toBeNull();
+    expect(Array.from(result as Uint8Array)).toStrictEqual(real);
+  });
+
+  it("an open frame of 121 bytes (still no stop flag) IS dropped — one byte past the cap", () => {
+    const openAt121 = Uint8Array.from([0xf1, ...new Array(120).fill(0x00)]);
+    expect(openAt121.length).toBe(121);
+    const r = reassemble();
+    expect(r.push(openAt121)).toBeNull();
+    // If it had been (wrongly) retained, completing it now would return
+    // a 122-byte frame. It must instead have been dropped, so this stop
+    // flag arrives with nothing open to close — null again.
+    expect(r.push(Uint8Array.from([0xf2]))).toBeNull();
   });
 
   it("each call to reassemble() starts with independent state", () => {
