@@ -267,6 +267,24 @@ export type RawPm5Status = GeneralStatus &
   SplitIntervalData &
   AdditionalSplitIntervalData;
 
+/** `OBJ_WORKOUTSTATE_T` ordinals (BLE doc Appendix A p.37), named for a fake
+ *  transport / test script (`src/monitor/transports/fake.ts`, a later task)
+ *  that needs to pick a specific wire state without re-deriving these
+ *  numbers from the table below — interface-notes.md §14. Only the ordinals
+ *  actually needed outside this module are named; `WORKOUTSTATE_TO_STATE`
+ *  below keeps its own inline bare-number comments (predates this need) so
+ *  this addition is purely additive, not a refactor of already-shipped,
+ *  cited code. Exporting these (rather than letting the fake re-declare its
+ *  own copies) is what keeps `pm5/` the ONLY place these ordinals are named
+ *  (design spec §Layering: "pm5/ is the only home of Concept2 bytes"). */
+export const WORKOUTSTATE_WAITTOBEGIN = 0;
+export const WORKOUTSTATE_INTERVALREST = 3;
+export const WORKOUTSTATE_INTERVALWORKTIME = 4;
+export const WORKOUTSTATE_INTERVALWORKDISTANCE = 5;
+export const WORKOUTSTATE_WORKOUTEND = 10;
+export const WORKOUTSTATE_TERMINATE = 11;
+export const WORKOUTSTATE_REARM = 13;
+
 /**
  * `OBJ_WORKOUTSTATE_T` (BLE doc Appendix A p.37) -> `MonitorFrame.state`,
  * cited row-by-row in interface-notes.md §14 (which also cites CSAFE doc
