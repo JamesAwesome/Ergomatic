@@ -262,7 +262,7 @@ describe("parseFrame — error cases (total parse, never throws)", () => {
     ]);
     const result = parseFrame(corrupted);
     expect(result).toStrictEqual({
-      error: { kind: "checksum-mismatch", expected: 0x00, computed: 0x61 },
+      error: { kind: "checksum-mismatch", received: 0x00, computed: 0x61 },
     });
   });
 

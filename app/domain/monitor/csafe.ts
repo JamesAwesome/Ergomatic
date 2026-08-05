@@ -8,13 +8,13 @@
 //
 // domain/monitor/** imports nothing from src/.
 
-/** Table 5 - Unique Frame Flags (interface-notes.md §1, CSAFE doc p.8). */
+/** Table 5 - Unique Frame Flags (interface-notes.md §1, CSAFE doc p.9). */
 const EXTENDED_START_FLAG = 0xf0;
 const STANDARD_START_FLAG = 0xf1;
 const STOP_FLAG = 0xf2;
 const STUFF_FLAG = 0xf3;
 
-/** Table 6 - Byte Stuffing Values (interface-notes.md §1, CSAFE doc p.8). */
+/** Table 6 - Byte Stuffing Values (interface-notes.md §1, CSAFE doc p.9). */
 const STUFF_CODE_BY_FLAG_BYTE = new Map<number, number>([
   [EXTENDED_START_FLAG, 0x00],
   [STANDARD_START_FLAG, 0x01],
@@ -72,7 +72,7 @@ export type CsafeParseError =
   | { kind: "dangling-stuff-flag" }
   | { kind: "unknown-stuff-code"; code: number }
   | { kind: "unstuffed-flag-byte"; byte: number }
-  | { kind: "checksum-mismatch"; expected: number; computed: number };
+  | { kind: "checksum-mismatch"; received: number; computed: number };
 
 type UnstuffResult = { bytes: Uint8Array } | { error: CsafeParseError };
 
@@ -163,7 +163,11 @@ export function parseFrame(
   const computed = xorAll(payload);
   if (computed !== checksumByte) {
     return {
-      error: { kind: "checksum-mismatch", expected: checksumByte, computed },
+      error: {
+        kind: "checksum-mismatch",
+        received: checksumByte,
+        computed,
+      },
     };
   }
   return { payload };
