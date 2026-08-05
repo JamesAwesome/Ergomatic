@@ -22,6 +22,19 @@ import { buildRun } from "../session/engine";
 // gives for resolving `originalStepIndex` through a lookup rather than
 // reimplementing `phases()`'s reps-expansion).
 //
+// HONEST SCOPE (Task 2 review, M3): this sweep runs every seeded workout as
+// a PRISTINE draft — nothing removed, nothing edited. That proves nothing
+// about the removal class: eight real starters (all shaped
+// `[wu, w, r, w]` in server/seed/library/o2.ts — Moonbow, Sun Dog,
+// Pogonip, Sun Pillar, Hazy Sunshine, Favonius, Nimbostratus, Virazon)
+// reach `leading-rest` through a LEGAL two-tap row removal on Confirm
+// (removing the warmup and the first work row leaves the "r" step as the
+// new first entry). `leading-rest`'s message is user-facing, shown on a
+// real screen after a real user action — not a synthetic-fixture-only
+// branch. See the separate "removal dimension" describe block below, which
+// drives the same real `SessionDraft.removed` path this sweep does not
+// exercise.
+//
 // DESIGN_BASELINES: copied from app/e2e/design.spec.ts (the screenshot
 // suite's fixed pair) for the same reason it's used there — deterministic,
 // arbitrary-but-fixed baselines with no dependency on stored/live state.
@@ -119,4 +132,51 @@ describe("compileProgram: the 300-workout sweep", () => {
     );
     expect(largest?.title).toBe("Sea Smoke");
   });
+});
+
+// The removal dimension (Task 2 review, M3): `leading-rest` reached
+// through a LIVE user action, not a hand-built CompiledPhase[] fixture.
+// All eight titles below are `[wu, w, r, w]` in server/seed/library/o2.ts
+// (verified by reading each entry). Removing rows 0 and 1 — the warmup and
+// the first work step, exactly two taps on Confirm's per-row remove
+// control — leaves `[r, w]` as the effective steps: a rest phase with
+// nothing before it. This drives the REAL `SessionDraft.removed` field
+// through the REAL `effectiveSteps` (via `buildRun`), not a reimplemented
+// filter, for the same "one algorithm, not two copies" reason `sweepOne`
+// above uses `buildDraft`/`buildRun` rather than hand-assembling phases.
+const REMOVAL_LEADING_REST_TITLES = [
+  "Moonbow",
+  "Sun Dog",
+  "Pogonip",
+  "Sun Pillar",
+  "Hazy Sunshine",
+  "Favonius",
+  "Nimbostratus",
+  "Virazon",
+];
+
+describe("compileProgram: the removal dimension — leading-rest is live, not synthetic", () => {
+  it.each(REMOVAL_LEADING_REST_TITLES)(
+    "%s: removing the first two rows on Confirm produces leading-rest",
+    (title) => {
+      const workout = LIBRARY_WORKOUTS.find((w) => w.title === title);
+      if (!workout) throw new Error(`fixture workout not found: ${title}`);
+      const draft = {
+        ...buildDraft({
+          id: `removal-${title}`,
+          title: workout.title,
+          type: workout.type,
+          steps: workout.steps,
+        }),
+        removed: [0, 1],
+      };
+      const run = buildRun(draft, DESIGN_BASELINES, NOW);
+      const result = compileProgram(run.phases);
+      expect(result).toStrictEqual({
+        code: "leading-rest",
+        message: expect.any(String),
+        phaseIndex: 0,
+      });
+    },
+  );
 });
