@@ -430,7 +430,7 @@ not assumed silently.
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0-2    | Elapsed Time                                                                                                                                               | 0.01 sec/lsb                                                                                                                                                                                                                                                                        |
 | 3-5    | Distance                                                                                                                                                   | 0.1 m/lsb                                                                                                                                                                                                                                                                           |
-| 6      | Workout Type (enum, §7 above / Appendix A)                                                                                                                 | —                                                                                                                                                                                                                                                                                   |
+| 6      | Workout Type (enum, Appendix A — final-review M-10: corrected from a misdirected "§7 above" cite; §7 is Command IDs and never transcribes `OBJ_WORKOUTTYPE_T`. §11's `CSAFE_PM_SET_WORKOUTTYPE` row is the one place a member is actually pinned, `0x08` = `WORKOUTTYPE_VARIABLE_INTERVAL`) | —                                                                                                                                                                                                                                                                                   |
 | 7      | Interval Type (enum)                                                                                                                                       | —                                                                                                                                                                                                                                                                                   |
 | 8      | Workout State (enum, §5 above)                                                                                                                             | —                                                                                                                                                                                                                                                                                   |
 | 9      | Rowing State (enum: 0=Inactive, 1=Active)                                                                                                                  | —                                                                                                                                                                                                                                                                                   |
@@ -624,8 +624,15 @@ every row maps to exactly one `state` value, cited individually:
 
 ## 15. Genuine ambiguities flagged for the laptop session (unresolved by document text alone)
 
-None of these change the SHAPE of `parse.ts`'s output — each is a specific
-value-mapping choice made and clearly commented at its call site, listed
+None of these change the SHAPE of `parse.ts`'s output. **Final-review M-4:**
+the claim that each is "clearly commented at its call site" was false for
+four of these eleven when first written — #5 (`currentSplit`'s null path),
+#6 (multi-frame retention), #7 (no wipe/reset), and #9 (trailing rest) had
+no or near-no call-site comment anywhere in the codec/compiler/driver. Each
+now carries one (`pm5/parse.ts`'s `toMonitorFrame` for #5; `pm5/
+commands.ts`'s `buildFrameGroups` for #6 and `buildProgrammingSequence` for
+#7; `program.ts`'s `compileProgram` doc comment for #9), so the claim holds
+for all eleven, not just the majority it covered before this fix. Listed
 here together for the laptop-vs-real-PM5 session (alongside the three
 disputed checksums in §6):
 
@@ -828,76 +835,207 @@ alongside the codec that produces the commands being acked.
   answer `pm5/commands.ts`'s writes without needing its own copy of the
   wrapper format.
 
+**Final-review M-6:** the non-`0x76` `topOpcode` fallback bullet above is an
+explicitly-unconfirmed inference ("not because it's confirmed correct for
+that shape") that §17 omitted before this fix — traced to §17's own source
+list naming only "§6, §14, and §15" and never §16 itself. Now flagged at
+§17 item 1 below, and §17's source list corrected to include this section.
+
+**Coalescing (resolved, recorded here for completeness — not a laptop-
+session item):** a single BLE notification callback can deliver TWO
+complete response frames back to back (real notifications coalesce this
+way under load) — `pm5/framer.ts`'s `reassemble()` documents the drain
+contract this requires (keep pushing empty chunks until it returns `null`
+again), and `src/monitor/driver.ts`'s own read loop follows it. This
+resolved a real, proven bug (fix-round MED-1, Task 4: a coalesced second
+frame arriving with nothing yet awaiting it used to be silently dropped,
+hanging `program()` forever whenever a multi-frame program's ack coalesced
+with the next) — pinned by a same-turn two-frame test and a mutation
+(`while` -> `if` on the drain loop, which survived 50/50 pre-fix). This is
+software-only and already proven in CI; it needs no laptop-session
+confirmation and was never a candidate for one — recorded here purely
+because a `grep` for "coalesc" across this file previously returned zero
+hits despite the driver's own MED-1 correctness argument resting on it.
+
 ## 17. The laptop session runsheet
 
 Phase 7A's own tasks resolved nothing by running actual bytes against a
 real PM5 — every value above is a documented-text or reviewed-code-behavior
-inference, each one explicitly flagged as provisional. This section adds
-NOTHING new: it is one numbered checklist gathering every item already
-flagged for "the laptop session" across §6, §14, and §15, so James's
-laptop-vs-real-PM5 session (via `src/monitor/transports/webBluetooth.ts`,
-Task 5 — a laptop has no Capacitor native shell to host
-`capacitorBle.ts`) has a single runsheet instead of a scavenger hunt
-through the sections above. Per the Task 5 brief and the plan's own Notes
-section, this session is a **James-device event that happens AFTER Phase
-7A merges** — never a CI gate, and not required for this task's own gates
-to pass.
+inference, each one explicitly flagged as provisional. This section gathers
+every item already flagged for "the laptop session" across §6, §14, §15,
+and §16, so James's laptop-vs-real-PM5 session has a single, RUNNABLE
+runsheet instead of a scavenger hunt through the sections above. Per the
+Task 5 brief and the plan's own Notes section, this session is a
+**James-device event that happens AFTER Phase 7A merges** — never a CI
+gate, and not required for this task's own gates to pass.
 
-1. **The three confirmed checksum errata** (§6, "3 errata" table): Fixed
-   Time Interval 2:00/:30 rest (doc `0x0A` vs computed `0xB0`), Variable
-   Interval v500m/1:00r×4 (doc `0xC6` vs computed `0x09` — the load-bearing
-   structural example), Terminate Workout (doc `0x62` vs computed `0x60`).
-   The codec trusts the computed (XOR-rule) value in all three; final
-   authority is this session.
-2. **The possible fourth erratum** (§6, "Possible fourth erratum,
-   unresolved"): the Predefined Standard List Workout #3 response frame
-   (p.80) prints `0x24`, which matches neither status-byte candidate the
-   XOR rule computes (`0x25`/`0xA5`) — recorded as unresolved (possibly an
-   extraction artifact), not encoded as a test vector.
-3. **COUNTDOWNPAUSE → `armed`** (§14, row 2): the least-certain single
-   mapping in the `WORKOUTSTATE` → `MonitorFrame.state` table — absent from
-   every Appendix E transition diagram, positioned by enum ordinal and
-   naming alone, not by an observed transition sequence.
-4. **Interval numbering base** (§15 #1): whether 0x0033's "Interval Count"
-   and 0x0037/0x0038's "Split/Interval Number" are 0-based (like the
-   CONFIRMED 0-based write-side index, §12) or 1-based — plus whether the
-   two independently-incrementing read-side fields actually stay in
-   lockstep on a real PM (the driver's `"divergence"` log, §15 #8, is what
-   would surface a real skew).
-5. **0x0038's Work/Rest Heartrate `255`-invalid sentinel by analogy**
-   (§15 #2): only 0x0032's Heartrate field is documented with this
-   sentinel; applied to 0x0038's two heartrate bytes unconfirmed (harmless
-   either way — see the item's own counter-evidence note on 0x0039's
-   different, zero-based sentinel for a similarly-named field).
-6. **`SET_TARGETPACETIME` for a no-target interval: zero vs omit** (§15
-   #3): `buildProgrammingSequence` currently sends `0x00000000`; five of
-   the document's own worked examples omit the command entirely instead.
-   If the real PM treats a zero pace target as an enforced (unmeetable)
-   0:00/500m pace, this needs to switch to omission.
-7. **Multi-frame programming retention** (§15 #6): whether the PM
-   accumulates interval configuration across multiple ack-gated frames the
-   way `buildFrameGroups` assumes — every worked example is single-frame;
-   Sea Smoke (25 intervals) needs 7. Flagged as the single fact this task
-   is LEAST confident about.
-8. **No documented wipe/reset for a shorter re-program** (§15 #7): whether
-   programming a workout with fewer intervals than a previously-loaded one
-   leaves a stale tail configured on the PM.
-9. **`intervalRemaining`'s checkpoint cadence** (§15 #8): whether 0x0033's
-   "Last Split Time"/"Last Split Distance" genuinely hold steady at the
-   current interval's start point for its whole duration, updating only at
-   the next boundary, as `computeRemainingForFrame` assumes.
-10. **Trailing-rest-on-final-interval acceptance** (§15 #9, added this
-    task): whether the real PM cleanly finishes counting down a nonzero
-    rest programmed onto the workout's LAST interval before `WorkoutEnd` —
-    untested by any worked example, practically significant (161 of 300
-    seeded workouts compile this shape per Task 2's review).
-11. **`currentSplit`'s idle/armed value** (§15 #5): whether an armed or
-    resting erg genuinely reports `0` (not a sentinel) for 0x0032's Current
-    Pace, or holds the last real value, or something else — relevant to
-    whatever a future screen renders for "no pace yet."
+**Final-review M-5 (this wave's fix):** before this fix, this section was
+an index, not a runsheet — every item was a bare cross-reference with no
+expected-vs-observed field, no setup instructions, no results destination,
+and its named vehicle (`webBluetooth.ts`) had ZERO call sites anywhere in
+the repo, so running it required writing code first. All four gaps are
+fixed below: setup steps, an expected/observed pair per item, §18 as the
+results destination, and `app/scripts/pm5-lab.ts`/`.html` as the entry
+point that actually exists now.
+
+### Not hardware-resolvable (excluded from the numbered runsheet)
+
+The Predefined Standard List Workout #3 response frame's possible fourth
+checksum erratum (§6, "Possible fourth erratum, unresolved": doc prints
+`0x24` for content `01|81 24`, matching neither XOR-rule candidate,
+`0x25`/`0xA5`) is **not something a rowing machine can resolve** — the
+notes' own text names the likely cause as an OCR/extraction artifact in the
+PDF, not a computed-value error. No PM5 observation, correct or otherwise,
+settles a transcription question; this needs a re-extraction of the source
+PDF, not a laptop session. Recorded here so it stays tracked without
+occupying a numbered slot that implies hardware can answer it.
+
+### Setup
+
+1. Wake the PM5 — row a stroke, or press any button on the monitor — so it
+   starts BLE advertising. It stays awake for a few minutes with no rower
+   input; if a scan later comes back empty, wake it again.
+2. From `app/`, run `pnpm dev` (Vite's dev server; no build step needed).
+3. Open **Chrome or another Chromium browser** — Web Bluetooth is
+   Chromium-only (`docs/superpowers/research/2026-07-27-pm5-ble-research.md`);
+   no flags need setting for `localhost`, which Chrome treats as a secure
+   context automatically.
+4. Navigate to `http://localhost:5173/scripts/pm5-lab.html` — the dev lab
+   harness (`app/scripts/pm5-lab.ts`, final-review M-5): wires
+   `createWebBluetoothTransport` straight to `createPm5Driver` and a real
+   event log, with console output plus an on-page `exportLog()` dump. NOT
+   product UI — no design-system components, excluded from the coverage
+   gate and mutation testing exactly like the two Transport adapters it
+   drives.
+5. Click **Scan & connect** and pick the PM5 from Chrome's own device
+   picker (a user gesture is required for `requestDevice`, which is why
+   this is a button rather than something that runs on page load — there
+   is no separate pairing step; the picker handles discovery).
+6. Use **Program test workout** / **Terminate** / **Disconnect** to drive
+   the scenarios the items below name; watch the on-page log AND the
+   devtools console (identical output). **Dump event log** prints
+   `exportLog()`'s full chunk-by-chunk trace (design spec §5) for anything
+   that needs the byte-level record, not just the human-readable line.
+7. **Results destination:** append what you observe to §18 below, one
+   entry per item number, dated. §18 is the only place these results live —
+   this section (§17) stays a fixed runsheet across sessions, not a log.
+
+### The runsheet
+
+1. **The three confirmed checksum errata** (§6, "3 errata" table).
+   Expected (per the XOR rule, which the codec trusts): Fixed Time Interval
+   2:00/:30 rest checksums `0xB0` (doc prints `0x0A`); Variable Interval
+   v500m/1:00r×4 (the load-bearing structural example) checksums `0x09`
+   (doc prints `0xC6`); Terminate Workout checksums `0x60` (doc prints
+   `0x62`). Observed: does the PM5 accept frames built with the computed
+   values, or does it reject them / behave as if it wanted the doc's
+   printed ones?
+2. **COUNTDOWNPAUSE → `armed`** (§14, row 2). Expected: `MonitorFrame.state`
+   reads `"armed"` at some point between connecting and the first stroke —
+   this mapping is the least-certain single row in the whole state table,
+   absent from every Appendix E transition diagram, positioned by enum
+   ordinal and naming alone. Observed: after programming a workout, watch
+   `exportLog()`'s "frame" entries between `armed` and the first stroke —
+   does a `COUNTDOWNPAUSE` state ever appear, and does the app's `"armed"`
+   reading look right through it?
+3. **Interval numbering base** (§15 #1). Expected: 0x0033's "Interval
+   Count" and 0x0037/0x0038's "Split/Interval Number" are 0-based, like the
+   CONFIRMED 0-based write-side index (§12). Observed: program the test
+   workout (one interval) and watch the `"frame"`/`"interval-complete"`
+   log entries' `intervalIndex`/`actual.index` values — do they start at 0
+   or 1? Do the two ever disagree (watch for a `"divergence"` log entry —
+   §15 #1's own lockstep question)?
+4. **`SET_TARGETPACETIME` for a no-target interval: zero vs omit** (§15
+   #3). Expected: sending `0x00000000` (this codec's current behavior)
+   means "no enforced target." Observed: program a workout with no split
+   ref (the harness's `TEST_PROGRAM` has `targetSplit: 120`, a real target
+   — for this item specifically, edit the harness's constant to `null` and
+   reload) and check whether the PM5 shows/enforces an impossible 0:00/500m
+   pace instead of "no target."
+5. **Multi-frame programming retention** (§15 #6, `pm5/commands.ts`'s
+   `buildFrameGroups` comment). Expected: the PM accumulates interval
+   configuration across every ack-gated frame it takes to program a
+   workout — every worked example in both source documents is
+   single-frame, so this is inferred, not observed. This is the single
+   fact the whole codec is LEAST confident about. Observed: program a
+   workout with enough intervals to force multiple frames (the harness's
+   `TEST_PROGRAM` is one frame; a real multi-frame case needs a bigger
+   `WorkoutProgram` — Sea Smoke's 25 intervals need 7) and confirm every
+   interval the PM ends up armed with matches what was sent, not only the
+   last frame's.
+6. **No documented wipe/reset for a shorter re-program** (§15 #7,
+   `buildProgrammingSequence`'s comment). Expected: unknown — no command
+   exists in the documented flow to clear a prior program. Observed:
+   program a workout with N intervals, then immediately program a SECOND,
+   shorter one (fewer intervals) without power-cycling the PM, and check
+   whether the PM plays only the second program or a mix carrying a stale
+   tail from the first.
+7. **`intervalRemaining`'s checkpoint cadence** (§15 #8,
+   `computeRemainingForFrame`'s comment). Expected: 0x0033's "Last Split
+   Time"/"Last Split Distance" hold steady at the current interval's start
+   point for its whole duration, updating only at the next boundary.
+   Observed: during a multi-interval test workout, watch whether the app's
+   own `intervalRemaining` counts down smoothly and hits exactly 0 at each
+   boundary, or jumps/glitches (a bad cadence assumption would show as a
+   sudden jump partway through an interval, not a boundary).
+8. **Trailing-rest-on-final-interval acceptance** (§15 #9/program.ts's rest-
+   folding comment). Expected: the PM cleanly finishes counting down a
+   nonzero rest programmed onto the workout's LAST interval before
+   `WorkoutEnd` — untested by any worked example, practically significant
+   (161 of 300 seeded library workouts compile this shape). Observed:
+   program a workout ending in a nonzero rest (edit the harness's
+   `TEST_PROGRAM.intervals[0].restSeconds` to something nonzero, since it
+   already is the only/last interval) and watch whether `WorkoutEnd`/
+   `workoutComplete` fires only after the rest counts down, or early.
+9. **`currentSplit`'s idle/armed value** (§15 #5, `toMonitorFrame`'s
+   comment). Expected: unknown — neither document states what an armed or
+   resting erg's Current Pace byte reads. Observed: while armed (before the
+   first stroke) and while resting between intervals, watch `"frame"` log
+   entries' `currentSplit` value — is it `0`, the last real pace, or
+   something else?
+10. **The non-`0x76` response `topOpcode` fallback** (§16's own
+    "Coalescing (resolved)" paragraph's neighbor — the unconfirmed-inference
+    bullet in §16's ack-echo format list). Expected: `pm5/response.ts`
+    never actually reaches this path in normal use (`pm5/commands.ts` never
+    emits a `0x1A`-wrapped command), so it should be unobservable in
+    ordinary operation. Observed: nothing specific to provoke — recorded so
+    that if `exportLog()` ever shows an ack whose bytes don't match the
+    `0x76`-wrapper shape (an `"ack"` entry that looks unlike every other
+    one), that's this path firing and worth a closer look.
+11. **`writeValueWithoutResponse` for multi-chunk CSAFE frames**
+    (`webBluetooth.ts`'s `write()` comment, final-review L-7). Expected: a
+    multi-chunk frame (any programming write spanning more than one 20-byte
+    BLE write) arrives intact even though each chunk is written with no
+    per-chunk ack. Observed: program a workout large enough to span
+    multiple chunks and watch for a `"frame-error"` log entry (a garbled/
+    truncated frame on the PM5's response path) or a `ProgramRejectionError`
+    with reason `"nak"` that wouldn't otherwise be expected — either would
+    suggest a dropped chunk under this write mode.
 
 Items already resolved with no laptop dependency (not on this list on
 purpose): `intervalIndex`/`spm` nullability is a business rule, not a wire
 question (§15 #4); the write-side `CSAFE_PM_WORKOUTINTERVALCOUNT` index is
 CONFIRMED 0-based by a worked example (§12), unlike the read-side fields in
-item 4 above.
+item 3 above; coalescing is resolved and proven in CI (§16), not a laptop
+question at all.
+
+## 18. Laptop session observations (results destination for §17)
+
+Empty until James runs a session. Append one entry per §17 item, dated,
+e.g.:
+
+```
+### 2026-MM-DD session
+
+1. Errata: PM5 accepted all three computed checksums; the doc's printed
+   values were rejected/never tried.
+2. COUNTDOWNPAUSE: observed between armed and first stroke, mapped to
+   "armed" correctly in the log.
+...
+```
+
+Confirmed findings get folded back into the relevant §6/§14/§15/§16 entry
+above (updating "unconfirmed"/"flagged" language to "confirmed
+YYYY-MM-DD") and into `ROADMAP.md`'s Phase 7B checklist — this section
+itself stays a running log, not the final source of truth once an item is
+resolved.

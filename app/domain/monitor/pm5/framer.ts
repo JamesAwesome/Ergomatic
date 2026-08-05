@@ -122,11 +122,13 @@ const STUFF_FLAG = 0xf3;
  * empty `Uint8Array`, which is a valid way to ask "is there a frame
  * already waiting?" without supplying new bytes. A caller that assumes one
  * push yields one frame's worth of everything available will stall: under
- * ack-gated sequencing (a later task), if a single BLE notification ever
- * happens to carry two complete response frames back to back, the second
- * is invisible until the caller drains again. The caller (the driver's
- * read loop) is responsible for calling `push` in a loop — with new bytes
- * when they arrive, and at least once more with an empty chunk after any
+ * `src/monitor/driver.ts`'s ack-gated sequencing, if a single BLE
+ * notification ever happens to carry two complete response frames back to
+ * back (a real, proven case — interface-notes.md §16's "Coalescing"
+ * paragraph), the second is invisible until the caller drains again. The
+ * caller (the driver's read loop) is responsible for calling `push` in a
+ * loop — with new bytes when they arrive, and at least once more with an
+ * empty chunk after any
  * push that returns non-null — until it returns `null`.
  *
  * Each call to `reassemble()` returns fresh, independent state.

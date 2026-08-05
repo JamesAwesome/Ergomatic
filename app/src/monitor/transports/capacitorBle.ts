@@ -81,6 +81,18 @@ function serviceFor(characteristicId: string): string {
 export function createCapacitorBleTransport(): Transport {
   let deviceId: string | null = null;
   let disconnectCb: ((reason: string) => void) | null = null;
+  // M-2 (final-review): `Transport.onDisconnect`'s own contract
+  // (types.ts:120-125) says it is "never fired by a caller-initiated
+  // disconnect()" — but `BleClient.disconnect()` below invokes the SAME
+  // `handleDisconnect` callback `connect()` registered for a genuine radio
+  // drop, and this file had NO guard against that before this fix, so
+  // every deliberate `disconnect()` call would ALSO fire `onDisconnect`,
+  // arming a driver's `reconnectPending` after a rower hung up on purpose.
+  // Set immediately before the caller-initiated `disconnect()` call,
+  // consumed (and reset) the first time the callback runs — a fresh
+  // `connect()` also resets it, so a stale `true` can never survive into a
+  // NEW connection's own genuine drop.
+  let callerInitiatedDisconnect = false;
 
   function requireConnected(characteristicId: string): {
     id: string;
@@ -93,6 +105,10 @@ export function createCapacitorBleTransport(): Transport {
   }
 
   function handleDisconnect(disconnectedId: string): void {
+    if (callerInitiatedDisconnect) {
+      callerInitiatedDisconnect = false;
+      return;
+    }
     disconnectCb?.(`capacitorBle: device ${disconnectedId} disconnected`);
   }
 
@@ -108,6 +124,9 @@ export function createCapacitorBleTransport(): Transport {
     },
 
     async connect(id: string): Promise<void> {
+      // A fresh connection never inherits a stale flag from a PRIOR one
+      // (M-2's own comment on the variable above).
+      callerInitiatedDisconnect = false;
       await BleClient.connect(id, handleDisconnect);
       deviceId = id;
     },
@@ -147,6 +166,7 @@ export function createCapacitorBleTransport(): Transport {
 
     async disconnect(): Promise<void> {
       if (deviceId !== null) {
+        callerInitiatedDisconnect = true;
         await BleClient.disconnect(deviceId);
       }
     },

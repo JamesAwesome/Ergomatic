@@ -49,9 +49,9 @@ function heartRate(byte: number): number | null {
  * `workoutState` fell through `toMonitorFrame`'s `?? "idle"` fallback,
  * indistinguishable from a genuine idle frame. Every one of the five parse
  * functions below checks its characteristic's documented byte count FIRST
- * and returns this typed error instead of decoding garbage — the driver
- * (a later task) logs it, giving the signal a silent `undefined` never
- * could.
+ * and returns this typed error instead of decoding garbage —
+ * `src/monitor/driver.ts` logs it, giving the signal a silent `undefined`
+ * never could.
  */
 export interface Pm5ParseError {
   characteristic: "0x0031" | "0x0032" | "0x0033" | "0x0037" | "0x0038";
@@ -267,10 +267,10 @@ export type RawPm5Status = GeneralStatus &
   SplitIntervalData &
   AdditionalSplitIntervalData;
 
-/** `OBJ_WORKOUTSTATE_T` ordinals (BLE doc Appendix A p.37), named for a fake
- *  transport / test script (`src/monitor/transports/fake.ts`, a later task)
- *  that needs to pick a specific wire state without re-deriving these
- *  numbers from the table below — interface-notes.md §14. Only the ordinals
+/** `OBJ_WORKOUTSTATE_T` ordinals (BLE doc Appendix A p.37), named for
+ *  `src/monitor/transports/fake.ts` and its own test suite, which need to
+ *  pick a specific wire state without re-deriving these numbers from the
+ *  table below — interface-notes.md §14. Only the ordinals
  *  actually needed outside this module are named; `WORKOUTSTATE_TO_STATE`
  *  below keeps its own inline bare-number comments (predates this need) so
  *  this addition is purely additive, not a refactor of already-shipped,
@@ -324,6 +324,12 @@ const UNKNOWN_WORKOUT_STATE_FALLBACK: MonitorFrame["state"] = "idle";
  * (interface-notes.md §15 #1). `spm` is always the raw Stroke Rate byte —
  * never actually `null` from this function (no documented invalid-rate
  * sentinel exists); the type allows `null` for a caller with no data yet.
+ * `currentSplit` is passed through unconditionally too, with no null path
+ * of its own (M-4, final-review) — unlike Heartrate's documented `255`
+ * sentinel, neither source document states what an armed/resting erg's
+ * Current Pace byte reads (interface-notes.md §15 #5); a screen rendering
+ * this as a pace string decides what "0:00" or an erratic idle value means,
+ * not this function. Flagged for the laptop session (§17 item 11).
  */
 export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
   const state =

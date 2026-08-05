@@ -12,6 +12,7 @@ import {
   buildProgrammingSequence,
   buildSampleRateConfig,
   buildTerminate,
+  Pm5EncodeError,
 } from "./commands.js";
 
 // Mirrors domain/monitor/program.test.ts's real-workout fixture plumbing
@@ -109,7 +110,12 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
     expect(program.intervals).toHaveLength(25);
 
     const frames = buildProgrammingSequence(program);
-    expect(frames.length).toBeGreaterThan(1); // actually exercises the multi-frame path
+    // L-3 (final-review): pinned exactly, not just "more than one" —
+    // interface-notes.md §15 #6/§17 item 7 and design spec §3 both cite
+    // Sea Smoke needing 7 frames under this packing; a regression to 6 or
+    // 8 (a packing change) must fail this test, not slide through under a
+    // >1 assertion.
+    expect(frames.length).toBe(7);
 
     let workoutIntervalCountCommands = 0;
     let screenStateCommands = 0;
@@ -336,6 +342,44 @@ describe("buildTerminate", () => {
     expect(Array.from(frames[0]![0]!)).toStrictEqual([
       0xf1, 0x76, 0x04, 0x13, 0x02, 0x01, 0x02, 0x60, 0xf2,
     ]);
+  });
+});
+
+describe("buildProgrammingSequence: M-9 — be32/be16 reject what compileProgram can no longer produce", () => {
+  // A caller-constructed WorkoutProgram bypassing compileProgram entirely
+  // (final-review M-9's own named 7B risk: `loadMonitorRun` only shallow-
+  // validates a PERSISTED program's shape, never its field values, before
+  // a future replay path could hand it straight back to this function) —
+  // this is the defense-in-depth half of the fix; `program.ts`'s own
+  // representability guard is the primary one.
+  it("a non-integer targetSplit throws a typed Pm5EncodeError instead of being silently truncated onto the wire", () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: 106.567,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    expect(() => buildProgrammingSequence(program)).toThrow(Pm5EncodeError);
+  });
+
+  it("a negative restSeconds also throws, not wraps around via >>>'s ToUint32", () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: -5,
+        },
+      ],
+    };
+    expect(() => buildProgrammingSequence(program)).toThrow(Pm5EncodeError);
   });
 });
 

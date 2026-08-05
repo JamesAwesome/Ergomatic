@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PM5 lab (dev harness — not product UI)</title>
+    <style>
+      /* Deliberately plain — this is a lab instrument, not a screen. No
+         design-system tokens, no CSS custom properties, nothing this
+         phase's UI conventions apply to. */
+      body {
+        font-family: monospace;
+        margin: 1rem;
+      }
+      button {
+        margin: 0 0.5rem 0.5rem 0;
+        padding: 0.5rem 1rem;
+      }
+      #log {
+        white-space: pre-wrap;
+        border: 1px solid #888;
+        padding: 0.5rem;
+        height: 60vh;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>PM5 lab</h1>
+    <p>
+      Dev-only harness for
+      <code>docs/monitor/pm5-interface-notes.md</code> §17's laptop-session
+      runsheet. Chrome/Chromium only (Web Bluetooth). See §17 for setup steps
+      and what to observe for each numbered item.
+    </p>
+    <p>
+      <button id="connect">Scan &amp; connect</button>
+      <button id="program">Program test workout</button>
+      <button id="terminate">Terminate</button>
+      <button id="disconnect">Disconnect (caller-initiated)</button>
+      <button id="dump">Dump event log</button>
+    </p>
+    <div id="log"></div>
+    <script type="module" src="/scripts/pm5-lab.ts"></script>
+  </body>
+</html>

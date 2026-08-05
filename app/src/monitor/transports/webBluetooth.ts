@@ -133,8 +133,24 @@ export function createWebBluetoothTransport(): Transport {
   let server: BluetoothRemoteGATTServer | null = null;
   let disconnectCb: ((reason: string) => void) | null = null;
   const characteristics = new Map<string, BluetoothRemoteGATTCharacteristic>();
+  // M-2 (final-review): `Transport.onDisconnect`'s own contract
+  // (types.ts:120-125) says it is "never fired by a caller-initiated
+  // disconnect()" — but `server.disconnect()` below fires
+  // `gattserverdisconnected` on the device just like a real radio drop
+  // would, and this file had NO guard against that before this fix, so
+  // every deliberate `disconnect()` call would ALSO fire `onDisconnect`,
+  // arming a driver's `reconnectPending` after a rower hung up on
+  // purpose. Set immediately before the caller-initiated `disconnect()`
+  // call, consumed (and reset) the first time the listener runs — a fresh
+  // `connect()` also resets it, so a stale `true` can never survive into a
+  // NEW connection's own genuine drop.
+  let callerInitiatedDisconnect = false;
 
   function handleGattServerDisconnected(): void {
+    if (callerInitiatedDisconnect) {
+      callerInitiatedDisconnect = false;
+      return;
+    }
     disconnectCb?.("webBluetooth: gattserverdisconnected");
   }
 
@@ -177,6 +193,9 @@ export function createWebBluetoothTransport(): Transport {
       if (!device.gatt) {
         throw new Error("webBluetooth: device has no GATT server");
       }
+      // A fresh connection never inherits a stale flag from a PRIOR one
+      // (M-2's own comment on the variable above).
+      callerInitiatedDisconnect = false;
       device.addEventListener(
         "gattserverdisconnected",
         handleGattServerDisconnected,
@@ -184,6 +203,17 @@ export function createWebBluetoothTransport(): Transport {
       server = await device.gatt.connect();
     },
 
+    // L-7 (final-review): prefers `writeValueWithoutResponse` with no
+    // citation and no §17 runsheet item before this fix — for a multi-chunk
+    // CSAFE frame (`pm5/commands.ts`'s chunked writes) this is the riskiest
+    // available choice: every 20-byte chunk is written back-to-back with no
+    // per-chunk ack, and `writeValueWithoutResponse` resolves on QUEUE, not
+    // delivery, so a dropped chunk would silently corrupt the frame with no
+    // signal at this layer. Kept (not switched to the always-acked
+    // `writeValue`) because neither source document states which the PM5
+    // expects or tolerates — an untested radio-behaviour assumption of
+    // exactly the class docs/monitor/pm5-interface-notes.md §17 exists to
+    // collect; flagged there (item 10) rather than guessed at here.
     async write(characteristicId: string, bytes: Uint8Array): Promise<void> {
       const characteristic = await getCharacteristic(characteristicId);
       if (characteristic.writeValueWithoutResponse) {
@@ -226,6 +256,12 @@ export function createWebBluetoothTransport(): Transport {
     },
 
     async disconnect(): Promise<void> {
+      // Only arm the guard when there's actually a live server to drop —
+      // calling this with nothing connected fires no
+      // `gattserverdisconnected` event at all, so there is nothing to
+      // suppress (`connect()` also resets the flag on its own, so a stale
+      // `true` can never leak into a later connection either way).
+      if (server) callerInitiatedDisconnect = true;
       server?.disconnect();
     },
 

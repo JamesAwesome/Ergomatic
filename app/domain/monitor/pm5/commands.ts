@@ -46,8 +46,12 @@ const WORKOUT_DURATION_TIME_SCALE = 100;
 
 /** `CSAFE_PM_SET_RESTDURATION` (interface-notes.md §11). Whole seconds —
  *  NOT the 0.01 sec/lsb scale `pm5/parse.ts`'s READ-side "Rest Time" field
- *  uses (interface-notes.md §10, §15 #2's sibling trap on the write side).
- *  Confirmed by §12's worked example (`1:00` = 60 s encodes as raw `60`). */
+ *  uses (interface-notes.md §10's 0x0032 table) — a second, independent
+ *  write/read scale mismatch alongside 0x0038's own read-side pace-scale
+ *  trap (§10's 0x0038 table: 0.1 vs 0.01 sec/lsb; final-review M-10 —
+ *  corrected from a prior misdirected "§15 #2" citation, which is the
+ *  unrelated heartrate-sentinel ambiguity). Confirmed by §12's worked
+ *  example (`1:00` = 60 s encodes as raw `60`). */
 const SET_RESTDURATION = 0x04;
 
 /** `CSAFE_PM_SET_TARGETPACETIME` (interface-notes.md §11). 0.01 sec/lsb per
@@ -84,16 +88,46 @@ const SCREENVALUEWORKOUT_PREPARETOROWWORKOUT = 0x01;
 const SCREENVALUEWORKOUT_TERMINATEWORKOUT = 0x02;
 
 /** Fastest documented C2 rowing status sample rate (interface-notes.md §4,
- *  BLE doc p.16: `0`=1 s, `1`=500 ms default, `2`=250 ms, `3`=100 ms). The
- *  driver (a later task) writes this to `uuids.ts`'s `SAMPLE_RATE_UUID` at
+ *  BLE doc p.16: `0`=1 s, `1`=500 ms default, `2`=250 ms, `3`=100 ms).
+ *  `src/monitor/driver.ts` writes this to `uuids.ts`'s `SAMPLE_RATE_UUID` at
  *  connect — the 500 ms default is too coarse for a live countdown. */
 const FASTEST_SAMPLE_RATE = 0x03;
 
+/** Thrown by `be16`/`be32` when a value cannot be safely encoded onto the
+ *  wire (final-review M-9). Every value that reaches either encoder today
+ *  is already a validated non-negative integer — `program.ts`'s own
+ *  representability checks guarantee this for `value`/`restSeconds`/
+ *  `targetSplit`, the only three fields `buildIntervalBlock` ever encodes —
+ *  but `buildProgrammingSequence` accepts ANY caller-constructed
+ *  `WorkoutProgram`, not only one that passed through `compileProgram`:
+ *  `monitorRun.ts`'s own header comment names `loadMonitorRun` as only a
+ *  SHALLOW shape validator of a persisted program (7B's eventual replay
+ *  path), never a field-level one. Without this guard, `>>>`'s own
+ *  ToUint32 conversion would silently TRUNCATE a fractional or
+ *  out-of-range value rather than reject it — this makes that failure loud
+ *  and typed instead of a silently wrong byte on the wire. */
+export class Pm5EncodeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "Pm5EncodeError";
+  }
+}
+
+function assertEncodable(value: number, maxValue: number): void {
+  if (!Number.isInteger(value) || value < 0 || value > maxValue) {
+    throw new Pm5EncodeError(
+      `pm5/commands: ${value} cannot be encoded onto the wire — must be an integer between 0 and ${maxValue}`,
+    );
+  }
+}
+
 function be16(value: number): [number, number] {
+  assertEncodable(value, 0xffff);
   return [(value >> 8) & 0xff, value & 0xff];
 }
 
 function be32(value: number): [number, number, number, number] {
+  assertEncodable(value, 0xffffffff);
   return [
     (value >>> 24) & 0xff,
     (value >>> 16) & 0xff,
@@ -213,6 +247,18 @@ function fitsInOneFrame(units: Uint8Array[]): boolean {
  * one unit), so `current` always holds at least the final unit by the time
  * the loop ends and is pushed unconditionally, rather than guarding against
  * an empty-`units` case neither caller can produce.
+ *
+ * M-4 (final-review) — multi-frame retention, interface-notes.md §15 #6:
+ * splitting `units` across several ack-gated frames like this ASSUMES the
+ * PM accumulates interval configuration across every separately-acked
+ * frame it takes to program a workout. Every worked example in both source
+ * documents is a SINGLE CSAFE frame; nothing in either describes what the
+ * PM does with configuration state across multiple frames. Sea Smoke (the
+ * design spec's own 25-interval stress case) needs 7 frames under this
+ * packing — an interval count and frame count neither document ever
+ * exercises even once. This is the single fact the whole codec is LEAST
+ * confident about; it is first on the laptop session's list
+ * (interface-notes.md §17 item 7).
  */
 function buildFrameGroups(units: Uint8Array[]): Uint8Array[][] {
   const groups: Uint8Array[][] = [];
@@ -255,6 +301,20 @@ function packGroup(units: Uint8Array[]): Uint8Array[] {
  * pre-chunked to the BLE write budget (`chunkFrames`, <=20 bytes). The
  * outer array is the ordered, ack-gated write sequence a driver (a later
  * task) sends frame by frame; the inner array is that frame's chunks.
+ *
+ * M-4 (final-review) — no wipe/reset step, interface-notes.md §15 #7: this
+ * function sends only the intervals `p` names, with no leading "clear the
+ * PM's prior program" command of any kind. That is not an oversight —
+ * NO such command exists in the documented proprietary programming flow
+ * (CSAFE Communication Definition rev 0.27, §11-13): `CSAFE_RESET_CMD`/
+ * `CSAFE_GOIDLE_CMD` are PUBLIC CSAFE only, and the document explicitly
+ * says public and proprietary modes "should not be mixed". Consequence:
+ * re-programming with FEWER intervals than a previously-loaded program
+ * (e.g. 4 after a prior 25) has no documented mechanism to clear the
+ * stale tail — intervals 5-25 may remain configured on the PM after this
+ * function finishes sending only 4. Flagged for the laptop session
+ * (interface-notes.md §17 item 8), alongside the multi-frame-retention
+ * assumption `buildFrameGroups` makes just above.
  */
 export function buildProgrammingSequence(p: WorkoutProgram): Uint8Array[][] {
   const units = p.intervals.map((interval, index) =>

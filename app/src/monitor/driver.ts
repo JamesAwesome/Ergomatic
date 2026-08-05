@@ -150,9 +150,10 @@ type PendingAckOutcome = "disconnected" | "ack-timeout" | CsafeResponse;
  *  simply never responds to one particular command, not a radio drop).
  *  Omitted entirely (the default) means the original, still-supported
  *  behavior: wait for either a real response or a disconnect, with no
- *  bound of its own. Real radio adapters (Task 5) are expected to
- *  translate their own real-time polling cadence into this same tick
- *  unit; this driver only ever counts them, never a clock. */
+ *  bound of its own. The real radio adapters (`webBluetooth.ts`,
+ *  `capacitorBle.ts`) are expected to translate their own real-time
+ *  polling cadence into this same tick unit; this driver only ever counts
+ *  them, never a clock. */
 export interface DriverOptions {
   ackTimeout?: { ticks: number };
 }
@@ -309,6 +310,26 @@ export function createPm5Driver(
   }
 
   t.onDisconnect((reason) => {
+    // M-3 (final-review), empirically proven: resolve any `pendingAck`
+    // BEFORE the terminal-latch early-return below, not after. A sequence
+    // sent AFTER the terminal state has already latched (a plausible 7B
+    // cleanup path — e.g. calling `terminate()` again on unmount) still
+    // registers a `pendingAck`, and `mergeStatus`'s own
+    // `if (terminalLatched) return` stops the GENERAL_STATUS tick that
+    // would otherwise resolve it via the ack-timeout policy (see
+    // `DriverOptions.ackTimeout`) — a disconnect is then the ONLY
+    // remaining signal. Before this fix, the early-return below discarded
+    // that signal silently, hanging `sendSequence` forever: proved with
+    // 5000ms of general-status ticks (the ack-timeout hatch, disabled by
+    // `terminalLatched`) PLUS an injected disconnect (this hatch,
+    // previously also disabled), neither settling the promise. Resolving
+    // with `"disconnected"` here is accurate even post-terminal — the
+    // transport genuinely did drop before this frame's ack arrived.
+    if (pendingAck) {
+      const resolve = pendingAck;
+      pendingAck = null;
+      resolve("disconnected");
+    }
     if (terminalLatched) {
       // Appendix E (CSAFE p.162): the PM auto-cycles
       // Terminate -> Rearm -> WaitToBegin on its own after a workout ends;
@@ -317,17 +338,6 @@ export function createPm5Driver(
       // over from this driver's point of view.
       log.record("disconnect", `post-terminal, ignored: ${reason}`);
       return;
-    }
-    if (pendingAck) {
-      // No wall clock anywhere in this driver — an unexpected link drop is
-      // the ONLY signal that turns "no ack yet" into "no ack ever coming"
-      // via THIS path, i.e. `ProgramRejection`'s "disconnected" reason
-      // (see this file's own header comment and `ProgramRejection`'s doc
-      // comment — distinct from the tick-counted "timeout" reason, whose
-      // link stays up the whole time).
-      const resolve = pendingAck;
-      pendingAck = null;
-      resolve("disconnected");
     }
     reconnectPending = true;
     log.record("disconnected", reason);

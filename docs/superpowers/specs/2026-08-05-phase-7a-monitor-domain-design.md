@@ -206,11 +206,32 @@ it.
 `ergomatic.monitorRun` v1 as drafted, PLUS `src/monitor/monitorRun.ts`
 exports the enforcement surface 7B wires:
 - `anyLiveSession(): "none" | "phone" | "monitor"` — reads BOTH
-  `sessionRun` and `monitorRun`; the guards that today read `RUN_KEY`
-  alone (WorkoutDetail's unlogged-run staged confirm — the 6B F5 fix;
-  `startSession`'s clear; Today's cold-start cards) migrate to it in
-  7B, and 7A's tests pin the helper's truth table so 7B's wiring is
-  mechanical.
+  `sessionRun` and `monitorRun`, answering "is anything actually LIVE
+  right now" for a resume/guard caller. **Amended (final-review M-1):**
+  this does NOT mean every existing guard migrates onto it mechanically.
+  `anyLiveSession()` collapses a completed-but-unlogged record on either
+  side to the same answer as absent — by design, since "live" and
+  "finished but not yet logged" are different questions. Two existing
+  guards need the UNLOGGED distinction specifically and must therefore
+  keep reading `loadRun()`/`loadMonitorRun()` DIRECTLY, never through
+  `anyLiveSession()`: WorkoutDetail's unlogged-run staged confirm (the 6B
+  F5 fix — it stages a "Replace" warning precisely BECAUSE the prior
+  session is unlogged, not because one is live) and Today's cold-start
+  stale-draft-discard guard (`Today.tsx`'s own Task 5 comment is the
+  reference pattern: it reads `loadMonitorRun()` directly rather than
+  `anyLiveSession()` because the function's own truth table treats a
+  completed-but-unlogged monitor run as absent, which is wrong for a
+  guard asking "is the erg possibly still running" rather than "should a
+  resume card show"). `startSession`'s clear and any other guard that
+  only ever needs "is something live, and if so which side" (not
+  "unlogged specifically") DOES migrate onto `anyLiveSession()`
+  mechanically, as originally described. 7A's tests pin the helper's
+  truth table either way; 7B's wiring is mechanical ONLY for the guards
+  in the second category — see ROADMAP.md's Phase 7B section for the
+  explicit warning this amendment adds, so the F5 data-loss class (a
+  guard silently downgraded from "unlogged" to "none" by routing it
+  through `anyLiveSession()`) cannot be reintroduced by a future
+  implementer reading this section alone.
 - Today's 24h stale-draft discard gains the same exception for a live
   monitorRun that it has for a completed sessionRun (a draft whose
   monitor session is mid-flight must survive — it carries the labels
