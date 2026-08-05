@@ -890,6 +890,15 @@ settles a transcription question; this needs a re-extraction of the source
 PDF, not a laptop session. Recorded here so it stays tracked without
 occupying a numbered slot that implies hardware can answer it.
 
+The §15 #2 heart-rate 255-sentinel item is likewise excluded from the
+numbered runsheet, for a different reason: its own row concludes the
+answer is harmless either way (255 bpm is physiologically impossible, so
+mapping it to `null` is correct whether or not it is the firmware's
+sentinel convention). A hardware observation would satisfy curiosity but
+change no code. It stays open in §15 as documentation; it earns no
+runsheet slot. (This paragraph exists so §17's completeness guarantee —
+every flagged item either numbered here or explicitly excused — holds.)
+
 ### Setup
 
 1. Wake the PM5 — row a stroke, or press any button on the monitor — so it

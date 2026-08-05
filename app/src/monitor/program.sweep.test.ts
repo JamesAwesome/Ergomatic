@@ -185,7 +185,8 @@ describe("compileProgram: the removal dimension — leading-rest is live, not sy
       const result = compileProgram(run.phases);
       expect(result).toStrictEqual({
         code: "leading-rest",
-        message: expect.any(String),
+        message:
+          "This workout starts with rest before any work — the PM5 has no way to program a rest before the first interval.",
         phaseIndex: 0,
       });
     },
