@@ -54,3 +54,17 @@ options`). Full gates, e2e ×2 fresh volume.
 ## Out of scope
 
 The Library's sheet and copy; the swap; storage keying; server.
+
+## Revision (James, mid-round)
+
+- The button reads **`Apply Filter`** (not Shuffle/Show). Behaviour on
+  apply: **if the shown workout no longer matches the new filter, the
+  card moves to one that does; if it still matches, it stays.** (This is
+  suggest()'s existing pick-fallback semantics — verify it holds in BOTH
+  the pick-override and no-pick cases and PIN it with tests + one e2e
+  rather than assuming; the copy change must not regress the mechanics.)
+- With the count gone from the button, the live pool count moves to a
+  small mono caption line directly above it (`20 OPTIONS` / `0 OPTIONS`)
+  — preserving the honesty signal and the only explanation of the
+  disabled-at-0 state. Flagged for James at the gate as the controller's
+  addition, not his ask.
