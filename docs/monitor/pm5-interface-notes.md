@@ -303,3 +303,34 @@ tables above because it duplicates Fixed Calorie's proprietary-wrapper shape
 Not used by Task 1's implementation (no command semantics in `csafe.ts` or
 `framer.ts` — both are byte/frame-level only); recorded for `pm5/commands.ts`
 (a later task) to cite without re-fetching the document.
+
+## 8. Table 19 — PM5 Workout Configuration Parameter Limits (for Task 2)
+
+**Provenance note:** this section did not exist when Task 1 closed — Task
+2's brief asserted these limits' entries were already here (Task 2's own
+report flags the discrepancy). They were not; they existed only in the
+adversarial review's independent extraction
+(`.superpowers/sdd/2026-08-05-phase-7a/spec-review.md` §H6, itself citing
+"CSAFE doc Table 19, 'PM5 Workout Configuration Parameter Limits', plus
+p.87 note"). Task 2 records them here, sourced from that review rather than
+a fresh `pdftotext` pass over the 162-page document (out of Task 2's scope
+— `domain/monitor/program.ts` is a pure IR compiler with no byte-level
+concerns, unlike `csafe.ts`/`framer.ts`), so `program.ts` has a citation
+inside this file rather than pointing at a review document. If a future
+task re-fetches the CSAFE document for other reasons, re-verifying these
+four values against the primary source directly (not just this
+secondhand citation) costs nothing extra.
+
+| Parameter | Min | Max |
+|---|---|---|
+| Interval distance duration | **100 m** | 999,999 m |
+| Variable interval time duration | **:20** | 99:59:59 |
+| `CSAFE_PM_SET_RESTDURATION` | :00 | **9:55** (595 s) |
+| Splits/intervals per workout (PM5) | — | **50** (30 on PM3/PM4) |
+
+`domain/monitor/program.ts`'s `compileProgram` enforces the four bolded
+values (`MIN_TIME_SECONDS`, `MIN_DISTANCE_METERS`, `MAX_REST_SECONDS`,
+`MAX_INTERVALS`) as its `interval-too-short` / `rest-too-long` /
+`too-many-intervals` `CompileError` branches. The upper bounds (99:59:59,
+999,999 m) are far above anything `domain/validate.ts` permits authoring
+today and are not separately enforced.
