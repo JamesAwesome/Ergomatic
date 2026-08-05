@@ -8,6 +8,8 @@ const EMPTY_DRAFT: TodayFilterDraft = {
   difficulties: [],
   durations: ["<30", "30-45", "45-60"],
   painLevels: [],
+  lastDone: null,
+  source: null,
 };
 
 /** Today's own `opener` is a caller-owned ref to a real button (unlike
@@ -75,11 +77,11 @@ function renderSheet(
 }
 
 describe("TodayFilterSheet", () => {
-  it("renders as a labelled dialog holding DIFFICULTY/TIME/PAIN, and no TYPE group", () => {
+  it("renders as a labelled dialog holding all five groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE), and no TYPE group", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
     expect(dialog).toBeInTheDocument();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN"]) {
+    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(screen.getByText(label)).toBeVisible();
     }
     for (const label of ["EASY", "MEDIUM", "HARD"]) {
@@ -90,6 +92,10 @@ describe("TodayFilterSheet", () => {
     }
     for (const level of ["1", "2", "3", "4", "5"]) {
       expect(screen.getByRole("button", { name: level })).toBeInTheDocument();
+    }
+    // Round 2 (2026-08-04): the Library's own LAST DONE/SOURCE pair.
+    for (const label of ["<21D", "21D+", "GLOBAL", "CUSTOM"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
     // No TYPE group — the type-swap chips stay on the plan line, untouched
     // by this sheet (the collapsible-filter spec's own "Type swap stays on
@@ -103,7 +109,7 @@ describe("TodayFilterSheet", () => {
   // hand-rolled chip groups had (fix round 2, M4).
   it("each group exposes an accessible name matching its own visible label", () => {
     renderSheet();
-    for (const label of ["DIFFICULTY", "TIME", "PAIN"]) {
+    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(screen.getByRole("group", { name: label })).toBeInTheDocument();
     }
     expect(
@@ -117,6 +123,18 @@ describe("TodayFilterSheet", () => {
         name: "3",
       }),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("group", { name: "LAST DONE" })).getByRole(
+        "button",
+        { name: "<21D" },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("group", { name: "SOURCE" })).getByRole(
+        "button",
+        { name: "CUSTOM" },
+      ),
+    ).toBeInTheDocument();
   });
 
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {
@@ -125,6 +143,8 @@ describe("TodayFilterSheet", () => {
         difficulties: ["easy", "hard"],
         durations: ["30-45", "60+"],
         painLevels: [2, 4],
+        lastDone: "under21",
+        source: "global",
       },
     });
     expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
@@ -166,6 +186,22 @@ describe("TodayFilterSheet", () => {
     expect(screen.getByRole("button", { name: "4" })).toHaveAttribute(
       "aria-pressed",
       "true",
+    );
+    expect(screen.getByRole("button", { name: "<21D" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "21D+" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "GLOBAL" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "CUSTOM" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
     );
   });
 
@@ -276,30 +312,111 @@ describe("TodayFilterSheet", () => {
     });
   });
 
-  describe("primary button (Show N options)", () => {
-    it("reads 'Show N options' from poolCount and calls onApply", async () => {
+  // Round 2 (2026-08-04): the Library's own half-width LAST DONE/SOURCE
+  // pair — mutually-exclusive toggle-off semantics, same as the Library's
+  // FilterSheet.tsx (setLastDone/setSource in src/library/filters.ts).
+  describe("LAST DONE (mutually exclusive, toggle-off)", () => {
+    it("clicking under21 sets it, replacing any previous value", async () => {
+      const { onChangeDraft } = renderSheet({
+        draft: { ...EMPTY_DRAFT, lastDone: "over21" },
+      });
+      await userEvent.click(screen.getByRole("button", { name: "<21D" }));
+      expect(onChangeDraft).toHaveBeenCalledWith({
+        ...EMPTY_DRAFT,
+        lastDone: "under21",
+      });
+    });
+
+    it("clicking the already-active cell clears it (toggle-off)", async () => {
+      const { onChangeDraft } = renderSheet({
+        draft: { ...EMPTY_DRAFT, lastDone: "under21" },
+      });
+      await userEvent.click(screen.getByRole("button", { name: "<21D" }));
+      expect(onChangeDraft).toHaveBeenCalledWith({
+        ...EMPTY_DRAFT,
+        lastDone: null,
+      });
+    });
+
+    it("clicking over21 sets it", async () => {
+      const { onChangeDraft } = renderSheet();
+      await userEvent.click(screen.getByRole("button", { name: "21D+" }));
+      expect(onChangeDraft).toHaveBeenCalledWith({
+        ...EMPTY_DRAFT,
+        lastDone: "over21",
+      });
+    });
+  });
+
+  describe("SOURCE (mutually exclusive, toggle-off)", () => {
+    it("clicking CUSTOM sets it, replacing any previous value", async () => {
+      const { onChangeDraft } = renderSheet({
+        draft: { ...EMPTY_DRAFT, source: "global" },
+      });
+      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      expect(onChangeDraft).toHaveBeenCalledWith({
+        ...EMPTY_DRAFT,
+        source: "custom",
+      });
+    });
+
+    it("clicking the already-active cell clears it (toggle-off)", async () => {
+      const { onChangeDraft } = renderSheet({
+        draft: { ...EMPTY_DRAFT, source: "custom" },
+      });
+      await userEvent.click(screen.getByRole("button", { name: "CUSTOM" }));
+      expect(onChangeDraft).toHaveBeenCalledWith({
+        ...EMPTY_DRAFT,
+        source: null,
+      });
+    });
+
+    it("clicking GLOBAL sets it", async () => {
+      const { onChangeDraft } = renderSheet();
+      await userEvent.click(screen.getByRole("button", { name: "GLOBAL" }));
+      expect(onChangeDraft).toHaveBeenCalledWith({
+        ...EMPTY_DRAFT,
+        source: "global",
+      });
+    });
+  });
+
+  // Revision (mid-round, James): the button's copy dropped Show/Shuffle
+  // entirely in favour of the constant "Apply Filter" — no count, no
+  // singular/plural variant. The live count (and the disabled-at-0
+  // explanation the button's old copy used to carry) moved to a small mono
+  // caption directly above it.
+  describe("primary button (Apply Filter) and the live count caption", () => {
+    it("always reads 'Apply Filter', regardless of poolCount, and calls onApply", async () => {
       const { onApply } = renderSheet({ poolCount: 12 });
-      const primary = screen.getByRole("button", { name: "Show 12 options" });
+      const primary = screen.getByRole("button", { name: "Apply Filter" });
       expect(primary).not.toBeDisabled();
       await userEvent.click(primary);
       expect(onApply).toHaveBeenCalledTimes(1);
     });
 
-    it("reads the singular 'Show 1 option' at poolCount 1, and is NOT disabled there (only 0 disables)", () => {
-      renderSheet({ poolCount: 1 });
-      const primary = screen.getByRole("button", { name: "Show 1 option" });
-      expect(primary).toBeInTheDocument();
-      expect(primary).not.toBeDisabled();
-      expect(
-        screen.queryByRole("button", { name: "Show 1 options" }),
-      ).not.toBeInTheDocument();
+    it("the caption reads 'N OPTIONS' for poolCount 12", () => {
+      renderSheet({ poolCount: 12 });
+      expect(screen.getByText("12 OPTIONS")).toBeVisible();
     });
 
-    it("disables at poolCount 0", () => {
+    it("the caption is singular-aware: '1 OPTION' at poolCount 1, not '1 OPTIONS'", () => {
+      renderSheet({ poolCount: 1 });
+      expect(screen.getByText("1 OPTION")).toBeVisible();
+      expect(screen.queryByText("1 OPTIONS")).not.toBeInTheDocument();
+      // The button itself never varies with poolCount — same "Apply Filter"
+      // whether the count is 1 or 12.
+      expect(
+        screen.getByRole("button", { name: "Apply Filter" }),
+      ).not.toBeDisabled();
+    });
+
+    it("disables the button at poolCount 0, with the caption reading '0 OPTIONS'", () => {
       renderSheet({ poolCount: 0 });
       expect(
-        screen.getByRole("button", { name: "Show 0 options" }),
+        screen.getByRole("button", { name: "Apply Filter" }),
       ).toBeDisabled();
+      expect(screen.getByText("0 OPTIONS")).toBeVisible();
     });
   });
 

@@ -31,7 +31,14 @@ export const TODAY_OVERRIDES_KEY = "ergomatic.todayOverrides";
  *  v3 (Amendment, 2026-08-04 PR #50 round): `capMinutes: number | null`
  *  (a single-value cap) is REPLACED by `durations: DurationBucket[]` (a
  *  bucket union) — TIME unifies on the Library's own four buckets
- *  (`<30/30-45/45-60/60+`, multi-select) instead of a cap single-select. */
+ *  (`<30/30-45/45-60/60+`, multi-select) instead of a cap single-select.
+ *
+ *  v4 (Round 2, 2026-08-04): `+ lastDone`, `+ source` — Today's sheet gains
+ *  the Library's own LAST DONE/SOURCE pair (src/library/filters.ts's
+ *  `Filters.lastDone`/`Filters.source`), same mutually-exclusive toggle-off
+ *  semantics. Both default to `null` ("off", no deviation) rather than ever
+ *  needing a separate "nothing chosen yet" state — same convention every
+ *  other field here already follows. */
 export interface TodayOverrides {
   date: string; // "YYYY-MM-DD" local (todayPick's format)
   planKey: string | null;
@@ -46,6 +53,10 @@ export interface TodayOverrides {
   // `painMax3` boolean with the same 1-5 multi-select shape Library's own
   // `Filters.painLevels` (src/library/filters.ts) settled on. Empty = off.
   painLevels: number[];
+  // v4 (Round 2): mirrors Library's own `Filters.lastDone` — null = off.
+  lastDone: "under21" | "over21" | null;
+  // v4 (Round 2): mirrors Library's own `Filters.source` — null = off.
+  source: "global" | "custom" | null;
 }
 
 const TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
@@ -72,6 +83,14 @@ function isPainLevel(v: unknown): v is number {
   return typeof v === "number" && PAIN_LEVELS.includes(v);
 }
 
+function isLastDone(v: unknown): v is "under21" | "over21" {
+  return v === "under21" || v === "over21";
+}
+
+function isSource(v: unknown): v is "global" | "custom" {
+  return v === "global" || v === "custom";
+}
+
 /** Strict shape check, same discipline as libraryFilters.ts's parseFilters
  *  — a stored value that predates a future TodayOverrides change (or was
  *  hand-edited) must come back `null`, never an object with a hole in it:
@@ -86,7 +105,23 @@ function isPainLevel(v: unknown): v is number {
  *  v2 record ALSO fails whole and falls back to `null`, never a v3 object
  *  half-populated from v2 data (unlike libraryFilters.ts's v1/v2 pair,
  *  every OTHER field here kept its name across both shape changes, so one
- *  field's rename is what has to catch each). */
+ *  field's rename is what has to catch each).
+ *
+ *  v4 (Round 2, 2026-08-04): `lastDone`/`source` get a DIFFERENT, more
+ *  lenient discipline than every field above — a MISSING key for either is
+ *  valid (defaults to `null`, "off") rather than failing the record whole.
+ *  This is deliberate, not an inconsistency: every prior shape change
+ *  (v1->v2's pain field, v2->v3's TIME field) was a RENAME of a concept the
+ *  record already had an opinion about, where a stale value sitting under
+ *  the OLD name must never half-apply under the new one — hence "missing
+ *  the new key -> reject whole." `lastDone`/`source` are GENUINELY NEW
+ *  concepts a v3 record never had any opinion on at all, so their absence
+ *  isn't corruption to reject — it's exactly what "the record upgrades in
+ *  place" means, preserving a rower's same-day difficulty/duration/pain
+ *  filters across the deploy instead of discarding the whole record over
+ *  two keys it correctly never had. A PRESENT-but-wrong-shaped value (an
+ *  unknown string, a stray number, a boolean) still fails strict, same as
+ *  every other field — leniency covers absence only, never garbage. */
 function parseOverrides(raw: string): TodayOverrides | null {
   let parsed: unknown;
   try {
@@ -109,6 +144,19 @@ function parseOverrides(raw: string): TodayOverrides | null {
     return null;
   }
   if (!Array.isArray(o.painLevels) || !o.painLevels.every(isPainLevel)) {
+    return null;
+  }
+  // v4 (Round 2): absence is valid (upgrade-in-place, defaults to null) —
+  // see this function's own doc comment. Only a PRESENT, wrong-shaped value
+  // fails.
+  if (
+    o.lastDone !== undefined &&
+    o.lastDone !== null &&
+    !isLastDone(o.lastDone)
+  ) {
+    return null;
+  }
+  if (o.source !== undefined && o.source !== null && !isSource(o.source)) {
     return null;
   }
   // Bound to a local so the narrowed `DurationBucket[]` type survives into
@@ -136,6 +184,15 @@ function parseOverrides(raw: string): TodayOverrides | null {
     // `.includes` checks and any future ordered rendering off this array
     // agreeing with what the cells themselves would produce.
     painLevels: [...new Set(o.painLevels)].sort((a, b) => a - b),
+    // v4 (Round 2): a v3 record has no `lastDone` key at all
+    // (`undefined`) — upgrades in place to `null` ("off") rather than
+    // falling back whole, per this function's own doc comment.
+    lastDone:
+      o.lastDone === undefined
+        ? null
+        : (o.lastDone as "under21" | "over21" | null),
+    source:
+      o.source === undefined ? null : (o.source as "global" | "custom" | null),
   };
 }
 

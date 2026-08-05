@@ -1,5 +1,6 @@
 import { estimateMinutes } from "../../domain/expand.js";
 import { bucketFor, type DurationBucket } from "../../domain/duration.js";
+import { RECENCY_BOUNDARY_DAYS, isRecent } from "../../domain/recency.js";
 import type { Baselines } from "../../domain/types.js";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { WorkoutType } from "../../domain/types.js";
@@ -11,6 +12,12 @@ import type { WorkoutType } from "../../domain/types.js";
 // needs to change its own import path.
 export type { DurationBucket };
 export { bucketFor };
+
+// Re-exported for every pre-existing importer (filterTokens.ts, FilterSheet.tsx,
+// filters.test.ts) — moved into domain/recency.ts (Round 2, 2026-08-04) so
+// domain/suggest.ts's own LAST DONE predicate can share the identical
+// boundary/rule, but nothing here needs to change its own import path.
+export { RECENCY_BOUNDARY_DAYS, isRecent };
 
 // v2 shape (Task 4, ui-fix round — DESIGN.md's "Library, second pass"):
 // PAIN moves from a single `painMax3` threshold toggle to a 1–5 multi-select
@@ -36,10 +43,6 @@ export const EMPTY_FILTERS: Filters = {
   lastDone: null,
   source: null,
 };
-
-// The single source for the recency boundary — applyFilters below and
-// isRecent share this rather than either re-deriving "21".
-export const RECENCY_BOUNDARY_DAYS = 21;
 
 export function toggleType(f: Filters, t: WorkoutType): Filters {
   return { ...f, type: f.type === t ? null : t };
@@ -69,20 +72,6 @@ export function setSource(f: Filters, value: "global" | "custom"): Filters {
 
 export function clearFilters(): Filters {
   return { ...EMPTY_FILTERS };
-}
-
-// Never-done (`lastDoneDaysAgo === null`) counts as NOT recent — pinned by
-// filters.test.ts's "never-done" case, not an oversight, and reused as-is
-// for the LAST DONE `under21`/`over21` pair below: never-done workouts land
-// in `21D+`, the same "not recent" bucket they've always belonged to.
-// Exported for filters.test.ts's direct unit coverage — applyFilters below,
-// in this same module, is the one real caller. Neither FilterSheet.tsx nor
-// filterTokens.ts imports this: FilterSheet.tsx takes a pre-computed
-// resultCount prop, and filterTokens.ts's own LAST DONE label derives from
-// `Filters.lastDone` (the already-applied filter value), never from a raw
-// `lastDoneDaysAgo` this function would need to re-derive it from.
-export function isRecent(lastDoneDaysAgo: number | null): boolean {
-  return lastDoneDaysAgo !== null && lastDoneDaysAgo < RECENCY_BOUNDARY_DAYS;
 }
 
 export function applyFilters(

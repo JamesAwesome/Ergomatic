@@ -4,18 +4,19 @@ import {
   DURATION_BUCKETS,
   type DurationBucket,
 } from "../../domain/duration.js";
+import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 import { DURATION_CHIPS } from "../components/durationChips";
 import type { TodayOverrides } from "./todayOverrides";
 
-/** The sheet's own scratch copy of the three fields it edits — a subset of
+/** The sheet's own scratch copy of the five fields it edits — a subset of
  *  `TodayOverrides`, not the whole record (swapType/date/planKey/doneN are
  *  none of this sheet's business). */
 export type TodayFilterDraft = Pick<
   TodayOverrides,
-  "difficulties" | "durations" | "painLevels"
+  "difficulties" | "durations" | "painLevels" | "lastDone" | "source"
 >;
 
 // PAIN's five cells, matching Library's own 1-5 union (FilterSheet.tsx's
@@ -30,8 +31,8 @@ const TITLE_ID = "today-filter-sheet-title";
  * Today's own FILTER sheet: slides up over the screen (Today.tsx never
  * pushes history for it — same BACK-with-sheet-open decision as Library's
  * FilterSheet.tsx, documented there). Operates entirely on a DRAFT copy of
- * `{difficulties, durations, painLevels}` that the caller owns
- * (`draft`/`onChangeDraft`); nothing here writes to Today's actually-
+ * `{difficulties, durations, painLevels, lastDone, source}` that the caller
+ * owns (`draft`/`onChangeDraft`); nothing here writes to Today's actually-
  * applied `TodayOverrides` record directly. `onApply` commits the draft
  * (Today.tsx's own merge-and-save); `onDismiss` (backdrop tap, Escape, or
  * an unmount from any other exit) discards it.
@@ -48,15 +49,32 @@ const TITLE_ID = "today-filter-sheet-title";
  * TIME cell now renders the identical bucket label the Library's own TIME
  * group already proved fits the 390px sheet width.
  *
+ * LAST DONE/SOURCE (Round 2, 2026-08-04): the Library's own half-width pair
+ * (FilterSheet.tsx's `filter-sheet-row`/`filter-sheet-group-half`), same
+ * mutually-exclusive toggle-off semantics, added below PAIN.
+ *
  * The dialog machinery (backdrop, `role="dialog"`, the focus trap/restore)
  * lives in SheetShell (extracted from Library's FilterSheet.tsx, Task 1 of
- * the 2026-08-04 round) — this component supplies only the three filter
- * groups and the `poolCount`-driven primary button, via SheetShell's
+ * the 2026-08-04 round) — this component supplies the five filter groups,
+ * the live-count caption, and the primary button, via SheetShell's
  * `children`/`primary` props. `opener` is the caller's own FILTER ⌄
  * button ref (unlike Library's FilterSheet, which captures
  * `document.activeElement` itself) — Today.tsx keeps that ref alive for
  * the lifetime of the button, so passing it through is simpler than
  * re-deriving "whatever had focus" here.
+ *
+ * Revision (mid-round, James): the primary button's copy settled on the
+ * constant **`Apply Filter`** — no count, no singular/plural variant — after
+ * the earlier `Show N options`/`Shuffle N options` drafts both named a
+ * COUNT the button itself no longer carries. The count (and the ONLY
+ * explanation of why the button is disabled at 0) moved to a small mono
+ * caption directly above the button (`{poolCount} OPTION(S)`, singular-aware)
+ * — the controller's own addition to preserve that honesty signal, flagged
+ * for James at the gate rather than assumed. `disabled` and `onApply`'s
+ * "narrows the pool; a still-matching pick stays, an excluded one moves to
+ * the new pool's own top choice" behaviour are both unchanged — see
+ * domain/suggest.ts's own `pickOverride ?? sorted[0]` for the mechanic this
+ * relies on.
  */
 export default function TodayFilterSheet({
   draft,
@@ -80,7 +98,7 @@ export default function TodayFilterSheet({
       onDismiss={onDismiss}
       opener={opener}
       primary={{
-        label: `Show ${poolCount} option${poolCount === 1 ? "" : "s"}`,
+        label: "Apply Filter",
         disabled: poolCount === 0,
         onPress: onApply,
       }}
@@ -154,6 +172,65 @@ export default function TodayFilterSheet({
           });
         }}
       />
+
+      {/* Round 2 (2026-08-04): the Library's own half-width LAST DONE/SOURCE
+          pair (FilterSheet.tsx's exact layout — `filter-sheet-row` +
+          `filter-sheet-group-half`), same mutually-exclusive toggle-off
+          semantics (setting the already-active cell clears it). */}
+      <div className="filter-sheet-row">
+        <CellGrid
+          className="filter-sheet-group-half"
+          label="LAST DONE"
+          cells={[
+            {
+              value: "under21",
+              label: `<${RECENCY_BOUNDARY_DAYS}D`,
+              pressed: draft.lastDone === "under21",
+            },
+            {
+              value: "over21",
+              label: `${RECENCY_BOUNDARY_DAYS}D+`,
+              pressed: draft.lastDone === "over21",
+            },
+          ]}
+          onToggle={(value) => {
+            const v = value as "under21" | "over21";
+            onChangeDraft({
+              ...draft,
+              lastDone: draft.lastDone === v ? null : v,
+            });
+          }}
+        />
+        <CellGrid
+          className="filter-sheet-group-half"
+          label="SOURCE"
+          cells={[
+            {
+              value: "global",
+              label: "GLOBAL",
+              pressed: draft.source === "global",
+            },
+            {
+              value: "custom",
+              label: "CUSTOM",
+              pressed: draft.source === "custom",
+            },
+          ]}
+          onToggle={(value) => {
+            const v = value as "global" | "custom";
+            onChangeDraft({ ...draft, source: draft.source === v ? null : v });
+          }}
+        />
+      </div>
+
+      {/* Revision (mid-round): the live pool count, moved off the primary
+          button's own copy (now the constant "Apply Filter") onto a small
+          mono caption directly above it — the only remaining explanation of
+          why the button disables at 0. Singular-aware, same idiom the
+          button's own count used to carry. */}
+      <p className="today-filter-sheet-count">
+        {poolCount} OPTION{poolCount === 1 ? "" : "S"}
+      </p>
     </SheetShell>
   );
 }

@@ -734,6 +734,22 @@ button:disabled {
   gap: 6px;
 }
 
+/* Today's own FILTER sheet only (Round 2, 2026-08-04) — the live pool count,
+   moved off the primary button's own copy ("Apply Filter" is now constant)
+   onto a small mono caption directly above it: the only remaining
+   explanation of why the button disables at 0. `.filter-sheet`'s own
+   `gap: 14px` between flex children already spaces this from the LAST DONE/
+   SOURCE row above and the primary button below, so no margin of its own is
+   needed. */
+.today-filter-sheet-count {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
 /* Fix round 1 (whole-branch review M1): N-agnostic instead of a fixed set
    of width variants — `grid-auto-flow: column` lays cells out in a single
    row, `grid-auto-columns: 1fr` gives each one an equal share of the

@@ -1069,7 +1069,7 @@ test.describe("today screen (plan active, logs present)", () => {
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "EASY", exact: true }).click();
     await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
-    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+    await page.getByRole("button", { name: "Apply Filter" }).click();
 
     const shuffle = page.getByRole("button", { name: "SHUFFLE ↻" });
     await expect(shuffle).toBeDisabled();
@@ -1111,7 +1111,7 @@ test.describe("today screen (plan active, logs present)", () => {
       .getByRole("group", { name: "PAIN" })
       .getByRole("button", { name: "3", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+    await page.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
       page.locator(".filter-token", { hasText: "PAIN 3" }),
     ).toBeVisible();
@@ -1135,7 +1135,7 @@ test.describe("today screen (plan active, logs present)", () => {
       .getByRole("group", { name: "PAIN" })
       .getByRole("button", { name: "3", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ options?$/ }).click();
+    await page.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
       page.locator(".filter-token", { hasText: "PAIN 3" }),
     ).toBeVisible();
@@ -1153,7 +1153,10 @@ test.describe("today screen (plan active, logs present)", () => {
   // CellGrid.tsx's own `role="group"` + `aria-labelledby` (fix round 1,
   // whole-branch review M3, present at HEAD for this round) restores the
   // accessible group name Today's pre-extraction inline chip groups had —
-  // pinned here now that all three groups live inside the sheet.
+  // pinned here now that DIFFICULTY/TIME/PAIN live inside the sheet
+  // (LAST DONE/SOURCE, Round 2, get the identical treatment from the same
+  // CellGrid component, spot-checked in TodayFilterSheet.test.tsx instead
+  // of duplicated here).
   test("DIFFICULTY/TIME/PAIN each expose a role=group with the visible label as its accessible name", async ({
     page,
   }) => {

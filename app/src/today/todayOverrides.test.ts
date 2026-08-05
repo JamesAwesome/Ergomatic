@@ -15,6 +15,24 @@ const FULL: TodayOverrides = {
   difficulties: ["easy", "hard"],
   durations: ["<30", "45-60"],
   painLevels: [1, 3, 5],
+  lastDone: "under21",
+  source: "custom",
+};
+
+// The pre-Round-2 (2026-08-04) v3 shape: every field this round didn't touch
+// keeps its name/type — `lastDone`/`source` simply don't exist yet, rather
+// than existing under some other name (unlike the pain/TIME renames V1/V2
+// below reject wholesale). This is exactly the record a rower's browser
+// could still be holding in localStorage from earlier the same day the
+// Round 2 deploy landed.
+const V3_RECORD = {
+  date: "2026-08-01",
+  planKey: "sprint",
+  doneN: 11,
+  swapType: "AT",
+  difficulties: ["easy", "hard"],
+  durations: ["<30", "45-60"],
+  painLevels: [1, 3, 5],
 };
 
 // The pre-Task-5 (ui-fix round) shape: every other field kept its name
@@ -99,6 +117,53 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
     expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(
       noSwap,
     );
+  });
+
+  it("round-trips lastDone: null and source: null (both off)", () => {
+    const off: TodayOverrides = { ...FULL, lastDone: null, source: null };
+    saveTodayOverrides(off);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(off);
+  });
+
+  it("round-trips lastDone: over21 and source: global", () => {
+    const other: TodayOverrides = {
+      ...FULL,
+      lastDone: "over21",
+      source: "global",
+    };
+    saveTodayOverrides(other);
+    expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual(other);
+  });
+
+  // Round 2 (2026-08-04) v3->v4 upgrade: unlike the v1/v2 rejections in the
+  // malformed-values table below, a v3 record (this exact shape — every
+  // OTHER field intact, `lastDone`/`source` simply never existed) upgrades
+  // IN PLACE rather than falling back wholesale — see parseOverrides' own
+  // doc comment for why this is deliberately a different discipline than
+  // the pain/TIME renames get. This is the fix for the deploy-day edge case
+  // itself: a rower's same-day difficulty/duration/pain filters survive the
+  // Round 2 deploy instead of silently resetting.
+  describe("v3 -> v4 upgrade (lastDone/source missing entirely)", () => {
+    it("loads a v3 record, defaulting lastDone/source to null, preserving every other field", () => {
+      localStorage.setItem(TODAY_OVERRIDES_KEY, JSON.stringify(V3_RECORD));
+      expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual({
+        ...V3_RECORD,
+        lastDone: null,
+        source: null,
+      });
+    });
+
+    it("upgrades even when only ONE of the two new keys is present (the other still defaults null)", () => {
+      localStorage.setItem(
+        TODAY_OVERRIDES_KEY,
+        JSON.stringify({ ...V3_RECORD, lastDone: "under21" }),
+      );
+      expect(loadTodayOverrides("2026-08-01", "sprint", 11)).toStrictEqual({
+        ...V3_RECORD,
+        lastDone: "under21",
+        source: null,
+      });
+    });
   });
 
   it("returns null when nothing is stored", () => {
@@ -219,6 +284,24 @@ describe("saveTodayOverrides / loadTodayOverrides", () => {
         "painLevels contains a non-integer",
         JSON.stringify({ ...FULL, painLevels: [4.5] }),
       ],
+      // Round 2 (2026-08-04): lastDone/source ABSENT is fine (see the
+      // v3->v4 upgrade describe below) — these prove a PRESENT but
+      // wrong-shaped value still fails strict, the same "leniency covers
+      // absence only, never garbage" rule parseOverrides' own doc comment
+      // spells out.
+      [
+        "lastDone wrong shape (a number)",
+        JSON.stringify({ ...FULL, lastDone: 21 }),
+      ],
+      [
+        "unknown lastDone value",
+        JSON.stringify({ ...FULL, lastDone: "recent" }),
+      ],
+      [
+        "source wrong shape (a boolean)",
+        JSON.stringify({ ...FULL, source: true }),
+      ],
+      ["unknown source value", JSON.stringify({ ...FULL, source: "mine" })],
       [
         "missing field",
         JSON.stringify({ date: "2026-08-01", planKey: "sprint", doneN: 11 }),

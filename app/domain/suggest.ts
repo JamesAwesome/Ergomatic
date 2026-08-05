@@ -1,6 +1,7 @@
 import type { Difficulty, WorkoutType } from "./types.js";
 import type { PlanCode } from "./plans.js";
 import { bucketFor, type DurationBucket } from "./duration.js";
+import { isRecent } from "./recency.js";
 
 export interface LibraryEntry {
   id: string;
@@ -9,6 +10,12 @@ export interface LibraryEntry {
   pain: number;
   estMinutes: number;
   lastDoneDaysAgo: number | null;
+  // Round 2 (2026-08-04): mirrors the Library's own `LibraryWorkout.isGlobal`
+  // — Today's `toLibraryEntry` (src/today/Today.tsx) passes `w.isGlobal`
+  // straight through, and the server's `/api/today` route
+  // (server/routes/data.ts) builds its own `LibraryEntry[]` the same way, so
+  // this is a required field on every caller, not optional.
+  isGlobal: boolean;
 }
 
 export interface SuggestPrefs {
@@ -55,6 +62,26 @@ export interface SuggestPrefs {
   // reason text below never claims a pain filter was checked when it
   // wasn't.
   painLevels?: number[];
+  // A mutually-exclusive pair, not a threshold — mirrors Library's own
+  // `Filters.lastDone` (src/library/filters.ts): `"under21"` keeps only
+  // entries `isRecent` (domain/recency.ts) calls recent, `"over21"` keeps
+  // only the rest (never-done, `lastDoneDaysAgo === null`, counts as
+  // `"over21"` — the Library's pinned rule, shared boundary constant).
+  // null/undefined means "off" — every entry passes, same honesty rule as
+  // every other field here (the reason text below never claims this was
+  // checked when it wasn't). Optional (unlike `difficulties`) because the
+  // server's own `/api/today` route (server/routes/data.ts) builds
+  // `SuggestPrefs` with no LAST DONE/SOURCE dimension at all — server
+  // suggestions have no client-side overrides to derive one from — and this
+  // keeps that call site compiling unchanged rather than forcing it to
+  // thread a `null` it has no opinion on through every prefs literal.
+  lastDone?: "under21" | "over21" | null;
+  // A mutually-exclusive pair, not a threshold — mirrors Library's own
+  // `Filters.source` (src/library/filters.ts): `"custom"` keeps only
+  // non-global (`isGlobal: false`) entries, `"global"` keeps only global
+  // ones. null/undefined means "off". Optional for the identical reason
+  // `lastDone` above is: the server's `/api/today` route never sets it.
+  source?: "global" | "custom" | null;
 }
 
 export interface SuggestInput {
@@ -113,6 +140,12 @@ function buildReason(
     const parts = ["difficulty"];
     if (timeChecked) parts.push("time");
     if (prefs.painLevels?.length) parts.push("pain");
+    // Round 2 (2026-08-04): recency/source append last, mirroring the
+    // sheet's own group order (DIFFICULTY, TIME, PAIN, LAST DONE, SOURCE) —
+    // truthy checks (not `!== undefined`) since both fields are
+    // null-when-off, same honesty rule as painLevels above.
+    if (prefs.lastDone) parts.push("recency");
+    if (prefs.source) parts.push("source");
     return `Nothing fit your ${parts.join("/")} filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
@@ -128,6 +161,27 @@ function passesDurationFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
   return prefs.durations.includes(bucketFor(e.estMinutes));
 }
 
+/** The LAST DONE clause shared by `suggest`/`suggestFreestyle`'s own filter
+ *  predicates — mirrors the Library's own `applyFilters` exactly
+ *  (`src/library/filters.ts`): `"under21"` requires `isRecent`,
+ *  `"over21"` requires the opposite (never-done included), null/undefined
+ *  never excludes. */
+function passesLastDoneFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
+  if (prefs.lastDone === "under21") return isRecent(e.lastDoneDaysAgo);
+  if (prefs.lastDone === "over21") return !isRecent(e.lastDoneDaysAgo);
+  return true;
+}
+
+/** The SOURCE clause shared by `suggest`/`suggestFreestyle`'s own filter
+ *  predicates — mirrors the Library's own `applyFilters` exactly
+ *  (`src/library/filters.ts`): `"custom"` requires `!isGlobal`, `"global"`
+ *  requires `isGlobal`, null/undefined never excludes. */
+function passesSourceFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
+  if (prefs.source === "custom") return !e.isGlobal;
+  if (prefs.source === "global") return e.isGlobal;
+  return true;
+}
+
 export function suggest(input: SuggestInput): Suggestion {
   const { todayCode, library, prefs, todayPickId } = input;
   const matchType: WorkoutType = todayCode === "TEST" ? "TR" : todayCode;
@@ -137,7 +191,9 @@ export function suggest(input: SuggestInput): Suggestion {
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
       passesDurationFilter(e, prefs) &&
-      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)),
+      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
+      passesLastDoneFilter(e, prefs) &&
+      passesSourceFilter(e, prefs),
   );
 
   const fellBack = typeMatched.length > 0 && filtered.length === 0;
@@ -176,7 +232,9 @@ export function suggestFreestyle(
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
       passesDurationFilter(e, prefs) &&
-      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)),
+      (!prefs.painLevels?.length || prefs.painLevels.includes(e.pain)) &&
+      passesLastDoneFilter(e, prefs) &&
+      passesSourceFilter(e, prefs),
   );
 
   const fellBack = library.length > 0 && filtered.length === 0;
