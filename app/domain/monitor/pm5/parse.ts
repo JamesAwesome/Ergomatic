@@ -41,6 +41,34 @@ function heartRate(byte: number): number | null {
   return byte === HEARTRATE_INVALID ? null : byte;
 }
 
+/**
+ * M3 (fix round after Task 3's first review): without a length check, a
+ * too-short `bytes` array (e.g. a 3-byte notification where a 19-byte one
+ * was expected) silently decoded as "valid" data — every out-of-range
+ * index reads `undefined`, and `undefined` for an enum field like
+ * `workoutState` fell through `toMonitorFrame`'s `?? "idle"` fallback,
+ * indistinguishable from a genuine idle frame. Every one of the five parse
+ * functions below checks its characteristic's documented byte count FIRST
+ * and returns this typed error instead of decoding garbage — the driver
+ * (a later task) logs it, giving the signal a silent `undefined` never
+ * could.
+ */
+export interface Pm5ParseError {
+  characteristic: "0x0031" | "0x0032" | "0x0033" | "0x0037" | "0x0038";
+  expected: number;
+  actual: number;
+}
+
+function checkLength(
+  bytes: Uint8Array,
+  expected: number,
+  characteristic: Pm5ParseError["characteristic"],
+): { error: Pm5ParseError } | null {
+  return bytes.length < expected
+    ? { error: { characteristic, expected, actual: bytes.length } }
+    : null;
+}
+
 /** 0x0031 — C2 rowing general status, 19 bytes (interface-notes.md §10). */
 export interface GeneralStatus {
   elapsedSeconds: number;
@@ -59,7 +87,11 @@ export interface GeneralStatus {
   dragFactor: number;
 }
 
-export function parseGeneralStatus(bytes: Uint8Array): GeneralStatus {
+export function parseGeneralStatus(
+  bytes: Uint8Array,
+): GeneralStatus | { error: Pm5ParseError } {
+  const lengthError = checkLength(bytes, 19, "0x0031");
+  if (lengthError) return lengthError;
   return {
     elapsedSeconds: readU24LE(bytes, 0) / 100,
     distanceMeters: readU24LE(bytes, 3) / 10,
@@ -89,7 +121,11 @@ export interface AdditionalStatus1 {
   ergMachineType: number;
 }
 
-export function parseAdditionalStatus1(bytes: Uint8Array): AdditionalStatus1 {
+export function parseAdditionalStatus1(
+  bytes: Uint8Array,
+): AdditionalStatus1 | { error: Pm5ParseError } {
+  const lengthError = checkLength(bytes, 17, "0x0032");
+  if (lengthError) return lengthError;
   return {
     elapsedSeconds: readU24LE(bytes, 0) / 100,
     speedMetersPerSecond: readU16LE(bytes, 3) / 1000,
@@ -119,7 +155,11 @@ export interface AdditionalStatus2 {
   lastSplitDistanceMeters: number;
 }
 
-export function parseAdditionalStatus2(bytes: Uint8Array): AdditionalStatus2 {
+export function parseAdditionalStatus2(
+  bytes: Uint8Array,
+): AdditionalStatus2 | { error: Pm5ParseError } {
+  const lengthError = checkLength(bytes, 20, "0x0033");
+  if (lengthError) return lengthError;
   return {
     elapsedSeconds: readU24LE(bytes, 0) / 100,
     intervalCount: readU8(bytes, 3),
@@ -151,7 +191,11 @@ export interface SplitIntervalData {
   splitIntervalNumber: number;
 }
 
-export function parseSplitIntervalData(bytes: Uint8Array): SplitIntervalData {
+export function parseSplitIntervalData(
+  bytes: Uint8Array,
+): SplitIntervalData | { error: Pm5ParseError } {
+  const lengthError = checkLength(bytes, 18, "0x0037");
+  if (lengthError) return lengthError;
   return {
     elapsedSeconds: readU24LE(bytes, 0) / 100,
     distanceMeters: readU24LE(bytes, 3) / 10,
@@ -187,7 +231,9 @@ export interface AdditionalSplitIntervalData {
 
 export function parseAdditionalSplitIntervalData(
   bytes: Uint8Array,
-): AdditionalSplitIntervalData {
+): AdditionalSplitIntervalData | { error: Pm5ParseError } {
+  const lengthError = checkLength(bytes, 19, "0x0038");
+  if (lengthError) return lengthError;
   return {
     elapsedSeconds: readU24LE(bytes, 0) / 100,
     splitIntervalAvgStrokeRate: readU8(bytes, 3),
@@ -224,7 +270,7 @@ export type RawPm5Status = GeneralStatus &
 /**
  * `OBJ_WORKOUTSTATE_T` (BLE doc Appendix A p.37) -> `MonitorFrame.state`,
  * cited row-by-row in interface-notes.md §14 (which also cites CSAFE doc
- * Appendix E's "PM State Transitions", p.161, for the states not directly
+ * Appendix E's "PM State Transitions", p.162, for the states not directly
  * named by the design spec). Every one of the 14 documented ordinals maps
  * to exactly one of the 6 `MonitorFrame.state` values.
  */

@@ -13,7 +13,7 @@ import {
 } from "./uuids.js";
 
 // Every UUID follows the documented base-UUID formula (interface-notes.md
-// §9, BLE doc p.7): "CE06xxxx-43E5-11E4-916C-0800200C9A66, where xxxx is a
+// §9, BLE doc p.9): "CE06xxxx-43E5-11E4-916C-0800200C9A66, where xxxx is a
 // 16-bit value" — cited per handle against the attribute table, BLE doc
 // pp.11-20.
 describe("pm5 UUIDs: base formula per handle (interface-notes.md §9)", () => {
