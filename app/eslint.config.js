@@ -66,6 +66,13 @@ export default tseslint.config(
       "src/api.ts",
       "src/native/**",
       "src/adapters/**",
+      // Phase 7A Task 5: the monitor's own radio adapters
+      // (`capacitorBle.ts`/`webBluetooth.ts`) ARE this domain's adapter
+      // layer — the one place `@capacitor-community/bluetooth-le` is
+      // allowed, same native-first reasoning as `src/adapters/**` above,
+      // just organized under `src/monitor/` instead since these two files
+      // are Transport implementations, not general platform adapters.
+      "src/monitor/transports/**",
       "src/**/*.test.{ts,tsx}",
     ],
     rules: {

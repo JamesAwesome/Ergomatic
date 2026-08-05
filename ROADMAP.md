@@ -813,20 +813,126 @@ record on a real device stays valid with no migration.
 structural-reference pipeline already produced its fixture data — but not
 yet scheduled.
 
-## Phase 7 — PM5 over Bluetooth
+## Phase 7A — Monitor domain (the domain beneath the screens)
+
+**Status:** Done (2026-08-05, PR #TBD)
+**Goal:** The PM5's protocol, a workout compiler, a runtime driver, and the
+localStorage-side session record all exist and are heavily tested — no
+screen changes, no live radio proof, both deliberately deferred.
+**Design authority:** `docs/superpowers/specs/2026-08-05-phase-7a-monitor-domain-design.md`,
+plan: `docs/superpowers/plans/2026-08-05-phase-7a-monitor-domain.md`.
+**Supersedes:** the single-phase "PM5 over Bluetooth" sketch this section
+used to be (`ergarcade/pm5-base`/plain-Rowing-Service/no-CSAFE) — superseded
+by CSAFE variable-interval programming, the design this phase actually
+implements. `docs/superpowers/research/2026-07-27-pm5-ble-research.md`
+still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
+
+- [x] `domain/monitor/pm5/`: the CSAFE frame codec (checksum, chunk,
+      reassemble), the programming-command byte layouts (`commands.ts`),
+      the five BLE status-characteristic decoders (`parse.ts`), and the
+      CSAFE ack/reject response parser (`response.ts`) — every byte cited
+      against the primary CSAFE/BLE PDFs; three checksum errata and one
+      unresolved candidate documented rather than guessed
+      (`docs/monitor/pm5-interface-notes.md`)
+- [x] `domain/monitor/program.ts`: `compileProgram`, turning a confirmed
+      session's phases into the PM5's variable-interval IR
+      (`WorkoutProgram`/`ProgramInterval`) or a typed, copy-ready
+      `CompileError`; Table 19's parameter limits re-verified against the
+      primary PDF
+- [x] `domain/monitor/types.ts`: the normalized seam every consumer above
+      the codec sees (`MonitorCapabilities`/`MonitorFrame`/`IntervalActual`/
+      `MonitorEvent`/`MonitorDriver`), plus the `Transport`/
+      `DiscoveredMonitor` radio abstraction three later transports satisfy
+- [x] `src/monitor/driver.ts`: the runtime driver — ack-gated write
+      sequencing with a pending-ack queue for coalesced BLE notifications,
+      the state machine with terminal-state latching (Appendix E's
+      auto-cycle never un-finishes a session), an optional tick-driven
+      ack-timeout policy, and `intervalRemaining`'s computation, rooted on
+      0x0033's own Last Split Time/Distance fields; `src/monitor/
+      transports/fake.ts` simulates a real PM5 end to end for CI
+      (byte-for-byte programming verification, six injection hooks)
+- [x] `src/monitor/monitorRun.ts`: the monitor-driven session record
+      (`MonitorRun`, localStorage, mirroring `session/run.ts`'s idiom), the
+      cross-clear rule (creating a `MonitorRun` clears any `SessionRun`),
+      and `anyLiveSession()`'s coexistence truth table (9 cells, pinned) —
+      Today's stale-draft discard gains a live-monitorRun exception, this
+      phase's one permitted UI touch
+- [x] `src/monitor/transports/capacitorBle.ts`
+      (`@capacitor-community/bluetooth-le`) and `src/monitor/transports/
+      webBluetooth.ts` (`navigator.bluetooth`): thin `Transport` adapters
+      for the two real radios, compile-tested shapes, deliberately excluded
+      from the coverage gate alongside `src/native/**` — no BLE radio
+      exists in CI to prove either one against
+- [x] `docs/monitor/pm5-interface-notes.md` gains a §17 "laptop session
+      runsheet" consolidating every doc-ambiguity or reviewed-assumption
+      flagged across the phase into one numbered checklist
+
+**Deferred, deliberately — 7B/7C's job:** no screen wires a `MonitorDriver`
+to anything yet — no "Connect PM5" affordance, no live pace/rate on the
+timer, no PM5-sourced log entries, no reverse cross-clear (a phone-timer
+session starting does not yet clear a stale `MonitorRun`). The
+laptop-vs-real-PM5 session (the three checksum errata, the interval-
+numbering base, and the rest of the §17 runsheet) happens **after this
+phase merges**, via `webBluetooth.ts` — a James-device event, not a CI
+gate, and not required for 7A's own exit.
+
+**Exit:** MET — every domain/driver behavior the design spec names has a
+passing test (100% on `domain/monitor/**` and on `src/monitor/
+monitorRun.ts`); the fake transport proves the full program → run →
+terminate arc against the exact bytes a real PM5 would exchange; the two
+coexistence guards (cross-clear, `anyLiveSession`) are pinned for 7B to
+wire mechanically.
+
+## Phase 7B — PM5 connected surface
 
 **Status:** Not started
-**Goal:** A connected erg makes workouts richer; an unconnected one loses nothing.
-**Research:** `docs/superpowers/research/2026-07-27-pm5-ble-research.md` (C2 Rowing Service: no pairing, subscribe-only; Web Bluetooth = Chromium-only).
+**Goal:** A rower can actually connect a PM5 from the app and row against
+it — the screens 7A's domain was built to sit underneath.
+**Design:** returned to design for the connected surface's own handoff,
+reconciled against 7A's shipped types before this phase starts.
 
-- [ ] `pm5/` client behind a **transport interface**: Capacitor BLE transport (iOS native shell — the PRIMARY path; `@capacitor-community/bluetooth-le` mirrors the Web Bluetooth API) + Web Bluetooth transport (desktop Chromium for dev/laptop use; also covers Android browsers if that door ever opens) + mock transport for tests — one client, three transports
-- [ ] Vendored/adapted from `ergarcade/pm5-base` (MIT, dependency-free, active); plain Rowing Service characteristics, no CSAFE
-- [ ] "Connect PM5" on Confirm targets, shown only where a transport is available; manual NEXT always remains; disconnect mid-workout degrades silently to manual
-- [ ] Live actual pace vs target range + live stroke rate vs prescribed SPM in the timer; distance steps auto-advance
+- [ ] "Connect PM5" affordance on Confirm targets, shown only where a
+      transport (`webBluetooth.ts`/`capacitorBle.ts`) is available; manual
+      NEXT always remains; disconnect mid-workout degrades silently to
+      manual
+- [ ] Live actual pace vs target range + live stroke rate vs prescribed SPM
+      in the timer, fed by `MonitorDriver`'s `frame` events; distance steps
+      auto-advance on `intervalComplete`
+- [ ] The reverse cross-clear direction: `buildRun`/`saveRun`
+      (`session/run.ts`) clears an existing live `MonitorRun` the same way
+      `createMonitorRun` already clears a `SessionRun` — 7A shipped only
+      its own half (`src/monitor/monitorRun.ts`'s own header comment names
+      this as a documented 7B obligation)
+- [ ] The James laptop-vs-real-PM5 session
+      (`docs/monitor/pm5-interface-notes.md` §17's runsheet): the three
+      checksum errata, the interval-numbering base, multi-frame
+      programming retention, and the rest of its eleven items, resolved
+      against a real PM5 via `webBluetooth.ts` before this phase's own
+      codec assumptions go further untested
+- [ ] Full behavior tested against the fake transport in CI; the laptop
+      session above is this phase's live-hardware verification, never a CI
+      gate
+
+**Exit:** On a real PM5: distance steps auto-advance, live pace shows
+against target, and "Connect PM5" degrades silently to manual on
+disconnect.
+
+## Phase 7C — PM5 logging
+
+**Status:** Not started
+**Goal:** A PM5-driven session logs with the same fidelity a phone-timer
+session does.
+
 - [ ] Per-step actual splits logged with `actualSource:'pm5'`
-- [ ] Full behavior tested against the mock transport in CI; one live-hardware verification on the real erg is the exit gate
+      (`IntervalActual` → the log's per-step actual, a third source
+      alongside `logDraft.ts`'s existing `'assumed'`/`'stopwatch'`)
+- [ ] The monitor-side log-writing path (`MonitorRun` → a save flow),
+      mirroring 6C's `logDraft.ts`/`LogScreen` split for the phone-timer
+      side
 
-**Exit:** On the real PM5: distance steps auto-advance, live pace shows against target, the log holds monitor-measured splits — and pulling the batteries mid-interval leaves the workout finishable by hand.
+**Exit:** A session fully driven by a connected PM5 saves a log
+indistinguishable in shape from a phone-timer session, with real
+monitor-measured splits.
 
 ## Phase 8 — Plan & Progress
 
@@ -895,7 +1001,6 @@ next phase. One line per round, newest first.
   meantime.
 - **Apple sign-in**: required the moment a build goes to EXTERNAL TestFlight or the App Store (guideline 4.8; internal TestFlight is exempt). Works with the existing openid-client stack (ES256 client secret, form_post callback, name/email on first auth only); design the allowlist story for private-relay emails first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
-- **PM5 workout programming (CSAFE)**: push intervals onto the monitor so the erg counts down itself — revisit after real-world Phase 7 use (~3-5 days, same BLE connection, Control Service).
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
 - **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Phase 6F's UI-fix round is done too, so nothing sits ahead of it in the queue any more — not started, but eligible to schedule now, not just eligible in principle.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.

@@ -17,6 +17,7 @@ import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
 import type { PlanCode } from "../../domain/plans.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
+import { loadMonitorRun } from "../monitor/monitorRun";
 import { useStagedDiscard } from "../session/useStagedDiscard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
@@ -283,8 +284,29 @@ export default function Today() {
   // doesn't try to verify the run actually belongs to the CURRENT draft
   // (6B has no id linking the two) — same "simplicity over precision" call
   // ConfirmTargets.tsx's own footer comment makes for the identical reason.
+  //
+  // Phase 7A Task 5 amendment: a LIVE monitor run (`monitorRun.ts` —
+  // `completedAt === null`, a workout currently being run by a connected
+  // PM5 rather than the phone's own timer) gets its own, symmetric-but-
+  // distinct exception, layered on top of the two above rather than
+  // replacing either. Distinct on purpose: a monitor-driven session (7B)
+  // has no reason to have set the phone-side draft's `startedAt` at all —
+  // the PM5 owns pacing, not this screen's own Start flow — so a stale,
+  // never-started draft sitting here while the erg is mid-workout is
+  // exactly the case the FIRST condition (`draft.startedAt === null`)
+  // would otherwise let straight through to a wipe. Checked here directly
+  // rather than through `anyLiveSession()` (`monitorRun.ts`): that
+  // function's own truth table treats a completed-but-unlogged monitor run
+  // the same as absent (nothing LIVE), which is right for a resume-style
+  // caller but wrong here — this guard is answering "is the erg possibly
+  // still running", not "should a resume card show." 7B's own guard
+  // rewiring is expected to consume `anyLiveSession()` mechanically where
+  // that distinction doesn't matter; this one 7A-owned line does not.
   useEffect(() => {
     const draft = loadDraft();
+    const monitorRun = loadMonitorRun();
+    const monitorRunIsLive =
+      monitorRun !== null && monitorRun.completedAt === null;
     if (
       draft &&
       draft.startedAt === null &&
@@ -293,7 +315,8 @@ export default function Today() {
       // all (the ordinary never-started-draft case this rule has always
       // covered) must still discard — only an ACTUAL completed run should
       // protect, not the absence of one coalescing to a false negative.
-      (loadRun()?.completedAt ?? null) === null
+      (loadRun()?.completedAt ?? null) === null &&
+      !monitorRunIsLive
     ) {
       clearDraft();
     }

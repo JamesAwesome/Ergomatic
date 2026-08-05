@@ -756,6 +756,29 @@ WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
    agreement; the driver LOGS a disagreement when one is observed (never
    corrects or picks a "winner" between the two). Both flagged for the
    laptop session alongside #1.
+9. **Trailing-rest-on-final-interval acceptance is untested against any
+   worked example.** `compileProgram` (`domain/monitor/program.ts`) folds a
+   rest phase's seconds into the PRECEDING interval's `restSeconds` with no
+   special case for whether that interval is the workout's last one — a
+   workout authored as `[work, rest]` compiles to one `ProgramInterval`
+   whose `restSeconds` is nonzero with nothing after it, and
+   `pm5/commands.ts`'s `buildProgrammingSequence` programs that interval's
+   `SET_RESTDURATION` exactly like any other, followed immediately by the
+   trailing `SET_SCREENSTATE` (§12). Every worked programming example in
+   both documents (§6, §12) ends on a WORK interval — none demonstrates a
+   variable-interval workout whose PROGRAMMED last interval carries a
+   nonzero rest, so there is no primary-source confirmation that the real
+   PM5 finishes counting down that trailing rest cleanly (rather than, say,
+   ending the workout early at the last work interval's own finish, or
+   mishandling the rest-to-`WorkoutEnd` transition some other way).
+   Practically significant, not a corner case: Task 2's review counted 161
+   of the 300 seeded library workouts as compiling to a program whose last
+   interval has `restSeconds > 0` (a workout authored with a cooldown-style
+   trailing rest step is common). Flagged for the laptop session — this is
+   a code-behavior assumption the review surfaced, not a document-text
+   ambiguity like #1-8 above, so it has no doc-page citation of its own;
+   its provenance is Task 2's review (`.superpowers/sdd/
+   2026-08-05-phase-7a-monitor-domain/progress.md`), not the CSAFE/BLE PDFs.
 
 ## 16. CSAFE response parsing (for `pm5/response.ts`)
 
@@ -804,3 +827,77 @@ alongside the codec that produces the commands being acked.
   `csafe.buildFrame` — this is what the fake transport (Task 4) uses to
   answer `pm5/commands.ts`'s writes without needing its own copy of the
   wrapper format.
+
+## 17. The laptop session runsheet
+
+Phase 7A's own tasks resolved nothing by running actual bytes against a
+real PM5 — every value above is a documented-text or reviewed-code-behavior
+inference, each one explicitly flagged as provisional. This section adds
+NOTHING new: it is one numbered checklist gathering every item already
+flagged for "the laptop session" across §6, §14, and §15, so James's
+laptop-vs-real-PM5 session (via `src/monitor/transports/webBluetooth.ts`,
+Task 5 — a laptop has no Capacitor native shell to host
+`capacitorBle.ts`) has a single runsheet instead of a scavenger hunt
+through the sections above. Per the Task 5 brief and the plan's own Notes
+section, this session is a **James-device event that happens AFTER Phase
+7A merges** — never a CI gate, and not required for this task's own gates
+to pass.
+
+1. **The three confirmed checksum errata** (§6, "3 errata" table): Fixed
+   Time Interval 2:00/:30 rest (doc `0x0A` vs computed `0xB0`), Variable
+   Interval v500m/1:00r×4 (doc `0xC6` vs computed `0x09` — the load-bearing
+   structural example), Terminate Workout (doc `0x62` vs computed `0x60`).
+   The codec trusts the computed (XOR-rule) value in all three; final
+   authority is this session.
+2. **The possible fourth erratum** (§6, "Possible fourth erratum,
+   unresolved"): the Predefined Standard List Workout #3 response frame
+   (p.80) prints `0x24`, which matches neither status-byte candidate the
+   XOR rule computes (`0x25`/`0xA5`) — recorded as unresolved (possibly an
+   extraction artifact), not encoded as a test vector.
+3. **COUNTDOWNPAUSE → `armed`** (§14, row 2): the least-certain single
+   mapping in the `WORKOUTSTATE` → `MonitorFrame.state` table — absent from
+   every Appendix E transition diagram, positioned by enum ordinal and
+   naming alone, not by an observed transition sequence.
+4. **Interval numbering base** (§15 #1): whether 0x0033's "Interval Count"
+   and 0x0037/0x0038's "Split/Interval Number" are 0-based (like the
+   CONFIRMED 0-based write-side index, §12) or 1-based — plus whether the
+   two independently-incrementing read-side fields actually stay in
+   lockstep on a real PM (the driver's `"divergence"` log, §15 #8, is what
+   would surface a real skew).
+5. **0x0038's Work/Rest Heartrate `255`-invalid sentinel by analogy**
+   (§15 #2): only 0x0032's Heartrate field is documented with this
+   sentinel; applied to 0x0038's two heartrate bytes unconfirmed (harmless
+   either way — see the item's own counter-evidence note on 0x0039's
+   different, zero-based sentinel for a similarly-named field).
+6. **`SET_TARGETPACETIME` for a no-target interval: zero vs omit** (§15
+   #3): `buildProgrammingSequence` currently sends `0x00000000`; five of
+   the document's own worked examples omit the command entirely instead.
+   If the real PM treats a zero pace target as an enforced (unmeetable)
+   0:00/500m pace, this needs to switch to omission.
+7. **Multi-frame programming retention** (§15 #6): whether the PM
+   accumulates interval configuration across multiple ack-gated frames the
+   way `buildFrameGroups` assumes — every worked example is single-frame;
+   Sea Smoke (25 intervals) needs 7. Flagged as the single fact this task
+   is LEAST confident about.
+8. **No documented wipe/reset for a shorter re-program** (§15 #7): whether
+   programming a workout with fewer intervals than a previously-loaded one
+   leaves a stale tail configured on the PM.
+9. **`intervalRemaining`'s checkpoint cadence** (§15 #8): whether 0x0033's
+   "Last Split Time"/"Last Split Distance" genuinely hold steady at the
+   current interval's start point for its whole duration, updating only at
+   the next boundary, as `computeRemainingForFrame` assumes.
+10. **Trailing-rest-on-final-interval acceptance** (§15 #9, added this
+    task): whether the real PM cleanly finishes counting down a nonzero
+    rest programmed onto the workout's LAST interval before `WorkoutEnd` —
+    untested by any worked example, practically significant (161 of 300
+    seeded workouts compile this shape per Task 2's review).
+11. **`currentSplit`'s idle/armed value** (§15 #5): whether an armed or
+    resting erg genuinely reports `0` (not a sentinel) for 0x0032's Current
+    Pace, or holds the last real value, or something else — relevant to
+    whatever a future screen renders for "no pace yet."
+
+Items already resolved with no laptop dependency (not on this list on
+purpose): `intervalIndex`/`spm` nullability is a business rule, not a wire
+question (§15 #4); the write-side `CSAFE_PM_WORKOUTINTERVALCOUNT` index is
+CONFIRMED 0-based by a worked example (§12), unlike the read-side fields in
+item 4 above.

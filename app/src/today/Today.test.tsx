@@ -10,6 +10,7 @@ import type { WorkoutType } from "../../domain/types.js";
 import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
+import { MONITOR_RUN_KEY, type MonitorRun } from "../monitor/monitorRun";
 import { elapsedSinceStart } from "./Today";
 import { TODAY_PICK_KEY, todayDateString } from "./todayPick";
 import { TODAY_OVERRIDES_KEY, type TodayOverrides } from "./todayOverrides";
@@ -1581,6 +1582,63 @@ describe("Today (stale draft discard on mount)", () => {
     localStorage.setItem(
       RUN_KEY,
       JSON.stringify(makeRun({ completedAt: null })),
+    );
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
+  });
+
+  // Phase 7A Task 5 amendment: a LIVE monitor run (a workout currently
+  // being run by a connected PM5, `completedAt === null`) gets its own
+  // exception, distinct from the completed-SessionRun one above — see
+  // Today.tsx's own comment on why a MONITOR run protects while LIVE
+  // (nothing sets this draft's `startedAt` while the erg, not this
+  // screen's timer, owns pacing) rather than while completed-and-unlogged
+  // like the sessionRun case.
+  function makeMonitorRun(overrides: Partial<MonitorRun>): MonitorRun {
+    return {
+      v: 1,
+      workoutId: "w-warmfront",
+      title: "Stationary Front",
+      program: { intervals: [] },
+      actuals: [],
+      deviceName: "PM5 (test)",
+      startedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      completedAt: null,
+      terminated: false,
+      ...overrides,
+    };
+  }
+
+  it("keeps a stale, never-started-looking draft when a monitor run is LIVE", async () => {
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null })),
+    );
+    mockReady();
+    await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+    expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
+  });
+
+  it("still discards a stale, never-started draft when the monitor run is completed, not live", async () => {
+    const stale = makeDraft({
+      createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+      startedAt: null,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(stale));
+    // A completed-but-unlogged monitor run is NOT the exception this rule
+    // grants — unlike the sessionRun side, only LIVE protects here (see
+    // Today.tsx's own comment).
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: new Date().toISOString() })),
     );
     mockReady();
     await renderToday();

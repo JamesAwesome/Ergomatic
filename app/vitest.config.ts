@@ -42,6 +42,17 @@ export default defineConfig({
         "src/vite-env.d.ts",
         "src/test/**",
         "src/native/**",
+        // Phase 7A Task 5: the two radio Transport adapters — no BLE radio
+        // exists in CI (or on the runner at all), so a mocked
+        // BleClient/navigator.bluetooth would only prove each file calls
+        // its own mock correctly, never that it talks to a real PM5.
+        // "Compile-tested shapes" (enforced by `pnpm typecheck`, not this
+        // gate) is the honest ceiling here — the real proof is James's
+        // laptop-vs-real-PM5 session, post-merge (interface-notes.md §17),
+        // the same boundary `src/native/**` above already draws for
+        // on-device plugin wrappers.
+        "src/monitor/transports/capacitorBle.ts",
+        "src/monitor/transports/webBluetooth.ts",
         "src/platform.ts",
         "server/index.ts",
         "server/testDeps.ts",
