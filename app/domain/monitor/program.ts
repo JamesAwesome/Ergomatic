@@ -162,7 +162,8 @@ const MIN_TIME_SECONDS = 20;
 const MIN_DISTANCE_METERS = 100;
 /** Table 19 — maximum rest duration accepted by `CSAFE_PM_SET_RESTDURATION`,
  *  in seconds. NOT 600 (10:00) — the obvious-looking round number is wrong
- *  by five seconds; the documented max is 9:55 (adversarial review H6). */
+ *  by five seconds; the documented max is 9:55, confirmed directly against
+ *  the primary CSAFE doc (Table 19, p.49 — interface-notes.md §8). */
 const MAX_REST_SECONDS = 9 * 60 + 55;
 /** Table 19 — maximum intervals in one PM5 variable-interval workout (30 on
  *  PM3/PM4, not this app's concern). */

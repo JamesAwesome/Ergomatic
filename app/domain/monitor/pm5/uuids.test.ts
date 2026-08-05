@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+import {
+  ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+  ADDITIONAL_STATUS_1_UUID,
+  ADDITIONAL_STATUS_2_UUID,
+  CONTROL_SERVICE_UUID,
+  GENERAL_STATUS_UUID,
+  RECEIVE_CHARACTERISTIC_UUID,
+  ROWING_SERVICE_UUID,
+  SAMPLE_RATE_UUID,
+  SPLIT_INTERVAL_DATA_UUID,
+  TRANSMIT_CHARACTERISTIC_UUID,
+} from "./uuids.js";
+
+// Every UUID follows the documented base-UUID formula (interface-notes.md
+// §9, BLE doc p.7): "CE06xxxx-43E5-11E4-916C-0800200C9A66, where xxxx is a
+// 16-bit value" — cited per handle against the attribute table, BLE doc
+// pp.11-20.
+describe("pm5 UUIDs: base formula per handle (interface-notes.md §9)", () => {
+  it.each([
+    ["CONTROL_SERVICE_UUID", CONTROL_SERVICE_UUID, "0020"],
+    ["RECEIVE_CHARACTERISTIC_UUID", RECEIVE_CHARACTERISTIC_UUID, "0021"],
+    ["TRANSMIT_CHARACTERISTIC_UUID", TRANSMIT_CHARACTERISTIC_UUID, "0022"],
+    ["ROWING_SERVICE_UUID", ROWING_SERVICE_UUID, "0030"],
+    ["GENERAL_STATUS_UUID", GENERAL_STATUS_UUID, "0031"],
+    ["ADDITIONAL_STATUS_1_UUID", ADDITIONAL_STATUS_1_UUID, "0032"],
+    ["ADDITIONAL_STATUS_2_UUID", ADDITIONAL_STATUS_2_UUID, "0033"],
+    ["SAMPLE_RATE_UUID", SAMPLE_RATE_UUID, "0034"],
+    ["SPLIT_INTERVAL_DATA_UUID", SPLIT_INTERVAL_DATA_UUID, "0037"],
+    [
+      "ADDITIONAL_SPLIT_INTERVAL_DATA_UUID",
+      ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+      "0038",
+    ],
+  ])("%s = ce06<handle>-43e5-11e4-916c-0800200c9a66", (_name, uuid, handle) => {
+    expect(uuid).toBe(`ce06${handle}-43e5-11e4-916c-0800200c9a66`);
+  });
+
+  it("every exported UUID is unique", () => {
+    const all = [
+      CONTROL_SERVICE_UUID,
+      RECEIVE_CHARACTERISTIC_UUID,
+      TRANSMIT_CHARACTERISTIC_UUID,
+      ROWING_SERVICE_UUID,
+      GENERAL_STATUS_UUID,
+      ADDITIONAL_STATUS_1_UUID,
+      ADDITIONAL_STATUS_2_UUID,
+      SAMPLE_RATE_UUID,
+      SPLIT_INTERVAL_DATA_UUID,
+      ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+    ];
+    expect(new Set(all).size).toBe(all.length);
+  });
+});

@@ -1,0 +1,302 @@
+// The PM5 status characteristics (0x0031/0x0032/0x0033/0x0037/0x0038) ->
+// RawPm5Status -> MonitorFrame / IntervalActual.
+//
+// Every offset and scale here cites docs/monitor/pm5-interface-notes.md §10
+// (BLE Interface Definition rev 1.30, pp.13-20) unless noted per field; the
+// WORKOUTSTATE mapping cites interface-notes.md §14. Multi-byte status
+// fields are little-endian (Lo/Mid/High or Lo/Hi in ascending byte order) —
+// the OPPOSITE byte order from `pm5/commands.ts`'s CSAFE command writes,
+// which are MSB-first; see interface-notes.md §10's note on this.
+//
+// domain/monitor/** imports nothing from src/.
+
+import type { IntervalActual, MonitorFrame } from "../types.js";
+
+/** BLE doc p.14: "Heartrate (bpm, 255=invalid)". Applied by this module to
+ *  every single-byte heart-rate field, including 0x0038's Work/Rest
+ *  Heartrate bytes, which have no explicit sentinel of their own
+ *  (interface-notes.md §15 #2 — an analogy, not an independently confirmed
+ *  fact for that characteristic). */
+const HEARTRATE_INVALID = 255;
+
+function readU8(bytes: Uint8Array, offset: number): number {
+  return bytes[offset]!;
+}
+
+/** Little-endian 16-bit read (status characteristics list these fields
+ *  "Lo, Hi" in ascending byte order — interface-notes.md §10). */
+function readU16LE(bytes: Uint8Array, offset: number): number {
+  return bytes[offset]! | (bytes[offset + 1]! << 8);
+}
+
+/** Little-endian 24-bit read (status characteristics list these fields
+ *  "Lo, Mid, High" in ascending byte order — interface-notes.md §10). */
+function readU24LE(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16)
+  );
+}
+
+function heartRate(byte: number): number | null {
+  return byte === HEARTRATE_INVALID ? null : byte;
+}
+
+/** 0x0031 — C2 rowing general status, 19 bytes (interface-notes.md §10). */
+export interface GeneralStatus {
+  elapsedSeconds: number;
+  distanceMeters: number;
+  workoutType: number;
+  intervalType: number;
+  workoutState: number;
+  rowingState: number;
+  strokeState: number;
+  totalWorkDistanceMeters: number;
+  /** Raw, unscaled: 0.01 sec/lsb only if `workoutDurationType` is Time —
+   *  undocumented for the other three duration types, so this module
+   *  reports it unscaled rather than guessing (interface-notes.md §10). */
+  workoutDurationRaw: number;
+  workoutDurationType: number;
+  dragFactor: number;
+}
+
+export function parseGeneralStatus(bytes: Uint8Array): GeneralStatus {
+  return {
+    elapsedSeconds: readU24LE(bytes, 0) / 100,
+    distanceMeters: readU24LE(bytes, 3) / 10,
+    workoutType: readU8(bytes, 6),
+    intervalType: readU8(bytes, 7),
+    workoutState: readU8(bytes, 8),
+    rowingState: readU8(bytes, 9),
+    strokeState: readU8(bytes, 10),
+    totalWorkDistanceMeters: readU24LE(bytes, 11),
+    workoutDurationRaw: readU24LE(bytes, 14),
+    workoutDurationType: readU8(bytes, 17),
+    dragFactor: readU8(bytes, 18),
+  };
+}
+
+/** 0x0032 — C2 rowing additional status 1, 17 bytes (interface-notes.md
+ *  §10). */
+export interface AdditionalStatus1 {
+  elapsedSeconds: number;
+  speedMetersPerSecond: number;
+  spm: number;
+  heartRateBpm: number | null;
+  currentSplit: number;
+  averageSplit: number;
+  restDistanceMeters: number;
+  restSeconds: number;
+  ergMachineType: number;
+}
+
+export function parseAdditionalStatus1(bytes: Uint8Array): AdditionalStatus1 {
+  return {
+    elapsedSeconds: readU24LE(bytes, 0) / 100,
+    speedMetersPerSecond: readU16LE(bytes, 3) / 1000,
+    spm: readU8(bytes, 5),
+    heartRateBpm: heartRate(readU8(bytes, 6)),
+    currentSplit: readU16LE(bytes, 7) / 100,
+    averageSplit: readU16LE(bytes, 9) / 100,
+    restDistanceMeters: readU16LE(bytes, 11),
+    restSeconds: readU24LE(bytes, 13) / 100,
+    ergMachineType: readU8(bytes, 16),
+  };
+}
+
+/** 0x0033 — C2 rowing additional status 2, 20 bytes (interface-notes.md
+ *  §10). */
+export interface AdditionalStatus2 {
+  elapsedSeconds: number;
+  /** Raw `CSAFE_PM_GET_WORKOUTINTERVALCOUNT` read-back value — base
+   *  (0- vs 1-based) unconfirmed, interface-notes.md §15 #1. */
+  intervalCount: number;
+  averagePowerWatts: number;
+  totalCalories: number;
+  splitAvgPace: number;
+  splitAvgPowerWatts: number;
+  splitAvgCalories: number;
+  lastSplitTimeSeconds: number;
+  lastSplitDistanceMeters: number;
+}
+
+export function parseAdditionalStatus2(bytes: Uint8Array): AdditionalStatus2 {
+  return {
+    elapsedSeconds: readU24LE(bytes, 0) / 100,
+    intervalCount: readU8(bytes, 3),
+    averagePowerWatts: readU16LE(bytes, 4),
+    totalCalories: readU16LE(bytes, 6),
+    splitAvgPace: readU16LE(bytes, 8) / 100,
+    splitAvgPowerWatts: readU16LE(bytes, 10),
+    splitAvgCalories: readU16LE(bytes, 12),
+    lastSplitTimeSeconds: readU24LE(bytes, 14) / 10,
+    lastSplitDistanceMeters: readU24LE(bytes, 17),
+  };
+}
+
+/** 0x0037 — C2 rowing split/interval data, 18 bytes (interface-notes.md
+ *  §10). */
+export interface SplitIntervalData {
+  elapsedSeconds: number;
+  distanceMeters: number;
+  splitIntervalTimeSeconds: number;
+  /** Whole meters (1 m/lsb) — NOT the 0.1 m/lsb scale of `distanceMeters`
+   *  three fields up, in this SAME characteristic (interface-notes.md
+   *  §10's explicit trap). */
+  splitIntervalDistanceMeters: number;
+  intervalRestTimeSeconds: number;
+  intervalRestDistanceMeters: number;
+  splitIntervalType: number;
+  /** Raw Split/Interval Number — same base ambiguity as
+   *  `AdditionalStatus2.intervalCount`, interface-notes.md §15 #1. */
+  splitIntervalNumber: number;
+}
+
+export function parseSplitIntervalData(bytes: Uint8Array): SplitIntervalData {
+  return {
+    elapsedSeconds: readU24LE(bytes, 0) / 100,
+    distanceMeters: readU24LE(bytes, 3) / 10,
+    splitIntervalTimeSeconds: readU24LE(bytes, 6) / 10,
+    splitIntervalDistanceMeters: readU24LE(bytes, 9),
+    intervalRestTimeSeconds: readU16LE(bytes, 12),
+    intervalRestDistanceMeters: readU16LE(bytes, 14),
+    splitIntervalType: readU8(bytes, 16),
+    splitIntervalNumber: readU8(bytes, 17),
+  };
+}
+
+/** 0x0038 — C2 rowing additional split/interval data, 19 bytes
+ *  (interface-notes.md §10). */
+export interface AdditionalSplitIntervalData {
+  elapsedSeconds: number;
+  splitIntervalAvgStrokeRate: number;
+  splitIntervalWorkHeartRateBpm: number | null;
+  splitIntervalRestHeartRateBpm: number | null;
+  /** 0.1 sec/lsb — genuinely DIFFERENT from 0x0032/0x0033's pace fields
+   *  (0.01 sec/lsb), printed identically in both copies of this
+   *  characteristic's table (interface-notes.md §10). The trap this task
+   *  was explicitly briefed to watch for. */
+  splitIntervalAvgPace: number;
+  splitIntervalTotalCalories: number;
+  splitIntervalAvgCalories: number;
+  splitIntervalSpeedMetersPerSecond: number;
+  splitIntervalPowerWatts: number;
+  splitAvgDragFactor: number;
+  splitIntervalNumber: number;
+  ergMachineType: number;
+}
+
+export function parseAdditionalSplitIntervalData(
+  bytes: Uint8Array,
+): AdditionalSplitIntervalData {
+  return {
+    elapsedSeconds: readU24LE(bytes, 0) / 100,
+    splitIntervalAvgStrokeRate: readU8(bytes, 3),
+    splitIntervalWorkHeartRateBpm: heartRate(readU8(bytes, 4)),
+    splitIntervalRestHeartRateBpm: heartRate(readU8(bytes, 5)),
+    splitIntervalAvgPace: readU16LE(bytes, 6) / 10,
+    splitIntervalTotalCalories: readU16LE(bytes, 8),
+    splitIntervalAvgCalories: readU16LE(bytes, 10),
+    splitIntervalSpeedMetersPerSecond: readU16LE(bytes, 12) / 1000,
+    splitIntervalPowerWatts: readU16LE(bytes, 14),
+    splitAvgDragFactor: readU8(bytes, 16),
+    splitIntervalNumber: readU8(bytes, 17),
+    ergMachineType: readU8(bytes, 18),
+  };
+}
+
+/**
+ * The merged view of all five status characteristics. A driver (a later
+ * task) builds one of these per "tick" by spreading each characteristic's
+ * latest decoded value (`{ ...prev, ...parseGeneralStatus(bytes) }`, etc.)
+ * as notifications arrive — this module only defines the shape and the two
+ * pure functions that read from it, never the accumulation itself (that is
+ * runtime/driver behaviour, out of `domain/monitor/**`'s pure-codec scope).
+ * Fields that both source characteristics report (e.g. `elapsedSeconds`,
+ * `splitIntervalNumber`) intersect cleanly since every decoder gives them
+ * the same name and meaning.
+ */
+export type RawPm5Status = GeneralStatus &
+  AdditionalStatus1 &
+  AdditionalStatus2 &
+  SplitIntervalData &
+  AdditionalSplitIntervalData;
+
+/**
+ * `OBJ_WORKOUTSTATE_T` (BLE doc Appendix A p.37) -> `MonitorFrame.state`,
+ * cited row-by-row in interface-notes.md §14 (which also cites CSAFE doc
+ * Appendix E's "PM State Transitions", p.161, for the states not directly
+ * named by the design spec). Every one of the 14 documented ordinals maps
+ * to exactly one of the 6 `MonitorFrame.state` values.
+ */
+const WORKOUTSTATE_TO_STATE: Record<number, MonitorFrame["state"]> = {
+  0: "armed", // WAITTOBEGIN — design spec §2 verbatim
+  1: "rowing", // WORKOUTROW — Appendix E: active rowing, no interval structure
+  2: "armed", // COUNTDOWNPAUSE — pre-row countdown, not Appendix E's mid-workout pause
+  3: "resting", // INTERVALREST — Appendix E's named rest state
+  4: "rowing", // INTERVALWORKTIME
+  5: "rowing", // INTERVALWORKDISTANCE
+  6: "resting", // INTERVALRESTENDTOWORKTIME — root IntervalRest, ephemeral
+  7: "resting", // INTERVALRESTENDTOWORKDISTANCE — root IntervalRest, ephemeral
+  8: "rowing", // INTERVALWORKTIMETOREST — root IntervalWorkTime, ephemeral
+  9: "rowing", // INTERVALWORKDISTANCETOREST — root IntervalWorkDistance, ephemeral
+  10: "finished", // WORKOUTEND — design spec §2 verbatim
+  11: "terminated", // TERMINATE — design spec §2 verbatim
+  12: "finished", // WORKOUTLOGGED — Appendix E: reached only via WorkoutEnd
+  13: "idle", // REARM — Appendix E: the reset tick before WaitToBegin
+};
+
+/** Defensive fallback for a `workoutState` byte outside the documented
+ *  0-13 range (garbled/corrupted radio data) — `idle` is the most
+ *  conservative reading (no program considered active), not a wire fact. */
+const UNKNOWN_WORKOUT_STATE_FALLBACK: MonitorFrame["state"] = "idle";
+
+/**
+ * `RawPm5Status` -> `MonitorFrame`. `intervalRemaining` is always `null`
+ * here — computed downstream by the driver from the program plus quantized
+ * progress (design spec §2; no characteristic reports it). `intervalIndex`
+ * is `null` outside `rowing`/`resting` (a business rule: no interval is
+ * "current" while armed/idle/finished/terminated), never from a wire
+ * sentinel — the raw value's numbering base itself is unconfirmed
+ * (interface-notes.md §15 #1). `spm` is always the raw Stroke Rate byte —
+ * never actually `null` from this function (no documented invalid-rate
+ * sentinel exists); the type allows `null` for a caller with no data yet.
+ */
+export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
+  const state =
+    WORKOUTSTATE_TO_STATE[raw.workoutState] ?? UNKNOWN_WORKOUT_STATE_FALLBACK;
+  const intervalActive = state === "rowing" || state === "resting";
+
+  return {
+    elapsedSeconds: raw.elapsedSeconds,
+    distanceMeters: raw.distanceMeters,
+    currentSplit: raw.currentSplit,
+    spm: raw.spm,
+    heartRateBpm: raw.heartRateBpm,
+    intervalIndex: intervalActive ? raw.intervalCount : null,
+    intervalRemaining: null,
+    state,
+  };
+}
+
+/**
+ * `RawPm5Status` -> `IntervalActual`, sourced from the 0x0037/0x0038 pair's
+ * per-interval fields (not the cumulative session totals also present in
+ * `RawPm5Status`): `elapsedSeconds`/`distanceMeters` are THIS interval's own
+ * duration/distance (`Split/Interval Time`/`Split/Interval Distance`), not
+ * the session-cumulative `Elapsed Time`/`Distance` fields. `avgHeartRateBpm`
+ * reads the WORK heartrate, not the rest heartrate — `ProgramInterval`
+ * bundles an interval's trailing rest into itself the same way this
+ * characteristic pairs a work value with a sibling rest value, and
+ * `IntervalActual` (like `ProgramInterval`) represents the work bout;
+ * `splitIntervalRestHeartRateBpm` is decoded but has no slot here.
+ */
+export function toIntervalActual(raw: RawPm5Status): IntervalActual {
+  return {
+    index: raw.splitIntervalNumber,
+    elapsedSeconds: raw.splitIntervalTimeSeconds,
+    distanceMeters: raw.splitIntervalDistanceMeters,
+    avgSplit: raw.splitIntervalAvgPace,
+    avgSpm: raw.splitIntervalAvgStrokeRate,
+    avgHeartRateBpm: raw.splitIntervalWorkHeartRateBpm,
+  };
+}
