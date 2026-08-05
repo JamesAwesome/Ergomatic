@@ -315,6 +315,17 @@ function packGroup(units: Uint8Array[]): Uint8Array[] {
  * function finishes sending only 4. Flagged for the laptop session
  * (interface-notes.md §17 item 8), alongside the multi-frame-retention
  * assumption `buildFrameGroups` makes just above.
+ *
+ * UPDATE (plan Task 2, post-hardware): `src/monitor/driver.ts`'s `program()`
+ * now sends `buildTerminate()` as a best-effort clear immediately before
+ * this sequence — but hardware proved that command is NOT a confirmed
+ * clear (interface-notes.md §18, progress.md's D1 update: a terminate was
+ * accepted once with a workout loaded and the following program was still
+ * rejected, twice). The stale-tail risk described above is therefore only
+ * ATTEMPTED against, not resolved; `program()`'s own verification phase is
+ * what actually decides whether the resulting workout matches what was
+ * sent, from the machine's reported "armed" state, not from this function's
+ * own byte-level guarantees.
  */
 export function buildProgrammingSequence(p: WorkoutProgram): Uint8Array[][] {
   const units = p.intervals.map((interval, index) =>
@@ -331,6 +342,14 @@ export function buildProgrammingSequence(p: WorkoutProgram): Uint8Array[][] {
  * `0x76` wrapper — one frame, pre-chunked. Returns the same `Uint8Array[][]`
  * shape as `buildProgrammingSequence` (always length 1) so a driver can
  * send either with identical ack-gated looping logic.
+ *
+ * Also reused by `src/monitor/driver.ts`'s `program()` as its best-effort
+ * "clear" step (plan Task 2) — NOT because this is confirmed to clear a
+ * loaded workout, but because it is the closest documented command to one.
+ * Laptop-session hardware proved it is NOT a reliable clear: `terminate()`
+ * was ACCEPTED once with a completed workout loaded, and the FOLLOWING
+ * program was still rejected — twice (interface-notes.md §18, progress.md's
+ * D1 update). The real clear command, if one exists, remains unidentified.
  */
 export function buildTerminate(): Uint8Array[][] {
   const unit = buildScreenState(SCREENVALUEWORKOUT_TERMINATEWORKOUT);

@@ -9,6 +9,14 @@
 // policy distinct from a transport disconnect, and `intervalRemaining`'s
 // computation.
 //
+// `program()`'s three-phase lifecycle (plan Task 2, "clear, ignore
+// rejection, verify" — interface-notes.md §18, progress.md's D1/D2): a
+// best-effort clear (`sendClear`, never fatal), the existing ack-gated send
+// (`sendSequence`, unchanged), then a tick-bounded VERIFICATION
+// (`verifyArmed`) against the machine's own reported state. The ack is
+// never trusted alone — the same ack byte has meant both "programmed" and
+// "nothing happened at all" on real hardware.
+//
 // Every Concept2 byte this file ever touches arrives pre-decoded through
 // `pm5/parse.ts` (`parseGeneralStatus` et al., `toMonitorFrame`,
 // `toIntervalActual`) or `pm5/response.ts` (`parseCsafeResponse`) — this
@@ -63,13 +71,15 @@ import type {
 } from "../../domain/monitor/types.js";
 import type { MonitorEventLog } from "./eventLog";
 
-/** A programming/terminate write that never got acked "ok" (design spec
- *  §3), for exactly THREE distinct reasons:
+/** A programming/terminate write that never got acked "ok", OR a
+ *  programming call whose verification phase never saw the machine report
+ *  "armed" (design spec §1/§3), for exactly FOUR distinct reasons:
  *  - `"nak"`: a response frame arrived with a non-"ok" status — the PM
  *    explicitly rejected it.
  *  - `"disconnected"`: the transport's `onDisconnect` fired before any
- *    response arrived — the link itself is down, so no response is ever
- *    coming.
+ *    response arrived (send phase) or before verification ever observed
+ *    "armed" (verify phase) — the link itself is down, so nothing further
+ *    is ever coming.
  *  - `"timeout"`: the link stayed UP (no disconnect), but the caller-
  *    supplied `ackTimeout` policy's tick budget elapsed with no response —
  *    a genuinely different failure mode than a disconnect (the spec's own
@@ -79,31 +89,50 @@ import type { MonitorEventLog } from "./eventLog";
  *    is learned from the transport's own event, `"timeout"` is counted in
  *    general-status TICKS (see `createPm5Driver`'s `ackTimeout` option),
  *    never `Date.now()`/`setTimeout`.
+ *  - `"not-observed"`: plan Task 2 (interface-notes.md §18, progress.md's
+ *    D2) — the ack said "ok", but `options.verifyTicks` GENERAL_STATUS
+ *    ticks elapsed without the machine ever reporting `state === "armed"`.
+ *    The ack is not sufficient evidence on its own: the identical `0x01`
+ *    ack byte came back from both a real program and a complete no-op on
+ *    real hardware.
  *
  *  `atFrame` is the 0-based index into the ack-gated sequence
  *  (`buildProgrammingSequence`'s outer array, or 0 for `buildTerminate`'s
- *  single frame) that failed; `hexTrace` is every write/ack exchanged
- *  during that call, already recorded to the event log too. */
+ *  single frame) that failed during the SEND phase; it is `-1` for a
+ *  verify-phase failure (`"not-observed"`, or `"disconnected"` while
+ *  verifying) — verification has no frames of its own, only ticks, so
+ *  there is no frame index to report. `hexTrace` is every write/ack
+ *  exchanged during a send-phase failure (already recorded to the event
+ *  log too), or a description of what verification observed instead. */
 export interface ProgramRejection {
-  reason: "nak" | "disconnected" | "timeout";
+  reason: ProgramRejectionReason;
   atFrame: number;
   hexTrace: string;
 }
 
-const REJECTION_VERBS: Record<ProgramRejection["reason"], string> = {
+export type ProgramRejectionReason =
+  "nak" | "disconnected" | "timeout" | "not-observed";
+
+const REJECTION_VERBS: Record<ProgramRejectionReason, string> = {
   nak: "rejected",
-  disconnected: "disconnected before acking",
+  disconnected: "disconnected before completing",
   timeout: "never acked (ack-timeout policy)",
+  "not-observed":
+    'never reported "armed" after programming (verification timed out)',
 };
 
 export class ProgramRejectionError extends Error implements ProgramRejection {
-  readonly reason: "nak" | "disconnected" | "timeout";
+  readonly reason: ProgramRejectionReason;
   readonly atFrame: number;
   readonly hexTrace: string;
 
   constructor(rejection: ProgramRejection) {
+    // Verify-phase failures (`atFrame: -1`) have no frame index worth
+    // printing — "frame -1" would read as a bug, not a deliberate sentinel.
     super(
-      `PM5 ${REJECTION_VERBS[rejection.reason]} frame ${rejection.atFrame}`,
+      rejection.atFrame >= 0
+        ? `PM5 ${REJECTION_VERBS[rejection.reason]} frame ${rejection.atFrame}`
+        : `PM5 ${REJECTION_VERBS[rejection.reason]}`,
     );
     this.name = "ProgramRejectionError";
     this.reason = rejection.reason;
@@ -156,6 +185,23 @@ type PendingAckOutcome = "disconnected" | "ack-timeout" | CsafeResponse;
  *  them, never a clock. */
 export interface DriverOptions {
   ackTimeout?: { ticks: number };
+  /**
+   * Bounds `program()`'s verification phase (design spec §1, plan Task 2)
+   * in GENERAL_STATUS_UUID ticks — the same tick pulse `ackTimeout` counts,
+   * but tracked as a SEPARATE budget on purpose: a monitor that is merely
+   * SLOW to ack (`ackTimeout`'s job) and one that acks instantly but never
+   * actually arms (`"not-observed"` — the identical `0x01` ack byte came
+   * back from both a real program and a complete no-op on real hardware,
+   * interface-notes.md §18/progress.md's D2) are two genuinely different
+   * failures. Collapsing them onto one shared budget would make a
+   * fast-but-lying monitor and a slow-but-honest one produce the SAME
+   * typed reason, purely depending on which clock happened to win —
+   * exactly the ambiguity a typed `ProgramRejectionReason` exists to
+   * remove. Omitted entirely (the default, matching `ackTimeout`'s own
+   * precedent) means no bound: verification waits for "armed" or a
+   * disconnect, forever, never a wall clock.
+   */
+  verifyTicks?: number;
 }
 
 export function createPm5Driver(
@@ -225,6 +271,16 @@ export function createPm5Driver(
   // pending ack, reset every time a new one is awaited — see `awaitAck`
   // and `DriverOptions.ackTimeout`'s own doc comment.
   let pendingAckTicks = 0;
+  // Registered while `program()`'s verification phase (`verifyArmed`,
+  // below) is waiting for the machine to report "armed" — `null` whenever
+  // no `program()` call is currently in that phase. A single slot, not a
+  // queue: mirrors `pendingAck`'s own one-at-a-time design, since
+  // `program()` calls are never expected to overlap.
+  let pendingVerify: {
+    resolve: () => void;
+    reject: (err: unknown) => void;
+    ticks: number;
+  } | null = null;
 
   /** Discards anything left in `pendingAckBuffer` from a PREVIOUS, already-
    *  resolved sequence — see the buffer's own comment for why a leftover
@@ -330,6 +386,17 @@ export function createPm5Driver(
       const resolve = pendingAck;
       pendingAck = null;
       resolve("disconnected");
+    }
+    // Same reasoning as the `pendingAck` hatch just above (M-3): a
+    // verification in progress has no other way to learn the link is gone
+    // — GENERAL_STATUS ticks (`verifyTicks`'s own bound) simply stop
+    // arriving, which would otherwise hang `program()` forever rather than
+    // report the real failure.
+    if (pendingVerify) {
+      settleVerifyFailure(
+        "disconnected",
+        `link disconnected during verification: ${reason}`,
+      );
     }
     if (terminalLatched) {
       // Appendix E (CSAFE p.162): the PM auto-cycles
@@ -553,6 +620,32 @@ export function createPm5Driver(
       }
     }
     maybeEmitFrame();
+
+    // `program()`'s verification tick pulse (`verifyArmed`, below) — the
+    // SAME GENERAL_STATUS_UUID arrival `maybeEmitFrame` just used, per
+    // `DriverOptions.verifyTicks`'s own doc comment on why this is a
+    // separate budget from `pendingAckTicks` above. Reads `raw.workoutState`
+    // directly via `toMonitorFrame` rather than waiting on `maybeEmitFrame`'s
+    // own `seen.general && seen.as1 && seen.as2` gate: verification only
+    // ever needs `state`, which 0x0031 alone determines, so it must not be
+    // held hostage by AS1/AS2 notifications that a real PM sends on the
+    // same cadence but that carry fields verification doesn't use.
+    if (pendingVerify) {
+      if (toMonitorFrame(raw as RawPm5Status).state === "armed") {
+        const resolve = pendingVerify.resolve;
+        pendingVerify = null;
+        resolve();
+      } else {
+        pendingVerify.ticks += 1;
+        const ticks = pendingVerify.ticks;
+        if (options.verifyTicks !== undefined && ticks >= options.verifyTicks) {
+          settleVerifyFailure(
+            "not-observed",
+            `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
+          );
+        }
+      }
+    }
   });
   mergeStatus(
     SPLIT_INTERVAL_DATA_UUID,
@@ -562,6 +655,110 @@ export function createPm5Driver(
       maybeEmitIntervalComplete();
     },
   );
+
+  /** Settles `pendingVerify` with a typed rejection: the general-status
+   *  tick handler above calls this on `verifyTicks` expiry
+   *  (`reason: "not-observed"`); `onDisconnect` calls it with
+   *  `reason: "disconnected"` so a real link drop during verification fails
+   *  loudly instead of waiting on ticks that will now never arrive. Always
+   *  logs the failure (design spec §1: "the full trace in the event log")
+   *  before rejecting, same as `sendSequence`'s own `"program-rejection"`
+   *  entries for a send-phase failure. */
+  function settleVerifyFailure(
+    reason: "not-observed" | "disconnected",
+    detail: string,
+  ): void {
+    // No `if (!pendingVerify) return` guard here: both call sites (the
+    // general-status tick handler above, `onDisconnect` below) already
+    // check `pendingVerify` before calling — a second check here would be
+    // dead code no test path can reach (same reasoning `maybeEmitFrame`'s
+    // own comment gives for omitting a redundant `terminalLatched` check).
+    const reject = pendingVerify!.reject;
+    pendingVerify = null;
+    log.record("program-rejection", `${reason} during verify: ${detail}`);
+    reject(
+      new ProgramRejectionError({ reason, atFrame: -1, hexTrace: detail }),
+    );
+  }
+
+  /**
+   * `program()`'s verification phase (design spec §1, plan Task 2: "clear,
+   * ignore rejection, verify"). The ack is not trusted on its own — the
+   * first laptop session saw the SAME ack byte (`0x01`) accompany both a
+   * real program and a complete no-op (interface-notes.md §18, progress.md's
+   * D2). This instead waits for the machine's OWN reported state to reach
+   * "armed" (WAITTOBEGIN/COUNTDOWNPAUSE, `pm5/parse.ts`'s `toMonitorFrame`)
+   * before `program()` is allowed to resolve.
+   *
+   * What "the machine reporting the programmed structure" (design spec §1)
+   * concretely checks: `state === "armed"`, and NOTHING else.
+   * `MonitorFrame` has no field that echoes the programmed interval COUNT
+   * back, and `intervalIndex` itself is business-NULL for the entire armed
+   * window (`toMonitorFrame`'s own rule: an interval is only ever "current"
+   * while rowing/resting) — there is no stronger, honestly-confirmed
+   * structural signal available on the wire today. This is not a
+   * compromise silently accepted here: it is the strongest check the data
+   * actually supports, documented as such rather than pretending to
+   * confirm more (e.g. that the interval count landed correctly) than a
+   * status frame can carry.
+   *
+   * Bounded by `options.verifyTicks` GENERAL_STATUS_UUID ticks — no wall
+   * clock, ever (same tick pulse as `ackTimeout`, tracked as its own
+   * budget; see `DriverOptions.verifyTicks`'s doc comment for why).
+   * Omitted entirely (like `ackTimeout`) means no bound: waits for "armed"
+   * or a disconnect, forever. On expiry, or a disconnect first, rejects
+   * with `ProgramRejectionError({ reason: "not-observed" | "disconnected",
+   * atFrame: -1 })` — verification has no frames of its own, only ticks.
+   */
+  function verifyArmed(): Promise<void> {
+    if (toMonitorFrame(raw as RawPm5Status).state === "armed") {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      pendingVerify = { resolve, reject, ticks: 0 };
+    });
+  }
+
+  /**
+   * `program()`'s clear step (design spec §1, plan Task 2: "clear, ignore
+   * rejection, verify"). Sends the documented terminate command
+   * (`buildTerminate()`) — the closest thing to a "clear the PM's loaded
+   * workout" command this codec has, though the laptop sessions proved it
+   * is NOT actually one: `terminate()` was ACCEPTED once with a completed
+   * workout loaded, and the FOLLOWING program was still rejected — twice
+   * (interface-notes.md §18, progress.md's D1 update). The real clear
+   * command, if one exists, is UNKNOWN.
+   *
+   * A `0x81` (nak) response here is the EXPECTED, common case — hardware
+   * showed the PM rejects a terminate when nothing is currently running or
+   * loaded (interface-notes.md §18's clean-run observation) — logged as
+   * `"clear-rejected"`, informational, never an error, never a throw.
+   * `"disconnected"`/`"timeout"` outcomes are NOT swallowed the same way:
+   * those mean the transport itself is broken, not "the PM had an opinion
+   * about the clear", so they propagate — attempting to write a whole
+   * program onto a link already known to be down would just hang the
+   * SEND phase instead of failing where the problem actually is.
+   *
+   * Whatever this step's outcome, it proves NOTHING about whether the PM
+   * is now actually clear — no read exists to confirm that. `program()`'s
+   * own verification phase (`verifyArmed`, above) is what actually decides
+   * success, from the machine's own state after the real programming
+   * write.
+   */
+  async function sendClear(): Promise<void> {
+    try {
+      await sendSequence(buildTerminate(), "clear-sent");
+    } catch (err) {
+      if (err instanceof ProgramRejectionError && err.reason === "nak") {
+        log.record(
+          "clear-rejected",
+          `PM rejected the clear (0x81) — expected when nothing was loaded (interface-notes.md §18): ${err.hexTrace}`,
+        );
+        return;
+      }
+      throw err;
+    }
+  }
 
   /**
    * Ack-gated write sequencing (design spec §3): write every chunk of one
@@ -663,8 +860,25 @@ export function createPm5Driver(
   return {
     capabilities,
 
+    // Destructive fact (interface-notes.md §18, progress.md's clean A/B
+    // run): the PM accepts a program ONLY when nothing is currently
+    // loaded — programming over an existing loaded workout is REJECTED
+    // **and WIPES it**. A failed `program()` call can therefore cost the
+    // rower whatever workout was already on the monitor, not merely fail
+    // to add a new one. Callers (7B's connect flow) MUST warn the rower
+    // BEFORE calling this, never react to a rejection afterward — by the
+    // time this call rejects, the previous workout may already be gone.
+    //
+    // Three phases (plan Task 2, "clear, ignore rejection, verify"):
+    // `sendClear()` is a best-effort clear, never fatal on its own;
+    // `sendSequence` is the existing ack-gated send, unchanged; `verifyArmed`
+    // is what actually decides success, from the machine's OWN reported
+    // state — never the ack alone (D2: the identical ack byte has meant
+    // both "programmed" and "nothing happened at all" on real hardware).
     async program(p: WorkoutProgram): Promise<void> {
+      await sendClear();
       await sendSequence(buildProgrammingSequence(p), "programmed");
+      await verifyArmed();
       program = p;
       log.record("armed", `programmed ${p.intervals.length} interval(s)`);
       emit({ kind: "armed" });

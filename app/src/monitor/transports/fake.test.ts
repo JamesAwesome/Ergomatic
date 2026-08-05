@@ -86,6 +86,13 @@ async function programIt(
   fake: ReturnType<typeof createFakeTransport>,
   program: WorkoutProgram,
 ) {
+  // Plan Task 2: `program()`'s own best-effort clear step precedes the real
+  // programming sequence (`src/monitor/driver.ts`'s `sendClear()`) — the
+  // fake's `"clearing"` phase expects the SAME `buildTerminate()` bytes
+  // first, always rejecting (0x81) before advancing to `"programming"`.
+  for (const chunk of buildTerminate()[0]!) {
+    await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+  }
   for (const chunk of buildProgrammingSequence(program)[0]!) {
     await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
   }
@@ -126,6 +133,14 @@ describe("createFakeTransport: scan/connect", () => {
 describe("createFakeTransport: programming — byte-for-byte verification, ack per FRAME not per chunk", () => {
   it("acks 'ok' only once the whole frame's chunks have arrived, matching bytes exactly", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
+
+    // Plan Task 2's clear step precedes programming — consumed here BEFORE
+    // subscribing below, so this test's own ack count stays scoped to the
+    // PROGRAM sequence exactly as before.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+
     const acks: ReturnType<typeof parseCsafeResponse>[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
       acks.push(parseCsafeResponse(b)),
@@ -147,12 +162,27 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
 
   it("asserts — a corrupted chunk throws rather than being silently accepted (it's a protocol assertion, not a stub)", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
+    // Clear the plan-Task-2 clearing phase first, so the corrupted write
+    // below is actually checked against the PROGRAM sequence.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
     const [frame] = buildProgrammingSequence(PROGRAM);
     const corrupted = Uint8Array.from(frame![0]!);
     corrupted[2] = (corrupted[2]! ^ 0xff) & 0xff;
     await expect(
       fake.write(RECEIVE_CHARACTERISTIC_UUID, corrupted),
     ).rejects.toThrow(/mismatch/);
+  });
+
+  it("asserts during the clearing phase too — a corrupted clear chunk throws rather than being silently accepted", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const [clearFrame] = buildTerminate();
+    const corrupted = Uint8Array.from(clearFrame![0]!);
+    corrupted[2] = (corrupted[2]! ^ 0xff) & 0xff;
+    await expect(
+      fake.write(RECEIVE_CHARACTERISTIC_UUID, corrupted),
+    ).rejects.toThrow(/unexpected write during the clear step/);
   });
 
   it("throws on a write past the end of the expected programming sequence", async () => {
@@ -167,6 +197,12 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
   it("injectNak(0) rejects frame 0's ack and does NOT advance to armed", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
     fake.injectNak(0);
+    // Consumed BEFORE subscribing (plan Task 2's clearing phase always
+    // rejects on its own, regardless of `injectNak` — see `phase`'s own
+    // doc comment) so `acks` below stays scoped to the PROGRAM sequence.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
     const acks: ReturnType<typeof parseCsafeResponse>[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
       acks.push(parseCsafeResponse(b)),
@@ -174,7 +210,9 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     const generals: Uint8Array[] = [];
     fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
 
-    await programIt(fake, PROGRAM);
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
     expect(acks).toHaveLength(1);
     expect(acks[0]).toMatchObject({ status: "reject" });
     // Never armed: no WAITTOBEGIN bundle should have been sent.
@@ -184,11 +222,16 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
   it("injectNak targeting a frame index that never occurs leaves every real ack as 'ok'", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
     fake.injectNak(7); // this program only ever reaches frame 0
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
     const acks: ReturnType<typeof parseCsafeResponse>[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
       acks.push(parseCsafeResponse(b)),
     );
-    await programIt(fake, PROGRAM);
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
     expect(acks).toHaveLength(1);
     expect(acks[0]).toMatchObject({ status: "ok" });
   });
@@ -208,6 +251,9 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
 
     const fake = createFakeTransport({ program: multiFrameProgram });
     fake.injectNak(2);
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
     const acks: ReturnType<typeof parseCsafeResponse>[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
       acks.push(parseCsafeResponse(b)),
@@ -222,6 +268,31 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     }
     expect(acks.map((a) => a.status)).toStrictEqual(["ok", "ok", "reject"]);
     expect(generals).toHaveLength(0); // never reached "armed" — frame 2's rejection halts the sequence
+  });
+
+  it("injectTimeout() during the PROGRAMMING phase itself withholds that frame's ack (distinct from the clearing-phase case)", async () => {
+    // Plan Task 2's leading "clearing" phase has its OWN `timeoutInjected`
+    // short-circuit (`onClearingFrameComplete`) — this pins the SEPARATE
+    // one in `onProgrammingFrameComplete`, by injecting the timeout only
+    // AFTER the clear step has already completed normally.
+    const fake = createFakeTransport({ program: PROGRAM });
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.injectTimeout();
+
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    expect(acks).toHaveLength(0); // link stays up, but no ack for this frame
+    expect(generals).toHaveLength(0); // never armed either
   });
 
   it("a write after a NAK'd frame (which never advances to armed) past the expected sequence's own end throws", async () => {
@@ -543,6 +614,14 @@ describe("createFakeTransport: a multi-frame programming sequence", () => {
     expect(seq.length).toBeGreaterThan(1); // confirms this fixture really is multi-frame
 
     const fake = createFakeTransport({ program: multiFrameProgram });
+
+    // Plan Task 2's clear step precedes programming — consumed here BEFORE
+    // subscribing below, so this test's own ack/general-status counts stay
+    // scoped to the PROGRAM sequence exactly as before.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+
     const acks: ReturnType<typeof parseCsafeResponse>[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
       acks.push(parseCsafeResponse(b)),

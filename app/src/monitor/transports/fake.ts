@@ -8,7 +8,9 @@
 // `tick(ms)` is the only thing that ever advances time); six injection
 // hooks (design spec §4, plan Task 4, plus fix-round HIGH-2's
 // `injectTimeout`, distinct from `injectDisconnect`: the link stays up,
-// only the ack never comes).
+// only the ack never comes); a leading "clearing" phase (plan Task 2)
+// modeling `program()`'s own best-effort clear step, always rejected
+// (0x81) before the real programming sequence begins.
 //
 // Concept2 byte-level knowledge stays confined to what this file calls INTO
 // `pm5/` (`buildProgrammingSequence`, `buildTerminate`, `buildAckFrame`,
@@ -315,7 +317,22 @@ export function createFakeTransport(
   let eventCursor = 0;
   let virtualClock = 0;
 
-  let phase: "programming" | "armed" = "programming";
+  // Plan Task 2: `program()` now sends `buildTerminate()` as a best-effort
+  // CLEAR step before the real programming sequence — so the very first
+  // write(s) this fake ever sees are the SAME bytes as `terminateChunks`
+  // (below), not `flatProgramChunks`. `"clearing"` models exactly that
+  // window, always rejecting (0x81) once its chunks are complete: hardware
+  // showed the PM rejects a terminate when nothing is loaded/running
+  // (interface-notes.md §18's clean-run observation), the common case for
+  // a fresh connection. `injectNak` deliberately does NOT reach into this
+  // phase — `nakAtFrame` addresses the PROGRAMMING sequence's own frames
+  // only (its own doc comment), and a clear that ALWAYS rejects has no
+  // "different" outcome worth injecting yet; giving the fake real
+  // load-state-aware clear behaviour is plan Task 4's job. `injectTimeout`
+  // DOES still apply here — its own "every ack this fake would otherwise
+  // send" wording is phase-agnostic by design.
+  let phase: "clearing" | "programming" | "armed" = "clearing";
+  let clearChunkCursor = 0;
   let programChunkCursor = 0;
   let programFrameCursor = 0;
   let terminateChunkCursor = 0;
@@ -393,6 +410,34 @@ export function createFakeTransport(
 
   function sendAck(status: "ok" | "reject"): void {
     notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame(status, []));
+  }
+
+  /** The clear step's own chunk assertion (plan Task 2) — reuses
+   *  `terminateChunks`, the SAME bytes `assertArmedChunk` below checks for
+   *  the app's own, later, explicit `terminate()` call. Separate cursor
+   *  (`clearChunkCursor`, not `terminateChunkCursor`) so a test that later
+   *  exercises a real `terminate()` after arming isn't left with a cursor
+   *  already partway advanced by `program()`'s own internal clear. */
+  function assertClearingChunk(chunk: Uint8Array): void {
+    const expected = terminateChunks[clearChunkCursor];
+    if (!expected || !bytesEqual(chunk, expected)) {
+      throw new Error(
+        `fake transport: unexpected write during the clear step ${toHex(chunk)} — only the documented terminate sequence is accepted here`,
+      );
+    }
+    clearChunkCursor += 1;
+  }
+
+  /** Called once the clear step's chunks have all arrived — always rejects
+   *  (0x81, the common "nothing was loaded" case, `phase`'s own doc
+   *  comment) and advances straight into `"programming"`. `timeoutInjected`
+   *  short-circuits this exactly like the other two frame-complete
+   *  handlers below: the bytes were already verified correct, but no ack
+   *  goes out and `phase` does not advance. */
+  function onClearingFrameComplete(): void {
+    if (timeoutInjected) return;
+    sendAck("reject");
+    phase = "programming";
   }
 
   // Byte-for-byte verification happens on every individual WRITE (BLE
@@ -537,7 +582,9 @@ export function createFakeTransport(
           `fake transport: unexpected write target ${characteristicId}`,
         );
       }
-      if (phase === "programming") {
+      if (phase === "clearing") {
+        assertClearingChunk(bytes);
+      } else if (phase === "programming") {
         assertProgrammingChunk(bytes);
       } else {
         assertArmedChunk(bytes);
@@ -549,7 +596,9 @@ export function createFakeTransport(
       // contract, keep pushing empty chunks until it returns null.
       let complete = incoming.push(bytes);
       while (complete) {
-        if (phase === "programming") {
+        if (phase === "clearing") {
+          onClearingFrameComplete();
+        } else if (phase === "programming") {
           onProgrammingFrameComplete();
         } else {
           onArmedFrameComplete();
