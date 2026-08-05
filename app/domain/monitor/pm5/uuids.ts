@@ -19,6 +19,17 @@ function pm5Uuid(handle: number): string {
   return `ce06${hex}-43e5-11e4-916c-0800200c9a66`;
 }
 
+/** C2 PM Device Information primary service (BLE doc p.11), used as a
+ *  DISCOVERY filter. Observed in the first laptop session
+ *  (interface-notes.md §18, 2026-08-05, PM5 432331249): a
+ *  `requestDevice` filter of the rowing service (0x0030) alone left
+ *  Chrome's picker scanning forever, while a filter set of THIS service OR
+ *  a "PM5" name prefix surfaced the erg immediately. Which of the two
+ *  matched is not determined by that observation — Chrome does not say —
+ *  so both are kept. What IS established: 0x0030 is not advertised, and a
+ *  picker filter can only match advertised UUIDs. No document states the
+ *  PM5's advertising set. */
+export const DEVICE_INFO_SERVICE_UUID = pm5Uuid(0x0000);
 /** C2 PM Control primary service (BLE doc p.12). */
 export const CONTROL_SERVICE_UUID = pm5Uuid(0x0020);
 /** C2 PM receive characteristic — WRITE, control command as a CSAFE frame,
