@@ -49,14 +49,60 @@ const TEST_PROGRAM: WorkoutProgram = {
   ],
 };
 
+/** §17 item 4 (zero-vs-omit for a no-target interval): the same shape with
+ *  `targetSplit: null`, so the question needs a command rather than an edit
+ *  and a reload mid-session. */
+const NO_TARGET_PROGRAM: WorkoutProgram = {
+  intervals: [{ ...TEST_PROGRAM.intervals[0]!, targetSplit: null }],
+};
+
+/** §17 item 5 (multi-frame retention — the codec's least-confident fact):
+ *  25 intervals is Sea Smoke's shape, which `buildFrameGroups` splits into
+ *  7 frames, so a PM that only keeps the last frame's intervals shows it
+ *  immediately. */
+const MANY_PROGRAM: WorkoutProgram = {
+  intervals: Array.from({ length: 25 }, () => ({
+    kind: "distance" as const,
+    value: 500,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 120,
+  })),
+};
+
+/** §17 item 6 (no wipe/reset): program this straight after MANY_PROGRAM
+ *  without power-cycling — a stale tail shows up as intervals 4..25
+ *  surviving on the monitor. */
+const SHORT_PROGRAM: WorkoutProgram = {
+  intervals: Array.from({ length: 3 }, () => ({
+    kind: "distance" as const,
+    value: 500,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 60,
+  })),
+};
+
 const log = createEventLog();
 const transport = createWebBluetoothTransport();
 let driver: MonitorDriver | null = null;
+
+/** The optional second seat (scripts/pm5-bridge.mjs). Every line this page
+ *  prints is mirrored there, and commands enqueued there are executed here —
+ *  so a session can be driven from a laptop while the rower rows. All of it
+ *  is best-effort: with no bridge running, every call fails silently and the
+ *  page behaves exactly as it did before. */
+const BRIDGE = "http://127.0.0.1:5178";
+
+function mirror(line: string): void {
+  void fetch(`${BRIDGE}/log`, { method: "POST", body: line }).catch(() => {});
+}
 
 function out(line: string): void {
   console.log(line);
   const el = document.querySelector<HTMLDivElement>("#log");
   if (el) el.textContent = `${el.textContent ?? ""}${line}\n`;
+  mirror(line);
 }
 
 function wireEvents(d: MonitorDriver): void {
@@ -88,25 +134,29 @@ onClick("connect", async () => {
   out(`capabilities: ${JSON.stringify(driver.capabilities)}`);
 });
 
-onClick("program", async () => {
+async function programNamed(
+  name: string,
+  program: WorkoutProgram,
+): Promise<void> {
   if (!driver) {
-    out("program(): connect first");
+    out(`${name}: connect first`);
     return;
   }
-  await driver.program(TEST_PROGRAM);
-  out("program(): acked, armed");
-});
+  out(`${name}: sending ${program.intervals.length} interval(s)…`);
+  await driver.program(program);
+  out(`${name}: acked, armed`);
+}
 
-onClick("terminate", async () => {
+async function terminate(): Promise<void> {
   if (!driver) {
     out("terminate(): connect first");
     return;
   }
   await driver.terminate();
   out("terminate(): acked");
-});
+}
 
-onClick("disconnect", async () => {
+async function disconnect(): Promise<void> {
   if (!driver) {
     out("disconnect(): connect first");
     return;
@@ -115,9 +165,57 @@ onClick("disconnect", async () => {
   out(
     "disconnect(): requested (caller-initiated — should NOT log a 'disconnected' MonitorEvent; watch the log above)",
   );
-});
+}
 
-onClick("dump", () => {
+function dump(): void {
   out("---- exportLog() ----");
   out(log.exportLog());
-});
+}
+
+/** What the bridge may trigger. `connect` is absent on purpose: Web
+ *  Bluetooth's `requestDevice` needs a real user gesture, so the person at
+ *  the erg always clicks that one themselves. */
+const REMOTE: Record<string, () => void | Promise<void>> = {
+  program: () => programNamed("program()", TEST_PROGRAM),
+  "program-no-target": () =>
+    programNamed("program(no-target, §17 #4)", NO_TARGET_PROGRAM),
+  "program-many": () =>
+    programNamed("program(25 intervals, §17 #5)", MANY_PROGRAM),
+  "program-short": () =>
+    programNamed("program(3 intervals, §17 #6)", SHORT_PROGRAM),
+  terminate,
+  disconnect,
+  dump,
+  ping: () => out(`ping: driver ${driver ? "connected" : "not connected"}`),
+};
+
+onClick("program", () => programNamed("program()", TEST_PROGRAM));
+onClick("terminate", terminate);
+onClick("disconnect", disconnect);
+onClick("dump", dump);
+
+/** Poll the bridge for queued commands. Failures are silent by design — no
+ *  bridge running is the ordinary case, and a lab that spams errors when
+ *  nobody is watching from a second seat would be worse than useless. */
+function pollBridge(): void {
+  void fetch(`${BRIDGE}/commands`)
+    .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
+    .then(async (cmds) => {
+      for (const cmd of cmds) {
+        const handler = REMOTE[cmd];
+        if (!handler) {
+          out(`remote: unknown command "${cmd}"`);
+          continue;
+        }
+        out(`remote: ${cmd}`);
+        try {
+          await handler();
+        } catch (err: unknown) {
+          out(`remote ${cmd} ERROR: ${String(err)}`);
+        }
+      }
+    })
+    .catch(() => {});
+}
+
+setInterval(pollBridge, 1000);
