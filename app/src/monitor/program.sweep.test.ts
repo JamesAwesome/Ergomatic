@@ -22,18 +22,24 @@ import { buildRun } from "../session/engine";
 // gives for resolving `originalStepIndex` through a lookup rather than
 // reimplementing `phases()`'s reps-expansion).
 //
-// HONEST SCOPE (Task 2 review, M3): this sweep runs every seeded workout as
-// a PRISTINE draft — nothing removed, nothing edited. That proves nothing
-// about the removal class: eight real starters (all shaped
-// `[wu, w, r, w]` in server/seed/library/o2.ts — Moonbow, Sun Dog,
-// Pogonip, Sun Pillar, Hazy Sunshine, Favonius, Nimbostratus, Virazon)
-// reach `leading-rest` through a LEGAL two-tap row removal on Confirm
-// (removing the warmup and the first work row leaves the "r" step as the
-// new first entry). `leading-rest`'s message is user-facing, shown on a
-// real screen after a real user action — not a synthetic-fixture-only
-// branch. See the separate "removal dimension" describe block below, which
-// drives the same real `SessionDraft.removed` path this sweep does not
-// exercise.
+// HONEST SCOPE (Task 2 review, M3, corrected in round 2 — the first version
+// of this comment misdescribed Virazon): this sweep runs every seeded
+// workout as a PRISTINE draft — nothing removed, nothing edited. That
+// proves nothing about the removal class: eight real starters reach
+// `leading-rest` through a LEGAL two-tap row removal on Confirm (removing
+// the warmup and the first work row). Seven of them — Moonbow, Sun Dog,
+// Pogonip, Sun Pillar, Hazy Sunshine, Favonius, Nimbostratus — are shaped
+// `[wu, w, r, w]` in server/seed/library/o2.ts, so removing rows 0-1 leaves
+// the "r" step as the new first entry directly. Virazon is NOT that shape:
+// it's `[wu, w, r, w, r, w]` (two work/rest pairs, o2.ts). Removing rows
+// 0-1 still leaves an "r" step first (`[r, w, r, w]`) — the same
+// leading-rest outcome — because the removed rows are the warmup and ONLY
+// the first work step; the "r" immediately after it was always going to
+// become the new head regardless of how many work/rest pairs follow.
+// `leading-rest`'s message is user-facing, shown on a real screen after a
+// real user action — not a synthetic-fixture-only branch. See the separate
+// "removal dimension" describe block below, which drives the same real
+// `SessionDraft.removed` path this sweep does not exercise.
 //
 // DESIGN_BASELINES: copied from app/e2e/design.spec.ts (the screenshot
 // suite's fixed pair) for the same reason it's used there — deterministic,
@@ -136,14 +142,19 @@ describe("compileProgram: the 300-workout sweep", () => {
 
 // The removal dimension (Task 2 review, M3): `leading-rest` reached
 // through a LIVE user action, not a hand-built CompiledPhase[] fixture.
-// All eight titles below are `[wu, w, r, w]` in server/seed/library/o2.ts
-// (verified by reading each entry). Removing rows 0 and 1 — the warmup and
-// the first work step, exactly two taps on Confirm's per-row remove
-// control — leaves `[r, w]` as the effective steps: a rest phase with
-// nothing before it. This drives the REAL `SessionDraft.removed` field
-// through the REAL `effectiveSteps` (via `buildRun`), not a reimplemented
-// filter, for the same "one algorithm, not two copies" reason `sweepOne`
-// above uses `buildDraft`/`buildRun` rather than hand-assembling phases.
+// Seven of the eight titles below (all but Virazon) are `[wu, w, r, w]` in
+// server/seed/library/o2.ts (verified by reading each entry); removing
+// rows 0 and 1 — the warmup and the first work step, exactly two taps on
+// Confirm's per-row remove control — leaves `[r, w]` as the effective
+// steps directly. Virazon is `[wu, w, r, w, r, w]` (two work/rest pairs);
+// removing the same two rows leaves `[r, w, r, w]` — still rest-first, for
+// the same reason (only the warmup and the FIRST work step are removed,
+// so the "r" immediately following the first work step becomes the new
+// head regardless of what follows it). This drives the REAL
+// `SessionDraft.removed` field through the REAL `effectiveSteps` (via
+// `buildRun`), not a reimplemented filter, for the same "one algorithm,
+// not two copies" reason `sweepOne` above uses `buildDraft`/`buildRun`
+// rather than hand-assembling phases.
 const REMOVAL_LEADING_REST_TITLES = [
   "Moonbow",
   "Sun Dog",
