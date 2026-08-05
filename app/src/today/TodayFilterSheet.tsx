@@ -27,6 +27,14 @@ const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 // at this id, same pattern as Library's FilterSheet.tsx.
 const TITLE_ID = "today-filter-sheet-title";
 
+// Fix round (M1, 2026-08-04): the live-count caption's own id — SheetShell's
+// primary button points its `aria-describedby` here, so a screen-reader
+// user tabbing to (or announcing) "Apply Filter" also hears the count and
+// the reason it's disabled at 0, which a disabled button's own unreachable
+// focus state can no longer surface any other way now that the count left
+// the button's accessible NAME (the Revision's own "Apply Filter" constant).
+const COUNT_ID = "today-filter-sheet-count";
+
 /**
  * Today's own FILTER sheet: slides up over the screen (Today.tsx never
  * pushes history for it — same BACK-with-sheet-open decision as Library's
@@ -101,6 +109,7 @@ export default function TodayFilterSheet({
         label: "Apply Filter",
         disabled: poolCount === 0,
         onPress: onApply,
+        describedBy: COUNT_ID,
       }}
     >
       <div className="filter-sheet-header">
@@ -228,7 +237,7 @@ export default function TodayFilterSheet({
           mono caption directly above it — the only remaining explanation of
           why the button disables at 0. Singular-aware, same idiom the
           button's own count used to carry. */}
-      <p className="today-filter-sheet-count">
+      <p id={COUNT_ID} className="today-filter-sheet-count">
         {poolCount} OPTION{poolCount === 1 ? "" : "S"}
       </p>
     </SheetShell>

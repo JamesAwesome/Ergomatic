@@ -612,10 +612,9 @@ describe("Today (FILTER sheet)", () => {
   it("applying SOURCE=CUSTOM narrows the pool to the personal fixture alone, swapping the recommendation", async () => {
     mockReady({ workouts: [ISOBAR, WARM_FRONT, PERSONAL_GRADIENT] });
     await renderToday();
-    // Pre-filter: ISOBAR (10 days ago) is least-recently-done among the
-    // three AT entries (WARM_FRONT 20, PERSONAL_GRADIENT 12) — wait, most
-    // days ago wins (least recently done), so WARM_FRONT (20) is actually
-    // the pre-filter pick.
+    // Pre-filter: byLeastRecentlyDone ranks by MOST days ago first, so
+    // WARM_FRONT (20 days) outranks PERSONAL_GRADIENT (12) and ISOBAR (10)
+    // — it's the pre-filter pick.
     expect(
       screen.getByRole("heading", { name: "Stationary Front" }),
     ).toBeVisible();

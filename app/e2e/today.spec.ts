@@ -218,6 +218,50 @@ async function neutralizeGlobalRecency(
   }
 }
 
+/** Logs a single personal (non-global) workout, by title, once — giving it
+ *  a real, non-null `lastDoneDaysAgo` (a few seconds old, so it always
+ *  reads as 0 days ago) instead of never-done. Fix round (L1, 2026-08-04
+ *  whole-branch review): the SOURCE=CUSTOM keep-or-move e2e below needs
+ *  ONE of its two personal fixtures to rank BELOW the other in
+ *  `byLeastRecentlyDone` (never-done always outranks any real number) —
+ *  without this, both fixtures tie as never-done and a stable sort makes
+ *  `sorted[0]` the same card whether the pickOverride mechanic the test
+ *  means to prove actually ran or not. Same `advancesPlan: false` POST
+ *  /api/logs idiom as `neutralizeGlobalRecency` above, scoped to one row
+ *  instead of a batch. */
+async function logOnce(page: Page, title: string): Promise<void> {
+  const result = await page.evaluate(async (t) => {
+    const listRes = await fetch("/api/workouts");
+    if (!listRes.ok) return { ok: false, status: listRes.status };
+    const workouts = (await listRes.json()) as Array<{
+      id: string;
+      title: string;
+      type: string;
+      isGlobal: boolean;
+    }>;
+    const match = workouts.find((w) => !w.isGlobal && w.title === t);
+    if (!match) return { ok: false, status: 404 };
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: match.id,
+        workoutTitle: t,
+        workoutType: match.type,
+        held: "held",
+        pain: 1,
+        notes: null,
+        steps: [{ label: "Work" }],
+        advancesPlan: false,
+      }),
+    });
+    return { ok: res.ok, status: res.status };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`logOnce failed for "${title}": ${result.status}`);
+  }
+}
+
 test.describe("Today enhancements: visible filter chips", () => {
   const highPainTitle = "Today Filters High Pain E2E";
   const lowPainTitle = "Today Filters Low Pain E2E";
@@ -313,50 +357,68 @@ test.describe("Today enhancements: visible filter chips", () => {
 // "Apply Filter" (Revision, mid-round) with the live count moved to its own
 // caption. This single continuous flow covers three things at once, per
 // the round's own testing note: a real SOURCE=CUSTOM filter (the personal
-// fixtures ARE the pool, the caption's count is honest, not hardcoded), the
-// KEEP half of the revision's "keep-or-move" requirement (the shown pick
-// still matches SOURCE=CUSTOM, so Apply leaves it in place), and the MOVE
-// half (a second, PAIN-based filter then excludes that same pick, so Apply
-// swaps the card to the one custom fixture that still matches).
+// fixtures ARE the pool, the caption's count is honest, not hardcoded), and
+// both halves of the revision's "keep-or-move" requirement.
+//
+// Fix round (L1, 2026-08-04 whole-branch review): the KEEP half needs a
+// SHUFFLE-established pick that a naive recompute would NOT reproduce on
+// its own — mirroring domain/suggest.test.ts's own "shown" vs.
+// "would-otherwise-win" fixture trick — rather than two never-done
+// fixtures whose tie-broken sort would show the same card whether the
+// pickOverride mechanic ran or not. `naturalWinnerTitle` stays never-done
+// (outranks everything); `shuffledPickTitle` is logged once (`logOnce`) so
+// it carries a real `lastDoneDaysAgo` and would NEVER win the sort on its
+// own — the only way it appears on screen is because SHUFFLE explicitly
+// picked it and the app correctly preserves that pick across a filter
+// apply.
 test.describe("Today enhancements: SOURCE=CUSTOM and the keep-or-move guarantee", () => {
-  const highPainTitle = "Today Source Custom High Pain E2E";
-  const lowPainTitle = "Today Source Custom Low Pain E2E";
+  const naturalWinnerTitle = "Today Keep-Or-Move Natural Winner E2E";
+  const shuffledPickTitle = "Today Keep-Or-Move Shuffled Pick E2E";
 
   test.afterEach(async ({ page }) => {
-    await cleanupByTitle(page, highPainTitle);
-    await cleanupByTitle(page, lowPainTitle);
+    await cleanupByTitle(page, naturalWinnerTitle);
+    await cleanupByTitle(page, shuffledPickTitle);
   });
 
-  test("SOURCE=CUSTOM narrows to the two personal fixtures with an honest count; the pick stays while it still matches, then moves once PAIN excludes it", async ({
+  test("SOURCE=CUSTOM narrows to the two personal fixtures with an honest count; a SHUFFLE-established pick survives a still-matching filter, then moves once LAST DONE excludes it", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
-      email: "today-source-custom@e2e.test",
-      name: "Today Source Custom Tester",
+      email: "today-keep-or-move@e2e.test",
+      name: "Today Keep-Or-Move Tester",
     });
     await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
-    // Same neutralize-then-import idiom as the PAIN-filter test above:
-    // makes these two personal fixtures the only never-done O2 entries, so
-    // the pre-filter pick (creation order: high-pain first) is deterministic.
+    // Same neutralize idiom as the PAIN-filter test above: makes
+    // `naturalWinnerTitle` the only never-done O2 entry in the WHOLE
+    // library (globals included), so it's the deterministic pre-filter
+    // pick regardless of either personal fixture's own creation order.
     await neutralizeGlobalRecency(page, "O2");
     await importBulk(
       page,
-      [`${highPainTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
+      [`${naturalWinnerTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
     );
     await importBulk(
       page,
-      [`${lowPainTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+      [`${shuffledPickTitle} | O2 | medium | 5`, "w 1:00 6k"].join("\n"),
     );
+    // Gives shuffledPickTitle a real (non-null) lastDoneDaysAgo — it now
+    // permanently loses the recency sort to naturalWinnerTitle's own
+    // never-done null, in BOTH the unfiltered and the SOURCE=CUSTOM pool.
+    await logOnce(page, shuffledPickTitle);
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(
+      naturalWinnerTitle,
+    );
 
     // SOURCE=CUSTOM: both personal fixtures pass (neither is global), and
     // nothing else in this fresh account's library is personal — the
-    // caption's count is a real, honest 2, not a hardcoded label.
+    // caption's count is a real, honest 2, not a hardcoded label. The
+    // natural winner still wins the sort here too (still never-done) — no
+    // discrimination yet, just proves the narrowing itself works.
     await openFilterSheet(page);
     const dialog = page.getByRole("dialog");
     const sourceGroup = dialog.getByRole("group", { name: "SOURCE" });
@@ -375,30 +437,56 @@ test.describe("Today enhancements: SOURCE=CUSTOM and the keep-or-move guarantee"
       page.getByRole("button", { name: "Apply Filter" }),
     ).toBeVisible();
     await applyFilterSheet(page);
+    await expect(page.locator(".today-card-title")).toHaveText(
+      naturalWinnerTitle,
+    );
 
-    // KEEP: the high-pain fixture still matches SOURCE=CUSTOM (it's
-    // personal), so Apply leaves the shown card exactly where it was —
-    // proving the filter narrowed the POOL without disturbing a pick that's
-    // still valid in it.
-    await expect(page.locator(".today-card-title")).toHaveText(highPainTitle);
+    // Establish a genuinely discriminating pick: SHUFFLE, against the now
+    // exactly-2-entry CUSTOM pool, cycles from index 0 (naturalWinnerTitle,
+    // the current recommendation) to index 1 (shuffledPickTitle) — a card
+    // that could ONLY appear here because the pickOverride mechanic ran,
+    // never because of the recency sort (which permanently favors the
+    // never-done natural winner instead).
+    await page.getByRole("button", { name: "SHUFFLE ↻" }).click();
+    await expect(page.locator(".today-card-title")).toHaveText(
+      shuffledPickTitle,
+    );
+
+    // KEEP: a genuinely NEW filter (deselect HARD — both fixtures are
+    // `medium`, so this can't touch the pool) is applied — the shuffled
+    // pick still matches it, so it must survive Apply. Discriminating: a
+    // naive recompute that dropped/ignored the stored pickOverride would
+    // incorrectly revert to naturalWinnerTitle here, since that's what the
+    // recency sort alone would produce.
+    await openFilterSheet(page);
+    await dialog.getByRole("button", { name: "HARD", exact: true }).click();
+    await applyFilterSheet(page);
+    await expect(page.locator(".today-card-title")).toHaveText(
+      shuffledPickTitle,
+    );
     await expect(
-      page.locator(".filter-token", { hasText: "CUSTOM" }),
+      page.locator(".filter-token", { hasText: "EASY–MEDIUM" }),
     ).toBeVisible();
 
-    // MOVE: a second filter (PAIN 1+2) now excludes the shown high-pain
-    // pick specifically — Apply has to swap the card to the one surviving
-    // fixture (low-pain), not merely narrow silently while leaving a
+    // MOVE: LAST DONE=21D+ now excludes the shuffled pick specifically (it
+    // has a real, recent `lastDoneDaysAgo` — under the 21-day boundary,
+    // i.e. NOT `21D+`) while keeping the never-done natural winner (never-
+    // done counts as `21D+`, the Library's own pinned rule) — Apply has to
+    // swap the card back, not merely narrow silently while leaving a
     // now-invalid pick on screen.
     await openFilterSheet(page);
-    const painGroup = page.getByRole("dialog").getByRole("group", {
-      name: "PAIN",
+    const lastDoneGroup = page.getByRole("dialog").getByRole("group", {
+      name: "LAST DONE",
     });
-    await painGroup.getByRole("button", { name: "1", exact: true }).click();
-    await painGroup.getByRole("button", { name: "2", exact: true }).click();
+    await lastDoneGroup
+      .getByRole("button", { name: "21D+", exact: true })
+      .click();
     await expect(filterSheetCount(page)).toHaveText("1 OPTION");
     await applyFilterSheet(page);
 
-    await expect(page.locator(".today-card-title")).toHaveText(lowPainTitle);
+    await expect(page.locator(".today-card-title")).toHaveText(
+      naturalWinnerTitle,
+    );
   });
 });
 
