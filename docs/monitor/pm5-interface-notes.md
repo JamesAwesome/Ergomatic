@@ -733,6 +733,29 @@ WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
    row. Flagged for the laptop session alongside #6 — both are the
    codec's assumptions about MULTI-frame/MULTI-program PM behavior that no
    single-frame, single-program worked example can confirm.
+8. **The driver's `intervalRemaining` checkpoint assumes 0x0033's "Last
+   Split Time"/"Last Split Distance" (§10, offset 14-19) report the
+   SESSION-cumulative point at which the CURRENT interval began (i.e.,
+   where the previous interval/split ended) continuously, on every
+   regular status tick — not merely once, at a boundary. Neither document
+   states an update cadence for these two fields beyond listing them in
+   the characteristic's byte table. `src/monitor/driver.ts`'s
+   `computeRemainingForFrame` subtracts this pair from
+   `MonitorFrame.elapsedSeconds`/`distanceMeters` to recover "progress
+   into this interval" with no local observation history at all
+   (replacing an earlier, buggier design that rooted a checkpoint at
+   whichever tick the driver happened to observe first) — correct only if
+   the field genuinely holds steady at the interval's start point for
+   that interval's whole duration, updating only at the NEXT boundary.
+   The same computation (and its sibling divergence check,
+   `src/monitor/driver.ts`'s `"divergence"` log kind) also assumes
+   `MonitorFrame.intervalIndex` (0x0033's Interval Count) and
+   `IntervalActual.index` (0x0037/0x0038's Split/Interval Number, #1
+   above) stay in lockstep frame-to-frame — #1 already flags these as two
+   independently-incrementing fields with no documented guarantee of
+   agreement; the driver LOGS a disagreement when one is observed (never
+   corrects or picks a "winner" between the two). Both flagged for the
+   laptop session alongside #1.
 
 ## 16. CSAFE response parsing (for `pm5/response.ts`)
 

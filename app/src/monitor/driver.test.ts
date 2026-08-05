@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { compileProgram } from "../../domain/monitor/program.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import { buildProgrammingSequence } from "../../domain/monitor/pm5/commands.js";
 import {
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
@@ -13,6 +14,7 @@ import {
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
   GENERAL_STATUS_UUID,
+  RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
   SPLIT_INTERVAL_DATA_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
@@ -285,11 +287,164 @@ describe("createPm5Driver: distance-kind interval — intervalRemaining uses dis
     fake.tick(200);
 
     const frames = events.filter((e) => e.kind === "frame");
-    // First tick: checkpoint sets itself here (progress 0, remaining full
-    // 1000m). Second tick: progress = 700 - 300 = 400m -> remaining 600m,
-    // using distanceMeters, never elapsedSeconds.
+    // No boundary ever occurs in this program (one interval only), so
+    // 0x0033's Last Split Distance stays at its session-start value (0)
+    // throughout — progress at the second tick is simply the session's
+    // own cumulative distanceMeters (700), using distanceMeters, never
+    // elapsedSeconds: remaining = 1000 - 700 = 300.
     expect(frames[frames.length - 1]).toMatchObject({
-      frame: { intervalRemaining: { kind: "distance", value: 600 } },
+      frame: { intervalRemaining: { kind: "distance", value: 300 } },
+    });
+  });
+});
+
+describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FIRST observed tick", () => {
+  it("a late-arriving first tick (300m into a 1000m interval) reports the true 700m remaining, not the full 1000m", async () => {
+    // The exact defect the fix-round review pinned: an earlier checkpoint
+    // design rooted itself at whichever tick the driver happened to see
+    // first, so a first observation arriving well after the interval
+    // actually started reported the FULL interval value as "remaining"
+    // forever. 0x0033's Last Split Distance (0, since no boundary has
+    // ever happened yet) needs no observation history to get this right.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "distance",
+          value: 1000,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    // `stubTransport` never auto-acks — the driver only sets its internal
+    // `program` (needed for `computeRemainingForFrame`'s `!program` guard
+    // to pass) once `program()`'s ack-gated sequence actually resolves, so
+    // this manually acks the single frame a 1-interval program produces.
+    const pending = driver.program(program);
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    await pending;
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20)); // lastSplitDistanceMeters = 0
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 60,
+        distanceMeters: 300,
+        workoutType: 8,
+        intervalType: 1,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 1,
+        totalWorkDistanceMeters: 300,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+
+    const frames = events.filter((e) => e.kind === "frame");
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({
+      frame: { intervalRemaining: { kind: "distance", value: 700 } },
+    });
+  });
+
+  it("a reconnect timeline SPANNING a boundary re-derives the correct remaining for the NEW interval, not the full interval value", async () => {
+    // The case the plain "disconnect mid-interval" reconnect test dodges
+    // (a 1-interval program has no boundary to span at all). Two distance
+    // intervals: 500m then 1000m.
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "distance",
+          value: 500,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          kind: "distance",
+          value: 1000,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 40,
+        distanceMeters: 200,
+        spm: 22,
+        currentSplit: 110,
+        heartRateBpm: 140,
+        intervalIndex: 0,
+      },
+      // The interval-0 boundary happens WHILE disconnected — never
+      // delivered live, only tracked internally by the fake.
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 100,
+          distanceMeters: 500,
+          avgSplit: 110,
+          avgSpm: 22,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 100,
+        cumulativeDistanceMeters: 500,
+      },
+      // The interval-1 tick also happens while disconnected — 200m into
+      // the new 1000m interval (700 session-cumulative - 500 checkpoint).
+      {
+        atMs: 300,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 140,
+        distanceMeters: 700,
+        spm: 22,
+        currentSplit: 108,
+        heartRateBpm: 145,
+        intervalIndex: 1,
+      },
+    ];
+    const { fake, driver, events } = harness({ program, events: timeline });
+
+    await driver.program(program);
+    fake.tick(100); // interval-0 tick lands normally
+    fake.injectDisconnect();
+    fake.tick(200); // the boundary AND the interval-1 tick both elapse while disconnected
+    fake.completeReconnect(); // flushes both — boundary first, then the fresh interval-1 status
+
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(1);
+
+    const frames = events.filter((e) => e.kind === "frame");
+    const latest = frames[frames.length - 1];
+    // 1000m interval, checkpoint at 500 (from the boundary that happened
+    // while disconnected), now at session distance 700 -> 200m progress
+    // -> 800m remaining. An earlier design would have checkpointed at
+    // THIS tick itself (progress 0, remaining the full 1000m) since it's
+    // the first tick the driver ever observed for interval 1.
+    expect(latest).toMatchObject({
+      kind: "frame",
+      frame: {
+        intervalIndex: 1,
+        distanceMeters: 700,
+        intervalRemaining: { kind: "distance", value: 800 },
+      },
     });
   });
 });
@@ -584,8 +739,8 @@ describe("createPm5Driver: NAK during programming", () => {
   });
 });
 
-describe("createPm5Driver: timeout (link down before any ack arrives)", () => {
-  it("a disconnect while a programming ack is pending rejects with reason 'timeout'", async () => {
+describe("createPm5Driver: disconnected (link down before any ack arrives)", () => {
+  it("a disconnect while a programming ack is pending rejects with reason 'disconnected'", async () => {
     // Uses a bare stub, not the fake: the fake always acks synchronously
     // inside write() (the same-turn ordering this file's `sendSequence`
     // comment documents), so to get a write whose ack genuinely never
@@ -594,13 +749,15 @@ describe("createPm5Driver: timeout (link down before any ack arrives)", () => {
     const transport = stubTransport();
     const log = createEventLog();
     const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
 
     const pending = driver.program(MINIMAL_PROGRAM);
     transport.fireDisconnect("radio out of range");
 
     await expect(pending).rejects.toSatisfy((err: unknown) => {
       expect(err).toBeInstanceOf(ProgramRejectionError);
-      expect((err as ProgramRejectionError).reason).toBe("timeout");
+      expect((err as ProgramRejectionError).reason).toBe("disconnected");
       expect((err as ProgramRejectionError).atFrame).toBe(0);
       return true;
     });
@@ -610,9 +767,114 @@ describe("createPm5Driver: timeout (link down before any ack arrives)", () => {
         .some(
           (e) =>
             e.kind === "program-rejection" &&
+            e.detail.startsWith("disconnected at frame 0"),
+        ),
+    ).toBe(true);
+    // Fix-round HIGH-2: a genuine disconnect is distinguishable from an
+    // ack-timeout precisely because it ALSO fires a `disconnected`
+    // MonitorEvent (the transport's own onDisconnect signal) — see the
+    // "distinguishable outcomes" describe block below for the contrast.
+    expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(1);
+  });
+});
+
+describe("createPm5Driver: HIGH-2 — ack-timeout policy, distinct from disconnect", () => {
+  it("injectTimeout() + enough general-status ticks rejects with reason 'timeout', link never disconnects", async () => {
+    // Scripted so that TWO general-status ticks become due — nothing in
+    // the fake gates timeline delivery on `phase`, so these deliver mid-
+    // "programming" (before "armed"), exercising a genuine "mid-sequence
+    // timeout" (spec §4's own phrasing, mirroring "mid-sequence NAK")
+    // rather than only being testable after the session is armed.
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 1,
+        distanceMeters: 1,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        intervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 2,
+        distanceMeters: 2,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        intervalIndex: 0,
+      },
+    ];
+    const fake = createFakeTransport({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+    });
+    const log = createEventLog();
+    const driver = createPm5Driver(fake, log, { ackTimeout: { ticks: 2 } });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    fake.injectTimeout();
+    const pending = driver.program(MINIMAL_PROGRAM);
+    fake.tick(200); // delivers both scheduled general-status ticks in one call
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("timeout");
+      expect((err as ProgramRejectionError).hexTrace).toContain(
+        "ack-timeout policy",
+      );
+      return true;
+    });
+    // The distinguishing observable: no disconnect ever happened.
+    expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(0);
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "program-rejection" &&
             e.detail.startsWith("timeout at frame 0"),
         ),
     ).toBe(true);
+  });
+
+  it("with no ackTimeout option configured, general-status ticks never time out an ack-await (original, still-supported behavior)", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 1,
+        distanceMeters: 1,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        intervalIndex: 0,
+      },
+    ];
+    const fake = createFakeTransport({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+    });
+    const log = createEventLog();
+    const driver = createPm5Driver(fake, log); // no options — the default
+
+    fake.injectTimeout();
+    const pending = driver.program(MINIMAL_PROGRAM);
+    fake.tick(1000); // as many ticks as it likes — nothing ever times this out
+
+    let settled = false;
+    void pending.catch(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false); // still hanging, exactly as documented — no policy, no bound
   });
 });
 
@@ -692,8 +954,24 @@ describe("createPm5Driver: disconnect mid-interval -> reconnect with re-derived 
 });
 
 describe("createPm5Driver: garbled frame — logged, stream lives", () => {
-  it("a too-short General Status notification is logged as frame-error, not thrown; the next valid one still emits normally", async () => {
-    const { fake, driver, events, log } = harness({ program: MINIMAL_PROGRAM });
+  it("a too-short General Status notification is logged as frame-error, not thrown; the next VALID one still emits normally (L1)", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 45,
+        distanceMeters: 150,
+        spm: 22,
+        currentSplit: 115,
+        heartRateBpm: 138,
+        intervalIndex: 0,
+      },
+    ];
+    const { fake, driver, events, log } = harness({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+    });
     await driver.program(MINIMAL_PROGRAM);
     const framesAfterArm = events.filter((e) => e.kind === "frame").length;
 
@@ -706,12 +984,103 @@ describe("createPm5Driver: garbled frame — logged, stream lives", () => {
     expect(errorEntry).toBeDefined();
     expect(errorEntry?.detail).toContain("0x0031");
 
-    // The stream lives: a subsequent VALID notification still works.
+    // The stream LIVES: this scripted, genuinely valid notification is
+    // delivered and DOES produce a real "frame" event with its own
+    // decoded values — not merely "ticking doesn't throw".
     fake.tick(100);
-    // (MINIMAL_PROGRAM has no scripted timeline events, so nothing new is
-    // due — the assertion here is simply that ticking doesn't throw or
-    // wedge the driver after the garbled frame.)
-    expect(() => fake.tick(100)).not.toThrow();
+    const frames = events.filter((e) => e.kind === "frame");
+    expect(frames.length).toBe(framesAfterArm + 1);
+    expect(frames[frames.length - 1]).toMatchObject({
+      kind: "frame",
+      frame: { state: "rowing", elapsedSeconds: 45, distanceMeters: 150 },
+    });
+  });
+});
+
+describe("createPm5Driver: MED-2 — divergence logging", () => {
+  it("logs a 'divergence' entry when frame.intervalIndex (0x0033) disagrees with actual.index (0x0037/38)", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      // General-status tick reports intervalIndex 0.
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        intervalIndex: 0,
+      },
+      // Boundary reports a DIFFERENT split number (2) — a skew that can't
+      // happen in this fake's own book-keeping by construction, so it's
+      // authored directly here to pin the driver's own comparison.
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 2,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 22,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 200,
+      },
+    ];
+    const { fake, log } = harness({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+    });
+    // Note: `driver.program()` is deliberately never called here — the
+    // divergence check depends only on the "seen" status/split
+    // characteristics having arrived at least once (satisfied by ticking
+    // the scripted timeline below), not on the driver's own `program`
+    // state, so there is nothing to await first.
+    fake.tick(200);
+
+    const divergence = log.entries().find((e) => e.kind === "divergence");
+    expect(divergence).toBeDefined();
+    expect(divergence?.detail).toContain("intervalIndex=0");
+    expect(divergence?.detail).toContain("actual.index=2");
+  });
+
+  it("logs nothing when the two fields agree", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        intervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 22,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 200,
+      },
+    ];
+    const { fake, log } = harness({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+    });
+    fake.tick(200);
+    expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
   });
 });
 
@@ -759,8 +1128,8 @@ describe("createPm5Driver: 'seen' gating — a notification before its siblings 
   });
 });
 
-describe("createPm5Driver: unsolicited ack frame", () => {
-  it("an ack notification with nothing awaiting it is logged, not thrown", () => {
+describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
+  it("an ack notification with nothing awaiting it is BUFFERED (logged, not thrown or discarded)", () => {
     const transport = stubTransport();
     const log = createEventLog();
     createPm5Driver(transport, log);
@@ -774,10 +1143,51 @@ describe("createPm5Driver: unsolicited ack frame", () => {
     expect(
       log
         .entries()
-        .some(
-          (e) => e.kind === "frame-error" && e.detail.includes("unsolicited"),
-        ),
+        .some((e) => e.kind === "ack-buffered" && e.detail.includes("queued")),
     ).toBe(true);
+  });
+
+  it("a coalesced notification carrying TWO complete ack frames does not hang program() on a multi-frame sequence", async () => {
+    // The exact defect the fix-round review proved both ways: the drain
+    // loop pulls both frames out of one notification synchronously, but
+    // resolving the first frame's `pendingAck` does not synchronously let
+    // `sendSequence` register the next one — so, before this fix, the
+    // second frame was discarded as "unsolicited" and the write it was
+    // really for (frame 1) waited forever.
+    const fiveIntervalProgram: WorkoutProgram = {
+      intervals: Array.from({ length: 5 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      })),
+    };
+    const seq = buildProgrammingSequence(fiveIntervalProgram);
+    expect(seq.length).toBeGreaterThan(1); // confirms this fixture is genuinely multi-frame
+
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.program(fiveIntervalProgram);
+
+    // Both frames' acks, concatenated into ONE raw byte stream — a
+    // single BLE notification that happened to coalesce two responses.
+    const ack1 = buildAckFrame("ok", []);
+    const ack2 = buildAckFrame("ok", []);
+    const coalesced = new Uint8Array(ack1.length + ack2.length);
+    coalesced.set(ack1, 0);
+    coalesced.set(ack2, ack1.length);
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, coalesced);
+
+    await expect(pending).resolves.toBeUndefined();
+    // Both frames' chunks actually went out — this isn't a case where the
+    // driver merely accepted the buffered ack without ever writing the
+    // second frame's own bytes.
+    expect(
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID),
+    ).toHaveLength(seq.flat().length);
   });
 });
 
@@ -795,6 +1205,51 @@ describe("createPm5Driver: sample-rate write failure", () => {
             e.kind === "transport-error" && e.detail.includes("sample rate"),
         ),
     ).toBe(true);
+  });
+});
+
+describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-frame program", () => {
+  function hex(bytes: Uint8Array): string {
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
+  }
+
+  it("log.entries() shows exactly buildProgrammingSequence's chunks, each frame paired with one 'ok' ack", async () => {
+    const program: WorkoutProgram = {
+      intervals: Array.from({ length: 13 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      })),
+    };
+    const seq = buildProgrammingSequence(program);
+    expect(seq).toHaveLength(4); // confirms this fixture is genuinely multi-frame
+
+    const { driver, log } = harness({ program });
+    await driver.program(program);
+
+    const trace = log
+      .entries()
+      .filter((e) => e.kind === "write" || e.kind === "ack");
+    const expectedAckHex = hex(buildAckFrame("ok", []));
+
+    let cursor = 0;
+    for (const frame of seq) {
+      for (const chunk of frame) {
+        expect(trace[cursor]).toMatchObject({
+          kind: "write",
+          detail: hex(chunk),
+        });
+        cursor += 1;
+      }
+      expect(trace[cursor]).toMatchObject({
+        kind: "ack",
+        detail: expectedAckHex,
+      });
+      cursor += 1;
+    }
+    expect(trace).toHaveLength(cursor);
   });
 });
 

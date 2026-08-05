@@ -193,6 +193,37 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     expect(acks[0]).toMatchObject({ status: "ok" });
   });
 
+  it("injectNak(2) rejects a LATER frame (not just frame 0) in a genuinely multi-frame sequence (fix-round L2)", async () => {
+    const multiFrameProgram: WorkoutProgram = {
+      intervals: Array.from({ length: 13 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      })),
+    };
+    const seq = buildProgrammingSequence(multiFrameProgram);
+    expect(seq).toHaveLength(4); // confirms this fixture is genuinely 4 frames
+
+    const fake = createFakeTransport({ program: multiFrameProgram });
+    fake.injectNak(2);
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+
+    for (const frame of seq.slice(0, 3)) {
+      for (const chunk of frame) {
+        await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+      }
+    }
+    expect(acks.map((a) => a.status)).toStrictEqual(["ok", "ok", "reject"]);
+    expect(generals).toHaveLength(0); // never reached "armed" — frame 2's rejection halts the sequence
+  });
+
   it("a write after a NAK'd frame (which never advances to armed) past the expected sequence's own end throws", async () => {
     // injectNak(0) rejects PROGRAM's only frame, so `phase` never leaves
     // "programming" — a further write finds the expected-chunk cursor
@@ -264,6 +295,25 @@ describe("createFakeTransport: terminate", () => {
     expect(decodeGeneral(generals[0]!).workoutState).toBe(
       WORKOUTSTATE_TERMINATE,
     );
+  });
+
+  it("injectTimeout() withholds the terminate ack too — link stays up, nothing reported (fix-round HIGH-2)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    await programIt(fake, PROGRAM);
+    fake.injectTimeout();
+
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    expect(acks).toHaveLength(0);
+    expect(generals).toHaveLength(0);
   });
 });
 

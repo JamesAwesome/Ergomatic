@@ -1,9 +1,13 @@
 // The PM5 runtime driver (design spec §2-§3): wires a `Transport` to the
 // `pm5/` codec and exposes the normalized `MonitorDriver` seam. Owns
-// ack-gated write sequencing, the state machine (program -> armed -> the
-// frame stream -> interval boundaries -> finished/terminated, with terminal
-// states LATCHED per the Task 3 review's Appendix-E finding), and
-// `intervalRemaining`'s computation.
+// ack-gated write sequencing (with a pending-ack QUEUE — a coalesced BLE
+// notification can carry two response frames in one callback turn, and the
+// second must not be dropped just because nothing was awaiting it yet), the
+// state machine (program -> armed -> the frame stream -> interval
+// boundaries -> finished/terminated, with terminal states LATCHED per the
+// Task 3 review's Appendix-E finding), an optional tick-driven ack-timeout
+// policy distinct from a transport disconnect, and `intervalRemaining`'s
+// computation.
 //
 // Every Concept2 byte this file ever touches arrives pre-decoded through
 // `pm5/parse.ts` (`parseGeneralStatus` et al., `toMonitorFrame`,
@@ -60,29 +64,46 @@ import type {
 import type { MonitorEventLog } from "./eventLog";
 
 /** A programming/terminate write that never got acked "ok" (design spec
- *  §3): either the PM explicitly rejected it (`reason: "nak"`), or the
- *  link went down before any response arrived at all (`reason: "timeout"`
- *  — there is no wall clock anywhere in this driver, so the ONLY way it
- *  ever learns "no response is coming" rather than merely "no response
- *  YET" is the transport's own `onDisconnect` signal; see `sendSequence`'s
- *  own comment). `atFrame` is the 0-based index into the ack-gated sequence
+ *  §3), for exactly THREE distinct reasons:
+ *  - `"nak"`: a response frame arrived with a non-"ok" status — the PM
+ *    explicitly rejected it.
+ *  - `"disconnected"`: the transport's `onDisconnect` fired before any
+ *    response arrived — the link itself is down, so no response is ever
+ *    coming.
+ *  - `"timeout"`: the link stayed UP (no disconnect), but the caller-
+ *    supplied `ackTimeout` policy's tick budget elapsed with no response —
+ *    a genuinely different failure mode than a disconnect (the spec's own
+ *    "mid-sequence timeout" injection, distinct from "disconnect mid-
+ *    write"; fix-round HIGH-2). There is no wall clock anywhere in this
+ *    driver for either "no response is coming" signal: `"disconnected"`
+ *    is learned from the transport's own event, `"timeout"` is counted in
+ *    general-status TICKS (see `createPm5Driver`'s `ackTimeout` option),
+ *    never `Date.now()`/`setTimeout`.
+ *
+ *  `atFrame` is the 0-based index into the ack-gated sequence
  *  (`buildProgrammingSequence`'s outer array, or 0 for `buildTerminate`'s
  *  single frame) that failed; `hexTrace` is every write/ack exchanged
  *  during that call, already recorded to the event log too. */
 export interface ProgramRejection {
-  reason: "nak" | "timeout";
+  reason: "nak" | "disconnected" | "timeout";
   atFrame: number;
   hexTrace: string;
 }
 
+const REJECTION_VERBS: Record<ProgramRejection["reason"], string> = {
+  nak: "rejected",
+  disconnected: "disconnected before acking",
+  timeout: "never acked (ack-timeout policy)",
+};
+
 export class ProgramRejectionError extends Error implements ProgramRejection {
-  readonly reason: "nak" | "timeout";
+  readonly reason: "nak" | "disconnected" | "timeout";
   readonly atFrame: number;
   readonly hexTrace: string;
 
   constructor(rejection: ProgramRejection) {
     super(
-      `PM5 ${rejection.reason === "nak" ? "rejected" : "never acked"} frame ${rejection.atFrame}`,
+      `PM5 ${REJECTION_VERBS[rejection.reason]} frame ${rejection.atFrame}`,
     );
     this.name = "ProgramRejectionError";
     this.reason = rejection.reason;
@@ -115,11 +136,31 @@ export function computeIntervalRemaining(
   return { kind: interval.kind, value: Math.max(0, interval.value - progress) };
 }
 
-type PendingAckOutcome = "link-down" | CsafeResponse;
+/** `"disconnected"`/`"timeout"` are the two ways an ack-await can end
+ *  without a real response (see `ProgramRejection`'s own doc comment for
+ *  the distinction); anything else is a genuine parsed response. */
+type PendingAckOutcome = "disconnected" | "ack-timeout" | CsafeResponse;
+
+/** Fix-round HIGH-2: an optional, tick-driven ack-timeout policy — no wall
+ *  clock. `ticks` counts GENERAL_STATUS_UUID notifications (this driver's
+ *  established "tick pulse", `maybeEmitFrame`'s own comment) that arrive
+ *  while a write is awaiting its ack; once that many have arrived with no
+ *  response, the pending ack is resolved as `"ack-timeout"` — distinct
+ *  from `"disconnected"` (the link stays up the whole time; a real PM that
+ *  simply never responds to one particular command, not a radio drop).
+ *  Omitted entirely (the default) means the original, still-supported
+ *  behavior: wait for either a real response or a disconnect, with no
+ *  bound of its own. Real radio adapters (Task 5) are expected to
+ *  translate their own real-time polling cadence into this same tick
+ *  unit; this driver only ever counts them, never a clock. */
+export interface DriverOptions {
+  ackTimeout?: { ticks: number };
+}
 
 export function createPm5Driver(
   t: Transport,
   log: MonitorEventLog,
+  options: DriverOptions = {},
 ): MonitorDriver {
   // PM5-intrinsic capabilities — a PM5 always programs, always reports
   // stroke rate, always reports intervals; `deviceName` has no source in
@@ -138,18 +179,52 @@ export function createPm5Driver(
   let terminalLatched = false;
   let reconnectPending = false;
   let raw: Partial<RawPm5Status> = {};
-  // The session-cumulative elapsed/distance readings at the moment the
-  // CURRENT interval began — see `computeRemainingForFrame`'s own comment
-  // for why this checkpoint approach, not 0x0037's fields, is what feeds
-  // `computeIntervalRemaining`'s "quantized progress" argument.
-  let intervalStart: {
-    index: number;
-    elapsedSeconds: number;
-    distanceMeters: number;
-  } | null = null;
+  // The last `MonitorFrame.intervalIndex` this driver has actually SEEN
+  // (0x0033's Interval Count) — compared against `IntervalActual.index`
+  // (0x0037/0x0038's Split/Interval Number) at every boundary to log a
+  // `"divergence"` if the two disagree (fix-round MED-2; the two fields
+  // are independently-incrementing per interface-notes.md §15 #1/#8 — this
+  // driver correlates them but does not assume they can't skew).
+  let lastFrameIntervalIndex: number | null = null;
   const seen = { general: false, as1: false, as2: false, asSplit: false };
   const listeners = new Set<(e: MonitorEvent) => void>();
   let pendingAck: ((outcome: PendingAckOutcome) => void) | null = null;
+  // Fix-round MED-1: responses that arrive with NOTHING awaiting them yet
+  // are queued here rather than discarded. This is not merely defensive —
+  // it is REQUIRED for correctness: a coalesced BLE notification can carry
+  // two complete response frames in one callback turn (the drain loop
+  // below empties `controlReassembler` synchronously); the FIRST frame
+  // resolves whatever `pendingAck` is currently set, but resolving a
+  // promise never synchronously resumes its awaiter — `sendSequence` only
+  // gets a chance to register the NEXT `pendingAck` on a later microtask.
+  // The second frame is therefore drained while `pendingAck` is still
+  // null, even though it is a perfectly real ack for the very next await.
+  // Buffering it here (and `awaitAck` checking the buffer FIRST, before
+  // ever creating a new promise) means that ack is still there when
+  // `sendSequence` asks for it, instead of program() hanging forever.
+  const pendingAckBuffer: PendingAckOutcome[] = [];
+  // Ticks (GENERAL_STATUS_UUID arrivals) counted against the CURRENT
+  // pending ack, reset every time a new one is awaited — see `awaitAck`
+  // and `DriverOptions.ackTimeout`'s own doc comment.
+  let pendingAckTicks = 0;
+
+  /** The single place `sendSequence` gets its next ack outcome from — the
+   *  buffer (MED-1) is checked first; only if it is empty does this
+   *  register a fresh `pendingAck` (and reset the tick counter for the
+   *  ack-timeout policy, HIGH-2). Called BEFORE any write goes out for the
+   *  frame it is awaiting — see `sendSequence`'s own comment on why that
+   *  ordering, not just this buffer, is what makes a same-turn ack safe.
+   */
+  function awaitAck(): Promise<PendingAckOutcome> {
+    const buffered = pendingAckBuffer.shift();
+    if (buffered !== undefined) {
+      return Promise.resolve(buffered);
+    }
+    pendingAckTicks = 0;
+    return new Promise((resolve) => {
+      pendingAck = resolve;
+    });
+  }
 
   function emit(e: MonitorEvent): void {
     for (const cb of listeners) cb(e);
@@ -185,11 +260,16 @@ export function createPm5Driver(
       pendingAck = null;
       resolve(response);
     } else {
-      // A response frame with no write awaiting one — logged, never
-      // crashes the read loop (this could be a real PM's unsolicited
-      // status echo, or a test's injected garble landing on the wrong
-      // channel).
-      log.record("frame-error", `unsolicited ack frame: ${toHex(frame)}`);
+      // A response frame with nothing CURRENTLY awaiting one — queued
+      // (MED-1), not discarded: the classic case is the second frame of a
+      // coalesced notification, arriving before `sendSequence` has had a
+      // microtask to register the next `pendingAck`. Never crashes the
+      // read loop either way.
+      log.record(
+        "ack-buffered",
+        `no pending ack yet — queued: ${toHex(frame)}`,
+      );
+      pendingAckBuffer.push(response);
     }
   }
 
@@ -205,12 +285,14 @@ export function createPm5Driver(
     }
     if (pendingAck) {
       // No wall clock anywhere in this driver — an unexpected link drop is
-      // the ONLY signal that turns "no ack yet" into "no ack ever coming",
-      // i.e. `ProgramRejection`'s "timeout" reason (see this file's own
-      // header comment and `ProgramRejection`'s doc comment).
+      // the ONLY signal that turns "no ack yet" into "no ack ever coming"
+      // via THIS path, i.e. `ProgramRejection`'s "disconnected" reason
+      // (see this file's own header comment and `ProgramRejection`'s doc
+      // comment — distinct from the tick-counted "timeout" reason, whose
+      // link stays up the whole time).
       const resolve = pendingAck;
       pendingAck = null;
-      resolve("link-down");
+      resolve("disconnected");
     }
     reconnectPending = true;
     log.record("disconnected", reason);
@@ -250,41 +332,35 @@ export function createPm5Driver(
   /**
    * `intervalRemaining`'s "quantized progress" input (design spec §2/§3):
    * how far INTO the current interval `frame` represents, in the
-   * interval's own unit. Sourced from a CHECKPOINT (the session-cumulative
-   * `elapsedSeconds`/`distanceMeters` recorded the moment `intervalIndex`
-   * last changed), not from 0x0037/0x0038's fields — those characteristics
-   * are the boundary-completion pair (`toIntervalActual`'s own source,
-   * interface-notes.md §10) and, per this task's own build (see
-   * `src/monitor/transports/fake.ts`'s header comment), are never
-   * documented or modeled as a LIVE mid-interval feed; treating their
-   * last-known (boundary) values as "current progress" would show the
-   * PREVIOUS interval's final numbers throughout the whole of the next
-   * one. The checkpoint approach instead only needs fields EVERY general/
-   * additional-status tick already carries (`elapsedSeconds`,
-   * `distanceMeters`, `intervalIndex`), works identically for a
-   * time-kind or distance-kind interval, and needs no assumption about a
-   * characteristic's update cadence at all.
+   * interval's own unit.
+   *
+   * Fix-round HIGH-2 (re-rooted per review): sourced from 0x0033's own
+   * "Last Split Time"/"Last Split Distance" fields (`RawPm5Status.
+   * lastSplitTimeSeconds`/`lastSplitDistanceMeters`, interface-notes.md
+   * §10 offset 14-19) — the session-cumulative point at which the CURRENT
+   * interval began, reported on EVERY regular status tick, needing no
+   * local observation history at all. `frame.elapsedSeconds`/
+   * `distanceMeters` minus that pair is "how far into this interval",
+   * correct on the VERY FIRST tick the driver ever observes for a given
+   * interval (unlike an earlier version of this function, which rooted a
+   * checkpoint at whichever tick it happened to see first — permanently
+   * wrong for any interval whose first observed tick wasn't also its
+   * true start, e.g. a late-arriving first tick, or a reconnect that
+   * skipped straight into the interval already in progress; see the
+   * report and interface-notes.md §15 #8 for the assumption this now
+   * rests on instead). No driver-local state is needed to compute this —
+   * every input is read straight from the current merged `raw`/`frame`.
    */
   function computeRemainingForFrame(
     frame: MonitorFrame,
   ): MonitorFrame["intervalRemaining"] {
-    if (frame.intervalIndex === null) {
-      intervalStart = null; // no interval active — armed/idle/finished/terminated
-      return null;
-    }
-    if (!intervalStart || intervalStart.index !== frame.intervalIndex) {
-      intervalStart = {
-        index: frame.intervalIndex,
-        elapsedSeconds: frame.elapsedSeconds,
-        distanceMeters: frame.distanceMeters,
-      };
-    }
-    if (!program) return null;
+    if (!program || frame.intervalIndex === null) return null;
     const interval = program.intervals[frame.intervalIndex];
+    const status = raw as RawPm5Status;
     const progress =
       interval?.kind === "distance"
-        ? frame.distanceMeters - intervalStart.distanceMeters
-        : frame.elapsedSeconds - intervalStart.elapsedSeconds;
+        ? frame.distanceMeters - status.lastSplitDistanceMeters
+        : frame.elapsedSeconds - status.lastSplitTimeSeconds;
     return computeIntervalRemaining(interval, progress);
   }
 
@@ -303,6 +379,7 @@ export function createPm5Driver(
       ...base,
       intervalRemaining: computeRemainingForFrame(base),
     };
+    lastFrameIntervalIndex = frame.intervalIndex;
     log.record("frame", `state=${frame.state} elapsed=${frame.elapsedSeconds}`);
     emit({ kind: "frame", frame });
 
@@ -332,20 +409,24 @@ export function createPm5Driver(
     log.record("interval-complete", `index=${actual.index}`);
     emit({ kind: "intervalComplete", actual });
 
-    // Root the NEXT interval's checkpoint at this exact boundary, using
-    // 0x0037's own SESSION-cumulative `elapsedSeconds`/`distanceMeters`
-    // fields (a separate pair from `actual`'s per-interval ones — see
-    // `computeRemainingForFrame`'s comment) rather than waiting for that
-    // next interval's own first live tick to set it. Without this, the
-    // first tick of every interval after the first would checkpoint
-    // itself (progress 0, i.e. the full interval value shown as
-    // "remaining") instead of picking up where the completed interval
-    // left off.
-    intervalStart = {
-      index: actual.index + 1,
-      elapsedSeconds: status.elapsedSeconds,
-      distanceMeters: status.distanceMeters,
-    };
+    // Fix-round MED-2: 0x0033's Interval Count (`MonitorFrame.
+    // intervalIndex`, tracked as `lastFrameIntervalIndex`) and 0x0037/38's
+    // Split/Interval Number (`actual.index`) are documented as two
+    // SEPARATE, independently-incrementing fields (interface-notes.md §15
+    // #1/#8) — nothing guarantees they agree. This never corrects either
+    // value (there is no documented rule for which one would be "right");
+    // it only surfaces the disagreement so a bug report / diagnostics
+    // view (7B) can see it happened, via the trace, without a screen
+    // silently trusting a skewed pairing.
+    if (
+      lastFrameIntervalIndex !== null &&
+      lastFrameIntervalIndex !== actual.index
+    ) {
+      log.record(
+        "divergence",
+        `intervalIndex=${lastFrameIntervalIndex} (0x0033) vs actual.index=${actual.index} (0x0037/38)`,
+      );
+    }
   }
 
   // AS1/AS2 only merge into `raw` and mark themselves `seen` — they do NOT
@@ -384,6 +465,18 @@ export function createPm5Driver(
   );
   mergeStatus(GENERAL_STATUS_UUID, "0x0031", parseGeneralStatus, () => {
     seen.general = true;
+    // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
+    // HIGH-2): only counts while a write is genuinely awaiting its ack
+    // (`pendingAck` set) AND a policy was actually configured — otherwise
+    // a fully-connected, un-timed-out session just counts nothing, ever.
+    if (pendingAck && options.ackTimeout) {
+      pendingAckTicks += 1;
+      if (pendingAckTicks >= options.ackTimeout.ticks) {
+        const resolve = pendingAck;
+        pendingAck = null;
+        resolve("ack-timeout");
+      }
+    }
     maybeEmitFrame();
   });
   mergeStatus(
@@ -411,19 +504,20 @@ export function createPm5Driver(
     for (let frameIndex = 0; frameIndex < sequence.length; frameIndex += 1) {
       const chunks = sequence[frameIndex]!;
 
-      // The ack-await promise is created and `pendingAck` assigned BEFORE
-      // any write goes out — never after. A fake (or a real radio) may
-      // deliver its ack notification synchronously from inside `write()`,
-      // before that call's returned promise even settles; registering
-      // `pendingAck` only after the writes/`await`s would race that
-      // delivery and could drop the ack on the floor (observed while
-      // building the fake: a same-turn ack arrived while `pendingAck` was
-      // still null, logged as "unsolicited", and the real wait below never
-      // resolved). Setting it up first makes the ordering safe regardless
-      // of whether the transport acks synchronously or on a later tick.
-      const ackPromise = new Promise<PendingAckOutcome>((resolve) => {
-        pendingAck = resolve;
-      });
+      // `awaitAck()` is called — and, on the path where it registers a
+      // fresh `pendingAck` rather than serving a buffered response,
+      // `pendingAck` is assigned — BEFORE any write goes out, never after.
+      // A fake (or a real radio) may deliver its ack notification
+      // synchronously from inside `write()`, before that call's returned
+      // promise even settles; registering `pendingAck` only after the
+      // writes/`await`s would race that delivery and could drop the ack
+      // on the floor (observed while building the fake: a same-turn ack
+      // arrived while `pendingAck` was still null, and the wait below
+      // never resolved — MED-1's buffer is the OTHER half of this fix, for
+      // when a SECOND coalesced frame arrives in that same gap). Setting
+      // it up first makes the ordering safe regardless of whether the
+      // transport acks synchronously or on a later tick.
+      const ackPromise = awaitAck();
 
       for (const chunk of chunks) {
         const hex = toHex(chunk);
@@ -441,15 +535,24 @@ export function createPm5Driver(
 
       const outcome = await ackPromise;
 
-      if (outcome === "link-down") {
-        trace.push("(link down — no ack)");
+      if (outcome === "disconnected" || outcome === "ack-timeout") {
+        const reason = outcome === "disconnected" ? "disconnected" : "timeout";
+        trace.push(
+          outcome === "disconnected"
+            ? "(link down — no ack)"
+            : // `options.ackTimeout` is guaranteed set here: "ack-timeout" is
+              // only ever produced by the GENERAL_STATUS_UUID handler's own
+              // `if (pendingAck && options.ackTimeout)` guard above, so
+              // reaching this branch at all proves it was configured.
+              `(ack-timeout policy: ${options.ackTimeout!.ticks} tick(s) with no ack)`,
+        );
         const hexTrace = trace.join(" | ");
         log.record(
           "program-rejection",
-          `timeout at frame ${frameIndex}: ${hexTrace}`,
+          `${reason} at frame ${frameIndex}: ${hexTrace}`,
         );
         throw new ProgramRejectionError({
-          reason: "timeout",
+          reason,
           atFrame: frameIndex,
           hexTrace,
         });

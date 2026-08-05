@@ -5,8 +5,10 @@
 // `buildProgrammingSequence` output (asserts — a wrong byte is a test
 // failure, not a tolerated write); acks via `pm5/response.ts`'s
 // `buildAckFrame`; plays a tick-driven session timeline (no wall clock —
-// `tick(ms)` is the only thing that ever advances time); five injection
-// hooks (design spec §4, plan Task 4).
+// `tick(ms)` is the only thing that ever advances time); six injection
+// hooks (design spec §4, plan Task 4, plus fix-round HIGH-2's
+// `injectTimeout`, distinct from `injectDisconnect`: the link stays up,
+// only the ack never comes).
 //
 // Concept2 byte-level knowledge stays confined to what this file calls INTO
 // `pm5/` (`buildProgrammingSequence`, `buildTerminate`, `buildAckFrame`,
@@ -127,11 +129,14 @@ export interface FakeControls {
    *  `completeReconnect()` to flush, which is what makes the reconnect
    *  path re-derive position instead of assuming continuity. */
   tick(ms: number): void;
-  /** The NEXT programming ack-gated frame written (0-based index into
+  /** The NEXT programming ack-gated FRAME written (0-based index into
    *  `buildProgrammingSequence`'s outer array — the same index a driver's
    *  ack-gated loop advances one-per-frame, not one-per-20-byte-chunk) gets
-   *  a reject status instead of success. */
-  injectNak(atChunk: number): void;
+   *  a reject status instead of success. Named `atFrame` (not `atChunk`,
+   *  fix-round L2): "chunk" in this codebase means one <=20-byte BLE
+   *  write, and a NAK is a response to a whole ack-gated FRAME (which may
+   *  span several chunks), never a partial one. */
+  injectNak(atFrame: number): void;
   /** Simulates an unexpected link drop: fires the driver's `onDisconnect`
    *  callback and stops delivering scheduled notifications until
    *  `completeReconnect()`. If a program/terminate write is awaiting its
@@ -139,6 +144,15 @@ export interface FakeControls {
    *  same "link is down, no response is coming" signal a real disconnect
    *  mid-write would produce. */
   injectDisconnect(): void;
+  /** Simulates a mid-sequence ack timeout DISTINCT from a disconnect
+   *  (fix-round HIGH-2, spec §4's own separately-listed injection hook):
+   *  the link stays fully up — notifications keep flowing normally, and
+   *  `onDisconnect` never fires — but every ack this fake would otherwise
+   *  send from now on is silently withheld. Combined with the driver's
+   *  optional `ackTimeout` policy and enough `tick()` calls to deliver the
+   *  configured number of General Status ticks, the pending write
+   *  eventually rejects with `reason: "timeout"`, never `"disconnected"`. */
+  injectTimeout(): void;
   /** Delivers one deliberately too-short General Status (0x0031)
    *  notification RIGHT NOW, regardless of the script/clock — exercises
    *  `pm5/parse.ts`'s length-guard `Pm5ParseError` path end-to-end. */
@@ -166,10 +180,22 @@ function toHex(bytes: Uint8Array): string {
  *  one `FakeStatusEvent` — the "full bundle" this fake always sends
  *  together for a status tick, in this fixed order, so the driver (which
  *  gates its `frame` event on having seen all three at least once) is
- *  always warmed up by the time a real session begins. */
+ *  always warmed up by the time a real session begins.
+ *
+ *  `lastSplit` is 0x0033's "Last Split Time"/"Last Split Distance" pair
+ *  (interface-notes.md §10, §15 #8) — the session-cumulative point at
+ *  which the CURRENT interval began, i.e. wherever the most recent
+ *  boundary (if any) left off. The driver's `computeRemainingForFrame`
+ *  (fix-round HIGH-1) subtracts this from the live `elapsedSeconds`/
+ *  `distanceMeters` above to recover "progress into this interval" with
+ *  no observation history of its own — an earlier version of this fake
+ *  hardcoded both fields to 0 forever, which made every interval after
+ *  the first compute a wrong (too-generous) `intervalRemaining` the
+ *  moment it wasn't the interval that started the whole session. */
 function statusBundle(
   program: WorkoutProgram,
   e: FakeStatusEvent,
+  lastSplit: { elapsedSeconds: number; distanceMeters: number },
 ): { general: GeneralStatus; as1: AdditionalStatus1; as2: AdditionalStatus2 } {
   const interval = program.intervals[e.intervalIndex];
   const isDistance = interval?.kind === "distance";
@@ -182,8 +208,8 @@ function statusBundle(
       splitAvgPace: 0,
       splitAvgPowerWatts: 0,
       splitAvgCalories: 0,
-      lastSplitTimeSeconds: 0,
-      lastSplitDistanceMeters: 0,
+      lastSplitTimeSeconds: lastSplit.elapsedSeconds,
+      lastSplitDistanceMeters: lastSplit.distanceMeters,
     },
     as1: {
       elapsedSeconds: e.elapsedSeconds,
@@ -247,7 +273,9 @@ function boundaryBundle(e: FakeBoundaryEvent): {
 
 /** The fixed WAITTOBEGIN bundle the fake sends the instant programming
  *  finishes (design spec §2: "armed" = WAITTOBEGIN) — zeroed progress, no
- *  interval active yet. */
+ *  interval active yet, and no split has ever completed (`lastSplit` is
+ *  always `{0, 0}` here — nothing to root it at before the session's own
+ *  first interval even starts). */
 function armedBundle(): {
   general: GeneralStatus;
   as1: AdditionalStatus1;
@@ -266,6 +294,7 @@ function armedBundle(): {
       heartRateBpm: null,
       intervalIndex: 0,
     },
+    { elapsedSeconds: 0, distanceMeters: 0 },
   );
 }
 
@@ -290,7 +319,13 @@ export function createFakeTransport(
   let programChunkCursor = 0;
   let programFrameCursor = 0;
   let terminateChunkCursor = 0;
-  let nakAtChunk: number | null = null;
+  let nakAtFrame: number | null = null;
+  // `injectTimeout()` (fix-round HIGH-2): once set, every ack this fake
+  // would otherwise send is withheld — link stays up, `linkDown` stays
+  // false, notifications keep flowing, only acks stop. Sticky (not a
+  // one-shot), matching "the ack never comes" literally: nothing in this
+  // fake's own state machine would ever clear it back to sending acks.
+  let timeoutInjected = false;
 
   let linkDown = false;
   let disconnectCb: ((reason: string) => void) | null = null;
@@ -302,6 +337,15 @@ export function createFakeTransport(
   // `tick`/`completeReconnect` doc comments.
   let latestStatus: FakeStatusEvent | null = null;
   let latestBoundary: FakeBoundaryEvent | null = null;
+  // The MACHINE's own last-known "where did the current interval start"
+  // checkpoint (0x0033's Last Split Time/Distance, fed to every
+  // `statusBundle()` call — see that function's own doc comment). Updated
+  // in `deliverOrCache` the moment a boundary is PROCESSED, regardless of
+  // `linkDown` — the real PM keeps this bookkeeping up to date whether or
+  // not the phone is currently connected to hear about it (design spec §4's
+  // iOS note), which is exactly what makes the reconnect path's very first
+  // post-reconnect status tick already carry the correct value.
+  let lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
 
   const incoming = reassemble();
 
@@ -310,7 +354,11 @@ export function createFakeTransport(
   }
 
   function deliverStatus(e: FakeStatusEvent): void {
-    const { general, as1, as2 } = statusBundle(script.program, e);
+    const { general, as1, as2 } = statusBundle(
+      script.program,
+      e,
+      lastBoundaryCumulative,
+    );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
     notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
@@ -373,9 +421,17 @@ export function createFakeTransport(
   }
 
   /** Called once per COMPLETE programming frame (not per chunk) — decides
-   *  the ack and, on success, whether the whole sequence is now done. */
+   *  the ack and, on success, whether the whole sequence is now done.
+   *  `timeoutInjected` (fix-round HIGH-2) short-circuits ALL of that: the
+   *  frame's bytes were already verified correct (by
+   *  `assertProgrammingChunk`, before this ever runs), but no ack is sent
+   *  and nothing advances — the link simply goes quiet on this one
+   *  response, exactly the "mid-sequence timeout" the spec's own §4
+   *  injection hook describes, distinct from `injectDisconnect()` (which
+   *  also flips `linkDown` and fires `onDisconnect`; this does neither). */
   function onProgrammingFrameComplete(): void {
-    const shouldNak = nakAtChunk === programFrameCursor;
+    if (timeoutInjected) return;
+    const shouldNak = nakAtFrame === programFrameCursor;
     sendAck(shouldNak ? "reject" : "ok");
     if (!shouldNak) {
       programFrameCursor += 1;
@@ -407,6 +463,7 @@ export function createFakeTransport(
    *  defensively-`??`-guarded version left that unreachable fallback
    *  branch permanently uncovered). */
   function onArmedFrameComplete(): void {
+    if (timeoutInjected) return; // same short-circuit as onProgrammingFrameComplete
     terminateChunkCursor = 0; // a script could call terminate() only once in practice, but reset defensively
     sendAck("ok");
     const previous = latestStatus!;
@@ -431,6 +488,15 @@ export function createFakeTransport(
       if (!linkDown) deliverStatus(event);
     } else {
       latestBoundary = event;
+      // The machine's own bookkeeping updates HERE, unconditionally —
+      // never gated on `linkDown` (see `lastBoundaryCumulative`'s own
+      // comment). This is what a later status tick (live or, after
+      // `completeReconnect()`, the very first post-reconnect one) picks up
+      // automatically, with no separate reconnect-specific logic needed.
+      lastBoundaryCumulative = {
+        elapsedSeconds: event.cumulativeElapsedSeconds,
+        distanceMeters: event.cumulativeDistanceMeters,
+      };
       if (!linkDown) deliverBoundary(event);
     }
   }
@@ -517,8 +583,11 @@ export function createFakeTransport(
       virtualClock += ms;
       runDueEvents();
     },
-    injectNak(atChunk: number): void {
-      nakAtChunk = atChunk;
+    injectNak(atFrame: number): void {
+      nakAtFrame = atFrame;
+    },
+    injectTimeout(): void {
+      timeoutInjected = true;
     },
     injectDisconnect(): void {
       linkDown = true;
@@ -533,8 +602,14 @@ export function createFakeTransport(
     },
     completeReconnect(): void {
       linkDown = false;
-      if (latestStatus) deliverStatus(latestStatus);
+      // Boundary FIRST, then status: a boundary that elapsed while
+      // disconnected chronologically precedes any later status tick this
+      // fake also has cached, and delivering it first keeps the driver's
+      // own last-seen-`intervalIndex` bookkeeping (fed by status ticks,
+      // used for the "divergence" check, fix-round MED-2) from briefly
+      // looking skewed against a boundary that is actually still in order.
       if (latestBoundary) deliverBoundary(latestBoundary);
+      if (latestStatus) deliverStatus(latestStatus);
     },
   };
 }
