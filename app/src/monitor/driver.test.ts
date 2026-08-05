@@ -1191,6 +1191,86 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
   });
 });
 
+describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence boundary", () => {
+  it("a stray ack delivered AFTER program() resolves is discarded (logged as stale), not consumed by terminate()'s own sequence", async () => {
+    // The regression the MED-1 fix introduced: `pendingAckBuffer` is
+    // per-driver, shared by every `program()`/`terminate()` call. Without
+    // clearing it at each `sendSequence()` entry, this stray "reject"
+    // (buffered here with nothing awaiting it — program() has already
+    // fully resolved) would be silently handed to terminate()'s OWN
+    // `awaitAck()` as if it were terminate's real response, rejecting
+    // terminate() with a NAK it never actually received — and terminate's
+    // REAL ack (sent below) would then itself become the NEXT stale
+    // leftover, poisoning whatever comes after.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const programPending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    await programPending;
+
+    // No sequence is running right now — this is genuinely stray. Body
+    // deliberately encodes a REJECT with a distinctive opcode (0x99) so a
+    // wrongly-consumed outcome (terminate() rejecting with "nak") is
+    // unambiguous, not a coincidence of some other default.
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame("reject", [0x99]),
+    );
+
+    const terminatePending = driver.terminate();
+    // terminate()'s REAL ack — sent AFTER the stale one, proving the
+    // sequence actually waited for and consumed THIS one, not the stray.
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+
+    await expect(terminatePending).resolves.toBeUndefined();
+    expect(
+      log.entries().some(
+        (e) =>
+          e.kind === "frame-error" &&
+          e.detail.includes("stale-ack") &&
+          e.detail.includes("reject") &&
+          e.detail.includes("153"), // 0x99 decimal — the stale frame's own commandId, proving THIS is the one discarded
+      ),
+    ).toBe(true);
+  });
+
+  it("the existing coalesced in-sequence case still resolves normally (the fix only clears BETWEEN sequences)", async () => {
+    // Same scenario as the MED-1 describe block above, re-run here to pin
+    // that `discardStaleAcks()` firing once at `sendSequence` entry does
+    // NOT also purge a legitimately coalesced buffered ack that arrives
+    // mid-sequence (between this same sequence's own frames).
+    const fiveIntervalProgram: WorkoutProgram = {
+      intervals: Array.from({ length: 5 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      })),
+    };
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.program(fiveIntervalProgram);
+    const ack1 = buildAckFrame("ok", []);
+    const ack2 = buildAckFrame("ok", []);
+    const coalesced = new Uint8Array(ack1.length + ack2.length);
+    coalesced.set(ack1, 0);
+    coalesced.set(ack2, ack1.length);
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, coalesced);
+
+    await expect(pending).resolves.toBeUndefined();
+    // No stale-ack anomaly here — the buffered second frame was consumed
+    // as a legitimate in-sequence ack, not discarded.
+    expect(log.entries().some((e) => e.detail.includes("stale-ack"))).toBe(
+      false,
+    );
+  });
+});
+
 describe("createPm5Driver: sample-rate write failure", () => {
   it("a failed sample-rate write is logged, not thrown, and doesn't block construction", async () => {
     const transport = stubTransport({ sampleRateFails: true });
