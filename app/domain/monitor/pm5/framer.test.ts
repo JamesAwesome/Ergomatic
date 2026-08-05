@@ -362,15 +362,30 @@ describe("reassemble", () => {
     expect(Array.from(result as Uint8Array)).toStrictEqual(real);
   });
 
-  it("an open frame of 121 bytes (still no stop flag) IS dropped — one byte past the cap", () => {
-    const openAt121 = Uint8Array.from([0xf1, ...new Array(120).fill(0x00)]);
-    expect(openAt121.length).toBe(121);
+  it("a stop flag landing exactly at the 121st byte does NOT close the frame — the cap must be checked before that byte, not after", () => {
+    // Unlike the all-garbage probes above, this stop flag is real and
+    // sits exactly at the disputed boundary: 119 filler bytes + a stop
+    // flag as byte 121 (start flag + 119 + stop = 121 total). A frame
+    // this long is already one byte over the 120-byte cap. A `>` instead
+    // of `>=` in the cap comparator would let the scan reach this byte
+    // and accept it as a valid (but over-budget) 121-byte frame; the
+    // correct comparator must drop the open frame the moment scanning
+    // reaches position 120, before ever looking at this byte.
+    const oneByteOver = Uint8Array.from([
+      0xf1,
+      ...new Array(119).fill(0x00),
+      0xf2,
+    ]);
+    expect(oneByteOver.length).toBe(121);
     const r = reassemble();
-    expect(r.push(openAt121)).toBeNull();
-    // If it had been (wrongly) retained, completing it now would return
-    // a 122-byte frame. It must instead have been dropped, so this stop
-    // flag arrives with nothing open to close — null again.
-    expect(r.push(Uint8Array.from([0xf2]))).toBeNull();
+    expect(r.push(oneByteOver)).toBeNull();
+    // Nothing should be left open either: a fresh, well-formed frame
+    // arriving next must be found on its own, not appended to a
+    // wrongly-retained 121-byte frame.
+    const real = Uint8Array.from([0xf1, 0x01, 0x02, 0xf2]);
+    const result = r.push(real);
+    expect(result).not.toBeNull();
+    expect(Array.from(result as Uint8Array)).toStrictEqual(Array.from(real));
   });
 
   it("each call to reassemble() starts with independent state", () => {
