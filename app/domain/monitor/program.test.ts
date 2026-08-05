@@ -566,9 +566,18 @@ describe("compileProgram: negative rest is guarded (Table 19's :00 minimum, Task
     });
   });
 
-  it("a negative SUM after folding a valid rest onto a negative one is also rejected", () => {
-    // Guards against a mutant that only checks the FIRST rest phase in a
-    // fold chain rather than every individual rest phase's own value.
+  it("a negative rest folding onto an ALREADY-nonzero rest is also rejected — not just the first rest in a chain", () => {
+    // Order matters (Task 2 review round 2, item 1): a valid rest FIRST
+    // (so `previous.restSeconds` is already 10, not 0) before the negative
+    // one arrives. A guard mutated to fire only when
+    // `previous.restSeconds === 0` (i.e. only the first rest in a fold
+    // chain) PASSES both this describe block's tests if the negative rest
+    // sits at the chain head in either — the reviewer proved this exact
+    // shape (valid rest, THEN a negative one) is the one that kills that
+    // mutant: under it, a combined restSeconds of -20 slips through
+    // silently instead of erroring. The previous version of this test put
+    // -30 first, which is indistinguishable from the single-rest test
+    // above under that mutant.
     const phases: CompiledPhase[] = [
       {
         type: "work",
@@ -577,13 +586,13 @@ describe("compileProgram: negative rest is guarded (Table 19's :00 minimum, Task
         seconds: 120,
         originalIndex: 0,
       },
-      { type: "rest", seconds: -30, originalIndex: 1 },
       { type: "rest", seconds: 10, originalIndex: 1 },
+      { type: "rest", seconds: -30, originalIndex: 1 },
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message: expect.any(String),
-      phaseIndex: 1,
+      phaseIndex: 2,
     });
   });
 });
