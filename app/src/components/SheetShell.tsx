@@ -18,7 +18,18 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
  * unmount) a route/tab change — discarding whatever the caller's own draft
  * state was is the CALLER's job, not this component's; SheetShell only ever
  * reports "go away."
- */
+ *
+ * `primary.describedBy` (Round 2 fix round, 2026-08-04, M1): optional —
+ * Library's FilterSheet.tsx carries the live count IN the button's own
+ * accessible name ("Show N workouts"), so it needs nothing here. Today's
+ * FILTER sheet moved that count to a separate caption once its own primary
+ * became the constant "Apply Filter" (the Revision), which orphaned the
+ * count from the accessible tree entirely: a disabled button isn't
+ * focusable, so a screen-reader user landing on "Apply Filter, dimmed"
+ * never learned why. Wiring the id straight onto `aria-describedby` (not
+ * `aria-live`, which would announce every draft toggle as the rower taps
+ * through cells) restores that — TodayFilterSheet.tsx is the one caller
+ * that passes it. */
 export function SheetShell({
   open,
   titleId,
@@ -31,7 +42,12 @@ export function SheetShell({
   titleId: string;
   onDismiss: () => void;
   opener: RefObject<HTMLElement | null>;
-  primary: { label: string; disabled: boolean; onPress: () => void };
+  primary: {
+    label: string;
+    disabled: boolean;
+    onPress: () => void;
+    describedBy?: string;
+  };
   children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -105,6 +121,7 @@ export function SheetShell({
           type="button"
           className="button-l1"
           disabled={primary.disabled}
+          aria-describedby={primary.describedBy}
           onClick={primary.onPress}
         >
           {primary.label}

@@ -418,6 +418,27 @@ describe("TodayFilterSheet", () => {
       ).toBeDisabled();
       expect(screen.getByText("0 OPTIONS")).toBeVisible();
     });
+
+    // Fix round (M1, 2026-08-04 whole-branch review): the count left the
+    // button's own accessible NAME once it became the constant "Apply
+    // Filter" — a disabled button isn't focusable, so without this a
+    // screen-reader user landing on it (or announcing it via other means)
+    // never learns WHY nothing is pressable at 0. `aria-describedby`
+    // (never `aria-live`, which would announce every draft toggle) links
+    // the caption in as the button's accessible DESCRIPTION instead.
+    it("the button's accessible description is the live count caption, at any poolCount", () => {
+      renderSheet({ poolCount: 7 });
+      expect(
+        screen.getByRole("button", { name: "Apply Filter" }),
+      ).toHaveAccessibleDescription("7 OPTIONS");
+    });
+
+    it("the disabled button at poolCount 0 still carries the count as its accessible description — the one path left to learn why, since a disabled control never receives focus", () => {
+      renderSheet({ poolCount: 0 });
+      expect(
+        screen.getByRole("button", { name: "Apply Filter" }),
+      ).toHaveAccessibleDescription("0 OPTIONS");
+    });
   });
 
   // The dialog machinery itself (backdrop/Escape/focus trap) is SheetShell's
