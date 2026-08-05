@@ -154,7 +154,7 @@ export type CompileError = {
 };
 
 /** Table 19 "PM5 Workout Configuration Parameter Limits" (CSAFE
- *  Communication Definition rev 0.27, p.87 note) — see
+ *  Communication Definition rev 0.27, p.49) — see
  *  `docs/monitor/pm5-interface-notes.md` §8. Minimum time-based interval
  *  duration, in seconds. */
 const MIN_TIME_SECONDS = 20;

@@ -7,8 +7,26 @@ import {
   parseSplitIntervalData,
   toIntervalActual,
   toMonitorFrame,
+  type Pm5ParseError,
   type RawPm5Status,
 } from "./parse.js";
+
+/** Unwraps a parse function's success branch, throwing (never a
+ *  conditional `expect`) if it was a `Pm5ParseError` instead — so a
+ *  decode fixture that's accidentally the wrong length fails the test
+ *  loudly instead of the field assertion silently comparing against
+ *  `undefined`. Mirrors `commands.test.ts`'s `expectPayload`/
+ *  `csafe.test.ts`'s `expectPayload` pattern for the same reason. */
+function expectDecoded<T extends object>(
+  result: T | { error: Pm5ParseError },
+): T {
+  if ("error" in result) {
+    throw new Error(
+      `expected a decoded value, got a parse error: ${JSON.stringify(result.error)}`,
+    );
+  }
+  return result;
+}
 
 // Little-endian encoders, independent of parse.ts's own (readU16LE/
 // readU24LE) — used only to BUILD test byte vectors from a chosen decimal
@@ -94,7 +112,9 @@ describe("parseAdditionalStatus1 (0x0032, 17 bytes, interface-notes.md §10)", (
       ...u24le(0),
       0,
     ]);
-    expect(parseAdditionalStatus1(bytes).heartRateBpm).toBeNull();
+    expect(
+      expectDecoded(parseAdditionalStatus1(bytes)).heartRateBpm,
+    ).toBeNull();
   });
 
   it("a real, non-sentinel heart rate byte is never mistaken for invalid", () => {
@@ -109,7 +129,7 @@ describe("parseAdditionalStatus1 (0x0032, 17 bytes, interface-notes.md §10)", (
       ...u24le(0),
       0,
     ]);
-    expect(parseAdditionalStatus1(bytes).heartRateBpm).toBe(254);
+    expect(expectDecoded(parseAdditionalStatus1(bytes)).heartRateBpm).toBe(254);
   });
 });
 
@@ -179,7 +199,7 @@ describe("parseSplitIntervalData (0x0037, 18 bytes, interface-notes.md §10)", (
       0,
       0,
     ]);
-    const decoded = parseSplitIntervalData(bytes);
+    const decoded = expectDecoded(parseSplitIntervalData(bytes));
     expect(decoded.distanceMeters).toBe(100);
     expect(decoded.splitIntervalDistanceMeters).toBe(1000);
     expect(decoded.distanceMeters).not.toBe(
@@ -237,7 +257,7 @@ describe("parseAdditionalSplitIntervalData (0x0038, 19 bytes, interface-notes.md
       0,
       0,
     ]);
-    const decoded = parseAdditionalSplitIntervalData(bytes);
+    const decoded = expectDecoded(parseAdditionalSplitIntervalData(bytes));
     expect(decoded.splitIntervalWorkHeartRateBpm).toBeNull();
     expect(decoded.splitIntervalRestHeartRateBpm).toBeNull();
   });
@@ -269,16 +289,87 @@ describe("parseAdditionalSplitIntervalData (0x0038, 19 bytes, interface-notes.md
       0,
       0,
     ]);
-    const fromStatus1 = parseAdditionalStatus1(
-      additionalStatus1Bytes,
+    const fromStatus1 = expectDecoded(
+      parseAdditionalStatus1(additionalStatus1Bytes),
     ).currentSplit;
-    const fromSplit =
-      parseAdditionalSplitIntervalData(
-        additionalSplitBytes,
-      ).splitIntervalAvgPace;
+    const fromSplit = expectDecoded(
+      parseAdditionalSplitIntervalData(additionalSplitBytes),
+    ).splitIntervalAvgPace;
     expect(fromStatus1).toBe(10); // 1000 * 0.01
     expect(fromSplit).toBe(100); // 1000 * 0.1
     expect(fromStatus1).not.toBe(fromSplit);
+  });
+});
+
+describe("length guards (M3): a too-short input is a typed error, never a silently garbage-filled decode", () => {
+  it.each([
+    ["parseGeneralStatus", parseGeneralStatus, 19, "0x0031"],
+    ["parseAdditionalStatus1", parseAdditionalStatus1, 17, "0x0032"],
+    ["parseAdditionalStatus2", parseAdditionalStatus2, 20, "0x0033"],
+    ["parseSplitIntervalData", parseSplitIntervalData, 18, "0x0037"],
+    [
+      "parseAdditionalSplitIntervalData",
+      parseAdditionalSplitIntervalData,
+      19,
+      "0x0038",
+    ],
+  ] as const)(
+    "%s: an empty input returns a Pm5ParseError naming the characteristic and both lengths",
+    (_name, parseFn, expected, characteristic) => {
+      const result = parseFn(Uint8Array.from([]));
+      expect(result).toStrictEqual({
+        error: { characteristic, expected, actual: 0 },
+      });
+    },
+  );
+
+  it.each([
+    ["parseGeneralStatus", parseGeneralStatus, 19, "0x0031"],
+    ["parseAdditionalStatus1", parseAdditionalStatus1, 17, "0x0032"],
+    ["parseAdditionalStatus2", parseAdditionalStatus2, 20, "0x0033"],
+    ["parseSplitIntervalData", parseSplitIntervalData, 18, "0x0037"],
+    [
+      "parseAdditionalSplitIntervalData",
+      parseAdditionalSplitIntervalData,
+      19,
+      "0x0038",
+    ],
+  ] as const)(
+    "%s: one byte short of the documented length still errors (off-by-one, not just wildly short)",
+    (_name, parseFn, expected, characteristic) => {
+      const oneShort = new Uint8Array(expected - 1);
+      const result = parseFn(oneShort);
+      expect(result).toStrictEqual({
+        error: { characteristic, expected, actual: expected - 1 },
+      });
+    },
+  );
+
+  it.each([
+    ["parseGeneralStatus", parseGeneralStatus, 19],
+    ["parseAdditionalStatus1", parseAdditionalStatus1, 17],
+    ["parseAdditionalStatus2", parseAdditionalStatus2, 20],
+    ["parseSplitIntervalData", parseSplitIntervalData, 18],
+    ["parseAdditionalSplitIntervalData", parseAdditionalSplitIntervalData, 19],
+  ] as const)(
+    "%s: exactly the documented length decodes successfully (the boundary itself is not an error)",
+    (_name, parseFn, expected) => {
+      const exact = new Uint8Array(expected);
+      const result = parseFn(exact);
+      expect("error" in result).toBe(false);
+    },
+  );
+
+  it('a too-short GeneralStatus never reaches toMonitorFrame\'s ?? "idle" fallback silently — the caller sees the error before touching workoutState at all', () => {
+    // The exact failure class M3 named: bytes[8] on a 3-byte array reads
+    // `undefined`, which used to sail through as a "decoded" workoutState
+    // and land on toMonitorFrame's UNKNOWN_WORKOUT_STATE_FALLBACK,
+    // indistinguishable from a genuine idle frame. The length guard now
+    // rejects the input before any field is ever read.
+    const result = parseGeneralStatus(Uint8Array.from([1, 2, 3]));
+    expect(result).toStrictEqual({
+      error: { characteristic: "0x0031", expected: 19, actual: 3 },
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 // C2 PM Bluetooth Smart service/characteristic UUIDs.
 //
 // Every UUID is derived from the documented base-UUID formula
-// (interface-notes.md §9, BLE doc p.7):
+// (interface-notes.md §9, BLE doc p.9):
 //   "The PM's UUID is CE06xxxx-43E5-11E4-916C-0800200C9A66, where xxxx is a
 //    16-bit value used to identify the specific service or characteristic."
 // `xxxx` below is each service/characteristic's GATT handle, cited per

@@ -110,8 +110,9 @@ whether it still fits in the current frame.
 Command-boundary alignment (never splitting a single CSAFE command across a
 frame boundary) is **not** `packPayload`'s job — `packPayload` is a generic,
 command-agnostic byte packer. Boundary-aware splitting is the job of
-`pm5/commands.ts` (a later task), which assembles one command's bytes at a
-time and is responsible for not asking `packPayload` to split mid-command.
+`pm5/commands.ts` (Task 3's `buildFrameGroups`, §12 below), which assembles
+one interval block's bytes at a time and is responsible for not asking
+`packPayload` to split mid-block.
 
 ## 4. BLE write/notify byte budget (BLE doc p.12)
 
@@ -129,7 +130,7 @@ rate: `0` = 1 s, `1` = 500 ms (**default if not explicitly set**), `2` =
 here since it is read from the same document pages and future tasks (the
 driver) must write it at connect.
 
-## 5. Workout state enum (BLE doc Appendix A, p.37) — for later tasks
+## 5. Workout state enum (BLE doc Appendix A, p.37) — for `pm5/parse.ts`
 
 ```c
 typedef enum {
@@ -151,15 +152,18 @@ typedef enum {
 ```
 
 Not consumed by Task 1; recorded here (verified against the fetched
-document, matching the adversarial review's citation exactly) so a later
-task does not re-fetch the document to get it.
+document, matching the adversarial review's citation exactly) for Task 3's
+`pm5/parse.ts`, which consumes it directly — see §14's row-by-row
+`WORKOUTSTATE` -> `MonitorFrame.state` mapping.
 
 ## 6. Byte-vector examples (CSAFE doc pp.79–90) — non-exhaustive
 
 **This list is not the complete set of worked examples in the document** —
 it is the ones exercised by `csafe.test.ts` and `framer.test.ts`, plus a
-handful more recorded here because a later task (`pm5/parse.ts`, response
-parsing) needs verified RESPONSE-side vectors and Task 1 had none. The
+handful more recorded here because Task 3's `pm5/response.ts` (§16 below —
+CSAFE response parsing, NOT `pm5/parse.ts`, which decodes the BLE status
+characteristics and never touches the control-characteristic ack/reject
+responses) needs verified RESPONSE-side vectors and Task 1 had none. The
 document has other worked examples (Fixed Calories, Fixed Calorie Interval,
 Predefined list selection, force-curve polling, etc. — see p.77–90 generally)
 not all of which are transcribed here.
@@ -218,16 +222,31 @@ document as "`81 or 01`"), which **is** part of the checksummed content —
 confirmed below because both status-byte values independently reproduce
 both printed checksum alternatives exactly.
 
-| #   | Example                                               | Doc page | Frame content (hex, incl. status, excl. flags/checksum)                                                                      | Checksum (status=`01`) | Checksum (status=`81`) |
-| --- | ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------- |
-| R1  | Fixed Distance response (public CSAFE)                | p.79     | `01\|81 1A 00`                                                                                                               | `0x1B`                 | `0x9B`                 |
-| R2  | JustRow response (proprietary)                        | p.80     | `01\|81 76 02 01 13`                                                                                                         | `0x67`                 | `0xE7`                 |
-| R3  | Get Force Curve — `CSAFE_PM_GET_STROKESTATE` response | p.90     | `09 1A 03 BF 01 04` (status here is `09`, not `01`/`81` — this response reports live StrokeState, not a program-command ack) | `0xAA`                 | —                      |
+| #   | Example                                                                                                                               | Doc page | Frame content (hex, incl. status, excl. flags/checksum)                                                                      | Checksum (status=`01`) | Checksum (status=`81`) |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------- |
+| R1  | Fixed Distance response (public CSAFE)                                                                                                | p.79     | `01\|81 1A 00`                                                                                                               | `0x1B`                 | `0x9B`                 |
+| R2  | JustRow response (proprietary)                                                                                                        | p.80     | `01\|81 76 02 01 13`                                                                                                         | `0x67`                 | `0xE7`                 |
+| R3  | Get Force Curve — `CSAFE_PM_GET_STROKESTATE` response                                                                                 | p.90     | `09 1A 03 BF 01 04` (status here is `09`, not `01`/`81` — this response reports live StrokeState, not a program-command ack) | `0xAA`                 | —                      |
+| R4  | Variable Interval v500m/1:00r…4 response (proprietary, the full-length PROGRAMMING ack — the reviewer's newly verified fourth vector) | p.84-86  | `01\|81 76 1A 18 01 17 03 04 06 14 18 17 03 04 06 14 18 17 03 04 06 14 18 17 03 04 06 14 13`                                 | `0x7F`                 | `0xFF`                 |
 
 R1 and R2 are the pair the design spec's own byte-vector discipline
 (§Errata) was written against but never enumerated; R3 is a genuinely
 different response shape (a data-read response, not a programming-command
-ack) confirming the same checksum rule applies uniformly to both.
+ack) confirming the same checksum rule applies uniformly to both. R4 is
+the doc's OWN response to its own 4-interval Variable Interval command
+(§12) — self-consistent (both `FF`/`7F` printed alternatives independently
+reproduced by computing the XOR over status=`01` and status=`81`
+respectively, matching R1/R2's discipline; not a fourth errata) and the
+best available conformance vector for `pm5/response.ts`'s `parseCsafeResponse`,
+since it exercises the full-length, multi-command `0x76`-wrapper ack shape
+Task 4's driver will actually see after a real `program()` call — the
+wrapper's own "Wrapper command byte count" byte (`1A` = 26 decimal) is
+itself the count of ECHOED OPCODES that follow (one byte per acked
+sub-command, no lengths or data — `18,01,17,03,04,06,14` for interval 0
+[including the one-time `SET_WORKOUTTYPE`, opcode `01`], then
+`18,17,03,04,06,14` three more times for intervals 1-3, then `13` for the
+trailing `SET_SCREENSTATE` — 7+6+6+6+1 = 26 opcodes, matching the wrapper's
+declared count exactly).
 
 ### 3 errata (document checksum does NOT match the XOR rule — §Errata, M1)
 
@@ -300,8 +319,8 @@ tables above because it duplicates Fixed Calorie's proprietary-wrapper shape
 | `0x1A` | `CSAFE_SETUSERCFG1_CMD` (public CSAFE wrapper)                                                                                                                                                       |
 
 Not used by Task 1's implementation (no command semantics in `csafe.ts` or
-`framer.ts` — both are byte/frame-level only); recorded for `pm5/commands.ts`
-(a later task) to cite without re-fetching the document.
+`framer.ts` — both are byte/frame-level only); recorded for, and now used
+by, Task 3's `pm5/commands.ts` (§12 below).
 
 ## 8. Table 19 — PM5 Workout Configuration Parameter Limits (for Task 2)
 
@@ -340,7 +359,14 @@ completeness/future tasks):
 Splits/intervals cap (**50**) is Table 19's own note 2: "The split duration
 must not cause the total number of splits per workout to exceed the
 maximum of **50**" (Table 18's parallel PM3/PM4 note 1 gives the same
-sentence with **30**, confirming the "30 on PM3/PM4" line below).
+sentence with **30**, confirming the "30 on PM3/PM4" line below). Note this
+is literally a cap on **splits** (`CSAFE_PM_SET_SPLITDURATION`, a display
+subdivision within a fixed workout), not literally on **variable-interval
+COUNT** — `program.ts`'s `MAX_INTERVALS` treats "splits" and "intervals" as
+the same cap, which the document never states outright as one rule; it is
+the most natural reading (both share the PM's one internal slot-count
+limit) but is this module's own inference, not a verbatim equivalence in
+Table 19's text.
 
 | Parameter                          | Min       | Max                    |
 | ---------------------------------- | --------- | ---------------------- |
@@ -356,7 +382,7 @@ values (`MIN_TIME_SECONDS`, `MIN_DISTANCE_METERS`, `MAX_REST_SECONDS`,
 999,999 m) are far above anything `domain/validate.ts` permits authoring
 today and are not separately enforced.
 
-## 9. UUIDs (BLE doc p.7) — for `pm5/uuids.ts`
+## 9. UUIDs (BLE doc p.9) — for `pm5/uuids.ts`
 
 > "The PM's UUID is CE06xxxx-43E5-11E4-916C-0800200C9A66, where xxxx is a
 > 16-bit value used to identify the specific service or characteristic. The
@@ -379,7 +405,7 @@ Every offset below was counted directly from the doc's own "Data bytes
 packed as follows" field lists (confirmed against each characteristic's
 stated byte count in Table 5/BLE doc pp.13-20; the doc restates the
 identical 0x0031 layout verbatim in its Table 4, C2 Multiplexed Information
-Data Definitions, p.24 — cross-checked, no discrepancy). Multi-byte fields
+Data Definitions, p.25 — cross-checked, no discrepancy). Multi-byte fields
 are little-endian: the doc lists them "Lo, Mid, High" or "Lo, Hi" in
 ascending byte-offset order, i.e. byte 0 is the LEAST significant byte —
 the OPPOSITE byte order from the CSAFE proprietary command bytes in §11/§12
@@ -441,6 +467,22 @@ not assumed silently.
 | 12-13  | Split/Interval Avg Calories                          | whole cals                          |
 | 14-16  | Last Split Time                                      | 0.1 sec/lsb                         |
 | 17-19  | Last Split Distance                                  | whole meters                        |
+
+**The multiplexed (`0x0080`) restatements of 0x0032/0x0033 are NOT
+byte-identical to these GATT forms** (unlike 0x0031, which the doc restates
+verbatim — see the general rule above): the multiplexed 0x0032 entry (BLE
+doc Table 4, p.26) is **19 bytes**, not 17 — it inserts a 2-byte "Average
+Power" field between Rest Time and Erg Machine Type that the direct GATT
+0x0032 characteristic does not have. The multiplexed 0x0033 entry (Table 4,
+p.27) is correspondingly **18 bytes**, not 20 — it DROPS the "Average
+Power" field the direct GATT 0x0033 characteristic has (`parseAdditionalStatus2`'s
+offset 4-5 above). In effect, the multiplexed restatement moves "Average
+Power" from 0x0033 to 0x0032. `parse.ts` decodes the GATT forms exclusively
+(`GENERAL_STATUS_UUID`/`ADDITIONAL_STATUS_1_UUID`/`ADDITIONAL_STATUS_2_UUID`
+in `pm5/uuids.ts`, not the `0x0080` multiplexed characteristic) — wiring a
+future driver to the multiplexed characteristic instead and reusing these
+offset tables would silently decode the wrong field at the wrong scale for
+both characteristics.
 
 **0x0037 — C2 rowing split/interval data (18 bytes, BLE doc p.19):**
 
@@ -549,9 +591,12 @@ TERMINATEWORKOUT`) `62` (document's printed checksum — this is errata #9 in
 test asserts). `buildTerminate()` is exactly this one frame, wrapped and
 chunked like any other.
 
-## 14. Workout State -> `MonitorFrame.state` mapping (BLE doc p.37, CSAFE doc Appendix E p.161)
+## 14. Workout State -> `MonitorFrame.state` mapping (BLE doc p.37, CSAFE doc Appendix E p.162)
 
-Appendix E ("PM State Transitions", CSAFE doc p.161) gives named transition
+Appendix E ("PM State Transitions", CSAFE doc p.162 — the "Revision 0.27
+161" footer in the extracted text precedes the "Appendix E" heading, i.e.
+belongs to the PRECEDING page, so Appendix E itself starts on the next one)
+gives named transition
 sequences, e.g. `WaitToBegin->WorkoutRow->Terminate (user or
 command)->Rearm->WaitToBegin` and `WaitToBegin->IntervalWorkDistance->
 IntervalWorkDistanceToRest (may not see this state)->IntervalRest->
@@ -591,20 +636,56 @@ disputed checksums in §6):
    0-based). `parse.ts` passes the raw byte through unadjusted into
    `MonitorFrame.intervalIndex`/`IntervalActual.index` — if the real PM
    reports a 1-based count here, every consumer downstream is off by one
-   until the laptop session confirms it.
+   until the laptop session confirms it. **These are also two SEPARATE wire
+   fields, not one value read twice**: `MonitorFrame.intervalIndex` comes
+   from 0x0033's "Interval Count" (a live-status characteristic, sampled at
+   the general/additional-status rate, §4); `IntervalActual.index` comes
+   from 0x0037/0x0038's "Split/Interval Number" (an interval-boundary
+   characteristic). Nothing in either document guarantees these two
+   counters stay in lockstep frame-to-frame — a 7C consumer correlating a
+   `frame` event's `intervalIndex` against an `intervalComplete` event's
+   `actual.index` is matching two independently-incrementing fields by
+   value, not reading one field from two places; a driver-level skew
+   between them (a dropped notification, a boundary race) would surface as
+   a real but silent mismatch, not a crash.
 2. **0x0038's Work/Rest Heartrate sentinel.** Only 0x0032's Heartrate field
    is explicitly documented as "255=invalid" (§10). `parse.ts` applies the
    same sentinel to 0x0038's two heartrate bytes by analogy (same firmware,
    same byte width, same physical belt-absent case) — not independently
-   confirmed for this characteristic.
-3. **`SET_TARGETPACETIME` for a no-target interval.** Every worked example
-   programs a real pace target; `compileProgram`'s `ProgramInterval.
-targetSplit` is `null` for warmup/effort/test intervals. Since
-   `buildProgrammingSequence` always emits a fixed-shape interval block
-   (§12), `commands.ts` sends `0x00000000` (pace time zero) for a null
-   target — an assumption that 0 means "no enforced target" rather than
-   "target an impossible 0-second/500m pace," never verified against real
-   firmware.
+   confirmed for this characteristic. **Counter-evidence that the analogy
+   could be wrong:** the document's "invalid" sentinel convention is
+   PER-FIELD, not universal — 0x0039's "Recovery Heart Rate" byte (BLE doc
+   p.21) is explicitly documented as "(zero = not valid data...)", a
+   DIFFERENT sentinel (0, not 255) for a different heart-rate field on the
+   very same characteristic family. This is harmless either way in
+   practice: 255 bpm is a physiologically impossible reading regardless of
+   whether the document's authors intended it as 0x0038's sentinel too, so
+   a wrong guess here can only ever turn a genuinely-impossible reading
+   into `null` early or late, never fabricate a plausible-looking wrong
+   value.
+3. **`SET_TARGETPACETIME` for a no-target interval — record BOTH candidate
+   behaviors, laptop decides.** Every worked example that DOES have a
+   target pace field programs a real one; `compileProgram`'s
+   `ProgramInterval.targetSplit` is `null` for warmup/effort/test
+   intervals, and `buildProgrammingSequence` currently sends
+   `0x00000000` (pace time zero) for that case — implemented and tested as
+   such (interface-notes.md §12), on the assumption that 0 means "no
+   enforced target" rather than "target an impossible 0-second/500m pace."
+   **However:** five of the document's OWN worked examples OMIT
+   `SET_TARGETPACETIME` (opcode `0x06`) ENTIRELY rather than sending it
+   with a zero value — JustRow (§6 #2, p.80), Fixed Distance (§6 #3, p.81),
+   Fixed Time (§6 #4, p.81-82), Fixed Distance Interval (§6 #5, p.83), and
+   Fixed Calories (§6 #12, p.82-83) all program a workout with no per-
+   interval pace target and none of them include a `0x06` command at all.
+   This makes OMISSION at least as documented as sending zero — arguably
+   more so, since it is directly observed in five real examples, while
+   "zero means no target" is this module's own inference, observed in
+   none. The current implementation (zero) is UNCHANGED by this finding —
+   both are plausible, and choosing between them needs the laptop session,
+   not another guess from the documents alone. If the real PM5 treats a
+   zero pace target as an enforced (and unmeetable) 0:00/500m pace rather
+   than "no target," `buildProgrammingSequence` needs to switch to omitting
+   `SET_TARGETPACETIME` for `targetSplit === null` intervals instead.
 4. **`MonitorFrame.intervalIndex`/`spm` nullability from `parse.ts`.**
    `spm` is decoded as the raw Stroke Rate byte and is never actually
    `null` from this module (no documented invalid-stroke-rate sentinel
@@ -612,3 +693,91 @@ targetSplit` is `null` for warmup/effort/test intervals. Since
    anything `parse.ts` itself produces. `intervalIndex` IS mapped to `null`
    by this module, but only as a business rule (no interval is "current"
    outside the `rowing`/`resting` states), not from a wire sentinel.
+5. **`MonitorFrame.currentSplit` has no null path either.** Like `spm`,
+   `currentSplit` (0x0032's Current Pace) is decoded and passed through
+   unconditionally — there is no documented "no pace data" sentinel for
+   this field (unlike Heartrate's 255). In practice a stopped/idle erg's
+   Current Pace reads `0` (infinite pace, not a sentinel) — whether the
+   real PM5 actually reports exactly `0` while armed/resting, or holds the
+   last real value, or something else, is unconfirmed; a screen rendering
+   `currentSplit` as a pace string needs to decide what "0:00" or an
+   erratic pace value means while idle, and that convention is not
+   established by either document.
+6. **Multi-frame programming retention is UNDOCUMENTED — this codec's
+   single largest untested assumption.** Every worked programming example
+   in the CSAFE doc (§6, §12) is a SINGLE CSAFE frame; nothing in either
+   document describes what the PM does with interval configuration state
+   ACROSS multiple separately-acked frames. `buildProgrammingSequence`
+   assumes (and `buildFrameGroups`, §12, is built on the assumption) that
+   the PM accumulates interval configuration across as many ack-gated
+   frames as it takes — Sea Smoke, the design spec's own named stress case
+   with 25 real intervals, needs 7 frames with this implementation's
+   packing, an interval count and frame count neither document ever
+   exercises even once. If the real PM instead resets its "programming
+   mode" state between frames (e.g. `CONFIGURE_WORKOUT`'s "Programming
+   mode enable" byte, sent once per interval, turns out to gate something
+   more session-like than a flag), a multi-frame program could silently
+   configure only its LAST frame's intervals. This is the single fact this
+   task is least confident about; it is first on the laptop session's list.
+7. **No wipe/reset command exists in the documented proprietary programming
+   flow** (§11-13 — `CSAFE_RESET_CMD`/`CSAFE_GOIDLE_CMD` are PUBLIC CSAFE
+   only, and the doc explicitly says public and proprietary modes "should
+   not be mixed"). Re-programming a workout with FEWER intervals than the
+   one currently loaded (e.g. 4 intervals after a previous 25-interval
+   program) has no documented mechanism to clear the stale tail —
+   intervals 5-25 from the prior program may remain configured on the PM
+   after `buildProgrammingSequence` finishes sending only 4. Neither
+   document says whether `SET_WORKOUTTYPE`/the first `CSAFE_PM_
+WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
+   interval list, or whether a stale tail genuinely persists into the next
+   row. Flagged for the laptop session alongside #6 — both are the
+   codec's assumptions about MULTI-frame/MULTI-program PM behavior that no
+   single-frame, single-program worked example can confirm.
+
+## 16. CSAFE response parsing (for `pm5/response.ts`)
+
+M5 (fix round after Task 3's first review): keeping ack/reject parsing out
+of `pm5/parse.ts` is right (that module owns the BLE status
+characteristics, 0x0031/0x0032/0x0033/0x0037/0x0038 — a fundamentally
+different data path from the control characteristic's command responses),
+but deferring it to Task 4 (the driver, `src/monitor/`) would put Concept2
+byte-level knowledge in `src/` — the design's own rule (§Layering) is that
+`pm5/` is the ONLY home of Concept2 bytes, and BOTH the driver (reading
+acks) and the fake transport (Task 4, building synthetic acks to answer
+its own programming writes) need this logic. It belongs in `pm5/`
+alongside the codec that produces the commands being acked.
+
+**The ack-echo format**, reverse-derived from R1-R4 above: a response frame
+(post `csafe.parseFrame`) is `<status> <topOpcode> <count> <...>`.
+
+- `status`: `0x01` = success, anything else (`0x81` explicit failure, or a
+  genuinely different response shape like R3's `0x09`) is treated as
+  non-success. `pm5/response.ts` exposes exactly two buckets
+  (`"ok" | "reject"`), so R3's live-data status (`0x09`, not itself a
+  program-command result at all) falls into `"reject"` by this binary
+  reduction — R3 is included as a conformance vector to prove the parser
+  handles an unexpected status byte without crashing, not because `"reject"`
+  is R3's true semantic meaning (interface-notes.md's own R3 note already
+  says it "reports live StrokeState, not a program-command ack").
+- `topOpcode` + what follows: ONLY `0x76` (the C2 proprietary wrapper —
+  the one opcode the primary doc's own master ID table labels "Command
+  Wrapper", alongside `0x77`/`0x7E`/`0x7F`, none of which `pm5/commands.ts`
+  ever emits) gets the multi-opcode treatment: `count` is the number of
+  ECHOED OPCODE BYTES that follow (confirmed by R2's `76 02 01 13` — two
+  opcodes, `01` and `13`, exactly the two commands JustRow's own program
+  sent — and R4's `76 1A <26 opcodes>`, §6). Any OTHER `topOpcode` (R1 and
+  R3's `0x1A` — `CSAFE_SETUSERCFG1_CMD`, NOT one of the doc's four labeled
+  "Command Wrapper" opcodes, even though it wraps sub-commands in OTHER,
+  unrelated command contexts, §11) is treated as a single bare acked
+  command: `commandIds = [topOpcode]`, and whatever follows `topOpcode`
+  (R1's `00`, R3's `03 BF 01 04`) is NOT decoded as a further opcode list —
+  `pm5/commands.ts` never emits a `0x1A`-wrapped command itself, so this
+  path exists only so `parseCsafeResponse` doesn't crash or fabricate
+  garbage on a response shape it wasn't built to fully understand, not
+  because it's confirmed correct for that shape.
+- An ack-frame builder (`buildAckFrame(status, commandIds)`) is the
+  inverse: `0x76`-wraps `commandIds` as a bare opcode list (mirroring R2/R4
+  exactly) behind the requested status byte, then runs it through
+  `csafe.buildFrame` — this is what the fake transport (Task 4) uses to
+  answer `pm5/commands.ts`'s writes without needing its own copy of the
+  wrapper format.

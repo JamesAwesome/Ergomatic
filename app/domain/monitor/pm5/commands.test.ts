@@ -113,6 +113,7 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
 
     let workoutIntervalCountCommands = 0;
     let screenStateCommands = 0;
+    const intervalIndexSequence: number[] = [];
     for (const chunks of frames) {
       const commandBytes = unwrapFrame(chunks);
       const lengths = walkCommands(commandBytes); // throws on any split/truncated command
@@ -121,7 +122,12 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
       let offset = 0;
       for (const len of lengths) {
         const opcode = commandBytes[offset]!;
-        if (opcode === 0x18) workoutIntervalCountCommands += 1;
+        if (opcode === 0x18) {
+          workoutIntervalCountCommands += 1;
+          // SET_WORKOUTINTERVALCOUNT is "18 01 <index>" — collect the
+          // actual index byte, not just the fact that an 0x18 occurred.
+          intervalIndexSequence.push(commandBytes[offset + 2]!);
+        }
         if (opcode === 0x13) screenStateCommands += 1;
         offset += len;
       }
@@ -131,6 +137,15 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
     // split, never dropped).
     expect(workoutIntervalCountCommands).toBe(25);
     expect(screenStateCommands).toBe(1);
+    // The stronger guard (L7): the COUNT alone survives a mutant that
+    // shuffles, duplicates, or reorders interval blocks across frames as
+    // long as it still emits 25 total 0x18 commands — asserting the actual
+    // index VALUES form the exact ascending sequence 0..24, spanning every
+    // frame boundary in order, is what an atomicity break (or a reordering
+    // bug in buildFrameGroups) cannot survive.
+    expect(intervalIndexSequence).toStrictEqual(
+      Array.from({ length: 25 }, (_, i) => i),
+    );
   });
 
   it("Sea Smoke: the full multi-frame byte stream reassembles via framer.reassemble()", () => {
