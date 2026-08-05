@@ -202,11 +202,44 @@ export function createPm5Driver(
   // Buffering it here (and `awaitAck` checking the buffer FIRST, before
   // ever creating a new promise) means that ack is still there when
   // `sendSequence` asks for it, instead of program() hanging forever.
-  const pendingAckBuffer: PendingAckOutcome[] = [];
+  //
+  // Fix-round 2 (post-MED-1 regression): this buffer is per-DRIVER, not
+  // per-sequence — `program()` and `terminate()` share it. A stray or
+  // duplicate ack that arrives with nothing pending AFTER one sequence
+  // has already fully resolved used to sit here indefinitely; the NEXT
+  // sequence's `awaitAck()` would then silently consume it as if it were
+  // that sequence's own first-frame ack, and the REAL ack (arriving
+  // later) would land buffered as poison for whatever comes after THAT.
+  // `sendSequence` now clears (and logs) anything already sitting here
+  // the moment it starts — see its own comment.
+  //
+  // Only ever holds real `CsafeResponse` values: `"disconnected"`/
+  // `"ack-timeout"` are resolved directly against `pendingAck` (the
+  // `onDisconnect` handler, the ack-timeout tick counter below), never
+  // pushed here — `handleAckFrame` is this buffer's one producer, and it
+  // only ever has a parsed response frame to offer.
+  const pendingAckBuffer: CsafeResponse[] = [];
   // Ticks (GENERAL_STATUS_UUID arrivals) counted against the CURRENT
   // pending ack, reset every time a new one is awaited — see `awaitAck`
   // and `DriverOptions.ackTimeout`'s own doc comment.
   let pendingAckTicks = 0;
+
+  /** Discards anything left in `pendingAckBuffer` from a PREVIOUS, already-
+   *  resolved sequence — see the buffer's own comment for why a leftover
+   *  here is never a legitimate answer to a NEW sequence's first frame.
+   *  Logged as `"frame-error"` (the same kind an actually-malformed frame
+   *  gets) with a `"stale-ack"` marker in the detail, clearly distinct
+   *  from the benign in-sequence `"ack-buffered"` case — a leftover here
+   *  is always an anomaly worth seeing, never routine. */
+  function discardStaleAcks(): void {
+    while (pendingAckBuffer.length > 0) {
+      const stale = pendingAckBuffer.shift()!;
+      log.record(
+        "frame-error",
+        `stale-ack: leftover from a previous sequence, discarded (status=${stale.status} commandIds=[${stale.commandIds.join(",")}])`,
+      );
+    }
+  }
 
   /** The single place `sendSequence` gets its next ack outcome from — the
    *  buffer (MED-1) is checked first; only if it is empty does this
@@ -214,7 +247,9 @@ export function createPm5Driver(
    *  ack-timeout policy, HIGH-2). Called BEFORE any write goes out for the
    *  frame it is awaiting — see `sendSequence`'s own comment on why that
    *  ordering, not just this buffer, is what makes a same-turn ack safe.
-   */
+   *  Never called before `sendSequence` has already run `discardStaleAcks`
+   *  for THIS sequence, so any buffered entry `awaitAck` finds here was
+   *  genuinely produced during the current sequence's own execution. */
   function awaitAck(): Promise<PendingAckOutcome> {
     const buffered = pendingAckBuffer.shift();
     if (buffered !== undefined) {
@@ -500,6 +535,14 @@ export function createPm5Driver(
     sequence: Uint8Array[][],
     completionKind: string,
   ): Promise<void> {
+    // Fix-round 2: purge anything left over from a PREVIOUS sequence
+    // before this one's own first frame ever asks the buffer for
+    // anything — see `discardStaleAcks`'s own comment. Once, here, not
+    // per-frame: a buffered entry that arrives DURING this sequence's own
+    // execution (the MED-1 coalescing case) is still legitimate and must
+    // survive to the next `awaitAck()` call within this same loop.
+    discardStaleAcks();
+
     const trace: string[] = [];
     for (let frameIndex = 0; frameIndex < sequence.length; frameIndex += 1) {
       const chunks = sequence[frameIndex]!;
