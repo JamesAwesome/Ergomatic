@@ -328,6 +328,75 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     expect(generals).toHaveLength(0); // never reached "armed" — frame 2's rejection halts the sequence
   });
 
+  it("a MULTI-frame sequence refused mid-way is retried from frame 0 and completes — the prepare step is the reset point (review MED-1)", async () => {
+    // Task 6 fix round. The refused-frame position is reset by the PREPARE
+    // step, not by the refusal: `program()` always leads with a terminate
+    // and then re-sends its whole sequence from frame 0, so that is where
+    // the machine's expectation has to go back to. An earlier version
+    // rewound only to the start of the REFUSED FRAME, which is identical
+    // for a one-frame program (every other test here) and wrong for
+    // anything longer: this exact scenario threw
+    // `programming chunk 12 mismatch` on the retry's very first chunk.
+    const multiFrameProgram: WorkoutProgram = {
+      intervals: Array.from({ length: 13 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      })),
+    };
+    const seq = buildProgrammingSequence(multiFrameProgram);
+    expect(seq).toHaveLength(4);
+
+    const fake = createFakeTransport({ program: multiFrameProgram });
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    const sendPrepare = async (): Promise<void> => {
+      for (const chunk of buildTerminate()[0]!) {
+        await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+      }
+    };
+    const sendFrames = async (count: number): Promise<void> => {
+      for (const frame of seq.slice(0, count)) {
+        for (const chunk of frame) {
+          await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+        }
+      }
+    };
+
+    // Attempt 1: refused at frame 2, three frames in.
+    fake.injectNak(2);
+    await sendPrepare();
+    await sendFrames(3);
+    expect(acks.map(frameStatusOf)).toStrictEqual([
+      "reject", // the prepare step — nothing loaded
+      "ok",
+      "ok",
+      "reject", // frame 2
+    ]);
+
+    // Attempt 2: a real `program()` retry — prepare, then the WHOLE
+    // sequence again from frame 0. (`injectNak(9)` names a frame index this
+    // sequence never reaches, the same disarming idiom the sibling test
+    // above uses, so the retry is allowed to finish.)
+    fake.injectNak(9);
+    await sendPrepare();
+    await sendFrames(4);
+
+    expect(acks.slice(4).map(frameStatusOf)).toStrictEqual([
+      "reject", // prepare again — still nothing loaded
+      "ok",
+      "ok",
+      "ok",
+      "ok", // frame 2 re-sent and accepted, then frame 3: the sequence completes
+    ]);
+    fake.deliverArmedNow();
+    expect(fake.loadedIntervals()).toBe(multiFrameProgram.intervals.length);
+  });
+
   it("injectTimeout() during the PROGRAMMING phase itself withholds that frame's ack (distinct from the clearing-phase case)", async () => {
     // Plan Task 2's leading "clearing" phase has its OWN `timeoutInjected`
     // short-circuit (`onClearingFrameComplete`) — this pins the SEPARATE
@@ -353,13 +422,14 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     expect(generals).toHaveLength(0); // never armed either
   });
 
-  it("a rejected frame rewinds to ITSELF, not past the end — the retry re-sends the same bytes and is rejected again (injectNak is sticky)", async () => {
-    // Task 6: a refusal is not the end of the conversation. The chunk
-    // cursor goes back to the START of the frame that was refused (every
-    // laptop session retried refused programs, interface-notes.md §19.1),
-    // and `injectNak`'s positional selector still names that frame, so the
-    // retry meets the same answer. Before this the cursor was left past the
-    // frame's own chunks and any further write threw.
+  it("a refused frame can be re-sent behind another prepare step, and injectNak still names it (sticky)", async () => {
+    // Task 6: a refusal is not the end of the conversation — every laptop
+    // session retried refused programs (interface-notes.md §19.1's table is
+    // largely retries). The retry's own prepare step resets the sequence
+    // position, so frame 0 is expected again; `injectNak`'s positional
+    // selector still names frame 0, so it meets the same answer. Before
+    // this the cursor was left past the refused frame's chunks and any
+    // further write threw.
     const fake = createFakeTransport({ program: PROGRAM });
     fake.injectNak(0);
     await programIt(fake, PROGRAM);
@@ -372,11 +442,13 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     await programIt(fake, PROGRAM);
     expect(acks.map(frameStatusOf)).toStrictEqual(["reject", "reject"]);
 
-    // A chunk that belongs to neither sequence still throws, at the frame
-    // the machine is actually waiting for.
+    // A chunk that belongs to neither sequence still throws, and at the
+    // position the machine is genuinely at: the refusal itself rewinds
+    // nothing (this program's two chunks have both arrived), and only a
+    // prepare step puts the sequence back to frame 0.
     await expect(
       fake.write(RECEIVE_CHARACTERISTIC_UUID, Uint8Array.from([0xff])),
-    ).rejects.toThrow(/programming chunk 0 mismatch/);
+    ).rejects.toThrow(/programming chunk 2 mismatch/);
   });
 
   it("delivers the WAITTOBEGIN bundle once the sequence acks successfully AND armed delivery is flushed (programIt's own deliverArmedNow(), fix-round 1, F1)", async () => {
@@ -1143,7 +1215,22 @@ describe("createFakeTransport: the ack's status byte is the bitfield the machine
     for (const chunk of buildTerminate()[0]!) {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
+    // The terminate's OWN ack reports the state at the moment it arrived —
+    // the machine was still rowing when it was handed the command.
     expect(stateOf(frames[2]!)).toBe("in-use");
+
+    // But the ack AFTER that must not (review MED-3). This terminate made
+    // the machine report WORKOUTSTATE_TERMINATE, and `currentSlaveState`'s
+    // own contract puts a terminated machine in `ready`. Until the
+    // `latestStatus` assignment was routed through `setLatestStatus`,
+    // `machineState` never left `"rowing"` and every subsequent ack kept
+    // claiming `in-use` — a wrong low nibble on the exact field this task
+    // exists to make honest.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    expect(frames).toHaveLength(4);
+    expect(stateOf(frames[3]!)).toBe("ready");
   });
 
   it("scripting slaveState 'offline' models §19.3's live-erg capture: an ACCEPT with a non-Ready low nibble", async () => {
@@ -1173,11 +1260,11 @@ describe("createFakeTransport: the ack's status byte is the bitfield the machine
 // twelve status bytes [S2] captured is a rejection, and nothing ever
 // arrived unparseable (interface-notes.md §19.1). These hooks exist so the
 // driver's reject and garbled paths can be exercised over real bytes.
-describe("createFakeTransport: FakeScript.failNextWrite — the two never-observed ack shapes", () => {
+describe("createFakeTransport: FakeScript.failNextProgramFrame — the two never-observed ack shapes", () => {
   it("'reject' answers the next PROGRAMMING frame with a genuine 0x11-class reject, and is spent afterwards", async () => {
     const fake = createFakeTransport({
       program: PROGRAM,
-      failNextWrite: "reject",
+      failNextProgramFrame: "reject",
     });
     const acks: ReturnType<typeof parseCsafeResponse>[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
@@ -1186,7 +1273,7 @@ describe("createFakeTransport: FakeScript.failNextWrite — the two never-observ
 
     await programIt(fake, PROGRAM);
     // The prepare step is untouched by the hook (its own doc comment): it
-    // refuses because nothing is loaded, not because of `failNextWrite`.
+    // refuses because nothing is loaded, not because of `failNextProgramFrame`.
     expect(acks.map(frameStatusOf)).toStrictEqual(["reject", "reject"]);
     // A genuine reject, not the `0x81` that never meant one: bits 4-5 say
     // Reject, and the toggle is still just the toggle.
@@ -1202,7 +1289,7 @@ describe("createFakeTransport: FakeScript.failNextWrite — the two never-observ
     await programIt(fake, PROGRAM);
     expect(acks.map(frameStatusOf)).toStrictEqual([
       "reject", // prepare — nothing loaded
-      "reject", // the program: failNextWrite, consumed here
+      "reject", // the program: failNextProgramFrame, consumed here
       "reject", // prepare again — still nothing loaded
       "ok", // the program lands
     ]);
@@ -1212,7 +1299,7 @@ describe("createFakeTransport: FakeScript.failNextWrite — the two never-observ
   it("'garbled' answers with a frame that cannot be parsed AT ALL — structurally different from any reject", async () => {
     const fake = createFakeTransport({
       program: PROGRAM,
-      failNextWrite: "garbled",
+      failNextProgramFrame: "garbled",
     });
     const raw: Uint8Array[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) => raw.push(b));
@@ -1233,7 +1320,7 @@ describe("createFakeTransport: FakeScript.failNextWrite — the two never-observ
     // reject for the same frame parses fine.
     const cleanReject = createFakeTransport({
       program: PROGRAM,
-      failNextWrite: "reject",
+      failNextProgramFrame: "reject",
     });
     const rejectFrames: Uint8Array[] = [];
     cleanReject.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
@@ -1246,7 +1333,7 @@ describe("createFakeTransport: FakeScript.failNextWrite — the two never-observ
   it("'garbled' still consumes a toggle step — the PM's frame counter does not care whether the bytes survived", async () => {
     const fake = createFakeTransport({
       program: PROGRAM,
-      failNextWrite: "garbled",
+      failNextProgramFrame: "garbled",
     });
     const raw: Uint8Array[] = [];
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) => raw.push(b));

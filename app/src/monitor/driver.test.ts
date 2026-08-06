@@ -37,6 +37,7 @@ import {
 import type {
   DiscoveredMonitor,
   MonitorEvent,
+  MonitorFrame,
   Transport,
 } from "../../domain/monitor/types.js";
 import { buildDraft } from "../session/draft";
@@ -183,14 +184,20 @@ async function programAndArm(
  * `verifyArmed()` to observe (never a cached one; that is the whole point
  * of that phase).
  *
- * Needed wherever the shared fake cannot go, which since Task 4 includes
- * the most important case of all: a SECOND `program()` on the same
- * transport. `transports/fake.ts` models one program per fake — its
- * `phase` reaches `"armed"` and every write afterwards is asserted against
- * the terminate sequence alone, so a second programming send throws
- * "unexpected write while armed". Rewriting the fake is spec §6 / Task
- * 6's job, deliberately not this task's, so the re-program tests below
- * drive the protocol by hand instead.
+ * Needed wherever a test must control the TIMING of individual acks and
+ * status frames by hand — an ack that never comes, one that arrives before
+ * `verifyArmed()` has registered its wait, a terminal state injected
+ * between two frames of a sequence. `transports/fake.ts` models the
+ * protocol correctly and therefore cannot be made to misbehave on cue; that
+ * is exactly what these tests need.
+ *
+ * NOT needed for a second `program()` any more (Task 6): the fake now takes
+ * a whole new programming sequence after a terminate, with no reconnect,
+ * the way the machine does (interface-notes.md §19.4/§19.5). The
+ * fake-driven second-workout test further down this file is the primary
+ * proof of that lifecycle; the stub-driven re-program tests here remain as
+ * the by-hand variants, for the run-replacement and ack-timing edges the
+ * fake's own honest protocol will not produce.
  */
 async function programViaStub(
   driver: ReturnType<typeof createPm5Driver>,
@@ -4342,34 +4349,141 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
       ],
     });
 
+    /** The first ROWING frame emitted after `from` — a run's own opening
+     *  reading, past the WAITTOBEGIN frame `program()` arms on. */
+    const firstRowingFrameAfter = (from: number): MonitorFrame | undefined => {
+      for (const e of events.slice(from)) {
+        if (e.kind === "frame" && e.frame.state === "rowing") return e.frame;
+      }
+      return undefined;
+    };
+
     await programAndArm(driver, fake, program);
+    const run1Start = events.length;
     fake.tick(4000);
     expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
+
+    // Run 1's opening reading, as the baseline run 2 has to match: 100
+    // seconds into Sea Fret's 300s warmup, 200 to go.
+    expect(firstRowingFrameAfter(run1Start)?.intervalRemaining).toStrictEqual({
+      kind: "time",
+      value: 200,
+    });
+    const run1Actual = events.find((e) => e.kind === "intervalComplete");
 
     // No reconnect, no new transport, no new driver — just another
     // program() on the machine that has just finished a piece.
     await programAndArm(driver, fake, program);
+    const run2Start = events.length;
     fake.tick(3000);
 
     expect(events.filter((e) => e.kind === "armed")).toHaveLength(2);
     expect(log.entries().filter((e) => e.kind === "programmed")).toHaveLength(
       2,
     );
+
+    // Review MED-2: run 2 must not inherit run 1's SESSION bookkeeping.
+    // 0x0033's Last Split Time/Distance says where the interval currently
+    // running began, session-cumulative — meaningless across a workout
+    // boundary. Left standing at run 1's final boundary (300s/1200m), run
+    // 2's very first frame reported `{kind:"time", value:500}`: 500 seconds
+    // remaining of a 300-second interval, because progress computed as
+    // 100 - 300 = -200. The number below is the same one run 1 reported
+    // from the identical tick.
+    expect(firstRowingFrameAfter(run2Start)?.intervalRemaining).toStrictEqual({
+      kind: "time",
+      value: 200,
+    });
+
     // Both runs number their first actual 0 — the second run does not carry
     // the first one's numbering forward, and neither is `null`.
-    const actuals = events
-      .filter((e) => e.kind === "intervalComplete")
-      .map((e) => (e as { actual: { index: number | null } }).actual.index);
-    expect(actuals).toStrictEqual([0, 0]);
+    const completions = events.filter((e) => e.kind === "intervalComplete");
+    expect(
+      completions.map(
+        (e) => (e as { actual: { index: number | null } }).actual.index,
+      ),
+    ).toStrictEqual([0, 0]);
+    // And run 1's own record is exactly what it was when it was emitted,
+    // with run 2's standing beside it on its own values — two runs, two
+    // records, no cross-contamination in either direction.
+    expect(completions).toHaveLength(2);
+    expect(completions[0]).toStrictEqual(run1Actual);
+    expect(completions[1]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 300, distanceMeters: 1200 },
+    });
+
     // Nothing was left open or silently replaced, and the link never moved.
     expect(log.entries().some((e) => e.kind === "run-replaced")).toBe(false);
     expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(0);
     // The machine holds the program it was last given, both times.
     expect(fake.loadedIntervals()).toBe(program.intervals.length);
   });
+
+  it("a reconnect early in run 2 does not resurrect run 1's last boundary (the fake's cached half goes with the old program)", async () => {
+    // The other half of review MED-2's state leak. `completeReconnect()`
+    // flushes the fake's CACHED boundary — "the machine's next status frame
+    // after the radio came back". Cached across a program, that is run 1's
+    // final boundary arriving inside run 2 as if it had just happened: an
+    // extra `intervalComplete` carrying the previous workout's numbers,
+    // attributed to the new run.
+    const program = seaFretProgram();
+    const { fake, driver, events } = harness({
+      program,
+      events: [
+        {
+          atMs: 1000,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 100,
+          distanceMeters: 400,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: null,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 2000,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 300,
+            distanceMeters: 1200,
+            avgSplit: 125,
+            avgSpm: 22,
+            avgHeartRateBpm: null,
+          },
+          cumulativeElapsedSeconds: 300,
+          cumulativeDistanceMeters: 1200,
+        },
+        {
+          atMs: 3000,
+          kind: "status",
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 900,
+          distanceMeters: 3400,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: null,
+          programIntervalIndex: 2,
+        },
+      ],
+    });
+
+    await programAndArm(driver, fake, program);
+    fake.tick(3000);
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(1);
+
+    await programAndArm(driver, fake, program);
+    fake.injectDisconnect();
+    fake.completeReconnect();
+
+    // Run 2 has completed no interval. Run 1's boundary belongs to run 1.
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(1);
+  });
 });
 
-// SYNTHETIC failure paths (`FakeScript.failNextWrite`) — never observed on
+// SYNTHETIC failure paths (`FakeScript.failNextProgramFrame`) — never observed on
 // hardware, and the fake says so at the field's own definition
 // (interface-notes.md §19.1: not one of the twelve captured status bytes is
 // a rejection, and nothing ever arrived unparseable). They exist because
@@ -4377,10 +4491,10 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
 // a hand-rolled stub for want of any way to make the shared fake produce
 // either byte.
 describe("createPm5Driver: the fake's synthetic reject/garbled paths, driven end to end", () => {
-  it("failNextWrite 'reject' → reason 'nak' AND the documented GetErrorType follow-up in the trace (today: no such hook)", async () => {
+  it("failNextProgramFrame 'reject' → reason 'nak' AND the documented GetErrorType follow-up in the trace (today: no such hook)", async () => {
     const { fake, driver, log } = harness({
       program: MINIMAL_PROGRAM,
-      failNextWrite: "reject",
+      failNextProgramFrame: "reject",
     });
 
     const rejection = await driver.program(MINIMAL_PROGRAM).catch((e) => e);
@@ -4400,10 +4514,10 @@ describe("createPm5Driver: the fake's synthetic reject/garbled paths, driven end
     expect(fake.loadedIntervals()).toBeNull();
   });
 
-  it("failNextWrite 'garbled' → reason 'garbled', NOT 'nak', and no GetErrorType is sent (today: no such hook)", async () => {
+  it("failNextProgramFrame 'garbled' → reason 'garbled', NOT 'nak', and no GetErrorType is sent (today: no such hook)", async () => {
     const { fake, driver, log } = harness({
       program: MINIMAL_PROGRAM,
-      failNextWrite: "garbled",
+      failNextProgramFrame: "garbled",
     });
 
     const rejection = await driver.program(MINIMAL_PROGRAM).catch((e) => e);
@@ -4423,7 +4537,7 @@ describe("createPm5Driver: the fake's synthetic reject/garbled paths, driven end
   it("the one-shot is spent: a retry of the same program after a synthetic reject lands normally", async () => {
     const { fake, driver, events } = harness({
       program: MINIMAL_PROGRAM,
-      failNextWrite: "reject",
+      failNextProgramFrame: "reject",
     });
 
     await expect(driver.program(MINIMAL_PROGRAM)).rejects.toBeInstanceOf(
