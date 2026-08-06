@@ -349,9 +349,18 @@ export function createPm5Driver(
       const stale = pendingAckBuffer.shift()!;
       log.record(
         "frame-error",
-        `stale-ack: leftover from a previous sequence, discarded (status=${stale.status} commandIds=[${stale.commandIds.join(",")}])`,
+        `stale-ack: leftover from a previous sequence, discarded (${describeResponse(stale)})`,
       );
     }
+  }
+
+  /** Renders a `CsafeResponse` for the event log (`discardStaleAcks`,
+   *  `sendSequence`'s own trace) — one place for the two log call sites to
+   *  agree on the format, covering both union members (`pm5/response.ts`
+   *  §19.1: an `"unparseable"` frame carries no bitfield to print). */
+  function describeResponse(response: CsafeResponse): string {
+    if (response.kind === "unparseable") return "unparseable";
+    return `frameStatus=${response.frameStatus} slaveState=${response.slaveState} frameToggle=${response.frameToggle} commandIds=[${response.commandIds.join(",")}]`;
   }
 
   /** The single place `sendSequence` gets its next ack outcome from — the
@@ -985,9 +994,13 @@ export function createPm5Driver(
    * (interface-notes.md §18, progress.md's D1 update). The real clear
    * command, if one exists, is UNKNOWN.
    *
-   * Both `"nak"` (0x81 — the EXPECTED, common case: hardware showed the PM
+   * Both `"nak"` (the EXPECTED, common case: hardware showed the PM
    * rejects a terminate when nothing is currently running or loaded,
-   * interface-notes.md §18's clean-run observation) AND `"timeout"` are
+   * interface-notes.md §18's clean-run observation — the byte once cited
+   * here as `0x81` was itself a casualty of the whole-byte-compare bug
+   * `pm5/response.ts` fixed in this same commit; §19.1 shows `0x81`
+   * actually decodes to an ACCEPT, so which status byte a real clean-run
+   * reject uses on hardware is unconfirmed) AND `"timeout"` are
    * swallowed here as informational `"clear-rejected"`, never an error,
    * never a throw (fix-round 1, F3). `ProgramRejection`'s own doc comment
    * defines `"timeout"` as "the link stayed UP, but the PM never answered
@@ -1017,7 +1030,7 @@ export function createPm5Driver(
         log.record(
           "clear-rejected",
           err.reason === "nak"
-            ? `PM rejected the clear (0x81) — expected when nothing was loaded (interface-notes.md §18): ${err.hexTrace}`
+            ? `PM rejected the clear — expected when nothing was loaded (interface-notes.md §18; the exact status byte is in the trace): ${err.hexTrace}`
             : `PM never answered the clear (timeout) — the real clear command is unknown (interface-notes.md §18, progress.md's D1 update): ${err.hexTrace}`,
         );
         return;
@@ -1030,9 +1043,15 @@ export function createPm5Driver(
    * Ack-gated write sequencing (design spec §3): write every chunk of one
    * frame, await exactly one response frame on 0x0022, then move to the
    * next frame — never issuing the next frame's writes before the current
-   * one acks. A NAK (`status !== "ok"`) or the link going down before any
-   * response arrives both throw a typed `ProgramRejectionError` carrying
-   * the full hex trace of everything written/received during this call.
+   * one acks. A NAK (`pm5/response.ts`'s `frameStatus !== "ok"`, or a frame
+   * this driver could not even parse — see `describeResponse`'s own doc
+   * comment) or the link going down before any response arrives both throw
+   * a typed `ProgramRejectionError` carrying the full hex trace of
+   * everything written/received during this call. This treats `"reject"`,
+   * `"bad"`, and `"not-ready"` alike (and an unparseable frame as no
+   * better than an explicit reject) — telling those apart is a later
+   * task's job (pm5/response.ts §19.1); this one only fixes what "ok"
+   * means.
    *
    * `isClearStep` (fix-round 1, F7) suppresses the generic
    * `"program-rejection"` log entry for a NAK/timeout — `sendClear`'s own
@@ -1118,10 +1137,13 @@ export function createPm5Driver(
         });
       }
 
-      trace.push(
-        `ack status=${outcome.status} commandIds=[${outcome.commandIds.join(",")}]`,
-      );
-      if (outcome.status !== "ok") {
+      trace.push(`ack ${describeResponse(outcome)}`);
+      // pm5/response.ts §19.1: an unparseable frame carries no bitfield at
+      // all, and (per this function's own doc comment) is treated as no
+      // better than an explicit reject — telling the two apart, and
+      // telling "reject" apart from "bad"/"not-ready", is a later task's
+      // job, not this one's.
+      if (outcome.kind === "unparseable" || outcome.frameStatus !== "ok") {
         const hexTrace = trace.join(" | ");
         // F7: a clear-step NAK is the routine, expected case (`sendClear`'s
         // own doc comment) — it already logs "clear-rejected" itself, so

@@ -13,7 +13,10 @@ import {
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
 } from "../../../domain/monitor/pm5/parse.js";
-import { parseCsafeResponse } from "../../../domain/monitor/pm5/response.js";
+import {
+  parseCsafeResponse,
+  type CsafeResponse,
+} from "../../../domain/monitor/pm5/response.js";
 import { buildAdditionalStatus1Bytes } from "../../../domain/monitor/pm5/statusFrames.js";
 import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
@@ -27,6 +30,16 @@ import {
 } from "../../../domain/monitor/pm5/uuids.js";
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import { createFakeTransport, type FakeTimelineEvent } from "./fake";
+
+/** Phase 7A-fix-2, Task 2 (pm5/response.ts §19.1): `parseCsafeResponse` no
+ *  longer returns a `status` field — a response is either `{kind: "parsed",
+ *  frameStatus, ...}` or `{kind: "unparseable"}`. This file's own acks are
+ *  always well-formed (the fake builds them with `buildAckFrame`), so every
+ *  call site below is safe to read `frameStatus` off directly; this helper
+ *  exists only to keep the many `.map`/`.every` call sites below readable. */
+function frameStatusOf(response: CsafeResponse): string {
+  return response.kind === "parsed" ? response.frameStatus : "unparseable";
+}
 
 // A minimal, hand-built one-interval program — deliberately NOT a real
 // library workout, unlike driver.test.ts's happy-path suite (which drives
@@ -97,7 +110,7 @@ async function programIt(
   // Plan Task 2: `program()`'s own best-effort clear step precedes the real
   // programming sequence (`src/monitor/driver.ts`'s `sendClear()`) — the
   // fake's `"clearing"` phase expects the SAME `buildTerminate()` bytes
-  // first, always rejecting (0x81) before advancing to `"programming"`.
+  // first, always rejecting before advancing to `"programming"`.
   for (const chunk of buildTerminate()[0]!) {
     await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
   }
@@ -187,7 +200,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks).toHaveLength(1);
-    expect(acks[0]).toMatchObject({ status: "ok" });
+    expect(acks[0]).toMatchObject({ kind: "parsed", frameStatus: "ok" });
   });
 
   it("asserts — a corrupted chunk throws rather than being silently accepted (it's a protocol assertion, not a stub)", async () => {
@@ -244,7 +257,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks).toHaveLength(1);
-    expect(acks[0]).toMatchObject({ status: "reject" });
+    expect(acks[0]).toMatchObject({ kind: "parsed", frameStatus: "reject" });
     // Never armed: no WAITTOBEGIN bundle should have been sent.
     expect(generals).toHaveLength(0);
   });
@@ -263,7 +276,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks).toHaveLength(1);
-    expect(acks[0]).toMatchObject({ status: "ok" });
+    expect(acks[0]).toMatchObject({ kind: "parsed", frameStatus: "ok" });
   });
 
   it("injectNak(2) rejects a LATER frame (not just frame 0) in a genuinely multi-frame sequence (fix-round L2)", async () => {
@@ -296,7 +309,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
         await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
       }
     }
-    expect(acks.map((a) => a.status)).toStrictEqual(["ok", "ok", "reject"]);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok", "ok", "reject"]);
     expect(generals).toHaveLength(0); // never reached "armed" — frame 2's rejection halts the sequence
   });
 
@@ -391,7 +404,7 @@ describe("createFakeTransport: terminate", () => {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks).toHaveLength(1);
-    expect(acks[0]).toMatchObject({ status: "ok" });
+    expect(acks[0]).toMatchObject({ kind: "parsed", frameStatus: "ok" });
     expect(generals).toHaveLength(1);
     expect(decodeGeneral(generals[0]!).workoutState).toBe(
       WORKOUTSTATE_TERMINATE,
@@ -914,13 +927,13 @@ describe("createFakeTransport: D1 — a machine with a workout already loaded", 
     }
     // Accepted with something loaded — the D1 UPDATE observation, and the
     // opposite of the clean-state case every other test in this file drives.
-    expect(acks.map((a) => a.status)).toStrictEqual(["ok"]);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok"]);
     expect(fake.loadedIntervals()).toBe(3); // terminate is NOT a clear
 
     for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
-    expect(acks.map((a) => a.status)).toStrictEqual(["ok", "reject"]);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok", "reject"]);
     // The destructive half, confirmed twice on hardware: the rejection took
     // the rower's loaded workout with it.
     expect(fake.loadedIntervals()).toBeNull();
@@ -939,7 +952,7 @@ describe("createFakeTransport: D1 — a machine with a workout already loaded", 
     for (const chunk of buildTerminate()[0]!) {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
-    expect(acks.map((a) => a.status)).toStrictEqual(["reject"]);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["reject"]);
   });
 });
 
@@ -1000,7 +1013,7 @@ describe("createFakeTransport: a multi-frame programming sequence", () => {
         await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks).toHaveLength(seq.length - 1);
-    expect(acks.every((a) => a.status === "ok")).toBe(true);
+    expect(acks.every((a) => frameStatusOf(a) === "ok")).toBe(true);
     expect(generals).toHaveLength(0); // not armed yet — the last frame hasn't acked
 
     for (const chunk of seq[seq.length - 1]!) {

@@ -12,49 +12,75 @@
 //
 // domain/monitor/** imports nothing from src/.
 //
-// ============================================================================
-// KNOWN-WRONG: THE STATUS PARSING IN THIS FILE IS A BUG. DO NOT TRUST IT.
-// ============================================================================
-// `parseCsafeResponse` decides accept-vs-reject with a WHOLE-BYTE comparison
-// against 0x01. The CSAFE status byte is a BITFIELD, not an enum
-// (interface-notes.md §19.1; CSAFE-DEF Table 9 p.11; csafe.h:747-766;
-// PM3CsafeCP.h:131-156):
+// The status byte is a BITFIELD, not an enum (interface-notes.md §19.1,
+// citing [SDK] csafe.h:747-766 and PM3CsafeCP.h:131-156, and [CSAFE-DEF]
+// p.11 Table 9): three independent fields packed into one byte —
 //
-//   bit 7   (0x80)  frame-count TOGGLE — alternates on alternate frames
-//   bit 6   (0x40)  unassigned/reserved
+//   bit 7    (0x80) frame-count TOGGLE — alternates on alternate frames,
+//                    NEVER a failure signal
+//   bit 6    (0x40) unassigned/reserved — ignored on parse, never set by
+//                    the builder
 //   bits 4-5 (0x30) previous-frame status: 0x00 Ok / 0x10 Reject /
-//                                          0x20 Bad / 0x30 Not ready
-//   bits 0-3 (0x0F) slave state: 0x01 Ready … 0x05 In Use … 0x09 Off line
+//                    0x20 Bad / 0x30 Not ready
+//   bits 0-3 (0x0F) slave state: 0x00 Error / 0x01 Ready / 0x02 Idle /
+//                    0x03 Have ID / 0x05 In Use / 0x06 Pause / 0x07 Finish /
+//                    0x08 Manual / 0x09 Off line (0x04 and 0x0A-0x0F are
+//                    unassigned)
 //
-// So 0x81 is toggle-high / previous-frame-OK / Ready — an ACCEPT — and this
-// file's `REJECT_STATUS_BYTE = 0x81` names an accept as a rejection.
-// Concept2's own worked examples document one identical successful response
-// as "81 or 01" and print BOTH checksums, all of which verify. Decomposed
-// correctly, NOT ONE status byte in either laptop hardware session was a
-// rejection; every "rejection" recorded in interface-notes.md §18 was an
-// acceptance this function mislabelled, and several conclusions recorded
-// there as PM5 behaviour were consequences of THIS code (§19.2).
-//
-// The correct tests: accept `(status & 0x30) === 0x00`; reject
-// `(status & 0x30) === 0x10`; slave state `status & 0x0F`; NEVER test
-// `status & 0x80` for failure.
-//
-// The fix is deliberately NOT made here — it needs a wider return type (the
-// two-bucket "ok" | "reject" cannot express Bad/NotReady or carry the slave
-// state), a `buildAckFrame`/fake-transport counterpart that can synthesise a
-// GENUINE reject (0x11), and its own tests. It is Phase 7A-fix-2's first
-// bullet (ROADMAP.md). Until then: read §19 before believing anything this
-// module says about `"reject"`.
-// ============================================================================
+// A prior version of this module compared the whole byte against a single
+// "success" constant — that bug, the hardware evidence that exposed it (two
+// laptop sessions in which every recorded "rejection" was actually an
+// accept with the toggle bit set or a non-Ready slave state), and its fix
+// are recorded in interface-notes.md §19.1-§19.2. Read that section before
+// changing this file's bit logic again.
 
 import { buildFrame, parseFrame } from "../csafe.js";
 
-export type CsafeResponseStatus = "ok" | "reject";
+/** Bits 4-5 (0x30) — interface-notes.md §19.1 via [SDK] csafe.h:747-766
+ *  (`CSAFE_PREVOK_FLG`/`CSAFE_PREVREJECT_FLG`/`CSAFE_PREVBAD_FLG`/
+ *  `CSAFE_PREVNOTRDY_FLG`). */
+export type CsafeFrameStatus = "ok" | "reject" | "bad" | "not-ready";
 
-export interface CsafeResponse {
-  status: CsafeResponseStatus;
-  commandIds: number[];
-}
+/** Bits 0-3 (0x0F) — interface-notes.md §19.1 via [SDK] csafe.h:747-766.
+ *  Any byte whose low nibble has no assigned meaning (`0x04`, `0x0A`-`0x0F`)
+ *  decodes to `"unknown"` rather than throwing or guessing; `buildAckFrame`
+ *  emits `0x04` for `"unknown"` (csafe.h's own comment: "0x04 deliberately
+ *  absent"). */
+export type CsafeSlaveState =
+  | "error"
+  | "ready"
+  | "idle"
+  | "have-id"
+  | "in-use"
+  | "paused"
+  | "finished"
+  | "manual"
+  | "offline"
+  | "unknown";
+
+/**
+ * A decoded CSAFE response (interface-notes.md §19.1's bitfield rule).
+ * `frameToggle` is bit 7 — it alternates on alternate frames and must NEVER
+ * be tested for failure (§19.1's own "killer evidence": Concept2's worked
+ * examples document one identical successful response as "81 or 01",
+ * differing in nothing but this bit).
+ *
+ * `{kind: "unparseable"}` is a frame this module cannot decode AT ALL — a
+ * bad checksum, missing frame flags, or too few bytes to even carry a
+ * status byte. That is a strictly different situation from the PM
+ * explicitly answering "reject"/"bad"/"not ready" to a well-formed frame:
+ * an unparseable frame carries no bitfield to report, so it cannot be
+ * folded into any `CsafeFrameStatus` value without inventing one.
+ */
+export type CsafeResponse =
+  | {
+      kind: "parsed";
+      frameStatus: CsafeFrameStatus;
+      slaveState: CsafeSlaveState;
+      frameToggle: boolean;
+      commandIds: number[];
+    }
+  | { kind: "unparseable" };
 
 /** C2 proprietary wrapper (interface-notes.md §7/§16) — the one opcode the
  *  primary doc's own master ID table labels "Command Wrapper" (alongside
@@ -62,28 +88,72 @@ export interface CsafeResponse {
  *  codec actually uses. */
 const PROPRIETARY_WRAPPER = 0x76;
 
-/** KNOWN-WRONG (see the banner above; interface-notes.md §19.1). `0x01` is
- *  ONE of two success bytes — "01 or 81" are the same successful response
- *  with the frame-count toggle low and high respectively. A whole-byte
- *  comparison against this constant misclassifies every toggle-high accept,
- *  every non-Ready slave state, and every `0x09` (Off line) frame. */
-const SUCCESS_STATUS_BYTE = 0x01;
-/** KNOWN-WRONG (see the banner above; interface-notes.md §19.1). `0x81` is
- *  NOT a failure — it is toggle-high / previous-frame-OK / Ready, i.e. an
- *  ACCEPT. A genuine reject is `(status & 0x30) === 0x10` (e.g. `0x11`).
- *  This constant exists only so `buildAckFrame` can round-trip today's
- *  wrong parse; it should not survive Phase 7A-fix-2. */
-const REJECT_STATUS_BYTE = 0x81;
+const FRAME_STATUS_MASK = 0x30;
+const SLAVE_STATE_MASK = 0x0f;
+const FRAME_TOGGLE_BIT = 0x80;
+
+/** interface-notes.md §19.1 via [SDK] csafe.h:747-766. */
+const FRAME_STATUS_BITS: Record<CsafeFrameStatus, number> = {
+  ok: 0x00,
+  reject: 0x10,
+  bad: 0x20,
+  "not-ready": 0x30,
+};
+const FRAME_STATUS_BY_BITS = new Map<number, CsafeFrameStatus>(
+  Object.entries(FRAME_STATUS_BITS).map(([name, bits]) => [
+    bits,
+    name as CsafeFrameStatus,
+  ]),
+);
+
+/** interface-notes.md §19.1 via [SDK] csafe.h:747-766. `unknown`'s `0x04`
+ *  is the builder's own choice of an unassigned value (csafe.h's comment:
+ *  "0x04 deliberately absent") — parsing never depends on this entry,
+ *  since `decodeSlaveState` falls back to `"unknown"` for ANY unmapped
+ *  nibble, not just this one. */
+const SLAVE_STATE_BITS: Record<CsafeSlaveState, number> = {
+  error: 0x00,
+  ready: 0x01,
+  idle: 0x02,
+  "have-id": 0x03,
+  "in-use": 0x05,
+  paused: 0x06,
+  finished: 0x07,
+  manual: 0x08,
+  offline: 0x09,
+  unknown: 0x04,
+};
+const SLAVE_STATE_BY_BITS = new Map<number, CsafeSlaveState>(
+  Object.entries(SLAVE_STATE_BITS)
+    .filter(([name]) => name !== "unknown")
+    .map(([name, bits]) => [bits, name as CsafeSlaveState]),
+);
+
+/** Total over its 2-bit input: masking a byte with `FRAME_STATUS_MASK`
+ *  always yields one of exactly the four values `FRAME_STATUS_BY_BITS` was
+ *  built from (`0x00`/`0x10`/`0x20`/`0x30`), so the lookup can never miss. */
+function decodeFrameStatus(statusByte: number): CsafeFrameStatus {
+  return FRAME_STATUS_BY_BITS.get(statusByte & FRAME_STATUS_MASK)!;
+}
+
+/** Unlike frame status, the slave-state nibble has UNASSIGNED values
+ *  (`0x04`, `0x0A`-`0x0F`) — real wire bytes, not merely a type-system
+ *  edge case (interface-notes.md §19.1 records `0x09` Off line arriving on
+ *  real hardware; nothing rules out an unassigned nibble arriving too), so
+ *  this falls back to `"unknown"` rather than asserting past a `Map.get`. */
+function decodeSlaveState(statusByte: number): CsafeSlaveState {
+  return SLAVE_STATE_BY_BITS.get(statusByte & SLAVE_STATE_MASK) ?? "unknown";
+}
 
 /**
  * Parses one complete CSAFE response frame (raw wire bytes, start flag
- * through stop flag) into a status/commandIds pair (interface-notes.md
- * §16). Total: a frame that fails `csafe.parseFrame` (bad checksum,
- * missing flags, garbled bytes) or is too short to carry even a status
- * byte is reported as `{status: "reject", commandIds: []}` rather than
- * thrown — a response the driver cannot even validate is, from its
- * perspective, no better than an explicit rejection; it should log and
- * treat the write as unacked, never crash the read loop.
+ * through stop flag) into a `CsafeResponse` (interface-notes.md §16, §19.1).
+ * Total: a frame that fails `csafe.parseFrame` (bad checksum, missing
+ * flags, garbled bytes) or is too short to carry even a status byte is
+ * reported as `{kind: "unparseable"}` rather than thrown — a response the
+ * driver cannot even validate is, from its perspective, no better than an
+ * explicit rejection; it should log and treat the write as unacked, never
+ * crash the read loop.
  *
  * The ack-echo format, reverse-derived from the four conformance vectors
  * (interface-notes.md §6 R1-R4): `<status> <topOpcode> <count> <...>`.
@@ -102,46 +172,83 @@ const REJECT_STATUS_BYTE = 0x81;
 export function parseCsafeResponse(frame: Uint8Array): CsafeResponse {
   const parsed = parseFrame(frame);
   if (!("payload" in parsed)) {
-    return { status: "reject", commandIds: [] };
+    return { kind: "unparseable" };
   }
 
   const payload = parsed.payload;
   const statusByte = payload[0];
   if (statusByte === undefined) {
-    return { status: "reject", commandIds: [] };
+    return { kind: "unparseable" };
   }
-  const status: CsafeResponseStatus =
-    statusByte === SUCCESS_STATUS_BYTE ? "ok" : "reject";
+
+  const frameStatus = decodeFrameStatus(statusByte);
+  const slaveState = decodeSlaveState(statusByte);
+  const frameToggle = (statusByte & FRAME_TOGGLE_BIT) !== 0;
 
   const topOpcode = payload[1];
   if (topOpcode === undefined) {
-    return { status, commandIds: [] };
+    return {
+      kind: "parsed",
+      frameStatus,
+      slaveState,
+      frameToggle,
+      commandIds: [],
+    };
   }
 
   if (topOpcode === PROPRIETARY_WRAPPER) {
     const count = payload[2] ?? 0;
     const commandIds = Array.from(payload.slice(3, 3 + count));
-    return { status, commandIds };
+    return { kind: "parsed", frameStatus, slaveState, frameToggle, commandIds };
   }
 
-  return { status, commandIds: [topOpcode] };
+  return {
+    kind: "parsed",
+    frameStatus,
+    slaveState,
+    frameToggle,
+    commandIds: [topOpcode],
+  };
+}
+
+export interface AckFrameOptions {
+  /** Default `"ok"`. */
+  frameStatus?: CsafeFrameStatus;
+  /** Default `"ready"`. */
+  slaveState?: CsafeSlaveState;
+  /** Default `false`. */
+  frameToggle?: boolean;
+  /** The opcode echo under the 0x76 wrapper. Default `[]`. */
+  commandIds?: number[];
 }
 
 /**
  * Builds a synthetic ack/reject response FRAME (raw wire bytes, not yet
  * chunked to the BLE notify budget — callers use `pm5/framer.ts`'s
  * `chunkFrames` for that, the same composable step `pm5/commands.ts` uses)
- * for `commandIds` under the 0x76 wrapper — the inverse of
- * `parseCsafeResponse`'s wrapper branch, mirroring R2/R4 exactly
- * (interface-notes.md §16). For `src/monitor/transports/fake.ts` to answer
- * `pm5/commands.ts`'s writes without needing its own copy of the wrapper
- * format.
+ * under the 0x76 wrapper — the inverse of `parseCsafeResponse`'s wrapper
+ * branch, mirroring R2/R4 exactly (interface-notes.md §16). For
+ * `src/monitor/transports/fake.ts` to answer `pm5/commands.ts`'s writes
+ * without needing its own copy of the wrapper format or the bitfield
+ * layout (interface-notes.md §19.1).
+ *
+ * Every field is independently choosable and independently defaulted (the
+ * status byte's three fields are independent on the wire, per §19.1), so
+ * callers can synthesise any combination — including ones no laptop
+ * session ever actually captured, e.g. a genuine reject (`frameStatus:
+ * "reject"`) or a non-Ready slave state on a successful frame.
  */
-export function buildAckFrame(
-  status: CsafeResponseStatus,
-  commandIds: number[],
-): Uint8Array {
-  const statusByte = status === "ok" ? SUCCESS_STATUS_BYTE : REJECT_STATUS_BYTE;
+export function buildAckFrame(options: AckFrameOptions = {}): Uint8Array {
+  const {
+    frameStatus = "ok",
+    slaveState = "ready",
+    frameToggle = false,
+    commandIds = [],
+  } = options;
+  const statusByte =
+    FRAME_STATUS_BITS[frameStatus] |
+    SLAVE_STATE_BITS[slaveState] |
+    (frameToggle ? FRAME_TOGGLE_BIT : 0);
   const payload = Uint8Array.from([
     statusByte,
     PROPRIETARY_WRAPPER,

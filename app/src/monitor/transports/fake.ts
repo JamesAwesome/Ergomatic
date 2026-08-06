@@ -27,9 +27,11 @@
 // hooks (design spec §4, plan Task 4, plus fix-round HIGH-2's
 // `injectTimeout`, distinct from `injectDisconnect`: the link stays up,
 // only the ack never comes); a leading "clearing" phase (plan Task 2)
-// modeling `program()`'s own best-effort clear step, rejected (0x81) when
-// nothing is loaded and ACCEPTED when something is (D1's own two observed
-// outcomes) before the real programming sequence begins.
+// modeling `program()`'s own best-effort clear step, rejected when nothing
+// is loaded and ACCEPTED when something is (D1's own two observed
+// outcomes) before the real programming sequence begins. `sendAck`'s own
+// doc comment covers what byte each outcome maps to since Phase 7A-fix-2's
+// corrected bitfield parse (pm5/response.ts §19.1).
 //
 // Concept2 byte-level knowledge stays confined to what this file calls INTO
 // `pm5/` (`buildProgrammingSequence`, `buildTerminate`, `buildAckFrame`,
@@ -173,8 +175,8 @@ export interface FakeScript {
    * reports what the fake still holds, so a test can watch it go.
    *
    * What this models, all of it observed:
-   * - the programming sequence's FIRST frame is rejected (0x81) while
-   *   something is loaded — and that rejection is DESTRUCTIVE: the fake
+   * - the programming sequence's FIRST frame is rejected while something
+   *   is loaded — and that rejection is DESTRUCTIVE: the fake
    *   drops the loaded workout, the same way a real 2-interval send
    *   visibly wiped a working 1-minute program and left the monitor
    *   showing an empty `:00`;
@@ -484,8 +486,8 @@ export function createFakeTransport(
   // write(s) this fake ever sees are the SAME bytes as `terminateChunks`
   // (below), not `flatProgramChunks`. `"clearing"` models exactly that
   // window. Its ack now depends on what the machine is HOLDING (D1, Task
-  // 4): rejected (0x81) when nothing is loaded — the clean-run observation,
-  // and the common case for a fresh connection — but ACCEPTED when a
+  // 4): rejected when nothing is loaded — the clean-run observation, and
+  // the common case for a fresh connection — but ACCEPTED when a
   // workout is loaded, which the D1 UPDATE row observed directly (and which
   // changed nothing about the following program still being rejected;
   // terminate is not a clear). `injectNak` deliberately does NOT reach into
@@ -619,8 +621,23 @@ export function createFakeTransport(
     deliverArmedBundle();
   }
 
+  /** Phase 7A-fix-2, Task 2 (pm5/response.ts §19.1): `buildAckFrame` now
+   *  takes an options object with an independent `frameStatus` per the
+   *  corrected bitfield parse — `"ok"` here builds the exact same wire byte
+   *  (`0x01`) this fake always sent for it, but `"reject"` now builds a
+   *  GENUINE reject (`frameStatus: "reject"`, bits `0x30`) rather than the
+   *  old `0x81`, which §19.1 showed decodes to an ACCEPT (toggle-high,
+   *  prev-OK, Ready) — a byte that never actually meant "reject" on the
+   *  wire, even though this file's callers have always used it to mean
+   *  one. Every call site below keeps meaning exactly what its name says:
+   *  driver-visible behaviour (whether `sendSequence` throws) is unchanged,
+   *  only the underlying byte the "reject" scenarios now emit changed, to
+   *  the byte that pm5/response.ts §19.1 established actually IS a reject. */
   function sendAck(status: "ok" | "reject"): void {
-    notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame(status, []));
+    notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: status, commandIds: [] }),
+    );
   }
 
   /** The clear step's own chunk assertion (plan Task 2) — reuses
@@ -641,7 +658,7 @@ export function createFakeTransport(
 
   /** Called once the clear step's chunks have all arrived. The ack depends
    *  on the machine's LOAD STATE, both halves observed (D1,
-   *  interface-notes.md §18 #6): rejected (0x81) with nothing loaded — the
+   *  interface-notes.md §18 #6): rejected with nothing loaded — the
    *  clean-run case — and ACCEPTED with a workout loaded. Either way the
    *  loaded workout SURVIVES: an accepted terminate did not clear the PM
    *  (the following program was still rejected, twice), which is the whole

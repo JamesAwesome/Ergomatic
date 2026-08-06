@@ -427,13 +427,19 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
     // 1-interval program produces, then supplies the WAITTOBEGIN status
     // `verifyArmed` (driver.ts) is waiting on before `program()` resolves.
     const pending = driver.program(program);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
           .length > clearChunkCount,
     );
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
     // Fix-round 2: `verifyArmed`'s snapshot is now taken AFTER the send
     // fully resolves (not before it starts) — drain until that has
     // actually happened, or this "armed" notify would land BEFORE the
@@ -988,7 +994,7 @@ describe("createPm5Driver: NAK during programming", () => {
         expect(rejection.reason).toBe("nak");
         expect(rejection.atFrame).toBe(0);
         expect(rejection.hexTrace).toContain("write");
-        expect(rejection.hexTrace).toContain("ack status=reject");
+        expect(rejection.hexTrace).toContain("ack frameStatus=reject");
         return true;
       },
     );
@@ -1003,10 +1009,50 @@ describe("createPm5Driver: NAK during programming", () => {
         ),
     ).toBe(true);
   });
+
+  it('an unparseable ack (bad checksum — pm5/response.ts §19.1\'s {kind: "unparseable"}) is treated the same as an explicit NAK, never crashes, and its trace says so', async () => {
+    // The fake has no hook to emit a genuinely unparseable frame (it only
+    // ever builds well-formed acks via `buildAckFrame`), so this drives a
+    // bare `stubTransport()` directly — same pattern as the other
+    // hand-rolled-transport tests in this file (e.g. "resolves only after
+    // the machine reports 'armed'" above).
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    // Clear step: accept it so the real programming frame is what fails.
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > clearChunkCount,
+    );
+    // R1's frame (interface-notes.md §6) with its checksum byte flipped —
+    // the same shape `domain/monitor/pm5/response.test.ts` uses to prove
+    // `parseCsafeResponse` returns `{kind: "unparseable"}`, not a parsed
+    // reject, for a frame it cannot even validate.
+    const unparseableAck = Uint8Array.from([
+      0xf1, 0x01, 0x1a, 0x00, 0xff, 0xf2,
+    ]);
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, unparseableAck);
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      const rejection = err as ProgramRejectionError;
+      expect(rejection.reason).toBe("nak");
+      expect(rejection.atFrame).toBe(0);
+      expect(rejection.hexTrace).toContain("ack unparseable");
+      return true;
+    });
+  });
 });
 
 describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () => {
-  it("a clear-rejected (0x81) step still proceeds to program the real workout (interface-notes.md §18: expected, never fatal)", async () => {
+  it("a clear-rejected step still proceeds to program the real workout (interface-notes.md §18: expected, never fatal)", async () => {
     // Realistic fixture (briefing: "at least one test per client task
     // starts from a real library workout"): Sea Fret, not a hand-built
     // minimum. Against TODAY's code (no clear step at all), `program()`
@@ -1016,7 +1062,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
 
     await programAndArm(driver, fake, program);
 
-    // The fake's clearing phase ALWAYS rejects (0x81) — the common
+    // The fake's clearing phase ALWAYS rejects — the common
     // "nothing was loaded" case (interface-notes.md §18) — and `program()`
     // must treat that as informational, not fatal: it logs and proceeds
     // straight into the real send.
@@ -1044,13 +1090,19 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     const driver = createPm5Driver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
           .length > clearChunkCount,
     );
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
 
     let settled = false;
     void pending.then(() => {
@@ -1076,13 +1128,19 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     const driver = createPm5Driver(transport, log, { verifyTicks: 3 });
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
           .length > clearChunkCount,
     );
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
     // Drain until `program()`'s own code has actually reached `verifyArmed()`
     // and registered its tick counter — a status notification sent before
     // that point updates `raw` but is never COUNTED as a verify tick (there
@@ -1137,13 +1195,19 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     const driver = createPm5Driver(transport, log, { verifyTicks: 2 });
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
           .length > clearChunkCount,
     );
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
     // Drain until `verifyArmed()` has actually registered its tick counter
     // (see the sibling "verify() times out" test's identical comment).
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
@@ -1180,13 +1244,19 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     const driver = createPm5Driver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
           .length > clearChunkCount,
     );
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
     // Drain until `verifyArmed()` has actually registered — see the
     // sibling "verify() times out" test's identical comment.
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
@@ -1229,7 +1299,10 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
@@ -1237,7 +1310,10 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     );
     // D2's exact silent no-op shape: the program's own ack says "ok", but
     // NO general-status tick ever arrives after this point.
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
 
     let settled = false;
     void pending.then(() => {
@@ -1278,7 +1354,10 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     const driver = createPm5Driver(transport, log, { verifyTicks: 3 });
 
     const pending = driver.program(fiveIntervalProgram);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", [])); // clear step
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // clear step
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
@@ -1287,7 +1366,10 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
 
     // Frame 0's own ack — only the FIRST of several frames this program
     // needs.
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
 
     // A stale "armed" tick lands HERE — after frame 0's ack, but well
@@ -1300,7 +1382,10 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     // further "armed" observation at any point.
     for (let frame = 1; frame < seq.length; frame += 1) {
       for (let i = 0; i < 20; i += 1) await Promise.resolve();
-      transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
     }
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
 
@@ -1370,7 +1455,10 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     );
     // The REAL program's own ack — swallowing the clear's timeout must not
     // block the send that follows it.
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
     // Fix-round 2: drain until the send has fully resolved and
     // `verifyArmed`'s snapshot has actually been captured (see that
     // function's own doc comment) before supplying a fresh post-send
@@ -1456,7 +1544,10 @@ describe("createPm5Driver: HIGH-2 — ack-timeout policy, distinct from disconne
     driver.events((e) => events.push(e));
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
@@ -2148,7 +2239,7 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
     expect(() =>
       transport.notify(
         TRANSMIT_CHARACTERISTIC_UUID,
-        buildAckFrame("ok", [0x01]),
+        buildAckFrame({ frameStatus: "ok", commandIds: [0x01] }),
       ),
     ).not.toThrow();
     expect(
@@ -2188,7 +2279,10 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
     // `discardStaleAcks()` (fix-round 2) would purge the FIRST of the two
     // coalesced acks as a stale leftover from the clear sequence instead of
     // consuming it as the real programming sequence's own frame-0 response.
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
@@ -2197,8 +2291,8 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
 
     // Both frames' acks, concatenated into ONE raw byte stream — a
     // single BLE notification that happened to coalesce two responses.
-    const ack1 = buildAckFrame("ok", []);
-    const ack2 = buildAckFrame("ok", []);
+    const ack1 = buildAckFrame({ frameStatus: "ok" });
+    const ack2 = buildAckFrame({ frameStatus: "ok" });
     const coalesced = new Uint8Array(ack1.length + ack2.length);
     coalesced.set(ack1, 0);
     coalesced.set(ack2, ack1.length);
@@ -2236,13 +2330,19 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     const driver = createPm5Driver(transport, log);
 
     const programPending = driver.program(MINIMAL_PROGRAM);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", [])); // clear step (plan Task 2)
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // clear step (plan Task 2)
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
           .length > clearChunkCount,
     );
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
     // Fix-round 2: drain until the send has fully resolved and
     // `verifyArmed`'s snapshot has actually been captured (its own doc
     // comment) before supplying a fresh post-send "armed" observation.
@@ -2256,13 +2356,16 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     // unambiguous, not a coincidence of some other default.
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
-      buildAckFrame("reject", [0x99]),
+      buildAckFrame({ frameStatus: "reject", commandIds: [0x99] }),
     );
 
     const terminatePending = driver.terminate();
     // terminate()'s REAL ack — sent AFTER the stale one, proving the
     // sequence actually waited for and consumed THIS one, not the stray.
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
 
     await expect(terminatePending).resolves.toBeUndefined();
     expect(
@@ -2295,14 +2398,17 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     const driver = createPm5Driver(transport, log);
 
     const pending = driver.program(fiveIntervalProgram);
-    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", [])); // clear step (plan Task 2)
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // clear step (plan Task 2)
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
           .length > clearChunkCount,
     );
-    const ack1 = buildAckFrame("ok", []);
-    const ack2 = buildAckFrame("ok", []);
+    const ack1 = buildAckFrame({ frameStatus: "ok" });
+    const ack2 = buildAckFrame({ frameStatus: "ok" });
     const coalesced = new Uint8Array(ack1.length + ack2.length);
     coalesced.set(ack1, 0);
     coalesced.set(ack2, ack1.length);
@@ -2371,7 +2477,7 @@ describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-fra
       .filter(
         (e) => e.seq > clearSeq && (e.kind === "write" || e.kind === "ack"),
       );
-    const expectedAckHex = hex(buildAckFrame("ok", []));
+    const expectedAckHex = hex(buildAckFrame({ frameStatus: "ok" }));
 
     let cursor = 0;
     for (const frame of seq) {
