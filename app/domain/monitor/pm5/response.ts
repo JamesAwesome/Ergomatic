@@ -11,6 +11,41 @@
 // §Layering).
 //
 // domain/monitor/** imports nothing from src/.
+//
+// ============================================================================
+// KNOWN-WRONG: THE STATUS PARSING IN THIS FILE IS A BUG. DO NOT TRUST IT.
+// ============================================================================
+// `parseCsafeResponse` decides accept-vs-reject with a WHOLE-BYTE comparison
+// against 0x01. The CSAFE status byte is a BITFIELD, not an enum
+// (interface-notes.md §19.1; CSAFE-DEF Table 9 p.11; csafe.h:747-766;
+// PM3CsafeCP.h:131-156):
+//
+//   bit 7   (0x80)  frame-count TOGGLE — alternates on alternate frames
+//   bit 6   (0x40)  unassigned/reserved
+//   bits 4-5 (0x30) previous-frame status: 0x00 Ok / 0x10 Reject /
+//                                          0x20 Bad / 0x30 Not ready
+//   bits 0-3 (0x0F) slave state: 0x01 Ready … 0x05 In Use … 0x09 Off line
+//
+// So 0x81 is toggle-high / previous-frame-OK / Ready — an ACCEPT — and this
+// file's `REJECT_STATUS_BYTE = 0x81` names an accept as a rejection.
+// Concept2's own worked examples document one identical successful response
+// as "81 or 01" and print BOTH checksums, all of which verify. Decomposed
+// correctly, NOT ONE status byte in either laptop hardware session was a
+// rejection; every "rejection" recorded in interface-notes.md §18 was an
+// acceptance this function mislabelled, and several conclusions recorded
+// there as PM5 behaviour were consequences of THIS code (§19.2).
+//
+// The correct tests: accept `(status & 0x30) === 0x00`; reject
+// `(status & 0x30) === 0x10`; slave state `status & 0x0F`; NEVER test
+// `status & 0x80` for failure.
+//
+// The fix is deliberately NOT made here — it needs a wider return type (the
+// two-bucket "ok" | "reject" cannot express Bad/NotReady or carry the slave
+// state), a `buildAckFrame`/fake-transport counterpart that can synthesise a
+// GENUINE reject (0x11), and its own tests. It is Phase 7A-fix-2's first
+// bullet (ROADMAP.md). Until then: read §19 before believing anything this
+// module says about `"reject"`.
+// ============================================================================
 
 import { buildFrame, parseFrame } from "../csafe.js";
 
@@ -27,10 +62,17 @@ export interface CsafeResponse {
  *  codec actually uses. */
 const PROPRIETARY_WRAPPER = 0x76;
 
-/** Status byte for success (interface-notes.md §6: "01 or 81" — 01 is the
- *  success value in every response example). */
+/** KNOWN-WRONG (see the banner above; interface-notes.md §19.1). `0x01` is
+ *  ONE of two success bytes — "01 or 81" are the same successful response
+ *  with the frame-count toggle low and high respectively. A whole-byte
+ *  comparison against this constant misclassifies every toggle-high accept,
+ *  every non-Ready slave state, and every `0x09` (Off line) frame. */
 const SUCCESS_STATUS_BYTE = 0x01;
-/** Status byte for explicit failure/CommStatus (interface-notes.md §6). */
+/** KNOWN-WRONG (see the banner above; interface-notes.md §19.1). `0x81` is
+ *  NOT a failure — it is toggle-high / previous-frame-OK / Ready, i.e. an
+ *  ACCEPT. A genuine reject is `(status & 0x30) === 0x10` (e.g. `0x11`).
+ *  This constant exists only so `buildAckFrame` can round-trip today's
+ *  wrong parse; it should not survive Phase 7A-fix-2. */
 const REJECT_STATUS_BYTE = 0x81;
 
 /**
