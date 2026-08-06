@@ -155,6 +155,47 @@ describe("parseCsafeResponse: the doc's own hand-verified checksum shape, both t
   });
 });
 
+// Fix round (task-2-review.md LOW-2): the doc's two VERBATIM captured
+// frames (interface-notes.md §19.1:1718-1719, [S2]'s own raw `exportLog()`
+// bytes, not a reconstruction like the 8-opcode shape above) — the actual
+// 14-opcode hardware shape the old whole-byte-compare bug mislabelled as
+// two separate rejections. Bytes copied verbatim, not recomputed; only the
+// expected `CsafeResponse` shape is new.
+describe("parseCsafeResponse: the two verbatim §19.1 hardware captures the old parser mislabelled", () => {
+  const opcodes14 = [
+    0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x18, 0x17, 0x03, 0x04, 0x06,
+    0x14, 0x13,
+  ];
+
+  it('interface-notes.md §19.1:1718 — `f1 81 76 0e … eb f2`: an ACCEPT (toggle high), not the "rejection" §18 originally recorded', () => {
+    const frame = Uint8Array.from([
+      0xf1, 0x81, 0x76, 0x0e, 0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x18,
+      0x17, 0x03, 0x04, 0x06, 0x14, 0x13, 0xeb, 0xf2,
+    ]);
+    expect(parseCsafeResponse(frame)).toStrictEqual({
+      kind: "parsed",
+      frameStatus: "ok",
+      slaveState: "ready",
+      frameToggle: true,
+      commandIds: opcodes14,
+    });
+  });
+
+  it("interface-notes.md §19.1:1719 — `f1 09 76 0e … 63 f2`: also an ACCEPT, slave state Off line, not a rejection", () => {
+    const frame = Uint8Array.from([
+      0xf1, 0x09, 0x76, 0x0e, 0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x18,
+      0x17, 0x03, 0x04, 0x06, 0x14, 0x13, 0x63, 0xf2,
+    ]);
+    expect(parseCsafeResponse(frame)).toStrictEqual({
+      kind: "parsed",
+      frameStatus: "ok",
+      slaveState: "offline",
+      frameToggle: false,
+      commandIds: opcodes14,
+    });
+  });
+});
+
 describe("parseCsafeResponse: the fix's own defect vectors — each one is a documented failure of the whole-byte compare this commit replaces", () => {
   it('0x81 decodes to an ACCEPT with the toggle bit set — today\'s whole-byte compare against 0x01 reports {status: "reject"} for this exact byte', () => {
     const frame = Uint8Array.from([0xf1, 0x81, 0x1a, 0x00, 0x9b, 0xf2]);
@@ -238,6 +279,40 @@ describe("parseCsafeResponse: the fix's own defect vectors — each one is a doc
       slaveState: "ready",
       frameToggle: false,
       commandIds: [0x1a],
+    });
+  });
+
+  // Fix round (task-2-review.md MED-1): `ok`/`reject` were pinned by the
+  // literal-byte vectors above, but `bad`/`not-ready` had no independent
+  // anchor anywhere — every `bad`/`not-ready` case elsewhere in this file
+  // goes through `buildAckFrame`, which derives its byte from the SAME
+  // `FRAME_STATUS_BITS` table `parseCsafeResponse` decodes against, so a
+  // relabelling of those two values (`bad`/`not-ready` swapped) stayed
+  // self-consistent and every test still passed. These two vectors are
+  // raw literal bytes on the input side, checked against named fields on
+  // the output side, with NO call to `buildAckFrame` and no shared
+  // derivation — a swap of `bad 0x20`/`"not-ready" 0x30` cannot pass both.
+  it('0x22 decodes to frameStatus "bad" / slaveState "idle" (a literal byte, not a buildAckFrame round-trip)', () => {
+    // f1 22 <checksum-of-just-0x22> f2 — XOR of a single byte is itself.
+    const frame = Uint8Array.from([0xf1, 0x22, 0x22, 0xf2]);
+    expect(parseCsafeResponse(frame)).toStrictEqual({
+      kind: "parsed",
+      frameStatus: "bad",
+      slaveState: "idle",
+      frameToggle: false,
+      commandIds: [],
+    });
+  });
+
+  it('0xb5 decodes to frameStatus "not-ready" / slaveState "in-use" / frameToggle true (a literal byte, not a buildAckFrame round-trip)', () => {
+    // f1 b5 <checksum-of-just-0xb5> f2 — XOR of a single byte is itself.
+    const frame = Uint8Array.from([0xf1, 0xb5, 0xb5, 0xf2]);
+    expect(parseCsafeResponse(frame)).toStrictEqual({
+      kind: "parsed",
+      frameStatus: "not-ready",
+      slaveState: "in-use",
+      frameToggle: true,
+      commandIds: [],
     });
   });
 });
@@ -413,6 +488,13 @@ describe("buildAckFrame: the inverse of parseCsafeResponse's wrapper branch", ()
 
   it("emits 0x04 for slaveState \"unknown\" (csafe.h: '0x04 deliberately absent')", () => {
     const frame = buildAckFrame({ slaveState: "unknown" });
+    // Fix round (task-2-review.md MED-2): the round-trip assertion below
+    // passes for ANY unassigned nibble (0x0a, 0x0f, ... all decode back to
+    // "unknown"), so it cannot tell 0x04 apart from a wrong value — it
+    // never actually pinned the byte the brief mandates. Assert the BYTE
+    // itself, not just its round trip (same technique the bit-6 test above
+    // already uses on `frame[1]`).
+    expect(frame[1]).toBe(0x04);
     expect(parseCsafeResponse(frame)).toStrictEqual({
       kind: "parsed",
       frameStatus: "ok",

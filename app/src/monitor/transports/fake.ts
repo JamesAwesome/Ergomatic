@@ -625,7 +625,8 @@ export function createFakeTransport(
    *  takes an options object with an independent `frameStatus` per the
    *  corrected bitfield parse — `"ok"` here builds the exact same wire byte
    *  (`0x01`) this fake always sent for it, but `"reject"` now builds a
-   *  GENUINE reject (`frameStatus: "reject"`, bits `0x30`) rather than the
+   *  GENUINE reject (`frameStatus: "reject"` — status byte `0x11`: `0x10`
+   *  under the `0x30` mask, slave state Ready) rather than the
    *  old `0x81`, which §19.1 showed decodes to an ACCEPT (toggle-high,
    *  prev-OK, Ready) — a byte that never actually meant "reject" on the
    *  wire, even though this file's callers have always used it to mean
