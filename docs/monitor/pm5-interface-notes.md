@@ -1375,6 +1375,242 @@ every flagged item either numbered here or explicitly excused — holds.)
     doc comment and `DriverOptions.errorTypeTicks`'s doc comment both cite
     this item.
 
+    > **Cross-reference (2026-08-06, Phase 7A-fix-2 Task 7): this item pairs
+    > naturally with the session-3 merge-gate row below** (§17, "The
+    > merge-gate row (session 3, prepared, NOT yet run)") — the lab is
+    > already connected and idle right before that row's step 1, exactly
+    > the state this item needs. It stays its OWN hardware action, not a
+    > sixth step of that row: `app/scripts/pm5-lab.ts`'s `REMOTE` map has no
+    > command that sends a bare `buildGetErrorType()` outside a genuine
+    > programming reject (`src/monitor/driver.ts`'s `sendGetErrorType` is
+    > only ever called internally, on a real `"nak"`), so answering this
+    > item still needs either a deliberately-provoked reject or a small
+    > harness addition — out of scope for this docs-only task. GetErrorType's
+    > own decode and `SetScreenState`'s pending/in-progress/inactive status
+    > (§19.6) both still wait on whichever session answers it.
+
+15. **STATUS: OPEN — carried from Phase 7A-fix-2 Task 6's review (the fake's
+    prepare-refusal rests on an uncaptured byte); did not exist before this
+    commit, so no data yet.** Whether the PM genuinely refuses a bare
+    `terminate()` sent to an idle machine (nothing loaded, nothing rowing).
+    `src/monitor/transports/fake.ts`'s `onClearingFrameComplete` synthesizes
+    `sendAck(loadedIntervalCount === null ? "reject" : "ok", …)` for exactly
+    this case, and `src/monitor/driver.ts`'s `sendPrepare` doc comment calls
+    the resulting refusal "the EXPECTED, common case — hardware showed the
+    PM refuses a terminate when nothing is currently running or loaded"
+    (`:1477-1481`), citing "interface-notes.md §18's clean-run observation."
+    That citation is this file's own "S1 | CLEAN RUN 2: terminate, nothing
+    loaded" row in §19.1's re-derivation table — an **NARR-NB** row: no byte
+    was ever written down for that send, only the OLD PARSE's label
+    ("rejected — nothing to terminate") survives. Every other "rejected"
+    label the old parse produced across both sessions turned out, once
+    decoded under the corrected bitfield rule, to be an ACCEPT (§19.1's
+    twelve RAW rows, zero rejections) — the one piece of "evidence" behind
+    this item is that exact parse, now known to mislabel acceptances as
+    rejections, applied to a send whose byte nobody captured. Expected:
+    unknown by design — this item exists to become known. Observed: from a
+    clean/idle PM5 (freshly connected, nothing programmed, nothing rowing —
+    the state the session-3 row's own setup leaves the machine in right
+    before its first `program-two-time` send), send a bare `terminate` (the
+    lab's `terminate` button / bridge command — standalone, never
+    `program()`'s internal prepare step) and `dump` immediately after; read
+    the raw status byte off the ack frame. Decoding it settles whether an
+    idle terminate is a genuine reject (`(status & 0x30) === 0x10`) or
+    another accept the old parse mislabeled. **What changes if it is NOT a
+    genuine reject:** `fake.ts`'s `onClearingFrameComplete` refusal is then
+    modelling a machine behaviour with no confirmed evidence behind it and
+    should accept unconditionally instead (the fake would need a different,
+    explicitly-synthetic hook to script a refusal, the way `injectNak`/
+    `failNextProgramFrame` already do for the programming frame); and
+    `driver.ts`'s `sendPrepare` comment's "hardware showed the PM refuses…"
+    clause would need to drop the hardware-evidence claim. The
+    swallow-as-routine BEHAVIOUR itself likely survives either way (ANY
+    non-disconnected prepare outcome is already swallowed, by design) — only
+    the STATED REASON for expecting a reject specifically would not.
+16. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; one of the "index
+    shapes the merge row does not convert" (design spec §5).** Whether
+    `toActualIndex`'s minus-1 rule (and 0x0033's own rest-keyed
+    `toProgramIndex`) hold at a boundary that is neither a program's first
+    nor its last — every hardware reading on record ([S1]'s CLEAN RUN 2,
+    [S2]'s D1-D4, and the session-3 row's own steps 2/4 below) comes from a
+    program with exactly ONE interior boundary (a 2-interval program has
+    only a work0→work1 transition to observe). `app/scripts/pm5-lab.ts`'s
+    `SHORT_PROGRAM` (3×500 m DISTANCE, rest 60 s — already wired as the
+    `program-short` command, §17 item 6's own vehicle) is the smallest
+    program with a genuinely interior boundary: work0→work1 (the first
+    boundary, same shape already observed) and work1→work2 (the SECOND
+    boundary — the first one this driver will ever have seen with a THIRD
+    interval still to come after it). Expected: unknown — forward
+    attribution and the minus-1 offset are stated as boundary-local rules
+    with no dependency on position within the program, so both boundaries
+    should read the same way relative to their own machine index, but
+    nothing has tested that a program's second boundary behaves like its
+    first rather than accumulating an error. Observed: `program-short`, row
+    through BOTH boundaries to completion, `dump`; read 0x0037/38's Split/
+    Interval Number at each boundary — does the second boundary normalize
+    to 1 the same clean way the first normalizes to 0, or does something
+    drift?
+17. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; the other unconverted
+    shape (design spec §5).** A DISTANCE-kind interval's ACTUAL. Session
+    3's own step 5 below (`program-many`) converts DISTANCE programs from
+    "never observed accepted" to observed-accepted, but explicitly involves
+    NO rowing, so what 0x0037/38 report when a DISTANCE interval actually
+    completes remains untested — every actual-index reading on record
+    (§19.1's table; the session-3 row's own steps 2/4) is from a TIME
+    interval. Expected: unknown — `toActualIndex`'s minus-1 rule is written
+    as index-shape-agnostic (it reads the machine's reported Split/Interval
+    Number, never the interval's own `kind`), so a DISTANCE interval's
+    actual should normalize the same way a TIME interval's does, but this
+    has never been observed. Observed: row `SHORT_PROGRAM`'s
+    (`program-short`) first interval (500 m) to completion — the same
+    hardware action item 16 above uses for its first boundary, so one row
+    can answer both items — and read the resulting `intervalComplete`
+    event's `index` (should normalize to 0) alongside its distance/duration
+    averages, confirming they are DISTANCE-shaped (`value` in metres, not
+    seconds) and not silently coerced toward a TIME reading anywhere in the
+    pipeline.
+18. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; the third unconverted
+    shape (design spec §5).** A single-interval program has no INTERIOR
+    boundary at all — only `WorkoutEnd` — so whatever forward-attribution/
+    minus-1 machinery fires (if anything fires) at that transition has never
+    been checked: every prior single-interval hardware run (the original
+    `TEST_PROGRAM`; item 8's trailing-rest confirmation) recorded that
+    `workoutComplete` fires correctly, but never recorded WHETHER an
+    `intervalComplete` accompanies it, or with what raw index, when there is
+    no "next" interval for a machine that attributes forward to attribute
+    into. Expected: unknown — `toActualIndex`'s clamp only returns a value
+    for raw machine indices in the explainable range `[0, L+1]` (`L` = the
+    program's length, design spec §5); with `L === 1` that range is
+    `[0, 2]`, narrower than every previously-tested `L === 2` case, so a
+    single-interval program is the smallest input this rule has ever had to
+    handle. Observed: `program` (the existing single-interval
+    `TEST_PROGRAM`), row to `WorkoutEnd`, `dump`, and read whether an
+    `intervalComplete` fires at all, and if so, its raw machine index
+    alongside the normalized `index` the driver reports.
+19. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; the fourth unconverted
+    shape (design spec §5).** A mid-interval terminate's reported boundary
+    number. [CSAFE-DEF] footnote 12 p.25 documents that the Split/Interval
+    Number "will change depending on where you are in the interval when the
+    workout is terminated," and design spec §5 scopes the minus-1 rule to
+    apply only "WHEN a run this driver opened is active and the machine
+    state is `rowing`/`resting`" — a terminated workout's state is neither,
+    so today's code should emit `index: null` with a `"divergence"` log
+    entry rather than a normalized number, but no hardware row has ever sent
+    a terminate PARTWAY THROUGH an interval (as opposed to between
+    intervals, or after `WorkoutEnd`) to confirm it. Expected: `index: null`
+    plus a `"divergence"` log entry — the state guard should exclude
+    `terminated` regardless of what raw index the machine reports. Observed:
+    `program-two-time`, row partway into the FIRST interval (short of its
+    60 s duration, short of any boundary), then `terminate` mid-stroke;
+    `dump` and read whatever boundary event fires — does `index` come
+    through `null` with `divergence` logged (matching the design), and
+    separately, for the historical record, what RAW Split/Interval Number
+    did the machine report at that mid-interval terminate (recorded even
+    though the driver discards it, since footnote 12 predicts it may be a
+    value this document has not yet catalogued)?
+
+### The merge-gate row (session 3, prepared, NOT yet run)
+
+**Update (Task 7 close-out, phase-7a-fix-2, 2026-08-06): this is the design
+spec's own §8 merge-gate row** — the ONE short hardware row (~8 min,
+James-operated) the spec's Decisions table requires before PR #52 leaves
+draft ("Merge gate: One hardware row with the corrected parse … before PR
+#52 leaves draft"). Sessions 1 and 2 (§18; §19's re-derivation table) both
+ran against the OLD, whole-byte-comparison parse — every finding from them
+is a RE-DERIVATION from raw bytes, not a fresh observation under the fix.
+This row is the first time anything gets sent to real hardware running
+Tasks 2-6's corrected code. Prepared here exactly like §17's earlier
+"pending verification row"; its results destination is §18's own
+session-3 heading below, with every slot deliberately EMPTY — nobody has
+run this yet, and no result below should be read as anything but a
+template until it is.
+
+**Port check, before anything else.** This repo runs multiple worktrees'
+dev servers concurrently — Vite silently moves to 5174/5175/… whenever
+5173 is already held by another worktree, per `pm5-bridge.mjs`'s own header
+comment (a pinned port assumption already burned this project once). After
+`pnpm dev` starts, confirm which port it actually bound, and before trusting
+the lab page for anything, view its SERVED `driver.ts` (devtools → Sources,
+or `view-source:http://localhost:<port>/src/monitor/driver.ts`) and confirm
+it contains `errorTypeTicks` — a stale dev server (a different worktree's,
+or a browser tab left open from before this branch's HEAD) would silently
+run an OLDER build and manufacture exactly the false rejections this whole
+phase exists to eliminate, at the one moment nobody would think to doubt
+the page.
+
+**Setup:** identical to §17's top-level "Setup" section above (wake the
+PM5, `pnpm dev` from `app/`, Chrome, the port check just above, then the lab
+page) plus `node scripts/pm5-bridge.mjs` in a second terminal — this row
+reuses the same bridge and the same `REMOTE` map as "The pending
+verification row," no new harness code.
+
+**The row.** James clicks **Scan & connect** (the one action needing a real
+user gesture); the controller drives everything else via
+`curl -X POST http://127.0.0.1:5178/command -d <command>`, waiting for the
+command's `out()` line in the page / `pm5-session.log` before sending the
+next one; James rows when a step says to. Verbatim from design spec §8:
+
+1. Controller: `curl -X POST http://127.0.0.1:5178/command -d program-two-time`
+   (`TWO_TIME_PROGRAM`: two 60 s TIME intervals, rest 30 s). **Expected:**
+   the first CLEAN end-to-end accept under the corrected parse —
+   `frameStatus "ok"`, `verifyArmed` resolves, no rejection anywhere in the
+   trace (contrast every prior session, where the OLD parse logged a
+   spurious `program-rejection` on sends shaped exactly like this one).
+2. James rows both intervals (short) to completion, through the 30 s rest
+   between them. **Expected:** actuals carrying OUR indices 0 and 1 (not the
+   old mixed-boundary shape D4 produced), `workoutComplete` firing exactly
+   once. This converts "a first boundary WITH rest" from unobserved to
+   observed (design spec §5) — every prior hardware reading of forward
+   attribution at a RESTING boundary was under the OLD parse.
+3. WITHOUT reconnecting, controller:
+   `curl -X POST http://127.0.0.1:5178/command -d program-no-rest`
+   (`TWO_TIME_NO_REST_PROGRAM`) — a DIFFERENT program (`restSeconds: 0` vs
+   the loaded one's `30`), so acceptance-over-loaded is distinguishable
+   from "was already the same." **Expected, precisely:** James reads the
+   monitor and sees the NO-REST workout, not the two-time one still sitting
+   there — the distinguishing tell on the PM5's own screen is what appears
+   BETWEEN the two work intervals. The loaded (two-time) program shows a
+   `0:30` rest countdown between them; the newly-sent (no-rest) program
+   shows NO rest screen at all — the display goes straight from the end of
+   interval 1 into interval 2 with nothing intervening. Seeing the `0:30`
+   rest countdown at all, at this point in the sequence, is the
+   disagreement to record — it would mean the earlier program is still
+   loaded despite the accept.
+4. James rows through the no-rest program's first boundary (work0→work1;
+   the second interval need not be completed). **Expected:** a NEW run
+   opens (design spec §4's fix, proven on hardware, not just CI — the
+   driver must accept `program()` again with no reconnect after the FIRST
+   program's `workoutComplete`), and the boundary's actual re-confirms
+   minus-1 within this newly-opened run at a no-rest boundary (§17 item 13,
+   originally answered under the old parse in session 2 — this is the
+   first confirmation under the corrected one).
+5. Controller: `curl -X POST http://127.0.0.1:5178/command -d program-many`
+   (`MANY_PROGRAM`: 25 DISTANCE intervals, 7 CSAFE frames). **NO rowing.**
+   James reads the monitor's interval count. **Expected:** the PM5 shows
+   all 25 intervals armed — not a stale tail from an earlier frame group
+   and not a truncation at frame 0's old misread "reject." Multi-FRAME
+   programming has NEVER completed on real hardware before the corrected
+   parse (the old code aborted at frame 0), and DISTANCE-kind intervals have
+   likewise never been observed accepted; one send settles both.
+
+A disagreement with any Expected reading above is a FINDING TO RECORD, not
+a failure to explain away or a reason to re-run until it looks right — the
+same discipline "The pending verification row" states for session 2.
+
+**Certification honesty (design spec §8's own closing line).** Step 2's
+rowing verifies single-frame TIME programming end-to-end — acceptance,
+boundary accounting, and completion: the full run lifecycle. Steps 3 and 5
+verify ACCEPTANCE and MONITOR DISPLAY ONLY, for no-rest TIME and multi-frame
+DISTANCE respectively — step 3 is not rowed to completion and step 5 is not
+rowed at all, so neither one certifies those shapes' run lifecycle (their
+boundary/actual behaviour, their `workoutComplete` timing, or anything
+`intervalComplete`-shaped). Items 16-19 above name what still needs a
+dedicated row of its own.
+
+**PR #52 leaves draft only after this row's five steps are run, §18 records
+Expected-vs-Observed for each, AND James gives explicit approval** — running
+the row is necessary, not sufficient.
+
 ### The pending verification row (prepared, NOT yet run)
 
 Task 5 close-out (phase-7a-fix) prepared this exact sequence so the next
@@ -1751,6 +1987,39 @@ session, alongside items 12 and 13 — item 6's real clear command remains
 the single top open question. "The pending verification row" in §17 is
 this close-out's prepared, not-yet-run sequence for verifying Tasks 2-4's
 fixes and picking up item 12 as a free extra observation.
+
+### 2026-08-06 session (PM5 TBD) — LAPTOP SESSION 3 (PENDING — not yet run)
+
+**Results destination for §17's "The merge-gate row (session 3, prepared,
+NOT yet run)."** This heading exists so the row has somewhere to write its
+results the moment it runs; every slot below is deliberately EMPTY, not a
+placeholder value, and none of them should be read as anything but pending
+until a real session fills them in. **The row is JAMES-OPERATED and has NOT
+happened as of this commit — nothing in this subsection is an observation.**
+
+- **Step 1** (`program-two-time`, first clean accept under the corrected
+  parse — `frameStatus "ok"`, `verifyArmed` resolves, no rejection in the
+  trace): PENDING.
+- **Step 2** (row both intervals; actuals carry OUR indices 0 and 1;
+  `workoutComplete` fires once; "first boundary WITH rest" converts from
+  unobserved to observed): PENDING.
+- **Step 3** (`program-no-rest` sent over the loaded two-time program
+  without reconnecting; James reads the monitor — the no-rest workout
+  visible, no `0:30` rest screen between intervals): PENDING.
+- **Step 4** (row the no-rest program's first boundary; a NEW run opens
+  with no reconnect; minus-1 re-confirmed at a no-rest boundary): PENDING.
+- **Step 5** (`program-many`, 25 DISTANCE intervals / 7 frames, NO rowing;
+  James reads the monitor's interval count): PENDING.
+- **Item 15** (idle-terminate raw ack byte, decoded): PENDING.
+- **Items 16-19** (a ≥3-interval program's middle boundary; a DISTANCE
+  interval's actual; a single-interval program's boundary-less completion;
+  a mid-interval terminate's reported number): PENDING — each is its own
+  hardware action, not part of the five-step row above.
+
+**James's explicit approval:** PENDING. Per the design spec's own merge
+gate and §17's own closing line, PR #52 stays in draft until every slot
+above is filled in from a real session AND this line records that approval
+was given.
 
 ## 19. Idiosyncrasies, and whether they were ours
 

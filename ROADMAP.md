@@ -958,70 +958,100 @@ observation, never as something Concept2 documents.
 
 ## Phase 7A-fix-2 — the status bitfield, and what it invalidates
 
-**Status:** Not started
+**Status:** Code complete (Tasks 1-6, commits `0d0af28`..`fcb7a4c` on
+`phase-7a-monitor-domain`). **The merge-gate row is the ONLY remaining
+item — James-operated, and has NOT happened yet**
+(`docs/monitor/pm5-interface-notes.md` §17, "The merge-gate row (session 3,
+prepared, NOT yet run)"; §18's session-3 heading holds its EMPTY,
+explicitly-pending observation slots).
 **Trigger:** FIRED — `docs/monitor/pm5-interface-notes.md` §19 (2026-08-06)
 established that the CSAFE status byte is being parsed wrongly and that
 several conclusions recorded as PM5 behaviour were consequences of that
-parse. Documentation is corrected; the code is not.
+parse. Documentation is corrected; the code now matches it.
 **Authority:** `docs/monitor/pm5-interface-notes.md` §19 for every citation
 below. Nothing here is a new hardware finding — it is the fix list §19
-generates.
+generated, now shipped.
 
-- [ ] **The status bitfield.** `app/domain/monitor/pm5/response.ts` — mask
-      instead of comparing: accept is `(status & 0x30) === 0x00`, reject is
-      `(status & 0x30) === 0x10`, `status & 0x0F` is the slave state,
-      `status & 0x80` is the frame toggle and must never be tested for
-      failure, bit `0x40` is reserved. Retire `REJECT_STATUS_BYTE = 0x81`.
-      Decide what `CsafeResponseStatus` becomes — the two-bucket
-      `"ok" | "reject"` currently throws away the slave state and cannot
-      express `Bad`/`NotReady`. `buildAckFrame` and
-      `src/monitor/transports/fake.ts` must be able to synthesise a
-      GENUINE reject (`0x11`), which today they cannot. Tests: a vector per
-      previous-frame-status value, per slave state, and both toggle
-      polarities (§19.1).
-- [ ] **Re-derive D1/D2 from the raw traces.** Both sessions' byte logs
-      still exist. Re-read every ack with the corrected decode and write
-      down what actually happened, rather than repairing the old narrative.
-      Specifically: what emptied the monitor's display after the
-      2-interval send, and whether multi-INTERVAL/multi-FRAME programming
-      has any evidence against it at all (§19.2, §18 #5).
-- [ ] **The terminal-latch recovery.** The monitor never stops responding;
+- [x] **The status bitfield.** `app/domain/monitor/pm5/response.ts` masks
+      instead of comparing: accept `(status & 0x30) === 0x00`, reject
+      `(status & 0x30) === 0x10`, `bad`/`not-ready` for the other two
+      previous-frame values, `status & 0x0F` the slave state, `status &
+      0x80` the frame toggle (never tested for failure), bit `0x40`
+      reserved. `REJECT_STATUS_BYTE` is retired. `CsafeResponse` gained a
+      `kind: "unparseable"` member for a garbled frame, distinct from a
+      genuine reject — today's conflation is the bug §1 of the design spec
+      names. `buildAckFrame` and the fake synthesise all four frame
+      statuses, any slave state, either toggle, and echo opcodes. Vectors
+      per previous-frame-status value, per slave state, both toggle
+      polarities. Task 2 (§19.1).
+- [x] **Re-derived D1/D2 from the raw traces.** The 34-row per-send table
+      (§19.1) decodes every captured/narrative status byte in both
+      sessions: zero of the twelve RAW bytes was a rejection. D1 is
+      WITHDRAWN — the display-emptying `:00` transition stays an open
+      finding (Verdict (a), STANDING OPEN, not re-explained as fact); D2's
+      framing is WITHDRAWN but what it was protecting survives via the
+      documented OFFLINE slave-state mechanism (Verdict (c)); and
+      program-over-loaded WORKS (Verdict (b), behavioural proof from the
+      rest-30→rest-0 contrast, not the byte-identical acks). Task 1
+      (§19.1/§19.2).
+- [x] **The terminal-latch recovery.** The monitor never stops responding;
       on completion it parks in `WorkoutLogged` and leaves via the Menu
-      button or a terminate command ([CSAFE-DEF] Appendix E). Give the
-      driver that path instead of requiring a reconnect — the latch itself
-      is fine, the conclusion drawn from it was not (§19.4).
-- [ ] **The no-rest interval rule.** `domain/monitor/pm5/intervalIndex.ts`
+      button or a terminate command ([CSAFE-DEF] Appendix E). `activeRun`
+      is opened by `program()` and only by `program()`; a terminal state
+      closes that run while every subscription stays live — frames keep
+      flowing after `workoutComplete`, `program()` works again with no
+      reconnect, and a boundary arriving outside an open run emits
+      `index: null` plus a `boundary-out-of-run`/`terminal-out-of-run` log
+      entry, and a program replacing an open run's own logs `run-replaced`,
+      rather than either corrupting a closed run's actuals. Task 4 (§19.4).
+- [x] **The no-rest interval rule.** `domain/monitor/pm5/intervalIndex.ts`
       applied forward attribution only on the resting side; laptop session
       2 read `0x0037` = 1 against `0x0033` = 0 at a work→work boundary with
       `restSeconds: 0`. Done by Phase 7A-fix-2 Task 5: `toActualIndex`
-      applies the offset unconditionally for 0x0037/38 (`IntervalActual.index`);
-      0x0033's own `toProgramIndex` stays rest-keyed. The
-      `index-unverified` trace entry is RETIRED, not kept meaningful — its
-      question is answered, and its residual condition folds into the
-      existing `"divergence"` kind (§19.8, §17 item 13).
-- [ ] **`SetScreenState` is asynchronous.** Its ack means "queued", not
-      "done" ([CSAFE-DEF] p.65). Terminate and the clear step both treat it
-      as completion. Poll `CSAFE_PM_GET_SCREENSTATESTATUS` until
-      `_INACTIVE` (the spec's weaker alternative is a fixed ≥1 s delay)
+      applies the offset unconditionally for 0x0037/38 (`IntervalActual.index`),
+      clamped within the explainable range `[0, L+1]` and `null` + a forked
+      `"divergence"` entry outside it; 0x0033's own `toProgramIndex` stays
+      rest-keyed. The `index-unverified` trace entry is RETIRED — the kind
+      no longer exists (§19.8, §17 item 13).
+- [x] **`sendPrepare` replaces the clear step.** `program()` still leads
+      with a terminate-shaped step, re-justified as the documented
+      `WaitToBegin` recovery path (not a "clear" — nothing clears; terminate
+      re-arms the same workout, §19.5) rather than deleted; its refusal is
+      swallowed as routine (`"prepare-rejected"`), broadened from
+      nak-or-timeout to anything but a confirmed disconnect. Task 3.
+      **Carried finding (§17 item 15, Task 7 close-out):** the refusal's
+      own hardware citation turns out to be an uncaptured byte — see the
+      merge-gate row below.
+- [x] **`SetScreenState` is asynchronous.** Its ack means "queued", not
+      "done" ([CSAFE-DEF] p.65). `terminate()` waits the documented ≥1 s
+      fallback delay (a tick bound, no wall clock) rather than polling
+      `CSAFE_PM_GET_SCREENSTATESTATUS` — that poll needs the pull path,
+      which this drop does not build (unconfirmed wrapper; §17 item 14)
       (§19.6).
-- [ ] **`GetErrorType` on a genuine reject.** A workout-configuration
+- [x] **`GetErrorType` on a genuine reject.** A workout-configuration
       reject is atomic and NOT self-describing — the master must issue
-      `GetErrorType` to learn why ([CSAFE-DEF] p.50). Once real rejects are
-      detectable, ask (§19.7).
-- [ ] **The fake and the driver still MODEL the withdrawn behaviour.**
-      Deliberately left untouched by the §19 documentation pass, because
-      changing them is a behavioural change with its own tests, not a
-      comment sweep: `src/monitor/transports/fake.ts` simulates D1 directly
-      (`loadedWorkout`, "rejected (0x81) when nothing is loaded and ACCEPTED
-      when something is"), `src/monitor/driver.ts`'s clear step logs "PM
-      rejected the clear (0x81) — expected when nothing was loaded"
-      (`:1020`) and carries the D1-update rationale at `:930`/`:984-996`/
-      `:1158`, and `driver.test.ts` pins D1 by name (`:2698`). All of it
-      encodes a machine behaviour that does not exist. Re-derive, then
-      re-pin.
+      `GetErrorType` to learn why ([CSAFE-DEF] p.50). `sendGetErrorType`
+      fires ONE `buildGetErrorType()` on a genuine `"nak"`, bounded by
+      `errorTypeTicks` so an unconfirmed pull-path wrapper cannot hang the
+      call forever, and logs the raw hex reply with no decode claim — the
+      decode itself still waits on §17 item 14 (the pull-path GET, not yet
+      sent). Task 3 (§19.7).
+- [x] **The fake and the driver stopped modelling the withdrawn behaviour.**
+      `src/monitor/transports/fake.ts` accepts-and-replaces instead of
+      rejecting-when-loaded, toggles bit 7 on every response frame, varies
+      slave state (`ready`/`offline`/`in-use`), echoes opcodes in its acks,
+      and can script a genuine `0x11` reject or a garbled frame (each
+      marked synthetic/never-observed). `driver.test.ts` no longer pins D1
+      by name. Task 6.
 
-**Exit:** every bullet above has a passing test; no test encodes a
-whole-byte status comparison; §18/§19's corrected record and the code agree.
+**Exit:** every bullet above has a passing test (2282 all-projects / 111
+files, e2e 210 — Task 6's count, unchanged by Task 7's docs-only close-out);
+no test encodes a whole-byte status comparison; §18/§19's corrected record
+and the code agree. **PR #52 leaves draft only after the merge-gate row
+(`docs/monitor/pm5-interface-notes.md` §17's five steps, James-operated and
+NOT yet run) is completed, §18 records its Expected-vs-Observed for each
+step, AND James gives explicit approval** — code-complete is necessary, not
+sufficient.
 
 ## Phase 7B — PM5 connected surface
 
