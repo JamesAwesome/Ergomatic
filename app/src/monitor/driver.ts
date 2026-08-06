@@ -15,10 +15,12 @@
 // confirmed disconnect still propagates, fix-round 1's F3), the existing
 // ack-gated send (`sendSequence`, unchanged), then a tick-bounded
 // VERIFICATION (`verifyArmed`) against the machine's own reported state,
-// observed STRICTLY AFTER the send began (fix-round 1's F1 — a snapshot
-// taken any earlier lets a stale, unrelated "armed" reading count). The ack
-// is never trusted alone — the same ack byte has meant both "programmed"
-// and "nothing happened at all" on real hardware.
+// observed STRICTLY AFTER the send FULLY COMPLETED — the last frame's ack,
+// not the first frame going out (fix-round 2; fix-round 1's own snapshot
+// point was too early for a multi-frame program, so a stale "armed" tick
+// from partway through the send could satisfy it). The ack is never
+// trusted alone — the same ack byte has meant both "programmed" and
+// "nothing happened at all" on real hardware.
 //
 // Every Concept2 byte this file ever touches arrives pre-decoded through
 // `pm5/parse.ts` (`parseGeneralStatus` et al., `toMonitorFrame`,
@@ -284,17 +286,6 @@ export function createPm5Driver(
     reject: (err: unknown) => void;
     ticks: number;
   } | null = null;
-  // Fix-round 1, F1: a monotonic count of every GENERAL_STATUS_UUID arrival
-  // this driver has ever seen — incremented unconditionally, first thing,
-  // regardless of `pendingAck`/`pendingVerify`/`seen` state. `verifyArmed`
-  // snapshots this BEFORE the real programming write and only accepts an
-  // "armed" observation whose arrival strictly postdates that snapshot
-  // (see `verifyArmed`'s own doc for the exact hardware shape this
-  // closes: the reviewer reproduced a completely stale "armed" — left
-  // over from the CLEAR step's own Appendix-E auto-cycle — satisfying the
-  // OLD immediate check for a program that was actually a total no-op).
-  let generalStatusTickCount = 0;
-
   /** Discards anything left in `pendingAckBuffer` from a PREVIOUS, already-
    *  resolved sequence — see the buffer's own comment for why a leftover
    *  here is never a legitimate answer to a NEW sequence's first frame.
@@ -619,10 +610,6 @@ export function createPm5Driver(
     },
   );
   mergeStatus(GENERAL_STATUS_UUID, "0x0031", parseGeneralStatus, () => {
-    // Fix-round 1, F1: counted BEFORE anything else in this handler, for
-    // every arrival unconditionally — `verifyArmed`'s snapshot comparison
-    // depends on this being a strict, gapless count of 0x0031 decodes.
-    generalStatusTickCount += 1;
     seen.general = true;
     // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
     // HIGH-2): only counts while a write is genuinely awaiting its ack
@@ -707,21 +694,39 @@ export function createPm5Driver(
    * "armed" (WAITTOBEGIN/COUNTDOWNPAUSE, `pm5/parse.ts`'s `toMonitorFrame`)
    * before `program()` is allowed to resolve.
    *
-   * `since` is `generalStatusTickCount`'s value captured BEFORE the real
-   * programming write (fix-round 1, F1) — an "armed" observation only
-   * counts if its arrival's count is strictly greater than `since`. Without
-   * this, a STALE cached `raw` satisfies verification for free: a review
-   * reproduced the hardware shape exactly — the clear step gets ACCEPTED
-   * (progress.md's D1 update: this happens), the PM's own Appendix-E
-   * auto-cycle (Terminate -> Rearm -> WaitToBegin) reports "armed" on its
-   * own, and a stale read of THAT observation would satisfy verification
-   * for a completely separate program write that was actually a total
-   * no-op — D2 resurrected through the very phase built to stop it.
-   * Requiring a POST-snapshot arrival is what makes "armed" evidence FOR
-   * THIS SEND, not evidence some workout, at some point, was loaded.
+   * NEVER checks the already-cached `raw` value at call time — it always
+   * registers `pendingVerify` and waits for the NEXT GENERAL_STATUS_UUID
+   * arrival, however soon that turns out to be. Combined with `program()`
+   * only ever calling this AFTER `sendSequence` has fully resolved (i.e.
+   * after the LAST frame's ack — fix-round 2; fix-round 1's own call site
+   * called this BEFORE the first frame even went out), that guarantees the
+   * evidence is a status arrival STRICTLY AFTER THE COMPLETE PROGRAM WAS
+   * DELIVERED — never a stale reading from before, or from partway
+   * through, the send. Two hardware shapes this closes:
+   * - Trusting whatever `raw` already said: a STALE cached value satisfies
+   *   verification for free. A review reproduced this exactly — the clear
+   *   step gets ACCEPTED (progress.md's D1 update: this happens), the PM's
+   *   own Appendix-E auto-cycle (Terminate -> Rearm -> WaitToBegin) reports
+   *   "armed" on its own, and a stale read of THAT would satisfy
+   *   verification for a completely separate program write that was
+   *   actually a total no-op — D2 resurrected through the very phase
+   *   built to stop it.
+   * - Calling this before the send finished (fix-round 1's own mistake): a
+   *   SECOND review reproduced a multi-frame program (several ack-gated
+   *   frames) where a stale "armed" tick landing after only the FIRST
+   *   frame's ack satisfied verification, with no fresh tick ever
+   *   required after the LAST frame — the very property being checked
+   *   ("this send" landed) was never actually true for frames 2+.
+   *
+   * Trade-off accepted on purpose: status frames arrive roughly 2/second
+   * continuously on real hardware (interface-notes.md §18), so a machine
+   * that reaches "armed" DURING the send still reports it again on its
+   * very next tick, well under a second later — waiting for a fresh
+   * arrival costs at most one extra tick of latency to make the evidence
+   * unambiguous, never a meaningfully longer wait.
    *
    * What "the machine reporting the programmed structure" (design spec §1)
-   * concretely checks TODAY: `state === "armed"` (from a post-snapshot
+   * concretely checks TODAY: `state === "armed"` (from a post-send
    * arrival), nothing more. This is NOT because no stronger signal exists
    * on the wire — 0x0031 already decodes `workoutType` (our own writes
    * always send `WORKOUTTYPE_VARIABLE_INTERVAL`) and `workoutDurationRaw`/
@@ -742,13 +747,7 @@ export function createPm5Driver(
    * with `ProgramRejectionError({ reason: "not-observed" | "disconnected",
    * atFrame: -1 })` — verification has no frames of its own, only ticks.
    */
-  function verifyArmed(since: number): Promise<void> {
-    if (
-      generalStatusTickCount > since &&
-      toMonitorFrame(raw as RawPm5Status).state === "armed"
-    ) {
-      return Promise.resolve();
-    }
+  function verifyArmed(): Promise<void> {
     return new Promise((resolve, reject) => {
       pendingVerify = { resolve, reject, ticks: 0 };
     });
@@ -946,18 +945,27 @@ export function createPm5Driver(
     // routine (fix-round 1, F3), only a confirmed disconnect still fatal;
     // `sendSequence` is the existing ack-gated send, unchanged; `verifyArmed`
     // is what actually decides success, from the machine's OWN reported
-    // state observed STRICTLY AFTER this send (fix-round 1, F1) — never
-    // the ack alone (D2: the identical ack byte has meant both "programmed"
+    // state observed STRICTLY AFTER the COMPLETE send (fix-round 2 —
+    // fix-round 1's own snapshot point, taken before the first frame went
+    // out, was too early: a reviewer showed a stale "armed" tick landing
+    // after only frame 1 of a multi-frame program satisfied verification
+    // with no fresh tick ever required after the LAST frame) — never the
+    // ack alone (D2: the identical ack byte has meant both "programmed"
     // and "nothing happened at all" on real hardware), and never a stale
-    // pre-send observation either (verifyArmed's own doc comment).
+    // observation from any point during the send either (verifyArmed's own
+    // doc comment).
     async program(p: WorkoutProgram): Promise<void> {
       await sendClear();
-      // F1: snapshot taken AFTER the clear resolves, BEFORE the real
-      // programming write — see verifyArmed's doc for exactly which
-      // hardware shape this excludes.
-      const armedSince = generalStatusTickCount;
       await sendSequence(buildProgrammingSequence(p), "programmed");
-      await verifyArmed(armedSince);
+      // Fix-round 2: called only AFTER the full send resolves — i.e.
+      // after the LAST frame's ack, not before the first frame went out.
+      // A multi-frame program's send can itself span several general-status
+      // ticks; an "armed" reading from partway through it is not evidence
+      // that THIS complete program landed, only that the machine was armed
+      // at SOME point before the send finished (see verifyArmed's own doc
+      // for why waiting here, never trusting anything already cached, is
+      // the correct trade-off, not an overcorrection).
+      await verifyArmed();
       program = p;
       log.record("armed", `programmed ${p.intervals.length} interval(s)`);
       emit({ kind: "armed" });

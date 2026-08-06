@@ -409,6 +409,11 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
           .length > clearChunkCount,
     );
     transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    // Fix-round 2: `verifyArmed`'s snapshot is now taken AFTER the send
+    // fully resolves (not before it starts) — drain until that has
+    // actually happened, or this "armed" notify would land BEFORE the
+    // snapshot and not count (see verifyArmed's own doc comment).
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
     await pending;
 
@@ -1126,6 +1131,84 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     await expect(pending).resolves.toBeUndefined();
   });
 
+  it("F1 (fix-round 2): a stale 'armed' tick landing after only the FIRST frame of a multi-frame send does not satisfy verification — only a tick after the LAST frame does", async () => {
+    // Re-review finding: fix-round 1's own snapshot (taken BEFORE the
+    // first frame went out) was still too early — a tick landing anywhere
+    // during a multi-frame program's send already counted as "post
+    // snapshot", so a stale "armed" reading after only frame 1's ack
+    // satisfied verification with no fresh tick EVER required after the
+    // LAST frame. Against fix-round 1's code, this test's final assertion
+    // (reason "not-observed") fails: that code resolves successfully
+    // instead, using the stale mid-send tick as its only evidence.
+    const fiveIntervalProgram: WorkoutProgram = {
+      intervals: Array.from({ length: 5 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      })),
+    };
+    const seq = buildProgrammingSequence(fiveIntervalProgram);
+    expect(seq.length).toBeGreaterThan(1); // confirms this fixture is genuinely multi-frame
+
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 3 });
+
+    const pending = driver.program(fiveIntervalProgram);
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("reject", [])); // clear step
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > clearChunkCount,
+    );
+
+    // Frame 0's own ack — only the FIRST of several frames this program
+    // needs.
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    // A stale "armed" tick lands HERE — after frame 0's ack, but well
+    // before the program is actually complete (frames 1..N-1 haven't even
+    // been written yet). This is the exact tick fix-round 1's own
+    // too-early snapshot would have accepted.
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+
+    // The remaining frames' acks — completing the send normally, with no
+    // further "armed" observation at any point.
+    for (let frame = 1; frame < seq.length; frame += 1) {
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    }
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    // NO tick ever follows the LAST frame's ack — three non-armed ticks
+    // trip the `verifyTicks` bound instead.
+    const stillIdle = buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_REARM,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+    transport.notify(GENERAL_STATUS_UUID, stillIdle);
+    transport.notify(GENERAL_STATUS_UUID, stillIdle);
+    transport.notify(GENERAL_STATUS_UUID, stillIdle);
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("not-observed");
+      return true;
+    });
+  });
+
   it("F3 (fix-round 1): a clear-step TIMEOUT (not just a NAK) is swallowed too — the real clear command is unknown, so an unanswered one is not fatal either", async () => {
     // `ProgramRejection`'s own doc comment: "timeout" means the link
     // stayed UP but the PM never answered ONE command — exactly the
@@ -1167,7 +1250,11 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     // The REAL program's own ack — swallowing the clear's timeout must not
     // block the send that follows it.
     transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
-    // A fresh post-send "armed" observation (F1's own requirement).
+    // Fix-round 2: drain until the send has fully resolved and
+    // `verifyArmed`'s snapshot has actually been captured (see that
+    // function's own doc comment) before supplying a fresh post-send
+    // "armed" observation (F1's own requirement).
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
 
     await expect(pending).resolves.toBeUndefined();
@@ -1642,6 +1729,10 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
     coalesced.set(ack1, 0);
     coalesced.set(ack2, ack1.length);
     transport.notify(TRANSMIT_CHARACTERISTIC_UUID, coalesced);
+    // Fix-round 2: drain until the send has fully resolved and
+    // `verifyArmed`'s snapshot has actually been captured (its own doc
+    // comment) before supplying a fresh post-send "armed" observation.
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS); // verifyArmed()'s own requirement
 
     await expect(pending).resolves.toBeUndefined();
@@ -1678,6 +1769,10 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
           .length > clearChunkCount,
     );
     transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildAckFrame("ok", []));
+    // Fix-round 2: drain until the send has fully resolved and
+    // `verifyArmed`'s snapshot has actually been captured (its own doc
+    // comment) before supplying a fresh post-send "armed" observation.
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS); // verifyArmed()'s own requirement
     await programPending;
 
@@ -1738,6 +1833,10 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     coalesced.set(ack1, 0);
     coalesced.set(ack2, ack1.length);
     transport.notify(TRANSMIT_CHARACTERISTIC_UUID, coalesced);
+    // Fix-round 2: drain until the send has fully resolved and
+    // `verifyArmed`'s snapshot has actually been captured (its own doc
+    // comment) before supplying a fresh post-send "armed" observation.
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS); // verifyArmed()'s own requirement
 
     await expect(pending).resolves.toBeUndefined();
