@@ -1218,10 +1218,11 @@ every flagged item either numbered here or explicitly excused — holds.)
     NOT because it has been observed correct here. `src/monitor/driver.ts`
     logs an `"index-unverified"` entry every time this happens so the
     assumption is visible in the trace, never silent. Expected: unknown by
-    design — this item exists to become known. Observed: program a
-    two-interval workout where interval 0 has `restSeconds: 0` (e.g. edit
-    the harness's `TEST_PROGRAM` to a second interval with `restSeconds: 0`
-    on the first), row through the work0→work1 boundary, and dump
+    design — this item exists to become known. Observed: send the harness's
+    `program-no-rest` command (`TWO_TIME_NO_REST_PROGRAM` — two 60s TIME
+    intervals, `restSeconds: 0` on both; added for this item precisely
+    because `TWO_TIME_PROGRAM`'s 30s rests cannot answer it), row through
+    the work0→work1 boundary, and dump
     `exportLog()`'s raw per-characteristic trace (the `"notify"` entries the
     §18 #3 session's own raw-logging fix produces) for 0x0037/38 — does the
     Split/Interval Number at that boundary read `0` (this interval, matching
@@ -1301,12 +1302,15 @@ re-run until it looks right:**
   to consumers) — already confirmed once (§18 #8's session); this row
   re-confirms it survives Tasks 2-4's changes.
 
-Item 13 (the no-rest boundary) is NOT part of this row — see item 13's own
-note above for why (`TWO_TIME_PROGRAM` has rest on both intervals). If time
-and monitor state allow, a second, separate program with a `restSeconds: 0`
-interior interval is the smallest addition that would close it in the same
-sitting, but it is a distinct action, not an "if possible" extra folded
-into the sequence above.
+Item 13 (the no-rest boundary) is a SECOND, DISTINCT row — not an extra
+folded into the sequence above, because `TWO_TIME_PROGRAM` has rest on both
+intervals and cannot answer it. The harness now carries
+`program-no-rest` (`TWO_TIME_NO_REST_PROGRAM`) so it can be run in the same
+sitting without editing code at the erg: after the row above finishes,
+`terminate`, `program-no-rest`, row through the work0→work1 boundary only
+(the second interval need not be completed — the boundary is the whole
+question), then `dump`. Read the Split/Interval Number on 0x0037 at that
+boundary per item 13. Two 60s intervals means this costs about two minutes.
 
 Items already resolved with no laptop dependency (not on this list on
 purpose): `intervalIndex`/`spm` nullability is a business rule, not a wire

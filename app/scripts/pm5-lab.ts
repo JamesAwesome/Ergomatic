@@ -107,6 +107,26 @@ const TWO_TIME_PROGRAM: WorkoutProgram = {
   })),
 };
 
+/** §17 item 13 (the no-rest work→work boundary): TWO TIME intervals with NO
+ *  rest between them. Everything we know about the PM's forward-attributed
+ *  numbering comes from boundaries that had a rest — the machine rolls to
+ *  `resting` and reports the index it is heading INTO (§18 #3, observed).
+ *  Nobody has ever seen what it reports at a work→work boundary, where it
+ *  never leaves `rowing`, so the driver cannot know whether to adjust and
+ *  logs `index-unverified` instead of guessing. This program is the one
+ *  reading that settles it: row through the first boundary and read what
+ *  Split/Interval Number 0x0037 carries — `0` (its own) or `1` (forward).
+ *  It exists because `TWO_TIME_PROGRAM`'s 30s rests cannot answer it. */
+const TWO_TIME_NO_REST_PROGRAM: WorkoutProgram = {
+  intervals: Array.from({ length: 2 }, () => ({
+    kind: "time" as const,
+    value: 60,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 0,
+  })),
+};
+
 const SHORT_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 3 }, () => ({
     kind: "distance" as const,
@@ -237,6 +257,11 @@ const REMOTE: Record<string, () => void | Promise<void>> = {
     programNamed("program(25 intervals, §17 #5)", MANY_PROGRAM),
   "program-two-time": () =>
     programNamed("program(2 TIME intervals, discriminator)", TWO_TIME_PROGRAM),
+  "program-no-rest": () =>
+    programNamed(
+      "program(2 TIME intervals, NO rest, §17 #13)",
+      TWO_TIME_NO_REST_PROGRAM,
+    ),
   "program-short": () =>
     programNamed("program(3 intervals, §17 #6)", SHORT_PROGRAM),
   terminate,
