@@ -19,6 +19,31 @@ import type { IntervalActual, MonitorFrame } from "../types.js";
  *  fact for that characteristic). */
 const HEARTRATE_INVALID = 255;
 
+/**
+ * D5 (interface-notes.md §18, PM5 432331249, 2026-08-05): the machine sent
+ * `0`, NOT the documented `255`, on 0x0038's Work Heartrate byte with no
+ * belt paired — an `avgHeartRateBpm: 0` reached `IntervalActual` and would
+ * have been logged by 7C as a real reading of zero beats per minute. §15
+ * #2 recorded the counter-evidence for this BEFORE the session ran: the
+ * document's own "invalid" convention is PER-FIELD, and 0x0039's Recovery
+ * Heart Rate (BLE doc p.21) is explicitly "(zero = not valid data)" — a
+ * different sentinel on the very same characteristic family.
+ *
+ * `heartRate()` below therefore treats BOTH bytes as "no reading". The
+ * union is safe in the direction that matters: 0 bpm is not a survivable
+ * heart rate and 255 bpm is not a reachable one, so neither value can ever
+ * be a genuine measurement this discards — whereas passing either through
+ * fabricates a plausible-looking number for a rower who simply wasn't
+ * wearing a belt. Applied to every heart-rate field this module decodes,
+ * not only the one 0x0038 byte the session directly observed: the observed
+ * case is the ONE we have, and a per-field split would claim a distinction
+ * between fields that no source states.
+ *
+ * `src/monitor/transports/fake.ts` emits this same byte for a beltless
+ * session, so the end-to-end path is exercised in CI.
+ */
+export const HEARTRATE_NO_BELT = 0;
+
 function readU8(bytes: Uint8Array, offset: number): number {
   return bytes[offset]!;
 }
@@ -38,7 +63,8 @@ function readU24LE(bytes: Uint8Array, offset: number): number {
 }
 
 function heartRate(byte: number): number | null {
-  return byte === HEARTRATE_INVALID ? null : byte;
+  // BOTH sentinels — see `HEARTRATE_NO_BELT`'s own doc comment (D5).
+  return byte === HEARTRATE_INVALID || byte === HEARTRATE_NO_BELT ? null : byte;
 }
 
 /**
@@ -314,6 +340,18 @@ const WORKOUTSTATE_TO_STATE: Record<number, MonitorFrame["state"]> = {
  *  conservative reading (no program considered active), not a wire fact. */
 const UNKNOWN_WORKOUT_STATE_FALLBACK: MonitorFrame["state"] = "idle";
 
+/** The `OBJ_WORKOUTSTATE_T` ordinal -> `MonitorFrame["state"]` lookup on its
+ *  own, exported for `src/monitor/transports/fake.ts`: the fake has to know
+ *  whether the wire state it is about to send counts as a REST (0x0033's
+ *  Interval Count is attributed forward during one — `intervalIndex.ts`'s
+ *  `toMachineIndex`), and deriving that from a bare ordinal in `src/` would
+ *  put the Appendix-A table outside `pm5/` (design spec §Layering). Same
+ *  reasoning that exports the `WORKOUTSTATE_*` ordinals above.
+ *  `toMonitorFrame` is this function's only other caller. */
+export function toMonitorState(workoutState: number): MonitorFrame["state"] {
+  return WORKOUTSTATE_TO_STATE[workoutState] ?? UNKNOWN_WORKOUT_STATE_FALLBACK;
+}
+
 /**
  * `RawPm5Status` -> `MonitorFrame`. `intervalRemaining` is always `null`
  * here — computed downstream by the driver from the program plus quantized
@@ -345,8 +383,7 @@ const UNKNOWN_WORKOUT_STATE_FALLBACK: MonitorFrame["state"] = "idle";
  * function that isn't `driver.ts`.
  */
 export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
-  const state =
-    WORKOUTSTATE_TO_STATE[raw.workoutState] ?? UNKNOWN_WORKOUT_STATE_FALLBACK;
+  const state = toMonitorState(raw.workoutState);
   const intervalActive = state === "rowing" || state === "resting";
 
   return {

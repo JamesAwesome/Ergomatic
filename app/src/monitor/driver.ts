@@ -248,7 +248,35 @@ export function createPm5Driver(
   // exact shape instead of catching it).
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
-  const seen = { general: false, as1: false, as2: false, asSplit: false };
+  const seen = { general: false, as1: false, as2: false };
+  /**
+   * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): which halves
+   * of the CURRENT boundary have landed. An interval boundary is reported
+   * on two separate characteristics — 0x0037 (identity: Split/Interval
+   * Number, time, distance) and 0x0038 (the averages) — and the observed
+   * PM5 sends them in that order, 0x0037 first, one notification apart.
+   *
+   * The version of this driver that met the erg emitted from 0x0037's
+   * arrival, gated on a flag only 0x0038 ever set. Both halves of that were
+   * wrong, and a two-interval session showed both:
+   * - the FIRST boundary's 0x0037 arrived before 0x0038 had ever been seen,
+   *   so it was dropped with no log line and no event — one
+   *   `intervalComplete` for a workout that crossed two boundaries
+   *   ("arrives-discarded", the diagnosis Task 1 confirmed over
+   *   "never-arrives");
+   * - the emission that DID fire read `raw`'s 0x0038 fields from the
+   *   PREVIOUS boundary, because this boundary's 0x0038 was still one
+   *   notification away — interval 2's identity carried interval 1's
+   *   averages.
+   *
+   * Both are fixed by the same rule: emit when THIS boundary's two halves
+   * have BOTH merged into `raw`, whichever order they arrive in, then reset
+   * for the next one. Order-agnostic on purpose — the observed order is
+   * firmware behaviour, not a documented guarantee, and a driver that
+   * silently depended on it would be one firmware revision from repeating
+   * exactly this defect.
+   */
+  const boundaryHalves = { split: false, asSplit: false };
   const listeners = new Set<(e: MonitorEvent) => void>();
   let pendingAck: ((outcome: PendingAckOutcome) => void) | null = null;
   // Fix-round MED-1: responses that arrive with NOTHING awaiting them yet
@@ -588,10 +616,22 @@ export function createPm5Driver(
     }
   }
 
-  function maybeEmitIntervalComplete(): void {
+  /** Records the arrival of one half of a boundary and emits once both
+   *  halves of THAT boundary are in — see `boundaryHalves`'s own doc
+   *  comment (D4). The reset happens BEFORE the emission, not after, so a
+   *  listener that somehow re-entered could never see a half-consumed
+   *  pair. */
+  function noteBoundaryHalf(half: "split" | "asSplit"): void {
+    boundaryHalves[half] = true;
+    if (!(boundaryHalves.split && boundaryHalves.asSplit)) return;
+    boundaryHalves.split = false;
+    boundaryHalves.asSplit = false;
+    emitIntervalComplete();
+  }
+
+  function emitIntervalComplete(): void {
     // Same reasoning as `maybeEmitFrame`: `mergeStatus` already gates on
     // `terminalLatched` before this function is ever reached.
-    if (!seen.asSplit) return;
     announceReconnectIfPending();
     const status = raw as RawPm5Status;
     // `rawActual.index` is 0x0037/38's own Split/Interval Number, UNCHANGED
@@ -732,7 +772,7 @@ export function createPm5Driver(
     "0x0038",
     parseAdditionalSplitIntervalData,
     () => {
-      seen.asSplit = true;
+      noteBoundaryHalf("asSplit");
     },
   );
   mergeStatus(GENERAL_STATUS_UUID, "0x0031", parseGeneralStatus, () => {
@@ -782,7 +822,7 @@ export function createPm5Driver(
     "0x0037",
     parseSplitIntervalData,
     () => {
-      maybeEmitIntervalComplete();
+      noteBoundaryHalf("split");
     },
   );
 

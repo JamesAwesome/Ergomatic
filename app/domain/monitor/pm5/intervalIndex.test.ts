@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MonitorFrame } from "../types.js";
-import { toProgramIndex } from "./intervalIndex.js";
+import { toMachineIndex, toProgramIndex } from "./intervalIndex.js";
 
 // The full observed table (interface-notes.md §18 #3, PM5 432331249,
 // 2026-08-05): a clean 2x(1:00 work / 0:30 rest) session read
@@ -94,5 +94,62 @@ describe("toProgramIndex: a 1-interval program", () => {
 
   it("more than one step past the only interval is unexplainable", () => {
     expect(toProgramIndex(2, "rowing", 1)).toBeNull();
+  });
+});
+
+// The FORWARD direction (Phase 7A-fix Task 4): what `src/monitor/transports/
+// fake.ts` puts on its synthetic wire. Pinned to the SAME observed table
+// above, read the other way round — deliberately not asserted as
+// "whatever round-trips through `toProgramIndex`", which would pass even if
+// both functions shared a wrong model of the machine.
+describe("toMachineIndex: the observed table, read forwards (interface-notes.md §18 #3)", () => {
+  it.each<[string, number, MonitorFrame["state"], number]>([
+    ["work0", 0, "rowing", 0],
+    ["rest-after-work0", 0, "resting", 1],
+    ["work1", 1, "rowing", 1],
+    // The phantom the session actually ended on: a 2-interval program whose
+    // last interval's trailing rest reported index 2.
+    ["rest-after-work1 (the phantom the machine emitted)", 1, "resting", 2],
+  ])(
+    "%s: our %i, state %s -> machine %i",
+    (_label, programIndex, state, expected) => {
+      expect(toMachineIndex(programIndex, state)).toBe(expected);
+    },
+  );
+
+  it("never clamps: the phantom past the end of a program is the whole point", () => {
+    // A 3-interval program's last rest reports 3 — a value no interval of
+    // ours has. Clamping here would delete the defect from the fake and
+    // leave `toProgramIndex` nothing real to normalize.
+    expect(toMachineIndex(2, "resting")).toBe(3);
+    expect(toMachineIndex(24, "resting")).toBe(25);
+  });
+
+  it("a work→work boundary invents no offset — the rowing case passes through (§17 item 13 is unanswered)", () => {
+    expect(toMachineIndex(0, "rowing")).toBe(0);
+    expect(toMachineIndex(7, "rowing")).toBe(7);
+  });
+
+  it("inactive states pass through too — the machine still writes a byte into the field while armed or finished", () => {
+    // Unlike `toProgramIndex`, whose `null` for these states is a business
+    // rule about which of OUR intervals is current, this direction is about
+    // what the wire carries — and the wire always carries something.
+    expect(toMachineIndex(0, "armed")).toBe(0);
+    expect(toMachineIndex(2, "finished")).toBe(2);
+    expect(toMachineIndex(1, "idle")).toBe(1);
+    expect(toMachineIndex(1, "terminated")).toBe(1);
+  });
+
+  it("round-trips every ACTIVE row of the observed table back through toProgramIndex", () => {
+    // The property the fake-driven driver tests rely on end to end: for a
+    // 2-interval program, our index -> the machine's wire value -> back to
+    // ours, unchanged, for both work and rest.
+    for (const programIndex of [0, 1]) {
+      for (const state of ["rowing", "resting"] as const) {
+        expect(
+          toProgramIndex(toMachineIndex(programIndex, state), state, 2),
+        ).toBe(programIndex);
+      }
+    }
   });
 });

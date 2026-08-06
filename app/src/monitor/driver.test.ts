@@ -14,6 +14,7 @@ import {
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
 import {
+  ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
   GENERAL_STATUS_UUID,
@@ -360,7 +361,7 @@ describe("createPm5Driver: distance-kind interval — intervalRemaining uses dis
         spm: 22,
         currentSplit: 100,
         heartRateBpm: 140,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       {
         atMs: 200,
@@ -371,7 +372,7 @@ describe("createPm5Driver: distance-kind interval — intervalRemaining uses dis
         spm: 22,
         currentSplit: 100,
         heartRateBpm: 140,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
     ];
     const { fake, driver, events } = harness({ program, events: timeline });
@@ -495,7 +496,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
         spm: 22,
         currentSplit: 110,
         heartRateBpm: 140,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       // The interval-0 boundary happens WHILE disconnected — never
       // delivered live, only tracked internally by the fake.
@@ -524,7 +525,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
         spm: 22,
         currentSplit: 108,
         heartRateBpm: 145,
-        intervalIndex: 1,
+        programIntervalIndex: 1,
       },
     ];
     const { fake, driver, events } = harness({ program, events: timeline });
@@ -569,8 +570,15 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
         spm: 20,
         currentSplit: 130,
         heartRateBpm: 130,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
+      // Interval 0's boundary is a WORK->WORK one: the warmup compiles with
+      // `restSeconds: 0`, so no rest tick ever separates it from interval 1
+      // and the state word is still "rowing" when 0x0037/38 arrive. This is
+      // the shape with NO hardware evidence behind it (§17 item 13) — the
+      // fake puts the index through unadjusted, which is what today's code
+      // ASSUMES rather than knows, and the driver's "index-unverified"
+      // entry (asserted below) is the only thing that says so.
       {
         atMs: 200,
         kind: "boundary",
@@ -599,8 +607,29 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
         spm: 22,
         currentSplit: 132,
         heartRateBpm: 150,
-        intervalIndex: 1,
+        programIntervalIndex: 1,
       },
+      // Interval 1's TRAILING REST (60s, folded into interval 1 by
+      // `compileProgram`). This is where the machine's own numbering
+      // diverges from ours: 0x0033's Interval Count reads 2 here, not 1 —
+      // it is counting down TO interval 2 (interface-notes.md §18 #3), and
+      // the fake puts that forward-attributed value on the wire. Every
+      // assertion below sees OUR 1, which is `toProgramIndex` doing its job.
+      {
+        atMs: 350,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 570,
+        distanceMeters: 2000,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 140,
+        programIntervalIndex: 1,
+      },
+      // ...and the boundary lands DURING that rest, exactly as the observed
+      // trace has it ("20 resting -> 21 notify 0x0037"), so 0x0037/38's own
+      // Split/Interval Number is forward-attributed too: the wire says 2
+      // for the interval we call 1.
       {
         atMs: 400,
         kind: "boundary",
@@ -627,7 +656,24 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
         spm: 22,
         currentSplit: 132,
         heartRateBpm: 152,
-        intervalIndex: 2,
+        programIntervalIndex: 2,
+      },
+      // Interval 2's trailing rest — the LAST interval's own, which §17
+      // item 8 confirmed the machine counts down in full. Here the machine
+      // emits the PHANTOM: 0x0033 reads 3 on a three-interval program,
+      // counting down to an interval that does not exist. This is D3's
+      // exact observed shape (a 2-interval session ended on machine index
+      // 2), and the value `toProgramIndex` clamps back onto interval 2.
+      {
+        atMs: 550,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 870,
+        distanceMeters: 3000,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 145,
+        programIntervalIndex: 2,
       },
       {
         atMs: 600,
@@ -640,20 +686,22 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           avgSpm: 22,
           avgHeartRateBpm: 158,
         },
-        cumulativeElapsedSeconds: 840,
+        cumulativeElapsedSeconds: 900,
         cumulativeDistanceMeters: 3000,
       },
-      // Workout end.
+      // Workout end — no belt was ever worn for the closing tick, so this
+      // is also the D5 path: `null` here means the fake writes `0` on the
+      // wire (the byte the real machine sent), never the documented 255.
       {
         atMs: 700,
         kind: "status",
         workoutState: WORKOUTSTATE_WORKOUTEND,
-        elapsedSeconds: 840,
+        elapsedSeconds: 900,
         distanceMeters: 3400,
         spm: 0,
         currentSplit: 0,
         heartRateBpm: null,
-        intervalIndex: 2,
+        programIntervalIndex: 2,
       },
     ];
     const { fake, driver, events, log } = harness({
@@ -702,20 +750,60 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     expect(kinds[kinds.length - 1]).toBe("workoutComplete");
 
     const boundaries = events.filter((e) => e.kind === "intervalComplete");
-    // STALE (flagged, not fixed here — Task 3 review, owned by Task 4): this
-    // is the repo's only end-to-end index assertion across a full multi-
-    // interval program, and it passes only because `seaFretProgram`'s own
-    // scripted timeline (this file's `timeline` array above) feeds
-    // `actual.index` values the fake ALREADY treats as pre-normalized
-    // (`fake.ts`'s own now-flagged-stale doc comment) rather than the real
-    // forward-attributed wire values D3 proved the hardware sends. Task 4
-    // rebuilding the fake to emit true wire values is expected to change
-    // what this assertion needs to check, not just how it's built.
+    // The repo's end-to-end index assertion across a full multi-interval
+    // program. Since Task 4 the fake puts the MACHINE's own numbers on the
+    // wire (forward-attributed rests, phantom index and all), so this
+    // sequence is now produced by `toProgramIndex` actually undoing that —
+    // not by both sides agreeing on a pre-normalized fiction. The log
+    // assertion immediately below shows the two numberings side by side,
+    // which is what makes that claim checkable rather than asserted.
     expect(
       boundaries.map((e) =>
         e.kind === "intervalComplete" ? e.actual.index : -1,
       ),
     ).toStrictEqual([0, 1, 2]);
+    // Machine numbering vs ours, straight out of the trace: interval 0's
+    // boundary fired while still rowing (no rest to attribute forward), the
+    // other two fired mid-rest and carry the +1 — the last of them being
+    // the phantom `3` on a three-interval program.
+    expect(
+      log
+        .entries()
+        .filter((e) => e.kind === "interval-complete")
+        .map((e) => e.detail),
+    ).toStrictEqual([
+      "index=0 (machine reported 0)",
+      "index=1 (machine reported 2)",
+      "index=2 (machine reported 3)",
+    ]);
+    // The rest ticks themselves normalize too, not just the boundaries:
+    // 0x0033 read 2 and 3 during those two rests.
+    expect(
+      events
+        .filter((e) => e.kind === "frame" && e.frame.state === "resting")
+        .map((e) => (e.kind === "frame" ? e.frame.intervalIndex : -1)),
+    ).toStrictEqual([1, 2]);
+    // Nothing in this session is unexplainable — every machine number lands
+    // on a real interval once normalized, so the D3 divergence trigger
+    // stays quiet and the MED-2 raw-vs-raw one has nothing to report
+    // either (0x0033 and 0x0037/38 agree at every boundary, which is
+    // precisely why the raw values alone could never have caught D3).
+    expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
+    // ...but the ONE boundary with no hardware evidence behind its
+    // numbering says so, exactly once: interval 0's work->work boundary.
+    const unverified = log
+      .entries()
+      .filter((e) => e.kind === "index-unverified");
+    expect(unverified).toHaveLength(1);
+    expect(unverified[0]!.detail).toContain("actual.index=0");
+    // D5, end to end over a real workout: the closing tick had no belt, and
+    // the fake sent the byte the machine sent for that — `0`, not 255.
+    // Either way this must reach a consumer as "no reading".
+    const finalFrame = events.filter((e) => e.kind === "frame").at(-1);
+    expect(finalFrame).toMatchObject({
+      kind: "frame",
+      frame: { state: "finished", heartRateBpm: null },
+    });
 
     // intervalRemaining, re-derived from the checkpoint at each interval's
     // first tick: interval 1's live tick is 60s into a 240s interval.
@@ -747,7 +835,7 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
         spm: 0,
         currentSplit: 0,
         heartRateBpm: null,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       {
         atMs: 200,
@@ -758,7 +846,7 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
         spm: 0,
         currentSplit: 0,
         heartRateBpm: null,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       // A boundary event too, to prove intervalComplete is ALSO latched.
       {
@@ -1420,7 +1508,7 @@ describe("createPm5Driver: HIGH-2 — ack-timeout policy, distinct from disconne
         spm: 0,
         currentSplit: 0,
         heartRateBpm: null,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
     ];
     const fake = createFakeTransport({
@@ -1456,7 +1544,7 @@ describe("createPm5Driver: disconnect mid-interval -> reconnect with re-derived 
         spm: 22,
         currentSplit: 120,
         heartRateBpm: 140,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       // Two more intervals' worth of progress happen while disconnected —
       // never delivered live, only cached by the fake.
@@ -1469,7 +1557,7 @@ describe("createPm5Driver: disconnect mid-interval -> reconnect with re-derived 
         spm: 0,
         currentSplit: 0,
         heartRateBpm: 130,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       {
         atMs: 300,
@@ -1480,7 +1568,7 @@ describe("createPm5Driver: disconnect mid-interval -> reconnect with re-derived 
         spm: 24,
         currentSplit: 118,
         heartRateBpm: 160,
-        intervalIndex: 2,
+        programIntervalIndex: 2,
       },
     ];
     // A real 1-interval program (MINIMAL_PROGRAM) can't host a genuine
@@ -1537,7 +1625,7 @@ describe("createPm5Driver: garbled frame — logged, stream lives", () => {
         spm: 22,
         currentSplit: 115,
         heartRateBpm: 138,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
     ];
     const { fake, driver, events, log } = harness({
@@ -1582,7 +1670,7 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
         spm: 22,
         currentSplit: 120,
         heartRateBpm: 140,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       // Boundary reports a DIFFERENT split number (2) — a skew that can't
       // happen in this fake's own book-keeping by construction, so it's
@@ -1630,7 +1718,7 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
         spm: 22,
         currentSplit: 120,
         heartRateBpm: 140,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       {
         atMs: 200,
@@ -1676,7 +1764,7 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
         heartRateBpm: 140,
         // MINIMAL_PROGRAM has exactly 1 interval — 5 is FOUR past its only
         // valid index, not the offset rule's own one-past-the-end shape.
-        intervalIndex: 5,
+        programIntervalIndex: 5,
       },
     ];
     const { fake, driver, events, log } = harness({
@@ -1719,7 +1807,7 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
         spm: 22,
         currentSplit: 120,
         heartRateBpm: 140,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       {
         atMs: 200,
@@ -1780,13 +1868,16 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
         spm: 0,
         currentSplit: 0,
         heartRateBpm: 130,
-        intervalIndex: 0,
+        programIntervalIndex: 0,
       },
       {
         atMs: 200,
         kind: "boundary",
         actual: {
-          index: 9, // far past THREE_INTERVAL_PROGRAM's 3 intervals either way
+          // Authored as OUR index; the fake puts 10 on the wire (the rest's
+          // own forward attribution). Far past THREE_INTERVAL_PROGRAM's 3
+          // intervals either way, which is the point.
+          index: 9,
           elapsedSeconds: 60,
           distanceMeters: 200,
           avgSplit: 120,
@@ -1852,34 +1943,38 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
       ],
     };
     const timeline: FakeTimelineEvent[] = [
-      // No rest, so no separate "resting" tick ever reports interval 0's
-      // trailing rest — by the time this status arrives, the machine has
-      // already moved straight into interval 1's own rowing, and BOTH raw
-      // fields (0x0033 here, 0x0037/38 on the boundary below) read "1" —
-      // agreeing with EACH OTHER, exactly the reviewer's reproduction
-      // ("NO-REST DIVERGENCE []"), while both actually describe interval 0.
+      // Interval 0, rowing. There is no rest to follow it, so the state
+      // word never becomes "resting" at any point in this program and
+      // nothing is ever forward-attributed (`toMachineIndex` adjusts a REST
+      // and nothing else) — both raw fields agree with each other AND with
+      // us, which is exactly why no divergence of any kind can fire: the
+      // reviewer's reproduction, "NO-REST DIVERGENCE []".
       {
         atMs: 100,
         kind: "status",
         workoutState: WORKOUTSTATE_INTERVALWORKTIME, // rowing, never resting
-        elapsedSeconds: 65,
-        distanceMeters: 200,
+        elapsedSeconds: 50,
+        distanceMeters: 180,
         spm: 22,
         currentSplit: 120,
         heartRateBpm: 140,
-        intervalIndex: 1,
+        programIntervalIndex: 0,
       },
       {
         atMs: 200,
         kind: "boundary",
-        // The fake's own pre-D3 model (flagged stale, Task 4's own fix)
-        // supplies this as an already-"our-index" value; the point of this
-        // test is the STATE the boundary fires under (rowing, never
-        // resting), which drives the new log regardless of the fake's own
-        // numbering fidelity. `index: 1` here reproduces the reviewer's
-        // exact finding: interval 0's own actual filed one interval late.
+        // The interval that just finished is 0, and — under the ONLY rule
+        // available for this shape — the machine puts a plain `0` on
+        // 0x0037/38 for it. The fake deliberately does NOT invent a
+        // forward-attributed value here: no hardware reading exists for a
+        // work->work boundary (§17 item 13), and a fake that guessed would
+        // teach CI a number nobody has ever seen. If the machine turns out
+        // to attribute forward here too, EVERY actual in a `restSeconds: 0`
+        // program is filed one interval late and the only thing in the
+        // trace that would have hinted at it is the "index-unverified"
+        // entry asserted below.
         actual: {
-          index: 1,
+          index: 0,
           elapsedSeconds: 60,
           distanceMeters: 200,
           avgSplit: 120,
@@ -1889,6 +1984,19 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
       },
+      // The machine rows straight on into interval 1 with no state change
+      // of any kind — the whole point of the shape.
+      {
+        atMs: 300,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 90,
+        distanceMeters: 320,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: 141,
+        programIntervalIndex: 1,
+      },
     ];
     const { fake, driver, events, log } = harness({
       program: restlessProgram,
@@ -1896,7 +2004,7 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
     });
     await programAndArm(driver, fake, restlessProgram);
 
-    fake.tick(200);
+    fake.tick(300);
 
     // The boundary still fires and still normalizes to SOMETHING plausible
     // (never invents a NEW offset for this shape, per the review's explicit
@@ -1904,12 +2012,12 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
-      actual: { index: 1 },
+      actual: { index: 0 },
     });
 
     const unverified = log.entries().find((e) => e.kind === "index-unverified");
     expect(unverified).toBeDefined();
-    expect(unverified?.detail).toContain("actual.index=1");
+    expect(unverified?.detail).toContain("actual.index=0");
     expect(unverified?.detail).toContain("state=rowing");
     expect(unverified?.detail).toContain("§17 item 13");
 
@@ -1921,6 +2029,9 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
 
   it("a boundary that DOES follow a rest tick never logs 'index-unverified' (the rule has a real hardware-confirmed signal there)", async () => {
     const timeline: FakeTimelineEvent[] = [
+      // Interval 1's trailing rest: the machine's own counter reads 2 here
+      // (forward-attributed), and so does the Split/Interval Number on the
+      // boundary that follows — the confirmed half of the rule.
       {
         atMs: 100,
         kind: "status",
@@ -1930,13 +2041,13 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
         spm: 0,
         currentSplit: 0,
         heartRateBpm: 130,
-        intervalIndex: 1,
+        programIntervalIndex: 1,
       },
       {
         atMs: 200,
         kind: "boundary",
         actual: {
-          index: 0,
+          index: 1,
           elapsedSeconds: 60,
           distanceMeters: 200,
           avgSplit: 120,
@@ -1955,7 +2066,15 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
 
     fake.tick(200);
 
-    expect(events.some((e) => e.kind === "intervalComplete")).toBe(true);
+    // OUR 1, from a wire that said 2 — the discriminating row (a value the
+    // clamp cannot also produce), and the one the D3 fix exists for.
+    expect(events.find((e) => e.kind === "intervalComplete")).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 1 },
+    });
+    expect(
+      log.entries().find((e) => e.kind === "interval-complete")?.detail,
+    ).toBe("index=1 (machine reported 2)");
     expect(log.entries().some((e) => e.kind === "index-unverified")).toBe(
       false,
     );
@@ -2280,5 +2399,349 @@ describe("createPm5Driver: events() subscription and disconnect()", () => {
       true,
     );
     expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 7A-fix Task 4: the erg's own findings, as tests. Each suite below
+// exists because a real PM5 (432331249, 2026-08-05 — interface-notes.md §18)
+// did something this suite's fake could not do beforehand, so CI could not
+// have caught the defect it caused.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: D4 — a boundary's two halves, in the order the machine sends them", () => {
+  /** Two boundaries with DELIBERATELY different averages, each preceded by
+   *  the rest tick the machine sends first — the exact session shape that
+   *  produced ONE `intervalComplete` for a two-boundary workout, carrying
+   *  the wrong interval's numbers. */
+  function twoBoundaryTimeline(): FakeTimelineEvent[] {
+    return [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        spm: 20,
+        currentSplit: 130,
+        heartRateBpm: 130,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 70,
+        distanceMeters: 200,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 128,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 300,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 130,
+          avgSpm: 20,
+          avgHeartRateBpm: 130,
+        },
+        cumulativeElapsedSeconds: 90,
+        cumulativeDistanceMeters: 200,
+      },
+      {
+        atMs: 400,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 120,
+        distanceMeters: 320,
+        spm: 30,
+        currentSplit: 100,
+        heartRateBpm: 170,
+        programIntervalIndex: 1,
+      },
+      {
+        atMs: 500,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 160,
+        distanceMeters: 420,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 165,
+        programIntervalIndex: 1,
+      },
+      {
+        atMs: 600,
+        kind: "boundary",
+        actual: {
+          // Nothing about this interval resembles the previous one — that
+          // is the point: a stale-0x0038 read is unmistakable in the values.
+          index: 1,
+          elapsedSeconds: 60,
+          distanceMeters: 220,
+          avgSplit: 100,
+          avgSpm: 30,
+          avgHeartRateBpm: 170,
+        },
+        cumulativeElapsedSeconds: 180,
+        cumulativeDistanceMeters: 420,
+      },
+    ];
+  }
+
+  it("the FIRST boundary is not lost — both boundaries emit, even though 0x0037 arrives before 0x0038 has ever been seen", async () => {
+    const { fake, driver, events, log } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: twoBoundaryTimeline(),
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+    for (let i = 0; i < 6; i += 1) fake.tick(100);
+
+    // The observed session produced exactly ONE of these two. The trace
+    // below is what made that diagnosable: 0x0037 arriving first at BOTH
+    // boundaries, which is the arrival order the fake now reproduces.
+    expect(
+      log
+        .entries()
+        .filter((e) => e.kind === "notify" || e.kind === "notify-first")
+        .map((e) => e.detail.slice(0, 6))
+        .filter((c) => c === "0x0037" || c === "0x0038"),
+    ).toStrictEqual(["0x0037", "0x0038", "0x0037", "0x0038"]);
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(2);
+    expect(
+      boundaries.map((e) =>
+        e.kind === "intervalComplete" ? e.actual.index : -1,
+      ),
+    ).toStrictEqual([0, 1]);
+  });
+
+  it("each emission carries ITS OWN boundary's averages, never the previous boundary's stale 0x0038", async () => {
+    const { fake, driver, events } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: twoBoundaryTimeline(),
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+    for (let i = 0; i < 6; i += 1) fake.tick(100);
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    // The mixed-boundary defect (Task 1's unpredicted second finding): the
+    // one emission the erg produced carried interval 2's identity with
+    // interval 1's averages, because 0x0038 was still one notification
+    // behind. Identity AND averages must come from the same boundary.
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, avgSpm: 20, avgHeartRateBpm: 130, avgSplit: 130 },
+    });
+    expect(boundaries[1]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 1, avgSpm: 30, avgHeartRateBpm: 170, avgSplit: 100 },
+    });
+  });
+
+  it("one half alone never emits — a 0x0038 with no matching 0x0037 waits, rather than pairing with the NEXT boundary's identity", () => {
+    // The gate is symmetric on purpose (`driver.ts`'s `boundaryHalves`): the
+    // observed order is firmware behaviour, not a documented guarantee, so
+    // neither half may emit on its own. Driven through `stubTransport`
+    // because the fake only ever sends complete, correctly-ordered pairs.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, new Uint8Array(19));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, new Uint8Array(19));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, new Uint8Array(18));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(1);
+  });
+});
+
+describe("createPm5Driver: D1 — programming over a loaded workout is rejected, and destroys what was loaded", () => {
+  it("rejects at frame 0 and the monitor's own workout is GONE (the confirmed destructive half)", async () => {
+    const { fake, driver, events, log } = harness({
+      program: MINIMAL_PROGRAM,
+      // A workout the rower had already set up on the monitor.
+      loadedWorkout: { intervalCount: 4 },
+    });
+    expect(fake.loadedIntervals()).toBe(4);
+
+    const rejection = await driver.program(MINIMAL_PROGRAM).catch((e) => e);
+
+    expect(rejection).toBeInstanceOf(ProgramRejectionError);
+    expect(rejection).toMatchObject({ reason: "nak", atFrame: 0 });
+    // This is the fact `MonitorDriver.program`'s JSDoc requires 7B to warn
+    // about BEFORE calling: by the time the caller sees this error, the
+    // rower's loaded workout has already been wiped. A caller that treats a
+    // rejection as "nothing happened, we can retry safely" is wrong about
+    // the machine.
+    expect(fake.loadedIntervals()).toBeNull();
+    // And nothing was armed: no armed event, no armed log entry.
+    expect(events.some((e) => e.kind === "armed")).toBe(false);
+    expect(log.entries().some((e) => e.kind === "armed")).toBe(false);
+  });
+
+  it("the clear step is ACCEPTED while a workout is loaded, and still does not save the program (terminate is not a clear)", async () => {
+    const { fake, driver, log } = harness({
+      program: MINIMAL_PROGRAM,
+      loadedWorkout: { intervalCount: 2 },
+    });
+
+    await expect(driver.program(MINIMAL_PROGRAM)).rejects.toBeInstanceOf(
+      ProgramRejectionError,
+    );
+
+    // The D1 UPDATE row exactly: terminate acked "ok" with a workout
+    // loaded — so NO "clear-rejected" entry, unlike every clean-state
+    // program() in this file — and the program that followed was rejected
+    // anyway.
+    expect(log.entries().some((e) => e.kind === "clear-rejected")).toBe(false);
+    expect(log.entries().some((e) => e.kind === "clear-sent")).toBe(true);
+    expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
+      true,
+    );
+    expect(fake.loadedIntervals()).toBeNull();
+  });
+});
+
+describe("createPm5Driver: D6 — a write on a link that has gone down", () => {
+  it("fails loudly with the invalidated-handle error instead of quietly succeeding", async () => {
+    const { fake, driver } = harness({ program: MINIMAL_PROGRAM });
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+
+    fake.injectDisconnect();
+
+    // On the laptop this was Chrome refusing to use a characteristic
+    // handle cached before the drop. A transport that hands the driver a
+    // dead handle produces exactly this, and the driver must surface it
+    // rather than report a write that never reached the radio.
+    await expect(driver.terminate()).rejects.toThrow(/InvalidStateError/);
+  });
+
+  it("writes work again once the transport has re-established (the fake's stand-in for re-fetching its characteristics)", async () => {
+    const { fake, driver } = harness({ program: MINIMAL_PROGRAM });
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+
+    fake.injectDisconnect();
+    fake.completeReconnect();
+
+    await expect(driver.terminate()).resolves.toBeUndefined();
+  });
+});
+
+describe("createPm5Driver: the log records frame STATE CHANGES, not every frame", () => {
+  it("a 10-tick burst in one state yields exactly one 'frame' entry (the flood that evicted the programming trace)", async () => {
+    // interface-notes.md §18: status notifications arrive ~2/second, so one
+    // log entry per frame filled the 500-entry ring — and evicted the
+    // write/ack trace the log exists for — inside about four minutes. A
+    // trace that cannot survive a warm-up is not observability.
+    const timeline: FakeTimelineEvent[] = Array.from(
+      { length: 10 },
+      (_, i) => ({
+        atMs: 100 * (i + 1),
+        kind: "status" as const,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 10 + i,
+        distanceMeters: 40 + i * 4,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        programIntervalIndex: 0,
+      }),
+    );
+    const { fake, driver, events, log } = harness({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    const framesLoggedWhileArming = log
+      .entries()
+      .filter((e) => e.kind === "frame").length;
+
+    for (let i = 0; i < 10; i += 1) fake.tick(100);
+
+    // All ten frames still reach the CONSUMER — the live values belong to
+    // the event, which every pane already reads. Only the log is thinned.
+    expect(
+      events.filter((e) => e.kind === "frame" && e.frame.state === "rowing"),
+    ).toHaveLength(10);
+    expect(
+      log.entries().filter((e) => e.kind === "frame").length -
+        framesLoggedWhileArming,
+    ).toBe(1);
+    expect(
+      log
+        .entries()
+        .find((e) => e.kind === "frame" && e.detail.includes("rowing"))?.detail,
+    ).toContain("state=rowing");
+  });
+});
+
+describe("createPm5Driver: D5 — the beltless heart rate never reaches a consumer as a number", () => {
+  it("both the live frame and the interval's own average read null, from a wire that carried 0", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: null, // no belt: the fake sends the byte 0
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 65,
+        distanceMeters: 200,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 300,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 22,
+          // The exact field the machine sent `0` on (§18's new-defect note).
+          avgHeartRateBpm: null,
+        },
+        cumulativeElapsedSeconds: 90,
+        cumulativeDistanceMeters: 200,
+      },
+    ];
+    const { fake, driver, events } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+    for (let i = 0; i < 3; i += 1) fake.tick(100);
+
+    const rowing = events.find(
+      (e) => e.kind === "frame" && e.frame.state === "rowing",
+    );
+    expect(rowing).toMatchObject({ frame: { heartRateBpm: null } });
+    // `IntervalActual.avgHeartRateBpm` is what a 7C log screen would write
+    // down. "0 bpm" is not a reading a session can produce.
+    expect(events.find((e) => e.kind === "intervalComplete")).toMatchObject({
+      kind: "intervalComplete",
+      actual: { avgHeartRateBpm: null },
+    });
   });
 });
