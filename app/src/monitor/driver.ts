@@ -38,6 +38,7 @@ import {
   buildTerminate,
 } from "../../domain/monitor/pm5/commands.js";
 import { reassemble } from "../../domain/monitor/pm5/framer.js";
+import { toProgramIndex } from "../../domain/monitor/pm5/intervalIndex.js";
 import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
@@ -68,6 +69,7 @@ import type {
   WorkoutProgram,
 } from "../../domain/monitor/program.js";
 import type {
+  IntervalActual,
   MonitorCapabilities,
   MonitorDriver,
   MonitorEvent,
@@ -231,13 +233,20 @@ export function createPm5Driver(
   let terminalLatched = false;
   let reconnectPending = false;
   let raw: Partial<RawPm5Status> = {};
-  // The last `MonitorFrame.intervalIndex` this driver has actually SEEN
-  // (0x0033's Interval Count) — compared against `IntervalActual.index`
-  // (0x0037/0x0038's Split/Interval Number) at every boundary to log a
-  // `"divergence"` if the two disagree (fix-round MED-2; the two fields
-  // are independently-incrementing per interface-notes.md §15 #1/#8 — this
-  // driver correlates them but does not assume they can't skew).
-  let lastFrameIntervalIndex: number | null = null;
+  // The last RAW machine interval index this driver has actually SEEN on
+  // 0x0033 (Interval Count) — deliberately the UNNORMALIZED value (not
+  // `MonitorFrame.intervalIndex`, which is our own program index after the
+  // D3 fix below), because this variable's one job is the fix-round MED-2
+  // comparison against `IntervalActual`'s own raw Split/Interval Number
+  // (0x0037/0x0038) at every boundary, logging `"divergence"` if the two
+  // disagree. The two fields are independently-incrementing per
+  // interface-notes.md §15 #1/#8 — this driver correlates them but does not
+  // assume they can't skew — and that comparison is only meaningful in the
+  // machine's OWN numbering, not ours (interface-notes.md §18 #3: D3's own
+  // defect was two RAW fields agreeing with EACH OTHER while both disagreed
+  // with the program — a comparison in OUR numbering would have hidden that
+  // exact shape instead of catching it).
+  let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
   const seen = { general: false, as1: false, as2: false, asSplit: false };
   const listeners = new Set<(e: MonitorEvent) => void>();
@@ -506,12 +515,46 @@ export function createPm5Driver(
     if (!(seen.general && seen.as1 && seen.as2)) return;
     announceReconnectIfPending();
 
-    const base = toMonitorFrame(raw as RawPm5Status);
+    const status = raw as RawPm5Status;
+    const base = toMonitorFrame(status);
+    // D3 fix (interface-notes.md §18 #3, intervalIndex.ts's own doc
+    // comment): `base.intervalIndex` is still the RAW 0x0033 Interval
+    // Count (parse.ts never changed) — `toProgramIndex` translates it into
+    // OUR program index before it ever reaches `frame` (a consumer-facing
+    // value, per this task's own contract: intervalIndex/actual.index carry
+    // OUR index everywhere they reach a consumer, the raw value survives
+    // only in the event log below).
+    const programLength = program?.intervals.length ?? 0;
+    const intervalIndex = toProgramIndex(
+      status.intervalCount,
+      base.state,
+      programLength,
+    );
+    const frameWithIndex: MonitorFrame = { ...base, intervalIndex };
     const frame: MonitorFrame = {
-      ...base,
-      intervalRemaining: computeRemainingForFrame(base),
+      ...frameWithIndex,
+      intervalRemaining: computeRemainingForFrame(frameWithIndex),
     };
-    lastFrameIntervalIndex = frame.intervalIndex;
+    // Raw tracking for the OLD (fix-round MED-2) raw-vs-raw comparison —
+    // see `lastRawFrameIntervalIndex`'s own doc comment for why this stays
+    // in the machine's numbering, not `frame.intervalIndex`'s new one.
+    lastRawFrameIntervalIndex = base.intervalIndex;
+    // The NEW divergence trigger this task adds: a machine index that
+    // CANNOT be explained by the armed program's own length, while a real
+    // interval is supposedly current (`intervalActive`) — exactly the blind
+    // spot D3 exposed (both raw fields agreeing with each other, so the OLD
+    // raw-vs-raw check below never fires, while both disagree with the
+    // program). Gated on `program` actually being set: with no program
+    // armed, `programLength` is 0 and `toProgramIndex` always returns
+    // `null` by its own contract — informative about nothing, since there
+    // is no program to diverge FROM yet.
+    const intervalActive = base.state === "rowing" || base.state === "resting";
+    if (program && intervalActive && intervalIndex === null) {
+      log.record(
+        "divergence",
+        `intervalIndex=${status.intervalCount} (0x0033, state=${base.state}) has no corresponding interval in a ${programLength}-interval program`,
+      );
+    }
     // Log a frame ONLY when the machine's state word changes. Observed in
     // the first laptop session (interface-notes.md §18, 2026-08-05): status
     // notifications arrive ~2/second, so recording every one evicted the
@@ -551,26 +594,68 @@ export function createPm5Driver(
     if (!seen.asSplit) return;
     announceReconnectIfPending();
     const status = raw as RawPm5Status;
-    const actual = toIntervalActual(status);
-    log.record("interval-complete", `index=${actual.index}`);
+    // `rawActual.index` is 0x0037/38's own Split/Interval Number, UNCHANGED
+    // (`toIntervalActual` never touched by this task) — the same forward
+    // attribution D3 documents for 0x0033 applies here too
+    // (interface-notes.md §18 #3: both fields "agreed with each other"),
+    // normalized below via the CURRENT machine state, same as
+    // `maybeEmitFrame`'s own `base.state`.
+    const rawActual = toIntervalActual(status);
+    const state = toMonitorFrame(status).state;
+    const programLength = program?.intervals.length ?? 0;
+    const normalizedIndex = toProgramIndex(
+      rawActual.index,
+      state,
+      programLength,
+    );
+    // `IntervalActual.index` has no null slot (design spec §2's verbatim
+    // type, unchanged by this task) — an unexplainable machine value falls
+    // back to 0, the same conservative-reading precedent
+    // `UNKNOWN_WORKOUT_STATE_FALLBACK` sets elsewhere in this file. The true
+    // signal is never lost: it is the "divergence" entry logged below, not
+    // this fallback number, that a diagnostics view is expected to read.
+    const actual: IntervalActual = {
+      ...rawActual,
+      index: normalizedIndex ?? 0,
+    };
+    log.record(
+      "interval-complete",
+      `index=${actual.index} (machine reported ${rawActual.index})`,
+    );
     emit({ kind: "intervalComplete", actual });
 
-    // Fix-round MED-2: 0x0033's Interval Count (`MonitorFrame.
-    // intervalIndex`, tracked as `lastFrameIntervalIndex`) and 0x0037/38's
-    // Split/Interval Number (`actual.index`) are documented as two
-    // SEPARATE, independently-incrementing fields (interface-notes.md §15
-    // #1/#8) — nothing guarantees they agree. This never corrects either
-    // value (there is no documented rule for which one would be "right");
-    // it only surfaces the disagreement so a bug report / diagnostics
-    // view (7B) can see it happened, via the trace, without a screen
-    // silently trusting a skewed pairing.
+    // Fix-round MED-2 (UNCHANGED by this task, deliberately still comparing
+    // RAW values): 0x0033's Interval Count (tracked in the machine's own
+    // numbering as `lastRawFrameIntervalIndex`) and 0x0037/38's Split/
+    // Interval Number (`rawActual.index`) are documented as two SEPARATE,
+    // independently-incrementing fields (interface-notes.md §15 #1/#8) —
+    // nothing guarantees they agree. This never corrects either value
+    // (there is no documented rule for which one would be "right"); it only
+    // surfaces the disagreement so a bug report / diagnostics view (7B) can
+    // see it happened, via the trace, without a screen silently trusting a
+    // skewed pairing. Comparing the NORMALIZED values instead would hide
+    // exactly the shape D3 exposed — see `lastRawFrameIntervalIndex`'s own
+    // doc comment.
     if (
-      lastFrameIntervalIndex !== null &&
-      lastFrameIntervalIndex !== actual.index
+      lastRawFrameIntervalIndex !== null &&
+      lastRawFrameIntervalIndex !== rawActual.index
     ) {
       log.record(
         "divergence",
-        `intervalIndex=${lastFrameIntervalIndex} (0x0033) vs actual.index=${actual.index} (0x0037/38)`,
+        `intervalIndex=${lastRawFrameIntervalIndex} (0x0033) vs actual.index=${rawActual.index} (0x0037/38)`,
+      );
+    }
+
+    // The NEW divergence trigger this task adds (mirrors `maybeEmitFrame`'s
+    // own — see that comment for the full reasoning): the machine's actual
+    // index cannot be explained by the armed program's own length, while a
+    // real interval was supposedly current. Gated on `program` being set
+    // for the same reason as `maybeEmitFrame`'s check.
+    const stateActive = state === "rowing" || state === "resting";
+    if (program && stateActive && normalizedIndex === null) {
+      log.record(
+        "divergence",
+        `actual.index=${rawActual.index} (0x0037/38, state=${state}) has no corresponding interval in a ${programLength}-interval program`,
       );
     }
   }

@@ -82,6 +82,21 @@ const MINIMAL_PROGRAM: WorkoutProgram = {
   ],
 };
 
+/** A 3-interval program — used where a test's own scripted machine index
+ *  needs to land on a REAL interval (post-D3-fix, `toProgramIndex` clamps
+ *  or nulls a machine index that overshoots `MINIMAL_PROGRAM`'s single
+ *  interval, `domain/monitor/pm5/intervalIndex.ts`'s own contract), not
+ *  `MINIMAL_PROGRAM`'s one. */
+const THREE_INTERVAL_PROGRAM: WorkoutProgram = {
+  intervals: Array.from({ length: 3 }, () => ({
+    kind: "time" as const,
+    value: 60,
+    targetSplit: 120,
+    displaySpm: 22,
+    restSeconds: 30,
+  })),
+};
+
 // Plan Task 2: `program()` now sends `buildTerminate()` as its own
 // best-effort clear step BEFORE the real programming sequence — every
 // `stubTransport`-driven test below that drives acks by hand must account
@@ -311,8 +326,13 @@ describe("createPm5Driver: a rowing-state frame arriving before program() was ev
 
     const frames = events.filter((e) => e.kind === "frame");
     expect(frames).toHaveLength(1);
+    // D3 fix (`intervalIndex.ts`): with no program armed, `programLength`
+    // is 0 and `toProgramIndex` returns `null` by its own contract — there
+    // is no program for a raw machine index to be explained against, so
+    // "no interval is current" is the correct reading, same conclusion
+    // `intervalRemaining`'s own `!program` guard already reaches.
     expect(frames[0]).toMatchObject({
-      frame: { intervalIndex: 0, intervalRemaining: null },
+      frame: { intervalIndex: null, intervalRemaining: null },
     });
   });
 });
@@ -1454,12 +1474,18 @@ describe("createPm5Driver: disconnect mid-interval -> reconnect with re-derived 
         intervalIndex: 2,
       },
     ];
+    // A real 1-interval program (MINIMAL_PROGRAM) can't host a genuine
+    // "interval 2" — the machine's own jumped-ahead index (below) needs a
+    // program with enough intervals to make it a REAL one under the D3 fix
+    // (`toProgramIndex` clamps/nulls anything MINIMAL_PROGRAM's single
+    // interval can't explain); THREE_INTERVAL_PROGRAM exists for exactly
+    // this.
     const { fake, driver, events } = harness({
-      program: MINIMAL_PROGRAM,
+      program: THREE_INTERVAL_PROGRAM,
       events: timeline,
     });
 
-    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
     fake.tick(100); // the interval-0 live tick lands normally
 
     fake.injectDisconnect();
@@ -1618,6 +1644,171 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
     });
     fake.tick(200);
     expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
+  });
+});
+
+describe("createPm5Driver: D3 — a machine index the armed program's length cannot explain logs 'divergence' (the new trigger this task adds)", () => {
+  // Against TODAY's (pre-fix) code, both assertions below fail: `frame.
+  // intervalIndex` would be the RAW machine value (5) passed straight
+  // through, never `null`, and no "divergence" entry mentioning "has no
+  // corresponding interval" would exist at all — this is exactly D3's own
+  // blind spot (interface-notes.md §18 #3): a machine index the program
+  // can't explain, with nothing today to notice.
+  it("frame emission: a rowing machineIndex far past the armed program's length normalizes to null and logs divergence", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        // MINIMAL_PROGRAM has exactly 1 interval — 5 is FOUR past its only
+        // valid index, not the offset rule's own one-past-the-end shape.
+        intervalIndex: 5,
+      },
+    ];
+    const { fake, driver, events, log } = harness({
+      program: MINIMAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    const framesBeforeTick = events.filter((e) => e.kind === "frame").length;
+
+    fake.tick(100);
+
+    const frames = events.filter((e) => e.kind === "frame");
+    expect(frames.length).toBe(framesBeforeTick + 1);
+    expect(frames[frames.length - 1]).toMatchObject({
+      kind: "frame",
+      frame: { intervalIndex: null },
+    });
+    const divergence = log
+      .entries()
+      .find(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("has no corresponding interval"),
+      );
+    expect(divergence).toBeDefined();
+    expect(divergence?.detail).toContain("intervalIndex=5");
+    expect(divergence?.detail).toContain("0x0033");
+    expect(divergence?.detail).toContain("state=rowing");
+    expect(divergence?.detail).toContain("1-interval program");
+  });
+
+  it("intervalComplete emission: an actual.index far past the armed program's length falls back to 0 (IntervalActual.index has no null slot) and logs divergence", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        intervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          // THREE_INTERVAL_PROGRAM has 3 intervals — 9 is far past the
+          // offset rule's own one-past-the-end shape.
+          index: 9,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 22,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 200,
+      },
+    ];
+    const { fake, driver, events, log } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+
+    fake.tick(200);
+
+    const complete = events.find((e) => e.kind === "intervalComplete");
+    expect(complete).toMatchObject({
+      kind: "intervalComplete",
+      // The documented fallback (this function's own comment) — the raw
+      // machine value (9) is never assigned here; it survives only in the
+      // "divergence" entry asserted below.
+      actual: { index: 0 },
+    });
+    const divergence = log
+      .entries()
+      .find(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("has no corresponding interval"),
+      );
+    expect(divergence).toBeDefined();
+    expect(divergence?.detail).toContain("actual.index=9");
+    expect(divergence?.detail).toContain("0x0037/38");
+    expect(divergence?.detail).toContain("state=rowing");
+    expect(divergence?.detail).toContain("3-interval program");
+  });
+
+  it("intervalComplete emission: the same unexplainable check also applies while resting, not only while rowing", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 65,
+        distanceMeters: 100,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 130,
+        intervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 9, // far past THREE_INTERVAL_PROGRAM's 3 intervals either way
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 22,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 200,
+      },
+    ];
+    const { fake, driver, events, log } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+
+    fake.tick(200);
+
+    const complete = events.find((e) => e.kind === "intervalComplete");
+    expect(complete).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0 },
+    });
+    const divergence = log
+      .entries()
+      .find(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("has no corresponding interval"),
+      );
+    expect(divergence).toBeDefined();
+    expect(divergence?.detail).toContain("state=resting");
   });
 });
 
