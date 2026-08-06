@@ -1986,6 +1986,8 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
     expect(settled).toBe(false); // 2 of the default 3 — still not enough
 
     transport.notify(GENERAL_STATUS_UUID, tick);
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(settled).toBe(true); // the 3rd tick — MED-4: was a 5s timeout, not this assertion
 
     await expect(pending).rejects.toSatisfy((err: unknown) => {
       expect(err).toBeInstanceOf(ProgramRejectionError);
@@ -2046,6 +2048,17 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
         dragFactor: 130,
       }),
     );
+
+    // MED-4: this test used to go straight to the `rejects` assertion below,
+    // which died as a 5000ms timeout (not this assertion) under a mutant
+    // that removes the errorTypeTicks bound — the single configured tick
+    // (errorTypeTicks: 1) must be enough on its own.
+    let settled = false;
+    void pending.catch(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(settled).toBe(true);
 
     await expect(pending).rejects.toSatisfy((err: unknown) => {
       expect(err).toBeInstanceOf(ProgramRejectionError);
@@ -4230,10 +4243,13 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
 // DESTROYED what the monitor held. Both halves were our own parse bug —
 // every byte §18 recorded as a rejection decodes to an accept, and the
 // "wipe" was the mechanism invented to explain the toggle's alternation.
-// §19.1's Verdict (b) then settled the positive claim behaviourally: a
-// rest-0 program sent over a live rest-30 one, without reconnecting,
-// produced a work→work row with no `resting` state anywhere — the second
-// program replaced the first.
+// §19.1's Verdict (b) then settled the positive claim behaviourally,
+// corrected in the whole-branch fix wave: a rest-0 program landed over
+// whatever a rest-30 send and a reconnect had left loaded, and produced a
+// work→work row with no `resting` state anywhere — the second program
+// replaced the first. The clean single-connection observation (no
+// reconnect between the two sends) is still pending, §17's merge-gate row,
+// session 3, Step 3.
 describe("createPm5Driver: programming over a loaded workout ACCEPTS and REPLACES (D1 withdrawn, interface-notes.md §19.2)", () => {
   it("lands over a workout the rower already had, and what the monitor holds is the NEW program (today: rejected, and the old one destroyed)", async () => {
     const { fake, driver, events, log } = harness({

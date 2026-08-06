@@ -1542,7 +1542,15 @@ the page.
 PM5, `pnpm dev` from `app/`, Chrome, the port check just above, then the lab
 page) plus `node scripts/pm5-bridge.mjs` in a second terminal — this row
 reuses the same bridge and the same `REMOTE` map as "The pending
-verification row," no new harness code.
+verification row," no new harness code. **New for this session: pair
+James's Apple Watch to the PM5 as its heart-rate monitor before connecting
+the lab page.** This is the PM5's OWN pairing (the monitor's own HR-source
+menu), not anything this codebase drives or mediates — this project does
+not send `CSAFE_PM_GET_HRM` and has no belt/watch pairing flow of its own
+(§19.9's "one thing we are not doing"). Every prior session ran with NO
+heart-rate source paired; this is the first chance to observe the
+NON-sentinel (present) case rather than the `0`-with-no-belt sentinel
+§19.9 already covers.
 
 **The row.** James clicks **Scan & connect** (the one action needing a real
 user gesture); the controller drives everything else via
@@ -1561,7 +1569,15 @@ next one; James rows when a step says to. Verbatim from design spec §8:
    old mixed-boundary shape D4 produced), `workoutComplete` firing exactly
    once. This converts "a first boundary WITH rest" from unobserved to
    observed (design spec §5) — every prior hardware reading of forward
-   attribution at a RESTING boundary was under the OLD parse.
+   attribution at a RESTING boundary was under the OLD parse. **Heart rate
+   (OWNER ADDITION, watch paired per Setup above):** live `frame` events
+   while rowing should carry `heartRateBpm` NON-NULL and plausible — not
+   `0`, not `255` (both map to `null` by design, §19.9; a `null` reading
+   WITH the watch paired is itself a finding worth recording the raw
+   bytes for, not an expected outcome to wave past); the two
+   `intervalComplete` actuals should carry real `avgHeartRateBpm` numbers,
+   not the `null`/`0` sentinel this project has only ever observed with no
+   HR source paired.
 3. WITHOUT reconnecting, controller:
    `curl -X POST http://127.0.0.1:5178/command -d program-no-rest`
    (`TWO_TIME_NO_REST_PROGRAM`) — a DIFFERENT program (`restSeconds: 0` vs
@@ -1583,7 +1599,17 @@ next one; James rows when a step says to. Verbatim from design spec §8:
    program's `workoutComplete`), and the boundary's actual re-confirms
    minus-1 within this newly-opened run at a no-rest boundary (§17 item 13,
    originally answered under the old parse in session 2 — this is the
-   first confirmation under the corrected one).
+   first confirmation under the corrected one). **Heart rate (OWNER
+   ADDITION):** the same live-frame expectation as Step 2 — `heartRateBpm`
+   NON-NULL and plausible while rowing. What is genuinely new here: this is
+   a NO-REST work→work boundary, and 0x0038's work/rest HR-average fields
+   are per-field sentinel territory (§19.9's own caveat that the sentinel
+   citations are per-field, not a blanket rule) — capture what the
+   REST-average field reads on a boundary with no rest period at all. A
+   sentinel there is plausible (there was no rest to average over) and
+   would be consistent with the existing both-map-to-`null` handling; a
+   real number would be new information either way. Record the raw
+   0x0038 bytes for this boundary, not just the decoded value.
 5. Controller: `curl -X POST http://127.0.0.1:5178/command -d program-many`
    (`MANY_PROGRAM`: 25 DISTANCE intervals, 7 CSAFE frames). **NO rowing.**
    James reads the monitor's interval count. **Expected:** the PM5 shows
@@ -1605,7 +1631,13 @@ DISTANCE respectively — step 3 is not rowed to completion and step 5 is not
 rowed at all, so neither one certifies those shapes' run lifecycle (their
 boundary/actual behaviour, their `workoutComplete` timing, or anything
 `intervalComplete`-shaped). Items 16-19 above name what still needs a
-dedicated row of its own.
+dedicated row of its own. **Heart rate (OWNER ADDITION):** Steps 2 and 4
+verify live HR and the actuals' averages over exactly ONE device pairing —
+James's Apple Watch, linked to the PM5 as its HR source. That certifies the
+non-sentinel (present) reading path end to end for this one link; it does
+NOT certify a chest belt, and it does NOT exercise `CSAFE_PM_GET_HRM` or
+belt-presence detection (§19.9's "one thing we are not doing") — both
+remain future, untouched by this row.
 
 **PR #52 leaves draft only after this row's five steps are run, §18 records
 Expected-vs-Observed for each, AND James gives explicit approval** — running
@@ -2003,11 +2035,18 @@ happened as of this commit — nothing in this subsection is an observation.**
 - **Step 2** (row both intervals; actuals carry OUR indices 0 and 1;
   `workoutComplete` fires once; "first boundary WITH rest" converts from
   unobserved to observed): PENDING.
+- **Step 2 — heart rate** (OWNER ADDITION, watch paired: live `frame`
+  events' `heartRateBpm` while rowing — non-null and plausible, or a `null`
+  worth recording the raw bytes for; the two actuals' `avgHeartRateBpm`):
+  PENDING.
 - **Step 3** (`program-no-rest` sent over the loaded two-time program
   without reconnecting; James reads the monitor — the no-rest workout
   visible, no `0:30` rest screen between intervals): PENDING.
 - **Step 4** (row the no-rest program's first boundary; a NEW run opens
   with no reconnect; minus-1 re-confirmed at a no-rest boundary): PENDING.
+- **Step 4 — heart rate** (OWNER ADDITION: same live-frame expectation as
+  Step 2; PLUS what the 0x0038 rest-average HR field reads on a NO-REST
+  boundary — raw bytes, not just the decoded value): PENDING.
 - **Step 5** (`program-many`, 25 DISTANCE intervals / 7 frames, NO rowing;
   James reads the monitor's interval count): PENDING.
 - **Item 15** (idle-terminate raw ack byte, decoded): PENDING.
@@ -2273,10 +2312,10 @@ dumps are always written with the `S2` prefix.
 | S2 D3 | …→ internal SetProgram 2×TIME, **rest = 30s** (`… 02 00 1e 06 04 …`, matches `program-two-time`'s hardcoded rest=30 payload) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`, hence the console's `ProgramRejectionError`) | ready (1) | true | **accepted**; not rowed — the ring's next entry is `state=terminated` with no intervening rowing/resting frame (this is the same spontaneous termination, not a second, separate one) |
 | S2 D3 | `program-no-rest` dispatch → internal terminate, 2nd cycle | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
 | S2 D3 | …→ internal SetProgram 2×TIME, **rest = 0** (`… 02 00 00 06 04 …`, matches `program-no-rest`'s hardcoded rest=0 payload) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`, hence the console's `ProgramRejectionError`, then `"dispatched: dump"` → Dump 3) | ready (1) | true | **accepted** — **byte-identical ack to the rest-30 send above** (the echo carries command IDs, not parameter values, so this pair CANNOT by itself distinguish "replaced" from "was already the same") |
-| S2 gap | *(the row: continuous `state=rowing` from `elapsed=0` through `elapsed≈60`, `intervalComplete` at `elapsed:60`, then the VERY NEXT frame resets `elapsed` to 0 with `state` still `"rowing"` — NO `"resting"` state anywhere in this stretch)* | — | — | — | — | — | **the discriminating evidence for Verdict (b)** — see below |
+| S2 gap | **CORRECTION (2026-08-06, fix-2, §19.1):** *(Dump 3 fires (`dispatched: dump`), then `disconnect()`/`connect()` — a RECONNECT, on a fresh module instance)*. This row previously placed the rowing evidence for Verdict (b) HERE, between D3's two sends and D4, describing it as following D3's rest-0 send "without reconnecting." The raw log's state stream for the whole of D3's driver lifetime (both the rest-30 and the rest-0 sends above) is `[['armed', 280], ['terminated', 1]]` — **nobody rowed under D3 at all.** The rowing followed D4's OWN send below, on this reconnected connection. See the corrected row under S2 D4. | — | — | — | — | — | superseded placement — moved to S2 D4, below |
 | S2 D4 | terminate | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
-| S2 D4 | SetProgram 2×TIME, rest = 0 | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | accepted; another terminate+re-program cycle |
-| S2 D4 | *(no send — first no-rest work→work boundary)* | — | — | — | — | — | `interval-complete: "index=null (machine reported 1)"`; `divergence: intervalIndex=0 (0x0033) vs actual.index=1 (0x0037/38)` — answers §17 item 13 (§19.8); **no raw hex for this boundary** — only the decoded log line (§5's no-raw-hex caveat) |
+| S2 D4 | SetProgram 2×TIME, rest = 0 | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | accepted; another terminate+re-program cycle, on the reconnected connection above — **this is the send the rowing evidence below actually follows** |
+| S2 D4 | *(no send — the ONLY elapsed-reset-while-rowing in the whole log, and the first no-rest work→work boundary: continuous `state=rowing` from `elapsed=0` through `elapsed≈60` FOLLOWING D4's OWN SetProgram send directly above, an `intervalComplete` at `elapsed:60`, then the very next frame resets `elapsed` to 0 with `state` still `"rowing"` — NO `"resting"` state anywhere in this stretch. This IS the discriminating evidence for Verdict (b) — corrected below — and it is the SAME boundary as the `interval-complete` line to the right, not a second, separate observation; the two were previously double-counted)* | — | — | — | — | — | `interval-complete: "index=null (machine reported 1)"`; `divergence: intervalIndex=0 (0x0033) vs actual.index=1 (0x0037/38)` — answers §17 item 13 (§19.8); **no raw hex for this boundary** — only the decoded log line (§5's no-raw-hex caveat) |
 
 **Dump 1's build provenance, stated plainly:** it predates dumps 2-4 within
 the SAME [S2] log (the harness was rebuilt mid-session). Evidence: (1) its
@@ -2339,6 +2378,40 @@ additionally shows program-over-loaded works without the [clear/prepare]
 step, that is recorded as robustness, not grounds for removal") — it does
 not argue for removing the prepare step, and does not touch §5's minus-1
 scoping.
+
+> **CORRECTION (2026-08-06, fix-2, §19.1): the paragraph above misdescribes
+> the evidence chain — the conclusion survives, but not by this argument.**
+> "The row that followed" is misplaced: the raw log's state stream for the
+> whole of D3's driver lifetime — from the rest-30 send through the rest-0
+> send — is `[['armed', 280], ['terminated', 1]]`. **Nobody rowed while D3's
+> connection was live.** After D3's rest-0 send, Dump 3 fires, then the
+> harness disconnects and RECONNECTS (a step the paragraph above elides
+> entirely, stating "without reconnecting" for a chain that includes one),
+> and only THEN, on the fresh connection, does D4 send its own rest-0
+> program. The rowing — the one and only elapsed-reset-while-rowing in the
+> whole log — follows THAT send, not D3's. The table above is corrected to
+> place the row under S2 D4, where the log puts it.
+>
+> **The conclusion still holds, on a weaker argument than the one originally
+> written.** The D3 rest-30 → rest-0 pair supplies only byte-identical acks,
+> which — as this Verdict already says — cannot by themselves distinguish
+> "replaced" from "was already the same." What actually settles it is
+> simpler: whatever program the machine held across the reconnect (rest-30,
+> if D3's rest-0 send had no effect; rest-0, if it did) was then subject to
+> D4's OWN rest-0 send, and the observed run was rest-free either way. So "a
+> program sent over a loaded workout is accepted and replaces it" is still
+> supported by this data — just not by an unbroken "without reconnecting"
+> chain, and not by two independent observations (the "S2 gap" row and D4's
+> boundary row described the SAME boundary; the table previously
+> double-counted it as two).
+>
+> **This is exactly what session 3's Step 3 is for.** §17's merge-gate row
+> sends `program-no-rest` over the loaded two-time program on a SINGLE
+> connection, WITHOUT reconnecting, and has James read the monitor live —
+> the clean, single-connection observation this Verdict has been missing.
+> Until that row runs, Verdict (b)'s conclusion rests on the weaker
+> reconnect-spanning argument above, not on the stronger single-connection
+> one this section originally (and wrongly) claimed to already have.
 
 **Verdict (c) — D2's silent no-op: SURVIVES.** "An ack does not mean a
 program landed" is not a casualty of the bitfield fix: `0x01` is an accept
