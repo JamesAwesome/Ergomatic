@@ -3,6 +3,7 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { compileProgram } from "../../domain/monitor/program.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import {
+  buildGetErrorType,
   buildProgrammingSequence,
   buildTerminate,
 } from "../../domain/monitor/pm5/commands.js";
@@ -103,10 +104,10 @@ const THREE_INTERVAL_PROGRAM: WorkoutProgram = {
 };
 
 // Plan Task 2: `program()` now sends `buildTerminate()` as its own
-// best-effort clear step BEFORE the real programming sequence — every
+// best-effort prepare step BEFORE the real programming sequence — every
 // `stubTransport`-driven test below that drives acks by hand must account
 // for that leading exchange too, not just the programming sequence's own.
-const clearChunkCount = buildTerminate()[0]!.length;
+const prepareChunkCount = buildTerminate()[0]!.length;
 
 /** A WAITTOBEGIN (armed) General Status payload — `program()`'s
  *  verification phase (`verifyArmed`, driver.ts) resolves the instant this
@@ -132,7 +133,7 @@ const ARMED_GENERAL_STATUS = buildGeneralStatusBytes({
  *  wait). `stubTransport`'s writes/acks all resolve through chained
  *  Promises, never a real timer — but SEVERAL microtask hops separate
  *  "an ack was just notified" from "the NEXT sequence's own `awaitAck()`
- *  has registered its `pendingAck`" (clear step -> `sendClear` returns ->
+ *  has registered its `pendingAck`" (prepare step -> `sendPrepare` returns ->
  *  `program()`'s next `sendSequence` call -> `discardStaleAcks()` ->
  *  `awaitAck()`). Sending the next ack before that registration completes
  *  would have it discarded as a stale leftover from the PREVIOUS sequence
@@ -152,7 +153,7 @@ async function waitUntil(check: () => boolean, maxTicks = 50): Promise<void> {
  * tick-driven wait `verifyArmed()` exists to exercise — every fake-driven
  * test was taking the immediate-check fast path). A real `tick()` call is
  * now required before `program()` can resolve. This drains the microtask
- * queue generously first — the ENTIRE clear+send exchange is chunk-by-chunk
+ * queue generously first — the ENTIRE prepare+send exchange is chunk-by-chunk
  * microtask-hopped (never a real timer), and a multi-frame program can
  * need dozens of hops to fully land — THEN calls `fake.tick(0)` (no
  * scripted time elapses) to flush the now-pending armed delivery, then
@@ -171,10 +172,22 @@ async function programAndArm(
   await pending;
 }
 
-function harness(script: Parameters<typeof createFakeTransport>[0]) {
+function harness(
+  script: Parameters<typeof createFakeTransport>[0],
+  // Task 3: `terminate()` now waits `settleTicks` GENERAL_STATUS ticks
+  // after its own ack before resolving (default 3) — the fake only ever
+  // sends ONE such tick synchronously alongside a terminate ack (no
+  // continuous heartbeat model), which arrives before `terminate()` even
+  // registers its own wait, so it is never enough on its own. Tests whose
+  // focus is NOT settle behaviour pass `{ settleTicks: 0 }` here to keep
+  // `terminate()` resolving right after its ack, exactly like before this
+  // task; the settle wait itself is pinned by dedicated `stubTransport`
+  // tests below with full manual tick control.
+  driverOptions: Parameters<typeof createPm5Driver>[2] = {},
+) {
   const fake = createFakeTransport(script);
   const log = createEventLog();
-  const driver = createPm5Driver(fake, log);
+  const driver = createPm5Driver(fake, log, driverOptions);
   const events: MonitorEvent[] = [];
   driver.events((e) => events.push(e));
   return { fake, log, driver, events };
@@ -423,7 +436,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
     // `stubTransport` never auto-acks — the driver only sets its internal
     // `program` (needed for `computeRemainingForFrame`'s `!program` guard
     // to pass) once `program()`'s ack-gated sequence actually resolves, so
-    // this manually acks the clear step, then the single frame a
+    // this manually acks the prepare step, then the single frame a
     // 1-interval program produces, then supplies the WAITTOBEGIN status
     // `verifyArmed` (driver.ts) is waiting on before `program()` resolves.
     const pending = driver.program(program);
@@ -434,7 +447,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
@@ -737,16 +750,17 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // Trace-assertion #1: programming emitted exactly these command/ack
     // pairs — one "write" per BLE chunk, then one "ack" — filtered
     // straight out of the injectable event log. Scoped to entries AFTER
-    // the clear step's own "clear-rejected" marker (plan Task 2:
-    // `program()` now sends `buildTerminate()` as a leading clear, which
-    // contributes its own write/ack pair to the SAME log kinds first).
-    const clearSeq = log
+    // the prepare step's own "prepare-rejected" marker (plan Task 2/
+    // design spec §3: `program()` now sends `buildTerminate()` as a
+    // leading prepare, which contributes its own write/ack pair to the
+    // SAME log kinds first).
+    const prepareSeq = log
       .entries()
-      .find((e) => e.kind === "clear-rejected")!.seq;
+      .find((e) => e.kind === "prepare-rejected")!.seq;
     const trace = log
       .entries()
       .filter(
-        (e) => e.seq > clearSeq && (e.kind === "write" || e.kind === "ack"),
+        (e) => e.seq > prepareSeq && (e.kind === "write" || e.kind === "ack"),
       );
     expect(trace.length).toBeGreaterThan(0);
     expect(trace[trace.length - 1]!.kind).toBe("ack");
@@ -874,10 +888,16 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
         cumulativeDistanceMeters: 1,
       },
     ];
-    const { fake, driver, events, log } = harness({
-      program: MINIMAL_PROGRAM,
-      events: timeline,
-    });
+    // settleTicks: 0 — this test's own focus is Appendix-E LATCHING, not
+    // the settle wait (pinned separately, with full manual tick control,
+    // by the "terminate() settle wait" describe block below); the fake
+    // only ever delivers ONE status tick synchronously alongside a
+    // terminate ack, which is never enough for the real settleTicks
+    // default on its own.
+    const { fake, driver, events, log } = harness(
+      { program: MINIMAL_PROGRAM, events: timeline },
+      { settleTicks: 0 },
+    );
 
     await programAndArm(driver, fake, MINIMAL_PROGRAM);
     await driver.terminate();
@@ -913,7 +933,10 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
   });
 
   it("a disconnect that arrives AFTER the terminal state is logged, not treated as an error (no 'disconnected' event)", async () => {
-    const { fake, driver, events, log } = harness({ program: MINIMAL_PROGRAM });
+    const { fake, driver, events, log } = harness(
+      { program: MINIMAL_PROGRAM },
+      { settleTicks: 0 }, // unrelated to this test's own focus; see the sibling test's comment
+    );
     await programAndArm(driver, fake, MINIMAL_PROGRAM);
     await driver.terminate();
     expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
@@ -940,7 +963,14 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
     // the disconnect hatch — broken before this fix — now resolves it.
     const fake = createFakeTransport({ program: MINIMAL_PROGRAM });
     const log = createEventLog();
-    const driver = createPm5Driver(fake, log, { ackTimeout: { ticks: 1 } });
+    // settleTicks: 0 — this test's own focus is the ack-await hatches
+    // (ack-timeout vs. disconnect), not the settle wait; see the sibling
+    // "terminate() acks... LATCHES" test's comment for why the fake can't
+    // supply the real default on its own.
+    const driver = createPm5Driver(fake, log, {
+      ackTimeout: { ticks: 1 },
+      settleTicks: 0,
+    });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -1010,7 +1040,16 @@ describe("createPm5Driver: NAK during programming", () => {
     ).toBe(true);
   });
 
-  it('an unparseable ack (bad checksum — pm5/response.ts §19.1\'s {kind: "unparseable"}) is treated the same as an explicit NAK, never crashes, and its trace says so', async () => {
+  it('a garbled ack (bad checksum — pm5/response.ts §19.1\'s {kind: "unparseable"}) rejects with reason "garbled", DISTINCT from an explicit "nak" — never crashes, and its trace says so', async () => {
+    // Task 3's own pinned defect: today's (pre-Task-3) code folds EVERY
+    // non-"ok" response, including one it could not even parse, onto the
+    // single reason "nak" — the exact conflation this task fixes. Against
+    // that code, this test's `reason` assertion below fails (`"nak"`
+    // where this now expects `"garbled"`), which is the whole point: a
+    // frame this driver cannot validate at all is not the same statement
+    // as the PM explicitly answering "reject" — no GetErrorType should
+    // ever fire for it either (only a genuine `"nak"` does).
+    //
     // The fake has no hook to emit a genuinely unparseable frame (it only
     // ever builds well-formed acks via `buildAckFrame`), so this drives a
     // bare `stubTransport()` directly — same pattern as the other
@@ -1021,7 +1060,7 @@ describe("createPm5Driver: NAK during programming", () => {
     const driver = createPm5Driver(transport, log);
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    // Clear step: accept it so the real programming frame is what fails.
+    // Prepare step: accept it so the real programming frame is what fails.
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
       buildAckFrame({ frameStatus: "ok" }),
@@ -1029,7 +1068,7 @@ describe("createPm5Driver: NAK during programming", () => {
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     // R1's frame (interface-notes.md §6) with its checksum byte flipped —
     // the same shape `domain/monitor/pm5/response.test.ts` uses to prove
@@ -1043,20 +1082,435 @@ describe("createPm5Driver: NAK during programming", () => {
     await expect(pending).rejects.toSatisfy((err: unknown) => {
       expect(err).toBeInstanceOf(ProgramRejectionError);
       const rejection = err as ProgramRejectionError;
-      expect(rejection.reason).toBe("nak");
+      expect(rejection.reason).toBe("garbled");
       expect(rejection.atFrame).toBe(0);
       expect(rejection.hexTrace).toContain("ack unparseable");
       return true;
     });
+    // No GetErrorType send for a garbled frame — only a GENUINE "nak"
+    // fires one (`sendSequence`'s own `fetchErrorTypeOnNak` gate).
+    expect(log.entries().some((e) => e.kind === "error-type")).toBe(false);
   });
 });
 
-describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () => {
-  it("a clear-rejected step still proceeds to program the real workout (interface-notes.md §18: expected, never fatal)", async () => {
+describe("createPm5Driver: Phase 7A-fix-2 Task 3 — the wire's four non-'ok' reasons", () => {
+  it.each([
+    ["bad", "bad"],
+    ["not-ready", "not-ready"],
+  ] as const)(
+    "a genuine '%s' frame status rejects with reason '%s' — never folded into 'nak' (today's code, pre-Task-3, would report 'nak' here)",
+    async (frameStatus, expectedReason) => {
+      const transport = stubTransport();
+      const log = createEventLog();
+      const driver = createPm5Driver(transport, log);
+
+      const pending = driver.program(MINIMAL_PROGRAM);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "reject" }),
+      ); // prepare step — any non-disconnect outcome is swallowed
+      await waitUntil(
+        () =>
+          transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+            .length > prepareChunkCount,
+      );
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus }),
+      );
+
+      await expect(pending).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(ProgramRejectionError);
+        expect((err as ProgramRejectionError).reason).toBe(expectedReason);
+        expect((err as ProgramRejectionError).atFrame).toBe(0);
+        return true;
+      });
+      // Only a GENUINE reject ("nak") fires GetErrorType — CSAFE-DEF p.50's
+      // own "PrevReject" wording (interface-notes.md §19.7) is specific to
+      // that one status, not "bad"/"not-ready".
+      expect(log.entries().some((e) => e.kind === "error-type")).toBe(false);
+    },
+  );
+});
+
+describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine reject", () => {
+  it('fires ONE buildGetErrorType() send and logs the raw reply as hex (no decode claims), then still rejects "nak" as before', async () => {
+    // Against today's (pre-Task-3) code, no GetErrorType exists at all —
+    // this test's own write-count/log assertions below fail outright
+    // there (there is no extra write to find, no "error-type" log entry).
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const programFrame0ChunkCount =
+      buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    ); // prepare step accepted
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+
+    // A GENUINE reject — `(status & 0x30) === 0x10`, the real `0x11` shape
+    // (response.ts §19.1), never the old, wrong `0x81`.
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+
+    // The driver now sends buildGetErrorType() — one more RECEIVE write,
+    // beyond the prepare step's and the rejected programming frame's own.
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length >
+        prepareChunkCount + programFrame0ChunkCount,
+    );
+    const receiveWrites = transport.writes.filter(
+      (w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID,
+    );
+    expect(Array.from(receiveWrites.at(-1)!.bytes)).toStrictEqual(
+      Array.from(buildGetErrorType()),
+    );
+
+    // A scripted reply (this codec has never captured a real one — the
+    // pull path is interface-notes.md §17's own open hardware item). The
+    // driver must log it as RAW HEX, making no claim about its meaning.
+    const errorTypeReply = buildAckFrame({
+      frameStatus: "ok",
+      slaveState: "error",
+      commandIds: [0xc8],
+    });
+    transport.notify(TRANSMIT_CHARACTERISTIC_UUID, errorTypeReply);
+
+    // No retries: the outer rejection is exactly what it would have been
+    // without GetErrorType at all.
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("nak");
+      expect((err as ProgramRejectionError).atFrame).toBe(0);
+      return true;
+    });
+
+    const errorTypeEntries = log
+      .entries()
+      .filter((e) => e.kind === "error-type");
+    expect(errorTypeEntries).toHaveLength(1); // exactly once — no retries
+    const expectedHex = Array.from(errorTypeReply, (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join(" ");
+    expect(errorTypeEntries[0]!.detail).toBe(expectedHex);
+  });
+
+  it("logs 'no reply (disconnected)' if the link drops before GetErrorType's own reply arrives, and still rejects nak", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const programFrame0ChunkCount =
+      buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    ); // prepare step accepted
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // genuine reject
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length >
+        prepareChunkCount + programFrame0ChunkCount,
+    ); // GetErrorType's own write went out
+
+    transport.fireDisconnect("radio out of range");
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("nak");
+      return true;
+    });
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "error-type" && e.detail === "no reply (disconnected)",
+        ),
+    ).toBe(true);
+  });
+
+  it("logs 'no reply (ack-timeout)' if the ack-timeout policy elapses waiting for GetErrorType's own reply, and still rejects nak", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, {
+      ackTimeout: { ticks: 2 },
+    });
+    const programFrame0ChunkCount =
+      buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    ); // prepare step accepted
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // genuine reject
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length >
+        prepareChunkCount + programFrame0ChunkCount,
+    ); // GetErrorType's own write went out
+
+    const tick = buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_REARM,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+    transport.notify(GENERAL_STATUS_UUID, tick);
+    transport.notify(GENERAL_STATUS_UUID, tick);
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("nak");
+      return true;
+    });
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "error-type" && e.detail === "no reply (ack-timeout)",
+        ),
+    ).toBe(true);
+  });
+});
+
+describe("createPm5Driver: Phase 7A-fix-2 Task 3 — toggle and slave state never gate success", () => {
+  it("an ack with frameToggle=true and a non-'ready' slave state still succeeds, and the ack log records that slave state", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // prepare step
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({
+        frameStatus: "ok",
+        frameToggle: true,
+        slaveState: "offline",
+      }),
+    );
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(
+      log
+        .entries()
+        .some(
+          (e) => e.kind === "ack" && e.detail.includes("slaveState=offline"),
+        ),
+    ).toBe(true);
+  });
+
+  it("a 2-frame program whose acks are 0x01 (toggle low) then 0x81 (toggle high) completes successfully — VERIFIED per the brief's own instruction: already true after Task 2's parse fix, not a NEW Task 3 behaviour", async () => {
+    // Task 2 (response.ts §19.1) already corrected the parse so `0x81`
+    // decodes as an ACCEPT (toggle-high, prev-OK), and this driver's own
+    // ack-success condition has been `frameStatus === "ok"` — never gated
+    // on the toggle bit — since that same commit. This test pins the
+    // regression for Task 3 without claiming it as a Task-3-fixed defect.
+    const fiveIntervalProgram: WorkoutProgram = {
+      intervals: Array.from({ length: 5 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      })),
+    };
+    const seq = buildProgrammingSequence(fiveIntervalProgram);
+    expect(seq).toHaveLength(2); // confirms this fixture is genuinely 2 frames
+
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.program(fiveIntervalProgram);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // prepare step
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+    // Frame 0's ack: the "0x01" shape (toggle low).
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok", frameToggle: false }),
+    );
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length >
+        prepareChunkCount + seq[0]!.length,
+    );
+    // Frame 1's ack: the "0x81" shape (toggle high) — the exact byte a
+    // pre-Task-2 parser misread as a reject.
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok", frameToggle: true }),
+    );
+
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+
+    await expect(pending).resolves.toBeUndefined();
+  });
+});
+
+describe("createPm5Driver: Phase 7A-fix-2 Task 3 — terminate()'s post-ack settle wait", () => {
+  /** Any GENERAL_STATUS payload — the settle counter (driver.ts's raw
+   *  GENERAL_STATUS_UUID subscription) counts arrivals only, never
+   *  content, so what this contains is irrelevant to every test below. */
+  function settleTick(): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_REARM,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+  }
+
+  it("resolves only after settleTicks GENERAL_STATUS ticks (default 3), never on the ack alone", async () => {
+    // Against today's (pre-Task-3) code, terminate() resolves the instant
+    // the ack arrives — this test's first assertion (`settled` still
+    // false after the ack, and again after only 2 of 3 ticks) fails
+    // there, since today's promise would already be resolved by then.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.terminate();
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(settled).toBe(false); // the ack alone must never be enough
+
+    transport.notify(GENERAL_STATUS_UUID, settleTick());
+    transport.notify(GENERAL_STATUS_UUID, settleTick());
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(settled).toBe(false); // 2 of the default 3 — still not enough
+
+    transport.notify(GENERAL_STATUS_UUID, settleTick());
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("a custom settleTicks bound is honored", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { settleTicks: 1 });
+
+    const pending = driver.terminate();
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    transport.notify(GENERAL_STATUS_UUID, settleTick());
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("settleTicks: 0 resolves immediately after the ack, with no wait at all", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { settleTicks: 0 });
+
+    const pending = driver.terminate();
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it("a disconnect during the settle wait resolves terminate() rather than hanging it forever", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.terminate();
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+    transport.fireDisconnect("radio out of range");
+    await expect(pending).resolves.toBeUndefined();
+  });
+});
+
+describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejection, verify", () => {
+  it("a prepare-rejected step still proceeds to program the real workout (interface-notes.md §18/§19.4: expected, never fatal)", async () => {
     // Realistic fixture (briefing: "at least one test per client task
     // starts from a real library workout"): Sea Fret, not a hand-built
-    // minimum. Against TODAY's code (no clear step at all), `program()`
-    // never records a "clear-rejected" entry — this assertion fails there.
+    // minimum. Against TODAY's code (no prepare step at all), `program()`
+    // never records a "prepare-rejected" entry — this assertion fails there.
     const program = seaFretProgram();
     const { fake, driver, log, events } = harness({ program });
 
@@ -1066,15 +1520,15 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     // "nothing was loaded" case (interface-notes.md §18) — and `program()`
     // must treat that as informational, not fatal: it logs and proceeds
     // straight into the real send.
-    expect(log.entries().some((e) => e.kind === "clear-rejected")).toBe(true);
+    expect(log.entries().some((e) => e.kind === "prepare-rejected")).toBe(true);
     // The real program still landed and was verified: `createFakeTransport`
     // itself asserts every programming byte against
     // `buildProgrammingSequence` (a mismatch throws synchronously), so
     // reaching "armed" here is proof the real sequence was actually sent —
-    // not skipped, not corrupted by the leading clear attempt.
+    // not skipped, not corrupted by the leading prepare attempt.
     expect(events.some((e) => e.kind === "armed")).toBe(true);
     // F7 (fix-round 1): a HEALTHY program must never show a spurious
-    // "program-rejection" from its own routine, swallowed clear-step nak.
+    // "program-rejection" from its own routine, swallowed prepare-step nak.
     expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
       false,
     );
@@ -1097,7 +1551,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
@@ -1135,7 +1589,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
@@ -1202,7 +1656,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
@@ -1251,7 +1705,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
@@ -1282,7 +1736,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
 
   it("F1 (fix-round 1): a STALE pre-send 'armed' observation never satisfies verification on its own — only a fresh POST-send one does", async () => {
     // Reviewer-reproduced hardware shape (interface-notes.md §18,
-    // progress.md's D1 update/reviewer finding): the clear step gets
+    // progress.md's D1 update/reviewer finding): the prepare step gets
     // ACCEPTED, the PM's own Appendix-E auto-cycle (Terminate -> Rearm ->
     // WaitToBegin) reports "armed" ENTIRELY ON ITS OWN, and that stale
     // observation must never be reused as evidence for a SEPARATE program
@@ -1306,7 +1760,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     // D2's exact silent no-op shape: the program's own ack says "ok", but
     // NO general-status tick ever arrives after this point.
@@ -1357,11 +1811,11 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
       buildAckFrame({ frameStatus: "reject" }),
-    ); // clear step
+    ); // prepare step
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
 
     // Frame 0's own ack — only the FIRST of several frames this program
@@ -1415,12 +1869,12 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     });
   });
 
-  it("F3 (fix-round 1): a clear-step TIMEOUT (not just a NAK) is swallowed too — the real clear command is unknown, so an unanswered one is not fatal either", async () => {
+  it("F3 (fix-round 1): a prepare-step TIMEOUT (not just a NAK) is swallowed too — the real clear command is unknown, so an unanswered one is not fatal either", async () => {
     // `ProgramRejection`'s own doc comment: "timeout" means the link
     // stayed UP but the PM never answered ONE command — exactly the
-    // profile of the clear step (its real command is UNFOUND, D1 update),
+    // profile of the prepare step (its real command is UNFOUND, D1 update),
     // not evidence of a broken transport. Only "disconnected" (a confirmed
-    // dead link) stays fatal for the clear step; this asserts the RULE,
+    // dead link) stays fatal for the prepare step; this asserts the RULE,
     // not merely a byproduct of the fake's own phase modeling (the
     // reviewer's M3b finding).
     const transport = stubTransport();
@@ -1430,7 +1884,7 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     });
 
     const pending = driver.program(MINIMAL_PROGRAM);
-    // The clear step's OWN ack never arrives — two general-status ticks
+    // The prepare step's OWN ack never arrives — two general-status ticks
     // trip the ack-timeout policy (reason "timeout"), not a disconnect.
     const preSendTick = buildGeneralStatusBytes({
       elapsedSeconds: 0,
@@ -1451,9 +1905,9 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
-    // The REAL program's own ack — swallowing the clear's timeout must not
+    // The REAL program's own ack — swallowing the prepare step's timeout must not
     // block the send that follows it.
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
@@ -1471,11 +1925,11 @@ describe("createPm5Driver: plan Task 2 — clear, ignore rejection, verify", () 
       log
         .entries()
         .some(
-          (e) => e.kind === "clear-rejected" && e.detail.includes("timeout"),
+          (e) => e.kind === "prepare-rejected" && e.detail.includes("timeout"),
         ),
     ).toBe(true);
-    // F7: the swallowed clear timeout must not ALSO show up as a spurious
-    // "program-rejection" — only "clear-rejected" should record it.
+    // F7: the swallowed prepare timeout must not ALSO show up as a spurious
+    // "program-rejection" — only "prepare-rejected" should record it.
     expect(
       log
         .entries()
@@ -1528,10 +1982,10 @@ describe("createPm5Driver: disconnected (link down before any ack arrives)", () 
 
 describe("createPm5Driver: HIGH-2 — ack-timeout policy, distinct from disconnect", () => {
   it("injectTimeout() + enough general-status ticks rejects with reason 'timeout', link never disconnects", async () => {
-    // Uses a bare stub, not the fake: a `stubTransport`-driven clear step
-    // is let through first (fix-round 1, F3 now swallows a CLEAR-step
+    // Uses a bare stub, not the fake: a `stubTransport`-driven prepare step
+    // is let through first (fix-round 1, F3 now swallows a PREPARE-step
     // timeout too, so this test must aim its own timeout at the REAL
-    // programming write specifically, not the clear's) — then the
+    // programming write specifically, not the prepare step's) — then the
     // PROGRAM's own frame-0 ack is withheld and two general-status ticks
     // trip the ack-timeout policy for THAT write, a genuine "mid-sequence
     // timeout" (spec §4's own phrasing, mirroring "mid-sequence NAK").
@@ -1551,7 +2005,7 @@ describe("createPm5Driver: HIGH-2 — ack-timeout policy, distinct from disconne
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     // The PROGRAM's own ack never arrives — two general-status ticks trip
     // the ack-timeout policy for THIS write.
@@ -2274,11 +2728,12 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
 
     const pending = driver.program(fiveIntervalProgram);
 
-    // The clear step's own ack (plan Task 2) first — and fully drained
+    // The prepare step's own ack (plan Task 2) first — and fully drained
     // before the coalesced notification below, or `sendSequence`'s own
     // `discardStaleAcks()` (fix-round 2) would purge the FIRST of the two
-    // coalesced acks as a stale leftover from the clear sequence instead of
-    // consuming it as the real programming sequence's own frame-0 response.
+    // coalesced acks as a stale leftover from the prepare sequence instead
+    // of consuming it as the real programming sequence's own frame-0
+    // response.
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
       buildAckFrame({ frameStatus: "reject" }),
@@ -2286,7 +2741,7 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
 
     // Both frames' acks, concatenated into ONE raw byte stream — a
@@ -2306,11 +2761,11 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
     await expect(pending).resolves.toBeUndefined();
     // Both frames' chunks actually went out — this isn't a case where the
     // driver merely accepted the buffered ack without ever writing the
-    // second frame's own bytes. `clearChunkCount` accounts for the leading
-    // clear step's own chunks, which target the same characteristic.
+    // second frame's own bytes. `prepareChunkCount` accounts for the leading
+    // prepare step's own chunks, which target the same characteristic.
     expect(
       transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID),
-    ).toHaveLength(clearChunkCount + seq.flat().length);
+    ).toHaveLength(prepareChunkCount + seq.flat().length);
   });
 });
 
@@ -2327,17 +2782,20 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     // leftover, poisoning whatever comes after.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    // settleTicks: 0 — this test's own focus is the stale-ack buffer, not
+    // the settle wait; a stub transport supplies no ticks after the ack
+    // otherwise, so `terminatePending` would never settle.
+    const driver = createPm5Driver(transport, log, { settleTicks: 0 });
 
     const programPending = driver.program(MINIMAL_PROGRAM);
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
       buildAckFrame({ frameStatus: "reject" }),
-    ); // clear step (plan Task 2)
+    ); // prepare step (plan Task 2)
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
@@ -2401,11 +2859,11 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     transport.notify(
       TRANSMIT_CHARACTERISTIC_UUID,
       buildAckFrame({ frameStatus: "reject" }),
-    ); // clear step (plan Task 2)
+    ); // prepare step (plan Task 2)
     await waitUntil(
       () =>
         transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
-          .length > clearChunkCount,
+          .length > prepareChunkCount,
     );
     const ack1 = buildAckFrame({ frameStatus: "ok" });
     const ack2 = buildAckFrame({ frameStatus: "ok" });
@@ -2466,18 +2924,22 @@ describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-fra
     const { fake, driver, log } = harness({ program });
     await programAndArm(driver, fake, program);
 
-    // Scoped to entries AFTER the clear step's own "clear-rejected" marker
-    // (plan Task 2) — `program()`'s leading `buildTerminate()` clear
-    // contributes its own write/ack pair to these SAME log kinds first.
-    const clearSeq = log
+    // Scoped to entries AFTER the prepare step's own "prepare-rejected"
+    // marker (plan Task 2/design spec §3) — `program()`'s leading
+    // `buildTerminate()` prepare contributes its own write/ack pair to
+    // these SAME log kinds first.
+    const prepareSeq = log
       .entries()
-      .find((e) => e.kind === "clear-rejected")!.seq;
+      .find((e) => e.kind === "prepare-rejected")!.seq;
     const trace = log
       .entries()
       .filter(
-        (e) => e.seq > clearSeq && (e.kind === "write" || e.kind === "ack"),
+        (e) => e.seq > prepareSeq && (e.kind === "write" || e.kind === "ack"),
       );
-    const expectedAckHex = hex(buildAckFrame({ frameStatus: "ok" }));
+    // Task 3: the "ack" log detail now also carries the parsed slave
+    // state (`buildAckFrame`'s own default, "ready") alongside the raw
+    // hex it always showed.
+    const expectedAckHex = `${hex(buildAckFrame({ frameStatus: "ok" }))} slaveState=ready`;
 
     let cursor = 0;
     for (const frame of seq) {
@@ -2825,7 +3287,7 @@ describe("createPm5Driver: D1 — programming over a loaded workout is rejected,
     expect(log.entries().some((e) => e.kind === "armed")).toBe(false);
   });
 
-  it("the clear step is ACCEPTED while a workout is loaded, and still does not save the program (terminate is not a clear)", async () => {
+  it("the prepare step is ACCEPTED while a workout is loaded, and still does not save the program (terminate is not a clear)", async () => {
     const { fake, driver, log } = harness({
       program: MINIMAL_PROGRAM,
       loadedWorkout: { intervalCount: 2 },
@@ -2836,11 +3298,13 @@ describe("createPm5Driver: D1 — programming over a loaded workout is rejected,
     );
 
     // The D1 UPDATE row exactly: terminate acked "ok" with a workout
-    // loaded — so NO "clear-rejected" entry, unlike every clean-state
+    // loaded — so NO "prepare-rejected" entry, unlike every clean-state
     // program() in this file — and the program that followed was rejected
     // anyway.
-    expect(log.entries().some((e) => e.kind === "clear-rejected")).toBe(false);
-    expect(log.entries().some((e) => e.kind === "clear-sent")).toBe(true);
+    expect(log.entries().some((e) => e.kind === "prepare-rejected")).toBe(
+      false,
+    );
+    expect(log.entries().some((e) => e.kind === "prepare-sent")).toBe(true);
     expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
       true,
     );
@@ -2863,7 +3327,13 @@ describe("createPm5Driver: D6 — a write on a link that has gone down", () => {
   });
 
   it("writes work again once the transport has re-established (the fake's stand-in for re-fetching its characteristics)", async () => {
-    const { fake, driver } = harness({ program: MINIMAL_PROGRAM });
+    // settleTicks: 0 — this test's own focus is the reconnect/write path,
+    // not the settle wait; see the "terminate() acks... LATCHES" test's
+    // comment for why the fake can't supply the real default on its own.
+    const { fake, driver } = harness(
+      { program: MINIMAL_PROGRAM },
+      { settleTicks: 0 },
+    );
     await programAndArm(driver, fake, MINIMAL_PROGRAM);
 
     fake.injectDisconnect();
