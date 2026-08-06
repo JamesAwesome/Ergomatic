@@ -1118,25 +1118,45 @@ export function createPm5Driver(
     // The divergence trigger for `toActualIndex` itself returning `null`
     // (Task 4 introduced this trigger for `toProgramIndex`'s own
     // more-than-one-step-out `null`; Task 5 re-homes it here for
-    // `toActualIndex`'s narrower `null` contract). Unlike `maybeEmitFrame`'s
-    // mirror of this check (which still guards on `intervalActive` — a
-    // program can be armed with `base.state` outside rowing/resting, and
-    // that is NOT divergence-worthy there), no `stateActive` guard is
-    // needed here: past the run gate above, `programLength > 0` always
-    // (`activeRun!.program` is non-null by construction), so
-    // `toActualIndex`'s OWN contract makes `null` mean exactly one thing —
-    // `state` was outside `"rowing"`/`"resting"` when a boundary genuinely
-    // arrived. The most reachable case in practice is `"terminated"`
-    // (CSAFE-DEF footnote 12 p.25, cited via interface-notes.md §19.8: the
-    // Split/Interval Number "will change depending on where you are in the
-    // interval" once a workout is terminated mid-interval) — a boundary
-    // that arrives with no stable interval to name, which this driver
-    // reports as unexplainable rather than guessing.
+    // `toActualIndex`'s own, now-mirrored `null` contract — re-review
+    // MUST-1). Unlike `maybeEmitFrame`'s mirror of this check (which still
+    // guards on `intervalActive` — a program can be armed with `base.state`
+    // outside rowing/resting, and that is NOT divergence-worthy there), no
+    // `stateActive` GATE is needed here: past the run gate above,
+    // `programLength > 0` always (`activeRun!.program` is non-null by
+    // construction), so `toActualIndex` never returns `null` for lack of a
+    // program — every `null` reaching this point is genuinely one of its
+    // two remaining causes, and both deserve a log entry.
+    //
+    // The DETAIL, though, must fork on WHICH cause fired (re-review
+    // MUST-1(c)) — a single hard-coded string would read as
+    // self-contradicting once `toActualIndex` can return `null` for an
+    // in-range-looking state too:
+    //   - `state` outside `"rowing"`/`"resting"` — most reachably
+    //     `"terminated"` (CSAFE-DEF footnote 12 p.25, cited via
+    //     interface-notes.md §19.8: the Split/Interval Number "will change
+    //     depending on where you are in the interval" once a workout is
+    //     terminated mid-interval) — a boundary with no stable interval to
+    //     name.
+    //   - `state` WAS rowing/resting but the raw index is more than one
+    //     step outside the program's own length — the actuals-path
+    //     analogue of `maybeEmitFrame`'s own D3 trigger, and reworded to
+    //     match it verbatim ("has no corresponding interval in a
+    //     N-interval program") on purpose: same finding, same wording,
+    //     wherever it is logged.
+    const stateActive = state === "rowing" || state === "resting";
     if (normalizedIndex === null) {
-      log.record(
-        "divergence",
-        `actual.index=${rawActual.index} (0x0037/38) arrived while state=${state} — toActualIndex declines to normalize outside rowing/resting (a ${programLength}-interval program was armed, so this is not a missing program)`,
-      );
+      if (stateActive) {
+        log.record(
+          "divergence",
+          `actual.index=${rawActual.index} (0x0037/38, state=${state}) has no corresponding interval in a ${programLength}-interval program`,
+        );
+      } else {
+        log.record(
+          "divergence",
+          `actual.index=${rawActual.index} (0x0037/38) arrived while state=${state} — toActualIndex declines to normalize outside rowing/resting (a ${programLength}-interval program was armed, so this is not a missing program)`,
+        );
+      }
     }
   }
 

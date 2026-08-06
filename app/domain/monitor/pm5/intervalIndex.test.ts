@@ -221,15 +221,27 @@ describe("toActualIndex: no program to explain the index against", () => {
   });
 });
 
-describe("toActualIndex: clamps unconditionally at both ends — never null for an active state with a real program", () => {
-  it("machineIndex 0 (candidate -1) clamps to interval 0", () => {
+describe("toActualIndex: clamps exactly one step outside either end, mirroring toProgramIndex's own boundary shape (re-review MUST-1)", () => {
+  it("machineIndex 0 (candidate -1) clamps to interval 0 — the low edge, load-bearing for the SeaFret and fake-driven pins", () => {
     expect(toActualIndex(0, "rowing", 2)).toBe(0);
     expect(toActualIndex(0, "resting", 2)).toBe(0);
   });
 
-  it("a machineIndex far past the program's length still clamps to the last interval — no 'unexplainable' null here, unlike toProgramIndex", () => {
-    expect(toActualIndex(9, "rowing", 3)).toBe(2);
-    expect(toActualIndex(100, "resting", 3)).toBe(2);
+  it("machineIndex programLength+1 (candidate programLength) clamps to the last interval — the high edge, the direct analogue of S1's phantom row one level up", () => {
+    expect(toActualIndex(3, "rowing", 2)).toBe(1);
+    expect(toActualIndex(4, "resting", 3)).toBe(2);
+  });
+
+  it("more than one step outside either end is unexplainable -> null, never a fabricated interval identity", () => {
+    // candidate = 8, two steps past the last valid index (2) on a
+    // 3-interval program — NOT the offset rule's own one-past-the-end
+    // shape. An earlier version of this function clamped this to 2
+    // unconditionally, silently fabricating a plausible-but-wrong interval
+    // identity; ruled a MUST-FIX (re-review MUST-1) and reverted.
+    expect(toActualIndex(9, "rowing", 3)).toBeNull();
+    expect(toActualIndex(100, "resting", 3)).toBeNull();
+    // Symmetric on the low side: candidate = -2, two steps below zero.
+    expect(toActualIndex(-1, "resting", 2)).toBeNull();
   });
 });
 

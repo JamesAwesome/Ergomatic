@@ -223,18 +223,32 @@ export function toProgramIndex(
  * doc comment above) is actually pinned to "reports the interval it is
  * counting down to" by evidence distinguishing the two directions.
  *
- * **Clamping is unconditional** — `[0, programLength - 1]`, no matter how
- * far `machineIndex - 1` lands outside it. This is deliberately NOT
- * `toProgramIndex`'s "one step out clamps, more than one returns null"
- * shape: nothing in either hardware reading suggests the actuals
- * characteristic has its own "unexplainable" region the way a raw 0x0033
- * overshoot does, and a boundary event only exists at all because a real
- * interval genuinely just completed — there is always a real interval for
- * an out-of-range actual to belong to, so clamping all the way is the
- * honest normalization rather than manufacturing a second "unknown" case
- * with no evidence behind it.
+ * **Clamping mirrors `toProgramIndex`'s own boundary shape exactly**
+ * (re-review MUST-1 — an earlier version of this function clamped
+ * unconditionally, which silently fabricated a plausible-but-wrong interval
+ * identity for any input the offset rule cannot actually produce; reverted).
+ * `candidate = machineIndex - 1` behaves like this:
+ *   - in `[0, programLength - 1]` — return it, no adjustment needed.
+ *   - `-1` (raw `machineIndex` `0`) — clamp to `0`. The offset rule's own
+ *     low edge: under the 1-based-completed story there is no interval `-1`
+ *     to name; under the 0-based-forward story the boundary is heading into
+ *     interval `0`. Either way it belongs to interval `0`. **Load-bearing**:
+ *     the SeaFret full-path test's first boundary and a fake-driven
+ *     regression pin both feed this exact input.
+ *   - `programLength` (raw `machineIndex` `programLength + 1`) — clamp to
+ *     `programLength - 1`, the direct analogue of session 1's phantom row
+ *     (§19.8) one level up.
+ *   - anything further out (raw `machineIndex` `<= -1` or
+ *     `>= programLength + 2`) — **`null`**. More than one step outside
+ *     either edge is not a shape the offset rule produces at any point in a
+ *     program; treating it as "the last interval" (or any interval) would be
+ *     naming an unobserved shape as fact, the opposite of the honesty this
+ *     module otherwise practices. This is also what `IntervalActual.index`'s
+ *     `number | null` widening (Task 3 review, `docs/design/DEVIATIONS.md`)
+ *     exists to prevent on this exact field: a fabricated-but-plausible
+ *     number is worse than a `null` a 7C consumer must explicitly handle.
  *
- * **`null`** covers exactly two situations, both from the interface
+ * **`null`** therefore covers three situations, all from the interface
  * contract, not from this function inventing a new rule:
  *   - `programLength <= 0` — no program to normalize against (unreachable
  *     once a driver-opened run is active, by construction — see
@@ -247,10 +261,15 @@ export function toProgramIndex(
  *     terminated mid-interval — a value with no stable meaning to
  *     normalize, so this function declines rather than guessing which
  *     interval a mid-terminate boundary belongs to.
+ *   - a candidate more than one step outside `[0, programLength - 1]` — the
+ *     genuine "unexplainable" case above, the actuals-path analogue of
+ *     `toProgramIndex`'s own D3 divergence trigger.
  *
- * `IntervalActual.index`'s own `number | null` widening (Task 3 review,
- * `docs/design/DEVIATIONS.md`) is what lets this `null` survive all the way
- * to a consumer instead of being fabricated into a number.
+ * `src/monitor/driver.ts`'s `emitIntervalComplete` logs every `null` here as
+ * `"divergence"`, forking the detail string on WHICH of the three causes
+ * fired — the state-outside case and the unexplainable-candidate case read
+ * as genuinely different findings in a trace, even though this function
+ * itself just returns `null` for both.
  */
 export function toActualIndex(
   machineIndex: number,
@@ -261,5 +280,12 @@ export function toActualIndex(
   if (machineState !== "rowing" && machineState !== "resting") return null;
 
   const candidate = machineIndex - 1;
-  return Math.min(programLength - 1, Math.max(0, candidate));
+  if (candidate >= 0 && candidate < programLength) return candidate;
+  // Exactly one step outside either end — the offset rule's own boundary
+  // shape (mirrors `toProgramIndex`, above) — clamp, don't reject.
+  if (candidate === -1) return 0;
+  if (candidate === programLength) return programLength - 1;
+  // More than one step outside the valid range: not explained by the rule
+  // at all.
+  return null;
 }

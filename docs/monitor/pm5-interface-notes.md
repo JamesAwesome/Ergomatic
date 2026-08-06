@@ -1130,9 +1130,12 @@ every flagged item either numbered here or explicitly excused — holds.)
    structurally different from this codec's 0-based-per-work-interval
    numbering, not merely offset — `domain/monitor/pm5/intervalIndex.ts`'s
    `toProgramIndex`/`toMachineIndex` now do this translation (Task 3/4),
-   confirmed no longer open. **Residual, still open:** the RESTING half of
-   the rule is confirmed; the no-rest work→work boundary is not — see item
-   13 below, which carries the only unresolved piece of this item forward.
+   confirmed no longer open. **Residual — RESOLVED (§19.8, item 13's own
+   CORRECTION):** the RESTING half of the rule was confirmed here; the
+   no-rest work→work boundary (once carried forward to item 13 as the only
+   unresolved piece) is answered too, for 0x0037/38 specifically —
+   `toActualIndex` (Task 5) applies the offset unconditionally there, while
+   0x0033's own `toProgramIndex` above stays rest-keyed, unchanged.
    Interval numbering base (§15 #1). Expected: 0x0033's "Interval
    Count" and 0x0037/0x0038's "Split/Interval Number" are 0-based, like the
    CONFIRMED 0-based write-side index (§12). Observed: program the test
@@ -1292,8 +1295,8 @@ every flagged item either numbered here or explicitly excused — holds.)
     length); if no (or if the PM doesn't refresh these fields until
     rowing starts), the current state-only check stays the strongest
     honest option.
-13. **STATUS: OPEN — did not exist during session 1 (added afterward by
-    phase-7a-fix Task 3's review), so no data yet.** Needs a
+13. **STATUS: ANSWERED (§19.8) — the rest-keyed rule was wrong for
+    0x0037/38; `index-unverified` retired.** Needs a
     `restSeconds: 0` interior interval, which the pending verification
     row's `program-two-time` shape does NOT have (both its intervals carry
     `restSeconds: 30`) — this item needs its own follow-up row with a
@@ -2488,7 +2491,7 @@ transitions while the state word is still `"rowing"` passes the machine
 index through unadjusted. [S2] shows `0x0037` reporting **1** on exactly
 that boundary. **Forward attribution applies at work→work boundaries too, so
 the rest-keyed rule is WRONG there** — and the `index-unverified` log entry
-above, which exists to make the assumption visible rather than silent, did
+above, which existed to make the assumption visible rather than silent, did
 its job: it fired on the very boundary that disproves the assumption.
 
 > **CORRECTION (2026-08-06, fix-2, §19.8): two caveats added, per the
