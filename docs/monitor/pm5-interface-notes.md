@@ -1821,10 +1821,168 @@ reject is `(status & 0x30) === 0x10`; `status & 0x0F` is the slave state;
 **Verdict: OUR BUG.** Decomposed against Table 9, **every** status byte
 seen in [S1] and [S2] carries `(status & 0x30) === 0x00` — previous frame
 OK. `0x81` is toggle-high/prev-OK/Ready. `0x09` is toggle-low/prev-OK/Off
-line. **Not one genuine rejection was ever observed on this hardware.**
-Every "rejection" in both sessions was an acceptance that our own parser
-mislabelled. Several conclusions recorded in §18 as PM5 behaviour follow
-from that mislabelling and are corrected below and in place.
+line. Every "rejection" in both sessions was an acceptance that our own
+parser mislabelled. Several conclusions recorded in §18 as PM5 behaviour
+follow from that mislabelling and are corrected below and in place.
+
+> **CORRECTION (2026-08-06, fix-2, §19.1): "Not one genuine rejection was
+> ever observed on this hardware" OVERSTATES the evidence.** Twelve status
+> bytes were RECORDED — captured as raw hex via `exportLog()` or
+> transcribed as a bare byte value in the session narrative: five `0x01`,
+> six `0x81`, one `0x09`. All twelve decode `(status & 0x30) === 0x00`, so
+> **none of the twelve RECORDED status bytes was a rejection.** But roughly
+> six further sends across both sessions were never captured at all —
+> their status bytes are unknown, which is a different fact from "not a
+> rejection". The honest claim is "none of the twelve recorded status
+> bytes was a rejection; ~6 sends' bytes were never captured", not a
+> blanket statement about every send this hardware ever answered. The full
+> per-send inventory, with sources, is the table immediately below.
+
+#### Re-derivation: every send, decoded under the bitfield rule (fix-2 Task 1, 2026-08-06)
+
+Two evidence sources, of very different quality. **[S1] has NO raw trace**:
+its ledger records a bare status-byte value in prose for most sends (enough
+to decode frame status/slave state/toggle, but not the surrounding frame —
+no checksum, no echoed command IDs to cross-check), one send with a
+genuinely partial hex (the accepted single-interval command block, not an
+ack), and several sends where not even the byte was written down ("3
+DISTANCE intervals → rejected" carries no byte at all). **[S2] has four
+`exportLog()` dumps** (raw frames, full hex) plus a long stretch of
+narrative-only console output between dumps 2 and 3 where **roughly six
+sends' bytes were never captured** — four `program-two-time` retries and
+one `program-no-rest` retry, all logged only as `ProgramRejectionError`
+text under the OLD (buggy) parse, with no byte recorded. One of the four
+`program-two-time` retries is the **only send this project ever made to a
+PM parked in `WorkoutLogged`** — it fires immediately after a
+`workoutComplete` event, exactly where Appendix E parks a naturally-
+finished workout (§19.4). (The design spec's own text says "the three
+`program-two-time` sends between dumps 2 and 3" — the raw log shows FOUR,
+not three; recorded here as found, not silently reconciled to the spec's
+count. The WorkoutLogged identification is unaffected either way.)
+
+**Source key:** RAW = full frame captured via `exportLog()`, byte value
+verifiable independently of the driver's own labelling. NARR = a bare
+status-byte value written down in prose (session narrative or live console
+tail), not a captured frame. NARR-NB = narrative with **no byte at all** —
+the old parse's accept/reject label is all that survives, undecodable.
+
+| Session | Send | Src | Raw status byte | Frame status (`&0x30`) | Slave state (`&0x0F`) | Toggle (`&0x80`) | What the send was |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| S1 | 1 TIME interval, idle/armed | NARR | `0x01` | ok | ready (1) | false | SetProgram accepted; monitor showed "a 1 min workout loaded" |
+| S1 | 2 TIME intervals, sent right after #1 (still loaded) | NARR | `0x81` | **ok** (old parse: reject) | ready (1) | true | SetProgram — **accepted**; monitor immediately showed an EMPTY `:00`/`:00` session — see Verdict (a) |
+| S1 | 3 DISTANCE intervals (pre-A/B exploration) | NARR-NB | unknown | unknown | unknown | unknown | old parse logged "rejected"; no byte survives to re-derive |
+| S1 | 25 DISTANCE intervals (pre-A/B exploration) | NARR-NB | unknown | unknown | unknown | unknown | old parse logged "rejected"; no byte survives to re-derive |
+| S1 | (several unlogged sends, same single-interval frame) | NARR-NB | alternating `0x01`/`0x81` (exact sequence not preserved) | ok (both values) | ready (1, both values) | alternates | the "whole session alternating accept/reject/accept/reject" the ledger describes generally — every value in the alternation decodes ok; this is the toggle, not the machine changing its mind (§19.2) |
+| S1 | mid-JustRow (user rowing, unprogrammed) | NARR | `0x01` | ok | ready (1) | false | SetProgram accepted at the CSAFE level; **nothing programmed** (James read the monitor) — Verdict (c) |
+| S1 | mid-JustRow (same command/screen, different send) | NARR | `0x81` | **ok** (old parse: reject) | ready (1) | true | SetProgram; **nothing programmed** — Verdict (c) |
+| S1 | CLEAN RUN 2: terminate, nothing loaded | NARR-NB | unknown | unknown | unknown | unknown | old parse logged "rejected — nothing to terminate"; no byte recorded |
+| S1 | CLEAN RUN 2: 2×(1:00 work/0:30 rest) | NARR-NB | unknown (narrative says only "accepted") | unknown | unknown | unknown | landed; rowed to completion; produced the D3 phantom `index: 2` (§19.8) — this is the SAME program shape [S2]'s Dump 1 repeats with full hex, below |
+| S2 D1 | terminate (standalone `terminate()`, NOT `program()`'s internal step — this build has none) | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"terminate-sent"`, not `"clear-sent"` — the naming difference IS the "no clear step" provenance marker for this build |
+| S2 D1 | SetProgram 2×TIME (60s/30s rest), 1st send | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | accepted |
+| S2 D1 | SAME SetProgram re-sent while erg already rowing (frame at seq13: `state=rowing elapsed=0.98`) | RAW | `f1 09 76 0e … 63 f2` → `0x09` | **ok** (old parse: `program-rejection`) | **OFFLINE (9)** | false | accepted at the CSAFE level, **no effect** — the erg is being rowed outside master control; raw-byte confirmation of the OFFLINE no-op mechanism cited in Verdict (c) |
+| S2 D1 | (build provenance) | — | — | — | — | — | older build than D2-D4: no clear step (above), `interval-complete` logged as bare `"index=2"` with no "(machine reported N)" suffix, `avgHeartRateBpm: 0` reaches the event (not null) — see the provenance note below the table |
+| S2 D2 | terminate (`program()`'s internal step), 1st attempt | RAW | `f1 81 76 01 13 e5 f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | accepted; old parse retried it as if rejected |
+| S2 D2 | terminate, retry (same command re-sent) | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
+| S2 D2 | SetProgram 2×TIME (60s/30s rest) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | accepted |
+| S2 gap | `program-two-time` retry #1 (state=armed) | NARR-NB | unknown | unknown | unknown | unknown | old parse: `ProgramRejectionError: PM5 rejected frame 0`; no byte captured (live console tail, not an `exportLog()` dump) |
+| S2 gap | `program-two-time` retry #2 (state=armed) | NARR-NB | unknown | unknown | unknown | unknown | same as above |
+| S2 gap | *(two `intervalComplete` events, `index: null`, then `workoutComplete` — a JustRow-shape row outside any driver-opened run)* | — | — | — | — | — | out-of-run boundaries, correctly `index: null` |
+| S2 gap | `program-two-time` retry #3 — sent IMMEDIATELY after `workoutComplete` | NARR-NB | unknown | unknown | unknown | unknown | **the only send this project ever made to a PM parked in `WorkoutLogged`**; old parse: `ProgramRejectionError`; no byte captured |
+| S2 gap | *(two reconnects, no sends)* | — | — | — | — | — | — |
+| S2 gap | `program-two-time` retry #4 (state=armed, post-reconnect) | NARR-NB | unknown | unknown | unknown | unknown | old parse: `ProgramRejectionError`; no byte captured |
+| S2 gap | *(state jumps `armed` → `terminated` with no rowing shown in the console tail)* | — | — | — | — | — | — |
+| S2 gap | `program-no-rest` retry #1 | NARR-NB | unknown | unknown | unknown | unknown | old parse: `ProgramRejectionError`; no byte captured; immediately followed by the `dump` command that produced Dump 3 |
+| S2 D3 | terminate | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"`; fresh ring since the last reconnect, accepted first try |
+| S2 D3 | SetProgram 2×TIME, **rest = 30s** (`… 02 00 1e 06 04 …`) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | **accepted**; not rowed — the ring's next entry is `state=terminated` with no intervening rowing/resting frame |
+| S2 D3 | terminate, 2nd cycle | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
+| S2 D3 | SetProgram 2×TIME, **rest = 0** (`program-no-rest`, `… 02 00 00 06 04 …`) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | **accepted** — **byte-identical ack to the rest-30 send above** (the echo carries command IDs, not parameter values, so this pair CANNOT by itself distinguish "replaced" from "was already the same") |
+| S2 gap | *(the row: continuous `state=rowing` from `elapsed=0` through `elapsed≈60`, `intervalComplete` at `elapsed:60`, then the VERY NEXT frame resets `elapsed` to 0 with `state` still `"rowing"` — NO `"resting"` state anywhere in this stretch)* | — | — | — | — | — | **the discriminating evidence for Verdict (b)** — see below |
+| S2 D4 | terminate | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
+| S2 D4 | SetProgram 2×TIME, rest = 0 | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | accepted; another terminate+re-program cycle |
+| S2 D4 | *(no send — first no-rest work→work boundary)* | — | — | — | — | — | `interval-complete: "index=null (machine reported 1)"`; `divergence: intervalIndex=0 (0x0033) vs actual.index=1 (0x0037/38)` — answers §17 item 13 (§19.8); **no raw hex for this boundary** — only the decoded log line (§5's no-raw-hex caveat) |
+
+**Dump 1's build provenance, stated plainly:** it predates dumps 2-4 within
+the SAME [S2] log (the harness was rebuilt mid-session). Evidence: (1) its
+terminate is logged `"terminate-sent"` (the standalone `terminate()` call)
+rather than `"clear-sent"` (the label `program()`'s own internal prepare
+step uses in every later dump) — this build's `program()` had no internal
+clear step, so the harness called `terminate()` and the program write as
+two separate dispatched actions; (2) its `interval-complete` reads bare
+`"index=2"` with no "(machine reported N)" diagnostic suffix, unlike D4's
+`"index=null (machine reported 1)"`; (3) its `intervalComplete` carries
+`avgHeartRateBpm: 0` (not `null`), i.e. pre-dates §19.9's both-sentinels
+mapping reaching this code path; (4) that same `intervalComplete` (`index:
+2`, the D3 phantom third index) is the exact shape `ba180c3` later fixed —
+a boundary whose two halves (0x0037/0x0038) were paired without checking
+they name the same boundary. **The index byte (`2`) is a wire fact — the
+machine really did send that Split/Interval Number on the wire — but
+nothing else about that combined event (its averages, its pairing with a
+particular 0x0038) is trustworthy evidence post-`ba180c3`,** since the old
+pairing logic could have combined halves from different boundaries. This
+caveat is carried into §19.8 below.
+
+**Verdict (a) — the `:00` empty display: STANDING OPEN, not explained.**
+The table's second [S1] row is the only human reading across this exact
+transition: idle/armed, a 1-interval program lands (`0x01`), James reads
+"a 1 min workout" on the monitor, a 2-interval program is sent immediately
+after (`0x81`), and James reads an EMPTY session, `:00` time and `:00`
+split. Under the corrected parse `0x81` is an ACCEPT
+(`(0x81 & 0x30) === 0x00`), not the reject the old code reported — so the
+old explanation ("a rejection wipes the display") is gone, and nothing in
+hand replaces it. What we do NOT have: the full frame for that specific
+send (narrative-only, no echoed command IDs to cross-check against what
+actually got programmed); a `SetScreenState`/`GetScreenStateStatus` read at
+the moment James looked (§19.6 documents the ack as "queued", not "done" —
+a candidate TIMING explanation, but nothing here confirms the screen was
+still catching up rather than genuinely empty); and no repeat of this exact
+transition in [S2] to corroborate or refute it (S2's own program-over-loaded
+sequence, Verdict (b) below, shows the SECOND program landing correctly,
+not an empty screen). Forcing a conclusion here would outrun the evidence;
+this stays UNRESOLVED per the design spec's own instruction, and 7B's
+"prove the monitor idle before programming" requirement is independently
+justified regardless of how this resolves.
+
+**Verdict (b) — program-over-loaded: WORKS.** The byte-identical repeat
+sends (any two `0x81` acks in the table, e.g. [S2] D3's rest-30 and rest-0
+programs) cannot be the evidence — the ack echoes command IDs, not
+parameter values, so an unchanged program would ack identically to a
+replaced one. The discriminating evidence is BEHAVIOURAL, from the table's
+[S2] D3→gap→D4 sequence: D3 sent a 2×TIME/rest-30 program (accepted,
+`0x81`), then — without reconnecting — a 2×TIME/**rest-0** program over it
+(also accepted, byte-identical `0x81`). The row that followed (captured
+live, not in an `exportLog()` dump) shows continuous `state=rowing` from
+`elapsed=0` through `elapsed≈60`, an `intervalComplete` at the 60s mark,
+and the very next frame resetting `elapsed` to 0 while `state` stays
+`"rowing"` — **no `"resting"` state anywhere in the transition.** Had the
+rest-30 program still been active, a ~30s resting interval would have
+intervened. Its absence is direct behavioural proof the rest-0 program
+REPLACED the rest-30 one, not merely that the same program was resent. This
+confirms the design spec's own anticipated outcome (§3: "if §Re-derivation
+additionally shows program-over-loaded works without the [clear/prepare]
+step, that is recorded as robustness, not grounds for removal") — it does
+not argue for removing the prepare step, and does not touch §5's minus-1
+scoping.
+
+**Verdict (c) — D2's silent no-op: SURVIVES.** "An ack does not mean a
+program landed" is not a casualty of the bitfield fix: `0x01` is an accept
+under BOTH the old whole-byte compare and the corrected bitfield parse
+(`(0x01 & 0x30) === 0x00`), so [S1]'s mid-JustRow `0x01` send — accepted,
+nothing programmed, James confirmed on the monitor — reads the same way
+either way. The documented mechanism the design spec cites (slave state
+OFFLINE, "user starts workout before equipment is configured", §19.3) has
+DIRECT raw-byte confirmation in this table: [S2] Dump 1's second
+SetProgram send, re-sent after the frame stream already showed
+`state=rowing elapsed=0.98`, acked `0x09` — `(0x09 & 0x30) === 0x00` (ok)
+with slave state `9` (OFFLINE). The CSAFE frame validated; the erg was
+already being rowed outside master control; nothing programmed. [S1]'s own
+mid-JustRow sends do not have a full captured byte to confirm slaveState
+directly (only the bare value `0x01`/`0x81`, which decode to slave state
+`ready`, not `offline` — the CSAFE communications task and the erg's own
+workout-state machine are documented as decoupled, §19.6, so this is not a
+contradiction, just a gap this table does not paper over). The GENERAL
+claim survives either way: an accepted frame is a statement about frame
+validity, not about a workout being loaded, and `verifyArmed` staying in
+`program()` is justified on exactly this evidence.
 
 ### 19.2 D1 ("accepts only when nothing is loaded") and D2 ("identical bytes, both accept and reject") — **OUR BUG**, both
 
@@ -1861,18 +2019,37 @@ design spec, and in the roadmap as machine behaviour, and they were not.**
 
 What survives, and what does not:
 
+> **CORRECTION (2026-08-06, fix-2, §19.2): the "Does NOT survive" line
+> wrongly included "an ack of `0x01` does not mean a program landed."**
+> That observation is NOT built on a reject-that-was-actually-an-accept —
+> `0x01` is an accept under BOTH the old whole-byte compare and the
+> corrected bitfield parse. It never depended on the mislabelling this
+> section otherwise corrects, so the bitfield fix changes nothing about it.
+> It belongs in a "SURVIVES" bullet, not "Does NOT survive". See §19.1's
+> re-derivation table, Verdict (c), for the raw-byte-confirmed mechanism
+> (slave state OFFLINE) and the corrected list below.
+
 - **Does NOT survive:** "the PM accepts a program only when nothing is
-  loaded"; "a rejection wipes what was loaded"; "an ack of `0x01` does not
-  mean a program landed"; "`terminate()` is not a reliable clear because
-  the following program was rejected twice". Each rests on at least one
-  reject that was actually an accept.
+  loaded"; "a rejection wipes what was loaded"; "`terminate()` is not a
+  reliable clear because the following program was rejected twice". Each
+  rests on at least one reject that was actually an accept.
+- **SURVIVES:** "an ack of `0x01` does not mean a program landed."
+  [S1]'s mid-JustRow send acked `0x01` — an accept either way — and
+  programmed nothing (James read the monitor). The mechanism, per
+  §19.3/§19.1's re-derivation (Verdict (c)): mid JustRow the PM can be in
+  slave state OFFLINE, "user starts workout before equipment is
+  configured" — not under CSAFE master control. An `"ok"` frame status is
+  a statement about frame validity, not about a workout being loaded. This
+  is why `verifyArmed` stays in `program()`, for the reason now stated
+  correctly.
 - **Genuinely still open:** James read an empty `:00` session off the
   monitor after a 2-interval send during [S1]. *Something* emptied that
   display. What it was is now **UNRESOLVED** — it can no longer be
   attributed to "a rejection wipes it", because there was no rejection.
   Programming over a live/loaded workout remains the prime suspect, and 7B's
   "prove the monitor idle before programming" requirement stands on its own
-  merits regardless.
+  merits regardless. (§19.1's re-derivation, Verdict (a), lays out what was
+  and was not checked before leaving this open.)
 - **Also still true:** verifying a program against the machine's own
   reported state rather than against the ack is good engineering and stays.
   Its stated justification changes — an ack now means what CSAFE says it
@@ -1982,7 +2159,7 @@ minute after the end (the revised recovery-HR summary, §19.9). A driver that
 wants to keep working after `workoutComplete` should send terminate and
 carry on, not drop the connection.
 
-### 19.5 No command clears a loaded workout — **REAL PM5 BEHAVIOUR, DOCUMENTED**
+### 19.5 No command clears a loaded workout — **DOCUMENTED ABSENCE** (relabelled)
 
 **What we observed.** §15 #7 and §17 item 6 flagged the missing wipe/reset
 as an open question; `commands.ts` asserts twice that no such command
@@ -2027,8 +2204,32 @@ The only documented way to change what workout is loaded remains
 "program a new one" — accumulate `Set*` commands and commit with
 `SetProgram`, which overwrites.
 
-**Verdict: REAL PM5 BEHAVIOUR, DOCUMENTED.** No clear command exists; the
-absence is deliberate, and Rearm is the reason.
+> **CORRECTION (2026-08-06, fix-2, §19.5): the verdict label misapplied
+> REAL-DOCUMENTED to what is actually a documented ABSENCE.** What the
+> sources positively document is the terminate→Rearm transition (Appendix
+> E) and Rearm's own named states — that part is real, documented PM5
+> behaviour. "No clear command exists" is a DIFFERENT kind of claim: an
+> exhaustive-search negative over both PDFs, with two candidates
+> (`CSAFE_RESET_CMD` `0x81`, `SCREENVALUEWORKOUT_GOTOMAINSCREEN` 6)
+> genuinely untested on hardware. A search finding nothing is not the same
+> evidentiary class as a source stating a behaviour outright; the section
+> heading is relabelled to make that distinction visible rather than
+> folding both into one verdict tag.
+>
+> **The WorkoutLogged asymmetry, recorded here as well as in §19.4:**
+> terminate does NOT route through Rearm uniformly. Mid-workout, terminate
+> gives `…->Terminate->Rearm->WaitToBegin` (Appendix E). But terminate from
+> `WorkoutLogged` (a naturally-finished workout, §19.4) goes **straight to
+> `WaitToBegin`**, with no Rearm step — the two exits differ in shape, not
+> just in name, and `program()`'s leading terminate (§3) has to work
+> correctly from either starting state.
+
+**Verdict: the terminate→Rearm transition is REAL PM5 BEHAVIOUR,
+DOCUMENTED; "no clear command exists" is a DOCUMENTED ABSENCE** (an
+exhaustive negative search, not a positive behavioural citation) with two
+untested candidates and one confirmed asymmetry (WorkoutLogged's exit
+skips Rearm). Rearm is the reason a clear command was never going to exist:
+the designed post-terminate destination is the SAME workout, re-armed.
 
 ### 19.6 `SetScreenState`'s ack means "queued", not "done" — **REAL PM5 BEHAVIOUR, DOCUMENTED**
 
@@ -2173,6 +2374,40 @@ the rest-keyed rule is WRONG there** — and the `index-unverified` log entry
 above, which exists to make the assumption visible rather than silent, did
 its job: it fired on the very boundary that disproves the assumption.
 
+> **CORRECTION (2026-08-06, fix-2, §19.8): two caveats added, per the
+> fix-2 re-derivation (§19.1).**
+>
+> **Build provenance on the `index: 2` phantom-third reading.** The raw
+> bytes cited above (`{"kind":"intervalComplete","actual":{"index":2,…}}`
+> off `0x0037 1e 19 00 95 07 …`) come from [S2]'s Dump 1, which the
+> re-derivation identifies as an OLDER BUILD than the rest of [S2] — no
+> internal clear/prepare step, `interval-complete` logged without a
+> "(machine reported N)" diagnostic, `avgHeartRateBpm: 0` reaching the
+> event uncorrected — AND, separately, the exact shape `ba180c3` later
+> fixed: a boundary whose two halves (0x0037/0x0038) were paired without
+> checking they name the same boundary. **The index byte (`2`) itself is a
+> wire fact** — the machine genuinely put that value on the wire, and it is
+> what makes this a corroborating SECOND reading of forward attribution
+> alongside [S1]'s. But nothing else in that combined event (its averages,
+> which particular 0x0038 it was paired with) should be treated as
+> independently reliable evidence, since the pairing logic that produced it
+> is the one `ba180c3` replaced.
+>
+> **The pairing-gate and no-raw-hex caveats, for the no-rest boundary
+> (`0x0037` reporting `1`, [S2] Dump 4).** Since `ba180c3`, the driver's own
+> pairing gate REQUIRES a 0x0037/0x0038 pair to name the same boundary
+> before emitting an actual — so "both halves agree" for this reading is
+> now ENFORCED by the driver, not independently EVIDENCED by two
+> free-standing observations that happened to match. And the boundary's raw
+> hex was never captured: only `notify-first` logs a characteristic's first
+> raw payload, so this specific boundary's re-derivation cites the decoded
+> log line (`"interval-complete","detail":"index=null (machine reported
+> 1)"` / the `divergence` entry) rather than a captured frame. Both facts
+> are honestly disclosed, not fatal to the finding: the gate enforcing
+> agreement is a correctness improvement, not a source of false agreement,
+> and the decoded log line is itself driver output over a real BLE
+> notification, not a fabrication.
+
 ### 19.9 Heart-rate sentinels — **REAL PM5 BEHAVIOUR, DOCUMENTED** (and our handling is right for the wrong stated reason)
 
 **What we observed.** [S1], D5: with no belt paired, `avgHeartRateBpm: 0`
@@ -2210,12 +2445,31 @@ heart rate as
 than trusting "255=invalid" alone. c2forum reports of a PM5 showing 0 during
 belt acquisition are consistent (anecdotal, weak).
 
+> **CORRECTION (2026-08-06, fix-2, §19.9): the restated justification above
+> still leans on the wrong argument.** "The sources distinguish them
+> per-field, and defensive clients show both values in the wild" is
+> corroborating, not load-bearing — §15 #2 is explicitly double-edged (a
+> per-field convention cuts against generalizing 0x0039's `0`-sentinel to
+> 0x0032/0x0038 just as much as it supports it), and per-field citations
+> alone cannot justify mapping BOTH sentinels on all three fields at once.
+> The argument that actually carries the weight is the one already in
+> `domain/monitor/pm5/parse.ts`'s own doc comment (`HEARTRATE_NO_BELT`,
+> field-independent, not per-field): **no heart-rate field on this machine
+> can carry a true `0` or a true `255` — a rower producing zero beats per
+> minute is not a rower, and 255 bpm is equally unreachable** — so mapping
+> both to `null` can never discard a genuine measurement on ANY of the
+> three heart-rate fields this module decodes, independent of which
+> sentinel any one document happens to state for that field. The per-field
+> citations and the `ergarcade/pm5-base` behavioural evidence remain useful
+> corroboration; they are not the reason.
+
 **Verdict: REAL PM5 BEHAVIOUR, DOCUMENTED.** Keep the both-map-to-null
-behaviour; correct its stated justification from "no source distinguishes
-them" to "the sources distinguish them per-field, and defensive clients
-(and this hardware) show both values in the wild". `statusFrames.ts`
-continuing to ENCODE `null` as the documented `255` also stays right — one
-encoder cannot write two sentinels for one state.
+behaviour. Its justification is the FIELD-INDEPENDENT argument above (no
+rower has an HR of 0 or 255, on any of the three fields), corroborated —
+not established — by the per-field sentinel citations and by
+`ergarcade/pm5-base` treating both values as no-data in the wild.
+`statusFrames.ts` continuing to ENCODE `null` as the documented `255` also
+stays right — one encoder cannot write two sentinels for one state.
 
 **One thing we are not doing.** Belt presence has its own query and is not
 inferable from the HR value: `CSAFE_PM_GET_HRM` (`0x84`) returns "Byte 0:
