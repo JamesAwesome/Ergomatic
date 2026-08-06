@@ -290,9 +290,10 @@ export interface DriverOptions {
    * The documented fix is polling `CSAFE_PM_GET_SCREENSTATESTATUS` until
    * `_INACTIVE` — NOT built here, deliberately (design spec §7): that GET
    * lives in the same unconfirmed pull-command space as
-   * `buildGetErrorType` (interface-notes.md §17's pull-path item). This
-   * settles for the document's own WEAKER fallback instead — "delay
-   * sufficiently long (e.g. 1 second or more)" — expressed as a tick
+   * `buildGetErrorType` (interface-notes.md §17 item 14, the pull-path
+   * wrapper question). This settles for the document's own WEAKER
+   * fallback instead — "delay sufficiently long (e.g. 1 second or more)"
+   * — expressed as a tick
    * count rather than a literal wall-clock second, same "no wall clock,
    * ever" rule as every other tick budget in this file.
    *
@@ -306,11 +307,41 @@ export interface DriverOptions {
    * this hazard.
    */
   settleTicks?: number;
+  /**
+   * Bounds `sendGetErrorType`'s own reply wait (Task 3 review,
+   * IMPORTANT-1) in GENERAL_STATUS_UUID ticks — ALWAYS ACTIVE, unlike
+   * `ackTimeout`'s bound on every OTHER write, which only counts when the
+   * caller opts in. A genuine reject fires `GetErrorType` unconditionally
+   * (`sendSequence`'s own `fetchErrorTypeOnNak` gate), so an operator who
+   * never configured `ackTimeout` (the real call site, `pm5-lab.ts`, only
+   * ever passes `verifyTicks`) would otherwise have NO bound on this one
+   * wait — proven by the review: a stub transport, no `ackTimeout`, a
+   * genuine `0x11` reject, and the outer rejection never settles. The
+   * wrapper is itself unconfirmed (`buildGetErrorType`'s own doc
+   * comment's 0x1A-vs-0x7F conflict), and CSAFE-DEF p.10 says a slave
+   * "merely disregards" an unrecognized command — so a real PM may simply
+   * never reply at all, making an unbounded wait a LIKELY hang, not a
+   * theoretical one.
+   *
+   * Same principle as `settleTicks` (that field's own doc comment):
+   * omitting this is never "no bound" — it means the default, `3`. On
+   * expiry, `sendGetErrorType` logs the same `"no reply (ack-timeout)"`
+   * marker a configured `ackTimeout` would have produced, and the ORIGINAL
+   * `"nak"` rejection proceeds exactly as it would have without
+   * `GetErrorType` at all — this bound only stops the wait from hanging,
+   * it never changes the outer outcome.
+   */
+  errorTypeTicks?: number;
 }
 
 /** `DriverOptions.settleTicks`'s own default — see that field's doc
  *  comment for why "omitted" means this number, not "no bound". */
 const DEFAULT_SETTLE_TICKS = 3;
+
+/** `DriverOptions.errorTypeTicks`'s own default — same rationale as
+ *  `DEFAULT_SETTLE_TICKS`, a separate constant so the two budgets can
+ *  diverge independently if a future finding ever needs them to. */
+const DEFAULT_ERROR_TYPE_TICKS = 3;
 
 export function createPm5Driver(
   t: Transport,
@@ -449,6 +480,17 @@ export function createPm5Driver(
     ticks: number;
     ticksNeeded: number;
   } | null = null;
+  /** Task 3 review, IMPORTANT-1: registered ONLY while `sendGetErrorType`'s
+   *  own `awaitAck()` is outstanding — an ALWAYS-ACTIVE bound, independent
+   *  of whether the caller configured `options.ackTimeout` (see
+   *  `DriverOptions.errorTypeTicks`'s own doc comment for why an unbounded
+   *  wait here is a likely hang, not a theoretical one). Counted on the
+   *  same raw GENERAL_STATUS_UUID subscription as `pendingSettle` (below),
+   *  which resolves `pendingAck` directly with `"ack-timeout"` on expiry —
+   *  the exact same outcome a configured `ackTimeout` would have produced,
+   *  so `sendGetErrorType` needs no extra branch to tell the two apart. */
+  let pendingErrorTypeTimeout: { ticks: number; ticksNeeded: number } | null =
+    null;
   /** Discards anything left in `pendingAckBuffer` from a PREVIOUS, already-
    *  resolved sequence — see the buffer's own comment for why a leftover
    *  here is never a legitimate answer to a NEW sequence's first frame.
@@ -1029,22 +1071,43 @@ export function createPm5Driver(
   );
 
   // `terminate()`'s settle-wait tick pulse (design spec §7, interface-
-  // notes.md §19.6) — a RAW subscription, deliberately NOT routed through
-  // `mergeStatus`: that helper's own `if (terminalLatched) return` gate
-  // would swallow exactly the ticks this needs, since terminate()'s own
-  // ack is usually what CAUSES `terminalLatched` to become true (the very
-  // next status tick reports "terminated") — every tick after the first
-  // would otherwise never reach a counter placed inside `mergeStatus`'s
-  // gated callback. No decode needed either: this only counts arrivals,
-  // it never reads a field, so a garbled General Status notification
-  // still proves the radio is alive and still counts as a tick.
+  // notes.md §19.6) AND `sendGetErrorType`'s always-active reply bound
+  // (Task 3 review, IMPORTANT-1) — a RAW subscription, deliberately NOT
+  // routed through `mergeStatus`: that helper's own
+  // `if (terminalLatched) return` gate would swallow exactly the ticks
+  // the settle wait needs, since terminate()'s own ack is usually what
+  // CAUSES `terminalLatched` to become true (the very next status tick
+  // reports "terminated") — every tick after the first would otherwise
+  // never reach a counter placed inside `mergeStatus`'s gated callback.
+  // The SAME independence is valuable for `pendingErrorTypeTimeout`, even
+  // though it fires earlier in the lifecycle (before any program is ever
+  // armed) — one raw subscription is simpler than two, and neither
+  // counter needs a decode: this only counts arrivals, it never reads a
+  // field, so a garbled General Status notification still proves the
+  // radio is alive and still counts as a tick.
   t.subscribe(GENERAL_STATUS_UUID, () => {
-    if (!pendingSettle) return;
-    pendingSettle.ticks += 1;
-    if (pendingSettle.ticks >= pendingSettle.ticksNeeded) {
-      const resolve = pendingSettle.resolve;
-      pendingSettle = null;
-      resolve();
+    if (pendingSettle) {
+      pendingSettle.ticks += 1;
+      if (pendingSettle.ticks >= pendingSettle.ticksNeeded) {
+        const resolve = pendingSettle.resolve;
+        pendingSettle = null;
+        resolve();
+      }
+    }
+    // Only counts while a real ack is still outstanding — if the
+    // configured `options.ackTimeout` (a SEPARATE, opt-in bound on the
+    // very same `pendingAck`) already fired first, `pendingAck` is
+    // already `null` here and this is a no-op, never a double-resolve.
+    if (pendingErrorTypeTimeout && pendingAck) {
+      pendingErrorTypeTimeout.ticks += 1;
+      if (
+        pendingErrorTypeTimeout.ticks >= pendingErrorTypeTimeout.ticksNeeded
+      ) {
+        const resolve = pendingAck;
+        pendingAck = null;
+        pendingErrorTypeTimeout = null;
+        resolve("ack-timeout");
+      }
     }
   });
 
@@ -1166,29 +1229,43 @@ export function createPm5Driver(
    * self-describing, and "the Master must issue a PM-specific
    * GetErrorType command to determine the specific error information".
    *
-   * Reuses the SAME `awaitAck()`/`pendingAck` queue and `ackTimeout` tick
-   * policy every other write goes through — 0xC8's reply arrives on the
-   * SAME characteristic (0x0022) every other ack does, so there is no
-   * need for a second waiting mechanism. Logged as kind `"error-type"`,
-   * RAW HEX ONLY (`buildGetErrorType`'s own doc comment: the pull path's
-   * decode is unconfirmed, interface-notes.md §17's pull-path item) — no
-   * claim is ever made about what the bytes MEAN, only what they WERE. No
-   * retries: a second reject here would just be more of the same
-   * unconfirmed signal, never new information. The CSAFE-DEF Table 10
-   * ≥50ms inter-frame gap (cited via interface-notes.md §19) is already
-   * satisfied by the BLE round trip the FAILED frame's own ack took —
-   * nothing here adds a wall-clock delay of any kind.
+   * Reuses the SAME `awaitAck()`/`pendingAck` queue every other write goes
+   * through — 0xC8's reply arrives on the SAME characteristic (0x0022)
+   * every other ack does — but does NOT rely on the caller's OPT-IN
+   * `options.ackTimeout` for its own bound: `DriverOptions.errorTypeTicks`
+   * (default 3, that field's own doc comment) is ALWAYS active,
+   * independent of whatever `ackTimeout` is or isn't configured (Task 3
+   * review, IMPORTANT-1 — proven on review with a stub transport, no
+   * `ackTimeout`, and a genuine reject: the outer rejection never settled
+   * without this). Logged as kind `"error-type"`, RAW HEX ONLY
+   * (`buildGetErrorType`'s own doc comment: the pull path's decode is
+   * unconfirmed, interface-notes.md §17 item 14) — no claim is
+   * ever made about what the bytes MEAN, only what they WERE, or that
+   * none arrived. No retries: a second reject here would just be more of
+   * the same unconfirmed signal, never new information. The CSAFE-DEF
+   * Table 10 ≥50ms inter-frame gap (cited via interface-notes.md §19) is
+   * already satisfied by the BLE round trip the FAILED frame's own ack
+   * took — nothing here adds a wall-clock delay of any kind.
    *
-   * Never throws: whatever this observes (a reply, a timeout, or a
+   * Never throws: whatever this observes (a reply, either timeout, or a
    * disconnect) is logged and this simply returns — the caller's own
    * `"nak"` rejection is unconditional and unaffected either way.
    */
   async function sendGetErrorType(): Promise<void> {
+    pendingErrorTypeTimeout = {
+      ticks: 0,
+      ticksNeeded: options.errorTypeTicks ?? DEFAULT_ERROR_TYPE_TICKS,
+    };
     const ackPromise = awaitAck();
     for (const chunk of chunkFrames([buildGetErrorType()])) {
       await t.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     const outcome = await ackPromise;
+    // Cleared regardless of which path resolved `outcome` — a real reply,
+    // a disconnect, `options.ackTimeout` (if configured), or this
+    // function's own always-active bound above all funnel through the
+    // same `pendingAck`, and none of them leave anything else to time out.
+    pendingErrorTypeTimeout = null;
     log.record(
       "error-type",
       outcome === "disconnected" || outcome === "ack-timeout"
@@ -1485,7 +1562,7 @@ export function createPm5Driver(
     // deliberately NOT built — its pull-command wrapper is itself an
     // unresolved conflict between the two source documents, the same one
     // `buildGetErrorType` cites at its own definition (interface-notes.md
-    // §17's pull-path item).
+    // §17 item 14).
     async terminate(): Promise<void> {
       await sendSequence(buildTerminate(), "terminate-sent");
       await settleAfterTerminate();
