@@ -14,6 +14,7 @@ import {
   loadMonitorRun,
   clearMonitorRun,
   createMonitorRun,
+  recordActual,
   anyLiveSession,
   MONITOR_RUN_KEY,
   type MonitorRun,
@@ -356,6 +357,65 @@ describe("createMonitorRun", () => {
       ),
     ).not.toThrow();
     expect(loadRun()).toBeNull();
+  });
+});
+
+describe("recordActual: actuals accumulate only while the run is open (Phase 7A-fix-2 Task 4, spec §4)", () => {
+  beforeEach(() => localStorage.clear());
+
+  const actual2: IntervalActual = {
+    index: 1,
+    elapsedSeconds: 448,
+    distanceMeters: 2000,
+    avgSplit: 112,
+    avgSpm: 25,
+    avgHeartRateBpm: 158,
+  };
+
+  it("appends to a LIVE run, in arrival order, and persists the result", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+
+    const afterFirst = recordActual(run, actual1);
+    const afterSecond = recordActual(afterFirst, actual2);
+
+    expect(afterSecond.actuals).toStrictEqual([actual1, actual2]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(afterSecond));
+    // A new record each time — the caller's own copy is never reached back
+    // into (`session/engine.ts`'s idiom).
+    expect(run.actuals).toStrictEqual([]);
+    expect(afterFirst.actuals).toStrictEqual([actual1]);
+  });
+
+  it("a CLOSED run is immutable: the same actual arriving after completedAt changes nothing, in memory or in storage", () => {
+    // The record-side half of the run scoping. The driver already refuses
+    // to normalize a post-run boundary into a finished workout (it emits
+    // `index: null` + `boundary-out-of-run`), but a `MonitorRun` outlives
+    // the driver instance that produced it, so the record refuses on its
+    // own terms too. Against a `recordActual` without the guard, both
+    // assertions below fail — the actual lands in a finished workout's
+    // record and gets persisted there.
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: [actual1],
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    saveMonitorRun(closed);
+
+    const after = recordActual(closed, actual2);
+
+    expect(after).toBe(closed);
+    expect(after.actuals).toStrictEqual([actual1]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
+  });
+
+  it("refuses a closed run that was TERMINATED just the same — 'closed' is completedAt, not how it ended", () => {
+    const terminated: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+      terminated: true,
+    };
+    expect(recordActual(terminated, actual1).actuals).toStrictEqual([]);
   });
 });
 

@@ -52,6 +52,13 @@ export interface MonitorRun {
   // `actuals`
   // shorter than `program.intervals`, so array position and program
   // interval also do not correspond 1:1.
+  //
+  // Grows ONLY through `recordActual` below, and ONLY while the run is
+  // live (`completedAt === null`) — spec §4's "the record is immutable
+  // afterwards". A boundary the machine reports after this run closed is
+  // not this run's (`domain/monitor/types.ts`'s `MonitorEvent` contract:
+  // it arrives with `index: null` plus a `boundary-out-of-run` log), and
+  // never lands here.
   actuals: IntervalActual[];
   deviceName: string;
   startedAt: string;
@@ -163,6 +170,41 @@ export function createMonitorRun(
   clearRun();
   saveMonitorRun(run);
   return run;
+}
+
+/**
+ * Appends one interval boundary's actual to a live run, persisting the
+ * result — the record-side half of Task 4's run scoping (spec §4: "within
+ * an open run: actuals accumulate ... the record is immutable
+ * afterwards"), and the function 7B's event wiring appends through when it
+ * sees a `MonitorEvent` of kind `intervalComplete`.
+ *
+ * **A CLOSED run is immutable: this returns it UNCHANGED and persists
+ * nothing.** `completedAt !== null` is what "closed" means on this record
+ * (the same "live" vs "finished but not yet logged" boundary
+ * `MonitorRun.completedAt`'s own comment draws, and the one
+ * `monitorRunState` below already keys off). The driver's own run scoping
+ * is the first line of defence — it emits a post-run boundary with
+ * `index: null` and a `boundary-out-of-run` log rather than an actual
+ * belonging to the finished workout (`domain/monitor/types.ts`'s
+ * `MonitorEvent` contract) — but the record refuses independently, because
+ * the two are separate lifetimes: a `MonitorRun` outlives the driver
+ * instance that produced it (it is in localStorage, and 7C reads it back
+ * on a later screen), so "which run is open" cannot be a fact only the
+ * driver holds.
+ *
+ * Returns a NEW record rather than mutating in place, matching
+ * `session/engine.ts`'s own idiom for `SessionRun` updates — the caller
+ * holds the result; nothing here reaches back into a caller's copy.
+ */
+export function recordActual(
+  run: MonitorRun,
+  actual: IntervalActual,
+): MonitorRun {
+  if (run.completedAt !== null) return run;
+  const next: MonitorRun = { ...run, actuals: [...run.actuals, actual] };
+  saveMonitorRun(next);
+  return next;
 }
 
 type RecordState = "absent" | "live" | "unlogged";

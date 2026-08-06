@@ -172,6 +172,109 @@ async function programAndArm(
   await pending;
 }
 
+/**
+ * The `stubTransport` counterpart to `programAndArm`: drives one complete
+ * `program()` call by hand — the prepare step's routine refusal, the real
+ * send's `"ok"` ack, then a FRESH post-send "armed" status for
+ * `verifyArmed()` to observe (never a cached one; that is the whole point
+ * of that phase).
+ *
+ * Needed wherever the shared fake cannot go, which since Task 4 includes
+ * the most important case of all: a SECOND `program()` on the same
+ * transport. `transports/fake.ts` models one program per fake — its
+ * `phase` reaches `"armed"` and every write afterwards is asserted against
+ * the terminate sequence alone, so a second programming send throws
+ * "unexpected write while armed". Rewriting the fake is spec §6 / Task
+ * 6's job, deliberately not this task's, so the re-program tests below
+ * drive the protocol by hand instead.
+ */
+async function programViaStub(
+  driver: ReturnType<typeof createPm5Driver>,
+  transport: ReturnType<typeof stubTransport>,
+  p: WorkoutProgram,
+): Promise<void> {
+  const sent = (): number =>
+    transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+      .length;
+  const start = sent();
+  const pending = driver.program(p);
+  await waitUntil(() => sent() > start);
+  // A refusal is the prepare step's expected answer (`sendPrepare`
+  // swallows anything but a disconnect).
+  transport.notify(
+    TRANSMIT_CHARACTERISTIC_UUID,
+    buildAckFrame({ frameStatus: "reject" }),
+  );
+  await waitUntil(() => sent() > start + prepareChunkCount);
+  transport.notify(
+    TRANSMIT_CHARACTERISTIC_UUID,
+    buildAckFrame({ frameStatus: "ok" }),
+  );
+  // Drain until `verifyArmed()` has registered its wait — an "armed"
+  // status delivered before that merges into `raw` and is never counted,
+  // which would hang this helper rather than fail it.
+  for (let i = 0; i < 50; i += 1) await Promise.resolve();
+  transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+  await pending;
+}
+
+/** A General Status payload in an arbitrary machine state — the by-hand
+ *  lifecycles below need more than `ARMED_GENERAL_STATUS` alone. */
+function generalStatusIn(
+  workoutState: number,
+  elapsedSeconds = 0,
+  distanceMeters = 0,
+): Uint8Array {
+  return buildGeneralStatusBytes({
+    elapsedSeconds,
+    distanceMeters,
+    workoutType: 8,
+    intervalType: 0,
+    workoutState,
+    rowingState: 0,
+    strokeState: 0,
+    totalWorkDistanceMeters: distanceMeters,
+    workoutDurationRaw: 0,
+    workoutDurationType: 0,
+    dragFactor: 130,
+  });
+}
+
+/** One half of a boundary, addressed to a specific Split/Interval Number
+ *  and carrying values distinctive enough to tell boundaries apart in an
+ *  assertion. Built through the pm5 encoders, so these are the real bytes
+ *  the driver's own decoders read. (Module-scoped since Task 4 — the
+ *  run-scoping tests need the same two halves the D4 block does.) */
+function splitHalf(boundary: number, seconds: number, meters: number) {
+  return buildSplitIntervalDataBytes({
+    elapsedSeconds: seconds,
+    distanceMeters: meters,
+    splitIntervalTimeSeconds: seconds,
+    splitIntervalDistanceMeters: meters,
+    intervalRestTimeSeconds: 0,
+    intervalRestDistanceMeters: 0,
+    splitIntervalType: 0,
+    splitIntervalNumber: boundary,
+  });
+}
+
+function asSplitHalf(boundary: number, avgSpm: number) {
+  return buildAdditionalSplitIntervalDataBytes({
+    elapsedSeconds: 0,
+    splitIntervalAvgStrokeRate: avgSpm,
+    splitIntervalWorkHeartRateBpm: 150,
+    splitIntervalRestHeartRateBpm: 120,
+    splitIntervalAvgPace: 120,
+    splitIntervalTotalCalories: 0,
+    splitIntervalAvgCalories: 0,
+    splitIntervalSpeedMetersPerSecond: 0,
+    splitIntervalPowerWatts: 0,
+    splitAvgDragFactor: 130,
+    splitIntervalNumber: boundary,
+    ergMachineType: 1,
+  });
+}
+
 function harness(
   script: Parameters<typeof createFakeTransport>[0],
   // Task 3: `terminate()` now waits `settleTicks` GENERAL_STATUS ticks
@@ -842,13 +945,19 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
   });
 });
 
-describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () => {
-  it("terminate() acks, reports terminated, and LATCHES through the PM's own auto Rearm->WaitToBegin cycle", async () => {
-    // Appendix E (CSAFE p.162): after Terminate, the PM auto-cycles
-    // Rearm -> WaitToBegin on its own, with no further driver action —
-    // pinned here by literally scripting that exact sequence as
-    // additional timeline events AFTER terminate() and asserting the
-    // driver never un-finishes.
+describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver does not", () => {
+  it("terminate() acks, reports terminated once, and the PM's own auto Rearm->WaitToBegin cycle re-opens NOTHING — while frames keep flowing", async () => {
+    // Appendix E (CSAFE p.162, interface-notes.md §19.4/§19.5): after
+    // Terminate, the PM auto-cycles Rearm -> WaitToBegin on its own, with
+    // no further driver action — pinned here by literally scripting that
+    // exact sequence as additional timeline events AFTER terminate().
+    //
+    // Task 4 changed what "the driver never un-finishes" is allowed to
+    // cost. It used to mean total deafness (`terminalLatched`): against
+    // that code this test's frame assertions below fail, because ZERO
+    // events of any kind arrived after the terminal state. The run-scoped
+    // rule keeps the protection (no second `terminated`, no numbered
+    // actual for the closed run) while the stream stays live.
     const timeline: FakeTimelineEvent[] = [
       {
         atMs: 100,
@@ -872,7 +981,10 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
         heartRateBpm: null,
         programIntervalIndex: 0,
       },
-      // A boundary event too, to prove intervalComplete is ALSO latched.
+      // A boundary event too — the machine's own post-terminate split
+      // (CSAFE-DEF footnote 12 p.25). It must reach a listener (the
+      // driver is not deaf) but carry NO interval identity: the run it
+      // would otherwise be filed against is closed.
       {
         atMs: 300,
         kind: "boundary",
@@ -904,10 +1016,11 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
 
     expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
     // terminate()'s own final status frame IS a regular "frame" event too
-    // (design choice: the last frame before latching is still observable,
-    // e.g. for a final elapsed/distance summary) — captured here as the
-    // baseline the post-terminal tick below must not add to.
-    const eventCountAfterTerminate = events.length;
+    // (the last frame before the run closes is still observable, e.g. for
+    // a final elapsed/distance summary) — captured here as the baseline
+    // the post-terminal ticks below now ADD to (they used to be swallowed
+    // entirely).
+    const frameCountAtClose = events.filter((e) => e.kind === "frame").length;
     expect(events[events.length - 1]).toStrictEqual({ kind: "terminated" });
 
     // Trace-assertion #2 (distinct from the happy-path test): terminate's
@@ -923,16 +1036,51 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
 
     fake.tick(500); // plays REARM -> WAITTOBEGIN -> the boundary, all post-terminal
 
-    // LATCHED: not one further event of any kind — the terminal state
-    // never un-fires, and no frame/intervalComplete sneaks in from the
-    // PM's own auto Rearm->WaitToBegin cycle or the trailing boundary.
-    expect(events).toHaveLength(eventCountAfterTerminate);
+    // The driver KEEPS CONSUMING: both auto-cycle ticks emit frames, the
+    // way §19.4 says a real PM5 keeps reporting. Against the pre-Task-4
+    // latch this is 0, not 2.
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(
+      frameCountAtClose + 2,
+    );
+    // ...and the run stays closed regardless of what the machine's own
+    // housekeeping says: Rearm (idle) then WaitToBegin (armed) re-open
+    // nothing, so there is no second terminal event and never a
+    // `workoutComplete`.
     expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
-    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
-    expect(events[events.length - 1]).toStrictEqual({ kind: "terminated" });
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(0);
+    // The trailing boundary IS delivered — but out of run, so it carries
+    // no index at all rather than being normalized into the finished
+    // workout's numbering, and it says so in the trace.
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(1);
+    expect(boundaries[0]).toStrictEqual({
+      kind: "intervalComplete",
+      actual: {
+        index: null,
+        elapsedSeconds: 1,
+        distanceMeters: 1,
+        // The fake wrote 0 for these (the script authored `null`, and
+        // 0x0038 has no null sentinel for a pace/rate) — carried through
+        // verbatim, since an out-of-run boundary is emitted unchanged
+        // apart from its index.
+        avgSplit: 0,
+        avgSpm: 0,
+        avgHeartRateBpm: null,
+      },
+    });
+    const outOfRun = log
+      .entries()
+      .filter((e) => e.kind === "boundary-out-of-run");
+    expect(outOfRun).toHaveLength(1);
+    expect(outOfRun[0]!.detail).toContain("Split/Interval Number 5");
+    // No `interval-complete` entry either — that kind means "an actual was
+    // filed against a run", and none was.
+    expect(log.entries().some((e) => e.kind === "interval-complete")).toBe(
+      false,
+    );
   });
 
-  it("a disconnect that arrives AFTER the terminal state is logged, not treated as an error (no 'disconnected' event)", async () => {
+  it("a disconnect that arrives AFTER the current run closed is logged, not treated as an error (no 'disconnected' event)", async () => {
     const { fake, driver, events, log } = harness(
       { program: MINIMAL_PROGRAM },
       { settleTicks: 0 }, // unrelated to this test's own focus; see the sibling test's comment
@@ -948,29 +1096,45 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
       log
         .entries()
         .some(
-          (e) => e.kind === "disconnect" && e.detail.includes("post-terminal"),
+          (e) =>
+            e.kind === "disconnect" &&
+            e.detail.includes("after the current run closed"),
         ),
     ).toBe(true);
   });
 
-  it("M-3 (final-review, empirically proven): a second terminate() call after 'terminated' has already latched resolves via the disconnect hatch, even though the ack-timeout hatch is disabled post-terminal", async () => {
-    // ackTimeout is configured but deliberately never saves the day here —
-    // `mergeStatus`'s own `if (terminalLatched) return` stops every
-    // GENERAL_STATUS notification before it ever reaches the tick counter,
-    // regardless of how much virtual time passes, once terminalLatched is
-    // set. This test proves BOTH halves of the empirically-proven bug: the
-    // ack-timeout hatch stays disabled (5000ms of ticks change nothing) AND
-    // the disconnect hatch — broken before this fix — now resolves it.
+  it("a disconnect with NO run ever opened is a REAL disconnect — the expected-disconnect classification is scoped to a closed run, not to 'the driver has seen a terminal state'", () => {
+    // The other side of the run-scoped replacement for `terminalLatched`'s
+    // second consumer (spec §4). 7B's connect flow drops the link before
+    // ever calling `program()` all the time; that is an error worth
+    // surfacing, and it must not be swallowed by the same branch that
+    // (correctly) ignores a drop after a finished run.
+    const { fake, events, log } = harness({ program: MINIMAL_PROGRAM });
+
+    fake.injectDisconnect();
+
+    expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(1);
+    expect(log.entries().some((e) => e.kind === "disconnected")).toBe(true);
+    expect(log.entries().some((e) => e.kind === "disconnect")).toBe(false);
+  });
+
+  it("M-3 (final-review, empirically proven): a second terminate() call after the run closed resolves via the disconnect hatch when no ackTimeout policy is configured at all", async () => {
+    // The M-3 fix, re-pinned for the run-scoped world. The ORIGINAL test
+    // relied on the ack-timeout hatch being DISABLED post-terminal
+    // (`mergeStatus`'s own `if (terminalLatched) return` swallowed the
+    // GENERAL_STATUS ticks that counter runs on) — Task 4 deletes that
+    // half, and the sibling test below now proves those ticks land. The
+    // hatch this test guards is the one that still matters: with NO
+    // `ackTimeout` configured — the real call site's shape
+    // (`scripts/pm5-lab.ts` passes only `verifyTicks`) — a disconnect is
+    // the only signal that no ack is coming, and dropping it hangs
+    // `sendSequence` forever.
     const fake = createFakeTransport({ program: MINIMAL_PROGRAM });
     const log = createEventLog();
-    // settleTicks: 0 — this test's own focus is the ack-await hatches
-    // (ack-timeout vs. disconnect), not the settle wait; see the sibling
-    // "terminate() acks... LATCHES" test's comment for why the fake can't
-    // supply the real default on its own.
-    const driver = createPm5Driver(fake, log, {
-      ackTimeout: { ticks: 1 },
-      settleTicks: 0,
-    });
+    // settleTicks: 0 — this test's own focus is the ack-await hatch, not
+    // the settle wait; see the sibling "terminate() acks..." test's
+    // comment for why the fake can't supply the real default on its own.
+    const driver = createPm5Driver(fake, log, { settleTicks: 0 });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
@@ -978,15 +1142,19 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
     await driver.terminate();
     expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
 
-    // A second terminate() call after the terminal state has already
-    // latched (a plausible 7B cleanup path — e.g. calling terminate()
-    // defensively on unmount). The fake's own ack is withheld
-    // (injectTimeout) so this reproduces the empirically-proven hang:
-    // neither escape hatch fires on its own once this write goes out.
+    // A second terminate() call after the run has already closed (a
+    // plausible 7B cleanup path — e.g. calling terminate() defensively on
+    // unmount). The fake's own ack is withheld (injectTimeout) so this
+    // reproduces the empirically-proven hang.
     fake.injectTimeout();
     const pending = driver.terminate();
 
-    fake.tick(5000); // the ack-timeout hatch: disabled post-terminal, proven inert
+    // No policy configured and (this script having no post-terminate
+    // events of its own) no ticks scripted either — virtual time passing
+    // changes nothing at all here. The sibling test below scripts the
+    // ticks and configures the policy, to prove the OTHER hatch now works
+    // through a closed run.
+    fake.tick(5000);
     let settled = false;
     void pending.catch(() => {
       settled = true;
@@ -1005,10 +1173,343 @@ describe("createPm5Driver: terminate + Appendix-E terminal-state latching", () =
       return true;
     });
 
-    // Still no 'disconnected' MonitorEvent — post-terminal disconnects stay
-    // silent to any listener, unchanged from the existing "no 'disconnected'
-    // event fires" test above.
+    // Still no 'disconnected' MonitorEvent — a drop after the current run
+    // closed stays silent to any listener, unchanged from the existing
+    // "no 'disconnected' event fires" test above.
     expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(0);
+  });
+
+  it("the ack-timeout policy now counts GENERAL_STATUS ticks AFTER the run closed — the half of M-3's hang that Task 4 removes at the source", async () => {
+    // Against the pre-Task-4 latch this hangs forever: `mergeStatus`
+    // swallowed every notification once a terminal state landed, so the
+    // `ackTimeout` counter (which counts GENERAL_STATUS arrivals) never
+    // saw a single tick and only a disconnect could settle a post-terminal
+    // write. The ticks below are scripted post-terminate housekeeping —
+    // exactly what a real PM5 keeps sending (§19.4).
+    const timeline: FakeTimelineEvent[] = [1, 2].map((i) => ({
+      atMs: i * 100,
+      kind: "status" as const,
+      workoutState: WORKOUTSTATE_REARM,
+      elapsedSeconds: 60,
+      distanceMeters: 200,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: null,
+      programIntervalIndex: 0,
+    }));
+    const { fake, driver, events } = harness(
+      { program: MINIMAL_PROGRAM, events: timeline },
+      { ackTimeout: { ticks: 2 }, settleTicks: 0 },
+    );
+
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    await driver.terminate();
+    expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+
+    fake.injectTimeout();
+    const pending = driver.terminate();
+    fake.tick(200); // two post-run status ticks, the configured budget
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("timeout");
+      return true;
+    });
+    // The link never went down — this is the timeout path, not the
+    // disconnect one.
+    expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(0);
+  });
+});
+
+describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the RUN, not the driver (spec §4, interface-notes.md §19.4)", () => {
+  it("frames KEEP ARRIVING after workoutComplete — session 2's exact shape, over a real library workout (today: silence)", async () => {
+    // [S2], three times: "after `{kind:workoutComplete}` fires, ZERO
+    // further frame events are emitted — not a slowed stream, not stale
+    // repeats, nothing", and a reconnect resumed them instantly. The
+    // monitor never stopped; the latch did. This is that trace as a test:
+    // a real compiled workout run to its natural end, then three more
+    // status ticks of the kind a PM5 parked in WorkoutLogged keeps
+    // sending. Against the pre-Task-4 driver `framesAfterComplete` is 0.
+    const program = seaFretProgram();
+    const finishedTick = (atMs: number): FakeTimelineEvent => ({
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_WORKOUTEND,
+      elapsedSeconds: 900,
+      distanceMeters: 3400,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: null,
+      programIntervalIndex: 2,
+    });
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 120,
+        distanceMeters: 400,
+        spm: 20,
+        currentSplit: 130,
+        heartRateBpm: 130,
+        programIntervalIndex: 0,
+      },
+      finishedTick(200),
+      // WorkoutLogged: the PM sits here answering CSAFE until Menu or a
+      // Terminate command (Appendix E via §19.4), reporting all the while.
+      finishedTick(300),
+      finishedTick(400),
+      finishedTick(500),
+    ];
+    const { fake, driver, events, log } = harness({
+      program,
+      events: timeline,
+    });
+
+    await programAndArm(driver, fake, program);
+    for (let i = 0; i < 5; i += 1) fake.tick(100);
+
+    const kinds = events.map((e) => e.kind);
+    expect(kinds.filter((k) => k === "workoutComplete")).toHaveLength(1);
+    const framesAfterComplete = events
+      .slice(kinds.indexOf("workoutComplete") + 1)
+      .filter((e) => e.kind === "frame");
+    expect(framesAfterComplete).toHaveLength(3);
+    expect(framesAfterComplete[2]).toMatchObject({
+      kind: "frame",
+      frame: { state: "finished", elapsedSeconds: 900, distanceMeters: 3400 },
+    });
+    // Once per run, never once per tick: the terminal entry is written by
+    // the close, and the repeated `finished` ticks that follow change no
+    // state word, so they add nothing to the 500-entry ring.
+    expect(log.entries().filter((e) => e.kind === "terminal")).toHaveLength(1);
+    expect(log.entries().some((e) => e.kind === "terminal-out-of-run")).toBe(
+      false,
+    );
+  });
+
+  it("program() succeeds again after a completed run, with NO reconnect anywhere — and the new run's boundaries are numbered again (today: dead)", async () => {
+    // §19.4's second half: "after an explicit disconnect() + re-scan() +
+    // connect(), frames resume instantly. We had been reading this as the
+    // monitor going quiet." Nothing here disconnects — same driver, same
+    // transport, same subscriptions, second workout. Against the
+    // pre-Task-4 driver this test hangs at the second `program()`: the
+    // ARMED status it waits on is swallowed by the latch, so verification
+    // never observes "armed".
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    // AS1/AS2 once, purely to satisfy the "seen" gate so status ticks
+    // below actually produce `frame` events.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
+
+    // The second run, on the same everything.
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    expect(events.filter((e) => e.kind === "armed")).toHaveLength(2);
+    expect(
+      events.filter(
+        (e) => e.kind === "disconnected" || e.kind === "reconnected",
+      ),
+    ).toHaveLength(0);
+
+    // ...and it is a genuinely OPEN run, not just a resolved promise: a
+    // boundary inside it is normalized and filed, where the same pair
+    // arriving a moment earlier (between the two runs) would have been
+    // `index: null` + `boundary-out-of-run`.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(0, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(0, 22));
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(1);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, avgSpm: 22 },
+    });
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      false,
+    );
+
+    // The second run closes on its own terminal state — one
+    // workoutComplete per run, exactly.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(2);
+  });
+
+  it("the PM's own auto-rearm noise opens NO run: armed -> rowing ticks after a terminated run produce frames and nothing else", async () => {
+    // Appendix E's Terminate -> Rearm -> WaitToBegin happens UNAIDED, and
+    // a rower can then pull the handle. Every ingredient of "a workout is
+    // starting" is present on the wire — armed, then rowing, then a
+    // boundary, then an end — with nobody having called `program()`. A
+    // state-driven run trigger would fabricate a whole run out of it.
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_WAITTOBEGIN,
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 20,
+        distanceMeters: 80,
+        spm: 24,
+        currentSplit: 118,
+        heartRateBpm: 140,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 300,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 40,
+          distanceMeters: 160,
+          avgSplit: 118,
+          avgSpm: 24,
+          avgHeartRateBpm: 142,
+        },
+        cumulativeElapsedSeconds: 40,
+        cumulativeDistanceMeters: 160,
+      },
+      // ...and the rower stops. A terminal state with no run to close:
+      // the log says so once, and no event goes out.
+      {
+        atMs: 400,
+        kind: "status",
+        workoutState: WORKOUTSTATE_WORKOUTEND,
+        elapsedSeconds: 60,
+        distanceMeters: 240,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      },
+    ];
+    const { fake, driver, events, log } = harness(
+      { program: MINIMAL_PROGRAM, events: timeline },
+      { settleTicks: 0 },
+    );
+
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    await driver.terminate();
+    const framesAtClose = events.filter((e) => e.kind === "frame").length;
+    expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+
+    fake.tick(400);
+
+    // Frames still emit for every one of the three status ticks (the
+    // fourth timeline entry is the boundary) — the driver hears all of it.
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(
+      framesAtClose + 3,
+    );
+    // But no run was opened, so nothing was completed, and no actual
+    // carries a number.
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(1);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: null },
+    });
+    expect(
+      log.entries().filter((e) => e.kind === "boundary-out-of-run"),
+    ).toHaveLength(1);
+    // The out-of-run terminal state is recorded exactly once, on the
+    // transition into it — never per tick.
+    const outOfRunTerminal = log
+      .entries()
+      .filter((e) => e.kind === "terminal-out-of-run");
+    expect(outOfRunTerminal).toHaveLength(1);
+    expect(outOfRunTerminal[0]!.detail).toContain('"finished"');
+  });
+
+  it("a boundary with NO run ever opened (a rower's own JustRow splits) emits index: null plus the log — the never-programmed case, not just the closed one", () => {
+    // The `activeRun === null` half of the out-of-run gate. A PM5
+    // auto-splits a user-started piece and reports those splits on the
+    // very same 0x0037/0x0038 pair; they are real, they are worth seeing,
+    // and they belong to no program of ours.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 120, 500));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 26));
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(1);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      // The values are real; only the identity is unknown.
+      actual: { index: null, elapsedSeconds: 120, distanceMeters: 500 },
+    });
+    const outOfRun = log
+      .entries()
+      .filter((e) => e.kind === "boundary-out-of-run");
+    expect(outOfRun).toHaveLength(1);
+    expect(outOfRun[0]!.detail).toContain("Split/Interval Number 1");
+    expect(log.entries().some((e) => e.kind === "interval-complete")).toBe(
+      false,
+    );
+  });
+
+  it("a boundary half still pending when a NEW run opens is discarded, never paired with the new run's first boundary", async () => {
+    // A hazard Task 4 itself creates: before this, a second run in one
+    // driver lifetime was impossible, so a leftover half could only ever
+    // meet its own run's traffic. Both runs number their splits from the
+    // same low integers, and `noteBoundaryHalf` pairs on that number — so
+    // without this the old run's orphaned averages would emit carrying
+    // the NEW run's identity (D4's corruption, one level up).
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    // Run 1's averages for Split/Interval Number 1 arrive; its 0x0037 is
+    // lost, so the half sits pending.
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 20));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    const orphans = log.entries().filter((e) => e.kind === "boundary-orphan");
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0]!.detail).toContain("new run opened");
+
+    // Run 2's own first boundary identity, same Split/Interval Number.
+    // Nothing pairs with it — the stale averages are gone.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
   });
 });
 
@@ -2528,15 +3029,17 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
         cumulativeDistanceMeters: 200,
       },
     ];
-    const { fake, log } = harness({
+    const { fake, driver, log } = harness({
       program: MINIMAL_PROGRAM,
       events: timeline,
     });
-    // Note: `driver.program()` is deliberately never called here — the
-    // divergence check depends only on the "seen" status/split
-    // characteristics having arrived at least once (satisfied by ticking
-    // the scripted timeline below), not on the driver's own `program`
-    // state, so there is nothing to await first.
+    // `program()` IS awaited here (Task 4): the raw-vs-raw comparison
+    // lives on the in-run boundary path, and since a run is opened only
+    // by `program()`, a boundary arriving without one is emitted with
+    // `index: null` + `boundary-out-of-run` and compared against nothing
+    // (pinned by its own test above). This test's subject is the skew
+    // between the two RAW fields within a real run.
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
     fake.tick(200);
 
     const divergence = log.entries().find((e) => e.kind === "divergence");
@@ -2573,12 +3076,19 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
         cumulativeDistanceMeters: 200,
       },
     ];
-    const { fake, log } = harness({
+    const { fake, driver, log } = harness({
       program: MINIMAL_PROGRAM,
       events: timeline,
     });
+    // A real run, for the same reason as the sibling test above — a
+    // silent log has to mean "the comparison ran and found nothing", not
+    // "there was no run for the comparison to happen in".
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
     fake.tick(200);
     expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
+    expect(log.entries().some((e) => e.kind === "interval-complete")).toBe(
+      true,
+    );
   });
 });
 
@@ -3414,40 +3924,6 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
       actual: { index: 1, avgSpm: 30, avgHeartRateBpm: 170, avgSplit: 100 },
     });
   });
-
-  /** One half of a boundary, addressed to a specific Split/Interval Number
-   *  and carrying values distinctive enough to tell boundaries apart in an
-   *  assertion. Built through the pm5 encoders, so these are the real bytes
-   *  the driver's own decoders read. */
-  function splitHalf(boundary: number, seconds: number, meters: number) {
-    return buildSplitIntervalDataBytes({
-      elapsedSeconds: seconds,
-      distanceMeters: meters,
-      splitIntervalTimeSeconds: seconds,
-      splitIntervalDistanceMeters: meters,
-      intervalRestTimeSeconds: 0,
-      intervalRestDistanceMeters: 0,
-      splitIntervalType: 0,
-      splitIntervalNumber: boundary,
-    });
-  }
-
-  function asSplitHalf(boundary: number, avgSpm: number) {
-    return buildAdditionalSplitIntervalDataBytes({
-      elapsedSeconds: 0,
-      splitIntervalAvgStrokeRate: avgSpm,
-      splitIntervalWorkHeartRateBpm: 150,
-      splitIntervalRestHeartRateBpm: 120,
-      splitIntervalAvgPace: 120,
-      splitIntervalTotalCalories: 0,
-      splitIntervalAvgCalories: 0,
-      splitIntervalSpeedMetersPerSecond: 0,
-      splitIntervalPowerWatts: 0,
-      splitAvgDragFactor: 130,
-      splitIntervalNumber: boundary,
-      ergMachineType: 1,
-    });
-  }
 
   it("an ORPHANED 0x0038 never pairs with the NEXT boundary's 0x0037 — the next boundary emits its own averages, and the orphan is logged, not merged", () => {
     // Task 4 review, IMPORTANT-1: pairing "one of each has arrived" is not

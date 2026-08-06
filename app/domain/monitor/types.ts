@@ -88,6 +88,33 @@ export interface IntervalActual {
   avgHeartRateBpm: number | null;
 }
 
+/**
+ * THE RUN CONTRACT (Phase 7A-fix-2 Task 4, spec §4), stated where every
+ * consumer sees it. A "run" is one programmed workout: it is opened by
+ * `MonitorDriver.program()` resolving, and by nothing else — no state word
+ * on the wire ever opens one, because a PM5 walks Terminate -> Rearm ->
+ * WaitToBegin unaided after a terminated workout (CSAFE-DEF Appendix E,
+ * via `docs/monitor/pm5-interface-notes.md` §19.4) and would otherwise
+ * fabricate runs out of its own housekeeping. It is closed by the first
+ * terminal state observed while it is open.
+ *
+ * What that buys a consumer:
+ * - `workoutComplete`/`terminated` fires AT MOST ONCE per run, and the
+ *   run's record is immutable afterwards.
+ * - **`intervalComplete` for a run never arrives after that run's
+ *   `workoutComplete`/`terminated`.** A completed run's actuals are the
+ *   whole set; nothing is ever appended later.
+ * - A boundary the machine reports OUTSIDE any open run (a rower's own
+ *   JustRow auto-splits, post-terminate housekeeping) is still emitted —
+ *   the driver never goes deaf — but it is identifiable as such:
+ *   `actual.index` is `null` AND the driver logs `boundary-out-of-run`.
+ *   Such an actual belongs to no program and must never be filed against
+ *   one.
+ * - `frame` events keep flowing through and after all of the above, for
+ *   the life of the transport, and `program()` works again with no
+ *   reconnect. A terminal state ends the RUN, never the stream (§19.4:
+ *   the monitor never stops responding — the silence used to be ours).
+ */
 export type MonitorEvent =
   | { kind: "frame"; frame: MonitorFrame }
   | { kind: "armed" } // programming done, PM waits for stroke one

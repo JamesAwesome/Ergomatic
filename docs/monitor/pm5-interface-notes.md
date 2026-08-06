@@ -2226,11 +2226,23 @@ from stock CSAFE here — there is no Finished-state timeout back to Idle;
 "the Ready state is entered instead of the Idle state" — so expect low
 nibble `0x01`, not `0x02`, after a workout concludes.
 
-The silence is ours: `src/monitor/driver.ts` latches terminal states
-(`terminalLatched`, `:233`/`:617-628`) and short-circuits every subscription
-callback afterwards, by design ("Appendix E's auto-cycle never un-finishes a
-session"). Reconnecting resets the latch, which is exactly why frames
-resumed instantly — the radio and the erg were never the variable.
+The silence is ours: at the time of [S2], `src/monitor/driver.ts` latched
+terminal states (`terminalLatched`, `:233`/`:617-628`) and short-circuited
+every subscription callback afterwards, by design ("Appendix E's auto-cycle
+never un-finishes a session"). Reconnecting reset the latch, which is
+exactly why frames resumed instantly — the radio and the erg were never the
+variable.
+
+> **FIXED (2026-08-06, fix-2 Task 4 — spec §4).** The latch is now scoped
+> to the RUN, not the driver: `activeRun` is opened by `program()` and only
+> by `program()` (a state-driven trigger would let the Terminate → Rearm →
+> WaitToBegin cycle above fabricate runs), and a terminal state closes that
+> run while every subscription stays live. Frames keep flowing after
+> `workoutComplete`, `program()` works again with no reconnect, and a
+> boundary arriving outside an open run is emitted with `index: null` plus
+> a `boundary-out-of-run` log rather than being filed against the finished
+> workout. The protection [S1] confirmed (no un-finishing, no un-completing)
+> is unchanged — `workoutComplete` still fires exactly once per run.
 
 **Verdict: OUR BUG.** The latch itself is a legitimate design choice and
 [S1] confirmed it does its job (no un-finishing). What was wrong was the
