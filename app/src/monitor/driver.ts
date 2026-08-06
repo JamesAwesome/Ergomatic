@@ -1674,21 +1674,23 @@ export function createPm5Driver(
   return {
     capabilities,
 
-    // CONFIRMED destructive fact (interface-notes.md §18, progress.md's
-    // clean A/B run): a REJECTED program WIPES whatever workout was
-    // already loaded on the monitor — a failed `program()` call can
-    // therefore cost the rower a workout they had, not merely fail to add
-    // a new one. Callers (7B's connect flow) MUST warn the rower BEFORE
-    // calling this, never react to a rejection afterward — by the time
-    // this call rejects, the previous workout may already be gone.
+    // D1 IS WITHDRAWN (interface-notes.md §19.2, on §19.1's per-send
+    // re-derivation table), and this comment used to assert it: "a REJECTED
+    // program WIPES whatever workout was already loaded", plus the rule
+    // that the PM "accepts only when idle". Both were our own parse bug —
+    // every byte §18 recorded as a rejection decodes to an ACCEPT under the
+    // CSAFE bitfield, so the rule had no evidence and the wipe was only the
+    // mechanism invented to explain the toggle's alternation. What §19.1's
+    // Verdict (b) established instead: a program over a loaded workout is
+    // accepted and REPLACES it.
     //
-    // The simple RULE that first explained the above ("accepts only when
-    // idle") is NOT equally confirmed: Task 1's D1 update found a
-    // terminate ACCEPTED with a workout loaded, yet the FOLLOWING program
-    // was still rejected — twice. The state model behind accept/reject is
-    // still not understood; only the destructive half is. Nothing below
-    // assumes the rule — prepare/send/verify is designed to survive not
-    // knowing it.
+    // Nothing below ever depended on either claim: prepare/send/verify was
+    // designed to survive not knowing the state model, and still is. The
+    // one thing 7B should still do before calling — confirm with the rower
+    // that the monitor is theirs to overwrite — now rests on §19.1's
+    // Verdict (a), the `:00` display that is STANDING OPEN, rather than on
+    // a destruction claim that did not survive (`MonitorDriver.program`'s
+    // own JSDoc, `domain/monitor/types.ts`, carries the full statement).
     //
     // Three phases (design spec §3): `sendPrepare()` is the documented
     // exit to WaitToBegin (interface-notes.md §19.4/§19.5) — NOT a clear,

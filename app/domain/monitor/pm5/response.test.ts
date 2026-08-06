@@ -1,12 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { parseFrame } from "../csafe.js";
+import type { WorkoutProgram } from "../program.js";
+import {
+  buildGetErrorType,
+  buildProgrammingSequence,
+  buildTerminate,
+} from "./commands.js";
 import {
   buildAckFrame,
+  echoedCommandIds,
   parseCsafeResponse,
   type CsafeFrameStatus,
   type CsafeResponse,
   type CsafeSlaveState,
 } from "./response.js";
+
+/** A pre-chunked sequence entry reassembled into the whole CSAFE frame the
+ *  PM actually receives and acks. */
+function joinChunks(chunks: Uint8Array[]): Uint8Array {
+  const frame = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    frame.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return frame;
+}
+
+/** `f1 <content…> <xor checksum> f2` — no byte here ever needs stuffing in
+ *  the hand-built vectors below, so the frame is exactly this. */
+function frameOf(content: number[]): Uint8Array {
+  return Uint8Array.from([
+    0xf1,
+    ...content,
+    content.reduce((a, b) => a ^ b, 0),
+    0xf2,
+  ]);
+}
 
 // The four conformance vectors, interface-notes.md §6 (R1-R3 pre-existing,
 // R4 added a prior round — the doc's own response to its 4-interval
@@ -511,6 +541,105 @@ describe("buildAckFrame: the inverse of parseCsafeResponse's wrapper branch", ()
   });
 });
 
+// `echoedCommandIds` (Phase 7A-fix-2 Task 6) — the REQUEST-side half of an
+// honest synthetic ack. The two anchors below are §19.1's own captured
+// acks: the opcode lists they carry are exactly what this function must
+// return for the frames that earned them.
+describe("echoedCommandIds: the opcode list a PM echoes for a request frame", () => {
+  const ONE_INTERVAL: WorkoutProgram = {
+    intervals: [
+      {
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+  const TWO_INTERVALS: WorkoutProgram = {
+    intervals: Array.from({ length: 2 }, () => ({
+      kind: "time" as const,
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 30,
+    })),
+  };
+
+  it("the terminate frame echoes its single SET_SCREENSTATE opcode — §19.1's `f1 01 76 01 13 65 f2`", () => {
+    expect(echoedCommandIds(joinChunks(buildTerminate()[0]!))).toStrictEqual([
+      0x13,
+    ]);
+  });
+
+  it("a 2-interval program echoes the fourteen ids §19.1 captured — `76 0e 18 01 17 03 04 06 14 18 17 03 04 06 14 13`", () => {
+    const sequence = buildProgrammingSequence(TWO_INTERVALS);
+    expect(sequence).toHaveLength(1); // one frame, as [S2]'s own send was
+    expect(echoedCommandIds(joinChunks(sequence[0]!))).toStrictEqual([
+      0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x18, 0x17, 0x03, 0x04, 0x06,
+      0x14, 0x13,
+    ]);
+  });
+
+  it("a 1-interval program echoes the doc's own hand-verified 8-opcode shape", () => {
+    expect(
+      echoedCommandIds(joinChunks(buildProgrammingSequence(ONE_INTERVAL)[0]!)),
+    ).toStrictEqual([0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x13]);
+  });
+
+  it("opcodes only — never a command's own data bytes, however many it carries", () => {
+    // `SET_WORKOUTDURATION` alone carries five data bytes; a naive
+    // every-other-byte read would put `0x00`/`0x30` in the echo.
+    const ids = echoedCommandIds(
+      joinChunks(buildProgrammingSequence(ONE_INTERVAL)[0]!),
+    );
+    expect(ids).toHaveLength(8);
+    expect(ids).not.toContain(0x00); // a duration identifier, not an opcode
+    expect(ids).not.toContain(0x30); // a duration byte (60s at 0.01s/lsb)
+  });
+
+  it("a frame that cannot be parsed at all echoes nothing, rather than throwing", () => {
+    expect(
+      echoedCommandIds(Uint8Array.from([0xf1, 0x01, 0xff, 0xf2])),
+    ).toStrictEqual([]);
+  });
+
+  it("a non-0x76 wrapper echoes nothing — the 0x1A pull path has no captured ack shape (§17 item 14)", () => {
+    expect(echoedCommandIds(buildGetErrorType())).toStrictEqual([]);
+  });
+
+  it("a 0x76 wrapper with no length byte at all echoes nothing", () => {
+    expect(echoedCommandIds(frameOf([0x76]))).toStrictEqual([]);
+  });
+
+  it("a 0x76 wrapper declaring zero bytes echoes nothing", () => {
+    expect(echoedCommandIds(frameOf([0x76, 0x00]))).toStrictEqual([]);
+  });
+
+  it("stops at the payload's real end when the wrapper's declared length overruns it", () => {
+    // Declares 10 wrapped bytes; only `13 02 01` follow, and the command
+    // itself claims two data bytes that are not all there.
+    expect(
+      echoedCommandIds(frameOf([0x76, 0x0a, 0x13, 0x02, 0x01])),
+    ).toStrictEqual([0x13]);
+  });
+
+  it("stops at the DECLARED length even when more bytes follow it", () => {
+    // Declares 3 wrapped bytes (`13 01 02`); the `14 01 01` after that is
+    // outside the wrapper and is not echoed.
+    expect(
+      echoedCommandIds(
+        frameOf([0x76, 0x03, 0x13, 0x01, 0x02, 0x14, 0x01, 0x01]),
+      ),
+    ).toStrictEqual([0x13]);
+  });
+
+  it("stops rather than reading past a command truncated before its own count byte", () => {
+    expect(echoedCommandIds(frameOf([0x76, 0x02, 0x13]))).toStrictEqual([0x13]);
+  });
+});
+
 // Vector matrix (task brief): every frame status × both toggle states ×
 // (empty echo, the doc's own hand-verified 8-opcode echo shape) — built via
 // `buildAckFrame` and round-tripped through `parseCsafeResponse`, proving
@@ -552,4 +681,72 @@ describe("parseCsafeResponse/buildAckFrame: full vector matrix — 4 frame statu
       }
     }
   }
+});
+
+// Phase 7A-fix-2 Task 6's round-trip pin, property-style over the WHOLE
+// option space rather than the slice above: the matrix named tests hold
+// `slaveState` at "ready", so a builder/parser disagreement confined to the
+// low nibble (the field a whole-byte compare over-reads, and the one the
+// fake now varies) would pass all sixteen of them. Every combination the
+// two functions can express is exercised here — 4 frame statuses x 10 slave
+// states x 2 toggles x 4 echo shapes = 320 — with the combination's own
+// label folded into the compared value, so a failure names the case rather
+// than leaving it to be reconstructed from a bare object diff.
+describe("parseCsafeResponse/buildAckFrame: the pair is inverse over the FULL option matrix", () => {
+  it("parseCsafeResponse(buildAckFrame(opts)) returns opts, for every combination", () => {
+    const frameStatuses: CsafeFrameStatus[] = [
+      "ok",
+      "reject",
+      "bad",
+      "not-ready",
+    ];
+    const slaveStates: CsafeSlaveState[] = [
+      "error",
+      "ready",
+      "idle",
+      "have-id",
+      "in-use",
+      "paused",
+      "finished",
+      "manual",
+      "offline",
+      "unknown",
+    ];
+    const echoes: number[][] = [
+      [],
+      [0x13], // the terminate ack §19.1 captured
+      [0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x13], // 1-interval program
+      [
+        0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x18, 0x17, 0x03, 0x04, 0x06,
+        0x14, 0x13,
+      ], // the 2-interval program ack §19.1 captured
+    ];
+
+    let combinations = 0;
+    for (const frameStatus of frameStatuses) {
+      for (const slaveState of slaveStates) {
+        for (const frameToggle of [false, true]) {
+          for (const commandIds of echoes) {
+            const label = `${frameStatus}/${slaveState}/toggle=${frameToggle}/echo=${commandIds.length}`;
+            const frame = buildAckFrame({
+              frameStatus,
+              slaveState,
+              frameToggle,
+              commandIds,
+            });
+            expect({ label, ...parseCsafeResponse(frame) }).toStrictEqual({
+              label,
+              kind: "parsed",
+              frameStatus,
+              slaveState,
+              frameToggle,
+              commandIds,
+            });
+            combinations += 1;
+          }
+        }
+      }
+    }
+    expect(combinations).toBe(320);
+  });
 });

@@ -3,43 +3,67 @@
 // characteristics), so a CI run exercises the exact bytes a real PM5 would
 // exchange.
 //
-// Phase 7A-fix Task 4: this file is a MODEL OF THE MACHINE WE MET
-// (interface-notes.md §18, PM5 432331249, 2026-08-05), not an idealized
-// PM5. Everything the erg did differently from what CI assumed is
-// reproduced here on purpose, so each hardware finding has a permanent
-// test:
+// Phase 7A-fix Task 4, CORRECTED by Phase 7A-fix-2 Task 6: this file is a
+// MODEL OF THE MACHINE WE MET (interface-notes.md §18/§19, PM5 432331249,
+// 2026-08-05), not an idealized PM5 — and, since fix-2, not the machine our
+// own misparse invented either. Everything the erg did differently from
+// what CI assumed is reproduced here on purpose, so each hardware finding
+// has a permanent test:
 //   - it numbers rests FORWARD, the way the real one does, and emits the
 //     phantom index past the end of a program (D3);
 //   - it delivers a boundary's 0x0037 BEFORE its 0x0038, the order the
 //     trace showed (D4 — the order that hid an entire interval);
 //   - it sends `0`, not the documented `255`, for a beltless heart rate
 //     (D5);
-//   - it REJECTS a program while a workout is loaded, and wipes what it
-//     held doing so (D1);
+//   - it TOGGLES bit 7 of the status byte on every ack it sends, the way
+//     [CSAFE-DEF] p.11 Table 9 says a CSAFE slave does and the way both
+//     laptop sessions actually behaved (§19.1/§19.2) — the alternation
+//     that our whole-byte compare read as "the machine changing its mind";
+//   - it ECHOES the opcodes of the frame it is acking, the shape every
+//     captured hardware ack has (§19.1);
+//   - it ACCEPTS a program while a workout is loaded and REPLACES it —
+//     D1 ("accepts only when nothing is loaded; a rejection wipes what was
+//     loaded") is WITHDRAWN, our bug, not the machine's (§19.2, and Task
+//     1's per-send re-derivation table in §19.1: every recorded
+//     "rejection" decodes to an accept, and Verdict (b) proves behaviourally
+//     that the second program replaced the first);
+//   - it takes a SECOND program with no reconnect, after a terminate, the
+//     way the machine does (§19.4/§19.5: terminate is the documented exit
+//     back to a programmable state);
 //   - its writes fail while the link is down, the way an invalidated GATT
 //     handle does (D6).
+//
+// Two ack shapes here are SYNTHETIC and say so at their definitions,
+// because nothing observed produced them: `FakeScript.failNextWrite`'s
+// genuine reject and its checksum-garbled frame (§19.1 — not one of the
+// twelve captured bytes was a rejection).
 //
 // Verifies each programming chunk byte-for-byte against
 // `buildProgrammingSequence`'s output (asserts — a wrong byte is a test
 // failure, not a tolerated write); acks via `pm5/response.ts`'s
-// `buildAckFrame`; plays a tick-driven session timeline (no wall clock —
-// `tick(ms)` is the only thing that ever advances time); six injection
-// hooks (design spec §4, plan Task 4, plus fix-round HIGH-2's
-// `injectTimeout`, distinct from `injectDisconnect`: the link stays up,
-// only the ack never comes); a leading "clearing" phase (plan Task 2)
-// modeling `program()`'s own best-effort clear step, rejected when nothing
-// is loaded and ACCEPTED when something is (D1's own two observed
-// outcomes) before the real programming sequence begins. `sendAck`'s own
-// doc comment covers what byte each outcome maps to since Phase 7A-fix-2's
-// corrected bitfield parse (pm5/response.ts §19.1).
+// `buildAckFrame` fed by its `echoedCommandIds`; plays a tick-driven
+// session timeline (no wall clock — `tick(ms)` is the only thing that ever
+// advances time); six injection hooks (design spec §4, plan Task 4, plus
+// fix-round HIGH-2's `injectTimeout`, distinct from `injectDisconnect`: the
+// link stays up, only the ack never comes); a leading "clearing" phase
+// (plan Task 2) modeling `program()`'s own best-effort prepare step,
+// rejected when nothing is loaded and ACCEPTED when something is.
+// `sendAck`'s own doc comment covers how each ack's status byte is
+// assembled since Phase 7A-fix-2's corrected bitfield parse
+// (pm5/response.ts §19.1).
 //
 // Concept2 byte-level knowledge stays confined to what this file calls INTO
 // `pm5/` (`buildProgrammingSequence`, `buildTerminate`, `buildAckFrame`,
-// `reassemble`, the `buildXBytes` encoders in `pm5/statusFrames.ts`,
+// `echoedCommandIds`, `reassemble`, the `buildXBytes` encoders in
+// `pm5/statusFrames.ts`,
 // `intervalIndex.ts`'s `toMachineIndex`, and the `WORKOUTSTATE_*` ordinals
 // / `toMonitorState` / `HEARTRATE_NO_BELT` that `pm5/parse.ts` exports for
 // exactly this purpose) — this file never computes a checksum, a byte
-// offset, a scale factor, or a numbering offset itself.
+// offset, a scale factor, a status-byte bit or a numbering offset itself.
+// (`sendGarbledAck` below INVALIDATES a checksum `pm5/csafe.ts` already
+// computed — the one thing a corrupted-frame hook has to be able to do —
+// by pushing one extra byte in after it, never by deriving a checksum of
+// its own and never by bit math.)
 
 import {
   buildGetErrorType,
@@ -59,7 +83,12 @@ import {
   type GeneralStatus,
   type SplitIntervalData,
 } from "../../../domain/monitor/pm5/parse.js";
-import { buildAckFrame } from "../../../domain/monitor/pm5/response.js";
+import {
+  buildAckFrame,
+  echoedCommandIds,
+  type CsafeFrameStatus,
+  type CsafeSlaveState,
+} from "../../../domain/monitor/pm5/response.js";
 import {
   buildAdditionalSplitIntervalDataBytes,
   buildAdditionalStatus1Bytes,
@@ -169,34 +198,82 @@ export interface FakeScript {
   /** Advertised device name — `scan()`'s single result. */
   deviceName?: string;
   /**
-   * D1 (interface-notes.md §18 #6, observed twice): the machine already
-   * has a workout loaded when this session starts — the state in which a
-   * real PM5 REJECTS a program and **wipes what it was holding while doing
-   * so**. Give it the loaded workout's interval count; `loadedIntervals()`
-   * reports what the fake still holds, so a test can watch it go.
+   * The machine already has a workout loaded when this session starts.
+   * Give it the loaded workout's interval count; `loadedIntervals()`
+   * reports what the fake is holding at any moment.
    *
-   * What this models, all of it observed:
-   * - the programming sequence's FIRST frame is rejected while something
-   *   is loaded — and that rejection is DESTRUCTIVE: the fake
-   *   drops the loaded workout, the same way a real 2-interval send
-   *   visibly wiped a working 1-minute program and left the monitor
-   *   showing an empty `:00`;
-   * - the clear step (`buildTerminate()`) is ACCEPTED while a workout is
-   *   loaded (the D1 UPDATE row) and REJECTED when nothing is
-   *   (the clean-run observation, which is what a scriptless fake models);
-   * - terminate does NOT clear the loaded workout — accepting it changed
-   *   nothing about the following program's rejection.
+   * **D1 IS WITHDRAWN** (interface-notes.md §19.2, on Task 1's per-send
+   * re-derivation table in §19.1). This field used to make the fake reject
+   * a program while something was loaded and DESTROY what it held. Neither
+   * half survived the corrected parse: every byte §18 recorded as a
+   * rejection decodes to an accept (`0x81` is toggle-high / prev-OK /
+   * Ready), so "accepts only when nothing is loaded" had nothing left
+   * supporting it, and the wipe was only ever the mechanism invented to
+   * explain the toggle's alternation. §19.1's Verdict (b) then showed the
+   * opposite BEHAVIOURALLY: [S2] sent a 2×TIME/rest-30 program, then —
+   * without reconnecting — a 2×TIME/rest-0 program over it, and the row
+   * that followed ran work→work with no `resting` state anywhere. The
+   * second program REPLACED the first.
    *
-   * What this deliberately does NOT model, because it is not understood:
-   * the D1 UPDATE also saw a SECOND program rejected after the first
-   * rejection had already wiped the monitor. Under this model the wipe
-   * leaves nothing loaded, so a retry succeeds. Reproducing the real
-   * behaviour would mean inventing a state machine behind accept/reject
-   * that no observation has pinned down — the top open question for the
-   * next hardware row (§18 #6). A fake that guessed would teach CI a
-   * fiction, which is the exact failure this whole phase exists to undo.
+   * So what this models now, each half cited:
+   * - a program sent while a workout is loaded is ACCEPTED, and the loaded
+   *   workout is REPLACED by the one just programmed (§19.1 Verdict (b));
+   * - the prepare step (`buildTerminate()`) is ACCEPTED while a workout is
+   *   loaded and REJECTED when nothing is — the two observed prepare-step
+   *   outcomes, unchanged by the parse fix (§19.1's `S2 D2` rows; the
+   *   nothing-loaded refusal is [S1]'s clean-run observation, whose byte
+   *   was never captured — recorded here as the narrative reported it, and
+   *   flagged as such);
+   * - terminate does NOT unload the workout — its documented destination is
+   *   *Rearm*, Concept2's own word for making the SAME workout ready again
+   *   (§19.5), so the count below survives a terminate. It does return the
+   *   machine to a programmable state, which is what makes a second
+   *   `program()` with no reconnect work (§19.4).
+   *
+   * Still genuinely OPEN, and deliberately NOT modelled: James read an
+   * empty `:00`/`:00` session off the monitor right after [S1]'s
+   * 2-interval send, which the corrected parse says was an ACCEPT. Nothing
+   * in hand explains what emptied that display (§19.1 Verdict (a) lays out
+   * what was and was not checked). A fake that guessed at it would teach CI
+   * a fiction, which is the exact failure this phase exists to undo.
    */
   loadedWorkout?: { intervalCount: number };
+  /**
+   * Forces the SLAVE-STATE nibble of every ack this fake sends
+   * (`pm5/response.ts`'s bits 0-3), instead of the state the fake would
+   * derive from what the machine is currently doing. The case this exists
+   * for is `"offline"`: [CSAFE-DEF] Figure 7 p.49 gives `Offline` exactly
+   * one entry arrow — "user starts workout before equipment is configured"
+   * — and [S2] Dump 1 caught it live, a `0x09` ack from a connected,
+   * responsive erg being rowed OUTSIDE master control
+   * (interface-notes.md §19.3). That is a different situation from this
+   * fake's own default `"in-use"`, which is the erg rowing a workout the
+   * master programmed; nothing derivable from the timeline distinguishes
+   * them, so it is scripted rather than guessed.
+   */
+  slaveState?: CsafeSlaveState;
+  /**
+   * The next PROGRAMMING frame's ack is a genuine reject (`0x11`-class) or
+   * a checksum-garbled frame instead of the accept it would otherwise get.
+   * One-shot: consumed by the first programming frame that completes, so a
+   * retry of that same frame acks normally.
+   *
+   * **NEVER OBSERVED ON HARDWARE — synthetic.** Not one of the twelve
+   * status bytes [S2] captured is a rejection, and no session ever produced
+   * an unparseable frame (interface-notes.md §19.1). These exist because
+   * the driver has code for both paths — a genuine reject fires the
+   * documented `GetErrorType` follow-up (§19.7) and rejects with reason
+   * `"nak"`; a frame that cannot be validated at all rejects with
+   * `"garbled"`, deliberately NOT folded into `"nak"` — and code with no
+   * way to be exercised is code with no test.
+   *
+   * Scoped to the PROGRAMMING sequence's own frames, the same scope
+   * `injectNak` has always had (`injectNak`'s own doc comment): the prepare
+   * step's ack is decided by the machine's load state, and `program()`
+   * swallows anything but a disconnect there anyway, so a failure aimed at
+   * it could never reach a driver-visible outcome.
+   */
+  failNextWrite?: "reject" | "garbled";
   /** The post-"armed" session timeline, ascending by `atMs`. `tick(ms)`
    *  advances a purely virtual clock (no timers, no wall clock anywhere in
    *  this file) and delivers every event whose `atMs` has now been
@@ -224,13 +301,22 @@ export interface FakeControls {
    *  to flush, which is what makes the reconnect path re-derive position
    *  instead of assuming continuity. */
   tick(ms: number): void;
-  /** The NEXT programming ack-gated FRAME written (0-based index into
+  /** The programming ack-gated FRAME at `atFrame` (0-based index into
    *  `buildProgrammingSequence`'s outer array — the same index a driver's
    *  ack-gated loop advances one-per-frame, not one-per-20-byte-chunk) gets
    *  a reject status instead of success. Named `atFrame` (not `atChunk`,
    *  fix-round L2): "chunk" in this codebase means one <=20-byte BLE
    *  write, and a NAK is a response to a whole ack-gated FRAME (which may
-   *  span several chunks), never a partial one. */
+   *  span several chunks), never a partial one.
+   *
+   *  This is the POSITIONAL selector for the same one reject path
+   *  `FakeScript.failNextWrite` reaches (`takeNextAckFailure` is the single
+   *  consumer, and `sendAck` the single emitter — Phase 7A-fix-2 Task 6
+   *  deliberately left no second way to produce a reject byte). Unlike
+   *  `failNextWrite` it is STICKY: the frame cursor does not advance past a
+   *  rejected frame, so re-sending that frame is rejected again. Where both
+   *  are set, `failNextWrite` — the more specific, one-shot instruction —
+   *  is consumed first. */
   injectNak(atFrame: number): void;
   /** Simulates an unexpected link drop: fires the driver's `onDisconnect`
    *  callback and stops delivering scheduled notifications until
@@ -280,10 +366,14 @@ export interface FakeControls {
    * this fake no longer delivers armed synchronously inside the write.
    */
   deliverArmedNow(): void;
-  /** What the machine is currently holding (D1): the `loadedWorkout` the
-   *  script started with, or `null` once a rejected program has WIPED it —
-   *  the destructive half of D1, which is the half that was confirmed.
-   *  `null` for a fake that never had one. */
+  /** What the machine is currently holding: the `loadedWorkout` the script
+   *  started with, then whatever the most recent COMPLETED program left
+   *  there (`FakeScript.loadedWorkout`'s own doc comment — a program
+   *  REPLACES what was loaded; D1's wipe is withdrawn, §19.2). `null` for a
+   *  fake that never had one and has not been programmed yet; never `null`
+   *  again once a program has landed, since nothing this codec can send
+   *  unloads a workout (§19.5 — terminate routes to Rearm, not to an empty
+   *  slot). */
   loadedIntervals(): number | null;
 }
 
@@ -491,26 +581,49 @@ export function createFakeTransport(
   let eventCursor = 0;
   let virtualClock = 0;
 
-  // Plan Task 2: `program()` now sends `buildTerminate()` as a best-effort
-  // CLEAR step before the real programming sequence — so the very first
+  // Plan Task 2: `program()` sends `buildTerminate()` as a best-effort
+  // PREPARE step before the real programming sequence — so the very first
   // write(s) this fake ever sees are the SAME bytes as `terminateChunks`
   // (below), not `flatProgramChunks`. `"clearing"` models exactly that
-  // window. Its ack now depends on what the machine is HOLDING (D1, Task
-  // 4): rejected when nothing is loaded — the clean-run observation, and
-  // the common case for a fresh connection — but ACCEPTED when a
-  // workout is loaded, which the D1 UPDATE row observed directly (and which
-  // changed nothing about the following program still being rejected;
-  // terminate is not a clear). `injectNak` deliberately does NOT reach into
-  // this phase — `nakAtFrame` addresses the PROGRAMMING sequence's own
-  // frames only (its own doc comment), and the load state is what decides
-  // this one. `injectTimeout` DOES still apply here — its own "every ack
-  // this fake would otherwise send" wording is phase-agnostic by design.
+  // window. Its ack depends on what the machine is HOLDING: rejected when
+  // nothing is loaded — the [S1] clean-run narrative, and the common case
+  // for a fresh connection — but ACCEPTED when a workout is loaded, which
+  // [S2]'s own raw dumps show directly (§19.1's `S2 D2`/`S2 D3` rows).
+  // `injectNak` deliberately does NOT reach into this phase — `nakAtFrame`
+  // addresses the PROGRAMMING sequence's own frames only (its own doc
+  // comment), and neither does `FakeScript.failNextWrite`, for the reason
+  // its own doc comment gives. `injectTimeout` DOES still apply here — its
+  // own "every ack this fake would otherwise send" wording is phase-agnostic
+  // by design.
+  //
+  // The cycle is a LOOP, not a one-way street (Task 6): a completed
+  // terminate while `"armed"` puts the machine back in `"clearing"` with
+  // every programming cursor rewound, because that is what the real one
+  // does — terminate is the documented exit back to `WaitToBegin`
+  // (interface-notes.md §19.4/§19.5), and a driver that has just finished a
+  // piece programs the next one over the same connection with no reconnect.
+  // This file used to stop at `"armed"` forever, which made a second
+  // `program()` throw "unexpected write while armed" and forced every
+  // second-workout test in `driver.test.ts` onto a hand-rolled stub.
   let phase: "clearing" | "programming" | "armed" = "clearing";
   let clearChunkCursor = 0;
   let programChunkCursor = 0;
   let programFrameCursor = 0;
   let terminateChunkCursor = 0;
   let nakAtFrame: number | null = null;
+  // `FakeScript.failNextWrite`'s live, consumable copy — one-shot, cleared
+  // by `takeNextAckFailure` the first time a programming frame completes.
+  let failNextProgrammingAck: "reject" | "garbled" | null =
+    script.failNextWrite ?? null;
+  // Bit 7 of the next ack's status byte ([CSAFE-DEF] p.11 Table 9: "Toggles
+  // between 0 and 1 on alternate frames"; interface-notes.md §19.1/§19.2).
+  // Starts LOW and flips after every ack this fake emits — including the
+  // GetErrorType reply and the synthetic failures, since the toggle belongs
+  // to the frame counter, never to the outcome. Starting low reproduces
+  // [S2] Dump 3's own captured pair exactly: the prepare step's ack
+  // `f1 01 76 01 13 65 f2`, then the SetProgram ack
+  // `f1 81 76 0e … eb f2`.
+  let ackToggle = false;
   // `injectTimeout()` (fix-round HIGH-2): once set, every ack this fake
   // would otherwise send is withheld — link stays up, `linkDown` stays
   // false, notifications keep flowing, only acks stop. Sticky (not a
@@ -523,10 +636,10 @@ export function createFakeTransport(
   // `tick()`'s own doc comment for why.
   let armedBundlePending = false;
 
-  // D1: what the machine is holding right now (`FakeScript.loadedWorkout`'s
-  // own doc comment). Set to `null` by the destructive rejection, never by
-  // the clear step — terminate was observed accepted with a workout loaded
-  // and the following program was still rejected.
+  // What the machine is holding right now (`FakeScript.loadedWorkout`'s own
+  // doc comment). REPLACED by each program that lands, never cleared: D1's
+  // destructive wipe is withdrawn (interface-notes.md §19.2), and terminate
+  // routes to Rearm rather than to an empty slot (§19.5).
   let loadedIntervalCount: number | null =
     script.loadedWorkout?.intervalCount ?? null;
 
@@ -631,24 +744,103 @@ export function createFakeTransport(
     deliverArmedBundle();
   }
 
-  /** Phase 7A-fix-2, Task 2 (pm5/response.ts §19.1): `buildAckFrame` now
-   *  takes an options object with an independent `frameStatus` per the
-   *  corrected bitfield parse — `"ok"` here builds the exact same wire byte
-   *  (`0x01`) this fake always sent for it, but `"reject"` now builds a
-   *  GENUINE reject (`frameStatus: "reject"` — status byte `0x11`: `0x10`
-   *  under the `0x30` mask, slave state Ready) rather than the
-   *  old `0x81`, which §19.1 showed decodes to an ACCEPT (toggle-high,
-   *  prev-OK, Ready) — a byte that never actually meant "reject" on the
-   *  wire, even though this file's callers have always used it to mean
-   *  one. Every call site below keeps meaning exactly what its name says:
-   *  driver-visible behaviour (whether `sendSequence` throws) is unchanged,
-   *  only the underlying byte the "reject" scenarios now emit changed, to
-   *  the byte that pm5/response.ts §19.1 established actually IS a reject. */
-  function sendAck(status: "ok" | "reject"): void {
-    notify(
-      TRANSMIT_CHARACTERISTIC_UUID,
-      buildAckFrame({ frameStatus: status, commandIds: [] }),
-    );
+  /** The slave-state nibble every ack carries (`pm5/response.ts` bits 0-3).
+   *  A script override wins outright (`FakeScript.slaveState`'s own doc
+   *  comment — `"offline"` is the case that matters, §19.3). Otherwise it
+   *  follows what the machine is actually doing: `"in-use"` while a workout
+   *  is running under master control, `"ready"` the rest of the time
+   *  (idle/armed/finished/terminated), which is exactly what every captured
+   *  ack shows — all twelve of [S2]'s bytes were taken with the erg not
+   *  rowing a programmed piece, and eleven read Ready (§19.1's table). This
+   *  is the low nibble a whole-byte comparison over-reads. */
+  function currentSlaveState(): CsafeSlaveState {
+    if (script.slaveState !== undefined) return script.slaveState;
+    return machineState === "rowing" || machineState === "resting"
+      ? "in-use"
+      : "ready";
+  }
+
+  /** THE one place this fake puts an ack on the wire (Phase 7A-fix-2 Task
+   *  6). Three independent fields, assembled by `buildAckFrame` and never
+   *  by bit math here (pm5/response.ts §19.1):
+   *
+   *  - `frameStatus` — `"ok"` builds `0x0X`, `"reject"` a GENUINE `0x1X`.
+   *    Task 2 corrected this from the old `0x81`, which §19.1 showed
+   *    decodes to an ACCEPT (toggle-high, prev-OK, Ready) — a byte that
+   *    never meant "reject" on the wire even though this file's callers
+   *    used it to mean one.
+   *  - `slaveState` — `currentSlaveState()` above.
+   *  - `frameToggle` — bit 7, flipped on EVERY ack regardless of outcome.
+   *    This is the alternation [S1] recorded as "accept/reject/accept/
+   *    reject" for one unchanging command, and the reason any whole-byte
+   *    status comparison anywhere in this repo now fails half the suite
+   *    (§19.2's verdict: the toggle, not the machine changing its mind).
+   *
+   *  `commandIds` is the ECHO — the opcodes of the frame being acked, taken
+   *  from the frame itself via `pm5/response.ts`'s `echoedCommandIds`, so
+   *  the fake cannot claim an echo the request never earned. */
+  function sendAck(status: CsafeFrameStatus, commandIds: number[]): void {
+    notify(TRANSMIT_CHARACTERISTIC_UUID, nextAckFrame(status, commandIds));
+  }
+
+  /** Builds the next ack frame and advances the toggle — shared by
+   *  `sendAck` and `sendGarbledAck` so a corrupted frame consumes a toggle
+   *  step exactly like a clean one (the PM's frame counter does not care
+   *  whether the bytes survived the air). */
+  function nextAckFrame(
+    status: CsafeFrameStatus,
+    commandIds: number[],
+  ): Uint8Array {
+    const frame = buildAckFrame({
+      frameStatus: status,
+      slaveState: currentSlaveState(),
+      frameToggle: ackToggle,
+      commandIds,
+    });
+    ackToggle = !ackToggle;
+    return frame;
+  }
+
+  /** `FakeScript.failNextWrite: "garbled"` — an otherwise well-formed ack
+   *  whose checksum no longer covers its contents, so `parseFrame` refuses
+   *  it and `parseCsafeResponse` reports `{kind: "unparseable"}`.
+   *
+   *  The corruption is one extra `0x01` pushed in after the real checksum,
+   *  before the stop flag. That byte then BECOMES the frame's checksum as
+   *  far as the parser is concerned, over contents that now include the old
+   *  one — and the XOR of "everything, then its own XOR" is always exactly
+   *  `0x00`, never `0x01`. So this is a checksum mismatch UNCONDITIONALLY,
+   *  with no branch and no dependence on what the ack happened to contain.
+   *  (Overwriting the checksum byte instead needs a "unless it already is
+   *  that value" guard, and no reachable ack has a checksum this fake can
+   *  drive to that value, which leaves a permanently untestable branch.)
+   *  `0x01` is not a frame flag, so nothing here can accidentally produce
+   *  some OTHER well-formed frame. Nothing computes a checksum — this only
+   *  invalidates one. SYNTHETIC: no hardware frame ever failed to parse
+   *  (interface-notes.md §19.1). */
+  function sendGarbledAck(commandIds: number[]): void {
+    const clean = nextAckFrame("ok", commandIds);
+    const garbled = new Uint8Array(clean.length + 1);
+    garbled.set(clean.subarray(0, clean.length - 1), 0);
+    garbled[clean.length - 1] = 0x01;
+    garbled[clean.length] = clean[clean.length - 1]!; // the stop flag
+    notify(TRANSMIT_CHARACTERISTIC_UUID, garbled);
+  }
+
+  /** The SINGLE consumer of both failure hooks, so there is exactly one
+   *  path from "this frame should fail" to a reject/garbled frame on the
+   *  wire. `FakeScript.failNextWrite` is the more specific instruction (a
+   *  one-shot, and the only one that can ask for `"garbled"`), so it is
+   *  consumed first; `injectNak`'s positional `nakAtFrame` answers for the
+   *  frame it names and stays armed, since a rejected frame never advances
+   *  the cursor past itself. */
+  function takeNextAckFailure(): "reject" | "garbled" | null {
+    if (failNextProgrammingAck !== null) {
+      const failure = failNextProgrammingAck;
+      failNextProgrammingAck = null;
+      return failure;
+    }
+    return nakAtFrame === programFrameCursor ? "reject" : null;
   }
 
   /** The clear step's own chunk assertion (plan Task 2) — reuses
@@ -667,21 +859,26 @@ export function createFakeTransport(
     clearChunkCursor += 1;
   }
 
-  /** Called once the clear step's chunks have all arrived. The ack depends
-   *  on the machine's LOAD STATE, both halves observed (D1,
-   *  interface-notes.md §18 #6): rejected with nothing loaded — the
-   *  clean-run case — and ACCEPTED with a workout loaded. Either way the
-   *  loaded workout SURVIVES: an accepted terminate did not clear the PM
-   *  (the following program was still rejected, twice), which is the whole
-   *  reason `program()` can't trust its own clear step. Advances into
-   *  `"programming"` regardless — the driver sends the program next no
+  /** Called once the prepare step's chunks have all arrived. The ack
+   *  depends on the machine's LOAD STATE: rejected with nothing loaded
+   *  ([S1]'s clean-run narrative, "rejected — nothing to terminate"; the
+   *  byte itself was never captured, §19.1's `S1 CLEAN RUN 2` row) and
+   *  ACCEPTED with a workout loaded (§19.1's `S2 D2`/`S2 D3` rows, raw
+   *  `f1 01 76 01 13 65 f2` / `f1 81 76 01 13 e5 f2`). Either way the
+   *  loaded workout SURVIVES: terminate's documented destination is *Rearm*
+   *  — the SAME workout made ready again (§19.5) — which is the whole
+   *  reason `program()` cannot treat this step as a clear. Advances into
+   *  `"programming"` regardless: the driver sends the program next no
    *  matter which ack it got. `timeoutInjected` short-circuits this exactly
    *  like the other two frame-complete handlers below: the bytes were
    *  already verified correct, but no ack goes out and `phase` does not
    *  advance. */
-  function onClearingFrameComplete(): void {
+  function onClearingFrameComplete(frame: Uint8Array): void {
     if (timeoutInjected) return;
-    sendAck(loadedIntervalCount === null ? "reject" : "ok");
+    sendAck(
+      loadedIntervalCount === null ? "reject" : "ok",
+      echoedCommandIds(frame),
+    );
     phase = "programming";
   }
 
@@ -697,17 +894,42 @@ export function createFakeTransport(
   // fixed by this split.)
   function assertProgrammingChunk(chunk: Uint8Array): void {
     const expected = flatProgramChunks[programChunkCursor];
-    if (!expected) {
+    if (!expected || !bytesEqual(chunk, expected)) {
       throw new Error(
-        `fake transport: unexpected extra programming write ${toHex(chunk)} — the expected sequence (${flatProgramChunks.length} chunks) is already complete`,
-      );
-    }
-    if (!bytesEqual(chunk, expected)) {
-      throw new Error(
-        `fake transport: programming chunk ${programChunkCursor} mismatch — expected ${toHex(expected)}, got ${toHex(chunk)}`,
+        `fake transport: programming chunk ${programChunkCursor} mismatch — got ${toHex(chunk)}, which is not chunk ${programChunkCursor} of buildProgrammingSequence's own ${flatProgramChunks.length}-chunk output`,
       );
     }
     programChunkCursor += 1;
+  }
+
+  /** The flat chunk index at which programming frame `frameIndex` starts —
+   *  `flatProgramChunks` is one flat list, but frames are what get acked
+   *  and retried, so both the rewind below and the terminate-recognition in
+   *  `write()` need to know where a frame's own chunks begin. */
+  function chunkCursorAtFrame(frameIndex: number): number {
+    return programSequence
+      .slice(0, frameIndex)
+      .reduce((total, frameChunks) => total + frameChunks.length, 0);
+  }
+
+  /** True when no chunk of the CURRENT programming frame has arrived yet —
+   *  i.e. the machine is between frames and the next thing it hears could
+   *  legitimately be either the next programming frame or a terminate. */
+  function atProgrammingFrameBoundary(): boolean {
+    return programChunkCursor === chunkCursorAtFrame(programFrameCursor);
+  }
+
+  /** A rejected frame is not the end of the conversation (Task 6). The
+   *  master's answer to a refusal is to try again, which every laptop
+   *  session did repeatedly (interface-notes.md §19.1's table is largely
+   *  retries), and a `program()` retry re-sends the whole sequence behind
+   *  its own prepare step — so the chunk cursor rewinds to the START of the
+   *  frame that was refused rather than being left partway through bytes
+   *  that are about to arrive again. The FRAME cursor deliberately does not
+   *  move: the refused frame has not landed, so the next frame the machine
+   *  expects to accept is still this one. */
+  function rewindAfterRefusedFrame(): void {
+    programChunkCursor = chunkCursorAtFrame(programFrameCursor);
   }
 
   /** Called once per COMPLETE programming frame (not per chunk) — decides
@@ -719,30 +941,34 @@ export function createFakeTransport(
    *  response, exactly the "mid-sequence timeout" the spec's own §4
    *  injection hook describes, distinct from `injectDisconnect()` (which
    *  also flips `linkDown` and fires `onDisconnect`; this does neither). */
-  function onProgrammingFrameComplete(): void {
+  function onProgrammingFrameComplete(frame: Uint8Array): void {
     if (timeoutInjected) return;
-    // D1, the confirmed destructive fact (interface-notes.md §18 #6,
-    // observed twice): programming over a loaded workout is REJECTED, and
-    // the rejection WIPES what was loaded. Not "rejected, try again with
-    // your workout still safe" — the rower's loaded session is gone by the
-    // time the caller sees the error, which is why `MonitorDriver.program`'s
-    // own JSDoc requires 7B to warn BEFORE calling, never after.
-    if (loadedIntervalCount !== null) {
-      loadedIntervalCount = null;
-      sendAck("reject");
+    const echo = echoedCommandIds(frame);
+    const failure = takeNextAckFailure();
+    if (failure !== null) {
+      if (failure === "garbled") {
+        sendGarbledAck(echo);
+      } else {
+        sendAck("reject", echo);
+      }
+      rewindAfterRefusedFrame();
       return;
     }
-    const shouldNak = nakAtFrame === programFrameCursor;
-    sendAck(shouldNak ? "reject" : "ok");
-    if (!shouldNak) {
-      programFrameCursor += 1;
-      if (programFrameCursor === programSequence.length) {
-        phase = "armed";
-        // Fix-round 1, F1: withheld until a subsequent `tick()` (or
-        // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
-        // this is no longer synchronous with the ack itself.
-        armedBundlePending = true;
-      }
+    sendAck("ok", echo);
+    programFrameCursor += 1;
+    if (programFrameCursor === programSequence.length) {
+      phase = "armed";
+      // D1 WITHDRAWN (interface-notes.md §19.2): a program sent over a
+      // loaded workout is accepted and REPLACES it — §19.1's Verdict (b),
+      // where a rest-0 program sent over a rest-30 one without reconnecting
+      // produced a work→work row with no resting state at all. What the
+      // machine holds is now what was just programmed, whatever it held
+      // before; nothing is ever wiped to `null` here.
+      loadedIntervalCount = script.program.intervals.length;
+      // Fix-round 1, F1: withheld until a subsequent `tick()` (or
+      // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
+      // this is no longer synchronous with the ack itself.
+      armedBundlePending = true;
     }
   }
 
@@ -758,19 +984,41 @@ export function createFakeTransport(
 
   /** Called once the terminate frame's chunks have all arrived — acks and
    *  immediately reports the TERMINATE status (the fake's own synchronous
-   *  stand-in for the PM's real, near-instant response). `latestStatus` is
-   *  guaranteed non-null here: `phase` only ever becomes `"armed"` (the
-   *  only way a terminate write reaches this function at all) immediately
-   *  after `deliverArmedBundle()` sets it, and nothing ever clears it back
-   *  to null afterward — so this reads the fields directly rather than
-   *  guarding against a case the state machine can't produce (an earlier,
-   *  defensively-`??`-guarded version left that unreachable fallback
-   *  branch permanently uncovered). */
-  function onArmedFrameComplete(): void {
+   *  stand-in for the PM's real, near-instant response), carried over from
+   *  whatever the machine last reported.
+   *
+   *  `latestStatus` CAN be null here, which an earlier version of this
+   *  function asserted away: since fix-round 1's F1 the armed bundle is
+   *  withheld until the next `tick()`/`deliverArmedNow()`, so a terminate
+   *  can legitimately arrive after `phase` became `"armed"` but before any
+   *  status has ever gone out. The fallback below is the state the machine
+   *  is in at that moment — armed, nothing rowed — not a defensive guess. */
+  function onArmedFrameComplete(frame: Uint8Array): void {
     if (timeoutInjected) return; // same short-circuit as onProgrammingFrameComplete
-    terminateChunkCursor = 0; // a script could call terminate() only once in practice, but reset defensively
-    sendAck("ok");
-    const previous = latestStatus!;
+    terminateChunkCursor = 0;
+    sendAck("ok", echoedCommandIds(frame));
+    // Back to a programmable machine (interface-notes.md §19.4/§19.5):
+    // terminate is the documented exit to `WaitToBegin`, so a whole new
+    // programming sequence can now arrive over this same connection, with
+    // the cursors rewound to its first frame. (A FURTHER terminate is legal
+    // too — `write()`'s own terminate recognition below picks that up.) The
+    // loaded workout is NOT cleared: terminate routes to Rearm, the SAME
+    // workout made ready again (§19.5), so the next prepare step acks "ok"
+    // rather than the nothing-loaded refusal a fresh connection gets.
+    phase = "programming";
+    programChunkCursor = 0;
+    programFrameCursor = 0;
+    const previous: FakeStatusEvent = latestStatus ?? {
+      atMs: virtualClock,
+      kind: "status",
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: null,
+      programIntervalIndex: 0,
+    };
     const terminated: FakeStatusEvent = {
       atMs: virtualClock,
       kind: "status",
@@ -856,18 +1104,47 @@ export function createFakeTransport(
       // Task 3's `sendGetErrorType` one-off write — checked BEFORE the
       // phase-based assertions below, since it can legitimately arrive
       // mid-"programming" (right after a reject) and is not the next
-      // expected programming/clearing/armed chunk. Answered with a
-      // scripted status; the fake makes no claim this is what a real
-      // GetErrorType reply actually contains (interface-notes.md §17's
-      // pull-path item — the decode is unconfirmed either way). Does not
+      // expected programming/clearing/armed chunk.
+      //
+      // ABSORBED AND ACKED, not scripted — Task 6's own choice, stated
+      // plainly. The reply is an ordinary `"ok"` ack echoing the single
+      // opcode that was asked for (`0xC8`), carrying this fake's normal
+      // toggle and slave state. Nothing about its CONTENT is scriptable,
+      // because nothing about it is known: no GET command has ever been
+      // sent to this hardware, the pull wrapper itself is an unresolved
+      // conflict between the two source documents, and the driver logs the
+      // reply as raw hex with no claimed meaning (interface-notes.md §17
+      // item 14, `buildGetErrorType`'s own doc comment). A scriptable
+      // payload here would be inventing the answer to the exact question
+      // the merge-gate row exists to ask. It DOES go through `sendAck`, so
+      // it consumes a toggle step like every other frame the PM emits —
+      // that much is frame-counter mechanics, not error semantics. Does not
       // touch `phase` or any cursor: this write is orthogonal to the
       // clearing/programming/armed state machine.
       if (bytesEqual(bytes, getErrorTypeFrame)) {
-        notify(
-          TRANSMIT_CHARACTERISTIC_UUID,
-          buildAckFrame({ frameStatus: "ok", commandIds: [0xc8] }),
-        );
+        // `0xC8` = `CSAFE_PM_GET_ERRORTYPE`, the one opcode
+        // `buildGetErrorType()` sends — the same inline literal Task 3 put
+        // here, unchanged. `echoedCommandIds` deliberately does not decode
+        // the `0x1A` pull wrapper this frame uses (its own doc comment), so
+        // there is nothing to derive it from.
+        sendAck("ok", [0xc8]);
         return;
+      }
+      // A terminate frame arriving where the next PROGRAMMING frame would
+      // go is legal and common (Task 6): it is the prepare step of the next
+      // `program()` after a previous one was refused or after a terminate
+      // re-opened the machine, and it is the app's own `terminate()` called
+      // twice. The machine parses whatever frame it is handed — only this
+      // fake's expected-byte bookkeeping needs telling which sequence the
+      // chunk belongs to, and only at a frame boundary (mid-frame, the next
+      // chunk is whatever the frame in progress says it is).
+      if (
+        phase === "programming" &&
+        atProgrammingFrameBoundary() &&
+        bytesEqual(bytes, terminateChunks[0]!)
+      ) {
+        phase = "clearing";
+        clearChunkCursor = 0;
       }
       if (phase === "clearing") {
         assertClearingChunk(bytes);
@@ -877,18 +1154,22 @@ export function createFakeTransport(
         assertArmedChunk(bytes);
       }
 
-      // `incoming` (`pm5/framer.ts`'s `reassemble()`) is used ONLY to
-      // detect "a complete frame has now arrived" — real start/stop-flag
-      // boundary detection, not a second byte comparison — per the drain
+      // `incoming` (`pm5/framer.ts`'s `reassemble()`) detects "a complete
+      // frame has now arrived" — real start/stop-flag boundary detection,
+      // not a second byte comparison; every chunk was already asserted
+      // correct one at a time above. Since Task 6 the REASSEMBLED FRAME
+      // itself is used as well, but only as the source of the opcode echo
+      // each handler puts in its ack (`pm5/response.ts`'s
+      // `echoedCommandIds`) — never as a byte check. Per the drain
       // contract, keep pushing empty chunks until it returns null.
       let complete = incoming.push(bytes);
       while (complete) {
         if (phase === "clearing") {
-          onClearingFrameComplete();
+          onClearingFrameComplete(complete);
         } else if (phase === "programming") {
-          onProgrammingFrameComplete();
+          onProgrammingFrameComplete(complete);
         } else {
-          onArmedFrameComplete();
+          onArmedFrameComplete(complete);
         }
         complete = incoming.push(new Uint8Array(0));
       }
