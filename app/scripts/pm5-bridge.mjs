@@ -24,10 +24,20 @@ const LOG = process.env.PM5_BRIDGE_LOG ?? "pm5-session.log";
 // comment). Binding to 127.0.0.1 keeps this off the network, but any page
 // open in the SAME browser can still POST here with no preflight (`text/
 // plain` is a CORS "simple request") while the bridge runs — and `program()`
-// is documented as destructive. Reject any request that names a different
+// is documented as destructive. Reject any request that names a non-loopback
 // Origin; requests with none (curl, the documented way to enqueue a command)
 // are unaffected.
-const ALLOWED_ORIGIN = process.env.PM5_BRIDGE_ORIGIN ?? "http://localhost:5173";
+//
+// Loopback on ANY port, not one hardcoded port. A pinned `localhost:5173`
+// looked right against `vite.config.ts` (no port override, so Vite's default)
+// and was wrong in practice within a day: a second worktree's dev server was
+// already holding 5173, Vite silently took 5174 for this one, and the pinned
+// check would have 403'd the lab's own mirroring — at the erg, which is the
+// worst possible place to debug it. The threat this guards is a REMOTE page
+// reaching a loopback port with a destructive `program` command; every
+// loopback origin is already a local dev server the operator started.
+const ORIGIN_ALLOWED = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/;
+const PINNED_ORIGIN = process.env.PM5_BRIDGE_ORIGIN;
 
 /** Commands wait here until the page's next poll drains them. */
 const queue = [];
@@ -53,7 +63,10 @@ const server = createServer(async (req, res) => {
   }
 
   const origin = req.headers.origin;
-  if (origin && origin !== ALLOWED_ORIGIN) {
+  const originOk = PINNED_ORIGIN
+    ? origin === PINNED_ORIGIN
+    : ORIGIN_ALLOWED.test(origin ?? "");
+  if (origin && !originOk) {
     res.writeHead(403).end();
     return;
   }
