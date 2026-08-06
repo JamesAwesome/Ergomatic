@@ -4,10 +4,11 @@
 // notification can carry two response frames in one callback turn, and the
 // second must not be dropped just because nothing was awaiting it yet), the
 // state machine (program -> armed -> the frame stream -> interval
-// boundaries -> finished/terminated, with terminal states LATCHED per the
-// Task 3 review's Appendix-E finding), an optional tick-driven ack-timeout
-// policy distinct from a transport disconnect, and `intervalRemaining`'s
-// computation.
+// boundaries -> finished/terminated, where a terminal state closes the
+// RUN — `activeRun`, opened only by `program()` — and never the driver
+// itself, Phase 7A-fix-2 Task 4 / spec §4 / interface-notes.md §19.4), an
+// optional tick-driven ack-timeout policy distinct from a transport
+// disconnect, and `intervalRemaining`'s computation.
 //
 // `program()`'s three-phase lifecycle (design spec §3, interface-notes.md
 // §18/§19.4/§19.5, progress.md's D1/D2): a leading PREPARE step
@@ -361,8 +362,44 @@ export function createPm5Driver(
     deviceName: "PM5",
   };
 
-  let program: WorkoutProgram | null = null;
-  let terminalLatched = false;
+  /**
+   * THE RUN (Phase 7A-fix-2 Task 4, spec §4) — this driver's single unit of
+   * session lifetime, and the thing a terminal state closes. It replaces
+   * the old `terminalLatched` boolean, which latched the whole DRIVER:
+   * every subscription callback short-circuited forever once
+   * finished/terminated arrived, so the driver went permanently deaf and
+   * only a reconnect revived it. Hardware session 2 caught exactly that
+   * (interface-notes.md §19.4, three times): zero frames after
+   * `workoutComplete`, instant resumption on reconnect — a minute of
+   * rowing at the erg with nothing on screen. The monitor never stops
+   * responding; the silence was ours.
+   *
+   * What the latch got RIGHT survives here, scoped to the run instead of
+   * the driver: a completed run's record must not be re-opened or added to
+   * by the PM's own housekeeping. That hazard is real and documented —
+   * after a TERMINATED workout the PM walks Terminate -> Rearm ->
+   * WaitToBegin entirely unaided (CSAFE-DEF Appendix E, cited via
+   * interface-notes.md §19.4/§19.5), so it reports "armed", then "rowing"
+   * again, with nobody having asked for anything.
+   *
+   * Hence the ownership rule, which is the whole point of this shape:
+   * **a run is opened by `program()` and ONLY by `program()`** (see this
+   * driver's `program` method, after `verifyArmed()` resolves). There is
+   * deliberately no state-driven opening — a rule like "an `armed` tick
+   * starts a run" would let the auto-rearm cycle above FABRICATE runs out
+   * of machine noise. A JustRow-follow mode would be its own designed
+   * feature (spec's own out-of-scope list), not an inference from a state
+   * word.
+   *
+   * `closed` is set by the first terminal state observed while the run is
+   * open, and never unset — `activeRun` is only ever REPLACED (by the next
+   * successful `program()`), never cleared, so `program` survives a close
+   * and live frames keep normalizing against the workout the machine is
+   * still holding. Everything else about the driver keeps running:
+   * subscriptions stay live, frames keep emitting, `program()` works
+   * again with no reconnect.
+   */
+  let activeRun: { program: WorkoutProgram; closed: boolean } | null = null;
   let reconnectPending = false;
   let raw: Partial<RawPm5Status> = {};
   // The last RAW machine interval index this driver has actually SEEN on
@@ -491,6 +528,28 @@ export function createPm5Driver(
    *  so `sendGetErrorType` needs no extra branch to tell the two apart. */
   let pendingErrorTypeTimeout: { ticks: number; ticksNeeded: number } | null =
     null;
+  /** "Is a run this driver opened active and not yet closed?" — the one
+   *  question the frame, boundary and disconnect paths ask about run
+   *  lifetime (and, per Task 4's own interface note, the question Task 5's
+   *  index normalization asks before it normalizes anything). `false` both
+   *  before the first `program()` of a driver's life and after the current
+   *  run's terminal state; the two are distinguished where it matters by
+   *  reading `activeRun` directly (the disconnect classification below). */
+  function runIsOpen(): boolean {
+    return activeRun !== null && !activeRun.closed;
+  }
+
+  /** The workout the machine is holding, per the last successful
+   *  `program()` — `null` until one has ever succeeded. Deliberately
+   *  SURVIVES the run's close (`activeRun` is replaced, never cleared):
+   *  a finished PM5 parks in `WorkoutLogged` still holding the workout it
+   *  just ran, so the frames that keep arriving afterwards still have a
+   *  real program to size `intervalRemaining` and normalize
+   *  `intervalIndex` against. */
+  function armedProgram(): WorkoutProgram | null {
+    return activeRun?.program ?? null;
+  }
+
   /** Discards anything left in `pendingAckBuffer` from a PREVIOUS, already-
    *  resolved sequence — see the buffer's own comment for why a leftover
    *  here is never a legitimate answer to a NEW sequence's first frame.
@@ -597,20 +656,26 @@ export function createPm5Driver(
 
   t.onDisconnect((reason) => {
     // M-3 (final-review), empirically proven: resolve any `pendingAck`
-    // BEFORE the terminal-latch early-return below, not after. A sequence
-    // sent AFTER the terminal state has already latched (a plausible 7B
-    // cleanup path — e.g. calling `terminate()` again on unmount) still
-    // registers a `pendingAck`, and `mergeStatus`'s own
-    // `if (terminalLatched) return` stops the GENERAL_STATUS tick that
-    // would otherwise resolve it via the ack-timeout policy (see
-    // `DriverOptions.ackTimeout`) — a disconnect is then the ONLY
-    // remaining signal. Before this fix, the early-return below discarded
-    // that signal silently, hanging `sendSequence` forever: proved with
-    // 5000ms of general-status ticks (the ack-timeout hatch, disabled by
-    // `terminalLatched`) PLUS an injected disconnect (this hatch,
-    // previously also disabled), neither settling the promise. Resolving
-    // with `"disconnected"` here is accurate even post-terminal — the
-    // transport genuinely did drop before this frame's ack arrived.
+    // BEFORE the expected-disconnect early-return below, not after. A
+    // sequence sent AFTER the current run closed (a plausible 7B cleanup
+    // path — e.g. calling `terminate()` again on unmount) still registers
+    // a `pendingAck`, and for a caller that configured no `ackTimeout`
+    // policy at all (the real call site, `scripts/pm5-lab.ts`, passes only
+    // `verifyTicks`) a disconnect is the ONLY remaining signal that no
+    // response is coming. Before this fix, the early-return below
+    // discarded that signal silently, hanging `sendSequence` forever.
+    // Resolving with `"disconnected"` here is accurate whether or not a
+    // run is open — the transport genuinely did drop before this frame's
+    // ack arrived.
+    //
+    // Task 4 NOTE on how this bug used to present: the ack-timeout hatch
+    // was ALSO disabled after a terminal state, because `mergeStatus`'s
+    // own `if (terminalLatched) return` swallowed the GENERAL_STATUS ticks
+    // that counter runs on. That half is gone — the run-scoped rewrite
+    // keeps every subscription live, so a configured `ackTimeout` now
+    // times a post-run write out on its own. This hatch stays because it
+    // is the unconfigured case's only exit, not because the other one is
+    // still broken.
     if (pendingAck) {
       const resolve = pendingAck;
       pendingAck = null;
@@ -641,13 +706,25 @@ export function createPm5Driver(
       pendingSettle = null;
       resolve();
     }
-    if (terminalLatched) {
-      // Appendix E (CSAFE p.162): the PM auto-cycles
-      // Terminate -> Rearm -> WaitToBegin on its own after a workout ends;
-      // a transport drop that happens to land during that housekeeping (or
-      // any time after) is expected, not an error — the session is already
-      // over from this driver's point of view.
-      log.record("disconnect", `post-terminal, ignored: ${reason}`);
+    if (activeRun !== null && activeRun.closed) {
+      // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
+      // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited
+      // via interface-notes.md §19.4): the PM auto-cycles
+      // Terminate -> Rearm -> WaitToBegin on its own after a terminated
+      // workout; a transport drop that happens to land during that
+      // housekeeping (or any time after the run this driver opened has
+      // closed) is expected, not an error — that RUN is over, even though
+      // this driver is emphatically still listening.
+      //
+      // Scoped to the CURRENT run on purpose: a drop with no run ever
+      // opened (`activeRun === null` — e.g. during 7B's connect flow,
+      // before any `program()` call) is a genuine disconnect and still
+      // announces itself below, and so is a drop during a run that is
+      // open. Only "this run already finished" is the expected case.
+      log.record(
+        "disconnect",
+        `after the current run closed, ignored: ${reason}`,
+      );
       return;
     }
     reconnectPending = true;
@@ -664,7 +741,15 @@ export function createPm5Driver(
     after: (decoded: T) => void,
   ): void {
     t.subscribe(uuid, (bytes) => {
-      if (terminalLatched) return;
+      // NO run/terminal gate here, ever (Task 4, spec §4): this callback
+      // used to `return` forever once `terminalLatched` was set, which is
+      // precisely how the driver went deaf after `workoutComplete`
+      // (interface-notes.md §19.4). Every characteristic stays subscribed
+      // and every notification is decoded for the whole life of the
+      // transport; what a closed run changes is what the EMISSION paths
+      // below do with the decode (`maybeEmitFrame`'s terminal branch,
+      // `emitIntervalComplete`'s out-of-run branch), never whether bytes
+      // are heard at all.
       // Laptop session 1 (interface-notes.md §18): a real two-interval
       // workout crossed a real boundary and NO intervalComplete fired, and
       // the log could not say whether 0x0037 never arrived or arrived and
@@ -725,8 +810,9 @@ export function createPm5Driver(
   function computeRemainingForFrame(
     frame: MonitorFrame,
   ): MonitorFrame["intervalRemaining"] {
-    if (!program || frame.intervalIndex === null) return null;
-    const interval = program.intervals[frame.intervalIndex];
+    const p = armedProgram();
+    if (!p || frame.intervalIndex === null) return null;
+    const interval = p.intervals[frame.intervalIndex];
     const status = raw as RawPm5Status;
     const progress =
       interval?.kind === "distance"
@@ -736,12 +822,12 @@ export function createPm5Driver(
   }
 
   function maybeEmitFrame(): void {
-    // No `terminalLatched` check here: this function is only ever invoked
-    // from `mergeStatus`'s own subscription callback, which ALREADY
-    // returns before calling `after()` (and therefore this function) once
-    // `terminalLatched` is set — a second check here would be dead code
-    // (confirmed: an earlier version had one, and coverage never exercised
-    // its `true` branch through any real call path).
+    // No run gate on the EMISSION itself (Task 4, spec §4): a `frame`
+    // event is the machine's current reading, which stays true and stays
+    // useful whether or not a run this driver opened is still open — the
+    // rower can see their numbers between runs, and 7B can show a live
+    // erg it has not programmed. Only the RUN-scoped consequences below
+    // (workoutComplete/terminated) care about `runIsOpen()`.
     if (!(seen.general && seen.as1 && seen.as2)) return;
     announceReconnectIfPending();
 
@@ -754,7 +840,8 @@ export function createPm5Driver(
     // value, per this task's own contract: intervalIndex/actual.index carry
     // OUR index everywhere they reach a consumer, the raw value survives
     // only in the event log below).
-    const programLength = program?.intervals.length ?? 0;
+    const p = armedProgram();
+    const programLength = p?.intervals.length ?? 0;
     const intervalIndex = toProgramIndex(
       status.intervalCount,
       base.state,
@@ -774,12 +861,12 @@ export function createPm5Driver(
     // interval is supposedly current (`intervalActive`) — exactly the blind
     // spot D3 exposed (both raw fields agreeing with each other, so the OLD
     // raw-vs-raw check below never fires, while both disagree with the
-    // program). Gated on `program` actually being set: with no program
-    // armed, `programLength` is 0 and `toProgramIndex` always returns
-    // `null` by its own contract — informative about nothing, since there
-    // is no program to diverge FROM yet.
+    // program). Gated on a program actually being armed: with none,
+    // `programLength` is 0 and `toProgramIndex` always returns `null` by
+    // its own contract — informative about nothing, since there is no
+    // program to diverge FROM yet.
     const intervalActive = base.state === "rowing" || base.state === "resting";
-    if (program && intervalActive && intervalIndex === null) {
+    if (p && intervalActive && intervalIndex === null) {
       log.record(
         "divergence",
         `intervalIndex=${status.intervalCount} (0x0033, state=${base.state}) has no corresponding interval in a ${programLength}-interval program`,
@@ -793,7 +880,8 @@ export function createPm5Driver(
     // cannot survive a warm-up is not observability. State transitions are
     // the frame-side fact worth keeping; the live values belong to the
     // `frame` EVENT (below), which every pane already consumes.
-    if (frame.state !== lastLoggedFrameState) {
+    const stateChanged = frame.state !== lastLoggedFrameState;
+    if (stateChanged) {
       lastLoggedFrameState = frame.state;
       log.record(
         "frame",
@@ -802,17 +890,50 @@ export function createPm5Driver(
     }
     emit({ kind: "frame", frame });
 
-    // Terminal-state latching (Task 3 review): once finished/terminated
-    // fires, LATCH — Appendix E's own auto-cycle (terminated -> idle
-    // (Rearm) -> armed (WaitToBegin)) must never un-finish the session.
-    // `terminalLatched` short-circuits every subscription callback above,
-    // so no further frame/state event is possible after this point.
+    // A terminal state closes THE RUN (Task 4, spec §4) — not the driver,
+    // not the subscriptions, not this function. Everything above still
+    // ran, and will run again on the very next notification.
+    if (!(frame.state === "finished" || frame.state === "terminated")) return;
+    if (!runIsOpen()) {
+      // A terminal state with no open run to close: either this run's own
+      // terminal state already closed it (the PM keeps reporting
+      // "finished" for as long as it sits in WorkoutLogged, so this is the
+      // COMMON case — `workoutComplete` fires exactly once per run), or no
+      // `program()` ever opened one (a workout the rower started on the
+      // machine itself). Logged only on a state CHANGE: at ~2 status
+      // notifications/second an unconditional entry here would evict the
+      // whole programming trace from the 500-entry ring in minutes, the
+      // same flood the frame log above already guards against.
+      if (stateChanged) {
+        log.record(
+          "terminal-out-of-run",
+          `machine reported "${frame.state}" with no open run — no workoutComplete/terminated event (a run is opened by program() alone, spec §4)`,
+        );
+      }
+      return;
+    }
+    activeRun!.closed = true;
+    // finished and terminated BOTH close the run, but they are NOT the
+    // same machine shape afterwards, and this driver must not assume they
+    // are (CSAFE-DEF Appendix E, cited via interface-notes.md §19.4):
+    // - "finished" (WORKOUTEND -> WorkoutLogged) PARKS. The PM stays in
+    //   WorkoutLogged, answering CSAFE the whole time, and leaves only on
+    //   the user pressing Menu or the master sending Terminate — which is
+    //   exactly what `program()`'s own leading prepare step does, and why
+    //   a rower can start a second workout from this app without touching
+    //   the erg.
+    // - "terminated" (TERMINATE) AUTO-REARMS: Terminate -> Rearm ->
+    //   WaitToBegin, unaided, so the machine reports "armed" and then
+    //   "rowing" again all by itself. That noise is precisely why a run is
+    //   opened by `program()` and never by a state word (`activeRun`'s own
+    //   doc comment).
+    // The run-close is symmetric; the CONSUMER-facing event is not, because
+    // 7C has to tell "logged 12 of 12" from "abandoned at 8"
+    // (`domain/monitor/types.ts`'s own note on why the pair exists).
     if (frame.state === "finished") {
-      terminalLatched = true;
       log.record("terminal", "finished");
       emit({ kind: "workoutComplete" });
-    } else if (frame.state === "terminated") {
-      terminalLatched = true;
+    } else {
       log.record("terminal", "terminated");
       emit({ kind: "terminated" });
     }
@@ -872,10 +993,41 @@ export function createPm5Driver(
   }
 
   function emitIntervalComplete(): void {
-    // Same reasoning as `maybeEmitFrame`: `mergeStatus` already gates on
-    // `terminalLatched` before this function is ever reached.
     announceReconnectIfPending();
     const status = raw as RawPm5Status;
+    const rawActual = toIntervalActual(status);
+    const state = toMonitorFrame(status).state;
+
+    // OUT-OF-RUN BOUNDARIES (Task 4, spec §4). 0x0037/0x0038 are not
+    // ours: a PM5 auto-splits a user-started JustRow piece and reports
+    // those splits on the very same pair, and its own post-terminate
+    // housekeeping can produce a boundary too (CSAFE-DEF footnote 12
+    // p.25: the Split/Interval Number "will change depending on where you
+    // are in the interval when the workout is terminated"). If no run this
+    // driver opened is currently open, this boundary belongs to no program
+    // of ours, so:
+    // - it is EMITTED (7B/observability still want to see that the erg
+    //   crossed a split — silence is what §19.4 cost us),
+    // - with `index: null`, never normalized against a program it has
+    //   nothing to do with, and never fabricated into a number
+    //   (`IntervalActual.index`'s own contract: `null` means "unknown",
+    //   NOT "interval 0"),
+    // - and it is identifiable as such by a consumer: `index: null` plus
+    //   this `boundary-out-of-run` log entry (the `MonitorEvent` contract
+    //   comment in `domain/monitor/types.ts` states this pairing).
+    // A closed run's `actuals` can therefore never grow: the only actual
+    // this path produces carries no interval identity to file under, and
+    // `monitorRun.ts`'s own `recordActual` refuses a completed record
+    // outright.
+    if (!runIsOpen()) {
+      log.record(
+        "boundary-out-of-run",
+        `machine reported Split/Interval Number ${rawActual.index} (state=${state}) with no open run — emitted with index=null, normalized against nothing, never added to a closed run's actuals`,
+      );
+      emit({ kind: "intervalComplete", actual: { ...rawActual, index: null } });
+      return;
+    }
+
     // `rawActual.index` is 0x0037/38's own Split/Interval Number, UNCHANGED
     // (`toIntervalActual` never touched by this task). Normalized below via
     // the CURRENT machine state, same as `maybeEmitFrame`'s own
@@ -893,18 +1045,28 @@ export function createPm5Driver(
     // See the OPEN hardware question below for the one shape (a work→work
     // boundary with no intervening rest) where even this inference has no
     // grounding at all.
-    const rawActual = toIntervalActual(status);
-    const state = toMonitorFrame(status).state;
-    const programLength = program?.intervals.length ?? 0;
+    //
+    // Task 5 NOTE (index normalization, minus-1): this whole path is what
+    // Task 5 changes. The GATE above is this task's — it decides WHETHER a
+    // boundary is normalized at all; the `toProgramIndex` call below is
+    // untouched by Task 4 and is what Task 5 replaces with the scoped
+    // minus-1 rule.
+    //
+    // Past the gate above, a driver-opened run is active BY CONSTRUCTION,
+    // so its program is non-null — no `?? 0` fallback and no second
+    // "is a program armed?" guard is needed anywhere below (both existed
+    // before Task 4, when this function could run with no run at all;
+    // keeping them would be unreachable code pretending to be a check).
+    const programLength = activeRun!.program.intervals.length;
     // `rawActual.index` is `IntervalActual`'s own (now `number | null`)
     // field, but `toIntervalActual` (`pm5/parse.ts`) always assigns it a
     // real decoded byte (`raw.splitIntervalNumber`) — the wire has no null
     // sentinel here, so this can never actually be `null`. Asserted past
     // the type rather than branched on (an earlier version branched here;
     // coverage never exercised the `null` side through any real call path,
-    // the same unreachable-by-construction shape `maybeEmitFrame`'s own
-    // comment describes for its `terminalLatched` check) — same established
-    // pattern as this file's own `raw as RawPm5Status` casts elsewhere.
+    // the same unreachable-by-construction shape the `activeRun!` on the
+    // `programLength` line above has) — same established pattern as this
+    // file's own `raw as RawPm5Status` casts elsewhere.
     const normalizedIndex = toProgramIndex(
       rawActual.index as number,
       state,
@@ -974,10 +1136,11 @@ export function createPm5Driver(
     // The NEW divergence trigger this task adds (mirrors `maybeEmitFrame`'s
     // own — see that comment for the full reasoning): the machine's actual
     // index cannot be explained by the armed program's own length, while a
-    // real interval was supposedly current. Gated on `program` being set
-    // for the same reason as `maybeEmitFrame`'s check.
+    // real interval was supposedly current. `maybeEmitFrame`'s mirror of
+    // this check still needs its own "is a program armed?" guard; this one
+    // does not, per the note above the `programLength` line.
     const stateActive = state === "rowing" || state === "resting";
-    if (program && stateActive && normalizedIndex === null) {
+    if (stateActive && normalizedIndex === null) {
       log.record(
         "divergence",
         `actual.index=${rawActual.index} (0x0037/38, state=${state}) has no corresponding interval in a ${programLength}-interval program`,
@@ -1073,18 +1236,16 @@ export function createPm5Driver(
   // `terminate()`'s settle-wait tick pulse (design spec §7, interface-
   // notes.md §19.6) AND `sendGetErrorType`'s always-active reply bound
   // (Task 3 review, IMPORTANT-1) — a RAW subscription, deliberately NOT
-  // routed through `mergeStatus`: that helper's own
-  // `if (terminalLatched) return` gate would swallow exactly the ticks
-  // the settle wait needs, since terminate()'s own ack is usually what
-  // CAUSES `terminalLatched` to become true (the very next status tick
-  // reports "terminated") — every tick after the first would otherwise
-  // never reach a counter placed inside `mergeStatus`'s gated callback.
-  // The SAME independence is valuable for `pendingErrorTypeTimeout`, even
-  // though it fires earlier in the lifecycle (before any program is ever
-  // armed) — one raw subscription is simpler than two, and neither
-  // counter needs a decode: this only counts arrivals, it never reads a
-  // field, so a garbled General Status notification still proves the
-  // radio is alive and still counts as a tick.
+  // routed through `mergeStatus`. The ORIGINAL reason is gone with Task
+  // 4: `mergeStatus` used to `return` on `terminalLatched`, swallowing
+  // exactly the ticks the settle wait needs (terminate()'s own ack is
+  // usually what CAUSED the latch), and it no longer gates on anything.
+  // The reason this stays raw is the OTHER one, which survives intact:
+  // neither counter needs a DECODE. `mergeStatus` returns before its
+  // `after()` callback whenever a notification fails its length guard, so
+  // a garbled General Status would not tick a counter placed in there —
+  // yet a garbled frame still proves the radio is alive, which is the
+  // only thing these two budgets are counting.
   t.subscribe(GENERAL_STATUS_UUID, () => {
     if (pendingSettle) {
       pendingSettle.ticks += 1;
@@ -1126,8 +1287,9 @@ export function createPm5Driver(
     // No `if (!pendingVerify) return` guard here: both call sites (the
     // general-status tick handler above, `onDisconnect` below) already
     // check `pendingVerify` before calling — a second check here would be
-    // dead code no test path can reach (same reasoning `maybeEmitFrame`'s
-    // own comment gives for omitting a redundant `terminalLatched` check).
+    // dead code no test path can reach (the same
+    // unreachable-by-construction reasoning `emitIntervalComplete`'s
+    // `activeRun!` carries).
     const reject = pendingVerify!.reject;
     pendingVerify = null;
     log.record("program-rejection", `${reason} during verify: ${detail}`);
@@ -1208,9 +1370,9 @@ export function createPm5Driver(
    *  own doc comment carries the full citation). Registers fresh and
    *  waits for `ticksNeeded` NEW arrivals — same "never trust an
    *  already-cached tick" discipline as `verifyArmed` — via the raw
-   *  GENERAL_STATUS_UUID subscription above, which (unlike `mergeStatus`'s
-   *  gated ones) keeps counting even after `terminalLatched` engages,
-   *  which terminate()'s own ack usually causes. `ticksNeeded <= 0`
+   *  GENERAL_STATUS_UUID subscription above, which keeps counting through
+   *  the terminal state terminate()'s own ack usually causes (as, since
+   *  Task 4, does every other subscription in this file). `ticksNeeded <= 0`
    *  resolves immediately without registering anything — "wait zero
    *  ticks" needs no tick to ever arrive to be satisfied. */
   function settleAfterTerminate(): Promise<void> {
@@ -1547,7 +1709,34 @@ export function createPm5Driver(
       // for why waiting here, never trusting anything already cached, is
       // the correct trade-off, not an overcorrection).
       await verifyArmed();
-      program = p;
+      // THE ONE PLACE A RUN IS OPENED (Task 4, spec §4 — `activeRun`'s own
+      // doc comment has the full reasoning). Deliberately here, on the
+      // success path past verification, and deliberately nowhere else: no
+      // state word, no `armed` tick, no boundary and no reconnect ever
+      // opens a run, because the PM's own Terminate -> Rearm ->
+      // WaitToBegin cycle produces all of those unaided and would
+      // otherwise fabricate runs out of housekeeping.
+      //
+      // Any PREVIOUS run — open or closed — is replaced outright, which is
+      // what makes a second workout possible in one driver lifetime with
+      // no reconnect (the §19.4 regression this task fixes). A boundary
+      // half still waiting for its partner belongs to the run being
+      // replaced, so it is dropped here rather than left to pair with the
+      // NEW run's first boundary: `noteBoundaryHalf`'s pairing gate
+      // matches on the Split/Interval NUMBER, and both runs number their
+      // splits from the same low integers, so a cross-run pairing is
+      // otherwise entirely constructible (it would emit this run's
+      // identity carrying the last run's averages — D4's corruption, one
+      // level up).
+      if (boundaryHalves.split !== null || boundaryHalves.asSplit !== null) {
+        log.record(
+          "boundary-orphan",
+          `a boundary half was still pending when a new run opened (0x0037=${boundaryHalves.split}, 0x0038=${boundaryHalves.asSplit}) — discarded rather than paired with the new run's first boundary`,
+        );
+      }
+      boundaryHalves.split = null;
+      boundaryHalves.asSplit = null;
+      activeRun = { program: p, closed: false };
       log.record("armed", `programmed ${p.intervals.length} interval(s)`);
       emit({ kind: "armed" });
     },
