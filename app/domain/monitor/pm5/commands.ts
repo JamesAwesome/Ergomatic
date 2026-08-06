@@ -383,6 +383,45 @@ export function buildTerminate(): Uint8Array[][] {
   return buildFrameGroups([unit]).map(packGroup);
 }
 
+/** `CSAFE_PM_GET_ERRORTYPE` (`0xC8`, csafe.h:513) — sent once by
+ *  `src/monitor/driver.ts` after a genuine reject during a programming
+ *  send to learn WHY (interface-notes.md §19.7, CSAFE-DEF p.50: "the
+ *  Master must issue a PM-specific GetErrorType command to determine the
+ *  specific error information" — a reject is not self-describing).
+ *
+ *  Wrapped under `0x1A` (`CSAFE_SETUSERCFG1_CMD`), NOT this file's usual
+ *  `0x76` push wrapper — matching CSAFE-DEF's own worked "Get Force Curve"
+ *  example (`F1 1A 01 BF A4 F2`, interface-notes.md §6 example 13) and our
+ *  own R3 conformance vector (`pm5/response.ts`). This is a genuine,
+ *  UNRESOLVED conflict between the two source documents, cited here at the
+ *  definition because it belongs to the byte choice, not to any one
+ *  caller: csafe.h's own four-wrapper partitioning
+ *  (interface-notes.md §19.11 — `0x76`/`0x77`/`0x7E`/`0x7F`, one push/pull
+ *  pair per command family) implies a GET command's wrapper should be
+ *  `0x7F` (`CSAFE_GETPMCFG_CMD`, the read counterpart of `0x76`'s
+ *  `CSAFE_SETPMCFG_CMD`), while every documented worked GET example uses
+ *  `0x1A` instead. We follow the document's own worked bytes over the
+ *  header's inferred partitioning. Settling which is actually right on the
+ *  wire needs one hardware GET — interface-notes.md §17's pull-path item,
+ *  which this function's own caller deliberately does not need an answer
+ *  to yet (`src/monitor/driver.ts` logs the reply as raw hex only, never a
+ *  claimed meaning).
+ *
+ *  Payload `[0x1A, 0x01, 0xC8]` (topOpcode, one echoed-opcode count, the
+ *  opcode itself) -> frame `f1 1a 01 c8 d3 f2`
+ *  (checksum `0x1A ^ 0x01 ^ 0xC8 = 0xD3`). Six bytes, always a single BLE
+ *  chunk — no `buildFrameGroups`/`packGroup` needed, unlike the multi-unit
+ *  sequences above.
+ */
+const GET_WRAPPER = 0x1a;
+const GET_ERRORTYPE = 0xc8;
+
+export function buildGetErrorType(): Uint8Array {
+  const payload = Uint8Array.from([GET_WRAPPER, 0x01, GET_ERRORTYPE]);
+  const [frame] = packPayload(payload);
+  return frame!;
+}
+
 /**
  * The general/additional-status sample-rate characteristic's write value,
  * set to the fastest documented rate (interface-notes.md §4, BLE doc p.16).

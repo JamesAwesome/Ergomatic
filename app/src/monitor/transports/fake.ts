@@ -42,6 +42,7 @@
 // offset, a scale factor, or a numbering offset itself.
 
 import {
+  buildGetErrorType,
   buildProgrammingSequence,
   buildTerminate,
 } from "../../../domain/monitor/pm5/commands.js";
@@ -476,6 +477,15 @@ export function createFakeTransport(
   // length table.
   const flatProgramChunks = programSequence.flat();
   const terminateChunks = buildTerminate()[0]!;
+  // Phase 7A-fix-2 Task 3: `src/monitor/driver.ts`'s `sendGetErrorType`
+  // fires this ONE-OFF write after a genuine reject during the real
+  // programming send — orthogonal to the clearing/programming/armed phase
+  // state machine below (it can arrive mid-"programming", right after a
+  // reject, and must never be mistaken for the next expected programming
+  // chunk). Always exactly one 6-byte BLE chunk (`buildGetErrorType`'s own
+  // doc comment), so a plain byte comparison is enough — no reassembler
+  // needed.
+  const getErrorTypeFrame = buildGetErrorType();
 
   const timeline = [...(script.events ?? [])].sort((a, b) => a.atMs - b.atMs);
   let eventCursor = 0;
@@ -842,6 +852,22 @@ export function createFakeTransport(
         throw new Error(
           `fake transport: unexpected write target ${characteristicId}`,
         );
+      }
+      // Task 3's `sendGetErrorType` one-off write — checked BEFORE the
+      // phase-based assertions below, since it can legitimately arrive
+      // mid-"programming" (right after a reject) and is not the next
+      // expected programming/clearing/armed chunk. Answered with a
+      // scripted status; the fake makes no claim this is what a real
+      // GetErrorType reply actually contains (interface-notes.md §17's
+      // pull-path item — the decode is unconfirmed either way). Does not
+      // touch `phase` or any cursor: this write is orthogonal to the
+      // clearing/programming/armed state machine.
+      if (bytesEqual(bytes, getErrorTypeFrame)) {
+        notify(
+          TRANSMIT_CHARACTERISTIC_UUID,
+          buildAckFrame({ frameStatus: "ok", commandIds: [0xc8] }),
+        );
+        return;
       }
       if (phase === "clearing") {
         assertClearingChunk(bytes);

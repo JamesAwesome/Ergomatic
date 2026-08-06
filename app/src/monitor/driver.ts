@@ -9,11 +9,13 @@
 // policy distinct from a transport disconnect, and `intervalRemaining`'s
 // computation.
 //
-// `program()`'s three-phase lifecycle (plan Task 2, "clear, ignore
-// rejection, verify" — interface-notes.md §18, progress.md's D1/D2): a
-// best-effort clear (`sendClear`, nak/timeout swallowed as routine — only a
-// confirmed disconnect still propagates, fix-round 1's F3), the existing
-// ack-gated send (`sendSequence`, unchanged), then a tick-bounded
+// `program()`'s three-phase lifecycle (design spec §3, interface-notes.md
+// §18/§19.4/§19.5, progress.md's D1/D2): a leading PREPARE step
+// (`sendPrepare` — renamed from "clear" by Phase 7A-fix-2 Task 3, since
+// nothing here clears anything; it is the documented exit to WaitToBegin,
+// see that function's own doc comment) whose outcome, apart from a
+// confirmed disconnect, is swallowed as routine (fix-round 1's F3), the
+// real ack-gated programming send (`sendSequence`), then a tick-bounded
 // VERIFICATION (`verifyArmed`) against the machine's own reported state,
 // observed STRICTLY AFTER the send FULLY COMPLETED — the last frame's ack,
 // not the first frame going out (fix-round 2; fix-round 1's own snapshot
@@ -22,22 +24,34 @@
 // trusted alone — the same ack byte has meant both "programmed" and
 // "nothing happened at all" on real hardware.
 //
+// Phase 7A-fix-2 Task 3 gave the ack path its real vocabulary
+// (`pm5/response.ts` §19.1's bitfield, already parsed by Task 2): success
+// is `frameStatus === "ok"` alone; a genuine reject during the real
+// programming send fires ONE documented `GetErrorType` follow-up
+// (`sendGetErrorType`, interface-notes.md §19.7) logged as raw hex; and
+// `terminate()` waits a tick-bounded SETTLE delay after its own ack
+// before resolving, since a `SetScreenState` ack means queued, not done
+// (interface-notes.md §19.6).
+//
 // Every Concept2 byte this file ever touches arrives pre-decoded through
 // `pm5/parse.ts` (`parseGeneralStatus` et al., `toMonitorFrame`,
 // `toIntervalActual`) or `pm5/response.ts` (`parseCsafeResponse`) — this
 // file never inspects a raw opcode, offset, or checksum itself (design
 // spec §Layering: "pm5/ is the only home of Concept2 bytes"; the Task 3
-// review's own obligation on this task). The one place that could tempt a
-// raw-byte shortcut — building the ack-gated write sequence — instead calls
-// `pm5/commands.ts`'s `buildProgrammingSequence`/`buildTerminate` and reads
-// nothing but their `Uint8Array[][]` shape.
+// review's own obligation on this task). The places that could tempt a
+// raw-byte shortcut — building the ack-gated write sequence, or the
+// one-off `GetErrorType` send — instead call `pm5/commands.ts`'s
+// `buildProgrammingSequence`/`buildTerminate`/`buildGetErrorType` and
+// `pm5/framer.ts`'s `chunkFrames`, reading nothing but their byte-array
+// shapes.
 
 import {
+  buildGetErrorType,
   buildProgrammingSequence,
   buildSampleRateConfig,
   buildTerminate,
 } from "../../domain/monitor/pm5/commands.js";
-import { reassemble } from "../../domain/monitor/pm5/framer.js";
+import { chunkFrames, reassemble } from "../../domain/monitor/pm5/framer.js";
 import { toProgramIndex } from "../../domain/monitor/pm5/intervalIndex.js";
 import {
   parseAdditionalSplitIntervalData,
@@ -52,6 +66,7 @@ import {
 } from "../../domain/monitor/pm5/parse.js";
 import {
   parseCsafeResponse,
+  type CsafeFrameStatus,
   type CsafeResponse,
 } from "../../domain/monitor/pm5/response.js";
 import {
@@ -80,9 +95,30 @@ import type { MonitorEventLog } from "./eventLog";
 
 /** A programming/terminate write that never got acked "ok", OR a
  *  programming call whose verification phase never saw the machine report
- *  "armed" (design spec §1/§3), for exactly FOUR distinct reasons:
- *  - `"nak"`: a response frame arrived with a non-"ok" status — the PM
- *    explicitly rejected it.
+ *  "armed" (design spec §1/§3), for exactly SEVEN distinct reasons —
+ *  Phase 7A-fix-2 Task 3 split what used to be a single `"nak"` bucket
+ *  into the four the wire actually distinguishes (`pm5/response.ts`
+ *  §19.1's bitfield):
+ *  - `"nak"`: a GENUINE reject — `(status & 0x30) === 0x10`,
+ *    `CsafeFrameStatus` `"reject"`. The PM explicitly said no. On a
+ *    programming send (never the prepare/terminate steps) this also fires
+ *    ONE `buildGetErrorType()` and logs the raw reply
+ *    (`sendGetErrorType`'s own doc comment) — CSAFE-DEF p.50
+ *    (interface-notes.md §19.7): "the entire workout configuration
+ *    operation is aborted resulting in a 'PrevReject' frame status. The
+ *    Master must issue a PM-specific GetErrorType command" — a reject is
+ *    not self-describing.
+ *  - `"bad"`: the PM's own "Bad" status — `(status & 0x30) === 0x20`. A
+ *    different machine statement than a reject, never folded into it.
+ *  - `"not-ready"`: the PM's own "Not ready" status —
+ *    `(status & 0x30) === 0x30`.
+ *  - `"garbled"`: the response frame could not even be PARSED (bad
+ *    checksum, missing flags, too short — `pm5/response.ts`'s
+ *    `{kind: "unparseable"}`). Distinct from `"nak"` ON PURPOSE: a frame
+ *    this driver cannot validate at all is a strictly different situation
+ *    from the PM explicitly answering "reject" to a well-formed one — the
+ *    exact conflation (both used to collapse onto `"nak"`) this task
+ *    fixes.
  *  - `"disconnected"`: the transport's `onDisconnect` fired before any
  *    response arrived (send phase) or before verification ever observed
  *    "armed" (verify phase) — the link itself is down, so nothing further
@@ -118,14 +154,36 @@ export interface ProgramRejection {
 }
 
 export type ProgramRejectionReason =
-  "nak" | "disconnected" | "timeout" | "not-observed";
+  | "nak"
+  | "bad"
+  | "not-ready"
+  | "garbled"
+  | "disconnected"
+  | "timeout"
+  | "not-observed";
 
 const REJECTION_VERBS: Record<ProgramRejectionReason, string> = {
   nak: "rejected",
+  bad: "reported the frame as malformed (bad)",
+  "not-ready": "reported not ready",
+  garbled: "returned a frame this driver could not even parse",
   disconnected: "disconnected before completing",
   timeout: "never acked (ack-timeout policy)",
   "not-observed":
     'never reported "armed" after programming (verification timed out)',
+};
+
+/** `pm5/response.ts` §19.1's bitfield -> this driver's typed reason, for
+ *  the three `CsafeFrameStatus` values that are NOT `"ok"` — `"garbled"`
+ *  (the `{kind: "unparseable"}` case, no `CsafeFrameStatus` to look up at
+ *  all) is handled separately by `sendSequence`, not through this map. */
+const REJECTION_REASON_BY_FRAME_STATUS: Record<
+  Exclude<CsafeFrameStatus, "ok">,
+  ProgramRejectionReason
+> = {
+  reject: "nak",
+  bad: "bad",
+  "not-ready": "not-ready",
 };
 
 export class ProgramRejectionError extends Error implements ProgramRejection {
@@ -172,10 +230,22 @@ export function computeIntervalRemaining(
   return { kind: interval.kind, value: Math.max(0, interval.value - progress) };
 }
 
+/** One arrived response frame on 0x0022: the RAW bytes alongside the
+ *  decoded `CsafeResponse` — `sendSequence`'s own ack-gating reads
+ *  `response`, but `sendGetErrorType` needs `raw` too (its own log entry
+ *  is RAW HEX with no decode claims, per that function's doc comment;
+ *  `CsafeResponse` throws away the exact bytes a `"parsed"` frame arrived
+ *  as, and an `"unparseable"` one never had a decode to keep in the first
+ *  place). `handleAckFrame` is this shape's one producer. */
+interface AckArrival {
+  raw: Uint8Array;
+  response: CsafeResponse;
+}
+
 /** `"disconnected"`/`"timeout"` are the two ways an ack-await can end
  *  without a real response (see `ProgramRejection`'s own doc comment for
- *  the distinction); anything else is a genuine parsed response. */
-type PendingAckOutcome = "disconnected" | "ack-timeout" | CsafeResponse;
+ *  the distinction); anything else is a genuine arrived frame. */
+type PendingAckOutcome = "disconnected" | "ack-timeout" | AckArrival;
 
 /** Fix-round HIGH-2: an optional, tick-driven ack-timeout policy — no wall
  *  clock. `ticks` counts GENERAL_STATUS_UUID notifications (this driver's
@@ -209,7 +279,38 @@ export interface DriverOptions {
    * disconnect, forever, never a wall clock.
    */
   verifyTicks?: number;
+  /**
+   * Bounds `terminate()`'s post-ack SETTLE wait (design spec §7,
+   * interface-notes.md §19.6) in GENERAL_STATUS_UUID ticks — the same
+   * pulse `ackTimeout`/`verifyTicks` count, but its own budget again, for
+   * the same reason those two are separate from each other.
+   * `SetScreenState`'s ack means the command was received and QUEUED, not
+   * that the PM has actually acted on it yet (CSAFE-DEF p.65: the comms
+   * task answers immediately, the UI task applies it later at 2-5 Hz).
+   * The documented fix is polling `CSAFE_PM_GET_SCREENSTATESTATUS` until
+   * `_INACTIVE` — NOT built here, deliberately (design spec §7): that GET
+   * lives in the same unconfirmed pull-command space as
+   * `buildGetErrorType` (interface-notes.md §17's pull-path item). This
+   * settles for the document's own WEAKER fallback instead — "delay
+   * sufficiently long (e.g. 1 second or more)" — expressed as a tick
+   * count rather than a literal wall-clock second, same "no wall clock,
+   * ever" rule as every other tick budget in this file.
+   *
+   * UNLIKE `ackTimeout`/`verifyTicks`, omitting this is never "no
+   * bound" — it means the default, `3`, not an unbounded wait
+   * (`terminate()` has no failure reason of its own to report if this
+   * ticked forever, so an unbounded settle would just be a silent hang
+   * with no reason typed for it). Passing `0` explicitly skips the wait
+   * entirely (resolves the instant the ack lands) — the escape hatch for
+   * a caller/test with no further ticks to offer and no need to model
+   * this hazard.
+   */
+  settleTicks?: number;
 }
+
+/** `DriverOptions.settleTicks`'s own default — see that field's doc
+ *  comment for why "omitted" means this number, not "no bound". */
+const DEFAULT_SETTLE_TICKS = 3;
 
 export function createPm5Driver(
   t: Transport,
@@ -317,12 +418,12 @@ export function createPm5Driver(
   // `sendSequence` now clears (and logs) anything already sitting here
   // the moment it starts — see its own comment.
   //
-  // Only ever holds real `CsafeResponse` values: `"disconnected"`/
+  // Only ever holds real `AckArrival` values: `"disconnected"`/
   // `"ack-timeout"` are resolved directly against `pendingAck` (the
   // `onDisconnect` handler, the ack-timeout tick counter below), never
   // pushed here — `handleAckFrame` is this buffer's one producer, and it
-  // only ever has a parsed response frame to offer.
-  const pendingAckBuffer: CsafeResponse[] = [];
+  // only ever has an arrived frame to offer.
+  const pendingAckBuffer: AckArrival[] = [];
   // Ticks (GENERAL_STATUS_UUID arrivals) counted against the CURRENT
   // pending ack, reset every time a new one is awaited — see `awaitAck`
   // and `DriverOptions.ackTimeout`'s own doc comment.
@@ -337,6 +438,17 @@ export function createPm5Driver(
     reject: (err: unknown) => void;
     ticks: number;
   } | null = null;
+  /** Registered while `terminate()`'s post-ack settle wait (design spec
+   *  §7, interface-notes.md §19.6) is counting — `null` whenever no
+   *  `terminate()` call is currently in that phase. A single slot, same
+   *  one-at-a-time design as `pendingAck`/`pendingVerify`. `ticksNeeded`
+   *  is captured per-call (not read from `options` again at tick time) so
+   *  a settle-in-progress isn't affected by anything else. */
+  let pendingSettle: {
+    resolve: () => void;
+    ticks: number;
+    ticksNeeded: number;
+  } | null = null;
   /** Discards anything left in `pendingAckBuffer` from a PREVIOUS, already-
    *  resolved sequence — see the buffer's own comment for why a leftover
    *  here is never a legitimate answer to a NEW sequence's first frame.
@@ -349,7 +461,7 @@ export function createPm5Driver(
       const stale = pendingAckBuffer.shift()!;
       log.record(
         "frame-error",
-        `stale-ack: leftover from a previous sequence, discarded (${describeResponse(stale)})`,
+        `stale-ack: leftover from a previous sequence, discarded (${describeResponse(stale.response)})`,
       );
     }
   }
@@ -411,11 +523,22 @@ export function createPm5Driver(
 
   function handleAckFrame(frame: Uint8Array): void {
     const response = parseCsafeResponse(frame);
-    log.record("ack", toHex(frame));
+    // Task 3: slave state joins the existing "ack" log detail (still the
+    // same kind, still leading with the same raw hex) — every parsed ack
+    // now shows what the PM said its OWN state was, not only whether the
+    // frame status was ok. An unparseable frame has no bitfield to add
+    // (response.ts §19.1) — hex alone, same as before this task.
+    log.record(
+      "ack",
+      response.kind === "parsed"
+        ? `${toHex(frame)} slaveState=${response.slaveState}`
+        : toHex(frame),
+    );
+    const arrival: AckArrival = { raw: frame, response };
     if (pendingAck) {
       const resolve = pendingAck;
       pendingAck = null;
-      resolve(response);
+      resolve(arrival);
     } else {
       // A response frame with nothing CURRENTLY awaiting one — queued
       // (MED-1), not discarded: the classic case is the second frame of a
@@ -426,7 +549,7 @@ export function createPm5Driver(
         "ack-buffered",
         `no pending ack yet — queued: ${toHex(frame)}`,
       );
-      pendingAckBuffer.push(response);
+      pendingAckBuffer.push(arrival);
     }
   }
 
@@ -461,6 +584,20 @@ export function createPm5Driver(
         "disconnected",
         `link disconnected during verification: ${reason}`,
       );
+    }
+    // Same reasoning as the two hatches just above: `terminate()`'s
+    // settle wait (`pendingSettle`, design spec §7) has no other way to
+    // learn the link is gone either — it counts raw GENERAL_STATUS_UUID
+    // arrivals (below), which simply stop coming. Unlike `pendingVerify`,
+    // this RESOLVES rather than rejects: `terminate()` already got its
+    // ack (the only thing it was ever going to report success/failure
+    // on), and the settle wait is purely "give the queued command a
+    // little time" — a dead link is not a reason to hang the caller
+    // forever waiting for ticks that will never arrive.
+    if (pendingSettle) {
+      const resolve = pendingSettle.resolve;
+      pendingSettle = null;
+      resolve();
     }
     if (terminalLatched) {
       // Appendix E (CSAFE p.162): the PM auto-cycles
@@ -891,6 +1028,26 @@ export function createPm5Driver(
     },
   );
 
+  // `terminate()`'s settle-wait tick pulse (design spec §7, interface-
+  // notes.md §19.6) — a RAW subscription, deliberately NOT routed through
+  // `mergeStatus`: that helper's own `if (terminalLatched) return` gate
+  // would swallow exactly the ticks this needs, since terminate()'s own
+  // ack is usually what CAUSES `terminalLatched` to become true (the very
+  // next status tick reports "terminated") — every tick after the first
+  // would otherwise never reach a counter placed inside `mergeStatus`'s
+  // gated callback. No decode needed either: this only counts arrivals,
+  // it never reads a field, so a garbled General Status notification
+  // still proves the radio is alive and still counts as a tick.
+  t.subscribe(GENERAL_STATUS_UUID, () => {
+    if (!pendingSettle) return;
+    pendingSettle.ticks += 1;
+    if (pendingSettle.ticks >= pendingSettle.ticksNeeded) {
+      const resolve = pendingSettle.resolve;
+      pendingSettle = null;
+      resolve();
+    }
+  });
+
   /** Settles `pendingVerify` with a typed rejection: the general-status
    *  tick handler above calls this on `verifyTicks` expiry
    *  (`reason: "not-observed"`); `onDisconnect` calls it with
@@ -917,8 +1074,8 @@ export function createPm5Driver(
   }
 
   /**
-   * `program()`'s verification phase (design spec §1, plan Task 2: "clear,
-   * ignore rejection, verify"). The ack is not trusted on its own — the
+   * `program()`'s verification phase (design spec §1, design spec §3:
+   * "prepare, ignore rejection, verify"). The ack is not trusted on its own — the
    * first laptop session saw the SAME ack byte (`0x01`) accompany both a
    * real program and a complete no-op (interface-notes.md §18, progress.md's
    * D2). This instead waits for the machine's OWN reported state to reach
@@ -935,8 +1092,8 @@ export function createPm5Driver(
    * DELIVERED — never a stale reading from before, or from partway
    * through, the send. Two hardware shapes this closes:
    * - Trusting whatever `raw` already said: a STALE cached value satisfies
-   *   verification for free. A review reproduced this exactly — the clear
-   *   step gets ACCEPTED (progress.md's D1 update: this happens), the PM's
+   *   verification for free. A review reproduced this exactly — the
+   *   prepare step gets ACCEPTED (progress.md's D1 update: this happens), the PM's
    *   own Appendix-E auto-cycle (Terminate -> Rearm -> WaitToBegin) reports
    *   "armed" on its own, and a stale read of THAT would satisfy
    *   verification for a completely separate program write that was
@@ -984,54 +1141,117 @@ export function createPm5Driver(
     });
   }
 
+  /** `terminate()`'s post-ack SETTLE wait (`DriverOptions.settleTicks`'s
+   *  own doc comment carries the full citation). Registers fresh and
+   *  waits for `ticksNeeded` NEW arrivals — same "never trust an
+   *  already-cached tick" discipline as `verifyArmed` — via the raw
+   *  GENERAL_STATUS_UUID subscription above, which (unlike `mergeStatus`'s
+   *  gated ones) keeps counting even after `terminalLatched` engages,
+   *  which terminate()'s own ack usually causes. `ticksNeeded <= 0`
+   *  resolves immediately without registering anything — "wait zero
+   *  ticks" needs no tick to ever arrive to be satisfied. */
+  function settleAfterTerminate(): Promise<void> {
+    const ticksNeeded = options.settleTicks ?? DEFAULT_SETTLE_TICKS;
+    if (ticksNeeded <= 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      pendingSettle = { resolve, ticks: 0, ticksNeeded };
+    });
+  }
+
   /**
-   * `program()`'s clear step (design spec §1, plan Task 2: "clear, ignore
-   * rejection, verify"). Sends the documented terminate command
-   * (`buildTerminate()`) — the closest thing to a "clear the PM's loaded
-   * workout" command this codec has, though the laptop sessions proved it
-   * is NOT actually one: `terminate()` was ACCEPTED once with a completed
-   * workout loaded, and the FOLLOWING program was still rejected — twice
-   * (interface-notes.md §18, progress.md's D1 update). The real clear
-   * command, if one exists, is UNKNOWN.
+   * Fires ONE `buildGetErrorType()` after a GENUINE reject during the
+   * real programming send (never the prepare/terminate steps — see
+   * `sendSequence`'s own `fetchErrorTypeOnNak` option), per CSAFE-DEF
+   * p.50 (interface-notes.md §19.7): a `SetProgram` reject is not
+   * self-describing, and "the Master must issue a PM-specific
+   * GetErrorType command to determine the specific error information".
    *
-   * Both `"nak"` (the EXPECTED, common case: hardware showed the PM
-   * rejects a terminate when nothing is currently running or loaded,
-   * interface-notes.md §18's clean-run observation — the byte once cited
-   * here as `0x81` was itself a casualty of the whole-byte-compare bug
-   * `pm5/response.ts` fixed in this same commit; §19.1 shows `0x81`
-   * actually decodes to an ACCEPT, so which status byte a real clean-run
-   * reject uses on hardware is unconfirmed) AND `"timeout"` are
-   * swallowed here as informational `"clear-rejected"`, never an error,
-   * never a throw (fix-round 1, F3). `ProgramRejection`'s own doc comment
-   * defines `"timeout"` as "the link stayed UP, but the PM never answered
-   * this ONE command" — which is exactly the profile of sending a command
-   * whose real semantics are unconfirmed (the clear command is UNKNOWN,
-   * per the D1 update above), not evidence of a broken transport. Only
-   * `"disconnected"` propagates: that means the link itself is confirmed
-   * down, a genuinely different and fatal condition regardless of which
-   * step hit it — attempting to write a whole program onto a link already
-   * known to be down would just hang the SEND phase instead of failing
-   * where the problem actually is.
+   * Reuses the SAME `awaitAck()`/`pendingAck` queue and `ackTimeout` tick
+   * policy every other write goes through — 0xC8's reply arrives on the
+   * SAME characteristic (0x0022) every other ack does, so there is no
+   * need for a second waiting mechanism. Logged as kind `"error-type"`,
+   * RAW HEX ONLY (`buildGetErrorType`'s own doc comment: the pull path's
+   * decode is unconfirmed, interface-notes.md §17's pull-path item) — no
+   * claim is ever made about what the bytes MEAN, only what they WERE. No
+   * retries: a second reject here would just be more of the same
+   * unconfirmed signal, never new information. The CSAFE-DEF Table 10
+   * ≥50ms inter-frame gap (cited via interface-notes.md §19) is already
+   * satisfied by the BLE round trip the FAILED frame's own ack took —
+   * nothing here adds a wall-clock delay of any kind.
+   *
+   * Never throws: whatever this observes (a reply, a timeout, or a
+   * disconnect) is logged and this simply returns — the caller's own
+   * `"nak"` rejection is unconditional and unaffected either way.
+   */
+  async function sendGetErrorType(): Promise<void> {
+    const ackPromise = awaitAck();
+    for (const chunk of chunkFrames([buildGetErrorType()])) {
+      await t.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    const outcome = await ackPromise;
+    log.record(
+      "error-type",
+      outcome === "disconnected" || outcome === "ack-timeout"
+        ? `no reply (${outcome})`
+        : toHex(outcome.raw),
+    );
+  }
+
+  /**
+   * `program()`'s LEADING prepare step (design spec §3, interface-notes.md
+   * §19.4/§19.5) — this is NOT a clear, and nothing here clears anything.
+   * A search of both source documents finds no command that clears or
+   * unloads a programmed workout (interface-notes.md §19.5): terminate's
+   * documented destination is *Rearm* — Concept2's own word for making
+   * the SAME workout ready again — never an empty slot. What terminate
+   * actually documents, and why `program()` still leads with it: it is
+   * the exit CSAFE-DEF's own Appendix E names from a naturally-finished,
+   * parked `WorkoutLogged` state (or any mid-session state) back to
+   * `WaitToBegin` (interface-notes.md §19.4 — "the documented client
+   * recovery path, and we were not using it"). Without this step, a PM
+   * parked in `WorkoutLogged` after a natural finish has no other
+   * documented way back to a programmable state; §19.5 additionally
+   * records that the WorkoutLogged exit skips Rearm entirely (a straight
+   * shot to WaitToBegin), an asymmetry `program()` has to work correctly
+   * across either way, which is exactly why this step is unconditional
+   * rather than only sent when a session is believed to still be open.
+   *
+   * ANY non-`"disconnected"` outcome is swallowed here as informational
+   * `"prepare-rejected"`, never an error, never a throw (fix-round 1, F3,
+   * broadened by Task 3 from "nak or timeout" to "anything but
+   * disconnected" now that `sendSequence` can produce `"bad"`/
+   * `"not-ready"`/`"garbled"` too — the ORIGINAL rule was always "only a
+   * confirmed dead link is fatal here", these two lines just make the
+   * code match that stated rule now that more reasons exist). A refusal
+   * (`"nak"`) is the EXPECTED, common case — hardware showed the PM
+   * refuses a terminate when nothing is currently running or loaded
+   * (interface-notes.md §18's clean-run observation, now understood as a
+   * legible machine statement — "nothing needs terminating" — rather than
+   * a mystery byte, §19.1/§19.5). Only `"disconnected"` propagates: that
+   * means the link itself is confirmed down, a genuinely different and
+   * fatal condition regardless of which step hit it — attempting to write
+   * a whole program onto a link already known to be down would just hang
+   * the SEND phase instead of failing where the problem actually is.
    *
    * Whatever this step's outcome, it proves NOTHING about whether the PM
-   * is now actually clear — no read exists to confirm that. `program()`'s
-   * own verification phase (`verifyArmed`, above) is what actually decides
+   * is now reachable — no read exists to confirm that. `program()`'s own
+   * verification phase (`verifyArmed`, above) is what actually decides
    * success, from the machine's own state after the real programming
    * write.
    */
-  async function sendClear(): Promise<void> {
+  async function sendPrepare(): Promise<void> {
     try {
-      await sendSequence(buildTerminate(), "clear-sent", true);
+      await sendSequence(buildTerminate(), "prepare-sent", {
+        isPrepareStep: true,
+      });
     } catch (err) {
       if (
         err instanceof ProgramRejectionError &&
-        (err.reason === "nak" || err.reason === "timeout")
+        err.reason !== "disconnected"
       ) {
         log.record(
-          "clear-rejected",
-          err.reason === "nak"
-            ? `PM rejected the clear — expected when nothing was loaded (interface-notes.md §18; the exact status byte is in the trace): ${err.hexTrace}`
-            : `PM never answered the clear (timeout) — the real clear command is unknown (interface-notes.md §18, progress.md's D1 update): ${err.hexTrace}`,
+          "prepare-rejected",
+          `PM's response to the prepare step was "${err.reason}" — swallowed as routine, not a clear and never fatal on its own (interface-notes.md §19.4/§19.5): ${err.hexTrace}`,
         );
         return;
       }
@@ -1043,29 +1263,43 @@ export function createPm5Driver(
    * Ack-gated write sequencing (design spec §3): write every chunk of one
    * frame, await exactly one response frame on 0x0022, then move to the
    * next frame — never issuing the next frame's writes before the current
-   * one acks. A NAK (`pm5/response.ts`'s `frameStatus !== "ok"`, or a frame
-   * this driver could not even parse — see `describeResponse`'s own doc
-   * comment) or the link going down before any response arrives both throw
-   * a typed `ProgramRejectionError` carrying the full hex trace of
-   * everything written/received during this call. This treats `"reject"`,
-   * `"bad"`, and `"not-ready"` alike (and an unparseable frame as no
-   * better than an explicit reject) — telling those apart is a later
-   * task's job (pm5/response.ts §19.1); this one only fixes what "ok"
-   * means.
+   * one acks. Success is `kind === "parsed" && frameStatus === "ok"`
+   * ALONE — toggle and slave state never gate it (`pm5/response.ts`
+   * §19.1: the toggle bit alternates on every frame regardless of
+   * outcome, and is never a failure signal). Anything else throws a typed
+   * `ProgramRejectionError` carrying the full hex trace of everything
+   * written/received during this call, with a reason that now tells apart
+   * exactly what the wire distinguishes (Task 3, `ProgramRejection`'s own
+   * doc comment has the full breakdown): a genuine reject (`"nak"`), the
+   * PM's own "bad" or "not ready" statuses, an unparseable frame
+   * (`"garbled"` — NOT folded into `"nak"`, today's fixed bug), or the
+   * link going down / an ack-timeout policy tripping before any response
+   * arrives at all (`"disconnected"`/`"timeout"`).
    *
-   * `isClearStep` (fix-round 1, F7) suppresses the generic
-   * `"program-rejection"` log entry for a NAK/timeout — `sendClear`'s own
-   * caller already logs those as informational `"clear-rejected"`, and
-   * without this every HEALTHY `program()` call would show a spurious
-   * rejection in the trace (the clear step's own NAK is the routine case).
-   * A `"disconnected"` failure still logs `"program-rejection"` regardless
-   * — that one is never swallowed, by either this function or `sendClear`.
+   * `isPrepareStep` (fix-round 1, F7; renamed with the step itself, Task
+   * 3) suppresses the generic `"program-rejection"` log entry for
+   * anything but a disconnect — `sendPrepare`'s own caller already logs
+   * those as informational `"prepare-rejected"`, and without this every
+   * HEALTHY `program()` call would show a spurious rejection in the trace
+   * (the prepare step's own refusal is the routine case). A
+   * `"disconnected"` failure still logs `"program-rejection"` regardless
+   * — that one is never swallowed, by either this function or
+   * `sendPrepare`.
+   *
+   * `fetchErrorTypeOnNak` (Task 3, interface-notes.md §19.7) fires ONE
+   * `sendGetErrorType()` when — and only when — the failure reason is a
+   * genuine `"nak"`: `true` only for the real programming send
+   * (`program()`'s own call site), never the prepare or terminate steps,
+   * whose `SET_SCREENSTATE` command carries no workout-configuration
+   * validation for a GetErrorType to explain (CSAFE-DEF p.50's own
+   * "PrevReject" wording is specific to `SetProgram`).
    */
   async function sendSequence(
     sequence: Uint8Array[][],
     completionKind: string,
-    isClearStep = false,
+    options_: { isPrepareStep?: boolean; fetchErrorTypeOnNak?: boolean } = {},
   ): Promise<void> {
+    const { isPrepareStep = false, fetchErrorTypeOnNak = false } = options_;
     // Fix-round 2: purge anything left over from a PREVIOUS sequence
     // before this one's own first frame ever asks the buffer for
     // anything — see `discardStaleAcks`'s own comment. Once, here, not
@@ -1122,9 +1356,9 @@ export function createPm5Driver(
         );
         const hexTrace = trace.join(" | ");
         // F7: "disconnected" always logs (never swallowed by anyone); a
-        // clear-step "timeout" is swallowed by `sendClear` (F3), so it's
-        // suppressed here too — see this function's own doc comment.
-        if (!isClearStep || reason === "disconnected") {
+        // prepare-step "timeout" is swallowed by `sendPrepare` (F3), so
+        // it's suppressed here too — see this function's own doc comment.
+        if (!isPrepareStep || reason === "disconnected") {
           log.record(
             "program-rejection",
             `${reason} at frame ${frameIndex}: ${hexTrace}`,
@@ -1137,26 +1371,47 @@ export function createPm5Driver(
         });
       }
 
-      trace.push(`ack ${describeResponse(outcome)}`);
-      // pm5/response.ts §19.1: an unparseable frame carries no bitfield at
-      // all, and (per this function's own doc comment) is treated as no
-      // better than an explicit reject — telling the two apart, and
-      // telling "reject" apart from "bad"/"not-ready", is a later task's
-      // job, not this one's.
-      if (outcome.kind === "unparseable" || outcome.frameStatus !== "ok") {
+      const response = outcome.response;
+      trace.push(`ack ${describeResponse(response)}`);
+      if (response.kind === "unparseable" || response.frameStatus !== "ok") {
+        // Task 3 (pm5/response.ts §19.1): the wire distinguishes FOUR
+        // non-"ok" shapes, and this driver now keeps them apart rather
+        // than folding every one of them into `"nak"` (the bug this task
+        // fixes) — `"garbled"` in particular MUST stay distinct from
+        // `"nak"`: a frame this driver could not even validate is not the
+        // same statement as the PM explicitly answering "reject".
+        const reason: ProgramRejectionReason =
+          response.kind === "unparseable"
+            ? "garbled"
+            : // TS can't carry "the outer `||` proved `frameStatus !== 'ok'`"
+              // through this ternary's own re-check of `kind` — the cast
+              // states what the outer condition already guarantees rather
+              // than re-deriving it with a redundant runtime branch.
+              REJECTION_REASON_BY_FRAME_STATUS[
+                response.frameStatus as Exclude<CsafeFrameStatus, "ok">
+              ];
         const hexTrace = trace.join(" | ");
-        // F7: a clear-step NAK is the routine, expected case (`sendClear`'s
-        // own doc comment) — it already logs "clear-rejected" itself, so
-        // logging THIS too would make every healthy `program()` call show
-        // a spurious rejection in the trace.
-        if (!isClearStep) {
+        // F7: a prepare-step refusal is the routine, expected case
+        // (`sendPrepare`'s own doc comment) — it already logs
+        // "prepare-rejected" itself, so logging THIS too would make every
+        // healthy `program()` call show a spurious rejection in the trace.
+        if (!isPrepareStep) {
           log.record(
             "program-rejection",
-            `nak at frame ${frameIndex}: ${hexTrace}`,
+            `${reason} at frame ${frameIndex}: ${hexTrace}`,
           );
         }
+        // interface-notes.md §19.7 (CSAFE-DEF p.50): a genuine reject
+        // during the real programming send is not self-describing — fire
+        // the one documented follow-up before rejecting. Never for
+        // `"bad"`/`"not-ready"`/`"garbled"`, and never for the
+        // prepare/terminate steps (`fetchErrorTypeOnNak` is `true` only
+        // at `program()`'s own real-send call site).
+        if (reason === "nak" && fetchErrorTypeOnNak) {
+          await sendGetErrorType();
+        }
         throw new ProgramRejectionError({
-          reason: "nak",
+          reason,
           atFrame: frameIndex,
           hexTrace,
         });
@@ -1181,26 +1436,31 @@ export function createPm5Driver(
     // terminate ACCEPTED with a workout loaded, yet the FOLLOWING program
     // was still rejected — twice. The state model behind accept/reject is
     // still not understood; only the destructive half is. Nothing below
-    // assumes the rule — clear/send/verify is designed to survive not
+    // assumes the rule — prepare/send/verify is designed to survive not
     // knowing it.
     //
-    // Three phases (plan Task 2, "clear, ignore rejection, verify"):
-    // `sendClear()` is a best-effort clear — nak/timeout swallowed as
-    // routine (fix-round 1, F3), only a confirmed disconnect still fatal;
-    // `sendSequence` is the existing ack-gated send, unchanged; `verifyArmed`
-    // is what actually decides success, from the machine's OWN reported
-    // state observed STRICTLY AFTER the COMPLETE send (fix-round 2 —
-    // fix-round 1's own snapshot point, taken before the first frame went
-    // out, was too early: a reviewer showed a stale "armed" tick landing
-    // after only frame 1 of a multi-frame program satisfied verification
-    // with no fresh tick ever required after the LAST frame) — never the
-    // ack alone (D2: the identical ack byte has meant both "programmed"
-    // and "nothing happened at all" on real hardware), and never a stale
-    // observation from any point during the send either (verifyArmed's own
-    // doc comment).
+    // Three phases (design spec §3): `sendPrepare()` is the documented
+    // exit to WaitToBegin (interface-notes.md §19.4/§19.5) — NOT a clear,
+    // nothing here clears anything — with any non-disconnect outcome
+    // swallowed as routine (fix-round 1, F3; broadened by Task 3, see
+    // `sendPrepare`'s own doc comment); `sendSequence` is the real
+    // ack-gated programming send, now firing `sendGetErrorType` on a
+    // genuine reject (Task 3); `verifyArmed` is what actually decides
+    // success, from the machine's OWN reported state observed STRICTLY
+    // AFTER the COMPLETE send (fix-round 2 — fix-round 1's own snapshot
+    // point, taken before the first frame went out, was too early: a
+    // reviewer showed a stale "armed" tick landing after only frame 1 of
+    // a multi-frame program satisfied verification with no fresh tick
+    // ever required after the LAST frame) — never the ack alone (D2: the
+    // identical ack byte has meant both "programmed" and "nothing
+    // happened at all" on real hardware), and never a stale observation
+    // from any point during the send either (verifyArmed's own doc
+    // comment).
     async program(p: WorkoutProgram): Promise<void> {
-      await sendClear();
-      await sendSequence(buildProgrammingSequence(p), "programmed");
+      await sendPrepare();
+      await sendSequence(buildProgrammingSequence(p), "programmed", {
+        fetchErrorTypeOnNak: true,
+      });
       // Fix-round 2: called only AFTER the full send resolves — i.e.
       // after the LAST frame's ack, not before the first frame went out.
       // A multi-frame program's send can itself span several general-status
@@ -1215,8 +1475,20 @@ export function createPm5Driver(
       emit({ kind: "armed" });
     },
 
+    // `terminate()`'s ack means the documented `SET_SCREENSTATE` command
+    // was received and QUEUED, never that the PM has actually acted on it
+    // (interface-notes.md §19.6, CSAFE-DEF p.65) — so this waits
+    // `settleAfterTerminate()`'s tick-bounded delay (design spec §7,
+    // `DriverOptions.settleTicks`'s own doc comment) before resolving,
+    // rather than reporting success the instant the ack lands. The
+    // documented, precise fix (`CSAFE_PM_GET_SCREENSTATESTATUS`) is
+    // deliberately NOT built — its pull-command wrapper is itself an
+    // unresolved conflict between the two source documents, the same one
+    // `buildGetErrorType` cites at its own definition (interface-notes.md
+    // §17's pull-path item).
     async terminate(): Promise<void> {
       await sendSequence(buildTerminate(), "terminate-sent");
+      await settleAfterTerminate();
     },
 
     events(cb: (e: MonitorEvent) => void): () => void {

@@ -9,6 +9,7 @@ import {
 import { parseFrame } from "../csafe.js";
 import { reassemble } from "./framer.js";
 import {
+  buildGetErrorType,
   buildProgrammingSequence,
   buildSampleRateConfig,
   buildTerminate,
@@ -341,6 +342,20 @@ describe("buildTerminate", () => {
     // asserts: 0x60 is the XOR rule's computed value.
     expect(Array.from(frames[0]![0]!)).toStrictEqual([
       0xf1, 0x76, 0x04, 0x13, 0x02, 0x01, 0x02, 0x60, 0xf2,
+    ]);
+  });
+});
+
+describe("buildGetErrorType", () => {
+  it("wraps 0xC8 under the 0x1A pull wrapper, matching CSAFE-DEF's own worked GET example's shape — F1 1A 01 C8 D3 F2", () => {
+    const frame = buildGetErrorType();
+    // Content is `1a 01 c8` (topOpcode 0x1A, one echoed opcode, 0xC8
+    // itself) — the SAME shape as interface-notes.md §6 example 13's
+    // `F1 1A 01 BF A4 F2` (GetStrokeState), never the 0x76 push wrapper
+    // every other builder in this file uses. Checksum
+    // 0x1A^0x01^0xC8 = 0xD3, the XOR rule this whole codec trusts.
+    expect(Array.from(frame)).toStrictEqual([
+      0xf1, 0x1a, 0x01, 0xc8, 0xd3, 0xf2,
     ]);
   });
 });
