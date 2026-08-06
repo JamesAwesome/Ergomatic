@@ -220,10 +220,12 @@ function representableSeconds(raw: number): number | null {
  * whose `restSeconds` is nonzero with nothing after it, and
  * `pm5/commands.ts` programs that interval's `SET_RESTDURATION` exactly
  * like any other, immediately followed by the trailing `SET_SCREENSTATE`.
- * This shape is untested against any CSAFE-doc worked example (every one of
- * them ends on a work interval) despite being common (161 of the 300 seeded
- * library workouts compile this way) — flagged for the laptop session,
- * `docs/monitor/pm5-interface-notes.md` §15 #9/§17 item 10.
+ * This shape has no worked example in either CSAFE doc (every one of them
+ * ends on a work interval) but is common (161 of the 300 seeded library
+ * workouts compile this way) — CONFIRMED accepted on hardware: the final
+ * interval's own rest counted down fully before `WorkoutEnd`/
+ * `workoutComplete` fired, with no early termination
+ * (`docs/monitor/pm5-interface-notes.md` §15 #9/§17 item 8, §18 #8).
  *
  * **Effort vs. split targets** (H8): a "split" work phase's `targetSplit`
  * is a real, user-chosen pace and is programmed as-is. An "effort" work

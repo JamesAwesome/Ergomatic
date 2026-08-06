@@ -373,7 +373,7 @@ export function toMonitorState(workoutState: number): MonitorFrame["state"] {
  * sentinel, neither source document states what an armed/resting erg's
  * Current Pace byte reads (interface-notes.md §15 #5); a screen rendering
  * this as a pace string decides what "0:00" or an erratic idle value means,
- * not this function. Flagged for the laptop session (§17 item 11).
+ * not this function. Flagged for the laptop session (§17 item 9).
  *
  * Phase 7A-fix Task 3 (D3): `intervalIndex` below is still the RAW machine
  * value (0x0033's Interval Count) — this module never learned about program

@@ -111,7 +111,7 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
 
     const frames = buildProgrammingSequence(program);
     // L-3 (final-review): pinned exactly, not just "more than one" —
-    // interface-notes.md §15 #6/§17 item 7 and design spec §3 both cite
+    // interface-notes.md §15 #6/§17 item 5 and design spec §3 both cite
     // Sea Smoke needing 7 frames under this packing; a regression to 6 or
     // 8 (a packing change) must fail this test, not slide through under a
     // >1 assertion.

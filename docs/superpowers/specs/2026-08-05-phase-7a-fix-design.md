@@ -15,8 +15,10 @@ does not exist. Full evidence: the ledger's LAPTOP SESSION 1 section
 (`.superpowers/sdd/2026-08-05-phase-7a-monitor-domain/progress.md`) and
 notes §18.
 
-Nothing here is speculative — every item below was observed, most of them
-twice, with the bytes captured.
+Nothing here is speculative — every item below was observed at the erg,
+with the bytes captured. Observation counts vary: D1's destructive wipe was
+confirmed twice; D2's three outcomes came from the same session; D3, D4,
+and D5 are each a single-session finding.
 
 ## What the hardware established
 
@@ -38,6 +40,17 @@ itself.
 | D3 | The PM attributes rests FORWARD: work0→idx0, rest→idx1, work1→idx1, rest→idx2. A 2-interval workout's final `IntervalActual` carried `index: 2`. | 7C would mis-attribute every actual. `divergence` never fired: both machine fields agree with each other, and both differ from ours. |
 | D4 | Only ONE `intervalComplete` fired for two intervals — the first boundary produced no actuals. | 7C's prefill would silently lose all but the last interval. Cause not isolated. |
 | D5 | With no belt: `avgHeartRateBpm: 0` (not 255, not absent). | We map only 255→null, so a bare erg reports "0 bpm" where the design requires `—`. |
+
+**CORRECTION (phase-7a-fix Task 1's own hardware row, same date):** D1's
+second sentence states the accept RULE ("only when no workout is loaded")
+as confirmed. It was not — the 7A ledger (`.superpowers/sdd/
+2026-08-05-phase-7a-monitor-domain/progress.md`) labels it a "working
+hypothesis (fits every observation)," not an observation itself. A later
+session falsified it: `terminate()` was ACCEPTED once with a workout
+loaded, yet the program sent right after was still REJECTED — twice. Only
+the destructive half of D1 (a rejection wipes what was loaded) stays
+confirmed; the accept/reject state model itself remains not understood
+(`docs/monitor/pm5-interface-notes.md` §18, item 6).
 
 **Fixed live at the erg, untested** (D6): the discovery filter (0x0030 is
 not advertised — the picker scanned forever); the frame flood evicting the
