@@ -865,16 +865,16 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
       exists in CI to prove either one against
 - [x] `docs/monitor/pm5-interface-notes.md` gains a §17 "laptop session
       runsheet" consolidating every doc-ambiguity or reviewed-assumption
-      flagged across the phase into one numbered checklist
+      flagged across the phase into one numbered checklist, and (after the
+      session below) a §18 recording what was actually observed against
+      real firmware
 
 **Deferred, deliberately — 7B/7C's job:** no screen wires a `MonitorDriver`
 to anything yet — no "Connect PM5" affordance, no live pace/rate on the
 timer, no PM5-sourced log entries, no reverse cross-clear (a phone-timer
-session starting does not yet clear a stale `MonitorRun`). The
-laptop-vs-real-PM5 session (the three checksum errata, the interval-
-numbering base, and the rest of the §17 runsheet) happens **after this
-phase merges**, via `webBluetooth.ts` — a James-device event, not a CI
-gate, and not required for 7A's own exit.
+session starting does not yet clear a stale `MonitorRun`). The remaining
+open §17 items (below) still need a further James-device row — a
+James-device event, not a CI gate, and not required for 7A's own exit.
 
 **Exit:** MET — every domain/driver behavior the design spec names has a
 passing test (100% on `domain/monitor/**` and on `src/monitor/
@@ -886,6 +886,36 @@ M-1, correcting this section's own prior claim): two guards need the
 UNLOGGED distinction the function deliberately collapses and must keep
 reading `loadRun()`/`loadMonitorRun()` directly — see Phase 7B's own
 bullet below before wiring any guard.
+
+**Hardware-verified — partially, not fully (phase-7a-fix, 2026-08-05).**
+This domain has now met a real PM5: laptop session 1, then a same-day
+diagnosis row, both run against the `pm5-lab` harness + bridge before this
+phase's own PR merged. The codec's bytes were right; the fake's MODEL of
+the machine was wrong in five ways no document states and no test could
+catch, all found and fixed in `phase-7a-fix` (own plan:
+`docs/superpowers/plans/2026-08-05-phase-7a-fix.md`): **D1** the PM accepts
+a program only when nothing is loaded, a rejection wipes what was loaded,
+and `terminate()` is NOT a reliable clear (the real clear command remains
+unfound); **D2** a `0x01` ack does not mean a program landed —
+`program()` now clears, sends, and verifies against the machine's own
+reported state instead of resolving on the ack alone; **D3** the PM
+attributes rests FORWARD into the interval they're heading toward — the
+driver now normalizes every machine index to this codec's own numbering
+before any consumer sees it; **D4** only one `intervalComplete` fired for
+a two-interval program (the first boundary's data arrived but was
+discarded) — fixed by waiting for both status halves of the same boundary
+before emitting; **D5** the no-belt heart-rate sentinel is `0`, not `255`
+as documented for a different characteristic — `parse.ts` now maps both to
+`null`. **This is not a claim of full verification.** One short row
+(`docs/monitor/pm5-interface-notes.md` §17, "The pending verification
+row") is prepared to confirm these five fixes against real hardware but
+has not been run yet, and several §17 items stay open regardless (the real
+clear command, whether an accepted program's structure reads back from
+0x0031, the no-rest work→work boundary index, and distance-kind/
+multi-frame programs from a known-empty machine — none of the last group
+has ever been tested without a loaded workout confounding the result).
+Every hardware claim above cites `pm5-interface-notes.md` §18 as an
+observation, never as something Concept2 documents.
 
 ## Phase 7B — PM5 connected surface
 
@@ -925,14 +955,20 @@ reconciled against 7A's shipped types before this phase starts.
       `createMonitorRun` already clears a `SessionRun` — 7A shipped only
       its own half (`src/monitor/monitorRun.ts`'s own header comment names
       this as a documented 7B obligation)
-- [ ] The James laptop-vs-real-PM5 session
-      (`docs/monitor/pm5-interface-notes.md` §17's runsheet, now a runnable
-      setup + expected/observed checklist with its own entry point,
-      `app/scripts/pm5-lab.ts`/`.html`): the three checksum errata, the
-      interval-numbering base, multi-frame programming retention, and the
-      rest of its eleven items, resolved against a real PM5 via
-      `webBluetooth.ts` before this phase's own codec assumptions go
-      further untested; results append to §18
+- [ ] The James laptop-vs-real-PM5 session named above has already run
+      once (laptop session 1) plus a same-day diagnosis row, both folded
+      into `phase-7a-fix` and recorded in
+      `docs/monitor/pm5-interface-notes.md` §18 — the checksum errata, the
+      interval-numbering base, and multi-INTERVAL programming are now
+      ANSWERED, not open. What is still open, per §17's own updated
+      status lines: the real clear/wipe command (UNFOUND —
+      `terminate()` is not it), whether an accepted program's structure
+      reads back from 0x0031, the no-rest work→work boundary index, and
+      distance-kind intervals / a genuine multi-FRAME program from a
+      known-empty machine (never tested without a loaded workout
+      confounding the result). §17's "The pending verification row" is
+      prepared for the next session, via `webBluetooth.ts` and
+      `app/scripts/pm5-lab.ts`/`.html`; results append to §18
 - [ ] Full behavior tested against the fake transport in CI; the laptop
       session above is this phase's live-hardware verification, never a CI
       gate
