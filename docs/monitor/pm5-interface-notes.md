@@ -222,6 +222,17 @@ document as "`81 or 01`"), which **is** part of the checksummed content —
 confirmed below because both status-byte values independently reproduce
 both printed checksum alternatives exactly.
 
+> **CORRECTION (2026-08-06, §19.1): "`81` = failure/CommStatus" is WRONG.**
+> The status byte is a bitfield ([CSAFE-DEF] Table 9, p.11): bit 7 (`0x80`)
+> is a frame-count toggle, bits 4-5 (`0x30`) are the previous-frame status
+> (`0x00` Ok / `0x10` Reject / `0x20` Bad / `0x30` Not ready), bits 0-3 are
+> the slave state. **`81` and `01` are the SAME successful response** —
+> toggle-high and toggle-low — which is exactly why the document prints
+> them side by side and prints both checksums, and exactly why both
+> reproduce. Accept is `(status & 0x30) === 0x00`; reject is
+> `(status & 0x30) === 0x10`. The checksum arithmetic in the table below is
+> unaffected and remains correct as computed.
+
 | #   | Example                                                                                                                               | Doc page | Frame content (hex, incl. status, excl. flags/checksum)                                                                      | Checksum (status=`01`) | Checksum (status=`81`) |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ---------------------- |
 | R1  | Fixed Distance response (public CSAFE)                                                                                                | p.79     | `01\|81 1A 00`                                                                                                               | `0x1B`                 | `0x9B`                 |
@@ -674,6 +685,12 @@ disputed checksums in §6):
    forward-attribution rule §18 #3 confirms is a resting-side rule only —
    what a work→work boundary with NO intervening rest reports is still
    unconfirmed (§17 item 13); do not read this item as fully closed.
+   > **CORRECTION (2026-08-06, §19.8): ANSWERED, and the rest-keyed rule is
+   > WRONG at a work→work boundary.** Laptop session 2 ran
+   > `TWO_TIME_NO_REST_PROGRAM` and read `0x0037` = **1** against `0x0033` =
+   > **0** at the work0→work1 boundary, with the state word `"rowing"`
+   > throughout. Forward attribution is not resting-side only. Fixing
+   > `intervalIndex.ts` is Phase 7A-fix-2's own task.
 2. **0x0038's Work/Rest Heartrate sentinel — ANSWERED (D5), excluded from
    the numbered runsheet; see the paragraph below.** Only 0x0032's Heartrate field
    is explicitly documented as "255=invalid" (§10). `parse.ts` applies the
@@ -763,7 +780,19 @@ disputed checksums in §6):
    answering this (it sends `terminate()` as a best-effort clear, ignores
    its rejection, and verifies the actual outcome either way), so the
    product code is not blocked — but the underlying mechanism is still not
-   understood. (§11-13 — `CSAFE_RESET_CMD`/`CSAFE_GOIDLE_CMD` are PUBLIC CSAFE
+   understood.
+   > **CORRECTION (2026-08-06, §19.5).** D1's "RULE" is withdrawn (§19.2)
+   > and the "rejected twice" evidence was an accept both times (§19.1), so
+   > neither sentence above evidences anything. The CONCLUSION — no
+   > dedicated clear command exists, and terminate is not one — is
+   > nevertheless correct and DOCUMENTED: terminate routes to *Rearm*,
+   > Concept2's own word for re-arming the SAME workout ([CSAFE-DEF]
+   > Appendix E; `WORKOUTSTATE_REARM` 13,
+   > `SCREENVALUEWORKOUT_REARMWORKOUT` 3). `CSAFE_PM_SET_RESET_ALL` (`0xE0`)
+   > is `<Not implemented>` and is NOT a candidate; the two untested ones
+   > are `CSAFE_RESET_CMD` (`0x81`) and `SCREENVALUEWORKOUT_GOTOMAINSCREEN`
+   > (6).
+   (§11-13 — `CSAFE_RESET_CMD`/`CSAFE_GOIDLE_CMD` are PUBLIC CSAFE
    only, and the doc explicitly says public and proprietary modes "should
    not be mixed"). Re-programming a workout with FEWER intervals than the
    one currently loaded (e.g. 4 intervals after a previous 25-interval
@@ -855,6 +884,18 @@ alongside the codec that produces the commands being acked.
   handles an unexpected status byte without crashing, not because `"reject"`
   is R3's true semantic meaning (interface-notes.md's own R3 note already
   says it "reports live StrokeState, not a program-command ack").
+  > **CORRECTION (2026-08-06, §19.1/§19.3): this bullet describes a BUG,
+  > not a rule.** The status byte is a bitfield; the whole-byte comparison
+  > `response.ts` implements is wrong. `0x81` is an ACCEPT (toggle-high,
+  > previous-frame-OK, Ready) and `0x09` is an ACCEPT (previous-frame-OK,
+  > slave state "Off line" — a monitor being rowed outside CSAFE master
+  > control, exactly [CSAFE-DEF]'s own force-curve polling example). Both
+  > were classified `"reject"` on real hardware in both laptop sessions.
+  > The correct discriminators are `(status & 0x30) === 0x00` for accept and
+  > `=== 0x10` for reject, with `status & 0x0F` carrying the slave state
+  > that a two-bucket return type currently throws away. The fix — and the
+  > tests for it — is Phase 7A-fix-2's own task; this note exists so nobody
+  > reads the bullet above as a specification.
 - `topOpcode` + what follows: ONLY `0x76` (the C2 proprietary wrapper —
   the one opcode the primary doc's own master ID table labels "Command
   Wrapper", alongside `0x77`/`0x7E`/`0x7F`, none of which `pm5/commands.ts`
@@ -940,6 +981,15 @@ audit than one that shows its full history. Two-tier summary:
   prepared, ready-to-run sequence for the next hardware session; it is
   NOT run yet — its Observed fields are deliberately blank.
 
+> **CORRECTION (2026-08-06, §19).** Three claims in the paragraph above are
+> no longer supported. (a) `terminate()` "was tried and is NOT it … still
+> rejected, twice" — both of those were ACCEPTS (§19.1); terminate is still
+> not a clear, but the documented reason is *Rearm*, not those two frames
+> (§19.5). (b) "D1 says [a loaded monitor] gets rejected regardless of the
+> bytes sent" — D1 is withdrawn (§19.2). (c) the no-rest work→work boundary
+> index (item 13) is now ANSWERED by laptop session 2: forward attribution
+> applies there too (§19.8).
+
 This session remains a **James-device event**, run with a controller
 driving the bridge (`app/scripts/pm5-bridge.mjs`) alongside him — never a
 CI gate, and not required for any task's own gates to pass.
@@ -981,7 +1031,8 @@ narrative:
    (terminate → 2 time intervals → accepted → rowed to completion) — this
    is distinct from the still-open multi-FRAME question (item 5 below),
    which needs enough intervals to force more than one CSAFE frame (§18
-   #5/#6, D1's rule).
+   #5/#6 — **CORRECTION (2026-08-06):** not "D1's rule"; D1 is withdrawn,
+   §19.2).
 
 ### Not hardware-resolvable (excluded from the numbered runsheet)
 
@@ -1089,7 +1140,13 @@ every flagged item either numbered here or explicitly excused — holds.)
    ever immediately after a successful single-interval program, i.e.
    against a LOADED monitor; D1 (item 6 below) says that gets rejected
    regardless of the bytes sent, so those attempts are confounded and
-   prove nothing about multi-frame retention specifically. **Distance-kind
+   prove nothing about multi-frame retention specifically.
+   > **CORRECTION (2026-08-06, §19.1/§19.2).** D1 is withdrawn, so the
+   > stated confound is not the reason. The stronger point stands and gets
+   > stronger: those attempts were never rejected at all — the frame-0
+   > `0x81` read as a "nak" was an ACCEPT — so multi-frame retention has no
+   > evidence either for or against it. Re-derive from the raw traces.
+   **Distance-kind
    intervals carry the same confound**: every DISTANCE program sent this
    session (3-interval, 25-interval) also ran against an already-loaded
    monitor. Neither "does a real multi-frame program retain all its
@@ -1121,7 +1178,14 @@ every flagged item either numbered here or explicitly excused — holds.)
    a working clear), but the underlying accept/reject state model is still
    not understood, and "The pending verification row" below is built
    around confirming the fix works DESPITE that gap, not around closing
-   the gap itself. No documented wipe/reset for a shorter re-program
+   the gap itself.
+   > **CORRECTION (2026-08-06, §19.1/§19.2/§19.5).** The "RULE" is withdrawn
+   > and the "rejected — twice" evidence was two acceptances. The absence of
+   > a clear command is real and DOCUMENTED (terminate routes to *Rearm*),
+   > but it was never established by this item's evidence. See §19.5 for the
+   > candidate list, and note `CSAFE_PM_SET_RESET_ALL` (`0xE0`) is
+   > `<Not implemented>`.
+   No documented wipe/reset for a shorter re-program
    (§15 #7,
    `buildProgrammingSequence`'s comment). Expected: unknown — no command
    exists in the documented flow to clear a prior program. Observed:
@@ -1257,8 +1321,10 @@ the next one; James rows when a command says to):
 1. James: reload `http://localhost:5173/scripts/pm5-lab.html`, click
    **Scan & connect**, pick the PM5.
 2. Controller: `curl -s localhost:5178/command -d terminate` — clears
-   whatever state the monitor is in (a `0x81` here is expected/fine per
-   D1 if nothing was loaded; the point is starting from a KNOWN state,
+   whatever state the monitor is in (a `0x81` here is expected/fine —
+   **CORRECTION (2026-08-06, §19.1):** not "per D1", and not a rejection at
+   all: `0x81` is an ACCEPT with the frame-count toggle high. The point is
+   starting from a KNOWN state,
    not a successful clear specifically).
 3. Controller: `curl -s localhost:5178/command -d program-two-time` —
    sends `TWO_TIME_PROGRAM` (two 60s/target-120/rest-30 intervals,
@@ -1347,6 +1413,23 @@ still REJECTED, twice. The accept/reject state model is still not
 understood; the real clear command, if one exists, remains UNFOUND (full
 detail: item 6 below).
 
+> **CORRECTION (2026-08-06, §19.1/§19.2) — D1 IS WITHDRAWN; IT WAS OUR
+> BUG.** Every "rejection" above was an ACCEPTANCE. `response.ts:72`
+> compares the whole status byte against `0x01`, but the status byte is a
+> BITFIELD: bit 7 (`0x80`) is a frame-count toggle that alternates on
+> alternate frames, bits 4-5 (`0x30`) are the previous-frame status, bits
+> 0-3 are the slave state. `0x81` is toggle-high / previous-frame-OK /
+> Ready — an accept ([CSAFE-DEF] Table 9; `csafe.h:747-766`). Decomposed
+> that way, not one status byte in either hardware session carries
+> `(status & 0x30) === 0x10`: **there were no rejections at all.** The rule
+> "the PM accepts a program only when nothing is loaded" was invented
+> specifically to explain an alternation that was the toggle bit, and the
+> "a rejection WIPES it" half no longer has a rejection to hang on. What
+> actually emptied the monitor's display after that 2-interval send is now
+> UNRESOLVED — programming over a live/loaded workout is the prime suspect,
+> and 7B's "prove the monitor idle before programming" requirement stands
+> on its own merits. Read §19.2 before citing any part of D1.
+
 **D2 — an ack of `0x01` does not mean a program landed on the machine.**
 Same command, same screen, three outcomes observed in the same session: a
 LIVE Just Row session → ack `0x01`, nothing programmed (a silent no-op); a
@@ -1359,9 +1442,37 @@ clears, sends, then VERIFIES against the machine's own reported state
 (`state === "armed"`) before resolving — an ack is necessary but was never
 sufficient, and no longer is treated as such.
 
+> **CORRECTION (2026-08-06, §19.1/§19.2) — D2's EVIDENCE WAS OUR BUG.** The
+> "ack `0x81` reject" outcome above never happened: `0x81` is an accept
+> (see D1's correction). The middle of the three outcomes is therefore not
+> a third outcome at all, and the alternation this session recorded — "the
+> SAME single-interval frame receiving both `0x01` accept and `0x81` reject
+> on different sends, and the whole session alternating
+> accept/reject/accept/reject/accept/reject/accept" — is fully explained by
+> [CSAFE-DEF] Table 9's "Frame Toggle — `0x80` — Toggles between 0 and 1 on
+> alternate frames". Identical command bytes legitimately produce status
+> bytes differing in bit 7. **This was recorded here, in the design spec,
+> and in ROADMAP.md as machine behaviour, and it was not.** What survives:
+> the observation that an ack alone did not prove a workout was on the
+> monitor during a live Just Row session (a real, separately-witnessed
+> silent no-op), and the clear→send→VERIFY design, which stays — an ack now
+> means what CSAFE says it means, but a `SetScreenState` ack still only
+> means "queued" (§19.6), so verifying against the machine's own reported
+> state remains the only sound way to know a program took.
+
 **D3 — the PM attributes rests FORWARD, into the interval they're heading
 toward; this codec's program indices are 0-based per WORK interval.** Full
 detail and the confirmed table: item 3 below.
+
+> **CORRECTION/EXTENSION (2026-08-06, §19.8) — D3 STANDS, but its SCOPE was
+> wrong.** Forward attribution is real and is the one item on this list with
+> no documentary corroboration anywhere (REAL PM5 BEHAVIOUR, UNDOCUMENTED).
+> What was wrong is treating it as a RESTING-side rule: laptop session 2 ran
+> the no-rest work→work boundary (`TWO_TIME_NO_REST_PROGRAM`) and 0x0037
+> reported **1** while 0x0033 reported **0**, with the state word `"rowing"`
+> throughout. Forward attribution applies at work→work boundaries too, so
+> `intervalIndex.ts`'s rest-keyed rule is WRONG there. This answers §17 item
+> 13.
 
 **D4 — only ONE `intervalComplete` fired for a two-interval program.** The
 first boundary produced no actual at all; the one actual this session did
@@ -1371,6 +1482,16 @@ fix: item 3 below (the "Follow-up hardware session" paragraph).
 **D5 — the no-HR sentinel is `0`, not `255`.** With no belt paired,
 `avgHeartRateBpm: 0` came through. Full detail and the fix: the "New defect
 confirmed this session" paragraph near the end of this section.
+
+> **CORRECTION (2026-08-06, §19.9) — the OBSERVATION and the FIX both
+> stand; the REASONING did not.** The sentinels are documented per-field:
+> live/average HR is "255=invalid" ([CSAFE-DEF] p.21, 0x0032) and Recovery
+> HR is "zero = not valid data" ([CSAFE-DEF] p.24, 0x0039). So the claim
+> below that "a per-field split would claim a distinction no source states"
+> is false — a source does state it. Mapping BOTH `0` and `255` to `null`
+> on every field is still the right defensive choice, and is corroborated
+> behaviourally by `ergarcade/pm5-base`'s shipped
+> `(n === 0 || n === 255) ? 'N/A'`. Only the justification changes.
 
 **The soft crash — corrected record.** During this session, the PM5
 soft-crashed once while programming attempts were being sent against a
@@ -1433,6 +1554,14 @@ establish about programming over a live session.
    multi-FRAME case (several ack-gated frames for one program, e.g. Sea
    Smoke's 25 intervals / 7 frames) remains UNTESTED from a clean state —
    still open for the next session.
+   > **CORRECTION (2026-08-06, §19.1).** The withdrawal above was right for
+   > a reason this item could not see: the `0x01`/`0x81` difference on
+   > identical bytes is the frame-count TOGGLE, and `0x81` is an accept. So
+   > "multi-frame accumulation is broken" was never evidenced — the frame-0
+   > `0x81` that produced it was an acceptance. The multi-FRAME question is
+   > not merely untested; the only evidence ever offered against it was a
+   > misread status byte. Re-derive it from the raw traces before treating
+   > any part of it as answered.
 6. **No documented wipe/reset for a shorter re-program (§17 item 6):
    ANSWERED, then WEAKENED.** `D1`: the PM accepts a program ONLY when
    nothing is loaded; programming over a loaded workout is REJECTED **and
@@ -1456,6 +1585,21 @@ establish about programming over a live session.
    remains UNFOUND — the top open question for the next hardware row.
    Plan Task 2's clear→send→verify design survives this: it never assumed
    the clear works, only that VERIFICATION would decide success either way.
+   > **CORRECTION (2026-08-06, §19.1/§19.2/§19.5).** Every "REJECTED" in
+   > this item was an ACCEPT — `0x81` is toggle-high/prev-OK/Ready, and
+   > "terminate (rejected — nothing to terminate)" was an accept too. So
+   > neither the D1 rule nor the D1 UPDATE's "terminate is not a reliable
+   > clear because the following program was still rejected" is evidenced.
+   > The CONCLUSION that terminate does not clear a loaded workout is
+   > nevertheless CORRECT and DOCUMENTED, for a different reason: terminate
+   > routes to *Rearm* ([CSAFE-DEF] Appendix E), and "Rearm" is Concept2's
+   > own word for making the SAME workout ready to run again
+   > (`WORKOUTSTATE_REARM` 13, `SCREENVALUEWORKOUT_REARMWORKOUT` 3). No
+   > command that clears a loaded workout is documented to exist.
+   > `CSAFE_PM_SET_RESET_ALL` (`0xE0`) is NOT a candidate — [CSAFE-DEF]
+   > marks it `<Not implemented>`. The two untested candidates are
+   > `CSAFE_RESET_CMD` (`0x81` as a COMMAND — unrelated to `0x81` as a
+   > status byte) and `SCREENVALUEWORKOUT_GOTOMAINSCREEN` (6). See §19.5.
 7. **`intervalRemaining` checkpoint cadence (§17 item 7): CONFIRMED
    correct.** 58.92 s remaining observed at 1.08 s into a 60 s interval,
    re-rooted at 60.0 at the next interval's start, matching
@@ -1498,7 +1642,13 @@ plan Task 4, `parse.ts` maps BOTH `0` and `255` to `null` on EVERY
 heart-rate field it decodes, not only the one byte the session observed
 (`HEARTRATE_NO_BELT`; §15 #2's own 0x0039 counter-evidence agreed with this
 before the session ever ran, and a per-field split would claim a
-distinction no source states). `statusFrames.ts` still ENCODES `null` as
+distinction no source states — **CORRECTION (2026-08-06, §19.9): a source
+DOES state it.** [CSAFE-DEF] documents `255=invalid` for live/average HR
+(p.21, 0x0032) and `zero = not valid data` for Recovery HR (p.24, 0x0039);
+§15 #2 above says the same thing. The both-map-to-`null` behaviour is still
+correct — it is the defensive choice `ergarcade/pm5-base` also ships
+(`(n === 0 || n === 255) ? 'N/A'`) — but this parenthetical's stated reason
+for it is false). `statusFrames.ts` still ENCODES `null` as
 the documented `255` — one encoder cannot write two sentinels for one
 state — so the fake passes `HEARTRATE_NO_BELT` explicitly to put the
 observed byte on its wire.
@@ -1521,3 +1671,666 @@ session, alongside items 12 and 13 — item 6's real clear command remains
 the single top open question. "The pending verification row" in §17 is
 this close-out's prepared, not-yet-run sequence for verifying Tasks 2-4's
 fixes and picking up item 12 as a free extra observation.
+
+## 19. Idiosyncrasies, and whether they were ours
+
+Two hardware sessions (§18, and session 2 on 2026-08-06) produced a list of
+things the PM5 "does". Three research passes then checked that list against
+Concept2's own primary sources and against every open-source PM5
+implementation that could be found. **Most of the list was not the machine.**
+This section is the definitive record: for each idiosyncrasy, what we
+observed, what the sources actually say, and a verdict.
+
+**Sources cited in this section** (in addition to §1's two fetched PDFs):
+
+| Ref            | Document                                                                                                                                                                                                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **[CSAFE-DEF]** | Concept2 PM CSAFE Communication Definition, **revision 0.31**, 173 pp (local copy; created 2025-07-17, modified 2026-03-12). §1's table cites revision 0.27 (162 pp) fetched from concept2.nl. Where both were read they agree; Table 9 is p.11 in both. Page numbers below are 0.31's, with 0.27's given where §1 already cites it. |
+| **[CID-2010]** | Concept2 PM Communication Interface Definition, "**PRELIMINARY**", revision 0.15, 78 pp, 2010-08-23 — a PM3/PM4-era *host API* reference that ships inside the C2 PM SDK. A different document from [CSAFE-DEF], not an older revision of it.                                                     |
+| **[SDK]**      | The C2 PM SDK's `Build/` tree: `csafe.h` (937 lines), `PM3CsafeCP.h`, `PM3DDICP.h`, and `main.cp` (1017 lines) — Concept2's own reference desktop application.                                                                                                                                    |
+| **[OSS]**      | A survey of open-source PM5/CSAFE implementations (named per item).                                                                                                                                                                                                                              |
+| **[S1]**       | Laptop session 1, 2026-08-05, PM5 432331249 — §18, raw trace in `.superpowers/sdd/2026-08-05-phase-7a-monitor-domain/progress.md`.                                                                                                                                                               |
+| **[S2]**       | Laptop session 2, 2026-08-06, same erg and harness — raw trace in that session's own scratchpad log.                                                                                                                                                                                             |
+
+**The verdicts** are drawn from exactly four values:
+
+- `OUR BUG` — the machine was behaving correctly; our code or our reading
+  manufactured the effect.
+- `REAL PM5 BEHAVIOUR, DOCUMENTED` — the machine does this, and Concept2
+  says so somewhere we had not read.
+- `REAL PM5 BEHAVIOUR, UNDOCUMENTED` — the machine does this, and no
+  source states it; our hardware readings are the only evidence.
+- `UNRESOLVED` — not settled by anything currently in hand.
+
+### 19.1 The status byte — **OUR BUG**
+
+**What we observed.** `app/domain/monitor/pm5/response.ts:72` decides
+accept-vs-reject with a whole-byte equality test:
+
+```ts
+const status: CsafeResponseStatus =
+  statusByte === SUCCESS_STATUS_BYTE ? "ok" : "reject";   // SUCCESS_STATUS_BYTE = 0x01
+```
+
+with a companion constant `REJECT_STATUS_BYTE = 0x81` (`:34`). Under that
+rule, every ack whose status byte was not exactly `0x01` was reported as a
+rejection. [S2]'s twelve acks decompose as: five `0x01`, six `0x81`, one
+`0x09` — e.g. `f1 81 76 0e 18 01 17 03 04 06 14 18 17 03 04 06 14 13 eb f2`
+and `f1 09 76 0e 18 01 17 03 04 06 14 18 17 03 04 06 14 13 63 f2`, both
+logged as `program-rejection … ack status=reject`. [S1] recorded the same
+pattern, and its own raw-trace correction already noticed the shape without
+being able to explain it: *"the SAME single-interval frame receiving both
+`0x01` accept and `0x81` reject on different sends, and the whole session
+alternating accept/reject/accept/reject/accept/reject/accept."*
+
+**What the sources say.** The status byte is a **bitfield**, not an enum.
+
+[SDK] `csafe.h:747-766`:
+
+```c
+#define CSAFE_PREVOK_FLG                    0x00
+#define CSAFE_PREVREJECT_FLG                0x10
+#define CSAFE_PREVBAD_FLG                   0x20
+#define CSAFE_PREVNOTRDY_FLG                0x30
+#define CSAFE_PREVFRAMESTATUS_MSK           0x30
+#define CSAFE_SLAVESTATE_ERR_FLG            0x00
+#define CSAFE_SLAVESTATE_RDY_FLG            0x01
+/* … IDLE 0x02, HAVEID 0x03, INUSE 0x05, PAUSE 0x06,
+      FINISH 0x07, MANUAL 0x08, OFFLINE 0x09 (0x04 deliberately absent) */
+#define CSAFE_FRAMECNT_FLG                  0x80
+#define CSAFE_SLAVESTATE_MSK                0x0F
+```
+
+[SDK] `PM3CsafeCP.h:131-156` restates the same layout independently and
+ships ready-made extractors:
+
+```c
+#define SLAVE_STATE_MASK         0x0f
+#define PREV_FRAME_STATUS_MASK   0x30
+#define FRAME_COUNT_MASK         0X80
+#define GET_SLAVE_STATE(val)     (val & SLAVE_STATE_MASK)
+#define GET_FRAME_STATUS(val)    ((val & PREV_FRAME_STATUS_MASK) >> 4)
+#define GET_FRAME_COUNT(val)     ((val & FRAME_COUNT_MASK) >> 7)
+
+enum SLAVE_STATUSES { STATUS_OK, STATUS_PREV_REJECT, STATUS_PREV_BAD,
+                      STATUS_PREV_NOT_READY };
+```
+
+[SDK] `main.cp` — **Concept2's own reference application** — decodes one
+status byte three separate ways and never once compares the whole byte to
+anything (`:629-631`, with the three decoders at `:737`, `:765`, `:822`):
+
+```c
+UpdateFrameCount(slaveStatus);   // GET_FRAME_COUNT  -> printed as a number
+UpdateSlaveState(slaveStatus);   // GET_SLAVE_STATE  -> "Ready"/"Idle"/…/"Offline"
+UpdateFrameStatus(slaveStatus);  // GET_FRAME_STATUS -> "Prev OK"/"Prev Reject"/…
+```
+
+The frame count is displayed as an ordinary counter on equal footing with
+the other two fields; there is no error path keyed off bit 7 anywhere in the
+file.
+
+[CSAFE-DEF] p.11, prose and **Table 9 – Response Status Byte Bit-Mapping**:
+
+> All responses have the same Frame Contents format as shown in Figure 5.
+> The status byte is **bit-mapped** in order to indicate frame count, status
+> and state machine state within the single byte.
+
+| Description           | Bit Mask | Notes                                                                                                       |
+| --------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| Frame Toggle          | `0x80`   | Toggles between 0 and 1 on alternate frames                                                                 |
+| Previous Frame Status | `0x30`   | `0x00`: Ok / `0x10`: Reject / `0x20`: Bad / `0x30`: Not ready                                               |
+| State Machine State   | `0x0F`   | `0x00` Error / `0x01` Ready / `0x02` Idle / `0x03` Have ID / `0x05` In Use / `0x06` Pause / `0x07` Finish / `0x08` Manual / `0x09` Off line |
+
+**The killer evidence.** [CSAFE-DEF]'s worked-example chapter (pp.85-98)
+documents the *same successful response* as **"81 or 01"**, and where the
+arithmetic allows it prints **both** corresponding checksums. Recomputing
+the XOR rule (§2) over the three dual-checksum examples:
+
+| Example                        | Contents after status | status=`01` → | doc  | status=`81` → | doc  |
+| ------------------------------ | --------------------- | ------------- | ---- | ------------- | ---- |
+| Terminate Workout, p.98        | `76 01 13`            | `0x65`        | `65` | `0xE5`        | `E5` |
+| Set Horizontal 2 km, p.85      | `1A 00`               | `0x1B`        | `1B` | `0x9B`        | `9B` |
+| JustRow, p.86                  | `76 02 01 13`         | `0x67`        | `67` | `0xE7`        | `E7` |
+
+**All six verify.** Concept2 documents one identical, successful response as
+being validly either `0x01` or `0x81` — differing in nothing but bit 7 — and
+carries that difference correctly through the checksum. The "81 or 01"
+formulation appears in roughly fifteen worked examples, every one of them a
+success case. Bit 7 cannot be an error flag. It is exactly what Table 9 says
+it is: a toggle. (§6's own R1/R2/R4 rows already computed both alternatives
+for this codec's conformance vectors — the arithmetic was in this file the
+whole time; only the interpretation was wrong.)
+
+Two caveats, recorded so the record is not tidier than the evidence:
+
+- **[CSAFE-DEF] Table 8 contradicts Table 9** on the same page, listing the
+  Status field's value range as `0x00 – 0x7F`, which would exclude `0x81`.
+  This is copy-paste contamination from Table 7 one page earlier, where
+  `0x00 – 0x7F` is the genuine range for *Long Command*. It is overruled by
+  Table 9 (the more specific statement), by `csafe.h`, and by ~15 worked
+  examples in the same document that print bit 7 set on real status bytes.
+- **Bit 6 (`0x40`) is unassigned.** `0x80 | 0x30 | 0x0F = 0xBF`; no source
+  assigns bit 6. Treat it as reserved — do not assume it reads 0, and do not
+  fold it into any mask.
+
+**The correct tests are therefore:** accept is `(status & 0x30) === 0x00`;
+reject is `(status & 0x30) === 0x10`; `status & 0x0F` is the slave state;
+`status & 0x80` is the toggle and must never be tested for failure.
+
+**Verdict: OUR BUG.** Decomposed against Table 9, **every** status byte
+seen in [S1] and [S2] carries `(status & 0x30) === 0x00` — previous frame
+OK. `0x81` is toggle-high/prev-OK/Ready. `0x09` is toggle-low/prev-OK/Off
+line. **Not one genuine rejection was ever observed on this hardware.**
+Every "rejection" in both sessions was an acceptance that our own parser
+mislabelled. Several conclusions recorded in §18 as PM5 behaviour follow
+from that mislabelling and are corrected below and in place.
+
+### 19.2 D1 ("accepts only when nothing is loaded") and D2 ("identical bytes, both accept and reject") — **OUR BUG**, both
+
+**What we observed.** §18's D1: *"the PM accepts a program only when
+nothing is loaded; a rejection WIPES what was loaded"*, "confirmed twice",
+later weakened by a D1 UPDATE in which a `terminate()` was accepted and the
+following program was "still REJECTED, twice". §18's D2: *"an ack of `0x01`
+does not mean a program landed"* — the same command, same screen, producing
+`0x01` and `0x81` on different sends. [S1]'s own trace states the pattern
+outright: the same single-interval frame receiving both values, "the whole
+session alternating accept/reject/accept/reject/accept/reject/accept".
+
+**What the sources say.** [CSAFE-DEF] p.11 Table 9: "Frame Toggle — `0x80` —
+**Toggles between 0 and 1 on alternate frames.**" [CSAFE-DEF] Figure 8
+(p.63) shows the toggle in a captured-style ladder diagram — eight
+successive response frames `07, 87, 07, 87, 07, 85, 02, 87`, bit 7 running
+`0, 1, 0, 1, 0, 1, 0, 1` — every one of them a successful exchange.
+
+**Verdict: OUR BUG, both.**
+
+D2 is now **fully explained and needs no PM5-side mechanism at all**: the
+toggle alternates on alternate frames, so identical command bytes
+legitimately produce status bytes that differ in bit 7, and a parser that
+compares the whole byte to `0x01` will report exactly the alternating
+accept/reject/accept/reject sequence [S1] recorded. The alternation was the
+toggle. It was never the machine changing its mind.
+
+D1 was built on top of D2: the "accepts only when nothing is loaded"
+hypothesis was constructed specifically to explain the alternation ("a
+rejection wipes it, so the NEXT attempt succeeds — that is the alternation,
+exactly"). With the alternation explained by bit 7, the hypothesis has no
+evidence left supporting it. **Both were recorded in this document, in the
+design spec, and in the roadmap as machine behaviour, and they were not.**
+
+What survives, and what does not:
+
+- **Does NOT survive:** "the PM accepts a program only when nothing is
+  loaded"; "a rejection wipes what was loaded"; "an ack of `0x01` does not
+  mean a program landed"; "`terminate()` is not a reliable clear because
+  the following program was rejected twice". Each rests on at least one
+  reject that was actually an accept.
+- **Genuinely still open:** James read an empty `:00` session off the
+  monitor after a 2-interval send during [S1]. *Something* emptied that
+  display. What it was is now **UNRESOLVED** — it can no longer be
+  attributed to "a rejection wipes it", because there was no rejection.
+  Programming over a live/loaded workout remains the prime suspect, and 7B's
+  "prove the monitor idle before programming" requirement stands on its own
+  merits regardless.
+- **Also still true:** verifying a program against the machine's own
+  reported state rather than against the ack is good engineering and stays.
+  Its stated justification changes — an ack now means what CSAFE says it
+  means, but a `SetScreenState` ack still only means "queued" (§19.6), and
+  `program()` has no other way to know a configuration took.
+
+### 19.3 Slave state `0x09` (OFFLINE) on a live erg — **REAL PM5 BEHAVIOUR, DOCUMENTED**
+
+**What we observed.** [S2], one ack out of twelve:
+`f1 09 76 0e 18 01 17 03 04 06 14 18 17 03 04 06 14 13 63 f2` — status
+`0x09`, arriving from a connected, responsive, actively-rowing erg
+immediately after a `frame` showing `state=rowing elapsed=0.98`. §16 had
+already met `0x09` on paper (R3, the Get Force Curve vector) and shrugged at
+it: "a genuinely different response shape … falls into `"reject"` by this
+binary reduction".
+
+**What the sources say.** `0x09` is not a whole-byte code at all; it is
+toggle-low, prev-frame-OK, slave state `0x09` = "Off line" — a **healthy,
+accepted frame**. And "Off line" does not mean disconnected.
+
+[CSAFE-DEF] Figure 7, p.49, "Public CSAFE State Machine Diagram": the
+`Offline` box has exactly **one** entry arrow, from `Ready`, labelled
+
+> "User starts workout before equipment is configured"
+
+with attached notes "1. Return to Ready state when workout is
+completed/aborted and user selects MenuBack. 2. No timeout condition
+implemented". OFFLINE is the state a PM enters when the rower starts rowing
+at the monitor before a CSAFE master has programmed it. The erg is alive,
+rowing, logging, and answering polls; it is "offline" only in the sense that
+the CSAFE state machine is not the thing driving the session.
+
+[CSAFE-DEF] pp.98-99, "Get Force Curve" — the spec's own multi-poll example
+against an **actively rowing** erg — shows status `09` on **every frame**:
+
+```
+Command Frame                          Response Frame
+F1  Standard frame start flag          F1  Standard frame start flag
+1A  PM-specific wrapper                09  Status
+01  Wrapper command byte count         1A  PM-specific wrapper
+BF  CSAFE_PM_GET_STROKESTATE           03  Wrapper command byte count
+A4  Checksum                           BF  CSAFE_PM_GET_STROKESTATE
+F2  Standard frame stop flag           01  Command byte count
+                                       04  StrokeState: Recovery
+                                       AA  Checksum
+                                       F2  Standard frame stop flag
+```
+
+`09^1A^03^BF^01^04 = 0xAA` — the checksum verifies, and the payload is real
+force-curve data. [CID-2010] p.12 Table 4 enumerates the same state list,
+and [SDK] `main.cp:793` maps `STATE_OFFLINE` to the display string
+"Offline".
+
+**Verdict: REAL PM5 BEHAVIOUR, DOCUMENTED.** `0x09` mid-session is the
+expected reading for an erg being rowed outside CSAFE master control, which
+is precisely what our harness does. It was our parser, not the machine, that
+turned a healthy frame into a rejection.
+
+### 19.4 The driver going deaf after a terminal state — **OUR BUG**
+
+**What we observed.** [S2], three times: after
+`[event] {"kind":"workoutComplete"}` fires, **zero** further `frame` events
+are emitted — not a slowed stream, not stale repeats, nothing. The final
+`workoutComplete` at the log's last line is followed by no events at all.
+And after an explicit `disconnect()` + re-`scan()` + `connect()`, frames
+resume **instantly** (`capabilities: {…}` then an unbroken run of
+`state=armed` frames on the very next lines). We had been reading this as
+the monitor going quiet at the end of a workout and needing a reconnect.
+
+**What the sources say.** The monitor never stops responding.
+
+[CSAFE-DEF] **Appendix E**, "PM State Transitions" (p.173 in rev 0.31; the
+p.162 this file's §14 already cites in rev 0.27):
+
+> For any fixed duration workout (defined end) that reaches its defined end:
+> `WaitToBegin->WorkoutRow->WorkoutEnd->WorkoutLogged->[Menu button]->WorkoutRearm->WaitToBegin`
+>
+> `WaitToBegin->WorkoutRow->WorkoutEnd->WorkoutLogged->[Terminate command]->WaitToBegin`
+
+On natural completion the PM **parks in `WorkoutLogged` and stays there**,
+answering CSAFE throughout — CSAFE is strictly poll-response in every state
+([CSAFE-DEF] Table 17: no unsolicited status uploads, no unsolicited command
+lists, and "Ack Disable" is listed as unsupported, i.e. every command is
+answered by at least a status byte). It leaves `WorkoutLogged` on the user
+pressing Menu **or** on the master issuing a Terminate command — **that is
+the documented client recovery path, and we were not using it.** Note the
+asymmetry the spec is careful about: terminate from `WorkoutLogged` goes
+straight to `WaitToBegin`, whereas terminate mid-workout routes via `Rearm`
+(§19.5). [CSAFE-DEF] Table 17 also warns that the PM deliberately deviates
+from stock CSAFE here — there is no Finished-state timeout back to Idle;
+"the Ready state is entered instead of the Idle state" — so expect low
+nibble `0x01`, not `0x02`, after a workout concludes.
+
+The silence is ours: `src/monitor/driver.ts` latches terminal states
+(`terminalLatched`, `:233`/`:617-628`) and short-circuits every subscription
+callback afterwards, by design ("Appendix E's auto-cycle never un-finishes a
+session"). Reconnecting resets the latch, which is exactly why frames
+resumed instantly — the radio and the erg were never the variable.
+
+**Verdict: OUR BUG.** The latch itself is a legitimate design choice and
+[S1] confirmed it does its job (no un-finishing). What was wrong was the
+*conclusion drawn from it* — that the PM5 goes quiet after a workout and
+needs a reconnect. It does not. [OSS] adds a supporting note from the other
+direction: nobody else documents a "PM goes silent at workout end" symptom,
+and the spec explicitly promises continued notifications for at least a
+minute after the end (the revised recovery-HR summary, §19.9). A driver that
+wants to keep working after `workoutComplete` should send terminate and
+carry on, not drop the connection.
+
+### 19.5 No command clears a loaded workout — **REAL PM5 BEHAVIOUR, DOCUMENTED**
+
+**What we observed.** §15 #7 and §17 item 6 flagged the missing wipe/reset
+as an open question; `commands.ts` asserts twice that no such command
+exists. [S1]/[S2] left it unanswered, and the D1 UPDATE's "terminate is not
+a reliable clear" reasoning is now void (§19.2).
+
+**What the sources say.** A search of both PDFs across the command tables,
+the proprietary command list, and every enumeration finds **no command
+documented as clearing or unloading a programmed workout** — and the spec's
+own vocabulary explains why. Terminate routes to *Rearm*:
+
+- [CSAFE-DEF] Appendix E: terminate mid-workout gives
+  `…->Terminate (user or command)->Rearm->WaitToBegin`.
+- `WORKOUTSTATE_REARM` (13) and `SCREENVALUEWORKOUT_REARMWORKOUT` (3) are
+  both first-class, named states (Appendix A).
+
+**"Rearm" is Concept2's own word for making the SAME workout ready to run
+again.** The designed post-terminate destination is a re-armed identical
+workout, not an empty slot. So "terminate does not clear the loaded workout"
+is correct and documented — it just was never evidenced by the reject that
+§18 cited for it.
+
+Two corrections to the candidate list this project has been carrying:
+
+- **`CSAFE_PM_SET_RESET_ALL` (`0xE0`) is NOT a candidate.** The SDK audit
+  raised it as a promising, in-family short command under the same `0x76`
+  wrapper we already use (`csafe.h:548-570`, `CSAFE_SETPMCFG_CMD_SHORT_MIN
+  = 0xE0`), and on the header alone that reading is fair. But
+  [CSAFE-DEF] marks `CSAFE_PM_SET_RESET_ALL` **`<Not implemented>`**. Do not
+  spend a hardware row on it.
+- **The two genuinely untested candidates are:** `CSAFE_RESET_CMD`
+  (`0x81`, public short command; [CID-2010] p.12 Table 4 describes it as
+  "Reset CSAFE state machine and related parameters" — scoped to the CSAFE
+  state machine, with neither document saying it discards a programmed
+  workout), and `SCREENVALUEWORKOUT_GOTOMAINSCREEN` (**6**, Appendix A —
+  navigates the UI, no documented effect on the loaded workout). Note that
+  `0x81` as a *command* is unrelated to `0x81` as a *status byte*
+  (§19.1) — the value is overloaded across the two directions, and
+  conflating them is an easy search error.
+
+The only documented way to change what workout is loaded remains
+"program a new one" — accumulate `Set*` commands and commit with
+`SetProgram`, which overwrites.
+
+**Verdict: REAL PM5 BEHAVIOUR, DOCUMENTED.** No clear command exists; the
+absence is deliberate, and Rearm is the reason.
+
+### 19.6 `SetScreenState`'s ack means "queued", not "done" — **REAL PM5 BEHAVIOUR, DOCUMENTED**
+
+**What we observed.** Nothing directly — this is a hazard the sources
+surfaced that our code walks into. `src/monitor/driver.ts`'s terminate step
+and `program()`'s clear step both send `buildTerminate()`
+(`SET_SCREENSTATE`/TERMINATEWORKOUT, §13) and treat the ack as completion
+before proceeding.
+
+**What the sources say.** [CSAFE-DEF] p.65 (verbatim):
+
+> The ScreenType command is unique in that it is initially processed by the
+> communication task and 'posted' for processing by the UI task. **The CSAFE
+> frame response is sent immediately** by the communications task. Since the
+> UI task only runs periodically (e.g., 2 - 5 Hz) there is some delay before
+> the full effect of the command is realized. The options are to delay
+> sufficiently long for the command to complete (e.g., 1 second or more), or
+> to poll for the status of ScreenType commands. Using the
+> `CSAFE_PM_GET_SCREENSTATESTATUS`, the status will be set to
+> `APGLOBALS_SCREENPENDINGFLG_PENDING` when the command is received …
+> `_INPROGRESS` while processing and … `_INACTIVE` when complete.
+
+[CSAFE-DEF] Figure 9 (p.64) adds a related practical caution for
+back-to-back workouts: after Set Finished, "Delay several seconds to Allow
+logging to complete" before starting the next.
+
+**Verdict: REAL PM5 BEHAVIOUR, DOCUMENTED.** An OK status on a
+`SetScreenState` means the command was *received and queued*, not that the
+screen changed. **This affects our terminate and clear steps directly**, both
+of which treat the ack as completion and immediately send the next thing.
+The documented remedy is to poll `CSAFE_PM_GET_SCREENSTATESTATUS` until
+`_INACTIVE` (a fixed ≥1 s delay is the spec's own weaker alternative). We do
+neither today.
+
+### 19.7 Workout programming is atomic — **REAL PM5 BEHAVIOUR, DOCUMENTED**
+
+**What the sources say.** [CSAFE-DEF] p.50 (verbatim):
+
+> When the SetProgramCmd is issued by the Master to program the previously
+> configured workout, all pertinent workout parameters are checked against
+> their respective limits. **If any parameter violates its limits, the
+> entire workout configuration operation is aborted resulting in a
+> "PrevReject" frame status.** The Master must issue a PM-specific
+> GetErrorType command to determine the specific error information.
+
+Three consequences. (i) Validation is **deferred to the commit** — the
+individual `SetHorizontal`/`SetTWork`/`SetSplitDuration`-family commands are
+accumulated first and checked at `SetProgram`. (ii) The commit is
+all-or-nothing for workout configuration. (iii) **The reject is not
+self-describing**: recovering *why* requires a follow-up `GetErrorType`,
+which this codec has never sent. The doc's word "PrevReject" is exactly
+`csafe.h`'s `CSAFE_PREVREJECT_FLG` (`0x10`), tying the prose to the bitfield
+in §19.1.
+
+**The scope of the atomicity matters.** A CSAFE frame is *not* atomic in
+general. [CSAFE-DEF] p.10:
+
+> The virtue of the Data Byte Count field in the long command is to allow
+> slave devices to handle unrecognized commands by **merely disregarding the
+> command and its data, while continuing to process succeeding commands
+> within the same frame.**
+
+So an unrecognized command is skipped and the monitor carries on executing
+the rest of the frame — **a frame can be partially applied**, and one status
+byte covers a whole multi-command frame ([CSAFE-DEF] p.10: a multi-command
+frame yields one response frame with one status). Do not infer from a
+non-OK status that nothing in the frame took effect. The all-or-nothing
+guarantee is specific to workout configuration at `SetProgram`.
+
+**Verdict: REAL PM5 BEHAVIOUR, DOCUMENTED.** Practical consequence for us:
+when a genuine `(status & 0x30) === 0x10` finally does appear, the correct
+next move is `GetErrorType`, not a retry and not a guess.
+
+### 19.8 Forward-attributed interval numbering — **REAL PM5 BEHAVIOUR, UNDOCUMENTED**
+
+**What we observed.** [S1], a clean 2×(1:00 work / 0:30 rest) session: work0
+→ idx 0, rest-after-work0 → idx 1, work1 → idx 1, rest-after-work1 → **idx
+2** — a phantom third index on a two-interval workout (§18 #3, D3). The PM
+attributes a rest **forward**, into the interval it is heading toward, while
+this codec's program indices are 0-based per WORK interval — two
+structurally different numbering systems, not an off-by-one. [S2] reproduced
+the phantom on the same program shape, with the raw bytes this time:
+`{"kind":"intervalComplete","actual":{"index":2,…}}` off 0x0037
+`1e 19 00 95 07 00 58 02 00 b9 00 00 1e 00 09 00 00 02`.
+
+[S2] answered the question §17 item 13 was written for: the no-rest
+work→work boundary, run with `TWO_TIME_NO_REST_PROGRAM` (two 60 s TIME
+intervals, `restSeconds: 0` on both). At the work0→work1 boundary the driver
+logged, in order:
+
+```
+{"seq":16,"kind":"interval-complete","detail":"index=null (machine reported 1)"}
+{"seq":17,"kind":"index-unverified","detail":"actual.index=null (0x0037/38) normalized
+  while state=rowing — no rest tick preceded this boundary (restSeconds may be 0 on the
+  completed interval), so the machine's work-to-work numbering at this exact boundary
+  shape is UNCONFIRMED by hardware (interface-notes.md §17 item 13)"}
+{"seq":18,"kind":"divergence","detail":"intervalIndex=0 (0x0033) vs actual.index=1 (0x0037/38)"}
+```
+
+**`0x0037` reported 1 while `0x0033` reported 0, at the boundary out of
+interval 0.** That is forward attribution, at a boundary with no rest in it
+at all.
+
+**What the sources say.** Nothing. Not the spec, not the SDKs, not any
+open-source project.
+
+- [CSAFE-DEF] lists `Split/Interval Number` as a payload field on BLE
+  characteristics `0x0037` and `0x0038` (pp.23-24) and defines
+  `CSAFE_PM_GET_WORKOUTINTERVALCOUNT` on the CSAFE side, but **neither
+  document states whether the number reported at a boundary refers to the
+  interval just completed or the one being entered.**
+- The nearest guidance is about interval *type*, not number — footnote 10
+  (p.23): "This value will change depending on where you are in the interval
+  (work, rest, etc)"; footnote 12 (p.25), the same for termination. Both
+  weakly favour "wherever you currently are", but that is inference.
+- [SDK] names the commands and gives no indexing convention.
+- [OSS] found nothing: `BoutFitness/Concept2-SDK` (and its forks
+  `paschmann/concept2_rower`, `RowBotics/Concept2-SDK`, `hanahanj/SAIL-V3`,
+  `morria/PMKit`) carries `intervalNumber` with a byte-offset comment and no
+  semantics; `ergarcade/pm5-base` has `intervalCount`/`splitIntervalCount`
+  with no note; GitHub code search and the c2forum threads turned up nothing
+  on point. **Our two hardware readings are the only evidence that exists.**
+
+The spec does supply one relevant warning, which is about sampling rather
+than numbering: the transitional workout states
+`WORKOUTSTATE_INTERVALWORKDISTANCETOREST` and
+`_INTERVALRESTENDTOWORKTIME` (Appendix A) exist precisely at these
+boundaries and Appendix E flags that a client "may not see this state".
+**Boundary sampling is documented as racy** — a reason to treat a single
+boundary reading as evidence about numbering only when it is corroborated,
+which here it is (two boundary shapes, same direction).
+
+**Verdict: REAL PM5 BEHAVIOUR, UNDOCUMENTED.**
+
+**[S2] answers §17 item 13, and the answer invalidates our rule.** The rule
+`domain/monitor/pm5/intervalIndex.ts` applies today is rest-keyed: forward
+attribution is treated as a *resting-side* phenomenon, and a boundary that
+transitions while the state word is still `"rowing"` passes the machine
+index through unadjusted. [S2] shows `0x0037` reporting **1** on exactly
+that boundary. **Forward attribution applies at work→work boundaries too, so
+the rest-keyed rule is WRONG there** — and the `index-unverified` log entry
+above, which exists to make the assumption visible rather than silent, did
+its job: it fired on the very boundary that disproves the assumption.
+
+### 19.9 Heart-rate sentinels — **REAL PM5 BEHAVIOUR, DOCUMENTED** (and our handling is right for the wrong stated reason)
+
+**What we observed.** [S1], D5: with no belt paired, `avgHeartRateBpm: 0`
+came through on 0x0038's work-heartrate field. §18 recorded this as "the
+no-HR sentinel is `0`, not `255`", and `parse.ts` was changed to map **both**
+`0` and `255` to `null` on every heart-rate field, with §18's own reasoning
+that "a per-field split would claim a distinction no source states".
+
+**What the sources say.** A source does state the distinction — the
+sentinels are **per-field**:
+
+- Live/average HR: [CSAFE-DEF] p.21, BLE characteristic `0x0032` (C2 rowing
+  additional status 1) — "**Heartrate (bpm, 255=invalid)**".
+- Recovery HR: [CSAFE-DEF] p.24, characteristic `0x0039` (end-of-workout
+  summary) — "**Recovery Heart Rate, (zero = not valid data.** After 1
+  minute of rest/recovery, PM5 sends this data as a revised End Of Workout
+  summary data characteristic unless the monitor has been turned off or a
+  new workout started)".
+- `CSAFE_GETHRCUR_CMD` (`0xB0`) documents only "Byte 0: Beats/Min" with **no
+  sentinel stated** for the CSAFE path; `CSAFE_GETHRAVG_CMD` and
+  `CSAFE_GETHRMAX_CMD` are `<Not implemented>`.
+
+So §18's premise was wrong ("no source states" the distinction — one does),
+while the conclusion it reached happens to be the right defensive choice.
+That choice is corroborated behaviourally, not just by analogy:
+**`ergarcade/pm5-base`** ([OSS]), a shipped Web Bluetooth PM5 library used
+across the sibling `pm5-detail`/`pm5-overlay`/`pm5-dump` projects, formats
+heart rate as
+
+```js
+(n === 0 || n === 255) ? 'N/A' : n + ' bpm'
+```
+
+— a real client defensively treating **both** sentinels as no-data rather
+than trusting "255=invalid" alone. c2forum reports of a PM5 showing 0 during
+belt acquisition are consistent (anecdotal, weak).
+
+**Verdict: REAL PM5 BEHAVIOUR, DOCUMENTED.** Keep the both-map-to-null
+behaviour; correct its stated justification from "no source distinguishes
+them" to "the sources distinguish them per-field, and defensive clients
+(and this hardware) show both values in the wild". `statusFrames.ts`
+continuing to ENCODE `null` as the documented `255` also stays right — one
+encoder cannot write two sentinels for one state.
+
+**One thing we are not doing.** Belt presence has its own query and is not
+inferable from the HR value: `CSAFE_PM_GET_HRM` (`0x84`) returns "Byte 0:
+Channel Status — 0 Inactive / 1 Discovery / 2 Paired", plus manufacturer
+bytes when paired; `CSAFE_PM_GET_EXTENDED_HRM` (`0xEA`) is the longer form.
+This codec uses neither. If a screen ever wants to say "no belt connected"
+as distinct from "no reading right now", `0x84` is the correct source.
+
+### 19.10 The open-source tally
+
+[OSS] surveyed every open-source CSAFE/PM5 implementation that could be
+found. **Seven mask the status byte correctly** — i.e. extract `0x30`/`0x0F`
+(and usually `0x80`) as separate fields rather than comparing the whole
+byte:
+
+| Implementation                       | Language   | Evidence                                                                                                    |
+| ------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| `tijmenvangulik/PM3Monitor`          | C/C++      | `concept2/csafe.h` — vendored copy of Concept2's own constants                                              |
+| `tijmenvangulik/ErgometerJS`         | TypeScript | live parse path in `performancemonitorBase.ts`: `currentByte & SLAVESTATE_MSK`, `(currentByte & PREVFRAMESTATUS_MSK) >> 4` |
+| `raralabs/pm5-emulator`              | Go         | `protocol/csafe/csafe-defs.go` — correct layout baked into a PM5 emulator                                   |
+| `gamelaster/node-concept2`           | C header   | `include/PM3CsafeCP.h` — `GET_SLAVE_STATE`/`GET_FRAME_STATUS`/`GET_FRAME_COUNT` macros                      |
+| `ff-fab/concept2mqtt`                | Rust       | `packages/csafe-codec/src/response/mod.rs` — explicit `& 0x80` / `(& 0x30) >> 4` / `& 0x0F`                  |
+| `seagrayinc/gorow`                   | Go         | `internal/csafe/csafe.go` — three named bit masks in the frame-parse path                                    |
+| `OpenRowingCommunity/csafe-fitness`  | Dart       | `CsafeStatus.fromByte` — `(byte & 0x80) >> 7`, `(byte & 0x30) >> 4`, `byte & 0x0F`                          |
+
+**Zero implementations reproduce our exact bug** (comparing the whole status
+byte against a fixed value). Nobody else made this particular mistake.
+
+**Two have nearby bugs**, worth recording because they show this table is a
+genuine trap rather than an obvious read:
+
+- **`wmmnpr/flutter_ble_c2pm`** (Dart) —
+  `lib/src/csafe/csafe_constants.dart:484-493` declares all four
+  `PREVIOUS_FRAME_STATUS` enum members with `id = 0x00` instead of
+  `0x00/0x10/0x20/0x30`. The mask (`v & 0x30`) is applied correctly, but the
+  lookup table behind it is wrong, so `fromInt` only ever resolves `Ok` and
+  **throws "Bad state: No element"** for any Reject/Bad/NotReady — a crash
+  where we produced a misclassification.
+- **`droogmic/Py3Row`** (Python, the most commonly cited Python PM3/4/5
+  library) — `pyrow/csafe/csafe_cmd.py` pops the status byte and stores it
+  raw; `pyrow/pyrow.py` later masks `& 0xF` for display of the slave state.
+  It **never inspects bits 4-5 at all**, so a genuinely rejected command is
+  indistinguishable from an accepted one to its callers. A third distinct
+  failure mode: not a wrong compare, but silently ignoring the field that
+  would report a rejection.
+
+Two independent plain-text transcriptions of Concept2's own spec
+(`Aho0526/RowPilot`'s `tmp/csafe_text.txt` and
+`gamalamadingdong/erg-link`'s `docs/concept2-pm5-reference/PM5_CSAFE_SPEC.md`)
+reproduce Table 9 identically, which rules out an OCR or misreading error on
+our side.
+
+### 19.11 What the SDK cannot corroborate
+
+The C2 PM SDK is a **pre-BLE PM3/PM4 artifact** (it targets an M68SZ328 CPU
+over USB/serial). It defines the generic CSAFE opcode space, the frame
+format, and the status byte authoritatively — which is why §19.1 leans on it
+so hard. It has **no BLE content at all**, so it can neither corroborate nor
+refute:
+
+- the BLE-proprietary enums this codec relies on —
+  `WORKOUTTYPE_VARIABLE_INTERVAL = 0x08`, `INTERVALTYPE_TIME`/`_DIST`,
+  `SCREENTYPE_WORKOUT`, `SCREENVALUEWORKOUT_PREPARETOROWWORKOUT`/
+  `_TERMINATEWORKOUT`, and `parse.ts`'s full `WORKOUTSTATE_TO_STATE` table
+  (0-13);
+- the `0x76`-wrapper **ack-echo format** (`<status> <topOpcode> <count>
+  <…opcodes>`) that §16 reverse-derived and `response.ts`/`buildAckFrame`
+  implement;
+- the byte-stuffing code assignment (`0xF0→0x00 … 0xF3→0x03`) —
+  `csafe.h:170`'s `CSAFE_FRAME_MAX_STUFF_OFFSET_BYTE = 0x03` is consistent
+  with four stuff codes but never names which flag maps to which;
+- the XOR checksum algorithm itself — no checksum source exists anywhere in
+  the SDK's readable files (it lives in the compiled `.a` libraries), and
+  `main.cp:322` has the reference app asking the *user* to type the checksum
+  in by hand.
+
+All of those still rest on the BLE doc (rev 1.30) alone, exactly as §1 says.
+
+**Frame size is unsettled, in Concept2's own artifact.** `csafe.h:189` says
+`#define CSAFE_FRAME_MAXSIZE 96`, while the *same file's* revision log
+(`csafe.h:46-48`) records: *"31 4/24/07 10:00a Mlyon — Increased CSAFE Frame
+size maximum from 96 to 120 (to fit in the largest USB report size
+supported)."* The 2010 SDK shipped with the header still saying 96 despite
+its own changelog. This **does not settle our 120-byte cap either way**
+(`framer.ts:13`, cited to §3 / [CSAFE-DEF] p.9): the SDK's constant is
+PM3/PM4 USB, ours is PM5 BLE from a newer document. Do not treat
+`CSAFE_FRAME_MAXSIZE = 96` as overriding it, and do not treat the changelog
+as confirming it.
+
+**Everything the SDK *can* speak to, it confirms.** All eight opcodes
+`commands.ts` emits match `csafe.h`'s `CSAFE_PM_LONG_PUSH_CFG_CMDS` enum
+byte for byte (`0x01`, `0x03`, `0x04`, `0x06`, `0x13`, `0x14`, `0x17`,
+`0x18`), as does the `0x76` wrapper (`CSAFE_SETPMCFG_CMD`, one of four
+push/pull wrappers alongside `0x77`/`0x7E`/`0x7F` — §16's characterisation
+of that family is exactly right). The frame flags
+(`0xF0`/`0xF1`/`0xF2`/`0xF3`), the single-byte checksum length
+(`CSAFE_FRAME_CHKSUM_LEN = 1`), and the standard-frame-only design (only
+*extended* frames carry the two address bytes) all match.
+
+### 19.12 One more wart, recorded
+
+[CID-2010] p.50's `CSAFE_GETVERSION_CMD` worked example prints a checksum
+that does not verify: the response
+`0xF0 0x00 0xFD 0x81 0x91 0x07 0x16 0x02 0x03 0xA4 0x01 0x84 0x03 0xA3 0xF2`
+states `0xA3`, and XOR over the contents gives **`0x22`** (including the
+address bytes gives `0xDF`, also not `0xA3`). The payload itself is
+self-consistent and correct — `0x16` = 22 = Manufacturer ID, `0x02` = Class
+Identifier 2, `0x03` = Model 3 = PM3, matching [CSAFE-DEF] Table 10 — so
+this is a printing typo in a document stamped "PRELIMINARY", not a different
+checksum rule. The standard-frame example immediately above it on the same
+page (`F1 80 80 F2` / `F1 01 80 01 01 81 F2`) verifies exactly
+(`01^80^01^01 = 0x81`). This is **consistent with the three errata this file
+already tracks** (§6) — the documents' printed checksums are the least
+reliable thing in them, and every one of this project's vectors asserts the
+computed value against the rule, never the printed value. Two further
+[CSAFE-DEF] examples ("Fixed Time" p.86, "Predefined List #3" p.86) print a
+single checksum where the status is given as "81 or 01", so neither
+alternative matches — the authors simply forgot to dualise those two cells.

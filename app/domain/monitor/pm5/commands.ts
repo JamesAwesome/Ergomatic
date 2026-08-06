@@ -326,6 +326,21 @@ function packGroup(units: Uint8Array[]): Uint8Array[] {
  * what actually decides whether the resulting workout matches what was
  * sent, from the machine's reported "armed" state, not from this function's
  * own byte-level guarantees.
+ *
+ * CORRECTION (2026-08-06, interface-notes.md §19.1/§19.5): the "rejected,
+ * twice" evidence above was TWO ACCEPTANCES — `response.ts` mis-parses the
+ * CSAFE status byte (`0x81` is toggle-high/prev-OK/Ready, an accept), and
+ * no genuine rejection was ever seen on this hardware. The CONCLUSION is
+ * unchanged and is now DOCUMENTED rather than inferred: no command clears a
+ * loaded workout, and terminate is not one, because terminate routes to
+ * *Rearm* — Concept2's own word for making the SAME workout ready again
+ * (CSAFE-DEF Appendix E; `WORKOUTSTATE_REARM` 13,
+ * `SCREENVALUEWORKOUT_REARMWORKOUT` 3). Also corrected: the paragraph above
+ * says "NO such command exists in the documented proprietary programming
+ * flow" — still true, but two candidates were never tried,
+ * `CSAFE_RESET_CMD` (`0x81` as a COMMAND, unrelated to the status byte of
+ * the same value) and `SCREENVALUEWORKOUT_GOTOMAINSCREEN` (6);
+ * `CSAFE_PM_SET_RESET_ALL` (`0xE0`) is `<Not implemented>` and is NOT one.
  */
 export function buildProgrammingSequence(p: WorkoutProgram): Uint8Array[][] {
   const units = p.intervals.map((interval, index) =>
@@ -350,6 +365,18 @@ export function buildProgrammingSequence(p: WorkoutProgram): Uint8Array[][] {
  * was ACCEPTED once with a completed workout loaded, and the FOLLOWING
  * program was still rejected — twice (interface-notes.md §18, progress.md's
  * D1 update). The real clear command, if one exists, remains unidentified.
+ *
+ * CORRECTION (2026-08-06, interface-notes.md §19.1/§19.5/§19.6): the
+ * "rejected — twice" evidence was two ACCEPTS (`response.ts` mis-parses the
+ * status bitfield). Terminate still does not clear, for a documented
+ * reason: it routes to *Rearm*, which re-arms the SAME workout. Two further
+ * facts this comment should carry — the ack for a `SET_SCREENSTATE` means
+ * "queued", not "done" (CSAFE-DEF p.65; poll
+ * `CSAFE_PM_GET_SCREENSTATESTATUS` until `_INACTIVE`), which the driver's
+ * terminate and clear steps both currently ignore; and after a workout
+ * completes the PM parks in `WorkoutLogged` and keeps answering, leaving
+ * only on a Menu press or a terminate command (Appendix E) — the recovery
+ * path we were not using.
  */
 export function buildTerminate(): Uint8Array[][] {
   const unit = buildScreenState(SCREENVALUEWORKOUT_TERMINATEWORKOUT);

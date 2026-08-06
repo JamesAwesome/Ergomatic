@@ -926,6 +926,99 @@ has ever been tested without a loaded workout confounding the result).
 Every hardware claim above cites `pm5-interface-notes.md` §18 as an
 observation, never as something Concept2 documents.
 
+> **CORRECTION (2026-08-06) — most of those five were OURS, not the
+> machine's.** Three research passes validated the hardware observations
+> against Concept2's own CSAFE spec, the C2 PM SDK, and every open-source
+> PM5 implementation that could be found; the record is
+> `docs/monitor/pm5-interface-notes.md` **§19**. The root cause:
+> `app/domain/monitor/pm5/response.ts:72` decides accept-vs-reject with a
+> whole-byte comparison against `0x01`, but the CSAFE status byte is a
+> BITFIELD — bit 7 (`0x80`) is a frame-count toggle, bits 4-5 (`0x30`) are
+> the previous-frame status, bits 0-3 are the slave state. `0x81` is an
+> ACCEPT. Decomposed correctly, **not one status byte in either hardware
+> session was a rejection.** Consequences for the five defects above:
+> **D1** is WITHDRAWN — "accepts only when nothing is loaded" was invented
+> to explain an alternation that was the toggle bit, and "a rejection wipes
+> it" has no rejection left; what emptied the monitor's display that day is
+> now unresolved (§19.2). **D2** is WITHDRAWN as stated — identical bytes
+> producing `0x01` and `0x81` is the toggle, not the machine changing its
+> mind; the clear→send→verify design stays for a different reason (§19.2,
+> §19.6). **D3** stands and is the one genuinely undocumented PM5
+> behaviour on the list, but its SCOPE was wrong: laptop session 2
+> (2026-08-06) showed forward attribution at a no-rest work→work boundary
+> too, so `intervalIndex.ts`'s rest-keyed rule is wrong there (§19.8).
+> **D4** stands (a real ordering/coherence defect, unaffected). **D5**'s
+> observation and fix stand, its stated reasoning does not — the sentinels
+> ARE documented per-field, and mapping both to `null` is a defensive
+> choice a shipped library also makes (§19.9). Also corrected: the PM5 does
+> NOT go quiet after a workout — it parks in `WorkoutLogged` and answers
+> throughout; our own terminal latch produced the silence, and Appendix E
+> documents the recovery path we were not using (§19.4). The fixes are
+> Phase 7A-fix-2's job, below.
+
+## Phase 7A-fix-2 — the status bitfield, and what it invalidates
+
+**Status:** Not started
+**Trigger:** FIRED — `docs/monitor/pm5-interface-notes.md` §19 (2026-08-06)
+established that the CSAFE status byte is being parsed wrongly and that
+several conclusions recorded as PM5 behaviour were consequences of that
+parse. Documentation is corrected; the code is not.
+**Authority:** `docs/monitor/pm5-interface-notes.md` §19 for every citation
+below. Nothing here is a new hardware finding — it is the fix list §19
+generates.
+
+- [ ] **The status bitfield.** `app/domain/monitor/pm5/response.ts` — mask
+      instead of comparing: accept is `(status & 0x30) === 0x00`, reject is
+      `(status & 0x30) === 0x10`, `status & 0x0F` is the slave state,
+      `status & 0x80` is the frame toggle and must never be tested for
+      failure, bit `0x40` is reserved. Retire `REJECT_STATUS_BYTE = 0x81`.
+      Decide what `CsafeResponseStatus` becomes — the two-bucket
+      `"ok" | "reject"` currently throws away the slave state and cannot
+      express `Bad`/`NotReady`. `buildAckFrame` and
+      `src/monitor/transports/fake.ts` must be able to synthesise a
+      GENUINE reject (`0x11`), which today they cannot. Tests: a vector per
+      previous-frame-status value, per slave state, and both toggle
+      polarities (§19.1).
+- [ ] **Re-derive D1/D2 from the raw traces.** Both sessions' byte logs
+      still exist. Re-read every ack with the corrected decode and write
+      down what actually happened, rather than repairing the old narrative.
+      Specifically: what emptied the monitor's display after the
+      2-interval send, and whether multi-INTERVAL/multi-FRAME programming
+      has any evidence against it at all (§19.2, §18 #5).
+- [ ] **The terminal-latch recovery.** The monitor never stops responding;
+      on completion it parks in `WorkoutLogged` and leaves via the Menu
+      button or a terminate command ([CSAFE-DEF] Appendix E). Give the
+      driver that path instead of requiring a reconnect — the latch itself
+      is fine, the conclusion drawn from it was not (§19.4).
+- [ ] **The no-rest interval rule.** `domain/monitor/pm5/intervalIndex.ts`
+      applies forward attribution only on the resting side; laptop session
+      2 read `0x0037` = 1 against `0x0033` = 0 at a work→work boundary with
+      `restSeconds: 0`. Make forward attribution unconditional and keep the
+      `index-unverified` trace entry meaningful (§19.8, §17 item 13).
+- [ ] **`SetScreenState` is asynchronous.** Its ack means "queued", not
+      "done" ([CSAFE-DEF] p.65). Terminate and the clear step both treat it
+      as completion. Poll `CSAFE_PM_GET_SCREENSTATESTATUS` until
+      `_INACTIVE` (the spec's weaker alternative is a fixed ≥1 s delay)
+      (§19.6).
+- [ ] **`GetErrorType` on a genuine reject.** A workout-configuration
+      reject is atomic and NOT self-describing — the master must issue
+      `GetErrorType` to learn why ([CSAFE-DEF] p.50). Once real rejects are
+      detectable, ask (§19.7).
+- [ ] **The fake and the driver still MODEL the withdrawn behaviour.**
+      Deliberately left untouched by the §19 documentation pass, because
+      changing them is a behavioural change with its own tests, not a
+      comment sweep: `src/monitor/transports/fake.ts` simulates D1 directly
+      (`loadedWorkout`, "rejected (0x81) when nothing is loaded and ACCEPTED
+      when something is"), `src/monitor/driver.ts`'s clear step logs "PM
+      rejected the clear (0x81) — expected when nothing was loaded"
+      (`:1020`) and carries the D1-update rationale at `:930`/`:984-996`/
+      `:1158`, and `driver.test.ts` pins D1 by name (`:2698`). All of it
+      encodes a machine behaviour that does not exist. Re-derive, then
+      re-pin.
+
+**Exit:** every bullet above has a passing test; no test encodes a
+whole-byte status comparison; §18/§19's corrected record and the code agree.
+
 ## Phase 7B — PM5 connected surface
 
 **Status:** Not started
