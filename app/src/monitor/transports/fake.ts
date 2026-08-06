@@ -34,7 +34,7 @@
 //     handle does (D6).
 //
 // Two ack shapes here are SYNTHETIC and say so at their definitions,
-// because nothing observed produced them: `FakeScript.failNextWrite`'s
+// because nothing observed produced them: `FakeScript.failNextProgramFrame`'s
 // genuine reject and its checksum-garbled frame (§19.1 — not one of the
 // twelve captured bytes was a rejection).
 //
@@ -219,11 +219,18 @@ export interface FakeScript {
    * - a program sent while a workout is loaded is ACCEPTED, and the loaded
    *   workout is REPLACED by the one just programmed (§19.1 Verdict (b));
    * - the prepare step (`buildTerminate()`) is ACCEPTED while a workout is
-   *   loaded and REJECTED when nothing is — the two observed prepare-step
-   *   outcomes, unchanged by the parse fix (§19.1's `S2 D2` rows; the
-   *   nothing-loaded refusal is [S1]'s clean-run observation, whose byte
-   *   was never captured — recorded here as the narrative reported it, and
-   *   flagged as such);
+   *   loaded — §19.1's `S2 D2` rows, raw captured bytes — and REJECTED when
+   *   nothing is. **That second half is the LAST behaviour in this fake
+   *   still resting on the withdrawn parse.** Its only source is §19.1's
+   *   `S1 CLEAN RUN 2` row, classed `NARR-NB`: "no byte at all — the old
+   *   parse's accept/reject label is all that survives, undecodable". The
+   *   surviving "rejected — nothing to terminate" label was produced by the
+   *   very whole-byte compare §19.1 withdrew, and every byte in that
+   *   document the compare called a rejection turned out to be an accept.
+   *   It is kept because it is not in §19.2's withdrawn list, because
+   *   `sendPrepare` swallows the outcome either way, and because inventing
+   *   the opposite would be no better sourced — NOT because it is
+   *   corroborated. One terminate sent to an idle machine settles it;
    * - terminate does NOT unload the workout — its documented destination is
    *   *Rearm*, Concept2's own word for making the SAME workout ready again
    *   (§19.5), so the count below survives a terminate. It does return the
@@ -267,13 +274,14 @@ export interface FakeScript {
    * `"garbled"`, deliberately NOT folded into `"nak"` — and code with no
    * way to be exercised is code with no test.
    *
-   * Scoped to the PROGRAMMING sequence's own frames, the same scope
+   * Scoped to the PROGRAMMING sequence's own frames — which is why the
+   * field is named for the frame and not for "the next write". Same scope
    * `injectNak` has always had (`injectNak`'s own doc comment): the prepare
    * step's ack is decided by the machine's load state, and `program()`
    * swallows anything but a disconnect there anyway, so a failure aimed at
    * it could never reach a driver-visible outcome.
    */
-  failNextWrite?: "reject" | "garbled";
+  failNextProgramFrame?: "reject" | "garbled";
   /** The post-"armed" session timeline, ascending by `atMs`. `tick(ms)`
    *  advances a purely virtual clock (no timers, no wall clock anywhere in
    *  this file) and delivers every event whose `atMs` has now been
@@ -309,14 +317,18 @@ export interface FakeControls {
    *  write, and a NAK is a response to a whole ack-gated FRAME (which may
    *  span several chunks), never a partial one.
    *
-   *  This is the POSITIONAL selector for the same one reject path
-   *  `FakeScript.failNextWrite` reaches (`takeNextAckFailure` is the single
-   *  consumer, and `sendAck` the single emitter — Phase 7A-fix-2 Task 6
-   *  deliberately left no second way to produce a reject byte). Unlike
-   *  `failNextWrite` it is STICKY: the frame cursor does not advance past a
-   *  rejected frame, so re-sending that frame is rejected again. Where both
-   *  are set, `failNextWrite` — the more specific, one-shot instruction —
-   *  is consumed first. */
+   *  This is the POSITIONAL selector for the same one SYNTHETIC reject path
+   *  `FakeScript.failNextProgramFrame` reaches: `takeNextAckFailure` is the
+   *  single consumer of both hooks, so Task 6 added no second way to ASK
+   *  for a reject. (The machine has one other, entirely legitimate reason
+   *  to answer `"reject"` — `onClearingFrameComplete`'s nothing-loaded
+   *  refusal of the prepare step. That is a load-state answer, not a
+   *  scripted failure.) Unlike `failNextProgramFrame` this one is STICKY:
+   *  the frame cursor does not advance past a rejected frame, and a retry
+   *  restarts the sequence from frame 0, so the same frame index meets the
+   *  same answer on every attempt. Where both are set,
+   *  `failNextProgramFrame` — the more specific, one-shot instruction — is
+   *  consumed first. */
   injectNak(atFrame: number): void;
   /** Simulates an unexpected link drop: fires the driver's `onDisconnect`
    *  callback and stops delivering scheduled notifications until
@@ -591,7 +603,7 @@ export function createFakeTransport(
   // [S2]'s own raw dumps show directly (§19.1's `S2 D2`/`S2 D3` rows).
   // `injectNak` deliberately does NOT reach into this phase — `nakAtFrame`
   // addresses the PROGRAMMING sequence's own frames only (its own doc
-  // comment), and neither does `FakeScript.failNextWrite`, for the reason
+  // comment), and neither does `FakeScript.failNextProgramFrame`, for the reason
   // its own doc comment gives. `injectTimeout` DOES still apply here — its
   // own "every ack this fake would otherwise send" wording is phase-agnostic
   // by design.
@@ -611,10 +623,10 @@ export function createFakeTransport(
   let programFrameCursor = 0;
   let terminateChunkCursor = 0;
   let nakAtFrame: number | null = null;
-  // `FakeScript.failNextWrite`'s live, consumable copy — one-shot, cleared
+  // `FakeScript.failNextProgramFrame`'s live, consumable copy — one-shot, cleared
   // by `takeNextAckFailure` the first time a programming frame completes.
   let failNextProgrammingAck: "reject" | "garbled" | null =
-    script.failNextWrite ?? null;
+    script.failNextProgramFrame ?? null;
   // Bit 7 of the next ack's status byte ([CSAFE-DEF] p.11 Table 9: "Toggles
   // between 0 and 1 on alternate frames"; interface-notes.md §19.1/§19.2).
   // Starts LOW and flips after every ack this fake emits — including the
@@ -760,9 +772,13 @@ export function createFakeTransport(
       : "ready";
   }
 
-  /** THE one place this fake puts an ack on the wire (Phase 7A-fix-2 Task
-   *  6). Three independent fields, assembled by `buildAckFrame` and never
-   *  by bit math here (pm5/response.ts §19.1):
+  /** Sends one intact ack (Phase 7A-fix-2 Task 6). `sendGarbledAck` below
+   *  notifies too, so this is not the only writer to 0x0022 — but both go
+   *  through `nextAckFrame`, which IS the one place an ack frame is built,
+   *  and that is the property that matters: no path can skip the toggle.
+   *
+   *  Three independent fields, assembled by `buildAckFrame` and never by
+   *  bit math here (pm5/response.ts §19.1):
    *
    *  - `frameStatus` — `"ok"` builds `0x0X`, `"reject"` a GENUINE `0x1X`.
    *    Task 2 corrected this from the old `0x81`, which §19.1 showed
@@ -801,7 +817,7 @@ export function createFakeTransport(
     return frame;
   }
 
-  /** `FakeScript.failNextWrite: "garbled"` — an otherwise well-formed ack
+  /** `FakeScript.failNextProgramFrame: "garbled"` — an otherwise well-formed ack
    *  whose checksum no longer covers its contents, so `parseFrame` refuses
    *  it and `parseCsafeResponse` reports `{kind: "unparseable"}`.
    *
@@ -829,7 +845,7 @@ export function createFakeTransport(
 
   /** The SINGLE consumer of both failure hooks, so there is exactly one
    *  path from "this frame should fail" to a reject/garbled frame on the
-   *  wire. `FakeScript.failNextWrite` is the more specific instruction (a
+   *  wire. `FakeScript.failNextProgramFrame` is the more specific instruction (a
    *  one-shot, and the only one that can ask for `"garbled"`), so it is
    *  consumed first; `injectNak`'s positional `nakAtFrame` answers for the
    *  frame it names and stays armed, since a rejected frame never advances
@@ -860,11 +876,15 @@ export function createFakeTransport(
   }
 
   /** Called once the prepare step's chunks have all arrived. The ack
-   *  depends on the machine's LOAD STATE: rejected with nothing loaded
-   *  ([S1]'s clean-run narrative, "rejected — nothing to terminate"; the
-   *  byte itself was never captured, §19.1's `S1 CLEAN RUN 2` row) and
+   *  depends on the machine's LOAD STATE: rejected with nothing loaded and
    *  ACCEPTED with a workout loaded (§19.1's `S2 D2`/`S2 D3` rows, raw
-   *  `f1 01 76 01 13 65 f2` / `f1 81 76 01 13 e5 f2`). Either way the
+   *  `f1 01 76 01 13 65 f2` / `f1 81 76 01 13 e5 f2`). The nothing-loaded
+   *  refusal is the ONE behaviour here still sourced from the withdrawn
+   *  parse — §19.1's `S1 CLEAN RUN 2` row is `NARR-NB`, no byte at all, and
+   *  its "rejected — nothing to terminate" label came from the very
+   *  whole-byte compare §19.1 overturned. Kept, with that stated:
+   *  `FakeScript.loadedWorkout`'s own doc comment has the full reasoning.
+   *  Either way the
    *  loaded workout SURVIVES: terminate's documented destination is *Rearm*
    *  — the SAME workout made ready again (§19.5) — which is the whole
    *  reason `program()` cannot treat this step as a clear. Advances into
@@ -872,7 +892,18 @@ export function createFakeTransport(
    *  matter which ack it got. `timeoutInjected` short-circuits this exactly
    *  like the other two frame-complete handlers below: the bytes were
    *  already verified correct, but no ack goes out and `phase` does not
-   *  advance. */
+   *  advance.
+   *
+   *  THIS IS THE RESET POINT for the programming sequence (Task 6 fix
+   *  round, review MED-1). `program()` always leads with this step and then
+   *  sends its sequence from frame 0, so whatever a PREVIOUS attempt left
+   *  behind — a refused frame partway through, a sequence abandoned by a
+   *  disconnect — is discarded here rather than being carried into bytes
+   *  that are about to arrive again from the top. An earlier version of
+   *  this file rewound only to the START OF THE REFUSED FRAME instead,
+   *  which is the wrong point for any sequence longer than one frame: a
+   *  4-frame program refused at frame 2 and retried properly threw
+   *  `programming chunk 12 mismatch` on the retry's very first chunk. */
   function onClearingFrameComplete(frame: Uint8Array): void {
     if (timeoutInjected) return;
     sendAck(
@@ -880,6 +911,8 @@ export function createFakeTransport(
       echoedCommandIds(frame),
     );
     phase = "programming";
+    programChunkCursor = 0;
+    programFrameCursor = 0;
   }
 
   // Byte-for-byte verification happens on every individual WRITE (BLE
@@ -902,36 +935,6 @@ export function createFakeTransport(
     programChunkCursor += 1;
   }
 
-  /** The flat chunk index at which programming frame `frameIndex` starts —
-   *  `flatProgramChunks` is one flat list, but frames are what get acked
-   *  and retried, so both the rewind below and the terminate-recognition in
-   *  `write()` need to know where a frame's own chunks begin. */
-  function chunkCursorAtFrame(frameIndex: number): number {
-    return programSequence
-      .slice(0, frameIndex)
-      .reduce((total, frameChunks) => total + frameChunks.length, 0);
-  }
-
-  /** True when no chunk of the CURRENT programming frame has arrived yet —
-   *  i.e. the machine is between frames and the next thing it hears could
-   *  legitimately be either the next programming frame or a terminate. */
-  function atProgrammingFrameBoundary(): boolean {
-    return programChunkCursor === chunkCursorAtFrame(programFrameCursor);
-  }
-
-  /** A rejected frame is not the end of the conversation (Task 6). The
-   *  master's answer to a refusal is to try again, which every laptop
-   *  session did repeatedly (interface-notes.md §19.1's table is largely
-   *  retries), and a `program()` retry re-sends the whole sequence behind
-   *  its own prepare step — so the chunk cursor rewinds to the START of the
-   *  frame that was refused rather than being left partway through bytes
-   *  that are about to arrive again. The FRAME cursor deliberately does not
-   *  move: the refused frame has not landed, so the next frame the machine
-   *  expects to accept is still this one. */
-  function rewindAfterRefusedFrame(): void {
-    programChunkCursor = chunkCursorAtFrame(programFrameCursor);
-  }
-
   /** Called once per COMPLETE programming frame (not per chunk) — decides
    *  the ack and, on success, whether the whole sequence is now done.
    *  `timeoutInjected` (fix-round HIGH-2) short-circuits ALL of that: the
@@ -951,7 +954,9 @@ export function createFakeTransport(
       } else {
         sendAck("reject", echo);
       }
-      rewindAfterRefusedFrame();
+      // Nothing is rewound here. A refused frame simply does not land, and
+      // the master's own retry leads with a prepare step — which is where
+      // the sequence position is reset (`onClearingFrameComplete`).
       return;
     }
     sendAck("ok", echo);
@@ -965,6 +970,18 @@ export function createFakeTransport(
       // machine holds is now what was just programmed, whatever it held
       // before; nothing is ever wiped to `null` here.
       loadedIntervalCount = script.program.intervals.length;
+      // …and the SESSION bookkeeping that belonged to the previous workout
+      // goes with it (Task 6 fix round, review MED-2). 0x0033's Last Split
+      // Time/Distance is "where the interval currently running began",
+      // session-cumulative — a number that means nothing across a workout
+      // boundary. Left standing, run 2's very first status frame told the
+      // driver its 300s interval had begun at second 300, and
+      // `computeRemainingForFrame` dutifully reported 500s remaining of a
+      // 300s interval. The cached boundary goes for the same reason: a
+      // reconnect early in run 2 would otherwise flush run 1's LAST
+      // boundary into run 2 as if it had just happened.
+      lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
+      latestBoundary = null;
       // Fix-round 1, F1: withheld until a subsequent `tick()` (or
       // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
       // this is no longer synchronous with the ack itself.
@@ -1030,7 +1047,14 @@ export function createFakeTransport(
       heartRateBpm: previous.heartRateBpm,
       programIntervalIndex: previous.programIntervalIndex,
     };
-    latestStatus = terminated;
+    // Through `setLatestStatus`, never by direct assignment (Task 6 fix
+    // round, review MED-3): that function is the only place `machineState`
+    // is kept in step with what the machine last reported, and since Task 6
+    // `machineState` decides the SLAVE-STATE nibble of every subsequent ack
+    // (`currentSlaveState`). Assigning `latestStatus` straight left a
+    // terminated machine still acking `in-use` — a wrong low nibble on the
+    // exact field this task exists to make honest.
+    setLatestStatus(terminated);
     deliverStatus(terminated);
   }
 
@@ -1136,13 +1160,15 @@ export function createFakeTransport(
       // re-opened the machine, and it is the app's own `terminate()` called
       // twice. The machine parses whatever frame it is handed — only this
       // fake's expected-byte bookkeeping needs telling which sequence the
-      // chunk belongs to, and only at a frame boundary (mid-frame, the next
-      // chunk is whatever the frame in progress says it is).
-      if (
-        phase === "programming" &&
-        atProgrammingFrameBoundary() &&
-        bytesEqual(bytes, terminateChunks[0]!)
-      ) {
+      // chunk belongs to. No frame-position guard: `terminateChunks[0]`
+      // carries a start flag and bytes no programming chunk ever matches,
+      // and `pm5/framer.ts`'s own resynchronization rule says a start flag
+      // arriving mid-frame DISCARDS the incomplete frame — so recognising a
+      // terminate whenever its first chunk shows up is what the reassembler
+      // itself would do. (An earlier version gated this on a
+      // frame-boundary check that no test could discriminate — review
+      // LOW-3 — and that a mid-frame terminate would have got wrong.)
+      if (phase === "programming" && bytesEqual(bytes, terminateChunks[0]!)) {
         phase = "clearing";
         clearChunkCursor = 0;
       }
