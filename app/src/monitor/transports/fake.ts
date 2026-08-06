@@ -1,30 +1,53 @@
 // The simulator (design spec §4): implements `Transport` end-to-end over
 // the SAME wire format the driver decodes (CSAFE frames + the five status
 // characteristics), so a CI run exercises the exact bytes a real PM5 would
-// exchange. Verifies each programming chunk byte-for-byte against Task 3's
-// `buildProgrammingSequence` output (asserts — a wrong byte is a test
+// exchange.
+//
+// Phase 7A-fix Task 4: this file is a MODEL OF THE MACHINE WE MET
+// (interface-notes.md §18, PM5 432331249, 2026-08-05), not an idealized
+// PM5. Everything the erg did differently from what CI assumed is
+// reproduced here on purpose, so each hardware finding has a permanent
+// test:
+//   - it numbers rests FORWARD, the way the real one does, and emits the
+//     phantom index past the end of a program (D3);
+//   - it delivers a boundary's 0x0037 BEFORE its 0x0038, the order the
+//     trace showed (D4 — the order that hid an entire interval);
+//   - it sends `0`, not the documented `255`, for a beltless heart rate
+//     (D5);
+//   - it REJECTS a program while a workout is loaded, and wipes what it
+//     held doing so (D1);
+//   - its writes fail while the link is down, the way an invalidated GATT
+//     handle does (D6).
+//
+// Verifies each programming chunk byte-for-byte against
+// `buildProgrammingSequence`'s output (asserts — a wrong byte is a test
 // failure, not a tolerated write); acks via `pm5/response.ts`'s
 // `buildAckFrame`; plays a tick-driven session timeline (no wall clock —
 // `tick(ms)` is the only thing that ever advances time); six injection
 // hooks (design spec §4, plan Task 4, plus fix-round HIGH-2's
 // `injectTimeout`, distinct from `injectDisconnect`: the link stays up,
 // only the ack never comes); a leading "clearing" phase (plan Task 2)
-// modeling `program()`'s own best-effort clear step, always rejected
-// (0x81) before the real programming sequence begins.
+// modeling `program()`'s own best-effort clear step, rejected (0x81) when
+// nothing is loaded and ACCEPTED when something is (D1's own two observed
+// outcomes) before the real programming sequence begins.
 //
 // Concept2 byte-level knowledge stays confined to what this file calls INTO
 // `pm5/` (`buildProgrammingSequence`, `buildTerminate`, `buildAckFrame`,
-// `reassemble`, the `buildXBytes` encoders in `pm5/statusFrames.ts`, the
-// `WORKOUTSTATE_*` ordinals `pm5/parse.ts` exports for exactly this
-// purpose) — this file never computes a checksum, a byte offset, or a scale
-// factor itself.
+// `reassemble`, the `buildXBytes` encoders in `pm5/statusFrames.ts`,
+// `intervalIndex.ts`'s `toMachineIndex`, and the `WORKOUTSTATE_*` ordinals
+// / `toMonitorState` / `HEARTRATE_NO_BELT` that `pm5/parse.ts` exports for
+// exactly this purpose) — this file never computes a checksum, a byte
+// offset, a scale factor, or a numbering offset itself.
 
 import {
   buildProgrammingSequence,
   buildTerminate,
 } from "../../../domain/monitor/pm5/commands.js";
 import { reassemble } from "../../../domain/monitor/pm5/framer.js";
+import { toMachineIndex } from "../../../domain/monitor/pm5/intervalIndex.js";
 import {
+  HEARTRATE_NO_BELT,
+  toMonitorState,
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
   type AdditionalSplitIntervalData,
@@ -54,32 +77,34 @@ import {
 import type {
   DiscoveredMonitor,
   IntervalActual,
+  MonitorFrame,
   Transport,
 } from "../../../domain/monitor/types.js";
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 
 /** One "tick" in the script's timeline: a full rowing/resting status
- *  update, delivered once `virtualClock` reaches `atMs`. `intervalIndex` is
- *  the 0-based interval this sample belongs to (mirrors `ProgramInterval`'s
- *  own indexing) — the fake writes it straight into 0x0033's "Interval
- *  Count" field (`AdditionalStatus2.intervalCount`), which is the field
- *  `parse.ts`'s `toMonitorFrame` reads into `MonitorFrame.intervalIndex`
- *  while `rowing`/`resting` (interface-notes.md §14/§15 #1). `workoutState`
- *  is a raw `OBJ_WORKOUTSTATE_T` ordinal — use the `WORKOUTSTATE_*`
- *  constants `pm5/parse.ts` exports rather than a bare number.
+ *  update, delivered once `virtualClock` reaches `atMs`. `workoutState` is
+ *  a raw `OBJ_WORKOUTSTATE_T` ordinal — use the `WORKOUTSTATE_*` constants
+ *  `pm5/parse.ts` exports rather than a bare number.
  *
- *  STALE (flagged, not fixed here — Phase 7A-fix Task 3 review, owned by
- *  Task 4): this doc comment's own numbering model predates D3
- *  (interface-notes.md §18 #3) — a real PM5 does NOT write the same index
- *  into 0x0033 across a whole interval's rowing AND resting; it attributes
- *  a REST forward, to the interval it's heading into. Every script in this
- *  file's own test suite (and every driver test built on this fake) still
- *  authors `intervalIndex` as if it were the ALREADY-normalized program
- *  index at every tick, rowing or resting — the shape the hardware was
- *  proven not to produce. Task 4 owns rebuilding this fake (and its
- *  scripts) to emit the true forward-attributed wire values, so driver
- *  tests built on it exercise `toProgramIndex`'s real inputs end-to-end,
- *  not a pre-D3 mental model. */
+ *  `programIntervalIndex` is OUR 0-based-per-work-interval index — the
+ *  interval of `script.program` this sample belongs to. It is deliberately
+ *  NOT what goes on the wire: D3 (interface-notes.md §18 #3) showed a real
+ *  PM5 attributes a REST FORWARD, to the interval it is counting down TO,
+ *  so the byte written into 0x0033's "Interval Count"
+ *  (`AdditionalStatus2.intervalCount`) is `pm5/intervalIndex.ts`'s
+ *  `toMachineIndex(programIntervalIndex, state)` — one HIGHER than this
+ *  field during a rest, this field exactly during work. The driver's
+ *  `toProgramIndex` has to undo that to get back to the number authored
+ *  here, which is what makes every fake-driven driver test an end-to-end
+ *  exercise of the normalization rather than a pre-normalized fiction
+ *  shared by both sides (this interface's predecessor named the field
+ *  `intervalIndex` and put it on the wire verbatim — the shape the
+ *  hardware was proven not to produce).
+ *
+ *  `heartRateBpm: null` means NO BELT PAIRED, and the fake sends the byte
+ *  the real machine sent for that: `0` (`HEARTRATE_NO_BELT`, D5), not the
+ *  documented `255`. */
 export interface FakeStatusEvent {
   atMs: number;
   kind: "status";
@@ -89,7 +114,7 @@ export interface FakeStatusEvent {
   spm: number;
   currentSplit: number;
   heartRateBpm: number | null;
-  intervalIndex: number;
+  programIntervalIndex: number;
 }
 
 /** One interval-boundary event: the completed interval's actuals, matching
@@ -113,12 +138,17 @@ export interface FakeBoundaryEvent {
   kind: "boundary";
   // `IntervalActual.index`'s type is `number | null` (Task 3 review,
   // `docs/design/DEVIATIONS.md`) to carry the DRIVER's post-normalization
-  // "unexplainable" case — but this fake script authors a raw WIRE value
-  // (what 0x0037/38 would report before the driver ever sees it), which is
-  // always a real number; the wire has no `null` byte. Narrowed back to
-  // `number` here rather than reusing `IntervalActual` as-is, so a script
-  // typo can't silently author `null` and have it misread as "this is what
-  // the machine sent."
+  // "unexplainable" case. Narrowed back to `number` here — and, since Task
+  // 4, carrying OUR program index rather than a wire value, exactly like
+  // `FakeStatusEvent.programIntervalIndex`: the number 0x0037/38's
+  // "Split/Interval Number" actually receives is
+  // `toMachineIndex(actual.index, <the machine's state right now>)`, so a
+  // boundary that lands while the PM has already rolled into its rest gets
+  // the forward-attributed value the hardware sent (interface-notes.md §18
+  // #3's own trace: the final boundary of a TWO-interval workout carried a
+  // Split/Interval Number of `2`). Authoring OUR index here also means a
+  // script typo can't silently author `null` and have it misread as "this
+  // is what the machine sent."
   actual: Omit<IntervalActual, "index"> & { index: number };
   cumulativeElapsedSeconds: number;
   cumulativeDistanceMeters: number;
@@ -135,6 +165,35 @@ export interface FakeScript {
   program: WorkoutProgram;
   /** Advertised device name — `scan()`'s single result. */
   deviceName?: string;
+  /**
+   * D1 (interface-notes.md §18 #6, observed twice): the machine already
+   * has a workout loaded when this session starts — the state in which a
+   * real PM5 REJECTS a program and **wipes what it was holding while doing
+   * so**. Give it the loaded workout's interval count; `loadedIntervals()`
+   * reports what the fake still holds, so a test can watch it go.
+   *
+   * What this models, all of it observed:
+   * - the programming sequence's FIRST frame is rejected (0x81) while
+   *   something is loaded — and that rejection is DESTRUCTIVE: the fake
+   *   drops the loaded workout, the same way a real 2-interval send
+   *   visibly wiped a working 1-minute program and left the monitor
+   *   showing an empty `:00`;
+   * - the clear step (`buildTerminate()`) is ACCEPTED while a workout is
+   *   loaded (the D1 UPDATE row) and REJECTED when nothing is
+   *   (the clean-run observation, which is what a scriptless fake models);
+   * - terminate does NOT clear the loaded workout — accepting it changed
+   *   nothing about the following program's rejection.
+   *
+   * What this deliberately does NOT model, because it is not understood:
+   * the D1 UPDATE also saw a SECOND program rejected after the first
+   * rejection had already wiped the monitor. Under this model the wipe
+   * leaves nothing loaded, so a retry succeeds. Reproducing the real
+   * behaviour would mean inventing a state machine behind accept/reject
+   * that no observation has pinned down — the top open question for the
+   * next hardware row (§18 #6). A fake that guessed would teach CI a
+   * fiction, which is the exact failure this whole phase exists to undo.
+   */
+  loadedWorkout?: { intervalCount: number };
   /** The post-"armed" session timeline, ascending by `atMs`. `tick(ms)`
    *  advances a purely virtual clock (no timers, no wall clock anywhere in
    *  this file) and delivers every event whose `atMs` has now been
@@ -175,7 +234,19 @@ export interface FakeControls {
    *  `completeReconnect()`. If a program/terminate write is awaiting its
    *  ack at the moment this is called, that ack now never arrives — the
    *  same "link is down, no response is coming" signal a real disconnect
-   *  mid-write would produce. */
+   *  mid-write would produce.
+   *
+   *  D6 (interface-notes.md §18's "also fixed live" list): from here until
+   *  `completeReconnect()`, every `write()` REJECTS rather than quietly
+   *  succeeding. On the real laptop this was Chrome's
+   *  `InvalidStateError: Characteristic ... is no longer valid. Remember to
+   *  retrieve the characteristic again after reconnecting.` — the handles a
+   *  transport cached before the drop are dead objects afterward. The fake
+   *  had no such behaviour, which is precisely why `webBluetooth.ts`'s
+   *  cached-characteristic bug passed every CI run while breaking every
+   *  post-reconnect write on hardware. `completeReconnect()` is this fake's
+   *  stand-in for a transport that re-fetched: writes work again after it,
+   *  never before. */
   injectDisconnect(): void;
   /** Simulates a mid-sequence ack timeout DISTINCT from a disconnect
    *  (fix-round HIGH-2, spec §4's own separately-listed injection hook):
@@ -206,6 +277,11 @@ export interface FakeControls {
    * this fake no longer delivers armed synchronously inside the write.
    */
   deliverArmedNow(): void;
+  /** What the machine is currently holding (D1): the `loadedWorkout` the
+   *  script started with, or `null` once a rejected program has WIPED it —
+   *  the destructive half of D1, which is the half that was confirmed.
+   *  `null` for a fake that never had one. */
+  loadedIntervals(): number | null;
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -241,12 +317,19 @@ function statusBundle(
   e: FakeStatusEvent,
   lastSplit: { elapsedSeconds: number; distanceMeters: number },
 ): { general: GeneralStatus; as1: AdditionalStatus1; as2: AdditionalStatus2 } {
-  const interval = program.intervals[e.intervalIndex];
+  const interval = program.intervals[e.programIntervalIndex];
   const isDistance = interval?.kind === "distance";
   return {
     as2: {
       elapsedSeconds: e.elapsedSeconds,
-      intervalCount: e.intervalIndex,
+      // D3: the MACHINE's number, not the script's — forward-attributed
+      // during a rest (`FakeStatusEvent.programIntervalIndex`'s own doc
+      // comment). This is the byte the driver's `toProgramIndex` has to
+      // undo.
+      intervalCount: toMachineIndex(
+        e.programIntervalIndex,
+        toMonitorState(e.workoutState),
+      ),
       averagePowerWatts: 0,
       totalCalories: 0,
       splitAvgPace: 0,
@@ -259,7 +342,12 @@ function statusBundle(
       elapsedSeconds: e.elapsedSeconds,
       speedMetersPerSecond: 0,
       spm: e.spm,
-      heartRateBpm: e.heartRateBpm,
+      // D5: a beltless tick puts `0` on the wire, the byte the real machine
+      // sent — NOT the documented 255 (`HEARTRATE_NO_BELT`, cited in
+      // `pm5/parse.ts`; interface-notes.md §18's new-defect note).
+      // `writeHeartRate`'s own `null` path would encode 255, which is the
+      // sentinel CI already believed in and the machine never sent.
+      heartRateBpm: e.heartRateBpm ?? HEARTRATE_NO_BELT,
       currentSplit: e.currentSplit,
       averageSplit: e.currentSplit,
       restDistanceMeters: 0,
@@ -282,24 +370,39 @@ function statusBundle(
   };
 }
 
-function boundaryBundle(e: FakeBoundaryEvent): {
+/** `machineState` is the state the PM is in AT THE MOMENT OF DELIVERY (the
+ *  last status tick it sent), which is what decides the forward attribution
+ *  of the Split/Interval Number this boundary carries — see
+ *  `FakeBoundaryEvent.actual`'s own comment. The observed trace has the
+ *  boundary notifications arriving while the state word already reads
+ *  `resting` (interface-notes.md §18 #3: "20 resting → 21 notify 0x0037"),
+ *  so a script that wants the hardware's own numbering puts a resting tick
+ *  before its boundary event, exactly as the machine does. */
+function boundaryBundle(
+  e: FakeBoundaryEvent,
+  machineState: MonitorFrame["state"],
+): {
   split: SplitIntervalData;
   asSplit: AdditionalSplitIntervalData;
 } {
   const { actual } = e;
+  const wireIndex = toMachineIndex(actual.index, machineState);
   return {
     asSplit: {
       elapsedSeconds: e.cumulativeElapsedSeconds,
       splitIntervalAvgStrokeRate: actual.avgSpm ?? 0,
-      splitIntervalWorkHeartRateBpm: actual.avgHeartRateBpm,
-      splitIntervalRestHeartRateBpm: null,
+      // D5, same as the status bundle's own heart-rate byte: `0` for no
+      // belt. This is the exact field the machine sent `0` on.
+      splitIntervalWorkHeartRateBpm:
+        actual.avgHeartRateBpm ?? HEARTRATE_NO_BELT,
+      splitIntervalRestHeartRateBpm: HEARTRATE_NO_BELT,
       splitIntervalAvgPace: actual.avgSplit ?? 0,
       splitIntervalTotalCalories: 0,
       splitIntervalAvgCalories: 0,
       splitIntervalSpeedMetersPerSecond: 0,
       splitIntervalPowerWatts: 0,
       splitAvgDragFactor: 130,
-      splitIntervalNumber: actual.index,
+      splitIntervalNumber: wireIndex,
       ergMachineType: 1,
     },
     split: {
@@ -310,7 +413,7 @@ function boundaryBundle(e: FakeBoundaryEvent): {
       intervalRestTimeSeconds: 0,
       intervalRestDistanceMeters: 0,
       splitIntervalType: 0,
-      splitIntervalNumber: actual.index,
+      splitIntervalNumber: wireIndex,
     },
   };
 }
@@ -336,7 +439,7 @@ function armedBundle(): {
       spm: 0,
       currentSplit: 0,
       heartRateBpm: null,
-      intervalIndex: 0,
+      programIntervalIndex: 0,
     },
     { elapsedSeconds: 0, distanceMeters: 0 },
   );
@@ -363,16 +466,16 @@ export function createFakeTransport(
   // CLEAR step before the real programming sequence — so the very first
   // write(s) this fake ever sees are the SAME bytes as `terminateChunks`
   // (below), not `flatProgramChunks`. `"clearing"` models exactly that
-  // window, always rejecting (0x81) once its chunks are complete: hardware
-  // showed the PM rejects a terminate when nothing is loaded/running
-  // (interface-notes.md §18's clean-run observation), the common case for
-  // a fresh connection. `injectNak` deliberately does NOT reach into this
-  // phase — `nakAtFrame` addresses the PROGRAMMING sequence's own frames
-  // only (its own doc comment), and a clear that ALWAYS rejects has no
-  // "different" outcome worth injecting yet; giving the fake real
-  // load-state-aware clear behaviour is plan Task 4's job. `injectTimeout`
-  // DOES still apply here — its own "every ack this fake would otherwise
-  // send" wording is phase-agnostic by design.
+  // window. Its ack now depends on what the machine is HOLDING (D1, Task
+  // 4): rejected (0x81) when nothing is loaded — the clean-run observation,
+  // and the common case for a fresh connection — but ACCEPTED when a
+  // workout is loaded, which the D1 UPDATE row observed directly (and which
+  // changed nothing about the following program still being rejected;
+  // terminate is not a clear). `injectNak` deliberately does NOT reach into
+  // this phase — `nakAtFrame` addresses the PROGRAMMING sequence's own
+  // frames only (its own doc comment), and the load state is what decides
+  // this one. `injectTimeout` DOES still apply here — its own "every ack
+  // this fake would otherwise send" wording is phase-agnostic by design.
   let phase: "clearing" | "programming" | "armed" = "clearing";
   let clearChunkCursor = 0;
   let programChunkCursor = 0;
@@ -390,6 +493,13 @@ export function createFakeTransport(
   // (or `deliverArmedNow()`) rather than delivered synchronously — see
   // `tick()`'s own doc comment for why.
   let armedBundlePending = false;
+
+  // D1: what the machine is holding right now (`FakeScript.loadedWorkout`'s
+  // own doc comment). Set to `null` by the destructive rejection, never by
+  // the clear step — terminate was observed accepted with a workout loaded
+  // and the following program was still rejected.
+  let loadedIntervalCount: number | null =
+    script.loadedWorkout?.intervalCount ?? null;
 
   let linkDown = false;
   let disconnectCb: ((reason: string) => void) | null = null;
@@ -410,11 +520,28 @@ export function createFakeTransport(
   // iOS note), which is exactly what makes the reconnect path's very first
   // post-reconnect status tick already carry the correct value.
   let lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
+  // The machine's CURRENT state word, in `MonitorFrame` terms — updated
+  // from every status event this fake processes (delivered or merely
+  // cached; the PM keeps rowing whether or not the phone is listening).
+  // Read by `deliverBoundary` to decide the forward attribution of the
+  // Split/Interval Number it puts on the wire (D3) — see `boundaryBundle`'s
+  // own doc comment. Starts at `"idle"`: nothing has been programmed yet,
+  // and no boundary can precede the first status tick on a real machine.
+  let machineState: MonitorFrame["state"] = "idle";
 
   const incoming = reassemble();
 
   function notify(uuid: string, bytes: Uint8Array): void {
     for (const cb of notifyCbs.get(uuid) ?? []) cb(bytes);
+  }
+
+  /** The single place `latestStatus` (and with it the machine's own current
+   *  state word) is assigned — every path that decides "this is what the
+   *  machine now reads" goes through here, so `machineState` can never
+   *  drift from the status the fake last committed to. */
+  function setLatestStatus(e: FakeStatusEvent): void {
+    latestStatus = e;
+    machineState = toMonitorState(e.workoutState);
   }
 
   function deliverStatus(e: FakeStatusEvent): void {
@@ -428,13 +555,23 @@ export function createFakeTransport(
     notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
   }
 
+  /** D4 (Task 1's verdict, interface-notes.md §18 #3): **0x0037 first, then
+   *  0x0038** — the order the real machine used at every boundary of the
+   *  observed session ("seq 25 notify 0x0037 → seq 26 interval-complete →
+   *  seq 27 notify 0x0038"). This file used to send them the other way
+   *  round, which is why CI never saw either half of the defect that order
+   *  causes: the driver's first boundary was DISCARDED (its emission gate
+   *  was satisfied only by 0x0038, which had not arrived yet), and the
+   *  emission that did fire read its averages from the PREVIOUS boundary's
+   *  0x0038 — one `intervalComplete` for a two-interval workout, carrying
+   *  interval 2's identity with interval 1's numbers. */
   function deliverBoundary(e: FakeBoundaryEvent): void {
-    const { split, asSplit } = boundaryBundle(e);
+    const { split, asSplit } = boundaryBundle(e, machineState);
+    notify(SPLIT_INTERVAL_DATA_UUID, buildSplitIntervalDataBytes(split));
     notify(
       ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
       buildAdditionalSplitIntervalDataBytes(asSplit),
     );
-    notify(SPLIT_INTERVAL_DATA_UUID, buildSplitIntervalDataBytes(split));
   }
 
   function deliverArmedBundle(): void {
@@ -442,7 +579,7 @@ export function createFakeTransport(
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
     notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
-    latestStatus = {
+    setLatestStatus({
       atMs: virtualClock,
       kind: "status",
       workoutState: WORKOUTSTATE_WAITTOBEGIN,
@@ -451,8 +588,8 @@ export function createFakeTransport(
       spm: 0,
       currentSplit: 0,
       heartRateBpm: null,
-      intervalIndex: 0,
-    };
+      programIntervalIndex: 0,
+    });
   }
 
   /** Fix-round 1, F1: the single place `armedBundlePending` is consumed —
@@ -485,15 +622,21 @@ export function createFakeTransport(
     clearChunkCursor += 1;
   }
 
-  /** Called once the clear step's chunks have all arrived — always rejects
-   *  (0x81, the common "nothing was loaded" case, `phase`'s own doc
-   *  comment) and advances straight into `"programming"`. `timeoutInjected`
-   *  short-circuits this exactly like the other two frame-complete
-   *  handlers below: the bytes were already verified correct, but no ack
-   *  goes out and `phase` does not advance. */
+  /** Called once the clear step's chunks have all arrived. The ack depends
+   *  on the machine's LOAD STATE, both halves observed (D1,
+   *  interface-notes.md §18 #6): rejected (0x81) with nothing loaded — the
+   *  clean-run case — and ACCEPTED with a workout loaded. Either way the
+   *  loaded workout SURVIVES: an accepted terminate did not clear the PM
+   *  (the following program was still rejected, twice), which is the whole
+   *  reason `program()` can't trust its own clear step. Advances into
+   *  `"programming"` regardless — the driver sends the program next no
+   *  matter which ack it got. `timeoutInjected` short-circuits this exactly
+   *  like the other two frame-complete handlers below: the bytes were
+   *  already verified correct, but no ack goes out and `phase` does not
+   *  advance. */
   function onClearingFrameComplete(): void {
     if (timeoutInjected) return;
-    sendAck("reject");
+    sendAck(loadedIntervalCount === null ? "reject" : "ok");
     phase = "programming";
   }
 
@@ -533,6 +676,17 @@ export function createFakeTransport(
    *  also flips `linkDown` and fires `onDisconnect`; this does neither). */
   function onProgrammingFrameComplete(): void {
     if (timeoutInjected) return;
+    // D1, the confirmed destructive fact (interface-notes.md §18 #6,
+    // observed twice): programming over a loaded workout is REJECTED, and
+    // the rejection WIPES what was loaded. Not "rejected, try again with
+    // your workout still safe" — the rower's loaded session is gone by the
+    // time the caller sees the error, which is why `MonitorDriver.program`'s
+    // own JSDoc requires 7B to warn BEFORE calling, never after.
+    if (loadedIntervalCount !== null) {
+      loadedIntervalCount = null;
+      sendAck("reject");
+      return;
+    }
     const shouldNak = nakAtFrame === programFrameCursor;
     sendAck(shouldNak ? "reject" : "ok");
     if (!shouldNak) {
@@ -581,7 +735,7 @@ export function createFakeTransport(
       spm: 0,
       currentSplit: previous.currentSplit,
       heartRateBpm: previous.heartRateBpm,
-      intervalIndex: previous.intervalIndex,
+      programIntervalIndex: previous.programIntervalIndex,
     };
     latestStatus = terminated;
     deliverStatus(terminated);
@@ -589,7 +743,7 @@ export function createFakeTransport(
 
   function deliverOrCache(event: FakeTimelineEvent): void {
     if (event.kind === "status") {
-      latestStatus = event;
+      setLatestStatus(event);
       if (!linkDown) deliverStatus(event);
     } else {
       latestBoundary = event;
@@ -634,6 +788,18 @@ export function createFakeTransport(
     // doing `await t.write(...)` must see a rejection, not an uncaught
     // synchronous exception escaping the `await` expression itself.
     async write(characteristicId: string, bytes: Uint8Array): Promise<void> {
+      // D6 (interface-notes.md §18's "also fixed live" list): while the
+      // link is down every handle a transport is holding is dead, and a
+      // write on one throws — Chrome's own wording reproduced verbatim
+      // below, because that string IS the observation. Checked before the
+      // sample-rate early-return: an invalidated handle does not care which
+      // characteristic it points at. See `injectDisconnect`'s doc comment
+      // for why the fake having none of this hid the session's worst bug.
+      if (linkDown) {
+        throw new Error(
+          `fake transport: InvalidStateError: Characteristic ${characteristicId} is no longer valid. Remember to retrieve the characteristic again after reconnecting.`,
+        );
+      }
       if (characteristicId === SAMPLE_RATE_UUID) {
         return;
       }
@@ -698,6 +864,9 @@ export function createFakeTransport(
     },
     deliverArmedNow(): void {
       flushArmedIfPending();
+    },
+    loadedIntervals(): number | null {
+      return loadedIntervalCount;
     },
     injectNak(atFrame: number): void {
       nakAtFrame = atFrame;

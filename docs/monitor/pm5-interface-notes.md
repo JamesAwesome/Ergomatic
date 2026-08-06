@@ -1105,9 +1105,11 @@ SESSION 1" section.
    produced for a 2-interval program carried MIXED-BOUNDARY data (interval
    2's identity from 0x0037, interval 1's averages from a STALE 0x0038 read
    left over from the prior boundary), confirming the "arrives-discarded"
-   prediction over "never-arrives" (D4). Fixed by emitting per-boundary
-   from a coherent snapshot rather than whatever merged last (Task 3's own
-   scope, not this task's).
+   prediction over "never-arrives" (D4). Fixed in plan Task 4 by emitting
+   per-boundary from a coherent snapshot rather than from whatever merged
+   last: `src/monitor/driver.ts` now waits for BOTH halves of the same
+   boundary (`boundaryHalves`), in either order, and the fake reproduces
+   the observed 0x0037-then-0x0038 arrival order so CI exercises it.
 4. **Zero vs omit for a no-target interval (§17 item 4): not tested this
    session** — the harness's `TEST_PROGRAM` used a real target throughout;
    still open.
@@ -1173,9 +1175,15 @@ diagnosis possible at all).
 
 **New defect confirmed this session, not in the original §17 list:** the
 no-HR sentinel is `0`, not `255` (D5) — with no belt paired,
-`avgHeartRateBpm: 0` came through on 0x0038's work-heartrate field. `parse.ts`
-now maps BOTH `0` and `255` to `null` for that field (§15 #2's own
-0x0039 counter-evidence agreed with this before the session ever ran).
+`avgHeartRateBpm: 0` came through on 0x0038's work-heartrate field. Since
+plan Task 4, `parse.ts` maps BOTH `0` and `255` to `null` on EVERY
+heart-rate field it decodes, not only the one byte the session observed
+(`HEARTRATE_NO_BELT`; §15 #2's own 0x0039 counter-evidence agreed with this
+before the session ever ran, and a per-field split would claim a
+distinction no source states). `statusFrames.ts` still ENCODES `null` as
+the documented `255` — one encoder cannot write two sentinels for one
+state — so the fake passes `HEARTRATE_NO_BELT` explicitly to put the
+observed byte on its wire.
 
 Folding these confirmations back into §6/§14/§15/§16's own
 "unconfirmed"/"flagged" language (updating each row to "confirmed

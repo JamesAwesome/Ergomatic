@@ -4,13 +4,21 @@ import {
   buildTerminate,
 } from "../../../domain/monitor/pm5/commands.js";
 import {
+  HEARTRATE_NO_BELT,
+  parseAdditionalSplitIntervalData,
+  parseAdditionalStatus2,
   parseGeneralStatus,
+  WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
 } from "../../../domain/monitor/pm5/parse.js";
 import { parseCsafeResponse } from "../../../domain/monitor/pm5/response.js";
+import { buildAdditionalStatus1Bytes } from "../../../domain/monitor/pm5/statusFrames.js";
 import {
+  ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+  ADDITIONAL_STATUS_1_UUID,
+  ADDITIONAL_STATUS_2_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
@@ -64,7 +72,7 @@ const TIMELINE_EVENTS: FakeTimelineEvent[] = [
     spm: 24,
     currentSplit: 110,
     heartRateBpm: 140,
-    intervalIndex: 0,
+    programIntervalIndex: 0,
   },
   {
     atMs: 2000,
@@ -108,6 +116,20 @@ async function programIt(
 
 function decodeGeneral(bytes: Uint8Array) {
   const decoded = parseGeneralStatus(bytes);
+  if ("error" in decoded)
+    throw new Error("unexpected parse error in test fixture");
+  return decoded;
+}
+
+function decodeAs2(bytes: Uint8Array) {
+  const decoded = parseAdditionalStatus2(bytes);
+  if ("error" in decoded)
+    throw new Error("unexpected parse error in test fixture");
+  return decoded;
+}
+
+function decodeAsSplit(bytes: Uint8Array) {
+  const decoded = parseAdditionalSplitIntervalData(bytes);
   if ("error" in decoded)
     throw new Error("unexpected parse error in test fixture");
   return decoded;
@@ -340,7 +362,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
           spm: 24,
           currentSplit: 110,
           heartRateBpm: 140,
-          intervalIndex: 0,
+          programIntervalIndex: 0,
         },
       ],
     });
@@ -604,6 +626,288 @@ describe("createFakeTransport: onDisconnect replacing a prior registration", () 
     fake.injectDisconnect();
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 7A-fix Task 4: the wire values that make this a MODEL of the PM5 we
+// met (interface-notes.md §18) rather than an idealized one. Each suite here
+// pins something the real machine did and this fake previously did not.
+// ---------------------------------------------------------------------------
+
+describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, not ours", () => {
+  const TWO_INTERVALS: WorkoutProgram = {
+    intervals: Array.from({ length: 2 }, () => ({
+      kind: "time" as const,
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 30,
+    })),
+  };
+
+  /** The full §18 #3 observation table for a 2×(1:00/0:30) session, in the
+   *  fake's own terms: what OUR index and the machine's state are at each
+   *  point, and what the machine actually put in 0x0033's Interval Count. */
+  const OBSERVED_TABLE = [
+    { our: 0, state: WORKOUTSTATE_INTERVALWORKTIME, machine: 0 }, // work0
+    { our: 0, state: WORKOUTSTATE_INTERVALREST, machine: 1 }, // rest after work0
+    { our: 1, state: WORKOUTSTATE_INTERVALWORKTIME, machine: 1 }, // work1
+    { our: 1, state: WORKOUTSTATE_INTERVALREST, machine: 2 }, // the phantom
+  ];
+
+  it("0x0033's Interval Count reproduces the observed table, phantom index and all", async () => {
+    const events: FakeTimelineEvent[] = OBSERVED_TABLE.map((row, i) => ({
+      atMs: 100 * (i + 1),
+      kind: "status" as const,
+      workoutState: row.state,
+      elapsedSeconds: 30 * (i + 1),
+      distanceMeters: 100 * (i + 1),
+      spm: 22,
+      currentSplit: 120,
+      heartRateBpm: 140,
+      programIntervalIndex: row.our,
+    }));
+    const fake = createFakeTransport({ program: TWO_INTERVALS, events });
+    await programIt(fake, TWO_INTERVALS);
+
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    for (let i = 0; i < OBSERVED_TABLE.length; i += 1) fake.tick(100);
+
+    expect(as2.map((b) => decodeAs2(b).intervalCount)).toStrictEqual(
+      OBSERVED_TABLE.map((row) => row.machine),
+    );
+  });
+
+  it("a boundary that lands mid-rest carries the forward-attributed Split/Interval Number too", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 65,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 1,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSplit: 120,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+          },
+          cumulativeElapsedSeconds: 90,
+          cumulativeDistanceMeters: 200,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS);
+
+    const asSplits: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) =>
+      asSplits.push(b),
+    );
+    fake.tick(200);
+
+    // The last interval of a two-interval program, reported as `2` — the
+    // phantom the session ended on.
+    expect(asSplits).toHaveLength(1);
+    expect(decodeAsSplit(asSplits[0]!).splitIntervalNumber).toBe(2);
+  });
+
+  it("a boundary while ROWING is NOT adjusted — no offset is invented for a work->work boundary (§17 item 13)", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 55,
+          distanceMeters: 190,
+          spm: 22,
+          currentSplit: 120,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSplit: 120,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS);
+
+    const asSplits: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) =>
+      asSplits.push(b),
+    );
+    fake.tick(200);
+
+    expect(decodeAsSplit(asSplits[0]!).splitIntervalNumber).toBe(0);
+  });
+});
+
+describe("createFakeTransport: D4 — 0x0037 arrives BEFORE 0x0038 at every boundary", () => {
+  it("delivers the identity half first and the averages half second, the order the machine used", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: TIMELINE_EVENTS,
+    });
+    await programIt(fake, PROGRAM);
+
+    const order: string[] = [];
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, () => order.push("0x0037"));
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, () =>
+      order.push("0x0038"),
+    );
+    fake.tick(2000);
+
+    // Task 1's verdict rests on this order: a driver that emitted from
+    // 0x0037 while gated on 0x0038 lost the first boundary entirely.
+    expect(order).toStrictEqual(["0x0037", "0x0038"]);
+  });
+});
+
+describe("createFakeTransport: D5 — the beltless heart-rate byte is 0, not 255", () => {
+  it("puts HEARTRATE_NO_BELT on the wire for a null heart rate, byte for byte", async () => {
+    const beltlessTick: FakeTimelineEvent = {
+      atMs: 100,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 10,
+      distanceMeters: 40,
+      spm: 24,
+      currentSplit: 110,
+      heartRateBpm: null, // no belt paired
+      programIntervalIndex: 0,
+    };
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [beltlessTick],
+    });
+    await programIt(fake, PROGRAM);
+
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    fake.tick(100);
+
+    // Built through the SAME pm5 encoder rather than asserting a byte
+    // offset here (offsets live in `pm5/`, never in `src/`): the two
+    // variants below differ in exactly the heart-rate byte, and the fake
+    // must produce the `0` one.
+    const fields = {
+      elapsedSeconds: beltlessTick.elapsedSeconds,
+      speedMetersPerSecond: 0,
+      spm: beltlessTick.spm,
+      currentSplit: beltlessTick.currentSplit,
+      averageSplit: beltlessTick.currentSplit,
+      restDistanceMeters: 0,
+      restSeconds: 0,
+      ergMachineType: 1,
+    };
+    const noBeltBytes = buildAdditionalStatus1Bytes({
+      ...fields,
+      heartRateBpm: HEARTRATE_NO_BELT,
+    });
+    const documentedSentinelBytes = buildAdditionalStatus1Bytes({
+      ...fields,
+      heartRateBpm: null, // the encoder's own 255
+    });
+    expect(noBeltBytes).not.toStrictEqual(documentedSentinelBytes); // the two really do differ
+    expect(as1).toHaveLength(1);
+    expect(as1[0]).toStrictEqual(noBeltBytes);
+  });
+});
+
+describe("createFakeTransport: D1 — a machine with a workout already loaded", () => {
+  it("accepts the clear, rejects the program, and WIPES what it was holding", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      loadedWorkout: { intervalCount: 3 },
+    });
+    expect(fake.loadedIntervals()).toBe(3);
+
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    // Accepted with something loaded — the D1 UPDATE observation, and the
+    // opposite of the clean-state case every other test in this file drives.
+    expect(acks.map((a) => a.status)).toStrictEqual(["ok"]);
+    expect(fake.loadedIntervals()).toBe(3); // terminate is NOT a clear
+
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    expect(acks.map((a) => a.status)).toStrictEqual(["ok", "reject"]);
+    // The destructive half, confirmed twice on hardware: the rejection took
+    // the rower's loaded workout with it.
+    expect(fake.loadedIntervals()).toBeNull();
+    fake.deliverArmedNow();
+    expect(generals).toHaveLength(0); // never armed
+  });
+
+  it("a fake with nothing loaded reports nothing loaded, and rejects the clear instead", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    expect(fake.loadedIntervals()).toBeNull();
+
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    expect(acks.map((a) => a.status)).toStrictEqual(["reject"]);
+  });
+});
+
+describe("createFakeTransport: D6 — handles die with the link", () => {
+  it("every write throws the invalidated-handle error while disconnected, and works again after reconnecting", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    await programIt(fake, PROGRAM);
+
+    fake.injectDisconnect();
+    await expect(
+      fake.write(RECEIVE_CHARACTERISTIC_UUID, buildTerminate()[0]![0]!),
+    ).rejects.toThrow(/no longer valid/);
+    // Not just the control characteristic — a stale handle is stale
+    // whatever it points at.
+    await expect(
+      fake.write(SAMPLE_RATE_UUID, Uint8Array.from([0x03])),
+    ).rejects.toThrow(/InvalidStateError/);
+
+    fake.completeReconnect();
+    await expect(
+      fake.write(SAMPLE_RATE_UUID, Uint8Array.from([0x03])),
+    ).resolves.toBeUndefined();
   });
 });
 

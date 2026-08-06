@@ -46,8 +46,10 @@ export interface MonitorRun {
   // `IntervalActual.index === null` (Phase 7A-fix Task 3, D3) — it means
   // the machine's reported index couldn't be matched to any interval in
   // `program`, NOT "this is interval 0". Never assume position in this
-  // array substitutes for `index`, either: a dropped/never-arrived boundary
-  // (see this driver's own `"seen.asSplit"` gating) can leave `actuals`
+  // array substitutes for `index`, either: a boundary whose two halves
+  // never both arrive (see `driver.ts`'s own `boundaryHalves` gating — the
+  // D4 defect was exactly this, one interval lost out of two) can leave
+  // `actuals`
   // shorter than `program.intervals`, so array position and program
   // interval also do not correspond 1:1.
   actuals: IntervalActual[];

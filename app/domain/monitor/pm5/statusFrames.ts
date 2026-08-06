@@ -26,11 +26,20 @@ import type {
   SplitIntervalData,
 } from "./parse.js";
 
-/** BLE doc p.14: "Heartrate (bpm, 255=invalid)" — the inverse of
- *  `parse.ts`'s `heartRate()` sentinel read, applied identically to every
- *  heart-rate field this module encodes (same analogy `parse.ts` itself
- *  makes for 0x0038's Work/Rest Heartrate bytes — interface-notes.md §15
- *  #2). */
+/** BLE doc p.14: "Heartrate (bpm, 255=invalid)" — what this module writes
+ *  for a `null` heart rate, on every heart-rate field it encodes (the same
+ *  analogy `parse.ts` makes for 0x0038's Work/Rest Heartrate bytes,
+ *  interface-notes.md §15 #2).
+ *
+ *  No longer a strict inverse of `parse.ts`'s `heartRate()`, on purpose:
+ *  that decoder maps BOTH `255` and `0` to `null` since D5
+ *  (interface-notes.md §18 — the beltless machine sent `0`), so
+ *  `null -> 255 -> null` still round-trips but `0 -> null -> 255` cannot.
+ *  One encoder cannot write two sentinels for one state; this one keeps
+ *  writing the DOCUMENTED byte, and a caller that specifically wants the
+ *  OBSERVED one (as `src/monitor/transports/fake.ts` does, being a model of
+ *  the machine we met) passes `parse.ts`'s `HEARTRATE_NO_BELT` as a real
+ *  number rather than `null`. */
 const HEARTRATE_INVALID = 255;
 
 function writeU8(bytes: Uint8Array, offset: number, value: number): void {

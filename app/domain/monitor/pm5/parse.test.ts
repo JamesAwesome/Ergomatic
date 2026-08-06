@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  HEARTRATE_NO_BELT,
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
@@ -7,6 +8,7 @@ import {
   parseSplitIntervalData,
   toIntervalActual,
   toMonitorFrame,
+  toMonitorState,
   type Pm5ParseError,
   type RawPm5Status,
 } from "./parse.js";
@@ -131,6 +133,42 @@ describe("parseAdditionalStatus1 (0x0032, 17 bytes, interface-notes.md §10)", (
     ]);
     expect(expectDecoded(parseAdditionalStatus1(bytes)).heartRateBpm).toBe(254);
   });
+
+  it("maps the OBSERVED zero sentinel to null too (D5, interface-notes.md §18): a beltless PM5 sent 0, not 255", () => {
+    const bytes = Uint8Array.from([
+      ...u24le(0),
+      ...u16le(0),
+      0,
+      HEARTRATE_NO_BELT, // no belt paired — the byte the real machine sent
+      ...u16le(0),
+      ...u16le(0),
+      ...u16le(0),
+      ...u24le(0),
+      0,
+    ]);
+    // 0 bpm is not a reading a living rower produces; passing it through
+    // fabricates a plausible-looking number for someone who simply wasn't
+    // wearing a belt (§15 #2's own 0x0039 counter-evidence predicted this
+    // before the session ever ran).
+    expect(
+      expectDecoded(parseAdditionalStatus1(bytes)).heartRateBpm,
+    ).toBeNull();
+  });
+
+  it("a heart rate of 1 bpm — one past the zero sentinel — is still decoded as a value", () => {
+    const bytes = Uint8Array.from([
+      ...u24le(0),
+      ...u16le(0),
+      0,
+      1,
+      ...u16le(0),
+      ...u16le(0),
+      ...u16le(0),
+      ...u24le(0),
+      0,
+    ]);
+    expect(expectDecoded(parseAdditionalStatus1(bytes)).heartRateBpm).toBe(1);
+  });
 });
 
 describe("parseAdditionalStatus2 (0x0033, 20 bytes, interface-notes.md §10)", () => {
@@ -240,6 +278,29 @@ describe("parseAdditionalSplitIntervalData (0x0038, 19 bytes, interface-notes.md
       splitIntervalNumber: 3,
       ergMachineType: 1,
     });
+  });
+
+  it("applies the ZERO sentinel to both heartrate bytes as well — the field the beltless machine actually sent 0 on (D5, interface-notes.md §18)", () => {
+    const bytes = Uint8Array.from([
+      ...u24le(0),
+      0,
+      HEARTRATE_NO_BELT, // work heartrate: no belt
+      HEARTRATE_NO_BELT, // rest heartrate: no belt
+      ...u16le(0),
+      ...u16le(0),
+      ...u16le(0),
+      ...u16le(0),
+      ...u16le(0),
+      0,
+      0,
+      0,
+    ]);
+    const decoded = expectDecoded(parseAdditionalSplitIntervalData(bytes));
+    // This is the exact value that reached `IntervalActual.avgHeartRateBpm`
+    // as a `0` during the laptop session — a 7C log screen would have
+    // written down "0 bpm average" for a rower wearing no belt.
+    expect(decoded.splitIntervalWorkHeartRateBpm).toBeNull();
+    expect(decoded.splitIntervalRestHeartRateBpm).toBeNull();
   });
 
   it("applies the 255=invalid sentinel to BOTH work and rest heartrate bytes (by analogy, interface-notes.md §15 #2)", () => {
@@ -448,6 +509,19 @@ describe("toMonitorFrame: WORKOUTSTATE -> state, cited row-by-row (interface-not
   it("an out-of-range workoutState byte falls back to idle (defensive, not a wire fact)", () => {
     const frame = toMonitorFrame(baseRaw({ workoutState: 255 }));
     expect(frame.state).toBe("idle");
+  });
+
+  it("toMonitorState is that same table, standalone — the form the fake transport needs (it has an ordinal, not a whole RawPm5Status)", () => {
+    // Exported so `src/monitor/transports/fake.ts` can ask "is the state I
+    // am about to send a REST?" without re-declaring Appendix A's table
+    // outside `pm5/` (design spec §Layering).
+    expect(toMonitorState(3)).toBe("resting");
+    expect(toMonitorState(4)).toBe("rowing");
+    expect(toMonitorState(255)).toBe("idle");
+    // Same function `toMonitorFrame` itself reads, not a parallel copy.
+    expect(toMonitorState(10)).toBe(
+      toMonitorFrame(baseRaw({ workoutState: 10 })).state,
+    );
   });
 });
 
