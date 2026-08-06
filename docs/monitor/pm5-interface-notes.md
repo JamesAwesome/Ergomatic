@@ -912,6 +912,18 @@ alongside the codec that produces the commands being acked.
   path exists only so `parseCsafeResponse` doesn't crash or fabricate
   garbage on a response shape it wasn't built to fully understand, not
   because it's confirmed correct for that shape.
+
+  > **CORRECTION (2026-08-06, Phase 7A-fix-2 Task 3): the sentence above
+  > is now FALSE.** `pm5/commands.ts`'s `buildGetErrorType` (added by
+  > Task 3) DOES emit a `0x1A`-wrapped command — `CSAFE_PM_GET_ERRORTYPE`
+  > (`0xC8`), sent by `src/monitor/driver.ts`'s `sendGetErrorType` after
+  > every genuine programming reject. The response-side reasoning
+  > (parsing an unconfirmed `0x1A` reply shape without crashing) is
+  > unaffected, but "never emits" no longer holds, and this path is no
+  > longer merely defensive against a shape this codec doesn't produce —
+  > it is now live on every reject. See §17's new pull-path item (added
+  > by this same correction) for the still-open wrapper question this
+  > raises on the REQUEST side.
 - An ack-frame builder (`buildAckFrame(status, commandIds)`) is the
   inverse: `0x76`-wraps `commandIds` as a bare opcode list (mirroring R2/R4
   exactly) behind the requested status byte, then runs it through
@@ -1228,6 +1240,19 @@ every flagged item either numbered here or explicitly excused — holds.)
     that if `exportLog()` ever shows an ack whose bytes don't match the
     `0x76`-wrapper shape (an `"ack"` entry that looks unlike every other
     one), that's this path firing and worth a closer look.
+
+    > **CORRECTION (2026-08-06, Phase 7A-fix-2 Task 3): "should be
+    > unobservable in ordinary operation" is now INVERTED, not merely
+    > stale.** `pm5/commands.ts`'s `buildGetErrorType` (Task 3) makes
+    > `src/monitor/driver.ts` emit exactly this `0x1A`-wrapped shape on
+    > the REQUEST side on every genuine programming reject, and the reply
+    > this item describes is the SAME response path `sendGetErrorType`
+    > now reads (raw hex only, no decode claim). This item's own
+    > "Observed: nothing specific to provoke" no longer holds either — a
+    > lab session sending `program-two-time` (or any workout) against a
+    > PM that genuinely rejects it will provoke this path directly. See
+    > item 14 (added by this correction) for the REQUEST-side wrapper
+    > question this raises, which item 10 itself never asked.
 11. **STATUS: OPEN — no symptom observed, but INCONCLUSIVE (§18 #11).**
     No dropped-chunk symptom appeared across any multi-chunk write this
     session, but no single write was large enough to be a decisive stress
@@ -1294,6 +1319,36 @@ every flagged item either numbered here or explicitly excused — holds.)
     into, matching the resting rule's own shape applied even with no rest)?
     That reading settles which rule (if either) actually governs a
     work→work boundary.
+14. **STATUS: OPEN — added by Phase 7A-fix-2 Task 3's review (MINOR-1);
+    did not exist before this commit, so no data yet.** Which wrapper a
+    GET/pull command should actually carry on the REQUEST side — `0x1A`
+    (`CSAFE_SETUSERCFG1_CMD`, per CSAFE-DEF's own worked "Get Force Curve"
+    example, `F1 1A 01 BF A4 F2`, §6 example 13) vs `0x7E`/`0x7F`
+    (csafe.h's own four-wrapper partitioning, §19.11 — one push/pull pair
+    per command family, `0x76`/`0x77` and `0x7E`/`0x7F`, which would put a
+    GET under `0x7E` or `0x7F` instead). `pm5/commands.ts`'s
+    `buildGetErrorType` (Task 3) and any future
+    `CSAFE_PM_GET_SCREENSTATESTATUS` send (design spec §7, `terminate()`'s
+    still-undone documented fix) both follow the DOCUMENT'S worked bytes
+    (`0x1A`) over the header's inference, but neither has ever been
+    confirmed on real hardware — this codec has never sent a non-`0x76`
+    command to a PM5. Expected: unknown by design — a real GET sent under
+    `0x1A` either gets a coherent reply (settling the wrapper AND proving
+    the pull path exists over this BLE transport in one observation) or
+    gets silence/an error (CSAFE-DEF p.10's own "merely disregards an
+    unrecognized command" applies here too — see item 10's own
+    correction, and `src/monitor/driver.ts`'s `errorTypeTicks` bound,
+    added for exactly this possibility). Observed: send `GetErrorType`
+    (`buildGetErrorType()`, `f1 1a 01 c8 d3 f2`) from the lab against a
+    clean-idle PM (no reject needed to provoke it manually — this item
+    only needs the raw reply captured, not a real error to describe) and
+    dump the raw response bytes. This single observation settles the
+    wrapper choice, whether the pull path works over BLE at all, AND
+    starts the decode `GetErrorType`'s own reply and
+    `GetScreenStateStatus`'s pending/in-progress/inactive status
+    (interface-notes.md §19.6) both still need — `buildGetErrorType`'s own
+    doc comment and `DriverOptions.errorTypeTicks`'s doc comment both cite
+    this item.
 
 ### The pending verification row (prepared, NOT yet run)
 

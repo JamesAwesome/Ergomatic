@@ -402,10 +402,10 @@ export function buildTerminate(): Uint8Array[][] {
  *  `CSAFE_SETPMCFG_CMD`), while every documented worked GET example uses
  *  `0x1A` instead. We follow the document's own worked bytes over the
  *  header's inferred partitioning. Settling which is actually right on the
- *  wire needs one hardware GET — interface-notes.md §17's pull-path item,
- *  which this function's own caller deliberately does not need an answer
- *  to yet (`src/monitor/driver.ts` logs the reply as raw hex only, never a
- *  claimed meaning).
+ *  wire needs one hardware GET — interface-notes.md §17 item 14 (the
+ *  pull-path wrapper question), which this function's own caller
+ *  deliberately does not need an answer to yet (`src/monitor/driver.ts`
+ *  logs the reply as raw hex only, never a claimed meaning).
  *
  *  Payload `[0x1A, 0x01, 0xC8]` (topOpcode, one echoed-opcode count, the
  *  opcode itself) -> frame `f1 1a 01 c8 d3 f2`

@@ -107,10 +107,11 @@ async function programIt(
   fake: ReturnType<typeof createFakeTransport>,
   program: WorkoutProgram,
 ) {
-  // Plan Task 2: `program()`'s own best-effort clear step precedes the real
-  // programming sequence (`src/monitor/driver.ts`'s `sendClear()`) — the
-  // fake's `"clearing"` phase expects the SAME `buildTerminate()` bytes
-  // first, always rejecting before advancing to `"programming"`.
+  // Plan Task 2 (renamed by Phase 7A-fix-2 Task 3): `program()`'s own
+  // best-effort PREPARE step precedes the real programming sequence
+  // (`src/monitor/driver.ts`'s `sendPrepare()`) — the fake's `"clearing"`
+  // phase expects the SAME `buildTerminate()` bytes first, always
+  // rejecting before advancing to `"programming"`.
   for (const chunk of buildTerminate()[0]!) {
     await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
   }

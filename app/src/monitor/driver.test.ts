@@ -1118,6 +1118,39 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — the wire's four non-'ok' re
         TRANSMIT_CHARACTERISTIC_UUID,
         buildAckFrame({ frameStatus }),
       );
+      // Drain generously before the defensive ticks below: under a
+      // mutant that fires `sendGetErrorType` for this frame status, its
+      // OWN write (and `awaitAck()` registration) needs several
+      // microtask hops to happen — sending ticks before that write is
+      // even out would just be discarded as a stray GENERAL_STATUS_UUID
+      // arrival with nothing pending yet, not consumed as the bound this
+      // test means to satisfy.
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+
+      // Defensive, ahead of the over-fire guard below: if a mutant makes
+      // THIS frame status also fire `sendGetErrorType` (Task 3 review,
+      // Mutation B), that wait is bounded by its own always-active
+      // `errorTypeTicks` (default 3, IMPORTANT-1) rather than
+      // `options.ackTimeout` (unset here) — these ticks satisfy that
+      // bound so the mutant dies on the assertion below instead of
+      // hanging the test. Under CORRECT code nothing is pending to
+      // resolve, so they are plain no-ops.
+      const tick = buildGeneralStatusBytes({
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_REARM,
+        rowingState: 0,
+        strokeState: 0,
+        totalWorkDistanceMeters: 0,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      });
+      transport.notify(GENERAL_STATUS_UUID, tick);
+      transport.notify(GENERAL_STATUS_UUID, tick);
+      transport.notify(GENERAL_STATUS_UUID, tick);
 
       await expect(pending).rejects.toSatisfy((err: unknown) => {
         expect(err).toBeInstanceOf(ProgramRejectionError);
@@ -1311,6 +1344,205 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — GetErrorType on a genuine r
             e.kind === "error-type" && e.detail === "no reply (ack-timeout)",
         ),
     ).toBe(true);
+  });
+
+  it("with NO ackTimeout configured at all, GetErrorType's own always-active errorTypeTicks bound (default 3) still rejects nak rather than hanging forever", async () => {
+    // Task 3 review, IMPORTANT-1: proven on review that this exact
+    // scenario hung FOREVER against the pre-fix code — `awaitAck()`'s own
+    // ack-timeout tick counter only counts while `options.ackTimeout` is
+    // configured (`if (pendingAck && options.ackTimeout)`), and the sole
+    // real call site (`app/scripts/pm5-lab.ts`) never configures one.
+    // `errorTypeTicks` is a SEPARATE, always-active bound for exactly
+    // this reason — it must fire with no `ackTimeout` anywhere in sight.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log); // no ackTimeout at all
+    const programFrame0ChunkCount =
+      buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    ); // prepare step accepted
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    ); // genuine reject
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length >
+        prepareChunkCount + programFrame0ChunkCount,
+    ); // GetErrorType's own write went out — and NO reply is ever sent
+
+    let settled = false;
+    void pending.catch(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(settled).toBe(false); // no ticks yet — must not resolve on its own
+
+    const tick = buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_REARM,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+    transport.notify(GENERAL_STATUS_UUID, tick);
+    transport.notify(GENERAL_STATUS_UUID, tick);
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+    expect(settled).toBe(false); // 2 of the default 3 — still not enough
+
+    transport.notify(GENERAL_STATUS_UUID, tick);
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("nak");
+      return true;
+    });
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "error-type" && e.detail === "no reply (ack-timeout)",
+        ),
+    ).toBe(true);
+  });
+
+  it("a custom errorTypeTicks bound is honored", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { errorTypeTicks: 1 });
+    const programFrame0ChunkCount =
+      buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length >
+        prepareChunkCount + programFrame0ChunkCount,
+    );
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_REARM,
+        rowingState: 0,
+        strokeState: 0,
+        totalWorkDistanceMeters: 0,
+        workoutDurationRaw: 0,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("nak");
+      return true;
+    });
+  });
+
+  it("a configured ackTimeout that fires FIRST still lets errorTypeTicks' own counter observe pendingAck already cleared (no double-resolve)", async () => {
+    // Exercises the raw tick handler's `pendingErrorTypeTimeout &&
+    // pendingAck` guard on its FALSE side: `options.ackTimeout` (opt-in,
+    // smaller) resolves `pendingAck` first; errorTypeTicks' own counter
+    // (always-active, larger here) must find nothing left to resolve on
+    // its own later ticks rather than throwing or double-resolving.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, {
+      ackTimeout: { ticks: 1 },
+      errorTypeTicks: 3,
+    });
+    const programFrame0ChunkCount =
+      buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length > prepareChunkCount,
+    );
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    await waitUntil(
+      () =>
+        transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+          .length >
+        prepareChunkCount + programFrame0ChunkCount,
+    );
+
+    const tick = buildGeneralStatusBytes({
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 0,
+      workoutState: WORKOUTSTATE_REARM,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+    // Tick 1: `options.ackTimeout` resolves `pendingAck` first (registered
+    // ahead of the raw subscription); errorTypeTicks' own counter, on the
+    // SAME tick, must see `pendingAck` already null and no-op rather than
+    // resolve again.
+    transport.notify(GENERAL_STATUS_UUID, tick);
+    // Two more ticks — errorTypeTicks would fire on the 3rd if it hadn't
+    // already been superseded; must not crash or re-resolve anything.
+    transport.notify(GENERAL_STATUS_UUID, tick);
+    transport.notify(GENERAL_STATUS_UUID, tick);
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("nak");
+      return true;
+    });
+    // Exactly one "no reply" entry — not two.
+    expect(log.entries().filter((e) => e.kind === "error-type")).toHaveLength(
+      1,
+    );
   });
 });
 
@@ -1532,6 +1764,63 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
       false,
     );
+  });
+
+  it.each([
+    ["bad", () => buildAckFrame({ frameStatus: "bad" })],
+    ["not-ready", () => buildAckFrame({ frameStatus: "not-ready" })],
+    ["garbled", () => Uint8Array.from([0xf1, 0x01, 0x1a, 0x00, 0xff, 0xf2])],
+  ] as const)(
+    "Task 3 review, IMPORTANT-2: a '%s' prepare-step response is swallowed too (broadened from the pre-Task-3 nak/timeout-only rule) — program() still proceeds to the real send and logs 'prepare-rejected'",
+    async (_label, buildPrepareAck) => {
+      // Reverting `sendPrepare`'s condition to the pre-Task-3
+      // `reason === "nak" || reason === "timeout"` rule makes this test
+      // fail: a "bad"/"not-ready"/"garbled" prepare response would
+      // escape `sendPrepare` uncaught and surface through `program()`'s
+      // own programming-failure channel — a prepare-step outcome dressed
+      // as a programming failure — instead of being swallowed here.
+      const transport = stubTransport();
+      const log = createEventLog();
+      const driver = createPm5Driver(transport, log);
+
+      const pending = driver.program(MINIMAL_PROGRAM);
+      transport.notify(TRANSMIT_CHARACTERISTIC_UUID, buildPrepareAck());
+      await waitUntil(
+        () =>
+          transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+            .length > prepareChunkCount,
+      );
+      // The real programming send proceeds normally — accept it.
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+
+      await expect(pending).resolves.toBeUndefined();
+      expect(log.entries().some((e) => e.kind === "prepare-rejected")).toBe(
+        true,
+      );
+      expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
+        false,
+      );
+    },
+  );
+
+  it("a disconnect DURING the prepare step still propagates as a fatal rejection — the one outcome sendPrepare never swallows", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const pending = driver.program(MINIMAL_PROGRAM);
+    transport.fireDisconnect("radio out of range");
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("disconnected");
+      return true;
+    });
   });
 
   it("resolves only after the machine reports 'armed', not merely after the ack (D2: the ack alone is not evidence of success)", async () => {
