@@ -1439,6 +1439,14 @@ establish about programming over a live session.
    WIPES what was loaded** — a failed 2-interval send visibly wiped a
    working 1-minute program, leaving the monitor showing an empty `:00`
    session. This is CONFIRMED destructive behavior, observed twice.
+   **`terminate()` when nothing is loaded: REJECTED** (0x81) — the clean-run
+   observation, from the same laptop session (`.superpowers/sdd/
+   2026-08-05-phase-7a-monitor-domain/progress.md:187`, "CLEAN RUN 2":
+   "terminate (rejected — nothing to terminate) → 2 TIME intervals →
+   accepted"). Recorded here as its own citable fact, since it was
+   previously only in the raw trace and several source comments (`src/
+   monitor/driver.ts`, `src/monitor/transports/fake.ts`) cited it to this
+   section without it actually being here.
    **D1 UPDATE** (phase-7a-fix Task 1's hardware row, same date): a
    `terminate()` was ACCEPTED with a completed workout loaded, yet the
    FOLLOWING program was still REJECTED — twice. So (a) `terminate()` is

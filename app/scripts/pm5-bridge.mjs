@@ -20,6 +20,14 @@ import { appendFileSync, writeFileSync } from "node:fs";
 
 const PORT = Number(process.env.PM5_BRIDGE_PORT ?? 5178);
 const LOG = process.env.PM5_BRIDGE_LOG ?? "pm5-session.log";
+// The lab page is served by `vite` on 5173 (scripts/pm5-lab.ts's own header
+// comment). Binding to 127.0.0.1 keeps this off the network, but any page
+// open in the SAME browser can still POST here with no preflight (`text/
+// plain` is a CORS "simple request") while the bridge runs — and `program()`
+// is documented as destructive. Reject any request that names a different
+// Origin; requests with none (curl, the documented way to enqueue a command)
+// are unaffected.
+const ALLOWED_ORIGIN = process.env.PM5_BRIDGE_ORIGIN ?? "http://localhost:5173";
 
 /** Commands wait here until the page's next poll drains them. */
 const queue = [];
@@ -41,6 +49,12 @@ const server = createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "content-type");
   if (req.method === "OPTIONS") {
     res.writeHead(204).end();
+    return;
+  }
+
+  const origin = req.headers.origin;
+  if (origin && origin !== ALLOWED_ORIGIN) {
+    res.writeHead(403).end();
     return;
   }
 

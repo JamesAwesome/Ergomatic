@@ -51,6 +51,17 @@ import type { MonitorFrame } from "../types.js";
  *   - our 1, rowing (work1)                -> machine 1
  *   - our 1, resting (rest after work1)    -> machine 2  (the "phantom")
  *
+ * This table is presented as one shape for both wire fields, but the
+ * evidence behind them is NOT symmetric: 0x0033's Interval Count is sampled
+ * continuously (every status tick), so all four rows are directly observed
+ * for it. 0x0037/38's Split/Interval Number is event-based, and a gate bug
+ * that session (fixed by Task 1, see `src/monitor/driver.ts`'s
+ * `emitIntervalComplete`) meant only the SESSION'S FINAL boundary — the
+ * phantom `2` — ever actually arrived and was recorded. The other three
+ * 0x0037/38 rows are an INFERENCE (the same forward-attribution rule 0x0033
+ * confirms, applied by assumption), not a second independently observed
+ * fact.
+ *
  * **No clamping, ever, and no upper bound.** The phantom index a real PM5
  * emits past the end of a program (our last interval's trailing rest) is
  * exactly the value this must produce for the driver to have something real
@@ -97,6 +108,15 @@ export function toMachineIndex(
  * The fourth row is the exact defect: the "phantom" machine index 2 lands
  * squarely on interval 1 (the program's last interval) once the offset is
  * applied — no clamping needed for this specific session's numbers.
+ *
+ * This function is applied to BOTH wire fields — `src/monitor/driver.ts`'s
+ * `maybeEmitFrame` calls it on 0x0033, `emitIntervalComplete` calls it on
+ * 0x0037/38 — but the table above was only fully OBSERVED for 0x0033
+ * (sampled every status tick). A gate bug that session (fixed by Task 1)
+ * meant only the table's final row — the phantom `2` — was ever actually
+ * recorded from 0x0037/38 itself; applying the same rule to the other three
+ * 0x0037/38 rows is an inference, not an independently confirmed fact (see
+ * `emitIntervalComplete`'s own comment for the full caveat).
  *
  * **Clamping** covers the rule's own boundary shape: a rest reported before
  * any interval has genuinely begun (`machineIndex` 0 while resting ->

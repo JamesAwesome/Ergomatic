@@ -258,7 +258,7 @@ function fitsInOneFrame(units: Uint8Array[]): boolean {
  * packing — an interval count and frame count neither document ever
  * exercises even once. This is the single fact the whole codec is LEAST
  * confident about; it is first on the laptop session's list
- * (interface-notes.md §17 item 7).
+ * (interface-notes.md §17 item 5).
  */
 function buildFrameGroups(units: Uint8Array[]): Uint8Array[][] {
   const groups: Uint8Array[][] = [];
@@ -313,7 +313,7 @@ function packGroup(units: Uint8Array[]): Uint8Array[] {
  * (e.g. 4 after a prior 25) has no documented mechanism to clear the
  * stale tail — intervals 5-25 may remain configured on the PM after this
  * function finishes sending only 4. Flagged for the laptop session
- * (interface-notes.md §17 item 8), alongside the multi-frame-retention
+ * (interface-notes.md §17 item 6), alongside the multi-frame-retention
  * assumption `buildFrameGroups` makes just above.
  *
  * UPDATE (plan Task 2, post-hardware): `src/monitor/driver.ts`'s `program()`

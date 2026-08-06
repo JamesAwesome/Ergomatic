@@ -818,7 +818,11 @@ yet scheduled.
 **Status:** Done (2026-08-05, PR #TBD)
 **Goal:** The PM5's protocol, a workout compiler, a runtime driver, and the
 localStorage-side session record all exist and are heavily tested — no
-screen changes, no live radio proof, both deliberately deferred.
+screen changes (deliberately deferred to 7B). Live radio proof was
+originally deferred too, but `phase-7a-fix` (below, 2026-08-05) ran the
+driver against a real PM5 before this phase's own PR merged — see
+"Hardware-verified — partially, not fully" further down for what that
+did and did not establish.
 **Design authority:** `docs/superpowers/specs/2026-08-05-phase-7a-monitor-domain-design.md`,
 plan: `docs/superpowers/plans/2026-08-05-phase-7a-monitor-domain.md`.
 **Supersedes:** the single-phase "PM5 over Bluetooth" sketch this section
@@ -893,10 +897,15 @@ diagnosis row, both run against the `pm5-lab` harness + bridge before this
 phase's own PR merged. The codec's bytes were right; the fake's MODEL of
 the machine was wrong in five ways no document states and no test could
 catch, all found and fixed in `phase-7a-fix` (own plan:
-`docs/superpowers/plans/2026-08-05-phase-7a-fix.md`): **D1** the PM accepts
-a program only when nothing is loaded, a rejection wipes what was loaded,
-and `terminate()` is NOT a reliable clear (the real clear command remains
-unfound); **D2** a `0x01` ack does not mean a program landed —
+`docs/superpowers/plans/2026-08-05-phase-7a-fix.md`): **D1** a REJECTED
+program WIPES whatever workout was already loaded — CONFIRMED destructive,
+observed twice — but the simple rule that first explained it ("the PM
+accepts a program only when nothing is loaded") is NOT equally confirmed:
+a later hardware session found `terminate()` ACCEPTED with a workout
+loaded, yet the FOLLOWING program was still rejected — twice. The state
+model behind accept/reject is still not understood; only the destructive
+half is, and the real clear command remains unfound; **D2** a `0x01` ack
+does not mean a program landed —
 `program()` now clears, sends, and verifies against the machine's own
 reported state instead of resolving on the ack alone; **D3** the PM
 attributes rests FORWARD into the interval they're heading toward — the
@@ -972,6 +981,16 @@ reconciled against 7A's shipped types before this phase starts.
 - [ ] Full behavior tested against the fake transport in CI; the laptop
       session above is this phase's live-hardware verification, never a CI
       gate
+- [ ] `src/monitor/driver.ts`'s `createPm5Driver` still hardcodes
+      `capabilities.deviceName: "PM5"` (a placeholder, honestly commented
+      in place) because its constructor signature (`createPm5Driver(t,
+      log)`) is never given a `DiscoveredMonitor`. The real source is
+      `DiscoveredMonitor.name` (`domain/monitor/types.ts`) — the advertised
+      name `Transport.scan()` already returns (e.g. "PM5 432331249"). This
+      phase's scan/connect wiring must thread that name into
+      `createPm5Driver` (e.g. an extra constructor argument) so
+      `capabilities.deviceName` reflects the actual connected device, not
+      the placeholder.
 
 **Exit:** On a real PM5: distance steps auto-advance, live pace shows
 against target, and "Connect PM5" degrades silently to manual on
@@ -1064,3 +1083,16 @@ next phase. One line per round, newest first.
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
 - **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Phase 6F's UI-fix round is done too, so nothing sits ahead of it in the queue any more — not started, but eligible to schedule now, not just eligible in principle.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
+- **Move programming limits onto `MonitorCapabilities`**: `domain/monitor/
+  program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
+  `MIN_DISTANCE_METERS = 100`, `MAX_REST_SECONDS = 595`,
+  `MAX_INTERVALS = 50`) and its six `CompileError` branches emit
+  user-facing copy naming "the PM5" directly. `compileProgram` is the only
+  producer of `WorkoutProgram`, and `MonitorCapabilities` has no channel
+  for programming limits today, so a second monitor would silently inherit
+  PM5 limits and PM5-branded rejection copy instead of its own. Disclosed
+  and accepted as correct for now at `program.ts:112` (single-monitor app,
+  cheap to fix later) — not a defect to fix today. Trigger: a second
+  monitor integration becomes real. Then: add a programming-limits channel
+  to `MonitorCapabilities`, move the four constants there per-monitor, and
+  template the six `CompileError` messages instead of hardcoding "PM5".

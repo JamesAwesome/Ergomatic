@@ -65,10 +65,15 @@ export interface MonitorFrame {
 export interface IntervalActual {
   // DEVIATION from design spec §2's verbatim `index: number` — see
   // `docs/design/DEVIATIONS.md`'s "Domain spec deviations (non-UI)" table.
-  // `null` means the machine's reported index (0x0037/38's Split/Interval
-  // Number) could not be explained by the armed program's length
-  // (`domain/monitor/pm5/intervalIndex.ts`'s `toProgramIndex`, Phase
-  // 7A-fix Task 3, D3) — logged by the driver as `"divergence"`.
+  // `null` comes from `domain/monitor/pm5/intervalIndex.ts`'s
+  // `toProgramIndex` (Phase 7A-fix Task 3, D3) and covers three distinct
+  // cases: no program armed yet, a state outside `rowing`/`resting`, or the
+  // machine's reported index (0x0037/38's Split/Interval Number) landing
+  // more than one step outside the program's valid range — the genuine D3
+  // divergence. Forward attribution itself is NOT a `null` case: the offset
+  // rule absorbs it by clamping. Only the third case is logged by the
+  // driver as `"divergence"` (gated on a program being armed) — the first
+  // is silent by construction, since there is no program to diverge FROM.
   // **A CONSUMER MUST NOT TREAT `null` AS INTERVAL 0** — it means "this
   // actual's own interval identity is unknown," not "the first interval."
   // 7C, which prefills a rower's workout log from `MonitorRun.actuals`
