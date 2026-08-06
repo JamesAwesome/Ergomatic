@@ -201,6 +201,13 @@ export function recordActual(
   run: MonitorRun,
   actual: IntervalActual,
 ): MonitorRun {
+  // OPEN OBLIGATION (fix round, A2): nothing in the codebase sets
+  // `completedAt` on a `MonitorRun` yet — `createMonitorRun` stamps it
+  // `null` and no writer ever moves it off that. **7B's completion writer
+  // (whatever turns a `workoutComplete`/`terminated` event into a
+  // finished record) is this guard's first real caller**; until it ships,
+  // the closed branch is exercised only by tests. The guard lands now, in
+  // the task that scopes runs, rather than being remembered later.
   if (run.completedAt !== null) return run;
   const next: MonitorRun = { ...run, actuals: [...run.actuals, actual] };
   saveMonitorRun(next);

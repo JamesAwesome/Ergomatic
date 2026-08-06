@@ -1511,6 +1511,76 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
     transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
     expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
   });
+
+  it("replacing an OPEN run says so in the trace: 'run-replaced' names what that run was holding, since it closes with no terminal event at all", async () => {
+    // Review L1. Every other lifecycle transition writes an entry
+    // (`armed`, `terminal`, `terminal-out-of-run`, `boundary-out-of-run`,
+    // `boundary-orphan`); a run REPLACED mid-flight was the one that
+    // vanished silently — no closing event by design (the contract on
+    // `MonitorEvent` states it) and, before this, nothing in the log
+    // either. The realistic hardware path never reaches this branch:
+    // `program()`'s leading prepare Terminate makes the PM report
+    // "terminated" first, closing run 1 with a real event.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    // Run 1 gets one real, numbered actual before it is replaced.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(0, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(0, 22));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(1);
+    // Run 1 is still open — no terminal state ever arrived.
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(0);
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    const replaced = log.entries().filter((e) => e.kind === "run-replaced");
+    expect(replaced).toHaveLength(1);
+    expect(replaced[0]!.detail).toContain("1-interval program");
+    expect(replaced[0]!.detail).toContain("accumulated 1 actual(s)");
+    // ...and still no terminal event for run 1: the log is the ONLY
+    // record that it ended, which is exactly why it has to exist.
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(0);
+    expect(events.filter((e) => e.kind === "terminated")).toHaveLength(0);
+    // The replacement entry precedes the new run's own `armed` entry —
+    // the trace reads in lifecycle order.
+    const armedSeqs = log
+      .entries()
+      .filter((e) => e.kind === "armed")
+      .map((e) => e.seq);
+    expect(replaced[0]!.seq).toBeGreaterThan(armedSeqs[0]!);
+    expect(replaced[0]!.seq).toBeLessThan(armedSeqs[1]!);
+  });
+
+  it("replacing an ALREADY-CLOSED run writes no 'run-replaced' entry — that run closed loudly, with its own terminal event", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    expect(log.entries().some((e) => e.kind === "run-replaced")).toBe(false);
+  });
 });
 
 describe("createPm5Driver: NAK during programming", () => {
