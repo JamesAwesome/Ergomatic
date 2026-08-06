@@ -42,6 +42,14 @@ export interface MonitorRun {
   workoutId: string | null;
   title: string;
   program: WorkoutProgram;
+  // A future 7C log screen prefilling from this array MUST handle
+  // `IntervalActual.index === null` (Phase 7A-fix Task 3, D3) — it means
+  // the machine's reported index couldn't be matched to any interval in
+  // `program`, NOT "this is interval 0". Never assume position in this
+  // array substitutes for `index`, either: a dropped/never-arrived boundary
+  // (see this driver's own `"seen.asSplit"` gating) can leave `actuals`
+  // shorter than `program.intervals`, so array position and program
+  // interval also do not correspond 1:1.
   actuals: IntervalActual[];
   deviceName: string;
   startedAt: string;

@@ -330,6 +330,19 @@ const UNKNOWN_WORKOUT_STATE_FALLBACK: MonitorFrame["state"] = "idle";
  * Current Pace byte reads (interface-notes.md §15 #5); a screen rendering
  * this as a pace string decides what "0:00" or an erratic idle value means,
  * not this function. Flagged for the laptop session (§17 item 11).
+ *
+ * Phase 7A-fix Task 3 (D3): `intervalIndex` below is still the RAW machine
+ * value (0x0033's Interval Count) — this module never learned about program
+ * indices and never will (it has no access to a `WorkoutProgram`, and
+ * `domain/monitor/**` importing one here would be the wrong layer for it
+ * anyway). `src/monitor/driver.ts`'s `maybeEmitFrame` OVERWRITES this field
+ * with `domain/monitor/pm5/intervalIndex.ts`'s `toProgramIndex` output
+ * before a `MonitorFrame` ever reaches a consumer. That means a
+ * `MonitorFrame` returned DIRECTLY by this function (as every test in this
+ * file's own suite exercises) still carries the machine's numbering in a
+ * field whose type (`domain/monitor/types.ts`) documents it as OUR
+ * numbering everywhere else — a trap for any future direct caller of this
+ * function that isn't `driver.ts`.
  */
 export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
   const state =
@@ -342,6 +355,7 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
     currentSplit: raw.currentSplit,
     spm: raw.spm,
     heartRateBpm: raw.heartRateBpm,
+    // RAW machine value — see this function's own doc comment above.
     intervalIndex: intervalActive ? raw.intervalCount : null,
     intervalRemaining: null,
     state,

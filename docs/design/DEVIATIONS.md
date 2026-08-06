@@ -119,3 +119,13 @@ by row 52. This table is the current-state authority throughout;
 `docs/design/README.md`'s own "Screens" section is a frozen handoff record,
 not re-verified against this table line by line — see that section's own
 header note.
+
+## Domain spec deviations (non-UI)
+
+This table is separate from the UI/UX handoff table above — it records
+divergences from `docs/superpowers/specs/2026-08-05-phase-7a-monitor-domain-design.md`'s
+own §2 type block instead, using the same three-column format.
+
+| Spec shows | Ergomatic builds | Why |
+|---|---|---|
+| §2's `IntervalActual.index: number` (verbatim) | `IntervalActual.index: number \| null` (`domain/monitor/types.ts`) — `null` when `domain/monitor/pm5/intervalIndex.ts`'s `toProgramIndex` cannot explain the machine's reported index against the armed program's length | Phase 7A-fix Task 3 review (D3): a hardware session showed the PM5 attributes a rest FORWARD, so a raw machine index can land on a value no program interval owns. The type was originally kept non-nullable and the unexplainable case fell back to a fabricated `0` — reviewed and reversed, because Phase 7C prefills a rower's workout log from these actuals, and a fabricated `0` produces a log entry that *looks like* a real "interval 0" and is wrong, which is worse than a `null` a consumer must explicitly handle. The two alternatives considered and rejected: dropping the actual from the array entirely throws away real duration/split/spm averages over what is only an index problem; inventing an `"uncertain"` sentinel value invents a whole new type for one field. Doing this before 7C is built is far cheaper than reconciling it after a log screen already assumes `index` is always a number. |

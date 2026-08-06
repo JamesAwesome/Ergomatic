@@ -66,7 +66,20 @@ import type { WorkoutProgram } from "../../../domain/monitor/program.js";
  *  `parse.ts`'s `toMonitorFrame` reads into `MonitorFrame.intervalIndex`
  *  while `rowing`/`resting` (interface-notes.md §14/§15 #1). `workoutState`
  *  is a raw `OBJ_WORKOUTSTATE_T` ordinal — use the `WORKOUTSTATE_*`
- *  constants `pm5/parse.ts` exports rather than a bare number. */
+ *  constants `pm5/parse.ts` exports rather than a bare number.
+ *
+ *  STALE (flagged, not fixed here — Phase 7A-fix Task 3 review, owned by
+ *  Task 4): this doc comment's own numbering model predates D3
+ *  (interface-notes.md §18 #3) — a real PM5 does NOT write the same index
+ *  into 0x0033 across a whole interval's rowing AND resting; it attributes
+ *  a REST forward, to the interval it's heading into. Every script in this
+ *  file's own test suite (and every driver test built on this fake) still
+ *  authors `intervalIndex` as if it were the ALREADY-normalized program
+ *  index at every tick, rowing or resting — the shape the hardware was
+ *  proven not to produce. Task 4 owns rebuilding this fake (and its
+ *  scripts) to emit the true forward-attributed wire values, so driver
+ *  tests built on it exercise `toProgramIndex`'s real inputs end-to-end,
+ *  not a pre-D3 mental model. */
 export interface FakeStatusEvent {
   atMs: number;
   kind: "status";
@@ -98,7 +111,15 @@ export interface FakeStatusEvent {
 export interface FakeBoundaryEvent {
   atMs: number;
   kind: "boundary";
-  actual: IntervalActual;
+  // `IntervalActual.index`'s type is `number | null` (Task 3 review,
+  // `docs/design/DEVIATIONS.md`) to carry the DRIVER's post-normalization
+  // "unexplainable" case — but this fake script authors a raw WIRE value
+  // (what 0x0037/38 would report before the driver ever sees it), which is
+  // always a real number; the wire has no `null` byte. Narrowed back to
+  // `number` here rather than reusing `IntervalActual` as-is, so a script
+  // typo can't silently author `null` and have it misread as "this is what
+  // the machine sent."
+  actual: Omit<IntervalActual, "index"> & { index: number };
   cumulativeElapsedSeconds: number;
   cumulativeDistanceMeters: number;
 }
