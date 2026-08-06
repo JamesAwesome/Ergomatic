@@ -1827,15 +1827,21 @@ follow from that mislabelling and are corrected below and in place.
 
 > **CORRECTION (2026-08-06, fix-2, §19.1): "Not one genuine rejection was
 > ever observed on this hardware" OVERSTATES the evidence.** Twelve status
-> bytes were RECORDED — captured as raw hex via `exportLog()` or
-> transcribed as a bare byte value in the session narrative: five `0x01`,
-> six `0x81`, one `0x09`. All twelve decode `(status & 0x30) === 0x00`, so
-> **none of the twelve RECORDED status bytes was a rejection.** But roughly
-> six further sends across both sessions were never captured at all —
-> their status bytes are unknown, which is a different fact from "not a
-> rejection". The honest claim is "none of the twelve recorded status
-> bytes was a rejection; ~6 sends' bytes were never captured", not a
-> blanket statement about every send this hardware ever answered. The full
+> bytes were RECORDED as raw hex, all of them via [S2]'s `exportLog()`
+> dumps (D1's `0x01`/`0x81`/`0x09`, D2's `0x81`/`0x01`/`0x81`, D3's
+> `0x01`/`0x81`/`0x01`/`0x81`, D4's `0x01`/`0x81` — five `0x01`, six
+> `0x81`, one `0x09`). All twelve decode `(status & 0x30) === 0x00`, so
+> **none of the twelve RECORDED status bytes was a rejection.** [S1]'s
+> narrative supplies additional known byte values for at least four more
+> sends (transcribed as bare values in prose, not captured frames) — those
+> are NOT part of the twelve; counting them separately is deliberate, not
+> an omission, since a narrative byte carries no checksum or echoed
+> command IDs to cross-check. Beyond both of these, roughly three further
+> sends' status bytes are unknown outright — not "not a rejection", simply
+> never captured. The honest claim is "none of [S2]'s twelve raw-captured
+> status bytes was a rejection; [S1] adds several more known-but-unverified
+> values; ~3 sends' bytes were never recorded at all", not a blanket
+> statement about every send this hardware ever answered. The full
 > per-send inventory, with sources, is the table immediately below.
 
 #### Re-derivation: every send, decoded under the bitfield rule (fix-2 Task 1, 2026-08-06)
@@ -1848,23 +1854,48 @@ genuinely partial hex (the accepted single-interval command block, not an
 ack), and several sends where not even the byte was written down ("3
 DISTANCE intervals → rejected" carries no byte at all). **[S2] has four
 `exportLog()` dumps** (raw frames, full hex) plus a long stretch of
-narrative-only console output between dumps 2 and 3 where **roughly six
-sends' bytes were never captured** — four `program-two-time` retries and
-one `program-no-rest` retry, all logged only as `ProgramRejectionError`
-text under the OLD (buggy) parse, with no byte recorded. One of the four
-`program-two-time` retries is the **only send this project ever made to a
-PM parked in `WorkoutLogged`** — it fires immediately after a
+narrative-only console output between dumps 2 and 3 where **three sends'
+bytes were never captured** — the `program-two-time` retries dispatched
+before [S2]'s LAST reconnect in that stretch, logged only as
+`ProgramRejectionError` text under the OLD (buggy) parse, with no byte
+recorded. One of those three is the **only send this project ever made to
+a PM parked in `WorkoutLogged`** — it fires immediately after a
 `workoutComplete` event, exactly where Appendix E parks a naturally-
-finished workout (§19.4). (The design spec's own text says "the three
-`program-two-time` sends between dumps 2 and 3" — the raw log shows FOUR,
-not three; recorded here as found, not silently reconciled to the spec's
-count. The WorkoutLogged identification is unaffected either way.)
+finished workout (§19.4).
+
+> **CORRECTION (2026-08-06, fix-2, §19.1) — a correction to this task's own
+> first pass, not a silent rewrite.** This subsection originally counted
+> FOUR `program-two-time` retries plus one `program-no-rest` retry (five
+> sends, "roughly six" with [S1] folded in) as never-captured, and flagged
+> the design spec's "three" figure as a discrepancy rather than
+> reconciling to it. That was wrong, caught on review:
+> `app/src/monitor/eventLog.ts`'s `createEventLog()` has no reset method
+> and `app/scripts/pm5-lab.ts` constructs exactly one, at module scope —
+> the only way its `seq` counter can restart at `0` (which every dump's
+> first entry does) is the whole module re-executing, i.e. a page reload.
+> Between Dump 2 and Dump 3 there are TWO reconnect cycles in the raw log.
+> The two sends this subsection called "retry #4" and the `program-no-rest`
+> retry are the ONLY dispatches after the LAST of those two reconnects —
+> and their write-byte signatures (`program-two-time` always encodes
+> `restSeconds: 30`; `program-no-rest` always encodes `restSeconds: 0`) and
+> their order match Dump 3's own two captured clear+program cycles exactly.
+> They are not lost sends; they ARE the "S2 D3" rows below, and are no
+> longer listed twice. The genuinely-uncaptured count between Dumps 2 and 3
+> is **three**, matching the design spec's original figure — the earlier
+> "not silently reconciled to the spec's count" framing had the direction
+> of the error backwards. The WorkoutLogged identification is unaffected
+> either way (it was, and remains, the third of the three).
 
 **Source key:** RAW = full frame captured via `exportLog()`, byte value
 verifiable independently of the driver's own labelling. NARR = a bare
 status-byte value written down in prose (session narrative or live console
 tail), not a captured frame. NARR-NB = narrative with **no byte at all** —
 the old parse's accept/reject label is all that survives, undecodable.
+**Dump-label note:** the table below uses `S2 D1`-`S2 D4` for [S2]'s four
+`exportLog()` dumps. This is unrelated to the document's long-standing
+`D1`-`D5` DEFECT labels used elsewhere (§19.2's heading, §19.8's "§18 #3,
+D3") — a bare "D3" in prose below always means the defect, never a dump;
+dumps are always written with the `S2` prefix.
 
 | Session | Send | Src | Raw status byte | Frame status (`&0x30`) | Slave state (`&0x0F`) | Toggle (`&0x80`) | What the send was |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -1888,14 +1919,11 @@ the old parse's accept/reject label is all that survives, undecodable.
 | S2 gap | `program-two-time` retry #2 (state=armed) | NARR-NB | unknown | unknown | unknown | unknown | same as above |
 | S2 gap | *(two `intervalComplete` events, `index: null`, then `workoutComplete` — a JustRow-shape row outside any driver-opened run)* | — | — | — | — | — | out-of-run boundaries, correctly `index: null` |
 | S2 gap | `program-two-time` retry #3 — sent IMMEDIATELY after `workoutComplete` | NARR-NB | unknown | unknown | unknown | unknown | **the only send this project ever made to a PM parked in `WorkoutLogged`**; old parse: `ProgramRejectionError`; no byte captured |
-| S2 gap | *(two reconnects, no sends)* | — | — | — | — | — | — |
-| S2 gap | `program-two-time` retry #4 (state=armed, post-reconnect) | NARR-NB | unknown | unknown | unknown | unknown | old parse: `ProgramRejectionError`; no byte captured |
-| S2 gap | *(state jumps `armed` → `terminated` with no rowing shown in the console tail)* | — | — | — | — | — | — |
-| S2 gap | `program-no-rest` retry #1 | NARR-NB | unknown | unknown | unknown | unknown | old parse: `ProgramRejectionError`; no byte captured; immediately followed by the `dump` command that produced Dump 3 |
-| S2 D3 | terminate | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"`; fresh ring since the last reconnect, accepted first try |
-| S2 D3 | SetProgram 2×TIME, **rest = 30s** (`… 02 00 1e 06 04 …`) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | **accepted**; not rowed — the ring's next entry is `state=terminated` with no intervening rowing/resting frame |
-| S2 D3 | terminate, 2nd cycle | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
-| S2 D3 | SetProgram 2×TIME, **rest = 0** (`program-no-rest`, `… 02 00 00 06 04 …`) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | **accepted** — **byte-identical ack to the rest-30 send above** (the echo carries command IDs, not parameter values, so this pair CANNOT by itself distinguish "replaced" from "was already the same") |
+| S2 gap | *(two reconnects, no sends — the SECOND is the last reconnect before Dump 3)* | — | — | — | — | — | — |
+| S2 D3 | `program-two-time` dispatch (state=armed, post-reconnect) → internal terminate | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"`; fresh ring since the last reconnect, accepted first try. **This dispatch's console line read `ProgramRejectionError` (old parse misreading the next ack, below) — it is NOT a separate uncaptured send; its bytes are these two D3 rows** |
+| S2 D3 | …→ internal SetProgram 2×TIME, **rest = 30s** (`… 02 00 1e 06 04 …`, matches `program-two-time`'s hardcoded rest=30 payload) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`, hence the console's `ProgramRejectionError`) | ready (1) | true | **accepted**; not rowed — the ring's next entry is `state=terminated` with no intervening rowing/resting frame (this is the same spontaneous termination, not a second, separate one) |
+| S2 D3 | `program-no-rest` dispatch → internal terminate, 2nd cycle | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
+| S2 D3 | …→ internal SetProgram 2×TIME, **rest = 0** (`… 02 00 00 06 04 …`, matches `program-no-rest`'s hardcoded rest=0 payload) | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`, hence the console's `ProgramRejectionError`, then `"dispatched: dump"` → Dump 3) | ready (1) | true | **accepted** — **byte-identical ack to the rest-30 send above** (the echo carries command IDs, not parameter values, so this pair CANNOT by itself distinguish "replaced" from "was already the same") |
 | S2 gap | *(the row: continuous `state=rowing` from `elapsed=0` through `elapsed≈60`, `intervalComplete` at `elapsed:60`, then the VERY NEXT frame resets `elapsed` to 0 with `state` still `"rowing"` — NO `"resting"` state anywhere in this stretch)* | — | — | — | — | — | **the discriminating evidence for Verdict (b)** — see below |
 | S2 D4 | terminate | RAW | `f1 01 76 01 13 65 f2` → `0x01` | ok | ready (1) | false | logged `"clear-sent"` |
 | S2 D4 | SetProgram 2×TIME, rest = 0 | RAW | `f1 81 76 0e … eb f2` → `0x81` | **ok** (old parse: `program-rejection`) | ready (1) | true | accepted; another terminate+re-program cycle |
