@@ -65,15 +65,23 @@ export interface MonitorFrame {
 export interface IntervalActual {
   // DEVIATION from design spec §2's verbatim `index: number` — see
   // `docs/design/DEVIATIONS.md`'s "Domain spec deviations (non-UI)" table.
-  // `null` comes from `domain/monitor/pm5/intervalIndex.ts`'s
-  // `toProgramIndex` (Phase 7A-fix Task 3, D3) and covers three distinct
-  // cases: no program armed yet, a state outside `rowing`/`resting`, or the
-  // machine's reported index (0x0037/38's Split/Interval Number) landing
-  // more than one step outside the program's valid range — the genuine D3
-  // divergence. Forward attribution itself is NOT a `null` case: the offset
-  // rule absorbs it by clamping. Only the third case is logged by the
-  // driver as `"divergence"` (gated on a program being armed) — the first
-  // is silent by construction, since there is no program to diverge FROM.
+  // `null` has two distinct sources here, logged under two distinct kinds:
+  //   - no run this driver opened is currently open
+  //     (`src/monitor/driver.ts`'s own out-of-run gate, Phase 7A-fix-2
+  //     Task 4) — logged as `"boundary-out-of-run"`, not `"divergence"`:
+  //     the boundary belongs to no program of ours, so there is nothing to
+  //     diverge FROM.
+  //   - a driver-opened run IS open, but
+  //     `domain/monitor/pm5/intervalIndex.ts`'s `toActualIndex` (Phase
+  //     7A-fix-2 Task 5 — 0x0037/38's own Split/Interval Number
+  //     normalization; NOT `toProgramIndex`, which stays 0x0033's, unchanged
+  //     since Task 3/D3) returned `null` — logged as `"divergence"`, forked
+  //     on cause: `state` outside `rowing`/`resting` when the boundary
+  //     arrived (most reachably `"terminated"`, CSAFE-DEF footnote 12), or
+  //     the machine's reported index landing more than one step outside the
+  //     program's valid range — the actuals-path analogue of `toProgramIndex`'s
+  //     own D3 divergence trigger. Forward attribution itself is NOT a
+  //     `null` case: the offset rule absorbs one step of it by clamping.
   // **A CONSUMER MUST NOT TREAT `null` AS INTERVAL 0** — it means "this
   // actual's own interval identity is unknown," not "the first interval."
   // 7C, which prefills a rower's workout log from `MonitorRun.actuals`

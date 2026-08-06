@@ -991,10 +991,14 @@ generates.
       driver that path instead of requiring a reconnect — the latch itself
       is fine, the conclusion drawn from it was not (§19.4).
 - [ ] **The no-rest interval rule.** `domain/monitor/pm5/intervalIndex.ts`
-      applies forward attribution only on the resting side; laptop session
+      applied forward attribution only on the resting side; laptop session
       2 read `0x0037` = 1 against `0x0033` = 0 at a work→work boundary with
-      `restSeconds: 0`. Make forward attribution unconditional and keep the
-      `index-unverified` trace entry meaningful (§19.8, §17 item 13).
+      `restSeconds: 0`. Done by Phase 7A-fix-2 Task 5: `toActualIndex`
+      applies the offset unconditionally for 0x0037/38 (`IntervalActual.index`);
+      0x0033's own `toProgramIndex` stays rest-keyed. The
+      `index-unverified` trace entry is RETIRED, not kept meaningful — its
+      question is answered, and its residual condition folds into the
+      existing `"divergence"` kind (§19.8, §17 item 13).
 - [ ] **`SetScreenState` is asynchronous.** Its ack means "queued", not
       "done" ([CSAFE-DEF] p.65). Terminate and the clear step both treat it
       as completion. Poll `CSAFE_PM_GET_SCREENSTATESTATUS` until

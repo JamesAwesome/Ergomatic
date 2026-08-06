@@ -3212,16 +3212,12 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     expect(divergence?.detail).toContain("1-interval program");
   });
 
-  // Task 5 (interface-notes.md §19.8): `toActualIndex`'s own contract is
-  // "clamped to [0, programLength - 1], unconditionally" (its own doc
-  // comment) — NOT `toProgramIndex`'s "one step out clamps, more than one
-  // returns null" shape. The two tests below used to assert `null` +
-  // divergence for a far-out-of-range actual (pre-Task-5, `toProgramIndex`
-  // was the shared function for BOTH paths); against Task 5's code they now
-  // clamp to the program's last interval instead, and log NO divergence for
-  // this reason — only `toActualIndex` returning `null` (state outside
-  // rowing/resting) still does, pinned in its own describe block below.
-  it("intervalComplete emission: an actual.index far past the armed program's length now CLAMPS (toActualIndex has no 'unexplainable' null, unlike toProgramIndex)", async () => {
+  // Re-review MUST-1: `toActualIndex` mirrors `toProgramIndex`'s own
+  // boundary shape — one step outside either end clamps, MORE than one step
+  // out is `null` + `divergence`, never a fabricated interval identity. The
+  // two tests below (originally Task 4's own) pin that for the actuals path
+  // exactly as `toProgramIndex`'s own D3 tests pin it for 0x0033.
+  it("intervalComplete emission: an actual.index far past the armed program's length normalizes to null (never a fabricated number) and logs divergence", async () => {
     const timeline: FakeTimelineEvent[] = [
       {
         atMs: 100,
@@ -3239,9 +3235,9 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
         kind: "boundary",
         actual: {
           // THREE_INTERVAL_PROGRAM has 3 intervals — 9 is far past the
-          // offset rule's own one-past-the-end shape. Under `toProgramIndex`
-          // (today's shared function, pre-Task-5) this was unexplainable;
-          // under `toActualIndex` it clamps to the last interval, 2.
+          // offset rule's own one-past-the-end shape (candidate 8, two
+          // steps past the last valid index 2) — unexplainable by
+          // `toActualIndex`, same as it would be for `toProgramIndex`.
           index: 9,
           elapsedSeconds: 60,
           distanceMeters: 200,
@@ -3264,20 +3260,27 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
-      actual: { index: 2 },
+      // Widened type (Task 3 review, `docs/design/DEVIATIONS.md`) — the raw
+      // machine value (9) is never assigned here, and neither is a
+      // fabricated stand-in number; `null` is the honest signal, with the
+      // raw value surviving in the "divergence" entry asserted below.
+      actual: { index: null },
     });
-    expect(
-      log
-        .entries()
-        .some(
-          (e) =>
-            e.kind === "divergence" &&
-            e.detail.includes("has no corresponding interval"),
-        ),
-    ).toBe(false);
+    const divergence = log
+      .entries()
+      .find(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("has no corresponding interval"),
+      );
+    expect(divergence).toBeDefined();
+    expect(divergence?.detail).toContain("actual.index=9");
+    expect(divergence?.detail).toContain("0x0037/38");
+    expect(divergence?.detail).toContain("state=rowing");
+    expect(divergence?.detail).toContain("3-interval program");
   });
 
-  it("intervalComplete emission: the same clamp applies while resting, not only while rowing", async () => {
+  it("intervalComplete emission: the same unexplainable check also applies while resting, not only while rowing", async () => {
     const timeline: FakeTimelineEvent[] = [
       {
         atMs: 100,
@@ -3296,9 +3299,7 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
         actual: {
           // Authored as OUR index; the fake puts 10 on the wire (the rest's
           // own forward attribution). Far past THREE_INTERVAL_PROGRAM's 3
-          // intervals either way, which is the point — clamps to 2 either
-          // way too, since `toActualIndex` does not distinguish rowing from
-          // resting at all.
+          // intervals either way, which is the point.
           index: 9,
           elapsedSeconds: 60,
           distanceMeters: 200,
@@ -3321,17 +3322,17 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
-      actual: { index: 2 },
+      actual: { index: null },
     });
-    expect(
-      log
-        .entries()
-        .some(
-          (e) =>
-            e.kind === "divergence" &&
-            e.detail.includes("has no corresponding interval"),
-        ),
-    ).toBe(false);
+    const divergence = log
+      .entries()
+      .find(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("has no corresponding interval"),
+      );
+    expect(divergence).toBeDefined();
+    expect(divergence?.detail).toContain("state=resting");
   });
 });
 
