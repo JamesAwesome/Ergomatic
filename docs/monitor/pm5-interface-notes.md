@@ -636,15 +636,31 @@ for all eleven, not just the majority it covered before this fix. Listed
 here together for the laptop-vs-real-PM5 session (alongside the three
 disputed checksums in §6):
 
-1. **Interval numbering base.** `CSAFE_PM_GET_WORKOUTINTERVALCOUNT`'s
-   READ-side value (0x0033 offset 3, "Interval Count") and 0x0037/0x0038's
-   "Split/Interval Number" are never shown with a worked example's decoded
-   value in either document (unlike the WRITE-side index in §12, confirmed
-   0-based). `parse.ts` passes the raw byte through unadjusted into
-   `MonitorFrame.intervalIndex`/`IntervalActual.index` — if the real PM
-   reports a 1-based count here, every consumer downstream is off by one
-   until the laptop session confirms it. **These are also two SEPARATE wire
-   fields, not one value read twice**: `MonitorFrame.intervalIndex` comes
+1. **Interval numbering base — ANSWERED by laptop session 1, see §18 #3.**
+   `CSAFE_PM_GET_WORKOUTINTERVALCOUNT`'s READ-side value (0x0033 offset 3,
+   "Interval Count") and 0x0037/0x0038's "Split/Interval Number" are never
+   shown with a worked example's decoded value in either document (unlike
+   the WRITE-side index in §12, confirmed 0-based). **Correction (Task 5
+   close-out): the sentence that used to stand here — "`parse.ts` passes
+   the raw byte through unadjusted into `MonitorFrame.intervalIndex`/
+   `IntervalActual.index`" — is now only half true and was left stale past
+   the fix that made it so.** `pm5/parse.ts` itself still does exactly
+   that: `toMonitorFrame`/`toIntervalActual` decode and pass the raw
+   0x0033/0x0037/0x0038 byte through with no adjustment, by design (§16's
+   layering rule keeps `pm5/` a byte-faithful codec, not a place to fold in
+   business numbering). But since Phase 7A-fix Task 3
+   (`domain/monitor/pm5/intervalIndex.ts`'s `toProgramIndex`, called from
+   `src/monitor/driver.ts`), that raw value is normalized into OUR 0-based
+   per-work-interval numbering **before** it reaches `MonitorFrame`/
+   `IntervalActual` as any consumer (a `frame`/`intervalComplete` event
+   listener, 7C's future log prefill) ever sees them — the raw machine
+   value survives only in the event log, per the design spec's own "Index
+   translation" decision. So: the real PM does report a 1-based-feeling,
+   forward-attributed count exactly as this item worried it might (§18 #3
+   confirms it, and worse — see below), but "every consumer downstream is
+   off by one" is no longer true of this codebase; it is true of `parse.ts`
+   in isolation and false of the seam anything outside `pm5/` reads. **These
+   are also two SEPARATE wire fields, not one value read twice**: `MonitorFrame.intervalIndex` comes
    from 0x0033's "Interval Count" (a live-status characteristic, sampled at
    the general/additional-status rate, §4); `IntervalActual.index` comes
    from 0x0037/0x0038's "Split/Interval Number" (an interval-boundary
@@ -654,8 +670,12 @@ disputed checksums in §6):
    `actual.index` is matching two independently-incrementing fields by
    value, not reading one field from two places; a driver-level skew
    between them (a dropped notification, a boundary race) would surface as
-   a real but silent mismatch, not a crash.
-2. **0x0038's Work/Rest Heartrate sentinel.** Only 0x0032's Heartrate field
+   a real but silent mismatch, not a crash. **Residual, still open:** the
+   forward-attribution rule §18 #3 confirms is a resting-side rule only —
+   what a work→work boundary with NO intervening rest reports is still
+   unconfirmed (§17 item 13); do not read this item as fully closed.
+2. **0x0038's Work/Rest Heartrate sentinel — ANSWERED (D5), excluded from
+   the numbered runsheet; see the paragraph below.** Only 0x0032's Heartrate field
    is explicitly documented as "255=invalid" (§10). `parse.ts` applies the
    same sentinel to 0x0038's two heartrate bytes by analogy (same firmware,
    same byte width, same physical belt-absent case) — not independently
@@ -711,7 +731,11 @@ disputed checksums in §6):
    erratic pace value means while idle, and that convention is not
    established by either document.
 6. **Multi-frame programming retention is UNDOCUMENTED — this codec's
-   single largest untested assumption.** Every worked programming example
+   single largest untested assumption. STILL OPEN — survives as §17 item
+   5.** Laptop session 1 confirmed multi-INTERVAL programming works (one
+   CSAFE frame, two intervals, rowed to completion) but never tested the
+   genuinely multi-FRAME case this item is actually about — see §18 #5's
+   "PARTIALLY answered" verdict. Every worked programming example
    in the CSAFE doc (§6, §12) is a SINGLE CSAFE frame; nothing in either
    document describes what the PM does with interval configuration state
    ACROSS multiple separately-acked frames. `buildProgrammingSequence`
@@ -727,7 +751,19 @@ disputed checksums in §6):
    configure only its LAST frame's intervals. This is the single fact this
    task is least confident about; it is first on the laptop session's list.
 7. **No wipe/reset command exists in the documented proprietary programming
-   flow** (§11-13 — `CSAFE_RESET_CMD`/`CSAFE_GOIDLE_CMD` are PUBLIC CSAFE
+   flow — STILL OPEN, and now sharper than a documentation gap.** Laptop
+   session 1 established the RULE (D1: the PM accepts a program only when
+   nothing is loaded; a rejection wipes what was loaded), and a follow-up
+   row (phase-7a-fix Task 1) established that `terminate()` is **not** a
+   working clear — it was accepted with a completed workout present, yet
+   the program sent right after was still rejected, twice. **The real clear
+   command, if a dedicated one even exists, remains UNFOUND — this is the
+   single top open question for the next hardware row** (§18 #6's "D1
+   UPDATE"). Plan Task 2's clear→send→verify design does not depend on
+   answering this (it sends `terminate()` as a best-effort clear, ignores
+   its rejection, and verifies the actual outcome either way), so the
+   product code is not blocked — but the underlying mechanism is still not
+   understood. (§11-13 — `CSAFE_RESET_CMD`/`CSAFE_GOIDLE_CMD` are PUBLIC CSAFE
    only, and the doc explicitly says public and proprietary modes "should
    not be mixed"). Re-programming a workout with FEWER intervals than the
    one currently loaded (e.g. 4 intervals after a previous 25-interval
@@ -740,7 +776,11 @@ WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
    row. Flagged for the laptop session alongside #6 — both are the
    codec's assumptions about MULTI-frame/MULTI-program PM behavior that no
    single-frame, single-program worked example can confirm.
-8. **The driver's `intervalRemaining` checkpoint assumes 0x0033's "Last
+8. **ANSWERED — CONFIRMED, see §18 #7** (58.92s remaining observed 1.08s
+   into a 60s interval, re-rooted at 60.0 on the next interval; no further
+   hardware testing needed for the cadence assumption itself). The
+   lockstep half shared with item #1 above stays flagged there. The
+   driver's `intervalRemaining` checkpoint assumes 0x0033's "Last
    Split Time"/"Last Split Distance" (§10, offset 14-19) report the
    SESSION-cumulative point at which the CURRENT interval began (i.e.,
    where the previous interval/split ended) continuously, on every
@@ -763,7 +803,10 @@ WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
    agreement; the driver LOGS a disagreement when one is observed (never
    corrects or picks a "winner" between the two). Both flagged for the
    laptop session alongside #1.
-9. **Trailing-rest-on-final-interval acceptance is untested against any
+9. **ANSWERED — CONFIRMED accepted, see §18 #8** (the 2×(work/rest)
+   session's final interval's own rest counted down fully before
+   `WorkoutEnd`/`workoutComplete` fired, no early termination; no further
+   hardware testing needed). Trailing-rest-on-final-interval acceptance is untested against any
    worked example.** `compileProgram` (`domain/monitor/program.ts`) folds a
    rest phase's seconds into the PRECEDING interval's `restSeconds` with no
    special case for whether that interval is the workout's last one — a
@@ -860,14 +903,46 @@ hits despite the driver's own MED-1 correctness argument resting on it.
 ## 17. The laptop session runsheet
 
 Phase 7A's own tasks resolved nothing by running actual bytes against a
-real PM5 — every value above is a documented-text or reviewed-code-behavior
-inference, each one explicitly flagged as provisional. This section gathers
-every item already flagged for "the laptop session" across §6, §14, §15,
-and §16, so James's laptop-vs-real-PM5 session has a single, RUNNABLE
-runsheet instead of a scavenger hunt through the sections above. Per the
-Task 5 brief and the plan's own Notes section, this session is a
-**James-device event that happens AFTER Phase 7A merges** — never a CI
-gate, and not required for this task's own gates to pass.
+real PM5 — every value above was, at the time this section was first
+written, a documented-text or reviewed-code-behavior inference, each one
+explicitly flagged as provisional. This section gathers every item already
+flagged for "the laptop session" across §6, §14, §15, and §16, so a
+laptop-vs-real-PM5 session has a single, RUNNABLE runsheet instead of a
+scavenger hunt through the sections above.
+
+**Update (Task 5 close-out, phase-7a-fix, 2026-08-05): laptop session 1 has
+now happened.** §18 holds its results. This runsheet is updated in place —
+each item below now carries its own status — rather than pruned, because a
+fixed, numbered runsheet that shrinks after every session is harder to
+audit than one that shows its full history. Two-tier summary:
+
+- **ANSWERED, no further hardware needed:** the discovery filter's real
+  shape; the XOR checksum rule (the PM's own ack checksums satisfy it,
+  making the doc's three printed values errata as encoded); 0-based
+  write-side interval indices; the GATT status parse (distance/elapsed/
+  pace/spm cross-check); `intervalRemaining`'s checkpoint computation; the
+  terminal-state latch (no un-finishing, confirmed in the field); and
+  multi-interval programming working end to end from a clean state. See
+  "Answered by laptop session 1" just below for the full list with
+  citations.
+- **STILL OPEN — must survive as executable runsheet items:** the real
+  clear/wipe command remains UNFOUND (item 6 — `terminate()` was tried and
+  is NOT it: accepted once with a completed workout present, yet the
+  program sent right after was still rejected, twice); whether an accepted
+  program's structure is readable back from 0x0031 rather than trusted on
+  the bare `armed` ack (item 12); the no-rest work→work boundary index
+  (item 13); and distance-kind intervals plus a genuinely multi-FRAME
+  program (Sea Smoke's 25 intervals / 7 frames), neither of which has ever
+  been tried from a known-empty machine (item 5 — every distance/25-
+  interval attempt so far ran immediately after a successful program,
+  i.e. against a LOADED monitor, which D1 says gets rejected regardless of
+  the bytes sent). "The pending verification row" below is this task's
+  prepared, ready-to-run sequence for the next hardware session; it is
+  NOT run yet — its Observed fields are deliberately blank.
+
+This session remains a **James-device event**, run with a controller
+driving the bridge (`app/scripts/pm5-bridge.mjs`) alongside him — never a
+CI gate, and not required for any task's own gates to pass.
 
 **Final-review M-5 (this wave's fix):** before this fix, this section was
 an index, not a runsheet — every item was a bare cross-reference with no
@@ -877,6 +952,36 @@ the repo, so running it required writing code first. All four gaps are
 fixed below: setup steps, an expected/observed pair per item, §18 as the
 results destination, and `app/scripts/pm5-lab.ts`/`.html` as the entry
 point that actually exists now.
+
+### Answered by laptop session 1 (2026-08-05) — no further hardware needed
+
+Each of these closes the corresponding numbered item below (status noted
+inline there too); listed together here so the "what's answered" question
+has one place with a one-line answer per fact, not a hunt through §18's
+narrative:
+
+1. The discovery filter's real shape — 0x0030 (the rowing service) is not
+   advertised and leaves Chrome's picker empty forever; device-info service
+   OR name-prefix `"PM5"` surfaces the real device (§18, "Also fixed live
+   this session").
+2. The XOR checksum rule is the real one — the PM's own ack checksums
+   satisfy it as this codec computes it; the doc's three printed values are
+   errata, as encoded (§18 #1, item 1 below).
+3. Write-side interval indices are 0-based, confirmed on the wire
+   (`18 01 00/01/02/03`) (§18 #1, item 1 below).
+4. The GATT status parse is right — distance/elapsed/pace/spm all
+   cross-check against each other (§18 #1, item 1 below).
+5. `intervalRemaining`'s checkpoint computation is correct as rebuilt onto
+   0x0033's Last Split fields (§18 #7, item 7 below).
+6. The terminal-state latch holds in the field: `finished` +
+   `workoutComplete`, no un-finishing, across a full multi-interval session
+   (§18, "VALIDATED ON HARDWARE" / item 8's trailing-rest confirmation
+   below).
+7. Multi-INTERVAL programming works end to end from a clean/idle state
+   (terminate → 2 time intervals → accepted → rowed to completion) — this
+   is distinct from the still-open multi-FRAME question (item 5 below),
+   which needs enough intervals to force more than one CSAFE frame (§18
+   #5/#6, D1's rule).
 
 ### Not hardware-resolvable (excluded from the numbered runsheet)
 
@@ -931,7 +1036,8 @@ every flagged item either numbered here or explicitly excused — holds.)
 
 ### The runsheet
 
-1. **The three confirmed checksum errata** (§6, "3 errata" table).
+1. **STATUS: ANSWERED (§18 #1).** The three confirmed checksum errata
+   (§6, "3 errata" table).
    Expected (per the XOR rule, which the codec trusts): Fixed Time Interval
    2:00/:30 rest checksums `0xB0` (doc prints `0x0A`); Variable Interval
    v500m/1:00r×4 (the load-bearing structural example) checksums `0x09`
@@ -939,7 +1045,11 @@ every flagged item either numbered here or explicitly excused — holds.)
    `0x62`). Observed: does the PM5 accept frames built with the computed
    values, or does it reject them / behave as if it wanted the doc's
    printed ones?
-2. **COUNTDOWNPAUSE → `armed`** (§14, row 2). Expected: `MonitorFrame.state`
+2. **STATUS: OPEN — not isolated by session 1** (§18 #2: the state word
+   was tracked `armed → rowing → resting → rowing → resting → finished`
+   across a full session with no un-finishing, but no entry pinpoints a
+   `COUNTDOWNPAUSE` ordinal specifically). COUNTDOWNPAUSE → `armed`
+   (§14, row 2). Expected: `MonitorFrame.state`
    reads `"armed"` at some point between connecting and the first stroke —
    this mapping is the least-certain single row in the whole state table,
    absent from every Appendix E transition diagram, positioned by enum
@@ -947,21 +1057,47 @@ every flagged item either numbered here or explicitly excused — holds.)
    `exportLog()`'s "frame" entries between `armed` and the first stroke —
    does a `COUNTDOWNPAUSE` state ever appear, and does the app's `"armed"`
    reading look right through it?
-3. **Interval numbering base** (§15 #1). Expected: 0x0033's "Interval
+3. **STATUS: ANSWERED, and it's worse than "which base" (§18 #3).** The
+   PM attributes rests FORWARD into the interval they're heading toward,
+   structurally different from this codec's 0-based-per-work-interval
+   numbering, not merely offset — `domain/monitor/pm5/intervalIndex.ts`'s
+   `toProgramIndex`/`toMachineIndex` now do this translation (Task 3/4),
+   confirmed no longer open. **Residual, still open:** the RESTING half of
+   the rule is confirmed; the no-rest work→work boundary is not — see item
+   13 below, which carries the only unresolved piece of this item forward.
+   Interval numbering base (§15 #1). Expected: 0x0033's "Interval
    Count" and 0x0037/0x0038's "Split/Interval Number" are 0-based, like the
    CONFIRMED 0-based write-side index (§12). Observed: program the test
    workout (one interval) and watch the `"frame"`/`"interval-complete"`
    log entries' `intervalIndex`/`actual.index` values — do they start at 0
    or 1? Do the two ever disagree (watch for a `"divergence"` log entry —
    §15 #1's own lockstep question)?
-4. **`SET_TARGETPACETIME` for a no-target interval: zero vs omit** (§15
+4. **STATUS: OPEN — not tested session 1** (§18 #4: the harness's
+   `TEST_PROGRAM` used a real target throughout). `SET_TARGETPACETIME` for a no-target interval: zero vs omit** (§15
    #3). Expected: sending `0x00000000` (this codec's current behavior)
    means "no enforced target." Observed: program a workout with no split
    ref (the harness's `TEST_PROGRAM` has `targetSplit: 120`, a real target
    — for this item specifically, edit the harness's constant to `null` and
    reload) and check whether the PM5 shows/enforces an impossible 0:00/500m
    pace instead of "no target."
-5. **Multi-frame programming retention** (§15 #6, `pm5/commands.ts`'s
+5. **STATUS: OPEN — PARTIALLY answered, genuine multi-frame still
+   untested from a clean state (§18 #5).** Multi-INTERVAL programming (one
+   CSAFE frame carrying 2 intervals) is CONFIRMED working end to end,
+   rowed to completion. The genuinely multi-FRAME case this item is
+   actually about — several ack-gated frames for one program, e.g. Sea
+   Smoke's 25 intervals / 7 frames — was attempted this session but only
+   ever immediately after a successful single-interval program, i.e.
+   against a LOADED monitor; D1 (item 6 below) says that gets rejected
+   regardless of the bytes sent, so those attempts are confounded and
+   prove nothing about multi-frame retention specifically. **Distance-kind
+   intervals carry the same confound**: every DISTANCE program sent this
+   session (3-interval, 25-interval) also ran against an already-loaded
+   monitor. Neither "does a real multi-frame program retain all its
+   frames" nor "does the DISTANCE kind program correctly" has been tested
+   from a known-empty machine — both fold into "The pending verification
+   row" below as follow-up work, since Task 2's clear→send→verify fix now
+   makes starting from a genuinely clean state routine rather than
+   something that has to be arranged by hand. Multi-frame programming retention (§15 #6, `pm5/commands.ts`'s
    `buildFrameGroups` comment). Expected: the PM accumulates interval
    configuration across every ack-gated frame it takes to program a
    workout — every worked example in both source documents is
@@ -972,14 +1108,28 @@ every flagged item either numbered here or explicitly excused — holds.)
    `WorkoutProgram` — Sea Smoke's 25 intervals need 7) and confirm every
    interval the PM ends up armed with matches what was sent, not only the
    last frame's.
-6. **No documented wipe/reset for a shorter re-program** (§15 #7,
+6. **STATUS: OPEN — ANSWERED then WEAKENED; the single top open question
+   for the next hardware row (§18 #6).** The RULE is confirmed (D1: the PM
+   accepts a program only when nothing is loaded; a rejected program WIPES
+   what was loaded). But the follow-up row (phase-7a-fix Task 1) found
+   `terminate()` is NOT a working clear: it was accepted once with a
+   completed workout present, yet the program sent right after was still
+   rejected — twice. **The real clear command, if one exists, remains
+   UNFOUND.** This does not block the shipped code (Task 2's clear→send→
+   verify sends `terminate()` as a best-effort clear, ignores its
+   rejection, and verifies the real outcome either way — it never assumed
+   a working clear), but the underlying accept/reject state model is still
+   not understood, and "The pending verification row" below is built
+   around confirming the fix works DESPITE that gap, not around closing
+   the gap itself. No documented wipe/reset for a shorter re-program
+   (§15 #7,
    `buildProgrammingSequence`'s comment). Expected: unknown — no command
    exists in the documented flow to clear a prior program. Observed:
    program a workout with N intervals, then immediately program a SECOND,
    shorter one (fewer intervals) without power-cycling the PM, and check
    whether the PM plays only the second program or a mix carrying a stale
    tail from the first.
-7. **`intervalRemaining`'s checkpoint cadence** (§15 #8,
+7. **STATUS: ANSWERED — CONFIRMED (§18 #7).** `intervalRemaining`'s checkpoint cadence (§15 #8,
    `computeRemainingForFrame`'s comment). Expected: 0x0033's "Last Split
    Time"/"Last Split Distance" hold steady at the current interval's start
    point for its whole duration, updating only at the next boundary.
@@ -987,7 +1137,7 @@ every flagged item either numbered here or explicitly excused — holds.)
    own `intervalRemaining` counts down smoothly and hits exactly 0 at each
    boundary, or jumps/glitches (a bad cadence assumption would show as a
    sudden jump partway through an interval, not a boundary).
-8. **Trailing-rest-on-final-interval acceptance** (§15 #9/program.ts's rest-
+8. **STATUS: ANSWERED — CONFIRMED accepted (§18 #8).** Trailing-rest-on-final-interval acceptance (§15 #9/program.ts's rest-
    folding comment). Expected: the PM cleanly finishes counting down a
    nonzero rest programmed onto the workout's LAST interval before
    `WorkoutEnd` — untested by any worked example, practically significant
@@ -996,13 +1146,16 @@ every flagged item either numbered here or explicitly excused — holds.)
    `TEST_PROGRAM.intervals[0].restSeconds` to something nonzero, since it
    already is the only/last interval) and watch whether `WorkoutEnd`/
    `workoutComplete` fires only after the rest counts down, or early.
-9. **`currentSplit`'s idle/armed value** (§15 #5, `toMonitorFrame`'s
+9. **STATUS: OPEN — not recorded session 1** (§18 #9). `currentSplit`'s idle/armed value (§15 #5, `toMonitorFrame`'s
    comment). Expected: unknown — neither document states what an armed or
    resting erg's Current Pace byte reads. Observed: while armed (before the
    first stroke) and while resting between intervals, watch `"frame"` log
    entries' `currentSplit` value — is it `0`, the last real pace, or
    something else?
-10. **The non-`0x76` response `topOpcode` fallback** (§16's own
+10. **STATUS: ANSWERED (as expected) — nothing to report (§18 #10).**
+    No ack of the unconfirmed shape appeared in any trace; stays on the
+    runsheet unchanged in case a future session's `exportLog()` ever shows
+    one. The non-`0x76` response `topOpcode` fallback (§16's own
     "Coalescing (resolved)" paragraph's neighbor — the unconfirmed-inference
     bullet in §16's ack-echo format list). Expected: `pm5/response.ts`
     never actually reaches this path in normal use (`pm5/commands.ts` never
@@ -1011,7 +1164,12 @@ every flagged item either numbered here or explicitly excused — holds.)
     that if `exportLog()` ever shows an ack whose bytes don't match the
     `0x76`-wrapper shape (an `"ack"` entry that looks unlike every other
     one), that's this path firing and worth a closer look.
-11. **`writeValueWithoutResponse` for multi-chunk CSAFE frames**
+11. **STATUS: OPEN — no symptom observed, but INCONCLUSIVE (§18 #11).**
+    No dropped-chunk symptom appeared across any multi-chunk write this
+    session, but no single write was large enough to be a decisive stress
+    case — recorded as answered-so-far, not proven, and left on the
+    runsheet rather than promoted to the "no further hardware needed" list
+    above. `writeValueWithoutResponse` for multi-chunk CSAFE frames**
     (`webBluetooth.ts`'s `write()` comment, final-review L-7). Expected: a
     multi-chunk frame (any programming write spanning more than one 20-byte
     BLE write) arrives intact even though each chunk is written with no
@@ -1020,7 +1178,9 @@ every flagged item either numbered here or explicitly excused — holds.)
     truncated frame on the PM5's response path) or a `ProgramRejectionError`
     with reason `"nak"` that wouldn't otherwise be expected — either would
     suggest a dropped chunk under this write mode.
-12. **Whether an accepted program's structure is readable back** (plan
+12. **STATUS: OPEN — not yet tested; folded into "The pending
+    verification row" below as an extra observation on the same row
+    (§18 #12).** Whether an accepted program's structure is readable back (plan
     7A-fix Task 2 review, F2 — `src/monitor/driver.ts`'s `verifyArmed`).
     `program()`'s verification today checks only `state === "armed"`: no
     laptop session has yet read 0x0031's `workoutType`/`workoutDurationRaw`/
@@ -1038,7 +1198,13 @@ every flagged item either numbered here or explicitly excused — holds.)
     length); if no (or if the PM doesn't refresh these fields until
     rowing starts), the current state-only check stays the strongest
     honest option.
-13. **0x0037/38's index at a work→work boundary with NO intervening rest**
+13. **STATUS: OPEN — did not exist during session 1 (added afterward by
+    phase-7a-fix Task 3's review), so no data yet.** Needs a
+    `restSeconds: 0` interior interval, which the pending verification
+    row's `program-two-time` shape does NOT have (both its intervals carry
+    `restSeconds: 30`) — this item needs its own follow-up row with a
+    different harness program, not a slot inside the pending row below.
+    0x0037/38's index at a work→work boundary with NO intervening rest**
     (plan 7A-fix Task 3 review, critical finding — `domain/monitor/pm5/
     intervalIndex.ts`'s `toProgramIndex`). §18 #3's confirmed forward-
     attribution rule ("a rest reports the interval it is heading into") only
@@ -1064,6 +1230,84 @@ every flagged item either numbered here or explicitly excused — holds.)
     That reading settles which rule (if either) actually governs a
     work→work boundary.
 
+### The pending verification row (prepared, NOT yet run)
+
+Task 5 close-out (phase-7a-fix) prepared this exact sequence so the next
+hardware session can verify Tasks 2-4's fixes (clear→send→verify, the
+index normalization, the boundary-halves fix, the HR sentinel) cleanly,
+without inventing a new harness action — every command below already
+exists in `app/scripts/pm5-lab.ts`'s `REMOTE` map. **This is a JAMES +
+controller row, per the plan's own Notes section: James operates the erg
+and the one action that needs a real user gesture (Connect); the
+controller drives everything else through the bridge.** The Observed
+column is deliberately blank — nobody has run this yet, and no result
+below should be read as anything but a template until it is.
+
+**Setup**, in addition to the "Setup" steps above: from `app/`, run
+`node scripts/pm5-bridge.mjs` in a second terminal (defaults to port 5178,
+logs to `./pm5-session.log`); the lab page polls it automatically once
+loaded (no extra step on James's side beyond having the page open).
+
+**Sequence** (the controller enqueues each command with
+`curl -s localhost:5178/command -d <command>` and waits for the
+corresponding `out()` line in `pm5-session.log`/the page before sending
+the next one; James rows when a command says to):
+
+1. James: reload `http://localhost:5173/scripts/pm5-lab.html`, click
+   **Scan & connect**, pick the PM5.
+2. Controller: `curl -s localhost:5178/command -d terminate` — clears
+   whatever state the monitor is in (a `0x81` here is expected/fine per
+   D1 if nothing was loaded; the point is starting from a KNOWN state,
+   not a successful clear specifically).
+3. Controller: `curl -s localhost:5178/command -d program-two-time` —
+   sends `TWO_TIME_PROGRAM` (two 60s/target-120/rest-30 intervals,
+   `app/scripts/pm5-lab.ts`'s own constant), which resolves only once
+   `verifyArmed` observes `state === "armed"` on the machine (Task 2's
+   fix) — a hang here (past `VERIFY_TICKS`, ~10s) is itself a finding, not
+   something to route around.
+4. James: row both intervals to completion (through the rest between
+   them, to `WorkoutEnd`).
+5. Controller: `curl -s localhost:5178/command -d dump` — prints
+   `exportLog()`'s full trace for the record.
+
+**Expected, checked against the dump — a disagreement with any of these
+is a FINDING TO RECORD, not a failure to explain away or a reason to
+re-run until it looks right:**
+
+- **Programming verified from machine state, not the bare ack.** The
+  `"programmed"` log line (the ack) and the eventual `program()` resolution
+  should be visibly separate events in the trace (Task 2's clear→send→
+  verify), not the same tick — confirms the fix is actually exercised on
+  hardware, not just in the fake.
+- **Item 12, folded in as a free extra observation (no separate command
+  needed):** once armed, do the `"frame"` entries' `workoutType`/
+  `workoutDurationRaw`/`workoutDurationType` fields read back
+  `WORKOUTTYPE_VARIABLE_INTERVAL` (`0x08`) and the first interval's
+  programmed 60s? If yes, `verifyArmed` has a real structural check to
+  upgrade to; if no, the state-only check stays the honest option (§17
+  item 12 above).
+- **TWO `intervalComplete` events, carrying OUR indices 0 and 1** — not
+  the one mixed-boundary event D4 produced before the fix. This is the
+  direct hardware retest of plan Task 1's diagnosis and Task 4's fix
+  (`boundaryHalves`, waiting for both 0x0037 and 0x0038 of the SAME
+  boundary before emitting).
+- **HR reads `null`, not `0`.** With no belt paired, `avgHeartRateBpm`
+  should now come through as `null` on both events (parse.ts's D5 fix
+  mapping both `0` and `255` to `null`) — the previously-observed raw `0`
+  should not reach an event.
+- **No un-finishing.** The state word should reach `finished` once, with
+  `workoutComplete` firing once, and never cycle back through
+  `armed`/`rowing` afterward (Appendix E's auto-rearm must stay invisible
+  to consumers) — already confirmed once (§18 #8's session); this row
+  re-confirms it survives Tasks 2-4's changes.
+
+Item 13 (the no-rest boundary) is NOT part of this row — see item 13's own
+note above for why (`TWO_TIME_PROGRAM` has rest on both intervals). If time
+and monitor state allow, a second, separate program with a `restSeconds: 0`
+interior interval is the smallest addition that would close it in the same
+sitting, but it is a distinct action, not an "if possible" extra folded
+into the sequence above.
+
 Items already resolved with no laptop dependency (not on this list on
 purpose): `intervalIndex`/`spm` nullability is a business rule, not a wire
 question (§15 #4); the write-side `CSAFE_PM_WORKOUTINTERVALCOUNT` index is
@@ -1077,7 +1321,69 @@ question at all.
 
 Run against the `pm5-lab` harness + bridge, before the fake modeled any of
 this session's findings. Full raw trace: the 7A ledger's own "LAPTOP
-SESSION 1" section.
+SESSION 1" section (`.superpowers/sdd/2026-08-05-phase-7a-monitor-domain/
+progress.md`).
+
+#### Defects D1-D5, and the soft crash (design spec's own labels, gathered here for cross-reference)
+
+Everything below is an OBSERVATION from this session (and, for D1's update,
+a same-day follow-up row), never Concept2 documentation. The detailed
+per-item writeups further down (numbered to match §17) carry the full
+evidence; this block exists so the five named defects and the crash
+correction are each findable as a single paragraph instead of scattered
+across the numbered list.
+
+**D1 — the PM accepts a program only when nothing is loaded; a rejection
+WIPES what was loaded.** A failed 2-interval send did not leave the prior
+1-minute workout intact — it left the monitor showing an empty `:00`
+session. Confirmed twice. **D1 UPDATE** (phase-7a-fix Task 1's own hardware
+row, same date): `terminate()` is NOT a reliable clear — it was ACCEPTED
+once with a completed workout loaded, yet the program sent right after was
+still REJECTED, twice. The accept/reject state model is still not
+understood; the real clear command, if one exists, remains UNFOUND (full
+detail: item 6 below).
+
+**D2 — an ack of `0x01` does not mean a program landed on the machine.**
+Same command, same screen, three outcomes observed in the same session: a
+LIVE Just Row session → ack `0x01`, nothing programmed (a silent no-op); a
+live Just Row session → ack `0x81` reject, also nothing programmed;
+idle/armed → ack `0x01`, and the workout was genuinely on the monitor
+(James confirmed by reading the display). The pre-fix driver resolved
+`program()` on the ack alone, so a no-op and a real success were
+indistinguishable to any caller. Fixed by plan Task 2: `program()` now
+clears, sends, then VERIFIES against the machine's own reported state
+(`state === "armed"`) before resolving — an ack is necessary but was never
+sufficient, and no longer is treated as such.
+
+**D3 — the PM attributes rests FORWARD, into the interval they're heading
+toward; this codec's program indices are 0-based per WORK interval.** Full
+detail and the confirmed table: item 3 below.
+
+**D4 — only ONE `intervalComplete` fired for a two-interval program.** The
+first boundary produced no actual at all; the one actual this session did
+produce carried mixed-boundary data. Full detail, the diagnosis, and the
+fix: item 3 below (the "Follow-up hardware session" paragraph).
+
+**D5 — the no-HR sentinel is `0`, not `255`.** With no belt paired,
+`avgHeartRateBpm: 0` came through. Full detail and the fix: the "New defect
+confirmed this session" paragraph near the end of this section.
+
+**The soft crash — corrected record.** During this session, the PM5
+soft-crashed once while programming attempts were being sent against a
+running Just Row session; James pressed BACK on the monitor to recover,
+which cleared the loaded session. **This is NOT a firmware hang and NOT
+something recovered by a battery pull.** The session's own raw trace
+initially described it more severely ("CRASHED (firmware hang, recovered
+by battery pull)"); James corrected this in the same session ("the crash
+was SOFT — he pressed Back and the session cleared; no power cycle, no
+hang"), and this document should have always carried the corrected version
+as ITS record rather than the initial overstatement — it did not until
+this fix, since §18 previously omitted the crash entirely. Real
+consequence, correctly scoped: a rower's in-progress session can be lost
+this way (already the basis for 7B's "prove the monitor idle before
+programming" requirement), but it is not a firmware brick and is not
+independent evidence of PM5 instability beyond what D1/D2 already
+establish about programming over a live session.
 
 1. **Errata (§17 item 1): CONFIRMED.** The PM's OWN ack checksums satisfy
    the XOR rule as this codec computes it (e.g. ack `f1 01 76 08 ... 77
@@ -1185,10 +1491,21 @@ the documented `255` — one encoder cannot write two sentinels for one
 state — so the fake passes `HEARTRATE_NO_BELT` explicitly to put the
 observed byte on its wire.
 
+**Reconciliation (Task 5 close-out, phase-7a-fix, 2026-08-05): done.**
 Folding these confirmations back into §6/§14/§15/§16's own
-"unconfirmed"/"flagged" language (updating each row to "confirmed
-2026-08-05") is plan Task 5's own job, not done in this fix round — this
-entry is §18's record of what happened, not yet reconciled with those
-sections' wording. §17 itself stays the fixed runsheet either way — items
-2, 4, 9, and the multi-FRAME half of item 5 stay open for the next
-session, alongside the new item 12.
+"unconfirmed"/"flagged" language, and §17's own items, was deferred here
+in the earlier fix round as "plan Task 5's own job" — that reconciliation
+is this section's own edit history now: §15 item 1's stale "`parse.ts`
+passes the raw byte through unadjusted" sentence is corrected (it was true
+of `parse.ts` alone and false of the driver-normalized value every
+consumer actually reads, since Task 3); §15 items 6/7 carry the D1-update
+and multi-frame-still-open language directly; §17's numbered items each
+carry an explicit STATUS line reflecting this section's findings; and a
+new "Answered by laptop session 1" summary sits near §17's top so the
+two-tier answered/open split doesn't require reading this whole section
+first. Items 2, 4, 9, and the genuine multi-FRAME half of item 5 (plus
+distance-kind intervals, confounded the same way) stay open for the next
+session, alongside items 12 and 13 — item 6's real clear command remains
+the single top open question. "The pending verification row" in §17 is
+this close-out's prepared, not-yet-run sequence for verifying Tasks 2-4's
+fixes and picking up item 12 as a free extra observation.
