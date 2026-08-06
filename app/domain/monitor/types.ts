@@ -162,9 +162,13 @@ export interface MonitorDriver {
    * seen from this hardware.
    *
    * What is established instead: a program sent over a loaded workout is
-   * accepted and REPLACES it (§19.1's Verdict (b) — a rest-0 program sent
-   * over a live rest-30 one, without reconnecting, produced a work→work row
-   * with no resting state at all).
+   * accepted and REPLACES it (§19.1's Verdict (b), corrected: a rest-0
+   * program landed over a loaded rest-30 one and produced a rest-free
+   * work→work row — but the observed row followed a RECONNECT and a SECOND
+   * rest-0 send, not an unbroken single-connection chain, so the conclusion
+   * rests on a weaker argument than "without reconnecting" would give. The
+   * clean single-connection observation is still pending: §17's merge-gate
+   * row, session 3, Step 3).
    *
    * Still OPEN, and the reason a caller should nonetheless confirm with the
    * rower first: James read an empty `:00`/`:00` session off the monitor

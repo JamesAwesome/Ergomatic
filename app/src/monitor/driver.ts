@@ -1474,11 +1474,18 @@ export function createPm5Driver(
    * `"not-ready"`/`"garbled"` too — the ORIGINAL rule was always "only a
    * confirmed dead link is fatal here", these two lines just make the
    * code match that stated rule now that more reasons exist). A refusal
-   * (`"nak"`) is the EXPECTED, common case — hardware showed the PM
-   * refuses a terminate when nothing is currently running or loaded
-   * (interface-notes.md §18's clean-run observation, now understood as a
-   * legible machine statement — "nothing needs terminating" — rather than
-   * a mystery byte, §19.1/§19.5). Only `"disconnected"` propagates: that
+   * (`"nak"`) is treated as the EXPECTED, routine case here — but NOT on
+   * confirmed hardware evidence that the PM refuses a terminate when
+   * nothing is running or loaded. That claim's own citation
+   * (interface-notes.md §18's clean-run observation) is, per §17 item 15,
+   * an uncaptured byte: the OLD (withdrawn) whole-byte parse's "rejected —
+   * nothing to terminate" label is all that survives for that send, and
+   * this is the ONE behaviour in this file still sourced from that
+   * withdrawn parse (matched on the fake side, `fake.ts`'s own comment on
+   * the same gap). The behaviour above — swallow any non-disconnect
+   * outcome here — does not depend on this claim; it is independently
+   * justified by the broadened rule already stated (only a confirmed dead
+   * link is fatal). Only `"disconnected"` propagates: that
    * means the link itself is confirmed down, a genuinely different and
    * fatal condition regardless of which step hit it — attempting to write
    * a whole program onto a link already known to be down would just hang

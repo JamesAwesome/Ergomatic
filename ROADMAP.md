@@ -963,7 +963,13 @@ observation, never as something Concept2 documents.
 item — James-operated, and has NOT happened yet**
 (`docs/monitor/pm5-interface-notes.md` §17, "The merge-gate row (session 3,
 prepared, NOT yet run)"; §18's session-3 heading holds its EMPTY,
-explicitly-pending observation slots).
+explicitly-pending observation slots). **Heart-rate verification joins this
+row** (owner addition, whole-branch fix wave, 2026-08-06): James's Apple
+Watch is now paired to the PM5 as its HR source, so Steps 2 and 4 also
+observe live `heartRateBpm` and the actuals' `avgHeartRateBpm` PRESENT for
+the first time — every prior observation was the no-HR-source `0` sentinel
+(§19.9). This verifies one device link (watch); the belt path and
+`CSAFE_PM_GET_HRM` stay future.
 **Trigger:** FIRED — `docs/monitor/pm5-interface-notes.md` §19 (2026-08-06)
 established that the CSAFE status byte is being parsed wrongly and that
 several conclusions recorded as PM5 behaviour were consequences of that
@@ -991,9 +997,12 @@ generated, now shipped.
       finding (Verdict (a), STANDING OPEN, not re-explained as fact); D2's
       framing is WITHDRAWN but what it was protecting survives via the
       documented OFFLINE slave-state mechanism (Verdict (c)); and
-      program-over-loaded WORKS (Verdict (b), behavioural proof from the
-      rest-30→rest-0 contrast, not the byte-identical acks). Task 1
-      (§19.1/§19.2).
+      program-over-loaded WORKS (Verdict (b) — corrected in the whole-branch
+      fix wave, 2026-08-06: the observed rest-free row followed a reconnect
+      and a second rest-0 send, not an unbroken rest-30→rest-0 chain on one
+      connection, so the conclusion holds on a weaker argument than
+      originally stated; the clean single-connection observation is still
+      pending, §17's merge-gate row Step 3). Task 1 (§19.1/§19.2).
 - [x] **The terminal-latch recovery.** The monitor never stops responding;
       on completion it parks in `WorkoutLogged` and leaves via the Menu
       button or a terminate command ([CSAFE-DEF] Appendix E). `activeRun`
@@ -1091,23 +1100,65 @@ reconciled against 7A's shipped types before this phase starts.
       `createMonitorRun` already clears a `SessionRun` — 7A shipped only
       its own half (`src/monitor/monitorRun.ts`'s own header comment names
       this as a documented 7B obligation)
-- [ ] The James laptop-vs-real-PM5 session named above has already run
-      once (laptop session 1) plus a same-day diagnosis row, both folded
-      into `phase-7a-fix` and recorded in
-      `docs/monitor/pm5-interface-notes.md` §18 — the checksum errata, the
-      interval-numbering base, and multi-INTERVAL programming are now
-      ANSWERED, not open. What is still open, per §17's own updated
-      status lines: the real clear/wipe command (UNFOUND —
-      `terminate()` is not it), whether an accepted program's structure
-      reads back from 0x0031, the no-rest work→work boundary index, and
-      distance-kind intervals / a genuine multi-FRAME program from a
-      known-empty machine (never tested without a loaded workout
-      confounding the result). §17's "The pending verification row" is
-      prepared for the next session, via `webBluetooth.ts` and
-      `app/scripts/pm5-lab.ts`/`.html`; results append to §18
+- [ ] **The James laptop-vs-real-PM5 session named above has now run
+      TWICE** (laptop session 1, plus a same-day diagnosis row; laptop
+      session 2, 2026-08-06, both under the OLD whole-byte status parse —
+      recorded in `docs/monitor/pm5-interface-notes.md` §18) **and been
+      re-derived once from the raw bytes without new hardware**
+      (phase-7a-fix-2 Task 1, §19.1's per-send table). Rewritten against the
+      current record, session-by-session claims no longer stand:
+      - The checksum errata, the interval-numbering base, and
+        multi-INTERVAL programming remain ANSWERED.
+      - **No clear/wipe command exists, and none is missing.** §19.5
+        relabelled this DOCUMENTED ABSENCE: `terminate()` is not a failed
+        clear candidate, it is the documented `WaitToBegin`/Rearm recovery
+        path, and nothing in either source document unloads a programmed
+        workout.
+      - **Programming over a loaded workout lands and replaces it**
+        (§19.1's Verdict (b)) — corrected in the whole-branch fix wave: the
+        observed rest-free row followed a reconnect and a second program
+        send, not an unbroken single-connection chain, so this rests on a
+        weaker argument than originally claimed; the clean single-connection
+        confirmation is still pending (§17's merge-gate row, Step 3).
+      - **The no-rest work→work boundary index is ANSWERED** (§17 item 13,
+        §19.8): indices are driver-normalized minus-1, applied
+        unconditionally by `toActualIndex` for 0x0037/38, clamped to
+        `[0, L+1]` with `null` + a `"divergence"` log entry outside it.
+      - **The `:00`/`:00` empty-display transition remains STANDING OPEN**
+        (§19.1's Verdict (a)) — not explained, not re-explained as a
+        rejection-wipe artifact (that mechanism was our own parse bug);
+        7B's "confirm the monitor idle before programming" connect-flow
+        warning re-founds on THIS open finding, not on the withdrawn
+        destruction claim.
+      - Distance-kind intervals and a genuine multi-FRAME program from a
+        known-empty machine remain untested on real hardware — §17's
+        merge-gate row (Step 5, `program-many`) is prepared to close this,
+        NOT yet run.
+      §17's operative row is now "The merge-gate row (session 3, prepared,
+      NOT yet run)" — a hardware confirmation of Tasks 2-6's CORRECTED
+      parse, not a fresh diagnosis session; results append to §18's
+      session-3 heading, every slot EMPTY pending that row.
 - [ ] Full behavior tested against the fake transport in CI; the laptop
       session above is this phase's live-hardware verification, never a CI
       gate
+- [ ] **A failed `program()` during an OPEN run leaves the old run open and
+      numbering.** `driver.ts`'s `program()` runs `sendPrepare()` →
+      `sendSequence()` → `verifyArmed()` and only replaces `activeRun` at
+      the end (`driver.ts` ~1770), after all three phases resolve. If any
+      of them throws while a run is already open (probe P3b, phase-7a-fix-2
+      Task 4's review), that run stays open: the next boundary is still
+      normalized against the FAILED program's own run, and it still emits
+      its own `workoutComplete` later. This is pre-existing (the prior
+      `let program` variable was equally never cleared on a failed
+      re-program) and was deliberately parked, not fixed, in fix-2 — its
+      original rationale ("the wipe is confirmed for a genuine reject
+      only") cited `program()`'s destructive-fact comment, which fix-2
+      Task 1 WITHDREW (interface-notes.md §19.2): no wipe of any kind is
+      confirmed for any status any more, and no genuine rejection has ever
+      been observed on this hardware. 7B's spec must decide whether/when to
+      close this run on a failed re-program, reasoned fresh against the
+      post-§19.2 record, not against the withdrawn wipe. Cited in the
+      whole-branch fix-2 ledger (`.superpowers/sdd/2026-08-06-phase-7a-fix-2/progress.md`).
 - [ ] `src/monitor/driver.ts`'s `createPm5Driver` still hardcodes
       `capabilities.deviceName: "PM5"` (a placeholder, honestly commented
       in place) because its constructor signature (`createPm5Driver(t,

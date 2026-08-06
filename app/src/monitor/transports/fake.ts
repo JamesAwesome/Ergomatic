@@ -210,10 +210,13 @@ export interface FakeScript {
    * Ready), so "accepts only when nothing is loaded" had nothing left
    * supporting it, and the wipe was only ever the mechanism invented to
    * explain the toggle's alternation. §19.1's Verdict (b) then showed the
-   * opposite BEHAVIOURALLY: [S2] sent a 2×TIME/rest-30 program, then —
-   * without reconnecting — a 2×TIME/rest-0 program over it, and the row
-   * that followed ran work→work with no `resting` state anywhere. The
-   * second program REPLACED the first.
+   * opposite BEHAVIOURALLY, corrected in the whole-branch fix wave: [S2]
+   * sent a 2×TIME/rest-30 program, then a reconnect, then a 2×TIME/rest-0
+   * program over whatever the reconnect left loaded — the resulting row ran
+   * work→work with no `resting` state anywhere. The second program
+   * REPLACED whichever program was still loaded; the clean single-
+   * connection observation (no reconnect between the two sends) is still
+   * pending §17's merge-gate row, session 3, Step 3.
    *
    * So what this models now, each half cited:
    * - a program sent while a workout is loaded is ACCEPTED, and the loaded
@@ -965,10 +968,11 @@ export function createFakeTransport(
       phase = "armed";
       // D1 WITHDRAWN (interface-notes.md §19.2): a program sent over a
       // loaded workout is accepted and REPLACES it — §19.1's Verdict (b),
-      // where a rest-0 program sent over a rest-30 one without reconnecting
-      // produced a work→work row with no resting state at all. What the
-      // machine holds is now what was just programmed, whatever it held
-      // before; nothing is ever wiped to `null` here.
+      // corrected: a rest-0 program landed over whatever a rest-30 send and
+      // a reconnect had left loaded, and produced a work→work row with no
+      // resting state at all. What the machine holds is now what was just
+      // programmed, whatever it held before; nothing is ever wiped to
+      // `null` here.
       loadedIntervalCount = script.program.intervals.length;
       // …and the SESSION bookkeeping that belonged to the previous workout
       // goes with it (Task 6 fix round, review MED-2). 0x0033's Last Split
