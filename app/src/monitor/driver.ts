@@ -53,7 +53,10 @@ import {
   buildTerminate,
 } from "../../domain/monitor/pm5/commands.js";
 import { chunkFrames, reassemble } from "../../domain/monitor/pm5/framer.js";
-import { toProgramIndex } from "../../domain/monitor/pm5/intervalIndex.js";
+import {
+  toActualIndex,
+  toProgramIndex,
+} from "../../domain/monitor/pm5/intervalIndex.js";
 import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
@@ -1041,26 +1044,16 @@ export function createPm5Driver(
     // `rawActual.index` is 0x0037/38's own Split/Interval Number, UNCHANGED
     // (`toIntervalActual` never touched by this task). Normalized below via
     // the CURRENT machine state, same as `maybeEmitFrame`'s own
-    // `base.state`. This is an INFERENCE, not an observed fact: §18 #3's
-    // hardware session only ever directly OBSERVED one 0x0037/38 index
-    // value (the phantom `2` at the session's FINAL boundary). The
-    // session's FIRST boundary's own 0x0037 DID arrive and WAS decoded and
-    // merged — what failed was the emission gate above, which then held no
-    // record of the value (Task 1's "arrives-discarded" verdict; Task 1 was
-    // diagnosis only, and the gate is fixed in this function's own caller,
-    // `noteBoundaryHalf`). So no earlier boundary's raw value was ever
-    // reported, and this rule's generality is unconfirmed. Applying the
-    // SAME forward-attribution rule 0x0033 is confirmed to use is the most
-    // defensible inference available, not a second confirmed fact.
-    // See the OPEN hardware question below for the one shape (a work→work
-    // boundary with no intervening rest) where even this inference has no
-    // grounding at all.
-    //
-    // Task 5 NOTE (index normalization, minus-1): this whole path is what
-    // Task 5 changes. The GATE above is this task's — it decides WHETHER a
-    // boundary is normalized at all; the `toProgramIndex` call below is
-    // untouched by Task 4 and is what Task 5 replaces with the scoped
-    // minus-1 rule.
+    // `base.state` — but via `toActualIndex`, NOT `toProgramIndex`
+    // (`maybeEmitFrame`'s own call, above, untouched): Task 5
+    // (interface-notes.md §19.8, answering §17 item 13) found the two wire
+    // fields disagree at a no-rest work→work boundary — 0x0033 read `0`
+    // (identity, matching `toProgramIndex`'s rowing branch) while 0x0037/38
+    // read `1` (forward-attributed anyway) — which means the rest-keyed
+    // rule this function used to share with `maybeEmitFrame` is WRONG for
+    // the actuals characteristic specifically. `toActualIndex`'s own doc
+    // comment carries the full evidence table and the honesty note about
+    // the one program shape both hardware readings come from.
     //
     // Past the gate above, a driver-opened run is active BY CONSTRUCTION,
     // so its program is non-null — no `?? 0` fallback and no second
@@ -1077,7 +1070,7 @@ export function createPm5Driver(
     // the same unreachable-by-construction shape the `activeRun!` on the
     // `programLength` line above has) — same established pattern as this
     // file's own `raw as RawPm5Status` casts elsewhere.
-    const normalizedIndex = toProgramIndex(
+    const normalizedIndex = toActualIndex(
       rawActual.index as number,
       state,
       programLength,
@@ -1099,28 +1092,6 @@ export function createPm5Driver(
     );
     activeRun!.actuals += 1;
     emit({ kind: "intervalComplete", actual });
-
-    // OPEN HARDWARE QUESTION (Task 3 review, critical finding —
-    // interface-notes.md §17 item 13): with `restSeconds: 0` the state word
-    // never leaves `"rowing"` at a work→work boundary (no rest tick ever
-    // fires in between), so `toProgramIndex`'s ONLY confirmed-by-hardware
-    // branch (the resting offset) never engages here — the rowing branch
-    // (pass `machineIndex` through unadjusted) runs instead, purely because
-    // it's the fallback for lack of a confirmed alternative, NOT because
-    // this specific shape has ever been observed correct. `seaFretProgram()`'s
-    // own 300s warmup interval and `MINIMAL_PROGRAM` both have this shape.
-    // Deliberately NOT inventing a new offset for this case — this whole
-    // phase exists to stop guessing at PM5 semantics from documented text
-    // or code-review inference alone (design spec's own layering rule).
-    // Logged so the assumption is visible in the trace, never silent; §17
-    // item 13 is the runsheet entry that would settle it with a real
-    // reading.
-    if (state === "rowing") {
-      log.record(
-        "index-unverified",
-        `actual.index=${actual.index} (0x0037/38) normalized while state=rowing — no rest tick preceded this boundary (restSeconds may be 0 on the completed interval), so the machine's work-to-work numbering at this exact boundary shape is UNCONFIRMED by hardware (interface-notes.md §17 item 13)`,
-      );
-    }
 
     // Fix-round MED-2 (UNCHANGED by this task, deliberately still comparing
     // RAW values): 0x0033's Interval Count (tracked in the machine's own
@@ -1144,17 +1115,27 @@ export function createPm5Driver(
       );
     }
 
-    // The NEW divergence trigger this task adds (mirrors `maybeEmitFrame`'s
-    // own — see that comment for the full reasoning): the machine's actual
-    // index cannot be explained by the armed program's own length, while a
-    // real interval was supposedly current. `maybeEmitFrame`'s mirror of
-    // this check still needs its own "is a program armed?" guard; this one
-    // does not, per the note above the `programLength` line.
-    const stateActive = state === "rowing" || state === "resting";
-    if (stateActive && normalizedIndex === null) {
+    // The divergence trigger for `toActualIndex` itself returning `null`
+    // (Task 4 introduced this trigger for `toProgramIndex`'s own
+    // more-than-one-step-out `null`; Task 5 re-homes it here for
+    // `toActualIndex`'s narrower `null` contract). Unlike `maybeEmitFrame`'s
+    // mirror of this check (which still guards on `intervalActive` — a
+    // program can be armed with `base.state` outside rowing/resting, and
+    // that is NOT divergence-worthy there), no `stateActive` guard is
+    // needed here: past the run gate above, `programLength > 0` always
+    // (`activeRun!.program` is non-null by construction), so
+    // `toActualIndex`'s OWN contract makes `null` mean exactly one thing —
+    // `state` was outside `"rowing"`/`"resting"` when a boundary genuinely
+    // arrived. The most reachable case in practice is `"terminated"`
+    // (CSAFE-DEF footnote 12 p.25, cited via interface-notes.md §19.8: the
+    // Split/Interval Number "will change depending on where you are in the
+    // interval" once a workout is terminated mid-interval) — a boundary
+    // that arrives with no stable interval to name, which this driver
+    // reports as unexplainable rather than guessing.
+    if (normalizedIndex === null) {
       log.record(
         "divergence",
-        `actual.index=${rawActual.index} (0x0037/38, state=${state}) has no corresponding interval in a ${programLength}-interval program`,
+        `actual.index=${rawActual.index} (0x0037/38) arrived while state=${state} — toActualIndex declines to normalize outside rowing/resting (a ${programLength}-interval program was armed, so this is not a missing program)`,
       );
     }
   }

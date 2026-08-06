@@ -108,15 +108,17 @@ const TWO_TIME_PROGRAM: WorkoutProgram = {
 };
 
 /** §17 item 13 (the no-rest work→work boundary): TWO TIME intervals with NO
- *  rest between them. Everything we know about the PM's forward-attributed
- *  numbering comes from boundaries that had a rest — the machine rolls to
- *  `resting` and reports the index it is heading INTO (§18 #3, observed).
- *  Nobody has ever seen what it reports at a work→work boundary, where it
- *  never leaves `rowing`, so the driver cannot know whether to adjust and
- *  logs `index-unverified` instead of guessing. This program is the one
- *  reading that settles it: row through the first boundary and read what
- *  Split/Interval Number 0x0037 carries — `0` (its own) or `1` (forward).
- *  It exists because `TWO_TIME_PROGRAM`'s 30s rests cannot answer it. */
+ *  rest between them — the program that produced the laptop session 2
+ *  reading which ANSWERED this item (interface-notes.md §19.8): 0x0037 read
+ *  `1` (forward-attributed) while 0x0033 read `0` (identity) at the same
+ *  work0→work1 boundary, still `"rowing"` throughout. The driver's old
+ *  `index-unverified` log entry, which existed to flag this exact
+ *  boundary shape while the reading was still missing, is retired now that
+ *  it isn't — `domain/monitor/pm5/intervalIndex.ts`'s `toActualIndex`
+ *  applies the forward-attributed offset unconditionally for
+ *  `IntervalActual.index`. Kept here (and in the `REMOTE` map below) since
+ *  it remains the harness program for re-confirming this shape on a future
+ *  session, not only for discovering it the first time. */
 const TWO_TIME_NO_REST_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 2 }, () => ({
     kind: "time" as const,

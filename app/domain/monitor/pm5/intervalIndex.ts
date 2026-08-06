@@ -68,12 +68,21 @@ import type { MonitorFrame } from "../types.js";
  * to normalize — clamping it here would delete the defect from the fake.
  *
  * **A `"rowing"` tick passes through UNADJUSTED** — the confirmed half of
- * the rule is the resting one. What the machine numbers at a work→work
- * boundary with no intervening rest is genuinely unknown (§17 item 13);
- * this function does not invent an offset for it, so a `restSeconds: 0`
- * boundary round-trips as identity and the driver's `"index-unverified"`
- * log entry — not a fabricated wire value — is the observable that the
- * assumption was in play.
+ * the rule is the resting one; §17 item 13 asked what a work→work boundary
+ * with no intervening rest does instead. **CORRECTION (Task 5,
+ * interface-notes.md §19.8): item 13 is now ANSWERED, but the answer is
+ * about 0x0037/38 (the ACTUALS characteristic), not 0x0033 (this function's
+ * own field) — the two wire fields disagreed at exactly that boundary
+ * (0x0033 read `0`, identity; 0x0037/38 read `1`, forward-attributed
+ * despite no rest), which is what proves the offset is per-characteristic,
+ * not a single shared rule.** This function (and `toProgramIndex`, which it
+ * inverts) is UNCHANGED by that finding — 0x0033's own no-rest behavior
+ * stays whatever the identity pass-through already modeled, since the one
+ * hardware reading available for it (`0`) matches identity exactly. The
+ * driver's old `"index-unverified"` log entry, which existed to flag this
+ * exact assumption while it was still open, is RETIRED (its question is
+ * answered); 0x0037/38's own corrected rule lives in `toActualIndex`,
+ * below.
  *
  * **States outside `"resting"`** all pass through: `toProgramIndex`'s own
  * `null` for inactive states is a business rule about which of OUR
@@ -169,4 +178,88 @@ export function toProgramIndex(
   // More than one step outside the valid range: not explained by the rule
   // at all.
   return null;
+}
+
+/**
+ * `machineIndex` (0x0037/38's Split/Interval Number) -> our program index,
+ * for `IntervalActual.index` alone — `src/monitor/driver.ts`'s
+ * `emitIntervalComplete` is this function's only caller, never
+ * `maybeEmitFrame` (that stays on `toProgramIndex`, above, unchanged by this
+ * function's introduction).
+ *
+ * Phase 7A-fix-2 Task 5 (interface-notes.md §19.8, itself answering §17 item
+ * 13): **the offset this function applies is `machineIndex - 1`, ALWAYS,
+ * regardless of `machineState`** — not "minus one while resting, unchanged
+ * while rowing" (`toProgramIndex`'s own rule, still correct for 0x0033, but
+ * wrong here). Two hardware readings established this, on the same program
+ * shape (a 2×TIME session), read two different ways:
+ *
+ *   - session 1's FINAL boundary (§18 #3, §19.8): machine `2`, state
+ *     `"resting"`, program length 2 -> our `1` — the "phantom third index",
+ *     which a rest-keyed minus-one already explained.
+ *   - session 2's FIRST boundary (§19.8, answering §17 item 13): machine
+ *     `1`, state `"rowing"` THE WHOLE TIME (no intervening rest — a
+ *     `restSeconds: 0` interval), program length 2 -> our `0`. Nothing
+ *     resting happened anywhere near this boundary, and the offset still
+ *     applied. `0x0033` read `0` at the same instant (identity, no offset)
+ *     — the two wire fields disagree with EACH OTHER here, which is exactly
+ *     what proves the offset is a property of the ACTUALS characteristic
+ *     itself, not of the machine's resting state (interface-notes.md's own
+ *     framing: "forward attribution is a property of the ACTUALS
+ *     characteristics, not of the resting state").
+ *
+ * **Honesty note, since both readings come from one program shape:** a
+ * 2×TIME session cannot distinguish "the machine reports the interval it
+ * just completed, 1-based" from "the machine reports the interval it is
+ * heading into, 0-based-forward" — both stories predict the identical
+ * `machineIndex - 1` arithmetic for every row above (completed-1-based:
+ * interval 1 finishing reports `1`, so `-1` gives our `0`;
+ * heading-into-0-based: the same boundary is heading into interval 1, which
+ * reports `1` directly, and `-1` re-attaches it to the interval whose
+ * boundary it actually is — same number, same subtraction). This function
+ * is robust to either account; only the NARRATIVE ("actuals name the
+ * interval that just happened") is chosen for the export's own name, and
+ * only 0x0033's own forward-attribution story (told in `toProgramIndex`'s
+ * doc comment above) is actually pinned to "reports the interval it is
+ * counting down to" by evidence distinguishing the two directions.
+ *
+ * **Clamping is unconditional** — `[0, programLength - 1]`, no matter how
+ * far `machineIndex - 1` lands outside it. This is deliberately NOT
+ * `toProgramIndex`'s "one step out clamps, more than one returns null"
+ * shape: nothing in either hardware reading suggests the actuals
+ * characteristic has its own "unexplainable" region the way a raw 0x0033
+ * overshoot does, and a boundary event only exists at all because a real
+ * interval genuinely just completed — there is always a real interval for
+ * an out-of-range actual to belong to, so clamping all the way is the
+ * honest normalization rather than manufacturing a second "unknown" case
+ * with no evidence behind it.
+ *
+ * **`null`** covers exactly two situations, both from the interface
+ * contract, not from this function inventing a new rule:
+ *   - `programLength <= 0` — no program to normalize against (unreachable
+ *     once a driver-opened run is active, by construction — see
+ *     `emitIntervalComplete`'s own comment — but this function does not
+ *     assume a caller already checked).
+ *   - `machineState` outside `"rowing"`/`"resting"` — most notably
+ *     `"terminated"`: CSAFE-DEF footnote 12 (p.25, cited via
+ *     interface-notes.md §19.8) warns the Split/Interval Number "will
+ *     change depending on where you are in the interval" when a workout is
+ *     terminated mid-interval — a value with no stable meaning to
+ *     normalize, so this function declines rather than guessing which
+ *     interval a mid-terminate boundary belongs to.
+ *
+ * `IntervalActual.index`'s own `number | null` widening (Task 3 review,
+ * `docs/design/DEVIATIONS.md`) is what lets this `null` survive all the way
+ * to a consumer instead of being fabricated into a number.
+ */
+export function toActualIndex(
+  machineIndex: number,
+  machineState: MonitorFrame["state"],
+  programLength: number,
+): number | null {
+  if (programLength <= 0) return null;
+  if (machineState !== "rowing" && machineState !== "resting") return null;
+
+  const candidate = machineIndex - 1;
+  return Math.min(programLength - 1, Math.max(0, candidate));
 }
