@@ -11,11 +11,14 @@
 //
 // `program()`'s three-phase lifecycle (plan Task 2, "clear, ignore
 // rejection, verify" — interface-notes.md §18, progress.md's D1/D2): a
-// best-effort clear (`sendClear`, never fatal), the existing ack-gated send
-// (`sendSequence`, unchanged), then a tick-bounded VERIFICATION
-// (`verifyArmed`) against the machine's own reported state. The ack is
-// never trusted alone — the same ack byte has meant both "programmed" and
-// "nothing happened at all" on real hardware.
+// best-effort clear (`sendClear`, nak/timeout swallowed as routine — only a
+// confirmed disconnect still propagates, fix-round 1's F3), the existing
+// ack-gated send (`sendSequence`, unchanged), then a tick-bounded
+// VERIFICATION (`verifyArmed`) against the machine's own reported state,
+// observed STRICTLY AFTER the send began (fix-round 1's F1 — a snapshot
+// taken any earlier lets a stale, unrelated "armed" reading count). The ack
+// is never trusted alone — the same ack byte has meant both "programmed"
+// and "nothing happened at all" on real hardware.
 //
 // Every Concept2 byte this file ever touches arrives pre-decoded through
 // `pm5/parse.ts` (`parseGeneralStatus` et al., `toMonitorFrame`,
@@ -281,6 +284,16 @@ export function createPm5Driver(
     reject: (err: unknown) => void;
     ticks: number;
   } | null = null;
+  // Fix-round 1, F1: a monotonic count of every GENERAL_STATUS_UUID arrival
+  // this driver has ever seen — incremented unconditionally, first thing,
+  // regardless of `pendingAck`/`pendingVerify`/`seen` state. `verifyArmed`
+  // snapshots this BEFORE the real programming write and only accepts an
+  // "armed" observation whose arrival strictly postdates that snapshot
+  // (see `verifyArmed`'s own doc for the exact hardware shape this
+  // closes: the reviewer reproduced a completely stale "armed" — left
+  // over from the CLEAR step's own Appendix-E auto-cycle — satisfying the
+  // OLD immediate check for a program that was actually a total no-op).
+  let generalStatusTickCount = 0;
 
   /** Discards anything left in `pendingAckBuffer` from a PREVIOUS, already-
    *  resolved sequence — see the buffer's own comment for why a leftover
@@ -606,6 +619,10 @@ export function createPm5Driver(
     },
   );
   mergeStatus(GENERAL_STATUS_UUID, "0x0031", parseGeneralStatus, () => {
+    // Fix-round 1, F1: counted BEFORE anything else in this handler, for
+    // every arrival unconditionally — `verifyArmed`'s snapshot comparison
+    // depends on this being a strict, gapless count of 0x0031 decodes.
+    generalStatusTickCount += 1;
     seen.general = true;
     // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
     // HIGH-2): only counts while a write is genuinely awaiting its ack
@@ -690,17 +707,32 @@ export function createPm5Driver(
    * "armed" (WAITTOBEGIN/COUNTDOWNPAUSE, `pm5/parse.ts`'s `toMonitorFrame`)
    * before `program()` is allowed to resolve.
    *
+   * `since` is `generalStatusTickCount`'s value captured BEFORE the real
+   * programming write (fix-round 1, F1) — an "armed" observation only
+   * counts if its arrival's count is strictly greater than `since`. Without
+   * this, a STALE cached `raw` satisfies verification for free: a review
+   * reproduced the hardware shape exactly — the clear step gets ACCEPTED
+   * (progress.md's D1 update: this happens), the PM's own Appendix-E
+   * auto-cycle (Terminate -> Rearm -> WaitToBegin) reports "armed" on its
+   * own, and a stale read of THAT observation would satisfy verification
+   * for a completely separate program write that was actually a total
+   * no-op — D2 resurrected through the very phase built to stop it.
+   * Requiring a POST-snapshot arrival is what makes "armed" evidence FOR
+   * THIS SEND, not evidence some workout, at some point, was loaded.
+   *
    * What "the machine reporting the programmed structure" (design spec §1)
-   * concretely checks: `state === "armed"`, and NOTHING else.
-   * `MonitorFrame` has no field that echoes the programmed interval COUNT
-   * back, and `intervalIndex` itself is business-NULL for the entire armed
-   * window (`toMonitorFrame`'s own rule: an interval is only ever "current"
-   * while rowing/resting) — there is no stronger, honestly-confirmed
-   * structural signal available on the wire today. This is not a
-   * compromise silently accepted here: it is the strongest check the data
-   * actually supports, documented as such rather than pretending to
-   * confirm more (e.g. that the interval count landed correctly) than a
-   * status frame can carry.
+   * concretely checks TODAY: `state === "armed"` (from a post-snapshot
+   * arrival), nothing more. This is NOT because no stronger signal exists
+   * on the wire — 0x0031 already decodes `workoutType` (our own writes
+   * always send `WORKOUTTYPE_VARIABLE_INTERVAL`) and `workoutDurationRaw`/
+   * `workoutDurationType`, which a real structural check could compare
+   * against `p`. It is because no laptop session has yet read those three
+   * fields back AFTER an accepted program to confirm they echo what was
+   * sent (interface-notes.md §17's runsheet now carries this as an open
+   * item) — gating on unconfirmed bytes would be a worse dishonesty than
+   * this narrower check. `intervalIndex` genuinely has no such upgrade
+   * path: it is business-NULL for the entire armed window (`toMonitorFrame`'s
+   * own rule — an interval is only ever "current" while rowing/resting).
    *
    * Bounded by `options.verifyTicks` GENERAL_STATUS_UUID ticks — no wall
    * clock, ever (same tick pulse as `ackTimeout`, tracked as its own
@@ -710,8 +742,11 @@ export function createPm5Driver(
    * with `ProgramRejectionError({ reason: "not-observed" | "disconnected",
    * atFrame: -1 })` — verification has no frames of its own, only ticks.
    */
-  function verifyArmed(): Promise<void> {
-    if (toMonitorFrame(raw as RawPm5Status).state === "armed") {
+  function verifyArmed(since: number): Promise<void> {
+    if (
+      generalStatusTickCount > since &&
+      toMonitorFrame(raw as RawPm5Status).state === "armed"
+    ) {
       return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
@@ -729,15 +764,20 @@ export function createPm5Driver(
    * (interface-notes.md §18, progress.md's D1 update). The real clear
    * command, if one exists, is UNKNOWN.
    *
-   * A `0x81` (nak) response here is the EXPECTED, common case — hardware
-   * showed the PM rejects a terminate when nothing is currently running or
-   * loaded (interface-notes.md §18's clean-run observation) — logged as
-   * `"clear-rejected"`, informational, never an error, never a throw.
-   * `"disconnected"`/`"timeout"` outcomes are NOT swallowed the same way:
-   * those mean the transport itself is broken, not "the PM had an opinion
-   * about the clear", so they propagate — attempting to write a whole
-   * program onto a link already known to be down would just hang the
-   * SEND phase instead of failing where the problem actually is.
+   * Both `"nak"` (0x81 — the EXPECTED, common case: hardware showed the PM
+   * rejects a terminate when nothing is currently running or loaded,
+   * interface-notes.md §18's clean-run observation) AND `"timeout"` are
+   * swallowed here as informational `"clear-rejected"`, never an error,
+   * never a throw (fix-round 1, F3). `ProgramRejection`'s own doc comment
+   * defines `"timeout"` as "the link stayed UP, but the PM never answered
+   * this ONE command" — which is exactly the profile of sending a command
+   * whose real semantics are unconfirmed (the clear command is UNKNOWN,
+   * per the D1 update above), not evidence of a broken transport. Only
+   * `"disconnected"` propagates: that means the link itself is confirmed
+   * down, a genuinely different and fatal condition regardless of which
+   * step hit it — attempting to write a whole program onto a link already
+   * known to be down would just hang the SEND phase instead of failing
+   * where the problem actually is.
    *
    * Whatever this step's outcome, it proves NOTHING about whether the PM
    * is now actually clear — no read exists to confirm that. `program()`'s
@@ -747,12 +787,17 @@ export function createPm5Driver(
    */
   async function sendClear(): Promise<void> {
     try {
-      await sendSequence(buildTerminate(), "clear-sent");
+      await sendSequence(buildTerminate(), "clear-sent", true);
     } catch (err) {
-      if (err instanceof ProgramRejectionError && err.reason === "nak") {
+      if (
+        err instanceof ProgramRejectionError &&
+        (err.reason === "nak" || err.reason === "timeout")
+      ) {
         log.record(
           "clear-rejected",
-          `PM rejected the clear (0x81) — expected when nothing was loaded (interface-notes.md §18): ${err.hexTrace}`,
+          err.reason === "nak"
+            ? `PM rejected the clear (0x81) — expected when nothing was loaded (interface-notes.md §18): ${err.hexTrace}`
+            : `PM never answered the clear (timeout) — the real clear command is unknown (interface-notes.md §18, progress.md's D1 update): ${err.hexTrace}`,
         );
         return;
       }
@@ -767,10 +812,19 @@ export function createPm5Driver(
    * one acks. A NAK (`status !== "ok"`) or the link going down before any
    * response arrives both throw a typed `ProgramRejectionError` carrying
    * the full hex trace of everything written/received during this call.
+   *
+   * `isClearStep` (fix-round 1, F7) suppresses the generic
+   * `"program-rejection"` log entry for a NAK/timeout — `sendClear`'s own
+   * caller already logs those as informational `"clear-rejected"`, and
+   * without this every HEALTHY `program()` call would show a spurious
+   * rejection in the trace (the clear step's own NAK is the routine case).
+   * A `"disconnected"` failure still logs `"program-rejection"` regardless
+   * — that one is never swallowed, by either this function or `sendClear`.
    */
   async function sendSequence(
     sequence: Uint8Array[][],
     completionKind: string,
+    isClearStep = false,
   ): Promise<void> {
     // Fix-round 2: purge anything left over from a PREVIOUS sequence
     // before this one's own first frame ever asks the buffer for
@@ -827,10 +881,15 @@ export function createPm5Driver(
               `(ack-timeout policy: ${options.ackTimeout!.ticks} tick(s) with no ack)`,
         );
         const hexTrace = trace.join(" | ");
-        log.record(
-          "program-rejection",
-          `${reason} at frame ${frameIndex}: ${hexTrace}`,
-        );
+        // F7: "disconnected" always logs (never swallowed by anyone); a
+        // clear-step "timeout" is swallowed by `sendClear` (F3), so it's
+        // suppressed here too — see this function's own doc comment.
+        if (!isClearStep || reason === "disconnected") {
+          log.record(
+            "program-rejection",
+            `${reason} at frame ${frameIndex}: ${hexTrace}`,
+          );
+        }
         throw new ProgramRejectionError({
           reason,
           atFrame: frameIndex,
@@ -843,10 +902,16 @@ export function createPm5Driver(
       );
       if (outcome.status !== "ok") {
         const hexTrace = trace.join(" | ");
-        log.record(
-          "program-rejection",
-          `nak at frame ${frameIndex}: ${hexTrace}`,
-        );
+        // F7: a clear-step NAK is the routine, expected case (`sendClear`'s
+        // own doc comment) — it already logs "clear-rejected" itself, so
+        // logging THIS too would make every healthy `program()` call show
+        // a spurious rejection in the trace.
+        if (!isClearStep) {
+          log.record(
+            "program-rejection",
+            `nak at frame ${frameIndex}: ${hexTrace}`,
+          );
+        }
         throw new ProgramRejectionError({
           reason: "nak",
           atFrame: frameIndex,
@@ -860,25 +925,39 @@ export function createPm5Driver(
   return {
     capabilities,
 
-    // Destructive fact (interface-notes.md §18, progress.md's clean A/B
-    // run): the PM accepts a program ONLY when nothing is currently
-    // loaded — programming over an existing loaded workout is REJECTED
-    // **and WIPES it**. A failed `program()` call can therefore cost the
-    // rower whatever workout was already on the monitor, not merely fail
-    // to add a new one. Callers (7B's connect flow) MUST warn the rower
-    // BEFORE calling this, never react to a rejection afterward — by the
-    // time this call rejects, the previous workout may already be gone.
+    // CONFIRMED destructive fact (interface-notes.md §18, progress.md's
+    // clean A/B run): a REJECTED program WIPES whatever workout was
+    // already loaded on the monitor — a failed `program()` call can
+    // therefore cost the rower a workout they had, not merely fail to add
+    // a new one. Callers (7B's connect flow) MUST warn the rower BEFORE
+    // calling this, never react to a rejection afterward — by the time
+    // this call rejects, the previous workout may already be gone.
+    //
+    // The simple RULE that first explained the above ("accepts only when
+    // idle") is NOT equally confirmed: Task 1's D1 update found a
+    // terminate ACCEPTED with a workout loaded, yet the FOLLOWING program
+    // was still rejected — twice. The state model behind accept/reject is
+    // still not understood; only the destructive half is. Nothing below
+    // assumes the rule — clear/send/verify is designed to survive not
+    // knowing it.
     //
     // Three phases (plan Task 2, "clear, ignore rejection, verify"):
-    // `sendClear()` is a best-effort clear, never fatal on its own;
+    // `sendClear()` is a best-effort clear — nak/timeout swallowed as
+    // routine (fix-round 1, F3), only a confirmed disconnect still fatal;
     // `sendSequence` is the existing ack-gated send, unchanged; `verifyArmed`
     // is what actually decides success, from the machine's OWN reported
-    // state — never the ack alone (D2: the identical ack byte has meant
-    // both "programmed" and "nothing happened at all" on real hardware).
+    // state observed STRICTLY AFTER this send (fix-round 1, F1) — never
+    // the ack alone (D2: the identical ack byte has meant both "programmed"
+    // and "nothing happened at all" on real hardware), and never a stale
+    // pre-send observation either (verifyArmed's own doc comment).
     async program(p: WorkoutProgram): Promise<void> {
       await sendClear();
+      // F1: snapshot taken AFTER the clear resolves, BEFORE the real
+      // programming write — see verifyArmed's doc for exactly which
+      // hardware shape this excludes.
+      const armedSince = generalStatusTickCount;
       await sendSequence(buildProgrammingSequence(p), "programmed");
-      await verifyArmed();
+      await verifyArmed(armedSince);
       program = p;
       log.record("armed", `programmed ${p.intervals.length} interval(s)`);
       emit({ kind: "armed" });

@@ -75,14 +75,20 @@ export interface MonitorDriver {
    * (hardware observed the identical ack byte for both a real program and
    * a complete no-op).
    *
-   * DESTRUCTIVE FACT, observed on real hardware (docs/monitor/
-   * pm5-interface-notes.md §18): the PM accepts a program ONLY when
-   * nothing is currently loaded — programming over an existing loaded
-   * workout is REJECTED **and WIPES what was loaded**. A failed call to
-   * this method can therefore cost the rower whatever workout was already
-   * on the monitor, not merely fail to add a new one. Callers MUST warn
-   * the rower BEFORE calling this, never react to a rejection afterward —
-   * by the time this rejects, the previous workout may already be gone.
+   * CONFIRMED destructive fact, observed on real hardware twice
+   * (docs/monitor/pm5-interface-notes.md §18): a REJECTED program WIPES
+   * whatever workout was already loaded on the monitor. A failed call to
+   * this method can therefore cost the rower a workout they had, not
+   * merely fail to add a new one. Callers MUST warn the rower BEFORE
+   * calling this, never react to a rejection afterward — by the time this
+   * rejects, the previous workout may already be gone.
+   *
+   * The simple RULE that first explained the above ("the PM accepts a
+   * program only when nothing is loaded") is NOT equally confirmed: a
+   * later hardware session found a terminate ACCEPTED with a workout
+   * loaded, yet the FOLLOWING program was still rejected — twice. The
+   * state model behind accept/reject is still not understood; only the
+   * destructive half is.
    */
   program(p: WorkoutProgram): Promise<void>;
   terminate(): Promise<void>; // the documented terminate command — no start() exists

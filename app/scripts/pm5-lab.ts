@@ -30,7 +30,27 @@ import { createWebBluetoothTransport } from "../src/monitor/transports/webBlueto
 import { createPm5Driver } from "../src/monitor/driver";
 import { createEventLog } from "../src/monitor/eventLog";
 import type { MonitorDriver, MonitorEvent } from "../domain/monitor/types";
+import type { MonitorEventLog } from "../src/monitor/eventLog";
 import type { WorkoutProgram } from "../domain/monitor/program";
+
+/**
+ * Fix-round 1, F4: without a `verifyTicks` bound, `program()`'s
+ * verification phase waits forever — the exact hardware case laptop
+ * session 1 hit (a `0x01` ack for a total no-op, D2) would leave this
+ * script's "Program test workout" button spinning in total silence, with
+ * nothing to press and nothing in the log explaining why.
+ *
+ * 20 ticks. The laptop session observed GENERAL_STATUS notifications
+ * arriving at roughly 2/second in practice (interface-notes.md §18) —
+ * NOT the 10/second the fastest documented sample rate
+ * (`buildSampleRateConfig`, §4) would suggest, so this budgets against the
+ * OBSERVED cadence, not the requested one. 20 ticks at ~2/s is ~10 real
+ * seconds — generous enough to absorb the PM's own Appendix-E auto-cycle
+ * (Terminate -> Rearm -> WaitToBegin) plus normal BLE jitter, while still
+ * bounded: a silent monitor now fails loudly (`"not-observed"`) instead of
+ * hanging the page forever.
+ */
+const VERIFY_TICKS = 20;
 
 /** One real interval, well inside every Table 19 minimum (interface-
  *  notes.md §8) — enough to drive `program()` -> `armed` -> `terminate()`
@@ -97,7 +117,27 @@ const SHORT_PROGRAM: WorkoutProgram = {
   })),
 };
 
-const log = createEventLog();
+const rawLog = createEventLog();
+// Fix-round 1, F4: taps every entry as it's recorded so the page/console
+// gets a live line the INSTANT verification begins — `sendSequence`
+// records `"programmed"` the moment the real send acks, which is exactly
+// when `program()` moves from "sent" to "waiting for the machine to say
+// armed" (driver.ts's own `verifyArmed` call). Without this, "Program
+// test workout" prints "sending…" and then nothing until it either
+// resolves or the `VERIFY_TICKS` bound above rejects it — indistinguishable
+// from a hung network call.
+const log: MonitorEventLog = {
+  record(kind, detail) {
+    rawLog.record(kind, detail);
+    if (kind === "programmed") {
+      out(
+        `verify: machine acked the send — waiting up to ${VERIFY_TICKS} status tick(s) (~2/s ⇒ ~${Math.round(VERIFY_TICKS / 2)}s) for it to report "armed"…`,
+      );
+    }
+  },
+  entries: () => rawLog.entries(),
+  exportLog: () => rawLog.exportLog(),
+};
 const transport = createWebBluetoothTransport();
 let driver: MonitorDriver | null = null;
 
@@ -143,7 +183,7 @@ onClick("connect", async () => {
   out(`scan(): found ${found.name} (${found.id})`);
   await transport.connect(found.id);
   out("connect(): ok");
-  driver = createPm5Driver(transport, log);
+  driver = createPm5Driver(transport, log, { verifyTicks: VERIFY_TICKS });
   wireEvents(driver);
   out(`capabilities: ${JSON.stringify(driver.capabilities)}`);
 });

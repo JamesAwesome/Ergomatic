@@ -96,6 +96,14 @@ async function programIt(
   for (const chunk of buildProgrammingSequence(program)[0]!) {
     await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
   }
+  // Fix-round 1, F1: the armed bundle is no longer delivered synchronously
+  // inside the last chunk's ack (that hid driver.ts's tick-driven verify
+  // wait from every fake-based test) — this file tests the FAKE's own
+  // wire-protocol modeling in isolation, not `verifyArmed()`'s waiting
+  // behaviour (covered directly in driver.test.ts), so `programIt` uses
+  // the synchronous escape hatch to keep every existing assertion's timing
+  // exactly as it was.
+  fake.deliverArmedNow();
 }
 
 function decodeGeneral(bytes: Uint8Array) {
@@ -308,7 +316,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     ).rejects.toThrow(/already complete/);
   });
 
-  it("delivers the WAITTOBEGIN bundle immediately once the sequence acks successfully", async () => {
+  it("delivers the WAITTOBEGIN bundle once the sequence acks successfully AND armed delivery is flushed (programIt's own deliverArmedNow(), fix-round 1, F1)", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
     const generals: Uint8Array[] = [];
     fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
@@ -641,6 +649,8 @@ describe("createFakeTransport: a multi-frame programming sequence", () => {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks).toHaveLength(seq.length);
+    expect(generals).toHaveLength(0); // acked, but armed delivery is withheld until a tick (fix-round 1, F1)
+    fake.deliverArmedNow();
     expect(generals).toHaveLength(1); // armed now
   });
 });

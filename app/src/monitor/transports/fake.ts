@@ -123,13 +123,23 @@ export interface FakeScript {
 
 export interface FakeControls {
   /** Advances the fake's internal virtual clock by `ms` and delivers every
-   *  scripted event now due. While disconnected (`injectDisconnect()`,
-   *  before `completeReconnect()`), the clock still advances and due
-   *  events are still consumed from the script (the PM keeps rowing
-   *  regardless of the phone's radio — design spec §4's iOS note) but are
-   *  NOT delivered as notifications; only their values are cached for
-   *  `completeReconnect()` to flush, which is what makes the reconnect
-   *  path re-derive position instead of assuming continuity. */
+   *  scripted event now due — ALSO flushes a pending WAITTOBEGIN bundle
+   *  first, if `program()`'s last frame has acked since the previous call
+   *  (fix-round 1, F1). That armed delivery used to happen SYNCHRONOUSLY
+   *  inside the programming write itself; a reviewer found that this made
+   *  every fake-driven test take driver.ts's IMMEDIATE-check fast path in
+   *  `verifyArmed()`, so the tick-driven WAIT it exists to exercise (the
+   *  actual protection against a stale/pre-send "armed" observation) was
+   *  only ever reached by hand-rolled `stubTransport` tests. Requiring a
+   *  real `tick()` call here — even `tick(0)`, which advances no scripted
+   *  time — makes every fake-driven `program()` call genuinely exercise
+   *  that wait too. While disconnected (`injectDisconnect()`, before
+   *  `completeReconnect()`), the clock still advances and due events are
+   *  still consumed from the script (the PM keeps rowing regardless of the
+   *  phone's radio — design spec §4's iOS note) but are NOT delivered as
+   *  notifications; only their values are cached for `completeReconnect()`
+   *  to flush, which is what makes the reconnect path re-derive position
+   *  instead of assuming continuity. */
   tick(ms: number): void;
   /** The NEXT programming ack-gated FRAME written (0-based index into
    *  `buildProgrammingSequence`'s outer array — the same index a driver's
@@ -164,6 +174,17 @@ export interface FakeControls {
    *  notification — "the machine's next status frame" the driver's
    *  reconnect path re-derives position from. */
   completeReconnect(): void;
+  /**
+   * Fix-round 1, F1: forces the WAITTOBEGIN bundle out RIGHT NOW instead
+   * of waiting for the next `tick()` — the escape hatch for a test that
+   * genuinely needs the OLD synchronous timing (matching a real PM's own
+   * near-instant response) rather than exercising `program()`'s
+   * tick-driven wait. A no-op if no armed delivery is currently pending
+   * (nothing was withheld, or it was already flushed). Most tests should
+   * prefer a real `tick()` call — see `tick()`'s own doc comment for why
+   * this fake no longer delivers armed synchronously inside the write.
+   */
+  deliverArmedNow(): void;
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -343,6 +364,11 @@ export function createFakeTransport(
   // one-shot), matching "the ack never comes" literally: nothing in this
   // fake's own state machine would ever clear it back to sending acks.
   let timeoutInjected = false;
+  // Fix-round 1, F1: set the instant the programming sequence's LAST frame
+  // acks (`onProgrammingFrameComplete`), flushed by the NEXT `tick()` call
+  // (or `deliverArmedNow()`) rather than delivered synchronously — see
+  // `tick()`'s own doc comment for why.
+  let armedBundlePending = false;
 
   let linkDown = false;
   let disconnectCb: ((reason: string) => void) | null = null;
@@ -406,6 +432,16 @@ export function createFakeTransport(
       heartRateBpm: null,
       intervalIndex: 0,
     };
+  }
+
+  /** Fix-round 1, F1: the single place `armedBundlePending` is consumed —
+   *  called from `tick()` (the normal path) and `deliverArmedNow()` (the
+   *  synchronous escape hatch). A no-op when nothing is pending, so both
+   *  callers can invoke it unconditionally. */
+  function flushArmedIfPending(): void {
+    if (!armedBundlePending) return;
+    armedBundlePending = false;
+    deliverArmedBundle();
   }
 
   function sendAck(status: "ok" | "reject"): void {
@@ -482,7 +518,10 @@ export function createFakeTransport(
       programFrameCursor += 1;
       if (programFrameCursor === programSequence.length) {
         phase = "armed";
-        deliverArmedBundle();
+        // Fix-round 1, F1: withheld until a subsequent `tick()` (or
+        // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
+        // this is no longer synchronous with the ack itself.
+        armedBundlePending = true;
       }
     }
   }
@@ -630,7 +669,14 @@ export function createFakeTransport(
 
     tick(ms: number): void {
       virtualClock += ms;
+      // Fix-round 1, F1: flush a pending armed delivery BEFORE any due
+      // scripted event, so a script's own first timeline entry is never
+      // delivered "ahead of" the session actually arming.
+      flushArmedIfPending();
       runDueEvents();
+    },
+    deliverArmedNow(): void {
+      flushArmedIfPending();
     },
     injectNak(atFrame: number): void {
       nakAtFrame = atFrame;
