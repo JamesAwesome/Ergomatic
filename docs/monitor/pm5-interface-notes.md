@@ -1038,6 +1038,31 @@ every flagged item either numbered here or explicitly excused — holds.)
     length); if no (or if the PM doesn't refresh these fields until
     rowing starts), the current state-only check stays the strongest
     honest option.
+13. **0x0037/38's index at a work→work boundary with NO intervening rest**
+    (plan 7A-fix Task 3 review, critical finding — `domain/monitor/pm5/
+    intervalIndex.ts`'s `toProgramIndex`). §18 #3's confirmed forward-
+    attribution rule ("a rest reports the interval it is heading into") only
+    has hardware evidence for the RESTING half — a boundary that transitions
+    while the state word is still `"rowing"` throughout (a `restSeconds: 0`
+    interval, which `seaFretProgram()`'s own warmup interval and
+    `MINIMAL_PROGRAM` both are) never engaged the resting branch during that
+    session, so what 0x0037/38 actually carries at THIS shape of boundary
+    is genuinely unknown — today's code applies the rowing rule (pass the
+    machine index through unadjusted) for lack of any confirmed alternative,
+    NOT because it has been observed correct here. `src/monitor/driver.ts`
+    logs an `"index-unverified"` entry every time this happens so the
+    assumption is visible in the trace, never silent. Expected: unknown by
+    design — this item exists to become known. Observed: program a
+    two-interval workout where interval 0 has `restSeconds: 0` (e.g. edit
+    the harness's `TEST_PROGRAM` to a second interval with `restSeconds: 0`
+    on the first), row through the work0→work1 boundary, and dump
+    `exportLog()`'s raw per-characteristic trace (the `"notify"` entries the
+    §18 #3 session's own raw-logging fix produces) for 0x0037/38 — does the
+    Split/Interval Number at that boundary read `0` (this interval, matching
+    the rowing rule as applied today) or `1` (the interval it's heading
+    into, matching the resting rule's own shape applied even with no rest)?
+    That reading settles which rule (if either) actually governs a
+    work→work boundary.
 
 Items already resolved with no laptop dependency (not on this list on
 purpose): `intervalIndex`/`spm` nullability is a business rule, not a wire

@@ -595,34 +595,75 @@ export function createPm5Driver(
     announceReconnectIfPending();
     const status = raw as RawPm5Status;
     // `rawActual.index` is 0x0037/38's own Split/Interval Number, UNCHANGED
-    // (`toIntervalActual` never touched by this task) — the same forward
-    // attribution D3 documents for 0x0033 applies here too
-    // (interface-notes.md §18 #3: both fields "agreed with each other"),
-    // normalized below via the CURRENT machine state, same as
-    // `maybeEmitFrame`'s own `base.state`.
+    // (`toIntervalActual` never touched by this task). Normalized below via
+    // the CURRENT machine state, same as `maybeEmitFrame`'s own
+    // `base.state`. This is an INFERENCE, not an observed fact: §18 #3's
+    // hardware session only ever directly OBSERVED one 0x0037/38 index
+    // value (the phantom `2` at the session's FINAL boundary) — the
+    // session's FIRST boundary's own 0x0037 arrived but was silently
+    // dropped before decode (Task 1's own "arrives-discarded" diagnosis,
+    // fixed by Task 1, not this task), so no earlier boundary's raw value
+    // was ever actually captured to confirm this rule generalizes. Applying
+    // the SAME forward-attribution rule 0x0033 is confirmed to use is the
+    // most defensible inference available, not a second confirmed fact.
+    // See the OPEN hardware question below for the one shape (a work→work
+    // boundary with no intervening rest) where even this inference has no
+    // grounding at all.
     const rawActual = toIntervalActual(status);
     const state = toMonitorFrame(status).state;
     const programLength = program?.intervals.length ?? 0;
+    // `rawActual.index` is `IntervalActual`'s own (now `number | null`)
+    // field, but `toIntervalActual` (`pm5/parse.ts`) always assigns it a
+    // real decoded byte (`raw.splitIntervalNumber`) — the wire has no null
+    // sentinel here, so this can never actually be `null`. Asserted past
+    // the type rather than branched on (an earlier version branched here;
+    // coverage never exercised the `null` side through any real call path,
+    // the same unreachable-by-construction shape `maybeEmitFrame`'s own
+    // comment describes for its `terminalLatched` check) — same established
+    // pattern as this file's own `raw as RawPm5Status` casts elsewhere.
     const normalizedIndex = toProgramIndex(
-      rawActual.index,
+      rawActual.index as number,
       state,
       programLength,
     );
-    // `IntervalActual.index` has no null slot (design spec §2's verbatim
-    // type, unchanged by this task) — an unexplainable machine value falls
-    // back to 0, the same conservative-reading precedent
-    // `UNKNOWN_WORKOUT_STATE_FALLBACK` sets elsewhere in this file. The true
-    // signal is never lost: it is the "divergence" entry logged below, not
-    // this fallback number, that a diagnostics view is expected to read.
+    // DEVIATION from design spec §2's verbatim `IntervalActual.index:
+    // number` (Task 3 review; recorded in `docs/design/DEVIATIONS.md`'s
+    // "Domain spec deviations (non-UI)" table and on the type itself,
+    // `domain/monitor/types.ts`) — `null` survives here rather than being
+    // fabricated into a number. A future 7C log screen prefilling from
+    // `MonitorRun.actuals` (`src/monitor/monitorRun.ts`) must never read
+    // `null` as "interval 0"; the true value is unknown, not zero.
     const actual: IntervalActual = {
       ...rawActual,
-      index: normalizedIndex ?? 0,
+      index: normalizedIndex,
     };
     log.record(
       "interval-complete",
       `index=${actual.index} (machine reported ${rawActual.index})`,
     );
     emit({ kind: "intervalComplete", actual });
+
+    // OPEN HARDWARE QUESTION (Task 3 review, critical finding —
+    // interface-notes.md §17 item 13): with `restSeconds: 0` the state word
+    // never leaves `"rowing"` at a work→work boundary (no rest tick ever
+    // fires in between), so `toProgramIndex`'s ONLY confirmed-by-hardware
+    // branch (the resting offset) never engages here — the rowing branch
+    // (pass `machineIndex` through unadjusted) runs instead, purely because
+    // it's the fallback for lack of a confirmed alternative, NOT because
+    // this specific shape has ever been observed correct. `seaFretProgram()`'s
+    // own 300s warmup interval and `MINIMAL_PROGRAM` both have this shape.
+    // Deliberately NOT inventing a new offset for this case — this whole
+    // phase exists to stop guessing at PM5 semantics from documented text
+    // or code-review inference alone (design spec's own layering rule).
+    // Logged so the assumption is visible in the trace, never silent; §17
+    // item 13 is the runsheet entry that would settle it with a real
+    // reading.
+    if (state === "rowing") {
+      log.record(
+        "index-unverified",
+        `actual.index=${actual.index} (0x0037/38) normalized while state=rowing — no rest tick preceded this boundary (restSeconds may be 0 on the completed interval), so the machine's work-to-work numbering at this exact boundary shape is UNCONFIRMED by hardware (interface-notes.md §17 item 13)`,
+      );
+    }
 
     // Fix-round MED-2 (UNCHANGED by this task, deliberately still comparing
     // RAW values): 0x0033's Interval Count (tracked in the machine's own

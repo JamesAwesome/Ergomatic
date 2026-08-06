@@ -7,7 +7,10 @@
 // MonitorCapabilities/MonitorFrame/IntervalActual/MonitorEvent/MonitorDriver
 // are the design spec's §2 block, reproduced field-for-field (names, types,
 // order, and the reasoning in each comment) —
-// docs/superpowers/specs/2026-08-05-phase-7a-monitor-domain-design.md §2.
+// docs/superpowers/specs/2026-08-05-phase-7a-monitor-domain-design.md §2 —
+// with ONE recorded exception: `IntervalActual.index`'s type. See that
+// field's own comment and `docs/design/DEVIATIONS.md`'s "Domain spec
+// deviations (non-UI)" table for why.
 //
 // domain/monitor/** imports nothing from src/.
 
@@ -31,6 +34,18 @@ export interface MonitorFrame {
   spm: number | null;
   heartRateBpm: number | null; // null = no belt data THIS frame
   intervalIndex: number | null;
+  // ^ OUR program index (0-based per work interval), never the raw machine
+  //   value straight off the wire — normalized by the driver via
+  //   `domain/monitor/pm5/intervalIndex.ts`'s `toProgramIndex` before this
+  //   field is ever set (Phase 7A-fix Task 3, D3). `null` while armed/idle/
+  //   finished/terminated (business rule, unchanged) OR while a real
+  //   interval IS current but the machine's own value can't be explained by
+  //   the program's length (the D3 case — logged as `"divergence"` by the
+  //   driver, not represented here). A `MonitorFrame` built directly by
+  //   `pm5/parse.ts`'s own `toMonitorFrame` — e.g. in that module's unit
+  //   tests — still carries the RAW machine value in this field; only a
+  //   `MonitorFrame` that has passed through `src/monitor/driver.ts` carries
+  //   OUR index.
   intervalRemaining: { kind: "time" | "distance"; value: number } | null;
   // ^ COMPUTED by the driver (program value minus quantized progress) —
   //   rev 1.30 has no "remaining" field on any characteristic (H3).
@@ -48,7 +63,19 @@ export interface MonitorFrame {
 }
 
 export interface IntervalActual {
-  index: number;
+  // DEVIATION from design spec §2's verbatim `index: number` — see
+  // `docs/design/DEVIATIONS.md`'s "Domain spec deviations (non-UI)" table.
+  // `null` means the machine's reported index (0x0037/38's Split/Interval
+  // Number) could not be explained by the armed program's length
+  // (`domain/monitor/pm5/intervalIndex.ts`'s `toProgramIndex`, Phase
+  // 7A-fix Task 3, D3) — logged by the driver as `"divergence"`.
+  // **A CONSUMER MUST NOT TREAT `null` AS INTERVAL 0** — it means "this
+  // actual's own interval identity is unknown," not "the first interval."
+  // 7C, which prefills a rower's workout log from `MonitorRun.actuals`
+  // (`src/monitor/monitorRun.ts`), is the reason this was widened before
+  // any UI existed to consume it: a fabricated `0` here would silently
+  // produce a plausible-looking but wrong log entry.
+  index: number | null;
   elapsedSeconds: number;
   distanceMeters: number;
   avgSplit: number | null;

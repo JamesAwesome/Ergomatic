@@ -702,6 +702,15 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     expect(kinds[kinds.length - 1]).toBe("workoutComplete");
 
     const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    // STALE (flagged, not fixed here — Task 3 review, owned by Task 4): this
+    // is the repo's only end-to-end index assertion across a full multi-
+    // interval program, and it passes only because `seaFretProgram`'s own
+    // scripted timeline (this file's `timeline` array above) feeds
+    // `actual.index` values the fake ALREADY treats as pre-normalized
+    // (`fake.ts`'s own now-flagged-stale doc comment) rather than the real
+    // forward-attributed wire values D3 proved the hardware sends. Task 4
+    // rebuilding the fake to emit true wire values is expected to change
+    // what this assertion needs to check, not just how it's built.
     expect(
       boundaries.map((e) =>
         e.kind === "intervalComplete" ? e.actual.index : -1,
@@ -1699,7 +1708,7 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     expect(divergence?.detail).toContain("1-interval program");
   });
 
-  it("intervalComplete emission: an actual.index far past the armed program's length falls back to 0 (IntervalActual.index has no null slot) and logs divergence", async () => {
+  it("intervalComplete emission: an actual.index far past the armed program's length normalizes to null (never a fabricated number) and logs divergence", async () => {
     const timeline: FakeTimelineEvent[] = [
       {
         atMs: 100,
@@ -1740,10 +1749,11 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
-      // The documented fallback (this function's own comment) — the raw
-      // machine value (9) is never assigned here; it survives only in the
-      // "divergence" entry asserted below.
-      actual: { index: 0 },
+      // Widened type (Task 3 review, `docs/design/DEVIATIONS.md`) — the raw
+      // machine value (9) is never assigned here, and neither is a
+      // fabricated stand-in number; `null` is the honest signal, with the
+      // raw value surviving in the "divergence" entry asserted below.
+      actual: { index: null },
     });
     const divergence = log
       .entries()
@@ -1798,7 +1808,7 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
-      actual: { index: 0 },
+      actual: { index: null },
     });
     const divergence = log
       .entries()
@@ -1809,6 +1819,146 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
       );
     expect(divergence).toBeDefined();
     expect(divergence?.detail).toContain("state=resting");
+  });
+});
+
+describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified' instead of staying silent", () => {
+  // Critical review finding: with `restSeconds: 0` the state word never
+  // leaves "rowing" at a work->work boundary (no rest tick ever fires in
+  // between), so the forward-attributed index passes through UNADJUSTED and
+  // the actual is filed one interval late -- with NO divergence and NO
+  // MED-2 entry, because the value is perfectly in-range and both raw
+  // fields agree with each other. Against TODAY's (pre-review-fix) code,
+  // the second assertion below fails: no "index-unverified" log entry
+  // exists at all, so this exact shape has nothing in the trace to flag it
+  // as an assumption rather than a confirmed reading.
+  it("a work->work boundary with restSeconds: 0 stays in 'rowing' the whole time and logs 'index-unverified', not silence", async () => {
+    const restlessProgram: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0, // no rest -- the state word never becomes "resting"
+        },
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      // No rest, so no separate "resting" tick ever reports interval 0's
+      // trailing rest — by the time this status arrives, the machine has
+      // already moved straight into interval 1's own rowing, and BOTH raw
+      // fields (0x0033 here, 0x0037/38 on the boundary below) read "1" —
+      // agreeing with EACH OTHER, exactly the reviewer's reproduction
+      // ("NO-REST DIVERGENCE []"), while both actually describe interval 0.
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME, // rowing, never resting
+        elapsedSeconds: 65,
+        distanceMeters: 200,
+        spm: 22,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        intervalIndex: 1,
+      },
+      {
+        atMs: 200,
+        kind: "boundary",
+        // The fake's own pre-D3 model (flagged stale, Task 4's own fix)
+        // supplies this as an already-"our-index" value; the point of this
+        // test is the STATE the boundary fires under (rowing, never
+        // resting), which drives the new log regardless of the fake's own
+        // numbering fidelity. `index: 1` here reproduces the reviewer's
+        // exact finding: interval 0's own actual filed one interval late.
+        actual: {
+          index: 1,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 22,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 200,
+      },
+    ];
+    const { fake, driver, events, log } = harness({
+      program: restlessProgram,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, restlessProgram);
+
+    fake.tick(200);
+
+    // The boundary still fires and still normalizes to SOMETHING plausible
+    // (never invents a NEW offset for this shape, per the review's explicit
+    // instruction) -- this is not a defect fix, only a visibility fix.
+    const complete = events.find((e) => e.kind === "intervalComplete");
+    expect(complete).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 1 },
+    });
+
+    const unverified = log.entries().find((e) => e.kind === "index-unverified");
+    expect(unverified).toBeDefined();
+    expect(unverified?.detail).toContain("actual.index=1");
+    expect(unverified?.detail).toContain("state=rowing");
+    expect(unverified?.detail).toContain("§17 item 13");
+
+    // No divergence of either kind fires -- the value is perfectly in
+    // range and both raw fields agree with each other, exactly the silent
+    // shape the review's critical finding described.
+    expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
+  });
+
+  it("a boundary that DOES follow a rest tick never logs 'index-unverified' (the rule has a real hardware-confirmed signal there)", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 65,
+        distanceMeters: 100,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 130,
+        intervalIndex: 1,
+      },
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 22,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 200,
+      },
+    ];
+    const { fake, driver, events, log } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+
+    fake.tick(200);
+
+    expect(events.some((e) => e.kind === "intervalComplete")).toBe(true);
+    expect(log.entries().some((e) => e.kind === "index-unverified")).toBe(
+      false,
+    );
   });
 });
 
