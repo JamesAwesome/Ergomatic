@@ -646,6 +646,14 @@ describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, 
     })),
   };
 
+  /** The same program with its rests removed — the ONLY shape in which a
+   *  boundary can legitimately be delivered while the state word still
+   *  reads "rowing" (§17 item 13's own open question). The fake enforces
+   *  this: see `boundaryBundle`'s guard. */
+  const TWO_INTERVALS_NO_REST: WorkoutProgram = {
+    intervals: TWO_INTERVALS.intervals.map((i) => ({ ...i, restSeconds: 0 })),
+  };
+
   /** The full §18 #3 observation table for a 2×(1:00/0:30) session, in the
    *  fake's own terms: what OUR index and the machine's state are at each
    *  point, and what the machine actually put in 0x0033's Interval Count. */
@@ -726,8 +734,13 @@ describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, 
   });
 
   it("a boundary while ROWING is NOT adjusted — no offset is invented for a work->work boundary (§17 item 13)", async () => {
+    // `restSeconds: 0`, and now REQUIRED to be: a rowing boundary on an
+    // interval that HAS a trailing rest describes a machine that has never
+    // existed, and the fake throws rather than quietly identity-numbering
+    // it. The no-rest shape is the only one where a rowing boundary is
+    // real — which is exactly why §17 item 13 is still open.
     const fake = createFakeTransport({
-      program: TWO_INTERVALS,
+      program: TWO_INTERVALS_NO_REST,
       events: [
         {
           atMs: 100,
@@ -756,7 +769,7 @@ describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, 
         },
       ],
     });
-    await programIt(fake, TWO_INTERVALS);
+    await programIt(fake, TWO_INTERVALS_NO_REST);
 
     const asSplits: Uint8Array[] = [];
     fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) =>
@@ -765,6 +778,47 @@ describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, 
     fake.tick(200);
 
     expect(decodeAsSplit(asSplits[0]!).splitIntervalNumber).toBe(0);
+  });
+
+  it("REFUSES an impossible fixture: an interval with a trailing rest cannot report its boundary while the machine still reads 'rowing'", async () => {
+    // The guard exists because the documented-only version of this rule was
+    // already broken once, by this file's own suite (Task 4 review,
+    // IMPORTANT-4). A fixture like this used to sail through and quietly
+    // produce an identity-numbered wire value — a test "proving" the D3
+    // normalization against bytes the hardware would never have sent.
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS, // every interval has a 30s trailing rest
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME, // not resting
+          elapsedSeconds: 55,
+          distanceMeters: 190,
+          spm: 22,
+          currentSplit: 120,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSplit: 120,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS);
+
+    expect(() => fake.tick(200)).toThrow(/30s trailing rest/);
   });
 });
 

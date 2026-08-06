@@ -377,15 +377,32 @@ function statusBundle(
  *  boundary notifications arriving while the state word already reads
  *  `resting` (interface-notes.md §18 #3: "20 resting → 21 notify 0x0037"),
  *  so a script that wants the hardware's own numbering puts a resting tick
- *  before its boundary event, exactly as the machine does. */
+ *  before its boundary event, exactly as the machine does.
+ *
+ *  ENFORCED, not merely documented (Task 4 review, IMPORTANT-4): a script
+ *  that completes an interval WITH a trailing rest while the state word
+ *  still says anything other than `resting` describes a machine we have
+ *  never met — the real one had already rolled into that rest and was
+ *  reporting the forward-attributed number by the time either
+ *  characteristic went out. Left as a comment, the rule was already broken
+ *  once by this file's own test suite, and the cost of a silently
+ *  identity-numbered boundary is a fixture that "proves" the D3
+ *  normalization against a wire value the hardware would not have sent. */
 function boundaryBundle(
   e: FakeBoundaryEvent,
   machineState: MonitorFrame["state"],
+  program: WorkoutProgram,
 ): {
   split: SplitIntervalData;
   asSplit: AdditionalSplitIntervalData;
 } {
   const { actual } = e;
+  const completed = program.intervals[actual.index];
+  if (completed && completed.restSeconds > 0 && machineState !== "resting") {
+    throw new Error(
+      `fake transport: boundary for interval ${actual.index} delivered while the machine reads "${machineState}", but that interval has a ${completed.restSeconds}s trailing rest — a real PM5 is already RESTING (and numbering forward) when it sends 0x0037/0x0038 for it (interface-notes.md §18 #3). Put a resting status tick before this boundary event.`,
+    );
+  }
   const wireIndex = toMachineIndex(actual.index, machineState);
   return {
     asSplit: {
@@ -566,7 +583,7 @@ export function createFakeTransport(
    *  0x0038 — one `intervalComplete` for a two-interval workout, carrying
    *  interval 2's identity with interval 1's numbers. */
   function deliverBoundary(e: FakeBoundaryEvent): void {
-    const { split, asSplit } = boundaryBundle(e, machineState);
+    const { split, asSplit } = boundaryBundle(e, machineState, script.program);
     notify(SPLIT_INTERVAL_DATA_UUID, buildSplitIntervalDataBytes(split));
     notify(
       ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
