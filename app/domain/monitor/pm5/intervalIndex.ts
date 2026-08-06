@@ -30,6 +30,54 @@
 import type { MonitorFrame } from "../types.js";
 
 /**
+ * The FORWARD direction: our program index -> the number the machine would
+ * put on the wire for it, given the machine's own state. Exists for
+ * `src/monitor/transports/fake.ts` (Phase 7A-fix Task 4), which has to
+ * synthesize 0x0033's Interval Count and 0x0037/38's Split/Interval Number
+ * the way the observed PM5 writes them — and cannot compute the offset
+ * itself without putting Concept2 numbering knowledge in `src/`.
+ *
+ * Deliberately NOT implemented as, or shared with, `toProgramIndex`'s own
+ * arithmetic: the fake feeding the driver a value derived from the very
+ * function under test would make an end-to-end index assertion tautological
+ * (both sides wrong in the same direction still round-trips). These are two
+ * independently written functions, each pinned by its own unit test to the
+ * §18 #3 observation table, so a mutation to either one breaks the
+ * round trip.
+ *
+ * The observed table (interface-notes.md §18 #3), read in this direction:
+ *   - our 0, rowing (work0)                -> machine 0
+ *   - our 0, resting (rest after work0)    -> machine 1
+ *   - our 1, rowing (work1)                -> machine 1
+ *   - our 1, resting (rest after work1)    -> machine 2  (the "phantom")
+ *
+ * **No clamping, ever, and no upper bound.** The phantom index a real PM5
+ * emits past the end of a program (our last interval's trailing rest) is
+ * exactly the value this must produce for the driver to have something real
+ * to normalize — clamping it here would delete the defect from the fake.
+ *
+ * **A `"rowing"` tick passes through UNADJUSTED** — the confirmed half of
+ * the rule is the resting one. What the machine numbers at a work→work
+ * boundary with no intervening rest is genuinely unknown (§17 item 13);
+ * this function does not invent an offset for it, so a `restSeconds: 0`
+ * boundary round-trips as identity and the driver's `"index-unverified"`
+ * log entry — not a fabricated wire value — is the observable that the
+ * assumption was in play.
+ *
+ * **States outside `"resting"`** all pass through: `toProgramIndex`'s own
+ * `null` for inactive states is a business rule about which of OUR
+ * intervals is current, not a claim that the machine stops writing a byte
+ * into the field — a real PM5 puts some number in 0x0033's Interval Count
+ * on every status tick, armed and finished included.
+ */
+export function toMachineIndex(
+  programIndex: number,
+  machineState: MonitorFrame["state"],
+): number {
+  return machineState === "resting" ? programIndex + 1 : programIndex;
+}
+
+/**
  * `machineIndex` -> our program index, given the machine's own reported
  * `machineState` and the ARMED program's interval count (`programLength`,
  * `WorkoutProgram.intervals.length` — this function takes the count, not
@@ -82,54 +130,6 @@ import type { MonitorFrame } from "../types.js";
  * `"divergence"` when `machineState` WAS `"rowing"`/`"resting"` (a real
  * interval was supposedly current) and this function still returned `null`.
  */
-/**
- * The FORWARD direction: our program index -> the number the machine would
- * put on the wire for it, given the machine's own state. Exists for
- * `src/monitor/transports/fake.ts` (Phase 7A-fix Task 4), which has to
- * synthesize 0x0033's Interval Count and 0x0037/38's Split/Interval Number
- * the way the observed PM5 writes them — and cannot compute the offset
- * itself without putting Concept2 numbering knowledge in `src/`.
- *
- * Deliberately NOT implemented as, or shared with, `toProgramIndex`'s own
- * arithmetic: the fake feeding the driver a value derived from the very
- * function under test would make an end-to-end index assertion tautological
- * (both sides wrong in the same direction still round-trips). These are two
- * independently written functions, each pinned by its own unit test to the
- * §18 #3 observation table, so a mutation to either one breaks the
- * round trip.
- *
- * The observed table (interface-notes.md §18 #3), read in this direction:
- *   - our 0, rowing (work0)                -> machine 0
- *   - our 0, resting (rest after work0)    -> machine 1
- *   - our 1, rowing (work1)                -> machine 1
- *   - our 1, resting (rest after work1)    -> machine 2  (the "phantom")
- *
- * **No clamping, ever, and no upper bound.** The phantom index a real PM5
- * emits past the end of a program (our last interval's trailing rest) is
- * exactly the value this must produce for the driver to have something real
- * to normalize — clamping it here would delete the defect from the fake.
- *
- * **A `"rowing"` tick passes through UNADJUSTED** — the confirmed half of
- * the rule is the resting one. What the machine numbers at a work→work
- * boundary with no intervening rest is genuinely unknown (§17 item 13);
- * this function does not invent an offset for it, so a `restSeconds: 0`
- * boundary round-trips as identity and the driver's `"index-unverified"`
- * log entry — not a fabricated wire value — is the observable that the
- * assumption was in play.
- *
- * **States outside `"resting"`** all pass through: `toProgramIndex`'s own
- * `null` for inactive states is a business rule about which of OUR
- * intervals is current, not a claim that the machine stops writing a byte
- * into the field — a real PM5 puts some number in 0x0033's Interval Count
- * on every status tick, armed and finished included.
- */
-export function toMachineIndex(
-  programIndex: number,
-  machineState: MonitorFrame["state"],
-): number {
-  return machineState === "resting" ? programIndex + 1 : programIndex;
-}
-
 export function toProgramIndex(
   machineIndex: number,
   machineState: MonitorFrame["state"],

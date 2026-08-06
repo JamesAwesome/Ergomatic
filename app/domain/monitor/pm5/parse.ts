@@ -23,21 +23,27 @@ const HEARTRATE_INVALID = 255;
  * D5 (interface-notes.md §18, PM5 432331249, 2026-08-05): the machine sent
  * `0`, NOT the documented `255`, on 0x0038's Work Heartrate byte with no
  * belt paired — an `avgHeartRateBpm: 0` reached `IntervalActual` and would
- * have been logged by 7C as a real reading of zero beats per minute. §15
- * #2 recorded the counter-evidence for this BEFORE the session ran: the
- * document's own "invalid" convention is PER-FIELD, and 0x0039's Recovery
- * Heart Rate (BLE doc p.21) is explicitly "(zero = not valid data)" — a
- * different sentinel on the very same characteristic family.
+ * have been logged by 7C as a real reading of zero beats per minute.
  *
- * `heartRate()` below therefore treats BOTH bytes as "no reading". The
- * union is safe in the direction that matters: 0 bpm is not a survivable
- * heart rate and 255 bpm is not a reachable one, so neither value can ever
- * be a genuine measurement this discards — whereas passing either through
- * fabricates a plausible-looking number for a rower who simply wasn't
- * wearing a belt. Applied to every heart-rate field this module decodes,
- * not only the one 0x0038 byte the session directly observed: the observed
- * case is the ONE we have, and a per-field split would claim a distinction
- * between fields that no source states.
+ * §15 #2 is DOUBLE-EDGED here, and both edges belong in the citation. It
+ * records that 0x0039's Recovery Heart Rate (BLE doc p.21) is explicitly
+ * documented "(zero = not valid data)" — a zero sentinel really does exist
+ * in this characteristic family, which is what made the observation above
+ * predictable. But the SAME note records why that is only suggestive: the
+ * document's "invalid" convention is PER-FIELD, so 0x0039's rule is no more
+ * evidence about 0x0032's or 0x0038's than 0x0032's documented `255` was
+ * evidence about 0x0038's.
+ *
+ * Neither edge decides it. The deciding argument is FIELD-INDEPENDENT: no
+ * heart-rate field on this machine can carry a true `0` — a rower producing
+ * zero beats per minute is not a rower — and `255` is equally unreachable.
+ * `heartRate()` therefore maps BOTH bytes to `null`, and can never discard
+ * a genuine measurement doing so, whereas passing either through fabricates
+ * a plausible-looking number for someone who simply wasn't wearing a belt.
+ * That argument holds for every heart-rate field this module decodes —
+ * exactly three: 0x0032's live Heartrate, and 0x0038's Work and Rest
+ * averages — so all three get it, not by generalizing the one observation
+ * but because the same reasoning covers each of them on its own.
  *
  * `src/monitor/transports/fake.ts` emits this same byte for a beltless
  * session, so the end-to-end path is exercised in CI.

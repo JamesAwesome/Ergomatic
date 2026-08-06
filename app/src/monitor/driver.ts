@@ -250,17 +250,19 @@ export function createPm5Driver(
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
   const seen = { general: false, as1: false, as2: false };
   /**
-   * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): which halves
-   * of the CURRENT boundary have landed. An interval boundary is reported
-   * on two separate characteristics — 0x0037 (identity: Split/Interval
-   * Number, time, distance) and 0x0038 (the averages) — and the observed
-   * PM5 sends them in that order, 0x0037 first, one notification apart.
+   * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
+   * Split/Interval Number each half of the pending boundary reported, or
+   * `null` for a half that has not arrived since the last emission. An
+   * interval boundary is reported on two separate characteristics — 0x0037
+   * (identity: Split/Interval Number, time, distance) and 0x0038 (the
+   * averages, and its OWN copy of the Split/Interval Number) — and the
+   * observed PM5 sends them in that order, one notification apart.
    *
    * The version of this driver that met the erg emitted from 0x0037's
    * arrival, gated on a flag only 0x0038 ever set. Both halves of that were
    * wrong, and a two-interval session showed both:
    * - the FIRST boundary's 0x0037 arrived before 0x0038 had ever been seen,
-   *   so it was dropped with no log line and no event — one
+   *   so it was decoded, merged into `raw`, and then never emitted — one
    *   `intervalComplete` for a workout that crossed two boundaries
    *   ("arrives-discarded", the diagnosis Task 1 confirmed over
    *   "never-arrives");
@@ -269,14 +271,26 @@ export function createPm5Driver(
    *   notification away — interval 2's identity carried interval 1's
    *   averages.
    *
-   * Both are fixed by the same rule: emit when THIS boundary's two halves
-   * have BOTH merged into `raw`, whichever order they arrive in, then reset
-   * for the next one. Order-agnostic on purpose — the observed order is
-   * firmware behaviour, not a documented guarantee, and a driver that
+   * Both are fixed by the same rule: emit when the two halves of the SAME
+   * boundary have merged into `raw`, whichever order they arrive in, then
+   * reset for the next one. Order-agnostic on purpose — the observed order
+   * is firmware behaviour, not a documented guarantee, and a driver that
    * silently depended on it would be one firmware revision from repeating
    * exactly this defect.
+   *
+   * Matching on the NUMBER, not merely on "one of each has arrived", is the
+   * fix round's own correction (Task 4 review, IMPORTANT-1): a pair-by-
+   * arrival gate still mixed boundaries in a narrower way. If a boundary's
+   * 0x0037 is lost, the orphaned 0x0038 sitting in the slot pairs with the
+   * NEXT boundary's 0x0037 and emits that boundary's identity carrying the
+   * orphan's averages — D4's second cause, surviving. Comparing the two
+   * halves' own Split/Interval Numbers (both characteristics carry one,
+   * `pm5/parse.ts`) makes a cross-boundary pairing impossible to construct.
    */
-  const boundaryHalves = { split: false, asSplit: false };
+  const boundaryHalves: { split: number | null; asSplit: number | null } = {
+    split: null,
+    asSplit: null,
+  };
   const listeners = new Set<(e: MonitorEvent) => void>();
   let pendingAck: ((outcome: PendingAckOutcome) => void) | null = null;
   // Fix-round MED-1: responses that arrive with NOTHING awaiting them yet
@@ -616,17 +630,57 @@ export function createPm5Driver(
     }
   }
 
-  /** Records the arrival of one half of a boundary and emits once both
-   *  halves of THAT boundary are in — see `boundaryHalves`'s own doc
-   *  comment (D4). The reset happens BEFORE the emission, not after, so a
-   *  listener that somehow re-entered could never see a half-consumed
-   *  pair. */
-  function noteBoundaryHalf(half: "split" | "asSplit"): void {
-    boundaryHalves[half] = true;
-    if (!(boundaryHalves.split && boundaryHalves.asSplit)) return;
-    boundaryHalves.split = false;
-    boundaryHalves.asSplit = false;
+  /**
+   * Records the arrival of one half of a boundary, carrying that half's own
+   * Split/Interval Number, and emits once BOTH halves of the SAME boundary
+   * are in — see `boundaryHalves`'s own doc comment (D4). The reset happens
+   * BEFORE the emission, not after, so a listener that somehow re-entered
+   * could never see a half-consumed pair.
+   *
+   * **A half whose partner never comes is DISCARDED, never emitted and
+   * never paired forward.** The moment a half belonging to a different
+   * boundary arrives, the stale one is dropped and logged
+   * (`boundary-orphan`) — including the case where the same characteristic
+   * reports twice in a row, which means the OTHER one was lost. The
+   * consequence is deliberate and is the lesser of the two evils available:
+   * that boundary's `intervalComplete` is lost (its data genuinely is —
+   * half of it never arrived, and `MonitorRun.actuals` is already
+   * documented as possibly shorter than `program.intervals`), while every
+   * LATER boundary stays intact. The alternative — emitting an identity
+   * with someone else's averages — is the D4 corruption itself, and it is
+   * silent: nothing downstream could tell such an actual from a real one.
+   * The log entry is what makes the loss visible instead.
+   */
+  function noteBoundaryHalf(half: "split" | "asSplit", boundary: number): void {
+    const otherHalf = half === "split" ? "asSplit" : "split";
+    const superseded = boundaryHalves[half];
+    if (superseded !== null && superseded !== boundary) {
+      // This same characteristic reported twice with nothing from its
+      // partner in between: the partner for `superseded` was lost.
+      recordOrphanedHalf(half, superseded);
+    }
+    boundaryHalves[half] = boundary;
+
+    const waiting = boundaryHalves[otherHalf];
+    if (waiting === null) return;
+    if (waiting !== boundary) {
+      recordOrphanedHalf(otherHalf, waiting);
+      boundaryHalves[otherHalf] = null;
+      return;
+    }
+    boundaryHalves.split = null;
+    boundaryHalves.asSplit = null;
     emitIntervalComplete();
+  }
+
+  function recordOrphanedHalf(
+    half: "split" | "asSplit",
+    boundary: number,
+  ): void {
+    log.record(
+      "boundary-orphan",
+      `${half === "split" ? "0x0037" : "0x0038"} for Split/Interval Number ${boundary} never found its partner — discarded rather than paired with another boundary (that interval's actual is lost)`,
+    );
   }
 
   function emitIntervalComplete(): void {
@@ -639,13 +693,15 @@ export function createPm5Driver(
     // the CURRENT machine state, same as `maybeEmitFrame`'s own
     // `base.state`. This is an INFERENCE, not an observed fact: §18 #3's
     // hardware session only ever directly OBSERVED one 0x0037/38 index
-    // value (the phantom `2` at the session's FINAL boundary) — the
-    // session's FIRST boundary's own 0x0037 arrived but was silently
-    // dropped before decode (Task 1's own "arrives-discarded" diagnosis,
-    // fixed by Task 1, not this task), so no earlier boundary's raw value
-    // was ever actually captured to confirm this rule generalizes. Applying
-    // the SAME forward-attribution rule 0x0033 is confirmed to use is the
-    // most defensible inference available, not a second confirmed fact.
+    // value (the phantom `2` at the session's FINAL boundary). The
+    // session's FIRST boundary's own 0x0037 DID arrive and WAS decoded and
+    // merged — what failed was the emission gate above, which then held no
+    // record of the value (Task 1's "arrives-discarded" verdict; Task 1 was
+    // diagnosis only, and the gate is fixed in this function's own caller,
+    // `noteBoundaryHalf`). So no earlier boundary's raw value was ever
+    // reported, and this rule's generality is unconfirmed. Applying the
+    // SAME forward-attribution rule 0x0033 is confirmed to use is the most
+    // defensible inference available, not a second confirmed fact.
     // See the OPEN hardware question below for the one shape (a work→work
     // boundary with no intervening rest) where even this inference has no
     // grounding at all.
@@ -771,8 +827,8 @@ export function createPm5Driver(
     ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
     "0x0038",
     parseAdditionalSplitIntervalData,
-    () => {
-      noteBoundaryHalf("asSplit");
+    (decoded) => {
+      noteBoundaryHalf("asSplit", decoded.splitIntervalNumber);
     },
   );
   mergeStatus(GENERAL_STATUS_UUID, "0x0031", parseGeneralStatus, () => {
@@ -821,8 +877,8 @@ export function createPm5Driver(
     SPLIT_INTERVAL_DATA_UUID,
     "0x0037",
     parseSplitIntervalData,
-    () => {
-      noteBoundaryHalf("split");
+    (decoded) => {
+      noteBoundaryHalf("split", decoded.splitIntervalNumber);
     },
   );
 

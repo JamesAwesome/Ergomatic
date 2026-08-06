@@ -23,7 +23,11 @@ import {
   SPLIT_INTERVAL_DATA_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../domain/monitor/pm5/uuids.js";
-import { buildGeneralStatusBytes } from "../../domain/monitor/pm5/statusFrames.js";
+import {
+  buildAdditionalSplitIntervalDataBytes,
+  buildGeneralStatusBytes,
+  buildSplitIntervalDataBytes,
+} from "../../domain/monitor/pm5/statusFrames.js";
 import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import type {
   DiscoveredMonitor,
@@ -1914,15 +1918,25 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
 });
 
 describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified' instead of staying silent", () => {
-  // Critical review finding: with `restSeconds: 0` the state word never
+  // Task 3's review finding, and the shape with the least evidence behind
+  // it anywhere in this driver: with `restSeconds: 0` the state word never
   // leaves "rowing" at a work->work boundary (no rest tick ever fires in
-  // between), so the forward-attributed index passes through UNADJUSTED and
-  // the actual is filed one interval late -- with NO divergence and NO
-  // MED-2 entry, because the value is perfectly in-range and both raw
-  // fields agree with each other. Against TODAY's (pre-review-fix) code,
-  // the second assertion below fails: no "index-unverified" log entry
-  // exists at all, so this exact shape has nothing in the trace to flag it
-  // as an assumption rather than a confirmed reading.
+  // between), so `toProgramIndex`'s only hardware-confirmed branch — the
+  // resting offset — never engages, and the machine's number passes through
+  // UNADJUSTED. Nothing else in the trace can flag that: the value is
+  // in-range, and both raw fields agree with each other, so neither
+  // divergence check fires. The `"index-unverified"` entry the second
+  // assertion below demands is therefore the ONE observable that this
+  // boundary's numbering is an assumption rather than a reading — and the
+  // only thing that would reveal a wrong assumption here, since if the
+  // machine really does attribute forward at a work->work boundary too,
+  // every actual in such a program is filed one interval late in silence.
+  // §17 item 13 is the reading that would settle it.
+  //
+  // NOTE for anyone reading the mutation log: the `machineState`-hardcode
+  // mutant CANNOT fail on this shape by construction — the state here IS
+  // "rowing", so hardcoding the literal is a no-op. This shape is guarded
+  // by the log assertion below and nothing else.
   it("a work->work boundary with restSeconds: 0 stays in 'rowing' the whole time and logs 'index-unverified', not silence", async () => {
     const restlessProgram: WorkoutProgram = {
       intervals: [
@@ -2544,23 +2558,139 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
     });
   });
 
-  it("one half alone never emits — a 0x0038 with no matching 0x0037 waits, rather than pairing with the NEXT boundary's identity", () => {
-    // The gate is symmetric on purpose (`driver.ts`'s `boundaryHalves`): the
-    // observed order is firmware behaviour, not a documented guarantee, so
-    // neither half may emit on its own. Driven through `stubTransport`
-    // because the fake only ever sends complete, correctly-ordered pairs.
+  /** One half of a boundary, addressed to a specific Split/Interval Number
+   *  and carrying values distinctive enough to tell boundaries apart in an
+   *  assertion. Built through the pm5 encoders, so these are the real bytes
+   *  the driver's own decoders read. */
+  function splitHalf(boundary: number, seconds: number, meters: number) {
+    return buildSplitIntervalDataBytes({
+      elapsedSeconds: seconds,
+      distanceMeters: meters,
+      splitIntervalTimeSeconds: seconds,
+      splitIntervalDistanceMeters: meters,
+      intervalRestTimeSeconds: 0,
+      intervalRestDistanceMeters: 0,
+      splitIntervalType: 0,
+      splitIntervalNumber: boundary,
+    });
+  }
+
+  function asSplitHalf(boundary: number, avgSpm: number) {
+    return buildAdditionalSplitIntervalDataBytes({
+      elapsedSeconds: 0,
+      splitIntervalAvgStrokeRate: avgSpm,
+      splitIntervalWorkHeartRateBpm: 150,
+      splitIntervalRestHeartRateBpm: 120,
+      splitIntervalAvgPace: 120,
+      splitIntervalTotalCalories: 0,
+      splitIntervalAvgCalories: 0,
+      splitIntervalSpeedMetersPerSecond: 0,
+      splitIntervalPowerWatts: 0,
+      splitAvgDragFactor: 130,
+      splitIntervalNumber: boundary,
+      ergMachineType: 1,
+    });
+  }
+
+  it("an ORPHANED 0x0038 never pairs with the NEXT boundary's 0x0037 — the next boundary emits its own averages, and the orphan is logged, not merged", () => {
+    // Task 4 review, IMPORTANT-1: pairing "one of each has arrived" is not
+    // enough. Boundary A's 0x0038 arrives, A's 0x0037 is LOST, and B's
+    // 0x0037 arrives next — a driver that pairs by arrival emits B's
+    // identity carrying A's averages, which is D4's corruption surviving in
+    // a narrower form. Driven through `stubTransport` because the fake only
+    // ever sends complete, correctly-ordered pairs.
     const transport = stubTransport();
     const log = createEventLog();
     const driver = createPm5Driver(transport, log);
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
 
-    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, new Uint8Array(19));
-    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
-    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, new Uint8Array(19));
+    // Boundary A: only its averages arrive (avgSpm 20). Its 0x0037 is lost.
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 20));
     expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
 
-    transport.notify(SPLIT_INTERVAL_DATA_UUID, new Uint8Array(18));
+    // Boundary B's identity: 120s/200m, Split/Interval Number 2. This must
+    // NOT emit — the only averages in `raw` belong to A.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 120, 200));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
+    expect(
+      log.entries().filter((e) => e.kind === "boundary-orphan"),
+    ).toHaveLength(1);
+    expect(log.entries().at(-1)?.detail).toContain("0x0038");
+    expect(log.entries().at(-1)?.detail).toContain("Number 1");
+
+    // B's own averages (avgSpm 30) complete B, and B emits with ITS pair.
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 30));
+    const emitted = events.filter((e) => e.kind === "intervalComplete");
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { elapsedSeconds: 120, distanceMeters: 200, avgSpm: 30 },
+    });
+    // A is simply gone — its data genuinely was. One actual lost beats one
+    // actual fabricated, and the log says which happened.
+    expect(
+      log.entries().filter((e) => e.kind === "boundary-orphan"),
+    ).toHaveLength(1);
+  });
+
+  it("the same characteristic reporting twice in a row orphans the first — the partner it was waiting for was the lost one", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 20));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 30));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
+    expect(
+      log.entries().filter((e) => e.kind === "boundary-orphan"),
+    ).toHaveLength(1);
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 120, 200));
+    const emitted = events.filter((e) => e.kind === "intervalComplete");
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { avgSpm: 30 },
+    });
+  });
+
+  it("the mirror case — an orphaned 0x0037 is discarded just the same (the gate has no preferred half)", () => {
+    // The observed order is 0x0037 first, so this is the LESS likely loss —
+    // but the gate is symmetric on purpose: the arrival order is firmware
+    // behaviour, not a documented guarantee.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 100));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 30));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(0);
+    const orphans = log.entries().filter((e) => e.kind === "boundary-orphan");
+    expect(orphans).toHaveLength(1);
+    expect(orphans[0]!.detail).toContain("0x0037");
+    expect(orphans[0]!.detail).toContain("Number 1");
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 120, 200));
+    expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(1);
+  });
+
+  it("a REPEATED half of the boundary still pending is not an orphan — the same notification twice changes nothing", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(3, 60, 100));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(3, 60, 100));
+    expect(log.entries().some((e) => e.kind === "boundary-orphan")).toBe(false);
+
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(3, 25));
     expect(events.filter((e) => e.kind === "intervalComplete")).toHaveLength(1);
   });
 });
