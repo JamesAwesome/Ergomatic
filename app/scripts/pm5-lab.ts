@@ -78,15 +78,22 @@ const NO_TARGET_PROGRAM: WorkoutProgram = {
 
 /** §17 item 5 (multi-frame retention — the codec's least-confident fact):
  *  25 intervals is Sea Smoke's shape, which `buildFrameGroups` splits into
- *  7 frames, so a PM that only keeps the last frame's intervals shows it
- *  immediately. */
+ *  7 frames, so a PM that only keeps the last frame's intervals is
+ *  detectable. Intervals are the Table 19 MINIMUM (100m, §8) with no rest,
+ *  because the armed screen does not show a full interval readout — the
+ *  count can only be read by ROWING into the program and watching the
+ *  interval counter advance, and 100m reps make each boundary ~25s of easy
+ *  rowing instead of 500m's ~2min. Rowing 2-3 boundaries also converts two
+ *  never-observed actual shapes in one go (§17: a DISTANCE interval's
+ *  actual, and a MIDDLE boundary of a big program); rest 0 matches the
+ *  no-rest shape hardware already accepted and ran for TIME (§19.8). */
 const MANY_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 25 }, () => ({
     kind: "distance" as const,
-    value: 500,
+    value: 100,
     targetSplit: 120,
     displaySpm: null,
-    restSeconds: 120,
+    restSeconds: 0,
   })),
 };
 

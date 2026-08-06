@@ -1445,30 +1445,29 @@ every flagged item either numbered here or explicitly excused — holds.)
     with no dependency on position within the program, so both boundaries
     should read the same way relative to their own machine index, but
     nothing has tested that a program's second boundary behaves like its
-    first rather than accumulating an error. Observed: `program-short`, row
-    through BOTH boundaries to completion, `dump`; read 0x0037/38's Split/
-    Interval Number at each boundary — does the second boundary normalize
-    to 1 the same clean way the first normalizes to 0, or does something
-    drift?
+    first rather than accumulating an error. Observed: **session 3's step
+    5 now covers this** — `program-many` (25×100m, no rest) rowed through
+    2-3 boundaries makes boundary 2 a genuinely interior one (22 intervals
+    still to come); read 0x0037/38's Split/Interval Number at each crossed
+    boundary — does the second normalize to 1 the same clean way the first
+    normalizes to 0, or does something drift? (`program-short`, 3×500m,
+    remains the dedicated fallback if step 5 is cut short.)
 17. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; the other unconverted
-    shape (design spec §5).** A DISTANCE-kind interval's ACTUAL. Session
-    3's own step 5 below (`program-many`) converts DISTANCE programs from
-    "never observed accepted" to observed-accepted, but explicitly involves
-    NO rowing, so what 0x0037/38 report when a DISTANCE interval actually
-    completes remains untested — every actual-index reading on record
-    (§19.1's table; the session-3 row's own steps 2/4) is from a TIME
-    interval. Expected: unknown — `toActualIndex`'s minus-1 rule is written
-    as index-shape-agnostic (it reads the machine's reported Split/Interval
+    shape (design spec §5).** A DISTANCE-kind interval's ACTUAL. What
+    0x0037/38 report when a DISTANCE interval actually completes has never
+    been tested — every actual-index reading on record (§19.1's table; the
+    session-3 row's own steps 2/4) is from a TIME interval. Expected:
+    unknown — `toActualIndex`'s minus-1 rule is written as
+    index-shape-agnostic (it reads the machine's reported Split/Interval
     Number, never the interval's own `kind`), so a DISTANCE interval's
     actual should normalize the same way a TIME interval's does, but this
-    has never been observed. Observed: row `SHORT_PROGRAM`'s
-    (`program-short`) first interval (500 m) to completion — the same
-    hardware action item 16 above uses for its first boundary, so one row
-    can answer both items — and read the resulting `intervalComplete`
-    event's `index` (should normalize to 0) alongside its distance/duration
-    averages, confirming they are DISTANCE-shaped (`value` in metres, not
-    seconds) and not silently coerced toward a TIME reading anywhere in the
-    pipeline.
+    has never been observed. Observed: **session 3's step 5 now covers
+    this** — its rowed 100m reps complete real DISTANCE intervals; read
+    each crossed boundary's `intervalComplete` `index` (0, 1, ... via
+    minus-1) alongside its averages, confirming they are DISTANCE-shaped
+    (~100m, `value` in metres) and not silently coerced toward a TIME
+    reading anywhere in the pipeline. (`program-short`'s 500m first
+    interval remains the dedicated fallback.)
 18. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; the third unconverted
     shape (design spec §5).** A single-interval program has no INTERIOR
     boundary at all — only `WorkoutEnd` — so whatever forward-attribution/
@@ -1611,13 +1610,25 @@ next one; James rows when a step says to. Verbatim from design spec §8:
    real number would be new information either way. Record the raw
    0x0038 bytes for this boundary, not just the decoded value.
 5. Controller: `curl -X POST http://127.0.0.1:5178/command -d program-many`
-   (`MANY_PROGRAM`: 25 DISTANCE intervals, 7 CSAFE frames). **NO rowing.**
-   James reads the monitor's interval count. **Expected:** the PM5 shows
-   all 25 intervals armed — not a stale tail from an earlier frame group
-   and not a truncation at frame 0's old misread "reject." Multi-FRAME
-   programming has NEVER completed on real hardware before the corrected
-   parse (the old code aborted at frame 0), and DISTANCE-kind intervals have
-   likewise never been observed accepted; one send settles both.
+   (`MANY_PROGRAM`: 25 DISTANCE intervals of **100m each, no rest** — the
+   Table 19 minimum, chosen because the armed screen does NOT show a full
+   interval readout, so the count can only be read by rowing into the
+   program; at 100m a boundary arrives every ~25s of easy rowing). **James
+   rows through 2-3 boundaries** (~1-1.5 min), watching the monitor's
+   interval counter, then stops; controller sends `terminate` and `dump`.
+   **Expected:** the send acks clean (multi-FRAME programming has NEVER
+   completed on real hardware before the corrected parse — the old code
+   aborted at frame 0 — and DISTANCE-kind intervals have never been
+   observed accepted; one send settles both); the monitor's interval
+   counter advances through the reps and reads against a total of 25 (not
+   a stale tail from an earlier frame group, not a truncation); the
+   driver's frames show `intervalIndex` advancing 0 → 1 → 2; each crossed
+   boundary emits an actual with OUR index (0, 1, ...) carrying real
+   ~100m distance data. Rowing here also converts two never-observed
+   actual shapes in one go — a DISTANCE interval's actual (item 17) and a
+   MIDDLE boundary of a big program (item 16) — and the work→work
+   boundaries double as DISTANCE-kind evidence for the state-free minus-1
+   rule (§19.8 observed it for TIME only).
 
 A disagreement with any Expected reading above is a FINDING TO RECORD, not
 a failure to explain away or a reason to re-run until it looks right — the
@@ -1625,13 +1636,14 @@ same discipline "The pending verification row" states for session 2.
 
 **Certification honesty (design spec §8's own closing line).** Step 2's
 rowing verifies single-frame TIME programming end-to-end — acceptance,
-boundary accounting, and completion: the full run lifecycle. Steps 3 and 5
-verify ACCEPTANCE and MONITOR DISPLAY ONLY, for no-rest TIME and multi-frame
-DISTANCE respectively — step 3 is not rowed to completion and step 5 is not
-rowed at all, so neither one certifies those shapes' run lifecycle (their
-boundary/actual behaviour, their `workoutComplete` timing, or anything
-`intervalComplete`-shaped). Items 16-19 above name what still needs a
-dedicated row of its own. **Heart rate (OWNER ADDITION):** Steps 2 and 4
+boundary accounting, and completion: the full run lifecycle. Step 3 verifies
+ACCEPTANCE and MONITOR DISPLAY ONLY for no-rest TIME (not rowed to
+completion). Step 5's partial row verifies multi-frame DISTANCE acceptance
+plus its EARLY boundaries and actuals (items 16/17 convert on the crossed
+boundaries) — but NOT the shape's completion: 22+ intervals go unrowed, so
+`workoutComplete` timing and the final boundary for multi-frame DISTANCE
+stay uncertified. Items 16-19 above record which of their readings this
+row now covers and what still needs a dedicated row. **Heart rate (OWNER ADDITION):** Steps 2 and 4
 verify live HR and the actuals' averages over exactly ONE device pairing —
 James's Apple Watch, linked to the PM5 as its HR source. That certifies the
 non-sentinel (present) reading path end to end for this one link; it does
@@ -2047,8 +2059,13 @@ happened as of this commit — nothing in this subsection is an observation.**
 - **Step 4 — heart rate** (OWNER ADDITION: same live-frame expectation as
   Step 2; PLUS what the 0x0038 rest-average HR field reads on a NO-REST
   boundary — raw bytes, not just the decoded value): PENDING.
-- **Step 5** (`program-many`, 25 DISTANCE intervals / 7 frames, NO rowing;
-  James reads the monitor's interval count): PENDING.
+- **Step 5** (`program-many`, 25×100m DISTANCE / 7 frames, no rest; rowed
+  through 2-3 boundaries — clean multi-frame ack; interval counter
+  advancing against 25; frames' `intervalIndex` 0 → 1 → 2; actuals with
+  OUR indices carrying ~100m distance data): PENDING.
+- **Step 5 — items 16/17 conversions** (the crossed MIDDLE boundary's
+  actual; the DISTANCE actual's fields; both raw 0x0037/38 captured):
+  PENDING.
 - **Item 15** (idle-terminate raw ack byte, decoded): PENDING.
 - **Items 16-19** (a ≥3-interval program's middle boundary; a DISTANCE
   interval's actual; a single-interval program's boundary-less completion;
