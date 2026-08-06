@@ -110,6 +110,14 @@ export interface IntervalActual {
  *   `actual.index` is `null` AND the driver logs `boundary-out-of-run`.
  *   Such an actual belongs to no program and must never be filed against
  *   one.
+ * - ONE exception to "closed by a terminal state": a run REPLACED by a new
+ *   `program()` while it was still open closes with NO
+ *   `workoutComplete`/`terminated` at all. A consumer must treat `armed`
+ *   as ending whatever run it was tracking rather than waiting for a
+ *   terminal event that may never come. (The driver logs `run-replaced`
+ *   when it happens. Real hardware rarely gets there: `program()`'s own
+ *   leading prepare Terminate makes the PM report "terminated" first,
+ *   closing the previous run through the normal path with a real event.)
  * - `frame` events keep flowing through and after all of the above, for
  *   the life of the transport, and `program()` works again with no
  *   reconnect. A terminal state ends the RUN, never the stream (§19.4:

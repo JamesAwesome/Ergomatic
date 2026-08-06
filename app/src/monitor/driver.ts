@@ -399,7 +399,17 @@ export function createPm5Driver(
    * subscriptions stay live, frames keep emitting, `program()` works
    * again with no reconnect.
    */
-  let activeRun: { program: WorkoutProgram; closed: boolean } | null = null;
+  let activeRun: {
+    program: WorkoutProgram;
+    closed: boolean;
+    /** How many actuals this run has accumulated — kept only so the
+     *  `run-replaced` entry can say what a silently-replaced run was
+     *  holding (fix round: an open run replaced by a new `program()` is
+     *  the one lifecycle transition with no event of its own). Counted at
+     *  the single in-run `intervalComplete` emission; out-of-run
+     *  boundaries belong to no run and are counted nowhere. */
+    actuals: number;
+  } | null = null;
   let reconnectPending = false;
   let raw: Partial<RawPm5Status> = {};
   // The last RAW machine interval index this driver has actually SEEN on
@@ -1087,6 +1097,7 @@ export function createPm5Driver(
       "interval-complete",
       `index=${actual.index} (machine reported ${rawActual.index})`,
     );
+    activeRun!.actuals += 1;
     emit({ kind: "intervalComplete", actual });
 
     // OPEN HARDWARE QUESTION (Task 3 review, critical finding —
@@ -1719,7 +1730,18 @@ export function createPm5Driver(
       //
       // Any PREVIOUS run — open or closed — is replaced outright, which is
       // what makes a second workout possible in one driver lifetime with
-      // no reconnect (the §19.4 regression this task fixes). A boundary
+      // no reconnect (the §19.4 regression this task fixes). Replacing an
+      // OPEN one is the single lifecycle transition with no event of its
+      // own: that run closes without a `workoutComplete`/`terminated`
+      // (stated on `MonitorEvent`, `domain/monitor/types.ts`), so it gets
+      // a `run-replaced` entry instead — every other transition here is
+      // already visible in the trace, and a run ending in silence is the
+      // exact class of invisibility §19.4 punished. The realistic
+      // hardware path does NOT reach this branch: `program()`'s own
+      // leading prepare Terminate makes the PM report "terminated" first,
+      // which closes run 1 through the normal path with a real event. So
+      // this entry marks the shape that would otherwise be a mystery in a
+      // trace, not the common one. A boundary
       // half still waiting for its partner belongs to the run being
       // replaced, so it is dropped here rather than left to pair with the
       // NEW run's first boundary: `noteBoundaryHalf`'s pairing gate
@@ -1728,6 +1750,12 @@ export function createPm5Driver(
       // otherwise entirely constructible (it would emit this run's
       // identity carrying the last run's averages — D4's corruption, one
       // level up).
+      if (runIsOpen()) {
+        log.record(
+          "run-replaced",
+          `program() replaced a run that was still OPEN (its ${activeRun!.program.intervals.length}-interval program had accumulated ${activeRun!.actuals} actual(s)) — that run closes here with no workoutComplete/terminated event of its own`,
+        );
+      }
       if (boundaryHalves.split !== null || boundaryHalves.asSplit !== null) {
         log.record(
           "boundary-orphan",
@@ -1736,7 +1764,7 @@ export function createPm5Driver(
       }
       boundaryHalves.split = null;
       boundaryHalves.asSplit = null;
-      activeRun = { program: p, closed: false };
+      activeRun = { program: p, closed: false, actuals: 0 };
       log.record("armed", `programmed ${p.intervals.length} interval(s)`);
       emit({ kind: "armed" });
     },
