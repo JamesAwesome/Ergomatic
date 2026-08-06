@@ -150,20 +150,29 @@ export interface MonitorDriver {
    * (hardware observed the identical ack byte for both a real program and
    * a complete no-op).
    *
-   * CONFIRMED destructive fact, observed on real hardware twice
-   * (docs/monitor/pm5-interface-notes.md §18): a REJECTED program WIPES
-   * whatever workout was already loaded on the monitor. A failed call to
-   * this method can therefore cost the rower a workout they had, not
-   * merely fail to add a new one. Callers MUST warn the rower BEFORE
-   * calling this, never react to a rejection afterward — by the time this
-   * rejects, the previous workout may already be gone.
+   * WITHDRAWN (docs/monitor/pm5-interface-notes.md §19.2, on §19.1's
+   * per-send re-derivation): this comment used to record a "CONFIRMED
+   * destructive fact — a REJECTED program WIPES whatever workout was
+   * already loaded", plus the rule that the PM "accepts a program only when
+   * nothing is loaded". Both were our own parse bug. Every byte §18
+   * recorded as a rejection decodes to an ACCEPT under the CSAFE bitfield
+   * (`0x81` is toggle-high / previous-frame-OK / Ready), so the rule had
+   * nothing supporting it, and the wipe was only the mechanism invented to
+   * explain the toggle's alternation. No genuine rejection has ever been
+   * seen from this hardware.
    *
-   * The simple RULE that first explained the above ("the PM accepts a
-   * program only when nothing is loaded") is NOT equally confirmed: a
-   * later hardware session found a terminate ACCEPTED with a workout
-   * loaded, yet the FOLLOWING program was still rejected — twice. The
-   * state model behind accept/reject is still not understood; only the
-   * destructive half is.
+   * What is established instead: a program sent over a loaded workout is
+   * accepted and REPLACES it (§19.1's Verdict (b) — a rest-0 program sent
+   * over a live rest-30 one, without reconnecting, produced a work→work row
+   * with no resting state at all).
+   *
+   * Still OPEN, and the reason a caller should nonetheless confirm with the
+   * rower first: James read an empty `:00`/`:00` session off the monitor
+   * immediately after a 2-interval send that the corrected parse says was
+   * accepted. Nothing explains what emptied that display (§19.1's Verdict
+   * (a)). Programming over a live or loaded workout remains the prime
+   * suspect, so 7B's "prove the monitor idle before programming" stands —
+   * on this open finding, not on a destruction claim that did not survive.
    */
   program(p: WorkoutProgram): Promise<void>;
   terminate(): Promise<void>; // the documented terminate command — no start() exists

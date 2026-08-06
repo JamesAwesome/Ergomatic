@@ -8,7 +8,10 @@
 // (interface-notes.md §16, M5). Both `src/monitor/driver.ts` (reading
 // acks) and `src/monitor/transports/fake.ts` (building synthetic acks)
 // need this — pm5/ is the only home of Concept2 bytes (design spec
-// §Layering).
+// §Layering). `echoedCommandIds` below reads the REQUEST side for the same
+// reason: an ack echoes the opcodes it is answering, so building one
+// honestly means decoding what was sent, and that decode is Concept2
+// byte-level knowledge too — the fake must not carry its own copy of it.
 //
 // domain/monitor/** imports nothing from src/.
 //
@@ -209,6 +212,58 @@ export function parseCsafeResponse(frame: Uint8Array): CsafeResponse {
     frameToggle,
     commandIds: [topOpcode],
   };
+}
+
+/**
+ * The opcode list a PM5 echoes back in its ack for `requestFrame` — the
+ * ECHO half of `buildAckFrame`'s `commandIds`, DERIVED from the request
+ * instead of restated by the caller, so a synthetic ack cannot claim an
+ * echo the request never earned (`src/monitor/transports/fake.ts` is the
+ * caller; interface-notes.md §19.1).
+ *
+ * Both shapes in §19.1's captured acks are exactly this list: the
+ * terminate frame (one `SET_SCREENSTATE` command, `13 02 01 02`) is acked
+ * `f1 01 76 01 13 65 f2` — a single echoed `0x13`; the 2-interval
+ * `SetProgram` is acked
+ * `f1 81 76 0e 18 01 17 03 04 06 14 18 17 03 04 06 14 13 eb f2` — fourteen
+ * ids, one per CSAFE command in the frame, opcodes only, in the order
+ * sent, with none of the commands' own data bytes.
+ *
+ * Only the `0x76` push wrapper is decoded — the wrapper `pm5/commands.ts`
+ * uses for every program/terminate frame, and the only one any captured
+ * hardware ack covers. Anything else (a frame this codec cannot parse at
+ * all, or the `0x1A`-wrapped pull `buildGetErrorType` emits) yields `[]`:
+ * no hardware ack for a pull command has ever been seen, so there is no
+ * echo shape to reproduce and inventing one would teach a fiction
+ * (interface-notes.md §17 item 14).
+ *
+ * Inside the wrapper each command is `<opcode> <byte count> <...data>`
+ * (interface-notes.md §11/§12) — walked command by command, never assumed
+ * to be one byte each, and stopping the moment the wrapper's declared
+ * length or the payload itself runs out rather than reading past either.
+ */
+export function echoedCommandIds(requestFrame: Uint8Array): number[] {
+  const parsed = parseFrame(requestFrame);
+  if (!("payload" in parsed)) {
+    return [];
+  }
+  const payload = parsed.payload;
+  if (payload[0] !== PROPRIETARY_WRAPPER) {
+    return [];
+  }
+  const declaredEnd = 2 + (payload[1] ?? 0);
+  const end = Math.min(declaredEnd, payload.length);
+  const commandIds: number[] = [];
+  let offset = 2;
+  while (offset < end) {
+    commandIds.push(payload[offset]!);
+    const dataByteCount = payload[offset + 1];
+    if (dataByteCount === undefined) {
+      break;
+    }
+    offset += 2 + dataByteCount;
+  }
+  return commandIds;
 }
 
 export interface AckFrameOptions {

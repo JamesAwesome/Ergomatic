@@ -13,7 +13,9 @@ import {
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
 } from "../../../domain/monitor/pm5/parse.js";
+import { parseFrame } from "../../../domain/monitor/csafe.js";
 import {
+  echoedCommandIds,
   parseCsafeResponse,
   type CsafeResponse,
 } from "../../../domain/monitor/pm5/response.js";
@@ -126,6 +128,18 @@ async function programIt(
   // the synchronous escape hatch to keep every existing assertion's timing
   // exactly as it was.
   fake.deliverArmedNow();
+}
+
+/** The whole CSAFE frame a pre-chunked sequence entry reassembles into —
+ *  what the machine acks, and what `echoedCommandIds` reads. */
+function joinChunks(chunks: Uint8Array[]): Uint8Array {
+  const frame = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    frame.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return frame;
 }
 
 function decodeGeneral(bytes: Uint8Array) {
@@ -339,17 +353,30 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     expect(generals).toHaveLength(0); // never armed either
   });
 
-  it("a write after a NAK'd frame (which never advances to armed) past the expected sequence's own end throws", async () => {
-    // injectNak(0) rejects PROGRAM's only frame, so `phase` never leaves
-    // "programming" — a further write finds the expected-chunk cursor
-    // already past the end of the (never-completed) sequence, a distinct
-    // path from the "armed" out-of-sequence write covered above.
+  it("a rejected frame rewinds to ITSELF, not past the end — the retry re-sends the same bytes and is rejected again (injectNak is sticky)", async () => {
+    // Task 6: a refusal is not the end of the conversation. The chunk
+    // cursor goes back to the START of the frame that was refused (every
+    // laptop session retried refused programs, interface-notes.md §19.1),
+    // and `injectNak`'s positional selector still names that frame, so the
+    // retry meets the same answer. Before this the cursor was left past the
+    // frame's own chunks and any further write threw.
     const fake = createFakeTransport({ program: PROGRAM });
     fake.injectNak(0);
     await programIt(fake, PROGRAM);
+
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    // A whole second attempt: prepare step, then the same frame again.
+    await programIt(fake, PROGRAM);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["reject", "reject"]);
+
+    // A chunk that belongs to neither sequence still throws, at the frame
+    // the machine is actually waiting for.
     await expect(
       fake.write(RECEIVE_CHARACTERISTIC_UUID, Uint8Array.from([0xff])),
-    ).rejects.toThrow(/already complete/);
+    ).rejects.toThrow(/programming chunk 0 mismatch/);
   });
 
   it("delivers the WAITTOBEGIN bundle once the sequence acks successfully AND armed delivery is flushed (programIt's own deliverArmedNow(), fix-round 1, F1)", async () => {
@@ -908,8 +935,13 @@ describe("createFakeTransport: D5 — the beltless heart-rate byte is 0, not 255
   });
 });
 
-describe("createFakeTransport: D1 — a machine with a workout already loaded", () => {
-  it("accepts the clear, rejects the program, and WIPES what it was holding", async () => {
+// D1 IS WITHDRAWN (interface-notes.md §19.2, on §19.1's per-send
+// re-derivation table). This block used to assert the opposite of what it
+// asserts now — that the fake rejected a program while something was loaded
+// and destroyed what it held. Both halves were our own parse bug; §19.1's
+// Verdict (b) established the replacement behaviourally.
+describe("createFakeTransport: a machine with a workout already loaded ACCEPTS and REPLACES", () => {
+  it("accepts the prepare step, accepts the program, and holds the NEW program afterwards (today: rejected, and the old one wiped)", async () => {
     const fake = createFakeTransport({
       program: PROGRAM,
       loadedWorkout: { intervalCount: 3 },
@@ -926,23 +958,22 @@ describe("createFakeTransport: D1 — a machine with a workout already loaded", 
     for (const chunk of buildTerminate()[0]!) {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
-    // Accepted with something loaded — the D1 UPDATE observation, and the
+    // Accepted with something loaded (§19.1's `S2 D2`/`S2 D3` rows) — the
     // opposite of the clean-state case every other test in this file drives.
     expect(acks.map(frameStatusOf)).toStrictEqual(["ok"]);
-    expect(fake.loadedIntervals()).toBe(3); // terminate is NOT a clear
+    expect(fake.loadedIntervals()).toBe(3); // terminate routes to Rearm, §19.5
 
     for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
-    expect(acks.map(frameStatusOf)).toStrictEqual(["ok", "reject"]);
-    // The destructive half, confirmed twice on hardware: the rejection took
-    // the rower's loaded workout with it.
-    expect(fake.loadedIntervals()).toBeNull();
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok", "ok"]);
+    // Replaced, not wiped: what the monitor holds is the program just sent.
+    expect(fake.loadedIntervals()).toBe(PROGRAM.intervals.length);
     fake.deliverArmedNow();
-    expect(generals).toHaveLength(0); // never armed
+    expect(generals).toHaveLength(1); // and it really did arm
   });
 
-  it("a fake with nothing loaded reports nothing loaded, and rejects the clear instead", async () => {
+  it("a fake with nothing loaded reports nothing loaded, and rejects the prepare step instead", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
     expect(fake.loadedIntervals()).toBeNull();
 
@@ -954,6 +985,280 @@ describe("createFakeTransport: D1 — a machine with a workout already loaded", 
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks.map(frameStatusOf)).toStrictEqual(["reject"]);
+  });
+});
+
+// Phase 7A-fix-2 Task 6. Three facts about the STATUS BYTE and one about
+// the echo, all of them things the pre-fix-2 fake got wrong, and all of
+// them the reason the whole-byte compare survived in CI for so long.
+describe("createFakeTransport: the ack's status byte is the bitfield the machine actually sends (interface-notes.md §19.1)", () => {
+  /** [S2]'s own `program-two-time`: two TIME intervals with a trailing
+   *  rest — the exact command SHAPE behind §19.1's captured 14-opcode ack
+   *  (the echo carries opcodes, never parameter values, so the rest/pace
+   *  numbers below do not enter into it). */
+  const TWO_INTERVAL_PROGRAM: WorkoutProgram = {
+    intervals: Array.from({ length: 2 }, () => ({
+      kind: "time" as const,
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 30,
+    })),
+  };
+
+  /** Every raw ack frame the fake puts on 0x0022, in order — one
+   *  subscription for the whole test, so a second `program()` keeps
+   *  appending to the same list. */
+  function collectAckFrames(
+    fake: ReturnType<typeof createFakeTransport>,
+  ): Uint8Array[] {
+    const frames: Uint8Array[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) => frames.push(b));
+    return frames;
+  }
+
+  async function drivePrepareAndProgram(
+    fake: ReturnType<typeof createFakeTransport>,
+    program: WorkoutProgram,
+  ): Promise<void> {
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    for (const chunk of buildProgrammingSequence(program)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+  }
+
+  it("reproduces [S2] Dump 3's captured prepare+program ack pair BYTE FOR BYTE — toggle low then high, real opcode echoes", async () => {
+    // The two frames §19.1's table records verbatim from `exportLog()`:
+    //   f1 01 76 01 13 65 f2                      (the "clear-sent" ack)
+    //   f1 81 76 0e 18 01 17 03 04 06 14
+    //            18 17 03 04 06 14 13 eb f2       (the SetProgram ack)
+    // Both are ACCEPTS. They differ in bit 7 because the toggle alternates,
+    // and in their echo because they are acking different frames. The old
+    // fake sent `f1 01 76 00 77 f2` for both.
+    const fake = createFakeTransport({
+      program: TWO_INTERVAL_PROGRAM,
+      // As [S2] was: mid-session, with a workout already on the monitor —
+      // which is why its prepare step acked "ok" rather than refusing.
+      loadedWorkout: { intervalCount: 2 },
+    });
+
+    const frames = collectAckFrames(fake);
+    await drivePrepareAndProgram(fake, TWO_INTERVAL_PROGRAM);
+
+    expect(frames).toHaveLength(2);
+    expect(Array.from(frames[0]!)).toStrictEqual([
+      0xf1, 0x01, 0x76, 0x01, 0x13, 0x65, 0xf2,
+    ]);
+    expect(Array.from(frames[1]!)).toStrictEqual([
+      0xf1, 0x81, 0x76, 0x0e, 0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x18,
+      0x17, 0x03, 0x04, 0x06, 0x14, 0x13, 0xeb, 0xf2,
+    ]);
+  });
+
+  it("flips bit 7 on EVERY ack, so no two consecutive acks are the same frame (today: bit 7 is never set)", async () => {
+    const fake = createFakeTransport({ program: TWO_INTERVAL_PROGRAM });
+    const frames = collectAckFrames(fake);
+    const togglesSoFar = (): (boolean | null)[] =>
+      frames.map((f) => {
+        const parsed = parseCsafeResponse(f);
+        return parsed.kind === "parsed" ? parsed.frameToggle : null;
+      });
+
+    await drivePrepareAndProgram(fake, TWO_INTERVAL_PROGRAM);
+    expect(togglesSoFar()).toStrictEqual([false, true]);
+
+    // Keep going through a terminate and a whole second program: five acks,
+    // strict alternation, never two alike in a row.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    await drivePrepareAndProgram(fake, TWO_INTERVAL_PROGRAM);
+    expect(togglesSoFar()).toStrictEqual([false, true, false, true, false]);
+  });
+
+  it("echoes the opcodes of the frame it is acking — the same list the request actually carried (today: an empty echo)", async () => {
+    const fake = createFakeTransport({ program: TWO_INTERVAL_PROGRAM });
+    const frames = collectAckFrames(fake);
+    await drivePrepareAndProgram(fake, TWO_INTERVAL_PROGRAM);
+
+    const sentPrepare = buildTerminate()[0]!;
+    const sentProgram = buildProgrammingSequence(TWO_INTERVAL_PROGRAM)[0]!;
+    const echoOf = (f: Uint8Array): number[] => {
+      const parsed = parseCsafeResponse(f);
+      return parsed.kind === "parsed" ? parsed.commandIds : [];
+    };
+
+    // Derived from what was SENT, not restated: the echo must match the
+    // request's own command list.
+    expect(echoOf(frames[0]!)).toStrictEqual(
+      echoedCommandIds(joinChunks(sentPrepare)),
+    );
+    expect(echoOf(frames[1]!)).toStrictEqual(
+      echoedCommandIds(joinChunks(sentProgram)),
+    );
+    // And independently, the literal shapes §19.1 captured: one opcode for
+    // the terminate, fourteen for the 2-interval program.
+    expect(echoOf(frames[0]!)).toStrictEqual([0x13]);
+    expect(echoOf(frames[1]!)).toStrictEqual([
+      0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x18, 0x17, 0x03, 0x04, 0x06,
+      0x14, 0x13,
+    ]);
+  });
+
+  it("a ONE-interval program's ack is the doc's own hand-verified 8-opcode shape", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const frames = collectAckFrames(fake);
+    await drivePrepareAndProgram(fake, PROGRAM);
+    const parsed = parseCsafeResponse(frames[1]!);
+    expect(parsed).toMatchObject({
+      kind: "parsed",
+      commandIds: [0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x13],
+    });
+    // `f1 81 76 08 … f7 f2` — interface-notes.md's own hand-verified
+    // checksum shape, at the toggle-high state this ack lands on.
+    expect(Array.from(frames[1]!)).toStrictEqual([
+      0xf1, 0x81, 0x76, 0x08, 0x18, 0x01, 0x17, 0x03, 0x04, 0x06, 0x14, 0x13,
+      0xf7, 0xf2,
+    ]);
+  });
+
+  it("carries slave state 'ready' while idle and 'in-use' while a workout is rowing (today: always ready)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [TIMELINE_EVENTS[0]!], // a rowing status tick at 1000ms
+    });
+    const frames = collectAckFrames(fake);
+    await drivePrepareAndProgram(fake, PROGRAM);
+    const stateOf = (f: Uint8Array): string => {
+      const parsed = parseCsafeResponse(f);
+      return parsed.kind === "parsed" ? parsed.slaveState : "unparseable";
+    };
+    // Programmed from idle: both acks read Ready, exactly as all eleven of
+    // [S2]'s non-OFFLINE captures do.
+    expect(frames.map(stateOf)).toStrictEqual(["ready", "ready"]);
+
+    fake.tick(1000); // the erg is now rowing the workout it was given
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    expect(stateOf(frames[2]!)).toBe("in-use");
+  });
+
+  it("scripting slaveState 'offline' models §19.3's live-erg capture: an ACCEPT with a non-Ready low nibble", async () => {
+    // [S2] Dump 1, raw: `f1 09 76 0e … 63 f2` — status 0x09 from a
+    // connected, responsive erg being rowed OUTSIDE master control
+    // ([CSAFE-DEF] Figure 7 p.49). `(0x09 & 0x30) === 0x00`: an accept. A
+    // whole-byte compare calls it a rejection.
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      slaveState: "offline",
+      loadedWorkout: { intervalCount: 1 },
+    });
+    const frames = collectAckFrames(fake);
+    await drivePrepareAndProgram(fake, PROGRAM);
+    expect(parseCsafeResponse(frames[0]!)).toMatchObject({
+      kind: "parsed",
+      frameStatus: "ok",
+      slaveState: "offline",
+      frameToggle: false,
+    });
+    // The status byte itself: 0x09, the byte the machine sent.
+    expect(frames[0]![1]).toBe(0x09);
+  });
+});
+
+// SYNTHETIC, and the field says so at its own definition: not one of the
+// twelve status bytes [S2] captured is a rejection, and nothing ever
+// arrived unparseable (interface-notes.md §19.1). These hooks exist so the
+// driver's reject and garbled paths can be exercised over real bytes.
+describe("createFakeTransport: FakeScript.failNextWrite — the two never-observed ack shapes", () => {
+  it("'reject' answers the next PROGRAMMING frame with a genuine 0x11-class reject, and is spent afterwards", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      failNextWrite: "reject",
+    });
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+
+    await programIt(fake, PROGRAM);
+    // The prepare step is untouched by the hook (its own doc comment): it
+    // refuses because nothing is loaded, not because of `failNextWrite`.
+    expect(acks.map(frameStatusOf)).toStrictEqual(["reject", "reject"]);
+    // A genuine reject, not the `0x81` that never meant one: bits 4-5 say
+    // Reject, and the toggle is still just the toggle.
+    expect(acks[1]).toMatchObject({
+      kind: "parsed",
+      frameStatus: "reject",
+      frameToggle: true,
+    });
+
+    // One-shot: the retry of the very same frame is accepted. (Its own
+    // prepare step is refused again — nothing is loaded yet, which is a
+    // statement about the machine, not about the spent hook.)
+    await programIt(fake, PROGRAM);
+    expect(acks.map(frameStatusOf)).toStrictEqual([
+      "reject", // prepare — nothing loaded
+      "reject", // the program: failNextWrite, consumed here
+      "reject", // prepare again — still nothing loaded
+      "ok", // the program lands
+    ]);
+    expect(fake.loadedIntervals()).toBe(PROGRAM.intervals.length);
+  });
+
+  it("'garbled' answers with a frame that cannot be parsed AT ALL — structurally different from any reject", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      failNextWrite: "garbled",
+    });
+    const raw: Uint8Array[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) => raw.push(b));
+
+    await programIt(fake, PROGRAM);
+
+    expect(raw).toHaveLength(2);
+    expect(parseCsafeResponse(raw[1]!)).toStrictEqual({ kind: "unparseable" });
+    // It really is a CHECKSUM failure, not a lost start/stop flag or an
+    // unstuffing error: the frame still opens and closes correctly, and
+    // `parseFrame` names the exact reason it will not have it.
+    expect(raw[1]![0]).toBe(0xf1);
+    expect(raw[1]![raw[1]!.length - 1]).toBe(0xf2);
+    expect(parseFrame(raw[1]!)).toStrictEqual({
+      error: { kind: "checksum-mismatch", received: 0x01, computed: 0x00 },
+    });
+    // And it is not merely a reject wearing a different hat: an ordinary
+    // reject for the same frame parses fine.
+    const cleanReject = createFakeTransport({
+      program: PROGRAM,
+      failNextWrite: "reject",
+    });
+    const rejectFrames: Uint8Array[] = [];
+    cleanReject.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      rejectFrames.push(b),
+    );
+    await programIt(cleanReject, PROGRAM);
+    expect(parseCsafeResponse(rejectFrames[1]!).kind).toBe("parsed");
+  });
+
+  it("'garbled' still consumes a toggle step — the PM's frame counter does not care whether the bytes survived", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      failNextWrite: "garbled",
+    });
+    const raw: Uint8Array[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) => raw.push(b));
+
+    await programIt(fake, PROGRAM); // ack 0 (toggle false), garbled ack 1
+    await programIt(fake, PROGRAM); // ack 2, ack 3
+
+    const toggles = raw.map((f) => {
+      const parsed = parseCsafeResponse(f);
+      return parsed.kind === "parsed" ? parsed.frameToggle : "unparseable";
+    });
+    expect(toggles).toStrictEqual([false, "unparseable", false, true]);
   });
 });
 

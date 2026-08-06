@@ -30,7 +30,10 @@ import {
   buildGeneralStatusBytes,
   buildSplitIntervalDataBytes,
 } from "../../domain/monitor/pm5/statusFrames.js";
-import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
+import {
+  buildAckFrame,
+  echoedCommandIds,
+} from "../../domain/monitor/pm5/response.js";
 import type {
   DiscoveredMonitor,
   MonitorEvent,
@@ -3863,6 +3866,19 @@ describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-fra
     return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
   }
 
+  /** The whole CSAFE frame a `buildProgrammingSequence` entry's chunks
+   *  reassemble into — what the PM actually acks, and what its echo is
+   *  derived from. */
+  function joinChunks(chunks: Uint8Array[]): Uint8Array {
+    const frame = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let offset = 0;
+    for (const chunk of chunks) {
+      frame.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return frame;
+  }
+
   it("log.entries() shows exactly buildProgrammingSequence's chunks, each frame paired with one 'ok' ack", async () => {
     const program: WorkoutProgram = {
       intervals: Array.from({ length: 13 }, () => ({
@@ -3891,10 +3907,16 @@ describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-fra
       .filter(
         (e) => e.seq > prepareSeq && (e.kind === "write" || e.kind === "ack"),
       );
-    // Task 3: the "ack" log detail now also carries the parsed slave
-    // state (`buildAckFrame`'s own default, "ready") alongside the raw
-    // hex it always showed.
-    const expectedAckHex = `${hex(buildAckFrame({ frameStatus: "ok" }))} slaveState=ready`;
+    // Task 3: the "ack" log detail carries the parsed slave state
+    // alongside the raw hex it always showed. Task 6: every ack in that
+    // trace is now a DIFFERENT frame — the toggle bit alternates
+    // ([CSAFE-DEF] p.11 Table 9, interface-notes.md §19.1/§19.2) and each
+    // one echoes its own frame's opcodes. Four identical `f1 01 76 00 77
+    // f2` acks is precisely the shape the old fake produced and no PM ever
+    // sent. The prepare step's own ack came first and took toggle-low, so
+    // the programming sequence starts toggle-HIGH and alternates from
+    // there.
+    let frameToggle = true;
 
     let cursor = 0;
     for (const frame of seq) {
@@ -3905,13 +3927,24 @@ describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-fra
         });
         cursor += 1;
       }
+      const expectedAck = buildAckFrame({
+        frameStatus: "ok",
+        frameToggle,
+        commandIds: echoedCommandIds(joinChunks(frame)),
+      });
       expect(trace[cursor]).toMatchObject({
         kind: "ack",
-        detail: expectedAckHex,
+        detail: `${hex(expectedAck)} slaveState=ready`,
       });
       cursor += 1;
+      frameToggle = !frameToggle;
     }
     expect(trace).toHaveLength(cursor);
+    // Not a tautology against the fake: the echo really is this frame's own
+    // command list, and the four acks really are four distinct frames.
+    expect(
+      new Set(trace.filter((e) => e.kind === "ack").map((e) => e.detail)).size,
+    ).toBe(seq.length);
   });
 });
 
@@ -4184,8 +4217,18 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
   });
 });
 
-describe("createPm5Driver: D1 — programming over a loaded workout is rejected, and destroys what was loaded", () => {
-  it("rejects at frame 0 and the monitor's own workout is GONE (the confirmed destructive half)", async () => {
+// D1 IS WITHDRAWN (interface-notes.md §19.2, on Task 1's per-send
+// re-derivation table in §19.1). This block used to pin the opposite of
+// what it pins now: that programming over a loaded workout was REJECTED and
+// DESTROYED what the monitor held. Both halves were our own parse bug —
+// every byte §18 recorded as a rejection decodes to an accept, and the
+// "wipe" was the mechanism invented to explain the toggle's alternation.
+// §19.1's Verdict (b) then settled the positive claim behaviourally: a
+// rest-0 program sent over a live rest-30 one, without reconnecting,
+// produced a work→work row with no `resting` state anywhere — the second
+// program replaced the first.
+describe("createPm5Driver: programming over a loaded workout ACCEPTS and REPLACES (D1 withdrawn, interface-notes.md §19.2)", () => {
+  it("lands over a workout the rower already had, and what the monitor holds is the NEW program (today: rejected, and the old one destroyed)", async () => {
     const { fake, driver, events, log } = harness({
       program: MINIMAL_PROGRAM,
       // A workout the rower had already set up on the monitor.
@@ -4193,43 +4236,203 @@ describe("createPm5Driver: D1 — programming over a loaded workout is rejected,
     });
     expect(fake.loadedIntervals()).toBe(4);
 
-    const rejection = await driver.program(MINIMAL_PROGRAM).catch((e) => e);
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
 
-    expect(rejection).toBeInstanceOf(ProgramRejectionError);
-    expect(rejection).toMatchObject({ reason: "nak", atFrame: 0 });
-    // This is the fact `MonitorDriver.program`'s JSDoc requires 7B to warn
-    // about BEFORE calling: by the time the caller sees this error, the
-    // rower's loaded workout has already been wiped. A caller that treats a
-    // rejection as "nothing happened, we can retry safely" is wrong about
-    // the machine.
-    expect(fake.loadedIntervals()).toBeNull();
-    // And nothing was armed: no armed event, no armed log entry.
-    expect(events.some((e) => e.kind === "armed")).toBe(false);
-    expect(log.entries().some((e) => e.kind === "armed")).toBe(false);
+    // Replaced, not wiped and not left alone: the machine holds exactly the
+    // program that was just sent.
+    expect(fake.loadedIntervals()).toBe(MINIMAL_PROGRAM.intervals.length);
+    expect(events.filter((e) => e.kind === "armed")).toHaveLength(1);
+    expect(log.entries().some((e) => e.kind === "armed")).toBe(true);
+    expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
+      false,
+    );
   });
 
-  it("the prepare step is ACCEPTED while a workout is loaded, and still does not save the program (terminate is not a clear)", async () => {
+  it("the prepare step is ACCEPTED while a workout is loaded (no 'prepare-rejected'), and the program that follows still lands", async () => {
     const { fake, driver, log } = harness({
       program: MINIMAL_PROGRAM,
       loadedWorkout: { intervalCount: 2 },
     });
 
-    await expect(driver.program(MINIMAL_PROGRAM)).rejects.toBeInstanceOf(
-      ProgramRejectionError,
-    );
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
 
-    // The D1 UPDATE row exactly: terminate acked "ok" with a workout
+    // §19.1's `S2 D2`/`S2 D3` rows: terminate acked "ok" with a workout
     // loaded — so NO "prepare-rejected" entry, unlike every clean-state
-    // program() in this file — and the program that followed was rejected
-    // anyway.
+    // program() in this file, which meets the nothing-loaded refusal
+    // instead. Terminate still is not a clear (§19.5: it routes to Rearm),
+    // but that no longer implies the program after it fails.
     expect(log.entries().some((e) => e.kind === "prepare-rejected")).toBe(
       false,
     );
     expect(log.entries().some((e) => e.kind === "prepare-sent")).toBe(true);
     expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
-      true,
+      false,
     );
+    expect(log.entries().some((e) => e.kind === "programmed")).toBe(true);
+  });
+});
+
+// Task 4 review's CARRIED OBLIGATION, discharged here: Task 4 proved a
+// second workout in one driver lifetime only through a hand-rolled stub,
+// because the fake modelled one program per connection and threw
+// "unexpected write while armed" on the second send. The fake now models
+// the loop the machine actually runs (interface-notes.md §19.4/§19.5:
+// terminate is the documented exit back to a programmable state), so the
+// regression §19.4 punished — the driver going deaf after a finished piece
+// — is now pinned END TO END over real CSAFE bytes.
+describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (interface-notes.md §19.4)", () => {
+  it("two coherent runs: the second run's actuals are numbered from 0 again (today: the fake's single-program model throws)", async () => {
+    const program = seaFretProgram();
+    // Sea Fret's interval 0 is the 300s warmup, restSeconds 0 — so its
+    // boundary is legitimately delivered while the machine still reads
+    // `rowing` (a trailing rest would require a `resting` tick first,
+    // `boundaryBundle`'s own enforced rule).
+    const rowingTick = (
+      atMs: number,
+      programIntervalIndex: number,
+      elapsedSeconds: number,
+      distanceMeters: number,
+    ): FakeTimelineEvent => ({
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds,
+      distanceMeters,
+      spm: 24,
+      currentSplit: 110,
+      heartRateBpm: null,
+      programIntervalIndex,
+    });
+    const firstBoundary = (atMs: number): FakeTimelineEvent => ({
+      atMs,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 300,
+        distanceMeters: 1200,
+        avgSplit: 125,
+        avgSpm: 22,
+        avgHeartRateBpm: null,
+      },
+      cumulativeElapsedSeconds: 300,
+      cumulativeDistanceMeters: 1200,
+    });
+
+    const { fake, driver, events, log } = harness({
+      program,
+      events: [
+        // Run 1: row the warmup out, complete it, then finish the piece.
+        rowingTick(1000, 0, 100, 400),
+        firstBoundary(2000),
+        rowingTick(3000, 1, 320, 1300),
+        {
+          atMs: 4000,
+          kind: "status",
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 900,
+          distanceMeters: 3400,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: null,
+          programIntervalIndex: 2,
+        },
+        // Run 2, on the same connection: the same piece, rowed again.
+        rowingTick(6000, 0, 100, 400),
+        firstBoundary(7000),
+      ],
+    });
+
+    await programAndArm(driver, fake, program);
+    fake.tick(4000);
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
+
+    // No reconnect, no new transport, no new driver — just another
+    // program() on the machine that has just finished a piece.
+    await programAndArm(driver, fake, program);
+    fake.tick(3000);
+
+    expect(events.filter((e) => e.kind === "armed")).toHaveLength(2);
+    expect(log.entries().filter((e) => e.kind === "programmed")).toHaveLength(
+      2,
+    );
+    // Both runs number their first actual 0 — the second run does not carry
+    // the first one's numbering forward, and neither is `null`.
+    const actuals = events
+      .filter((e) => e.kind === "intervalComplete")
+      .map((e) => (e as { actual: { index: number | null } }).actual.index);
+    expect(actuals).toStrictEqual([0, 0]);
+    // Nothing was left open or silently replaced, and the link never moved.
+    expect(log.entries().some((e) => e.kind === "run-replaced")).toBe(false);
+    expect(events.filter((e) => e.kind === "disconnected")).toHaveLength(0);
+    // The machine holds the program it was last given, both times.
+    expect(fake.loadedIntervals()).toBe(program.intervals.length);
+  });
+});
+
+// SYNTHETIC failure paths (`FakeScript.failNextWrite`) — never observed on
+// hardware, and the fake says so at the field's own definition
+// (interface-notes.md §19.1: not one of the twelve captured status bytes is
+// a rejection, and nothing ever arrived unparseable). They exist because
+// the driver has distinct code for each, and Task 3 built that code against
+// a hand-rolled stub for want of any way to make the shared fake produce
+// either byte.
+describe("createPm5Driver: the fake's synthetic reject/garbled paths, driven end to end", () => {
+  it("failNextWrite 'reject' → reason 'nak' AND the documented GetErrorType follow-up in the trace (today: no such hook)", async () => {
+    const { fake, driver, log } = harness({
+      program: MINIMAL_PROGRAM,
+      failNextWrite: "reject",
+    });
+
+    const rejection = await driver.program(MINIMAL_PROGRAM).catch((e) => e);
+
+    expect(rejection).toBeInstanceOf(ProgramRejectionError);
+    expect(rejection).toMatchObject({ reason: "nak", atFrame: 0 });
+    expect((rejection as ProgramRejectionError).hexTrace).toContain(
+      "ack frameStatus=reject",
+    );
+    // CSAFE-DEF p.50 (interface-notes.md §19.7): a reject is not
+    // self-describing, so the driver asks. The fake absorbs the 0xC8 write
+    // and answers it, so the reply is a real logged frame, not a timeout.
+    const errorType = log.entries().filter((e) => e.kind === "error-type");
+    expect(errorType).toHaveLength(1);
+    expect(errorType[0]!.detail).not.toContain("no reply");
+    // One-shot: the hook fired once and is spent.
     expect(fake.loadedIntervals()).toBeNull();
+  });
+
+  it("failNextWrite 'garbled' → reason 'garbled', NOT 'nak', and no GetErrorType is sent (today: no such hook)", async () => {
+    const { fake, driver, log } = harness({
+      program: MINIMAL_PROGRAM,
+      failNextWrite: "garbled",
+    });
+
+    const rejection = await driver.program(MINIMAL_PROGRAM).catch((e) => e);
+
+    expect(rejection).toBeInstanceOf(ProgramRejectionError);
+    expect(rejection).toMatchObject({ reason: "garbled", atFrame: 0 });
+    expect((rejection as ProgramRejectionError).hexTrace).toContain(
+      "ack unparseable",
+    );
+    // The distinction Task 3 exists to keep: a frame we could not validate
+    // is not the PM saying "reject", so the reject-only follow-up does not
+    // fire.
+    expect(log.entries().some((e) => e.kind === "error-type")).toBe(false);
+    expect(fake.loadedIntervals()).toBeNull();
+  });
+
+  it("the one-shot is spent: a retry of the same program after a synthetic reject lands normally", async () => {
+    const { fake, driver, events } = harness({
+      program: MINIMAL_PROGRAM,
+      failNextWrite: "reject",
+    });
+
+    await expect(driver.program(MINIMAL_PROGRAM)).rejects.toBeInstanceOf(
+      ProgramRejectionError,
+    );
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+
+    expect(events.filter((e) => e.kind === "armed")).toHaveLength(1);
+    expect(fake.loadedIntervals()).toBe(MINIMAL_PROGRAM.intervals.length);
   });
 });
 
