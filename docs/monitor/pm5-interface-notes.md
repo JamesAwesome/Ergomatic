@@ -1020,6 +1020,24 @@ every flagged item either numbered here or explicitly excused — holds.)
     truncated frame on the PM5's response path) or a `ProgramRejectionError`
     with reason `"nak"` that wouldn't otherwise be expected — either would
     suggest a dropped chunk under this write mode.
+12. **Whether an accepted program's structure is readable back** (plan
+    7A-fix Task 2 review, F2 — `src/monitor/driver.ts`'s `verifyArmed`).
+    `program()`'s verification today checks only `state === "armed"`: no
+    laptop session has yet read 0x0031's `workoutType`/`workoutDurationRaw`/
+    `workoutDurationType` back AFTER a program the PM accepted, so there is
+    no confirmed evidence either way that these fields echo what was sent.
+    Expected: unknown — `workoutType` should read back
+    `WORKOUTTYPE_VARIABLE_INTERVAL` (`0x08`, the only type this codec ever
+    sends) and `workoutDurationRaw`/`Type` should match the FIRST
+    interval's programmed duration, if the PM treats 0x0031 as an honest
+    mirror of its own configuration. Observed: program a workout, wait for
+    `"armed"`, and dump `exportLog()`'s `"frame"` entries around that
+    point — do `workoutType`/`workoutDurationRaw`/`workoutDurationType`
+    match what was sent? If yes, `verifyArmed` can upgrade from "armed
+    alone" to a real structural check (comparing against `p`, not just its
+    length); if no (or if the PM doesn't refresh these fields until
+    rowing starts), the current state-only check stays the strongest
+    honest option.
 
 Items already resolved with no laptop dependency (not on this list on
 purpose): `intervalIndex`/`spm` nullability is a business rule, not a wire
@@ -1030,21 +1048,114 @@ question at all.
 
 ## 18. Laptop session observations (results destination for §17)
 
-Empty until James runs a session. Append one entry per §17 item, dated,
-e.g.:
+### 2026-08-05 session (PM5 432331249) — LAPTOP SESSION 1
 
-```
-### 2026-MM-DD session
+Run against the `pm5-lab` harness + bridge, before the fake modeled any of
+this session's findings. Full raw trace: the 7A ledger's own "LAPTOP
+SESSION 1" section.
 
-1. Errata: PM5 accepted all three computed checksums; the doc's printed
-   values were rejected/never tried.
-2. COUNTDOWNPAUSE: observed between armed and first stroke, mapped to
-   "armed" correctly in the log.
-...
-```
+1. **Errata (§17 item 1): CONFIRMED.** The PM's OWN ack checksums satisfy
+   the XOR rule as this codec computes it (e.g. ack `f1 01 76 08 ... 77
+   f2`, hand-verified) — the doc's three printed values are errata, as
+   encoded. `parseCsafeResponse` reads real firmware correctly (echoed
+   command IDs decode right). The GATT status parse cross-checks too
+   (distance/elapsed/pace/spm agree with each other). Write-side interval
+   indices are 0-BASED (`18 01 00/01/02/03`), also confirmed.
+2. **COUNTDOWNPAUSE → `armed`: not specifically isolated.** The state word
+   was tracked transitioning `armed → rowing → resting → rowing → resting →
+   finished` across a full 2-interval session with no un-finishing, but no
+   entry pinpoints a `COUNTDOWNPAUSE` ordinal specifically — still flagged
+   unconfirmed in §14.
+3. **Interval numbering base (§17 item 3): ANSWERED, and it's worse than
+   "which base."** A CLEAN 2×(1:00 work / 0:30 rest) session showed work0
+   → idx 0, rest-after-work0 → idx 1, work1 → idx 1, rest-after-work1 → idx
+   2 (a phantom third) — the PM attributes rests FORWARD (into the interval
+   they're heading toward), while this codec's program indices are 0-based
+   per WORK interval. The two numbering systems are structurally different,
+   not merely offset by one. `divergence` never fired because
+   `frame.intervalIndex` and `actual.index` agreed with EACH OTHER while
+   both differed from ours (D3). **Follow-up hardware session (same date,
+   phase-7a-fix Task 1's own diagnosis row):** 0x0038 consistently arrives
+   AFTER 0x0037 at each boundary — the ONE `intervalComplete` this session
+   produced for a 2-interval program carried MIXED-BOUNDARY data (interval
+   2's identity from 0x0037, interval 1's averages from a STALE 0x0038 read
+   left over from the prior boundary), confirming the "arrives-discarded"
+   prediction over "never-arrives" (D4). Fixed by emitting per-boundary
+   from a coherent snapshot rather than whatever merged last (Task 3's own
+   scope, not this task's).
+4. **Zero vs omit for a no-target interval (§17 item 4): not tested this
+   session** — the harness's `TEST_PROGRAM` used a real target throughout;
+   still open.
+5. **Multi-frame retention (§17 item 5): PARTIALLY answered.** The
+   "multi-frame accumulation is broken" conclusion from an earlier reading
+   of this same session was WITHDRAWN once the full byte trace showed the
+   SAME single-interval frame getting both `0x01` and `0x81` on different
+   sends — bytes were never the variable (see D1 below). A clean
+   2-interval program (one CSAFE frame, no multi-frame split needed) WAS
+   confirmed to work end-to-end, rowed to completion. The genuinely
+   multi-FRAME case (several ack-gated frames for one program, e.g. Sea
+   Smoke's 25 intervals / 7 frames) remains UNTESTED from a clean state —
+   still open for the next session.
+6. **No documented wipe/reset for a shorter re-program (§17 item 6):
+   ANSWERED, then WEAKENED.** `D1`: the PM accepts a program ONLY when
+   nothing is loaded; programming over a loaded workout is REJECTED **and
+   WIPES what was loaded** — a failed 2-interval send visibly wiped a
+   working 1-minute program, leaving the monitor showing an empty `:00`
+   session. This is CONFIRMED destructive behavior, observed twice.
+   **D1 UPDATE** (phase-7a-fix Task 1's hardware row, same date): a
+   `terminate()` was ACCEPTED with a completed workout loaded, yet the
+   FOLLOWING program was still REJECTED — twice. So (a) `terminate()` is
+   NOT a reliable clear, and (b) "a rejection wipes it, the next one
+   succeeds" does not hold generally. The state model behind accept/reject
+   is still not understood; the actual clear command, if one exists,
+   remains UNFOUND — the top open question for the next hardware row.
+   Plan Task 2's clear→send→verify design survives this: it never assumed
+   the clear works, only that VERIFICATION would decide success either way.
+7. **`intervalRemaining` checkpoint cadence (§17 item 7): CONFIRMED
+   correct.** 58.92 s remaining observed at 1.08 s into a 60 s interval,
+   re-rooted at 60.0 at the next interval's start, matching
+   `computeRemainingForFrame`'s 0x0033-"Last Split"-based design exactly.
+8. **Trailing rest on the final interval (§17 item 8): CONFIRMED
+   accepted.** The 2×(work/rest) session's final interval's own rest
+   counted down fully before `WorkoutEnd`/`workoutComplete` fired, with no
+   early termination.
+9. **`currentSplit` idle/armed value (§17 item 9): not specifically
+   recorded** this session — still open.
+10. **Non-`0x76` fallback (§17 item 10): nothing to report**, as expected
+    — no ack of that shape appeared in any trace.
+11. **`writeValueWithoutResponse` multi-chunk integrity (§17 item 11): no
+    dropped-chunk symptom observed** across any multi-chunk write this
+    session (no unexplained `frame-error` or `nak`), though no single write
+    this session was large enough to be a decisive stress case.
+12. **Structural readback after an accepted program (§17 item 12,
+    added post-review): not yet tested.** This item did not exist during
+    this session — it was added by the Task 2 fix-round review (F2) after
+    noticing 0x0031 already decodes `workoutType`/`workoutDurationRaw`/
+    `workoutDurationType` but nothing has confirmed whether those fields
+    echo an accepted program's real content. Open for the next session.
 
-Confirmed findings get folded back into the relevant §6/§14/§15/§16 entry
-above (updating "unconfirmed"/"flagged" language to "confirmed
-YYYY-MM-DD") and into `ROADMAP.md`'s Phase 7B checklist — this section
-itself stays a running log, not the final source of truth once an item is
-resolved.
+**Also fixed live this session** (retro-tested by plan Task 4, D6): the
+discovery filter (0x0030 is not advertised — filtering on it left Chrome's
+picker empty forever; device-info service OR namePrefix "PM5" works); the
+frame flood evicting the programming trace (fixed: log state CHANGES only,
+~2/s was overwhelming the 500-entry ring in under 4 minutes); the GATT
+characteristic cache surviving reconnects (`InvalidStateError` on every
+post-reconnect write — would have broken the driver's whole reconnect path
+on real hardware while passing CI, since the fake had no handle
+invalidation); a duplicate `gattserverdisconnected` listener on reconnect;
+raw per-characteristic notification logging (what made the item-3 boundary
+diagnosis possible at all).
+
+**New defect confirmed this session, not in the original §17 list:** the
+no-HR sentinel is `0`, not `255` (D5) — with no belt paired,
+`avgHeartRateBpm: 0` came through on 0x0038's work-heartrate field. `parse.ts`
+now maps BOTH `0` and `255` to `null` for that field (§15 #2's own
+0x0039 counter-evidence agreed with this before the session ever ran).
+
+Folding these confirmations back into §6/§14/§15/§16's own
+"unconfirmed"/"flagged" language (updating each row to "confirmed
+2026-08-05") is plan Task 5's own job, not done in this fix round — this
+entry is §18's record of what happened, not yet reconciled with those
+sections' wording. §17 itself stays the fixed runsheet either way — items
+2, 4, 9, and the multi-FRAME half of item 5 stay open for the next
+session, alongside the new item 12.
