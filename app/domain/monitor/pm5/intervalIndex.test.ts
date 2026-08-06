@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { MonitorFrame } from "../types.js";
-import { toMachineIndex, toProgramIndex } from "./intervalIndex.js";
+import {
+  toActualIndex,
+  toMachineIndex,
+  toProgramIndex,
+} from "./intervalIndex.js";
 
 // The full observed table (interface-notes.md §18 #3, PM5 432331249,
 // 2026-08-05): a clean 2x(1:00 work / 0:30 rest) session read
@@ -125,7 +129,7 @@ describe("toMachineIndex: the observed table, read forwards (interface-notes.md 
     expect(toMachineIndex(24, "resting")).toBe(25);
   });
 
-  it("a work→work boundary invents no offset — the rowing case passes through (§17 item 13 is unanswered)", () => {
+  it("a work→work boundary invents no offset — the rowing case passes through (0x0033's own no-rest reading, §19.8, matches identity)", () => {
     expect(toMachineIndex(0, "rowing")).toBe(0);
     expect(toMachineIndex(7, "rowing")).toBe(7);
   });
@@ -151,5 +155,92 @@ describe("toMachineIndex: the observed table, read forwards (interface-notes.md 
         ).toBe(programIndex);
       }
     }
+  });
+});
+
+// Phase 7A-fix-2 Task 5 (interface-notes.md §19.8, answering §17 item 13):
+// `toActualIndex` is `IntervalActual.index`'s own normalization (0x0037/38,
+// the ACTUALS characteristic) — a SEPARATE rule from `toProgramIndex`'s
+// (0x0033, the live-frame Interval Count, UNCHANGED by this task). The
+// evidence table below is BOTH hardware readings that exist for this field,
+// cited to §19.8 and Task 1's own ledger table (interface-notes.md §18,
+// the [S1]/[S2] rows): one 2xTIME program, read at two different boundaries.
+describe("toActualIndex: the two hardware readings (interface-notes.md §19.8)", () => {
+  it.each<[string, number, MonitorFrame["state"], number, number]>([
+    // [S1] final boundary (§18 #3, §19.8): the "phantom third index" — a
+    // rest-keyed minus-one already explained this one.
+    ["S1 final boundary: resting, the phantom", 2, "resting", 2, 1],
+    // [S2] first boundary (§19.8, THE headline finding this task answers):
+    // NO rest ever separated this boundary from the next interval — state
+    // stayed "rowing" throughout — and the machine still forward-attributed
+    // by one. Against TODAY's code (`toProgramIndex`'s rowing branch, or no
+    // `toActualIndex` at all), this exact input normalizes to `1` (identity)
+    // or fails to compile; `toActualIndex` must return `0`.
+    [
+      "S2 first boundary: rowing, no rest at all — the discriminating row",
+      1,
+      "rowing",
+      2,
+      0,
+    ],
+    // The pre-existing rest-preceded case, RE-PINNED as a regression: the
+    // old rest-keyed rule already agreed with this one, so it must keep
+    // agreeing under the new state-free rule (both apply minus-one here).
+    [
+      "rest-preceded first boundary: today's rule already agrees",
+      1,
+      "resting",
+      2,
+      0,
+    ],
+  ])(
+    "%s: machine %i, state %s, len %i -> our %i",
+    (_label, machineIndex, state, len, expected) => {
+      expect(toActualIndex(machineIndex, state, len)).toBe(expected);
+    },
+  );
+});
+
+describe("toActualIndex: mid-terminate has no stable value to normalize (CSAFE-DEF footnote 12 p.25, via §19.8)", () => {
+  it.each<MonitorFrame["state"]>(["idle", "armed", "finished", "terminated"])(
+    "state=%s -> null regardless of machineIndex",
+    (state) => {
+      expect(toActualIndex(0, state, 2)).toBeNull();
+      expect(toActualIndex(1, state, 2)).toBeNull();
+    },
+  );
+});
+
+describe("toActualIndex: no program to explain the index against", () => {
+  it("programLength 0 -> null even while rowing", () => {
+    expect(toActualIndex(0, "rowing", 0)).toBeNull();
+  });
+
+  it("a negative programLength -> null (defensive; not a shape a real WorkoutProgram produces)", () => {
+    expect(toActualIndex(0, "rowing", -1)).toBeNull();
+  });
+});
+
+describe("toActualIndex: clamps unconditionally at both ends — never null for an active state with a real program", () => {
+  it("machineIndex 0 (candidate -1) clamps to interval 0", () => {
+    expect(toActualIndex(0, "rowing", 2)).toBe(0);
+    expect(toActualIndex(0, "resting", 2)).toBe(0);
+  });
+
+  it("a machineIndex far past the program's length still clamps to the last interval — no 'unexplainable' null here, unlike toProgramIndex", () => {
+    expect(toActualIndex(9, "rowing", 3)).toBe(2);
+    expect(toActualIndex(100, "resting", 3)).toBe(2);
+  });
+});
+
+describe("toActualIndex: honesty check — robust to either the 0-based-forward or 1-based-completed story", () => {
+  it("both readings from the ONE program shape (2xTIME) produce the same arithmetic either way this is told", () => {
+    // See toActualIndex's own doc comment: "the interval that just
+    // finished, 1-based" and "the interval being entered, 0-based-forward"
+    // predict the identical `machineIndex - 1` subtraction for both S1 and
+    // S2's readings — this test exists so a future reader trusts the
+    // function's behavior over either narrative.
+    expect(toActualIndex(2, "resting", 2)).toBe(1); // S1
+    expect(toActualIndex(1, "rowing", 2)).toBe(0); // S2
   });
 });

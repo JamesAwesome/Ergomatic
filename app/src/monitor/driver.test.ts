@@ -11,6 +11,7 @@ import {
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_REARM,
+  WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
@@ -700,11 +701,15 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
       },
       // Interval 0's boundary is a WORK->WORK one: the warmup compiles with
       // `restSeconds: 0`, so no rest tick ever separates it from interval 1
-      // and the state word is still "rowing" when 0x0037/38 arrive. This is
-      // the shape with NO hardware evidence behind it (§17 item 13) — the
-      // fake puts the index through unadjusted, which is what today's code
-      // ASSUMES rather than knows, and the driver's "index-unverified"
-      // entry (asserted below) is the only thing that says so.
+      // and the state word is still "rowing" when 0x0037/38 arrive. Task 5
+      // (interface-notes.md §19.8, answering §17 item 13): the fake's
+      // `toMachineIndex(0, "rowing")` puts a plain `0` on the wire here (its
+      // own model is unaffected by this task), and `toActualIndex(0,
+      // "rowing", 3)` clamps `0 - 1` back up to `0` — this boundary happens
+      // to land on the same number either way the offset is applied, so it
+      // does not by itself discriminate old vs. new (the discriminating row
+      // is pinned separately, driver-test-side, in the Task 5 describe
+      // block below).
       {
         atMs: 200,
         kind: "boundary",
@@ -916,13 +921,6 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // either (0x0033 and 0x0037/38 agree at every boundary, which is
     // precisely why the raw values alone could never have caught D3).
     expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
-    // ...but the ONE boundary with no hardware evidence behind its
-    // numbering says so, exactly once: interval 0's work->work boundary.
-    const unverified = log
-      .entries()
-      .filter((e) => e.kind === "index-unverified");
-    expect(unverified).toHaveLength(1);
-    expect(unverified[0]!.detail).toContain("actual.index=0");
     // D5, end to end over a real workout: the closing tick had no belt, and
     // the fake sent the byte the machine sent for that — `0`, not 255.
     // Either way this must reach a consumer as "no reading".
@@ -3214,7 +3212,16 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     expect(divergence?.detail).toContain("1-interval program");
   });
 
-  it("intervalComplete emission: an actual.index far past the armed program's length normalizes to null (never a fabricated number) and logs divergence", async () => {
+  // Task 5 (interface-notes.md §19.8): `toActualIndex`'s own contract is
+  // "clamped to [0, programLength - 1], unconditionally" (its own doc
+  // comment) — NOT `toProgramIndex`'s "one step out clamps, more than one
+  // returns null" shape. The two tests below used to assert `null` +
+  // divergence for a far-out-of-range actual (pre-Task-5, `toProgramIndex`
+  // was the shared function for BOTH paths); against Task 5's code they now
+  // clamp to the program's last interval instead, and log NO divergence for
+  // this reason — only `toActualIndex` returning `null` (state outside
+  // rowing/resting) still does, pinned in its own describe block below.
+  it("intervalComplete emission: an actual.index far past the armed program's length now CLAMPS (toActualIndex has no 'unexplainable' null, unlike toProgramIndex)", async () => {
     const timeline: FakeTimelineEvent[] = [
       {
         atMs: 100,
@@ -3232,7 +3239,9 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
         kind: "boundary",
         actual: {
           // THREE_INTERVAL_PROGRAM has 3 intervals — 9 is far past the
-          // offset rule's own one-past-the-end shape.
+          // offset rule's own one-past-the-end shape. Under `toProgramIndex`
+          // (today's shared function, pre-Task-5) this was unexplainable;
+          // under `toActualIndex` it clamps to the last interval, 2.
           index: 9,
           elapsedSeconds: 60,
           distanceMeters: 200,
@@ -3255,27 +3264,20 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
-      // Widened type (Task 3 review, `docs/design/DEVIATIONS.md`) — the raw
-      // machine value (9) is never assigned here, and neither is a
-      // fabricated stand-in number; `null` is the honest signal, with the
-      // raw value surviving in the "divergence" entry asserted below.
-      actual: { index: null },
+      actual: { index: 2 },
     });
-    const divergence = log
-      .entries()
-      .find(
-        (e) =>
-          e.kind === "divergence" &&
-          e.detail.includes("has no corresponding interval"),
-      );
-    expect(divergence).toBeDefined();
-    expect(divergence?.detail).toContain("actual.index=9");
-    expect(divergence?.detail).toContain("0x0037/38");
-    expect(divergence?.detail).toContain("state=rowing");
-    expect(divergence?.detail).toContain("3-interval program");
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "divergence" &&
+            e.detail.includes("has no corresponding interval"),
+        ),
+    ).toBe(false);
   });
 
-  it("intervalComplete emission: the same unexplainable check also applies while resting, not only while rowing", async () => {
+  it("intervalComplete emission: the same clamp applies while resting, not only while rowing", async () => {
     const timeline: FakeTimelineEvent[] = [
       {
         atMs: 100,
@@ -3294,7 +3296,9 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
         actual: {
           // Authored as OUR index; the fake puts 10 on the wire (the rest's
           // own forward attribution). Far past THREE_INTERVAL_PROGRAM's 3
-          // intervals either way, which is the point.
+          // intervals either way, which is the point — clamps to 2 either
+          // way too, since `toActualIndex` does not distinguish rowing from
+          // resting at all.
           index: 9,
           elapsedSeconds: 60,
           distanceMeters: 200,
@@ -3317,41 +3321,147 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
+      actual: { index: 2 },
+    });
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "divergence" &&
+            e.detail.includes("has no corresponding interval"),
+        ),
+    ).toBe(false);
+  });
+});
+
+describe("createPm5Driver: Task 5 — toActualIndex's own null (state outside rowing/resting) still logs divergence", () => {
+  it("a boundary that completes while the general-status word already reads TERMINATE (but the run has not yet closed) normalizes to null and logs divergence — CSAFE-DEF footnote 12 p.25 via §19.8", async () => {
+    // This exploits `maybeEmitFrame`'s own `seen.general && seen.as1 &&
+    // seen.as2` gate (its own comment, driver.ts): a General Status
+    // notification always merges `workoutState` into `raw` immediately, but
+    // the terminal-state-closes-the-run logic sits BEHIND that "seen all
+    // three" gate. `program()` here is armed via `programViaStub`, which
+    // resolves `verifyArmed()` from a bare GENERAL_STATUS_UUID notification
+    // alone (no AS1/AS2 ever sent) — so by the time a lone TERMINATE status
+    // arrives, `raw.workoutState` reads "terminated" while `activeRun`
+    // stays open (the close logic never runs, for lack of AS1/AS2). This is
+    // the one reachable way to observe `state === "terminated"` with
+    // `runIsOpen()` still true inside `emitIntervalComplete` — the shape
+    // CSAFE-DEF's footnote 12 describes, where a boundary's own value has no
+    // stable meaning at a mid-terminate moment.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    await programViaStub(driver, transport, THREE_INTERVAL_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 90, 300),
+    );
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+
+    const complete = events.find((e) => e.kind === "intervalComplete");
+    expect(complete).toMatchObject({
+      kind: "intervalComplete",
       actual: { index: null },
     });
     const divergence = log
       .entries()
       .find(
-        (e) =>
-          e.kind === "divergence" &&
-          e.detail.includes("has no corresponding interval"),
+        (e) => e.kind === "divergence" && e.detail.includes("state=terminated"),
       );
     expect(divergence).toBeDefined();
-    expect(divergence?.detail).toContain("state=resting");
+    expect(divergence?.detail).toContain("actual.index=1");
+    expect(divergence?.detail).toContain("3-interval program was armed");
+    // Never the out-of-run path: the run genuinely never closed here.
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      false,
+    );
   });
 });
 
-describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified' instead of staying silent", () => {
-  // Task 3's review finding, and the shape with the least evidence behind
-  // it anywhere in this driver: with `restSeconds: 0` the state word never
-  // leaves "rowing" at a work->work boundary (no rest tick ever fires in
-  // between), so `toProgramIndex`'s only hardware-confirmed branch — the
-  // resting offset — never engages, and the machine's number passes through
-  // UNADJUSTED. Nothing else in the trace can flag that: the value is
-  // in-range, and both raw fields agree with each other, so neither
-  // divergence check fires. The `"index-unverified"` entry the second
-  // assertion below demands is therefore the ONE observable that this
-  // boundary's numbering is an assumption rather than a reading — and the
-  // only thing that would reveal a wrong assumption here, since if the
-  // machine really does attribute forward at a work->work boundary too,
-  // every actual in such a program is filed one interval late in silence.
-  // §17 item 13 is the reading that would settle it.
-  //
-  // NOTE for anyone reading the mutation log: the `machineState`-hardcode
-  // mutant CANNOT fail on this shape by construction — the state here IS
-  // "rowing", so hardcoding the literal is a no-op. This shape is guarded
-  // by the log assertion below and nothing else.
-  it("a work->work boundary with restSeconds: 0 stays in 'rowing' the whole time and logs 'index-unverified', not silence", async () => {
+describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus-1, state-free within the gate; interface-notes.md §19.8)", () => {
+  // THE HEADLINE DEFECT TEST. Session 2's own reading (§19.8, answering §17
+  // item 13): at a no-rest work->work boundary, 0x0037/38 read `1` while
+  // state stayed "rowing" throughout. Against TODAY's code (`toProgramIndex`
+  // shared for both paths — its rowing branch passes the machine index
+  // through UNADJUSTED), this exact input normalizes to `1`, not `0`: driven
+  // through `stubTransport` directly (raw `splitHalf(1, ...)`/`asSplitHalf(1,
+  // ...)`) rather than the fake, because `transports/fake.ts`'s own
+  // `toMachineIndex(programIndex, "rowing")` is an identity pass-through —
+  // it cannot put a forward-attributed `1` on the wire for a rowing boundary
+  // at all, which is exactly the model gap this hardware reading exposed and
+  // which is out of this task's scope to fix (fake.ts is not in Task 5's
+  // file list). Talking to the raw characteristics lets this test pin the
+  // exact wire value session 2 actually saw.
+  it("a no-rest work->work boundary (machine 1, rowing, 2-interval program) normalizes to 0 — the forward-attributed 1 must not pass through", async () => {
+    const twoIntervalNoRest: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0, // no rest -- the state word never becomes "resting"
+        },
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    await programViaStub(driver, transport, twoIntervalNoRest);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 50, 180),
+    );
+
+    // The exact session-2 wire value: Split/Interval Number 1, arriving
+    // while the machine has never left "rowing".
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+
+    const complete = events.find((e) => e.kind === "intervalComplete");
+    expect(complete).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0 },
+    });
+    expect(
+      log.entries().find((e) => e.kind === "interval-complete")?.detail,
+    ).toBe("index=0 (machine reported 1)");
+    // Nothing in this session is unexplainable, and the two raw fields
+    // never disagreed with each other either (0x0033 was never sampled in
+    // this stub-driven test) — no divergence of any kind fires.
+    expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
+    // `index-unverified` is RETIRED — this exact boundary shape is what
+    // retired it (§17 item 13 is answered).
+    expect(log.entries().some((e) => e.kind === "index-unverified")).toBe(
+      false,
+    );
+  });
+
+  // A REGRESSION PIN, not a defect test: this shape happens to clamp to the
+  // same value (0) whether the old rest-keyed rule or the new state-free
+  // one is applied (`toMachineIndex(0, "rowing")` puts a plain `0` on the
+  // wire via the fake, and `0 - 1` clamps right back to `0`), so it does not
+  // discriminate old from new — it only proves the fake-driven path still
+  // behaves once `index-unverified` is gone.
+  it("a work->work boundary with restSeconds: 0 and machine index 0 still normalizes to 0, with no divergence and no retired log kind", async () => {
     const restlessProgram: WorkoutProgram = {
       intervals: [
         {
@@ -3371,12 +3481,6 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
       ],
     };
     const timeline: FakeTimelineEvent[] = [
-      // Interval 0, rowing. There is no rest to follow it, so the state
-      // word never becomes "resting" at any point in this program and
-      // nothing is ever forward-attributed (`toMachineIndex` adjusts a REST
-      // and nothing else) — both raw fields agree with each other AND with
-      // us, which is exactly why no divergence of any kind can fire: the
-      // reviewer's reproduction, "NO-REST DIVERGENCE []".
       {
         atMs: 100,
         kind: "status",
@@ -3391,16 +3495,6 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
       {
         atMs: 200,
         kind: "boundary",
-        // The interval that just finished is 0, and — under the ONLY rule
-        // available for this shape — the machine puts a plain `0` on
-        // 0x0037/38 for it. The fake deliberately does NOT invent a
-        // forward-attributed value here: no hardware reading exists for a
-        // work->work boundary (§17 item 13), and a fake that guessed would
-        // teach CI a number nobody has ever seen. If the machine turns out
-        // to attribute forward here too, EVERY actual in a `restSeconds: 0`
-        // program is filed one interval late and the only thing in the
-        // trace that would have hinted at it is the "index-unverified"
-        // entry asserted below.
         actual: {
           index: 0,
           elapsedSeconds: 60,
@@ -3434,32 +3528,23 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
 
     fake.tick(300);
 
-    // The boundary still fires and still normalizes to SOMETHING plausible
-    // (never invents a NEW offset for this shape, per the review's explicit
-    // instruction) -- this is not a defect fix, only a visibility fix.
     const complete = events.find((e) => e.kind === "intervalComplete");
     expect(complete).toMatchObject({
       kind: "intervalComplete",
       actual: { index: 0 },
     });
-
-    const unverified = log.entries().find((e) => e.kind === "index-unverified");
-    expect(unverified).toBeDefined();
-    expect(unverified?.detail).toContain("actual.index=0");
-    expect(unverified?.detail).toContain("state=rowing");
-    expect(unverified?.detail).toContain("§17 item 13");
-
-    // No divergence of either kind fires -- the value is perfectly in
-    // range and both raw fields agree with each other, exactly the silent
-    // shape the review's critical finding described.
     expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
+    expect(log.entries().some((e) => e.kind === "index-unverified")).toBe(
+      false,
+    );
   });
 
-  it("a boundary that DOES follow a rest tick never logs 'index-unverified' (the rule has a real hardware-confirmed signal there)", async () => {
+  it("a boundary that DOES follow a rest tick keeps normalizing the same way (regression pin: today's rest-keyed rule already agreed here)", async () => {
     const timeline: FakeTimelineEvent[] = [
       // Interval 1's trailing rest: the machine's own counter reads 2 here
       // (forward-attributed), and so does the Split/Interval Number on the
-      // boundary that follows — the confirmed half of the rule.
+      // boundary that follows — the confirmed half of the (now-retired)
+      // rest-keyed rule, and `toActualIndex` produces the identical answer.
       {
         atMs: 100,
         kind: "status",
@@ -3494,8 +3579,8 @@ describe("createPm5Driver: D3 review — no-rest boundary logs 'index-unverified
 
     fake.tick(200);
 
-    // OUR 1, from a wire that said 2 — the discriminating row (a value the
-    // clamp cannot also produce), and the one the D3 fix exists for.
+    // OUR 1, from a wire that said 2 — the row both the old rest-keyed rule
+    // and the new state-free rule agree on.
     expect(events.find((e) => e.kind === "intervalComplete")).toMatchObject({
       kind: "intervalComplete",
       actual: { index: 1 },

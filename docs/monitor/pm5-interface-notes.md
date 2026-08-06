@@ -691,6 +691,11 @@ disputed checksums in §6):
    > **0** at the work0→work1 boundary, with the state word `"rowing"`
    > throughout. Forward attribution is not resting-side only. Fixing
    > `intervalIndex.ts` is Phase 7A-fix-2's own task.
+   > **DONE (Task 5):** `toActualIndex` applies `machineIndex - 1`
+   > unconditionally (rowing or resting alike) for `IntervalActual.index`;
+   > `toProgramIndex`/0x0033 keeps the rest-keyed rule, since that field's
+   > own no-rest reading (`0`) matched identity. See §17 item 13's own
+   > CORRECTION for the full evidence.
 2. **0x0038's Work/Rest Heartrate sentinel — ANSWERED (D5), excluded from
    the numbered runsheet; see the paragraph below.** Only 0x0032's Heartrate field
    is explicitly documented as "255=invalid" (§10). `parse.ts` applies the
@@ -1319,6 +1324,23 @@ every flagged item either numbered here or explicitly excused — holds.)
     into, matching the resting rule's own shape applied even with no rest)?
     That reading settles which rule (if either) actually governs a
     work→work boundary.
+    > **CORRECTION (2026-08-06, Phase 7A-fix-2 Task 5): STATUS: ANSWERED.**
+    > Laptop session 2 read the Split/Interval Number as `1` at exactly this
+    > boundary shape (§19.8) — the interval-heading-into reading, not the
+    > "rowing rule" identity pass-through this item's own text (above)
+    > described as the untested assumption. 0x0033 read `0` (identity) at
+    > the same instant, so the two wire fields disagree with each other:
+    > 0x0037/38's forward attribution does not depend on the machine
+    > actually being in a resting state, only on 0x0037/38 being the field
+    > in question. `domain/monitor/pm5/intervalIndex.ts` now has a SECOND
+    > function, `toActualIndex`, applying `machineIndex - 1` unconditionally
+    > (whenever `machineState` is `"rowing"` or `"resting"`) for
+    > `IntervalActual.index` alone — `toProgramIndex` (0x0033, this item's
+    > own `intervalCount` field) is UNCHANGED, since its one hardware
+    > reading for this exact shape (`0`) matches identity exactly. The
+    > driver's `"index-unverified"` log entry, which existed to flag this
+    > item while it was open, is RETIRED — the question it was flagging is
+    > this correction.
 14. **STATUS: OPEN — added by Phase 7A-fix-2 Task 3's review (MINOR-1);
     did not exist before this commit, so no data yet.** Which wrapper a
     GET/pull command should actually carry on the REQUEST side — `0x1A`
