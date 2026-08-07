@@ -1,5 +1,6 @@
 import { fmtSplit } from "../../domain/format.js";
 import { refLabel } from "../../domain/pace.js";
+import type { Judgement } from "../../domain/judge.js";
 import type { EnginePhase } from "./engine";
 
 /** TARGET SPLIT card content: `main` is the mono-30px accent value, `sub`
@@ -69,18 +70,64 @@ export function rateDisplay(phase: EnginePhase): {
   return { main: "rate free", caption: null };
 }
 
-export default function TimerTargets({ phase }: { phase: EnginePhase }) {
+/** The phone timer's own rendering (unlabelled — the only variant that
+ *  existed before Phase 7B Task 3) vs. the connected panes' (Tasks 6/7,
+ *  neither task exists yet — this variant has no consumer today). The
+ *  `"default"` branch below is BYTE-IDENTICAL to what this component
+ *  rendered before this task (pinned by `TimerTargets.test.tsx`'s own
+ *  regression test, lifted from the pre-task commit) — every
+ *  `variant === "connected"` branch is additive JSX gated behind a
+ *  condition that's `false` by default. */
+export type TimerTargetsVariant = "default" | "connected";
+
+/** A live actual value ready to drop into the connected variant's judged-
+ *  actual slot: the caller (a future Task 6/7 consumer, reading a real PM5
+ *  `MonitorFrame` through `domain/judge.ts`'s `judgeActual`) supplies both
+ *  the already-formatted display string (this component never touches raw
+ *  PM5-shaped numbers) and the verdict, which becomes a `timer-card-actual-
+ *  {judgement}` class hook for that future consumer's own styling pass. */
+export interface JudgedActual {
+  display: string;
+  judgement: Judgement;
+}
+
+export default function TimerTargets({
+  phase,
+  variant = "default",
+  paceActual = null,
+  rateActual = null,
+}: {
+  phase: EnginePhase;
+  variant?: TimerTargetsVariant;
+  paceActual?: JudgedActual | null;
+  rateActual?: JudgedActual | null;
+}) {
   const target = targetSplitDisplay(phase);
   const rate = rateDisplay(phase);
+  const connected = variant === "connected";
   return (
     <div className="timer-cards">
       <div className="timer-card">
         <span className="timer-card-label">TARGET SPLIT</span>
-        <span className="timer-card-value timer-card-value-accent">
+        <span
+          className={
+            connected
+              ? "timer-card-value"
+              : "timer-card-value timer-card-value-accent"
+          }
+        >
           {target.main}
         </span>
         {target.sub !== null && (
           <span className="timer-card-caption">{target.sub}</span>
+        )}
+        {connected && <span className="timer-card-static">LIVE PACE</span>}
+        {connected && paceActual !== null && (
+          <span
+            className={`timer-card-actual timer-card-actual-${paceActual.judgement}`}
+          >
+            {paceActual.display}
+          </span>
         )}
       </div>
       <div className="timer-card">
@@ -88,6 +135,14 @@ export default function TimerTargets({ phase }: { phase: EnginePhase }) {
         <span className="timer-card-value">{rate.main}</span>
         {rate.caption !== null && (
           <span className="timer-card-caption">{rate.caption}</span>
+        )}
+        {connected && <span className="timer-card-static">LIVE RATE</span>}
+        {connected && rateActual !== null && (
+          <span
+            className={`timer-card-actual timer-card-actual-${rateActual.judgement}`}
+          >
+            {rateActual.display}
+          </span>
         )}
       </div>
     </div>

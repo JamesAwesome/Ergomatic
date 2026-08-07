@@ -26,6 +26,31 @@ import {
 } from "./run";
 import TimerTargets from "./TimerTargets";
 import TimerRuler from "./TimerRuler";
+import IntervalSegments from "../components/IntervalSegments";
+import UpNextStrip from "../components/UpNextStrip";
+
+/** Maps an `EnginePhase.type` onto `IntervalSegments`'s own neutral
+ *  `kinds` shape (`"work" | "rest" | "wu"`, Phase 7B Task 3's pinned prop
+ *  interface for the extracted dot strip — `src/components/
+ *  IntervalSegments.tsx`). That shape has no dedicated bucket for `"test"`
+ *  (an open-ended piece, e.g. a bare "2k test" step) — folded into `"work"`
+ *  here, the closest semantic match (an effortful interval, not a rest or a
+ *  warm-up) — since the strip's own rendering doesn't discriminate by kind
+ *  yet regardless (see that file's own doc comment), this mapping has no
+ *  visible effect today; it only matters once a future consumer actually
+ *  paints dots by kind. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function segmentKind(type: EnginePhase["type"]): "work" | "rest" | "wu" {
+  switch (type) {
+    case "warmup":
+      return "wu";
+    case "rest":
+      return "rest";
+    case "work":
+    case "test":
+      return "work";
+  }
+}
 
 /** STEP N OF M's own kind word — a fixed vocabulary independent of the
  *  phase's resolved TARGET (that lives on `EnginePhase.label`; this reads
@@ -528,20 +553,11 @@ export default function Timer() {
         </div>
       )}
 
-      <div className="timer-dots">
-        {currentRun.phases.map((_, i) => (
-          <span
-            key={i}
-            className={
-              i < currentRun.index
-                ? "timer-dot timer-dot-past"
-                : i === currentRun.index
-                  ? "timer-dot timer-dot-current"
-                  : "timer-dot timer-dot-future"
-            }
-          />
-        ))}
-      </div>
+      <IntervalSegments
+        total={currentRun.phases.length}
+        current={currentRun.index}
+        kinds={currentRun.phases.map((p) => segmentKind(p.type))}
+      />
 
       <div className="timer-phase">
         <div className="timer-phase-head">
@@ -562,21 +578,14 @@ export default function Timer() {
 
       <TimerTargets phase={phase} />
 
-      <div className="timer-upnext">
-        <div className="timer-upnext-main">
-          <span className="timer-upnext-label">UP NEXT</span>
-          <span className="timer-upnext-value">{upNextText(currentRun)}</span>
-        </div>
-        {/* Landscape-only second line (handoff §6) — hidden in portrait via
-            CSS (`.timer-upnext-then`'s own base rule), not a conditional
-            render keyed off orientation: this component has no JS notion of
-            the device's current orientation, and CSS's own media query is
-            the one thing that actually knows it. `thenText` itself is
-            data-driven (null past the last phase), independent of layout. */}
-        {thenText !== null && (
-          <span className="timer-upnext-then">then {thenText}</span>
-        )}
-      </div>
+      {/* `UpNextStrip` (src/components/UpNextStrip.tsx, Phase 7B Task 3) —
+          the landscape-only "then …" second line it renders is still
+          governed entirely by CSS (`.timer-upnext-then`'s own base rule),
+          not a conditional keyed off orientation: neither this component
+          nor the strip has any JS notion of the device's current
+          orientation. `upNextText`/`thenNextText` stay here, unchanged —
+          the strip only ever sees their already-computed output. */}
+      <UpNextStrip upNext={upNextText(currentRun)} thenNext={thenText} />
 
       <TimerRuler
         totalLeftSeconds={totalRemainingSeconds(currentRun, now)}

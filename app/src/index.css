@@ -3284,6 +3284,33 @@ button:disabled {
   color: var(--ink-3);
 }
 
+/* Connected-variant-only (Phase 7B Task 3): `TimerTargets`'s
+   `variant="connected"` branch — no consumer exists yet (Tasks 6/7). The
+   judgement-keyed classes below (`timer-card-actual-under/-within/-over/
+   -stale`, from `domain/judge.ts`'s own `Judgement` union) are structural
+   hooks only; deliberately left visually IDENTICAL to plain
+   `.timer-card-actual` rather than inventing unreviewed judgement colours —
+   the app's palette has no semantic success/warning family today, and
+   `--accent` is already a closed set of four meanings
+   (docs/design/DEVIATIONS.md row 50/56) a fifth "deviation" use would
+   quietly break. Choosing real per-judgement colour is Tasks 6/7's own
+   design-review call, not this extraction's. */
+.timer-card-static {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.timer-card-actual {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.timer-card-actual-stale {
+  color: var(--ink-5);
+}
+
 .timer-upnext {
   display: flex;
   flex-direction: column;
