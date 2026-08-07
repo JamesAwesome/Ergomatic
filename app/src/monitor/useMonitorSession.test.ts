@@ -782,11 +782,28 @@ describe("useMonitorSession: the double-fire pin", () => {
     await connect(result);
     const before = transport.wireWrites;
 
+    // Both fired before anything is awaited — a double-tap on Try again,
+    // or a component that fires its effect twice.
+    let first: Promise<void> | null = null;
+    let second: Promise<void> | null = null;
     await act(async () => {
-      // Both fired before anything is awaited — a double-tap on Try again,
-      // or a component that fires its effect twice.
-      const first = result.current.program(TWO_INTERVALS, TWO_IDENTITY);
-      const second = result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+      first = result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+      second = result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+    });
+
+    // The moment that matters, read at the first render after both
+    // presses: ONE attempt is under way and NOTHING has failed. This is
+    // what the synchronous flip buys and the only place it is visible —
+    // flip the phase one microtask late and the second call reaches the
+    // driver, whose single-flight gate refuses it with `ProgramBusyError`.
+    // The wire count would still come out right (the gate refuses before
+    // any byte), but the rower gets a state-6 FAILED screen for a press
+    // they were entitled to make, cleared a moment later by the first
+    // call's own success.
+    expect(result.current.phase).toBe("programming");
+    expect(result.current.error).toBeNull();
+
+    await act(async () => {
       await flush();
       fake.tick(0);
       await Promise.all([first, second]);
@@ -919,6 +936,18 @@ describe("useMonitorSession: failures", () => {
 describe("useMonitorSession: P3b — a failed program with a run open", () => {
   const liveTimeline: FakeTimelineEvent[] = [
     status(100, { elapsedSeconds: 20, distanceMeters: 70 }),
+    // The machine finishes the piece it was still running, well after our
+    // own record closed. The DRIVER's run is still open (it never saw the
+    // terminate we sent — see the lost notification below), so it emits a
+    // perfectly real `workoutComplete` here. That is the event the pin is
+    // about.
+    status(400, {
+      workoutState: WORKOUTSTATE_WORKOUTEND,
+      elapsedSeconds: 60,
+      distanceMeters: 200,
+      spm: 0,
+      currentSplit: 0,
+    }),
   ];
 
   it("closes the RECORD, terminates the erg, and IGNORES the terminal event that follows", async () => {
@@ -1518,14 +1547,28 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
   });
 
   it("a non-rowing frame resets the count outright — a rest cannot lend its frames to the next stroke", () => {
+    // Three frozen rowing frames, a rest, then the same frozen values
+    // again. Merely NOT COUNTING the rest would leave the run standing and
+    // let that fourth frame tip the session into PAUSED across a
+    // changeover — which is the false positive the whole derivation exists
+    // to avoid. The rest has to clear it.
+    const rowing = frame({
+      elapsedSeconds: 10,
+      distanceMeters: 30,
+      currentSplit: 120,
+      spm: 20,
+    });
     const resting = frame({ state: "resting", currentSplit: 0, spm: 0 });
-    let run = nextFreezeRun(null, resting);
-    run = nextFreezeRun(run, resting);
-    run = nextFreezeRun(run, resting);
-    run = nextFreezeRun(run, resting);
+    let run: FreezeRun | null = null;
+    for (let i = 0; i < 3; i += 1) run = nextFreezeRun(run, rowing);
+    expect(run!.frames).toBe(3);
 
-    expect(isPausedRun(run)).toBe(false);
+    run = nextFreezeRun(run, resting);
     expect(run.frames).toBe(0);
+
+    run = nextFreezeRun(run, rowing);
+    expect(run.frames).toBe(1);
+    expect(isPausedRun(run)).toBe(false);
   });
 });
 
