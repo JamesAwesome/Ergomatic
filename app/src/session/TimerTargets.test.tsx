@@ -169,4 +169,97 @@ describe("TimerTargets (component)", () => {
     expect(screen.queryByText("spm")).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
+
+  // BYTE-IDENTICAL REGRESSION PIN (Phase 7B Task 3). Lifted from THIS
+  // component's own pre-task render (HEAD at the start of this task, before
+  // the `variant` prop existed) by rendering the real `Timer` component
+  // against a distance work phase (split-ref "2k", no spm) and reading
+  // `document.querySelector(".timer-cards")!.outerHTML` — the exact string
+  // below, unedited. Proves `variant` omitted (and `variant="default"`
+  // explicitly) both still produce the identical DOM this component always
+  // rendered.
+  const pinnedPhase = phase({
+    type: "work",
+    targetKind: "split",
+    targetSplit: 100,
+    ref: { base: "2k", off: 0 },
+    label: "1:40.0",
+  });
+  const PINNED_DEFAULT_HTML =
+    '<div class="timer-cards"><div class="timer-card"><span class="timer-card-label">TARGET SPLIT</span><span class="timer-card-value timer-card-value-accent">1:40.0</span><span class="timer-card-caption">2K</span></div><div class="timer-card"><span class="timer-card-label">RATE</span><span class="timer-card-value">rate free</span></div></div>';
+
+  it("variant omitted renders byte-identical to the pre-Task-3 markup", () => {
+    const { container } = render(<TimerTargets phase={pinnedPhase} />);
+    expect(container.innerHTML).toBe(PINNED_DEFAULT_HTML);
+  });
+
+  it("variant='default' explicitly renders the identical byte-identical markup", () => {
+    const { container } = render(
+      <TimerTargets phase={pinnedPhase} variant="default" />,
+    );
+    expect(container.innerHTML).toBe(PINNED_DEFAULT_HTML);
+  });
+});
+
+describe("TimerTargets: variant='connected'", () => {
+  const splitPhase = phase({
+    type: "work",
+    targetKind: "split",
+    targetSplit: 136,
+    ref: { base: "6k", off: 16 },
+    label: "2:16.0",
+    spm: 22,
+  });
+
+  it("ink targets: the TARGET SPLIT value drops the accent class the default variant carries", () => {
+    render(<TimerTargets phase={splitPhase} variant="connected" />);
+    const value = screen.getByText("2:16.0");
+    expect(value.className).toBe("timer-card-value");
+    expect(value.className).not.toContain("timer-card-value-accent");
+  });
+
+  it("static third line: both cards render an unconditional caption the default variant never shows", () => {
+    render(<TimerTargets phase={splitPhase} variant="connected" />);
+    expect(screen.getByText("LIVE PACE")).toBeInTheDocument();
+    expect(screen.getByText("LIVE RATE")).toBeInTheDocument();
+  });
+
+  it("with no judged actual supplied, the actual slot is absent entirely (not an empty element)", () => {
+    const { container } = render(
+      <TimerTargets phase={splitPhase} variant="connected" />,
+    );
+    expect(container.querySelector(".timer-card-actual")).toBeNull();
+  });
+
+  it("judged-actual slot: renders the caller's display string with a judgement-keyed class, per card independently", () => {
+    render(
+      <TimerTargets
+        phase={splitPhase}
+        variant="connected"
+        paceActual={{ display: "2:19.4", judgement: "over" }}
+        rateActual={{ display: "18", judgement: "stale" }}
+      />,
+    );
+    const paceActualEl = screen.getByText("2:19.4");
+    expect(paceActualEl.className).toBe(
+      "timer-card-actual timer-card-actual-over",
+    );
+    const rateActualEl = screen.getByText("18", {
+      selector: ".timer-card-actual",
+    });
+    expect(rateActualEl.className).toBe(
+      "timer-card-actual timer-card-actual-stale",
+    );
+  });
+
+  it("the default variant never renders any connected-only element (static line or actual slot), even if actuals are passed", () => {
+    const { container } = render(
+      <TimerTargets
+        phase={splitPhase}
+        paceActual={{ display: "2:19.4", judgement: "over" }}
+      />,
+    );
+    expect(container.querySelector(".timer-card-static")).toBeNull();
+    expect(container.querySelector(".timer-card-actual")).toBeNull();
+  });
 });
