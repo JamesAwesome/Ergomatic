@@ -91,7 +91,7 @@ Commit: `feat: the driver knows its erg's name and says busy itself`.
 ### Task 2: The F5 walk closes — Connect guard + guarded cross-clears
 
 **Files:**
-- Modify: `app/src/screens/WorkoutDetail.tsx` (`handleStart` reads
+- Modify: `app/src/workout/WorkoutDetail.tsx` (`handleStart` reads
   `loadMonitorRun()` too; the Connect guard added — direct reads, the
   Today.tsx pattern, staged confirm), `app/src/session/run.ts`
   (`buildRun`/`saveRun` reverse cross-clear — behind the confirm path
@@ -123,7 +123,7 @@ Commit: `fix: two doors, one lock — no silent destruction in either direction`
 - Create: `app/domain/judge.ts` (+test), `app/src/components/
   IntervalSegments.tsx`, `app/src/components/UpNextStrip.tsx`
   (+tests) — extracted with NEUTRAL VALUE PROPS
-- Modify: `app/src/screens/Timer.tsx` (consumes the extracted pair),
+- Modify: `app/src/workout/Timer.tsx` (consumes the extracted pair),
   `app/src/components/TimerTargets.tsx` (variant prop: ink targets +
   static third line + judged-actual slot; default variant renders
   byte-identical DOM), `docs/design/DEVIATIONS.md` (tolerance
@@ -223,8 +223,8 @@ fixture dies; drop the ignore-after-close → its pin dies. Full gates;
 ### Task 5: Connect + the interstitial
 
 **Files:**
-- Create: `app/src/screens/ConnectedInterstitial.tsx` (+test)
-- Modify: `app/src/screens/WorkoutDetail.tsx` (the Connect button:
+- Create: `app/src/workout/ConnectedInterstitial.tsx` (+test)
+- Modify: `app/src/workout/WorkoutDetail.tsx` (the Connect button:
   second in stack, L2, `LAST USED · <name>` caption from localStorage,
   Bluetooth-off dashed treatment opening the OS prompt), router,
   tests; `app/src/api/` only if the BT-availability probe needs a
@@ -256,8 +256,8 @@ fake-driven. Full gates. Commit:
 ### Task 6: The surface — shell, panes A and B, mid-session states
 
 **Files:**
-- Create: `app/src/screens/ConnectedSurface.tsx`,
-  `app/src/screens/connected/PaneTimer.tsx`, `PaneLive.tsx`,
+- Create: `app/src/workout/ConnectedSurface.tsx`,
+  `app/src/workout/connected/PaneTimer.tsx`, `PaneLive.tsx`,
   `PagerRail.tsx` (+tests, +css tokens per the handoff)
 
 Behaviour: pane order A·B·C with landing/persistence per handoff (per
@@ -285,7 +285,7 @@ paused/disconnected treatments; End staging. Full gates. Commit:
 ### Task 7: Pane C + diagnostics
 
 **Files:**
-- Create: `app/src/screens/connected/PaneGrid.tsx`,
+- Create: `app/src/workout/connected/PaneGrid.tsx`,
   `ConnectionLogSheet.tsx` (+tests)
 
 Behaviour: the grid per the handoff — portrait two-line rows,
