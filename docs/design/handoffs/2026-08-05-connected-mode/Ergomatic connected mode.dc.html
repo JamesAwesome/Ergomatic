@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ddd8cc; }
+  a { color: #1b1a17; text-decoration: none; border-bottom: 1px solid #b5341f; }
+  a:hover { color: #b5341f; }
+</style>
+</helmet>
+
+<section style="display:flex;flex-direction:column;gap:34px;padding:48px 48px 110px;font-family:Archivo,sans-serif;color:#1b1a17">
+
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:900px">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">PHASE 7 · CONNECTED MODE · TURN 1</span>
+    <span style="font-family:Newsreader,serif;font-size:38px;font-weight:500;letter-spacing:-0.01em">The monitor drives; the phone explains</span>
+    <span style="font-size:14px;line-height:1.55;color:#3f3c35;text-wrap:pretty">Interstitial state machine, then three panes in both orientations, then the mid-session states. Frames are built to the UI-fix control spec: five button levels, accent means only four things, ≥44px targets, small mono labels never lighter than <span style="font-family:'IBM Plex Mono',monospace">#57544c</span>. Landscape frames are 844×390 and never scroll.</span>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:22px;padding:18px 20px;background:#f4f1e8;border:1px solid #1b1a17">
+    <div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:5px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DECISION · ACTUAL VS TARGET</span>
+      <span style="font-size:13px;line-height:1.5;color:#3f3c35">The target is <b>ink</b> in connected mode — the actual beside it is the only coloured value, and its <b>colour</b> is the judgement: teal <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#2a6275">#2a6275</span> under target, ink on target, ochre <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a5f18">#8a5f18</span> over. Beneath it sits a fixed <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">TARGET 22</span> caption that never re-words — no fills, borders, arrows or changing text. Accent's only job on these panes is the active interval's countdown.</span>
+    </div>
+    <div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:5px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DECISION · PORTRAIT GRID</span>
+      <span style="font-size:13px;line-height:1.5;color:#3f3c35">Two-line rows. Line 1 carries Time · Meters · /500m at mono 15px; line 2 carries SPM · HR · Rest at mono 12px with their own labels. Six columns, always visible, no horizontal scroll.</span>
+    </div>
+    <div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:5px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DECISION · PANES</span>
+      <span style="font-size:13px;line-height:1.5;color:#3f3c35">Order A timer · B live · C grid. Lands on B, then remembers the last pane per rower. Dots sit bottom-centre in portrait, right-edge vertical in landscape, 44px targets, labelled.</span>
+    </div>
+    <div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:5px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DECISION · DISTANCE INTERVALS</span>
+      <span style="font-size:13px;line-height:1.5;color:#3f3c35">The programmed dimension is the one that counts down and the one that wears accent: time intervals count time down and meters up; distance intervals count meters down and time up.</span>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid #1b1a17;padding-bottom:8px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;background:#1b1a17;color:#fffdf7;padding:4px 8px">1</span>
+      <span style="font-family:Newsreader,serif;font-size:26px;font-weight:500">Connect's placement on Workout detail</span>
+      <span style="font-size:13px;color:#57544c">one word, level 2, directly under Start</span>
+    </div>
+
+    <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
+      <div data-screen-label="Detail · action stack" style="width:390px;display:flex;flex-direction:column;gap:12px;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">← BACK</span>
+        <div style="display:flex;gap:7px;align-items:center">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.08em;background:#8a5f18;color:#fffdf7;padding:4px 7px">AT</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">MODERATE</span>
+        </div>
+        <span style="font-family:Newsreader,serif;font-size:33px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">Lucky Penny</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">50 MIN · PAIN 3/5 · 33 DAYS AGO</span>
+        <div style="display:flex;flex-direction:column;gap:12px;padding-top:6px">
+          <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-size:16px;font-weight:600">Start</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Connect</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Log it after</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Edit</div>
+          <div style="border-top:1px solid #d8d3c4;padding-top:12px">
+            <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #b5341f;color:#b5341f;border-radius:2px;font-size:16px;font-weight:600">Delete workout</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:330px;display:flex;flex-direction:column;gap:12px;padding-top:6px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">BUILD NOTES</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty"><b>Copy: “Connect”.</b> Ours. It reads as the verb for the whole mode and stays monitor-agnostic; “Connect monitor” doubles a word the interstitial says immediately anyway, and “Row on the erg” describes what Start already does.</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty">Second in the stack, above <i>Log it after</i>: the two ways to do the workout now sit together, and the two ways to deal with it afterwards sit together. Start stays the only level 1, so Connect cannot compete.</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty">After a first successful pair the label gains a trailing state caption on its own mono line beneath the stack — <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">LAST USED · PM5 430123456</span> — never inside the button.</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty">Disabled state (Bluetooth off): level-2 geometry, dashed <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">#c9c3b2</span> border, <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">#a09a8c</span> label, caption <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">BLUETOOTH IS OFF</span> — same dashed idiom as a disabled SHUFFLE.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid #1b1a17;padding-bottom:8px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;background:#1b1a17;color:#fffdf7;padding:4px 8px">2</span>
+      <span style="font-family:Newsreader,serif;font-size:26px;font-weight:500">Pairing and programming — full screen, seven states</span>
+      <span style="font-size:13px;color:#57544c">Confirm targets runs first, unchanged</span>
+    </div>
+    <span style="font-size:13px;line-height:1.55;color:#3f3c35;max-width:900px;text-wrap:pretty">Full-screen, borrowing Countdown's geometry: one mono status label, one serif line that says what is happening in plain words, a mono detail line, then the bottom stack. In-frame copy is short and em-dash free by rule: nothing the rower reads mid-session runs past two sentences. A sheet was rejected — this is a mode change with a failure path, and the workout behind it is not actionable while we scan. <b>Every state's stack ends in Cancel (level 2), which lands back on Workout detail.</b> Nothing here spins: state changes are the animation.</span>
+
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+
+      <div data-screen-label="Interstitial · scanning" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE 1 · 0–8 S</span>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">LOOKING FOR A MONITOR</span>
+          <span style="font-family:Newsreader,serif;font-size:40px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">Scanning</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="width:10px;height:10px;background:#1b1a17;display:block"></span>
+            <span style="width:10px;height:10px;background:#c9c3b2;display:block"></span>
+            <span style="width:10px;height:10px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;color:#57544c;padding-left:6px">SQUARES ADVANCE 1/S</span>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#3f3c35">LUCKY PENNY · 25 INTERVALS · 50 MIN</span>
+        </div>
+        <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Cancel</div>
+      </div>
+
+      <div data-screen-label="Interstitial · scanning, hint" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE 2 · AFTER 8 S</span>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">STILL LOOKING</span>
+          <span style="font-family:Newsreader,serif;font-size:40px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">No monitor yet</span>
+          <div style="background:#efeade;border-radius:2px;padding:14px 14px;display:flex;flex-direction:column;gap:7px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">TRY THIS</span>
+            <span style="font-size:14px;line-height:1.5;color:#1b1a17;text-wrap:pretty">Take a stroke, or press any button on the monitor. It won't answer while asleep.</span>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">SCANNING FOR 0:14</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Row on the phone timer instead</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Cancel</div>
+        </div>
+      </div>
+
+      <div data-screen-label="Interstitial · multiple monitors" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE 3 · GYM CASE</span>
+        <div style="flex:1;display:flex;flex-direction:column;gap:16px;padding-top:26px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">3 MONITORS NEARBY</span>
+          <span style="font-family:Newsreader,serif;font-size:36px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">Which erg are you on?</span>
+          <span style="font-size:13px;line-height:1.5;color:#3f3c35;text-wrap:pretty">Strongest signal first. Your number is on the monitor under <i>More Options › Utilities</i>.</span>
+          <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+            <div style="min-height:64px;display:flex;align-items:center;gap:12px;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;padding:0 14px">
+              <span style="width:10px;height:10px;background:#1b1a17;display:block;flex:none"></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;letter-spacing:0.04em">PM5 430123456</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">STRONG · USED LAST TIME</span>
+              </span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:#57544c">›</span>
+            </div>
+            <div style="min-height:64px;display:flex;align-items:center;gap:12px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:0 14px">
+              <span style="width:10px;height:10px;background:#a09a8c;display:block;flex:none"></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;letter-spacing:0.04em">PM5 430987001</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">MEDIUM</span>
+              </span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:#57544c">›</span>
+            </div>
+            <div style="min-height:64px;display:flex;align-items:center;gap:12px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:0 14px">
+              <span style="width:10px;height:10px;background:#c9c3b2;display:block;flex:none"></span>
+              <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;letter-spacing:0.04em">PM5 430450218</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">WEAK</span>
+              </span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:#57544c">›</span>
+            </div>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;padding-top:2px">STILL SCANNING · MORE MAY APPEAR</span>
+        </div>
+        <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Cancel</div>
+      </div>
+
+      <div data-screen-label="Interstitial · pairing" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE 4 · PAIRING</span>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">PM5 430123456</span>
+          <span style="font-family:Newsreader,serif;font-size:40px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">Connecting</span>
+          <div style="display:flex;flex-direction:column;gap:9px;padding-top:2px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">✓</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#1b1a17">FOUND</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:22px;height:10px;display:flex;align-items:center"><span style="width:10px;height:10px;background:#1b1a17;display:block"></span></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#1b1a17">CONNECTING</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:22px;height:10px;display:flex;align-items:center"><span style="width:10px;height:10px;background:#c9c3b2;display:block"></span></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">SENDING THE WORKOUT</span>
+            </div>
+          </div>
+        </div>
+        <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Cancel</div>
+      </div>
+
+      <div data-screen-label="Interstitial · programming" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE 5 · PROGRAMMING</span>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">PM5 430123456 · CONNECTED</span>
+          <span style="font-family:Newsreader,serif;font-size:40px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">Sending the workout</span>
+          <div style="display:flex;flex-direction:column;gap:9px;background:#efeade;border-radius:2px;padding:14px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">WHAT THE MONITOR IS GETTING</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">25 INTERVALS · 50:00 TOTAL</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">TARGETS FROM 2K 1:52.0 · 6K 2:02.0</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#1b1a17">3 TARGETS NUDGED ON CONFIRM</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:13px">✓</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em">FOUND</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:13px">✓</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em">CONNECTED</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:22px;height:10px;display:flex;align-items:center"><span style="width:10px;height:10px;background:#1b1a17;display:block"></span></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em">SENDING · INTERVAL 14 OF 25</span>
+            </div>
+          </div>
+        </div>
+        <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Cancel</div>
+      </div>
+
+      <div data-screen-label="Interstitial · failed" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE 6 · FAILED</span>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">PM5 430123456</span>
+          <span style="font-family:Newsreader,serif;font-size:38px;font-weight:500;line-height:1.1;letter-spacing:-0.01em">The monitor wouldn't take it</span>
+          <span style="font-size:14px;line-height:1.5;color:#3f3c35;text-wrap:pretty">It refused the workout at interval 14. End whatever is showing on the monitor, then try again.</span>
+          <div style="background:#efeade;border-radius:2px;padding:13px 14px;display:flex;flex-direction:column;gap:5px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">DETAIL</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#1b1a17">REJECTED · CSAFE 0x1A · 14/25</span>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">YOUR WORKOUT AND NUDGES ARE KEPT</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-size:16px;font-weight:600">Try again</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Row on the phone timer instead</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Cancel</div>
+        </div>
+      </div>
+
+      <div data-screen-label="Interstitial · ready" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:20px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE 7 · READY · AUTO-ADVANCES</span>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">PM5 430123456 · PROGRAMMED</span>
+          <span style="font-family:Newsreader,serif;font-size:44px;font-weight:500;line-height:1.05;letter-spacing:-0.01em">Ready when you pull</span>
+          <span style="font-size:14px;line-height:1.5;color:#3f3c35;text-wrap:pretty">The monitor starts the clock on your first stroke.</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#3f3c35">LUCKY PENNY · 25 INTERVALS · 50:00</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div style="height:56px;display:flex;align-items:center;justify-content:center;background:#b5341f;color:#fffdf7;border-radius:2px;font-size:16px;font-weight:600">Show me the numbers</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Cancel</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:22px;padding:16px 18px;background:#f4f1e8;border:1px solid #d8d3c4;max-width:1200px">
+      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:5px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TIMING</span>
+        <span style="font-size:13px;line-height:1.5;color:#3f3c35"><b>8 s</b> before the hint appears — long enough that a woken monitor is usually found first, short enough to beat impatience. The scan keeps running behind the hint; no timeout, no dead end. Ready auto-advances after <b>1.2 s</b>, or immediately on tap.</span>
+      </div>
+      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:5px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">PROGRESS, NOT SPINNERS</span>
+        <span style="font-size:13px;line-height:1.5;color:#3f3c35">Three mono checklist lines (found · connected · sending) carry every state, so a stall is legible: whichever line holds the filled square is where it's stuck. Programming shows interval <i>n</i> of <i>N</i> because a 25-interval push is the slow case.</span>
+      </div>
+      <div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:5px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">THE ESCAPE HATCH</span>
+        <span style="font-size:13px;line-height:1.5;color:#3f3c35">“Row on the phone timer instead” appears on both failure-ish states and drops straight into the existing Start path with the confirmed targets intact — the connect attempt costs the rower nothing.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid #1b1a17;padding-bottom:8px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;background:#1b1a17;color:#fffdf7;padding:4px 8px">3</span>
+      <span style="font-family:Newsreader,serif;font-size:26px;font-weight:500">The three panes · portrait</span>
+      <span style="font-size:13px;color:#57544c">A timer · B live · C grid — lands on B</span>
+    </div>
+
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+
+      <div data-screen-label="A · timer, connected" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17">
+        <div style="flex:1;display:flex;flex-direction:column;gap:14px;padding:18px 20px 0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">PM5 430123456</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">LUCKY PENNY</span>
+          </div>
+          <div style="display:flex;gap:3px">
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#8a8478;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">INTERVAL 3 OF 25 · WORK</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;color:#1b1a17">ROWING</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:96px;font-weight:500;line-height:0.92;letter-spacing:-0.05em">0:41</span>
+            <div style="display:flex;gap:0">
+              <span style="width:62%;height:6px;background:#1b1a17;display:block"></span>
+              <span style="width:38%;height:6px;background:#ded8c9;display:block"></span>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">NOW · /500M</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;letter-spacing:-0.02em;color:#8a5f18">1:57.8</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TARGET 2:00.0</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TARGET SPLIT</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;letter-spacing:-0.02em">2:00.0</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">6K −2</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">RATE</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;letter-spacing:-0.02em;color:#2a6275">21</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TARGET 22</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">METERS</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;letter-spacing:-0.02em">198</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">THIS INTERVAL</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#efeade;border-radius:2px;padding:13px 12px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">UP NEXT</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em">REST · 2:00</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #1b1a17;padding-top:12px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">TOTAL LEFT</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:22px">44:12</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;gap:0">
+              <span style="width:12%;height:6px;background:#1b1a17;display:block"></span>
+              <span style="width:88%;height:6px;background:#ded8c9;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:9px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:9px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:9px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:9px;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¼</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">½</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¾</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">50′</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:14px 20px 12px">
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">End session</div>
+        </div>
+        <div style="display:flex;border-top:1px solid #d8d3c4">
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#1b1a17;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#1b1a17">TIMER</span>
+          </div>
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LIVE</span>
+          </div>
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">GRID</span>
+          </div>
+        </div>
+      </div>
+
+      <div data-screen-label="B · live view" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17">
+        <div style="flex:1;display:flex;flex-direction:column;gap:14px;padding:18px 20px 0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">PM5 430123456</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">3 OF 25 · WORK</span>
+          </div>
+          <div style="display:flex;gap:3px">
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#8a8478;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0;border-top:2px solid #1b1a17;padding-top:10px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">NOW · /500M</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:96px;font-weight:500;line-height:0.9;letter-spacing:-0.05em;color:#8a5f18">1:57<span style="font-size:52px">.8</span></span>
+            <div style="display:flex;align-items:baseline;gap:10px;padding-top:6px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:0.08em;color:#57544c">TARGET</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:20px">2:00.0</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">· 6K −2</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0;border-top:1px solid #d8d3c4;padding-top:10px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">LEFT IN INTERVAL</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:60px;font-weight:500;line-height:0.95;letter-spacing:-0.04em">0:41</span>
+          </div>
+          <div style="display:flex;gap:10px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">RATE</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;letter-spacing:-0.03em;color:#2a6275">21</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">TARGET 22</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">HR</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;letter-spacing:-0.03em">164</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">88% MAX</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">METERS</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;letter-spacing:-0.03em">198</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">INTERVAL</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#efeade;border-radius:2px;padding:12px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">UP NEXT</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:0.08em">REST · 2:00</span>
+          </div>
+          <div style="display:flex;border-top:1px solid #1b1a17;padding-top:12px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">STROKES</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:20px">14</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">ELAPSED</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:20px">5:48</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TOTAL LEFT</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:20px">44:12</span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;gap:0">
+              <span style="width:12%;height:6px;background:#1b1a17;display:block"></span>
+              <span style="width:88%;height:6px;background:#ded8c9;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¼</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">½</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¾</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">50′</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:14px 20px 12px">
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">End session</div>
+        </div>
+        <div style="display:flex;border-top:1px solid #d8d3c4">
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TIMER</span>
+          </div>
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#1b1a17;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#1b1a17">LIVE</span>
+          </div>
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">GRID</span>
+          </div>
+        </div>
+      </div>
+
+      <div data-screen-label="C · grid" style="width:390px;height:844px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17">
+        <div style="flex:1;display:flex;flex-direction:column;gap:10px;padding:18px 20px 0;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">PM5 430123456</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">44:12 LEFT</span>
+          </div>
+          <div style="display:flex;gap:8px;border-bottom:2px solid #1b1a17;padding-bottom:7px">
+            <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">#</span>
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">TIME</span>
+            <span style="width:62px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">METERS</span>
+            <span style="width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">/500M</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:3px;padding:2px 0;border-bottom:1px solid #ded8c9">
+            <div style="display:flex;gap:8px;align-items:baseline">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">1</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px">10:00</span>
+              <span style="width:62px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px">2384</span>
+              <span style="width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px">2:05.8</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:baseline;padding-left:30px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3f3c35">SPM 18</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3f3c35">HR 142</span>
+              <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3f3c35">REST —</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:3px;padding:2px 0;border-bottom:1px solid #ded8c9">
+            <div style="display:flex;gap:8px;align-items:baseline">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">2</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px">1:00</span>
+              <span style="width:62px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px">251</span>
+              <span style="width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px">1:59.5</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:baseline;padding-left:30px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3f3c35">SPM 22</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3f3c35">HR 158</span>
+              <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#3f3c35">REST 2:00</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:4px;padding:9px 10px;background:#fffdf7;border:2px solid #1b1a17;border-radius:2px">
+            <div style="display:flex;gap:8px;align-items:baseline">
+              <span style="width:22px;display:flex;align-items:center;gap:3px"><span style="width:7px;height:14px;background:#1b1a17;display:block"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600">3</span></span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:22px;color:#b5341f;letter-spacing:-0.02em">0:41</span>
+              <span style="width:62px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px">198</span>
+              <span style="width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#8a5f18">1:57.8</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:baseline;padding-left:30px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#2a6275">SPM 21</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#1b1a17">HR 164</span>
+              <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#1b1a17">REST 2:00</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;padding-left:30px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">REMAINING · TARGET 2:00.0 · 6K −2</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:3px;padding:2px 0;border-bottom:1px dashed #c9c3b2">
+            <div style="display:flex;gap:8px;align-items:baseline">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">4</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">1:00</span>
+              <span style="width:62px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">—</span>
+              <span style="width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">2:00.0</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:baseline;padding-left:30px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">SPM 22</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">HR —</span>
+              <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">REST 2:00</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:3px;padding:2px 0;border-bottom:1px dashed #c9c3b2">
+            <div style="display:flex;gap:8px;align-items:baseline">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">5</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">—</span>
+              <span style="width:62px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">500</span>
+              <span style="width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">1:58.0</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:baseline;padding-left:30px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">SPM 24</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">HR —</span>
+              <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">REST 2:00</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:3px;padding:2px 0;border-bottom:1px dashed #c9c3b2">
+            <div style="display:flex;gap:8px;align-items:baseline">
+              <span style="width:22px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">6</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">1:00</span>
+              <span style="width:62px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">—</span>
+              <span style="width:66px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:15px;color:#57544c">2:00.0</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:baseline;padding-left:30px">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">SPM 22</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">HR —</span>
+              <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#57544c">REST 2:00</span>
+            </div>
+          </div>
+
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c;padding-top:2px">ROW 5 IS A 500 M PIECE · METERS COUNT DOWN</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 20px">
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">End session</div>
+        </div>
+        <div style="display:flex;border-top:1px solid #d8d3c4">
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TIMER</span>
+          </div>
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LIVE</span>
+          </div>
+          <div style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px">
+            <span style="width:9px;height:9px;background:#1b1a17;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#1b1a17">GRID</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:330px;display:flex;flex-direction:column;gap:12px;padding-top:6px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">PORTRAIT NOTES</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty"><b>Pane A</b> keeps the shipped timer's rhythm exactly, with two changes: the phase label gains an interval count from the machine, and a <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">NOW · /500M</span> card joins the target card so actual and target sit side by side at the same size — the target in ink, the actual carrying whatever colour its comparison earns.</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty"><b>Status word:</b> <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">ROWING</span> in ink, not the phone timer's accent <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">RUNNING</span> — accent is down to its four meanings. Flagged for DEVIATIONS; recommend the phone timer follows.</span>
+        <div style="display:flex;flex-direction:column;gap:8px;background:#f4f1e8;border:1px solid #d8d3c4;padding:12px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">OFF TARGET · SPLIT AND RATE, ONE RULE · THE CAPTION NEVER CHANGES</span>
+          <div style="display:flex;gap:8px">
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;padding:9px 10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.14em;color:#57544c">RATE</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;line-height:1;color:#2a6275">21</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">TARGET 22</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;padding:9px 10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.14em;color:#57544c">RATE</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;line-height:1">22</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">TARGET 22</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;padding:9px 10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.14em;color:#57544c">RATE</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;line-height:1;color:#8a5f18">25</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">TARGET 22</span>
+            </div>
+            <div style="flex:1.2;display:flex;flex-direction:column;gap:3px;background:#fffdf7;border:1px solid #d8d3c4;padding:9px 10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.14em;color:#57544c">NOW · /500M</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;line-height:1;color:#8a5f18">1:57.8</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">TARGET 2:00.0</span>
+            </div>
+          </div>
+          <span style="font-size:13px;line-height:1.5;color:#3f3c35;text-wrap:pretty">Teal <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#2a6275">#2a6275</span> under, ink on, ochre <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a5f18">#8a5f18</span> over — on the value itself. The caption underneath is a fixed <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">TARGET 22</span> that never re-words, so nothing on the card moves or reflows while you row; the only thing that changes is the colour of a number you were already watching. The split obeys it identically — pane A's <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">NOW · /500M</span> card, pane B's hero numeral in both orientations, and the grid's actual <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">/500M</span> and <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">SPM</span> cells. Both hexes are the app's own AT and O2 type colours, and both clear AA on page and surface.</span>
+        </div>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty"><b>Pane B</b> is one number tall enough to read from the doorway (96px portrait, tenths at 52px so the eye lands on the seconds), then time left, then a three-card row. It carries the timer's interval segment bar and its <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">UP NEXT</span> strip verbatim, so swiping between A and B never loses your place in the session. Nothing here is a control.</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty"><b>Pane C</b> two-line rows: 15px numbers on line 1, 12px on line 2, indented 30px under the interval number so the eye can still scan a column. The active row is a 2px ink card with a filled now-marker; its countdown is accent because it is a duration. Completed rows are actuals in ink over a solid rule; upcoming rows are programmed values in <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">#57544c</span> over a <b>dashed</b> rule — the app's existing "nothing here yet" idiom does the work that a lighter grey used to, and every value clears AA. Six columns, none hidden, no horizontal scroll.</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty"><b>Distance intervals</b> (row 5): the meters cell carries the programmed number and counts down when active; the time cell shows <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">—</span> until it accrues. A mono caption under the grid names it in plain words rather than inventing a glyph.</span>
+        <span style="font-size:13px;line-height:1.55;color:#3f3c35;text-wrap:pretty"><b>Dots</b> are a 56px band: 9px square, mono label, whole third is the tap target — 130×56 each. Labels stay because three unlabelled dots don't say what's behind them, and a wet thumb shouldn't have to explore.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid #1b1a17;padding-bottom:8px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;background:#1b1a17;color:#fffdf7;padding:4px 8px">4</span>
+      <span style="font-family:Newsreader,serif;font-size:26px;font-weight:500">Landscape · 844×390, never scrolls</span>
+      <span style="font-size:13px;color:#57544c">the primary context — phone on the mount</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:20px">
+
+      <div data-screen-label="A · timer, landscape" style="width:844px;height:390px;display:flex;background:#f4f1e8;border:1px solid #1b1a17;overflow:hidden">
+        <div style="flex:1;display:flex;flex-direction:column;gap:10px;padding:16px 0 16px 20px">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">INTERVAL 3 OF 25 · WORK</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em;padding-right:14px">ROWING</span>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:128px;font-weight:500;line-height:0.86;letter-spacing:-0.05em">0:41</span>
+          <div style="display:flex;gap:0;margin-right:14px">
+            <span style="width:62%;height:6px;background:#1b1a17;display:block"></span>
+            <span style="width:38%;height:6px;background:#ded8c9;display:block"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;border-top:1px solid #1b1a17;padding-top:9px;margin-right:14px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">TOTAL LEFT</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:22px">44:12</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;margin-right:14px">
+            <div style="display:flex;gap:0">
+              <span style="width:12%;height:6px;background:#1b1a17;display:block"></span>
+              <span style="width:88%;height:6px;background:#ded8c9;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¼</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">½</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¾</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">50′</span>
+            </div>
+          </div>
+          <div style="flex:1"></div>
+          <div style="height:48px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:15px;font-weight:600;margin-right:14px">End session</div>
+        </div>
+
+        <div style="flex:1.05;display:flex;flex-direction:column;gap:10px;padding:16px 8px 16px 6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">PM5 430123456</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">LUCKY PENNY</span>
+          </div>
+          <div style="display:flex;gap:3px">
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#8a8478;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+          </div>
+          <div style="display:flex;gap:8px;flex:1">
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px;justify-content:center;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">NOW · /500M</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:34px;line-height:1;letter-spacing:-0.03em;color:#8a5f18">1:57.8</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TARGET 2:00.0</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px;justify-content:center;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TARGET</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:34px;line-height:1;letter-spacing:-0.03em">2:00.0</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">6K −2</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex:1">
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px;justify-content:center;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">RATE</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:34px;line-height:1;letter-spacing:-0.03em;color:#2a6275">21</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TARGET 22</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px;justify-content:center;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">HR</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:34px;line-height:1;letter-spacing:-0.03em">164</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">88% MAX</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#efeade;border-radius:2px;padding:10px 12px;min-height:48px">
+            <span style="flex:1;display:flex;flex-direction:column;gap:3px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">UP NEXT</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;color:#57544c">THEN WORK · 2:00.0</span>
+            </span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;letter-spacing:0.08em">REST · 2:00</span>
+          </div>
+        </div>
+
+        <div style="width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-left:1px solid #d8d3c4">
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#1b1a17;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#1b1a17">TMR</span>
+          </div>
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">LIVE</span>
+          </div>
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">GRID</span>
+          </div>
+        </div>
+      </div>
+
+      <div data-screen-label="B · live view, landscape" style="width:844px;height:390px;display:flex;background:#f4f1e8;border:1px solid #1b1a17;overflow:hidden">
+        <div style="flex:1.15;display:flex;flex-direction:column;padding:14px 0 14px 20px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">PM5 430123456</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;padding-right:16px">3 OF 25 · WORK</span>
+          </div>
+          <div style="display:flex;gap:3px;margin:8px 16px 0 0">
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;height:3px;background:#8a8478;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+            <span style="flex:1;height:3px;background:#ded8c9;display:block"></span>
+          </div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c;padding-top:8px">NOW · /500M</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:150px;font-weight:500;line-height:0.86;letter-spacing:-0.06em;color:#8a5f18">1:57<span style="font-size:72px">.8</span></span>
+          <div style="display:flex;align-items:baseline;gap:10px;padding-top:4px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#57544c">TARGET</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:22px">2:00.0</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c">· 6K −2</span>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;gap:16px;border-top:1px solid #1b1a17;padding-top:9px;margin-right:16px">
+            <span style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">STROKES</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:18px">14</span>
+            </span>
+            <span style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">ELAPSED</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:18px">5:48</span>
+            </span>
+            <span style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TOTAL LEFT</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:18px">44:12</span>
+            </span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;margin:9px 16px 0 0">
+            <div style="display:flex;gap:0">
+              <span style="width:12%;height:6px;background:#1b1a17;display:block"></span>
+              <span style="width:88%;height:6px;background:#ded8c9;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+              <span style="flex:1;border-right:1px solid #c9c3b2;height:8px;display:block"></span>
+            </div>
+            <div style="display:flex">
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¼</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">½</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">¾</span>
+              <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#57544c;text-align:right">50′</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px;padding:14px 8px 14px 6px">
+          <div style="display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px 12px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">LEFT IN INTERVAL 3 OF 25</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:62px;font-weight:500;line-height:0.95;letter-spacing:-0.04em">0:41</span>
+          </div>
+          <div style="display:flex;gap:8px;flex:1">
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px;justify-content:center">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">RATE</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:44px;line-height:1;letter-spacing:-0.03em;color:#2a6275">21</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">TARGET 22</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px;justify-content:center">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">HR</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:44px;line-height:1;letter-spacing:-0.03em">164</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">88% MAX</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:10px;justify-content:center">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">METERS</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:44px;line-height:1;letter-spacing:-0.03em">198</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">INTERVAL</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#efeade;border-radius:2px;padding:9px 12px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#3f3c35">UP NEXT</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:0.08em">REST · 2:00</span>
+          </div>
+          <div style="height:44px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:14px;font-weight:600">End session</div>
+        </div>
+
+        <div style="width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-left:1px solid #d8d3c4">
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">TMR</span>
+          </div>
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#1b1a17;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#1b1a17">LIVE</span>
+          </div>
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">GRID</span>
+          </div>
+        </div>
+      </div>
+
+      <div data-screen-label="C · grid, landscape" style="width:844px;height:390px;display:flex;background:#f4f1e8;border:1px solid #1b1a17;overflow:hidden">
+        <div style="flex:1;display:flex;flex-direction:column;gap:0;padding:14px 0 12px 20px">
+          <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px">
+            <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">PM5 430123456 · LUCKY PENNY</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c;padding-right:14px">44:12 LEFT</span>
+          </div>
+          <div style="display:flex;gap:10px;border-bottom:2px solid #1b1a17;padding-bottom:6px;padding-right:14px">
+            <span style="width:26px;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">#</span>
+            <span style="flex:1.1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">TIME</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">METERS</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">/500M</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">SPM</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">HR</span>
+            <span style="flex:0.9;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">REST</span>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:baseline;padding:7px 14px 7px 0;border-bottom:1px solid #ded8c9">
+            <span style="width:26px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">1</span>
+            <span style="flex:1.1;font-family:'IBM Plex Mono',monospace;font-size:17px">10:00</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">2384</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">2:05.8</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">18</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">142</span>
+            <span style="flex:0.9;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">—</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:baseline;padding:7px 14px 7px 0;border-bottom:1px solid #ded8c9">
+            <span style="width:26px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">2</span>
+            <span style="flex:1.1;font-family:'IBM Plex Mono',monospace;font-size:17px">1:00</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">251</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">1:59.5</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">22</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">158</span>
+            <span style="flex:0.9;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">2:00</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:baseline;padding:8px 12px 8px 0;margin-right:14px;background:#fffdf7;border:2px solid #1b1a17;border-radius:2px">
+            <span style="width:26px;display:flex;align-items:center;gap:4px;padding-left:6px"><span style="width:7px;height:16px;background:#1b1a17;display:block"></span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600">3</span></span>
+            <span style="flex:1.1;font-family:'IBM Plex Mono',monospace;font-size:26px;color:#b5341f;letter-spacing:-0.02em">0:41</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">198</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#8a5f18">1:57.8</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#2a6275">21</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">164</span>
+            <span style="flex:0.9;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px">2:00</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:baseline;padding:7px 14px 7px 0;border-bottom:1px dashed #c9c3b2">
+            <span style="width:26px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">4</span>
+            <span style="flex:1.1;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">1:00</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">—</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">2:00.0</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">22</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">—</span>
+            <span style="flex:0.9;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">2:00</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:baseline;padding:7px 14px 7px 0;border-bottom:1px dashed #c9c3b2">
+            <span style="width:26px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#57544c">5</span>
+            <span style="flex:1.1;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">—</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">500</span>
+            <span style="flex:1;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">1:58.0</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">24</span>
+            <span style="flex:0.7;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">—</span>
+            <span style="flex:0.9;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:17px;color:#57544c">2:00</span>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:12px;padding-right:14px;padding-top:8px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">ROW 5 IS A 500 M PIECE · METERS COUNT DOWN · SWIPE THE LIST TO SEE 6–25</span>
+            <div style="width:180px;height:44px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:14px;font-weight:600">End session</div>
+          </div>
+        </div>
+
+        <div style="width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-left:1px solid #d8d3c4">
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">TMR</span>
+          </div>
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#c9c3b2;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#57544c">LIVE</span>
+          </div>
+          <div style="height:56px;width:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+            <span style="width:9px;height:9px;background:#1b1a17;display:block"></span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#1b1a17">GRID</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:22px;padding:16px 18px;background:#f4f1e8;border:1px solid #d8d3c4;max-width:1200px">
+        <div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:5px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">DOTS IN LANDSCAPE</span>
+          <span style="font-size:13px;line-height:1.5;color:#3f3c35">A 56px rail on the <b>right</b> edge, three 56×56 targets, three-letter mono labels. Right edge because a mount's cradle arms crop bottom-centre, and because the swipe gesture (anywhere on the surface, 60px threshold) is the real navigation — the rail is confirmation, not the only route.</span>
+        </div>
+        <div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:5px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">NO SCROLL, BY CONSTRUCTION</span>
+          <span style="font-size:13px;line-height:1.5;color:#3f3c35">Panes A and B are two fixed columns; nothing in them can grow. Pane C is the one exception and it is contained: the header, caption row and End button are pinned, and only the rows between them scroll — five fit at 390px, the active row is always scrolled to.</span>
+        </div>
+        <div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:5px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">GLOVED HANDS</span>
+          <span style="font-size:13px;line-height:1.5;color:#3f3c35">One control per pane (End session), never at an edge a palm rests on. End is staged: it becomes <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">Tap again to end</span> for 4 s, so a stray touch mid-piece can't finish the session.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid #1b1a17;padding-bottom:8px">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.12em;background:#1b1a17;color:#fffdf7;padding:4px 8px">5</span>
+      <span style="font-family:Newsreader,serif;font-size:26px;font-weight:500">Mid-session states and the diagnostics hook</span>
+    </div>
+
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+
+      <div data-screen-label="A · erg paused" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:18px 20px 12px;gap:14px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE · ERG PAUSED</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+          <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#3f3c35">PM5 430123456</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">LUCKY PENNY</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c">INTERVAL 3 OF 25 · WORK</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.16em">PAUSED</span>
+        </div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:96px;font-weight:500;line-height:0.92;letter-spacing:-0.05em;color:#57544c">0:41</span>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#efeade;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">NOW · /500M</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;color:#57544c;letter-spacing:-0.02em">—</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">NOT ROWING</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">TARGET SPLIT</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:30px;letter-spacing:-0.02em">2:00.0</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#57544c">6K −2</span>
+          </div>
+        </div>
+        <div style="height:52px;display:flex;align-items:center;gap:12px;background:#efeade;border-radius:2px;padding:0 12px">
+          <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.14em;color:#1b1a17">PAUSED · PULL TO RESUME</span>
+          <div style="width:64px;height:44px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #b5341f;color:#b5341f;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.1em">END</div>
+        </div>
+        <span style="font-size:13px;line-height:1.5;color:#3f3c35;text-wrap:pretty">The transport row is gone — the phone owns no Pause here. Its 52px is taken by the status block, so nothing above it shifts; END stays reachable inside it, staged as everywhere else. The interval clock greys but keeps its last value; NOW goes to <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">—</span> because there is no current pace when nobody is pulling.</span>
+      </div>
+
+      <div data-screen-label="B · connection lost" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:18px 20px 12px;gap:14px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE · CONNECTION LOST</span>
+        <div style="display:flex;align-items:center;gap:12px;background:#efeade;border-top:2px solid #1b1a17;padding:12px">
+          <span style="flex:1;display:flex;flex-direction:column;gap:5px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.14em;color:#1b1a17">LOST THE MONITOR · RECONNECTING</span>
+            <span style="font-size:13px;line-height:1.4;color:#3f3c35">Keep rowing. The erg is still counting.</span>
+          </span>
+          <span style="display:flex;gap:4px;flex:none">
+            <span style="width:8px;height:8px;background:#1b1a17;display:block"></span>
+            <span style="width:8px;height:8px;background:#c9c3b2;display:block"></span>
+            <span style="width:8px;height:8px;background:#c9c3b2;display:block"></span>
+          </span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="width:8px;height:8px;border:1px solid #1b1a17;display:block"></span>
+          <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">PM5 430123456 · TRYING</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0;border-top:2px solid #1b1a17;padding-top:10px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#57544c">LAST · /500M</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:104px;font-weight:500;line-height:0.9;letter-spacing:-0.05em;color:#57544c">1:59<span style="font-size:56px">.4</span></span>
+          <div style="display:flex;align-items:baseline;gap:10px;padding-top:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:0.08em;color:#57544c">TARGET</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:20px">2:00.0</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#efeade;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">RATE</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;color:#57544c;letter-spacing:-0.03em">21</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#efeade;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">HR</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;color:#57544c;letter-spacing:-0.03em">164</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#efeade;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">METERS</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;color:#57544c;letter-spacing:-0.03em">198</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;padding-top:2px">
+          <div style="display:flex;align-items:center;gap:10px;background:#1b1a17;padding:11px 12px">
+            <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:0.14em;color:#fffdf7">RECONNECTED · CAUGHT UP</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#c9c3b2">3 S</span>
+          </div>
+          <span style="font-size:13px;line-height:1.5;color:#3f3c35;text-wrap:pretty">One reminder, no arithmetic: the banner's three squares advance 1/s — the same sign of life the scanning state uses — so the rower can see we're still trying without being told how stale each number is. Every stale value greys onto the sunken fill; one glance says "these are not live". No modal: the rower is mid-piece. On rejoin, the ink banner confirms for 3 s and the grid backfills the missed intervals from the monitor's own memory.</span>
+        </div>
+      </div>
+
+      <div data-screen-label="Diagnostics" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:18px 20px 14px;gap:12px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">SHEET · TRIPLE-TAP THE DOTS</span>
+        <span style="font-family:Newsreader,serif;font-size:28px;font-weight:500;letter-spacing:-0.01em">Connection log</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;color:#57544c">PM5 430123456 · 214 EVENTS · SESSION 0:05:48</span>
+        <div style="display:flex;flex-direction:column;gap:5px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:12px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">0:00.12 SCAN START</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">0:02.48 FOUND 430123456 −61DBM</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">0:02.91 CONNECT OK</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">0:03.02 PROGRAM 25 INTERVALS</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">0:04.77 ACK 25/25</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">0:05.01 STATE READY</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">0:39.60 STATE ROWING I1</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">4:12.08 FRAME ERR CRC ×2</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">5:44.31 LINK DROP</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:1.5;color:#1b1a17">5:48.02 RECONNECT OK · BACKFILL I2</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="height:48px;display:flex;align-items:center;justify-content:center;background:#1b1a17;color:#fffdf7;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;letter-spacing:0.16em">COPY LOG</div>
+          <div style="height:52px;display:flex;align-items:center;justify-content:center;background:#fffdf7;border:1px solid #1b1a17;border-radius:2px;font-size:16px;font-weight:600">Close</div>
+        </div>
+        <span style="font-size:13px;line-height:1.5;color:#3f3c35;text-wrap:pretty">Triple-tap any dot in the rail — three deliberate taps on a 56px target, impossible mid-stroke, no long-press timer to trip. Existing SheetShell, mono body, deliberately unstyled beyond the tokens. <b>COPY LOG</b> is level 3 (solid ink) because it acts inside the sheet; <b>Close</b> is the level-2 dismiss.</span>
+      </div>
+
+      <div data-screen-label="HR absent" style="width:390px;display:flex;flex-direction:column;background:#f4f1e8;border:1px solid #1b1a17;padding:18px 20px 14px;gap:12px">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#57544c">STATE · NO HR MONITOR</span>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">RATE</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;letter-spacing:-0.03em;color:#2a6275">21</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">TARGET 22</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px dashed #c9c3b2;border-radius:2px;padding:11px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">HR</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;color:#57544c;letter-spacing:-0.03em">—</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">NO HR MONITOR</span>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#fffdf7;border:1px solid #d8d3c4;border-radius:2px;padding:11px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#57544c">METERS</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:40px;line-height:1;letter-spacing:-0.03em">198</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#57544c">INTERVAL</span>
+          </div>
+        </div>
+        <span style="font-size:13px;line-height:1.5;color:#3f3c35;text-wrap:pretty">The column and the card never leave. The value reads <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">—</span>, the card's border goes dashed — the app's established "nothing here yet" idiom — and the caption says <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">NO HR MONITOR</span>. Not "belt": chest straps, armbands and watches all land in the same cell. Grid cells show <span style="font-family:'IBM Plex Mono',monospace;font-size:11px">—</span> with no per-row caption; the pane-level card carries the explanation once. If a monitor appears mid-session the dash simply becomes a number — no announcement.</span>
+      </div>
+
+    </div>
+  </div>
+
+</section>
+
+</x-dc>
+</body>
+</html>
