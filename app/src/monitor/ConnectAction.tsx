@@ -7,27 +7,37 @@ import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
  *
  * **Why this exists as its own component, unmounted, in a task that ships
  * no screens.** 7B's plan builds the seam and the guards first (Tasks 1-3,
- * no screens) and the flow second: `onProceed` has nothing to hand off to
- * until `useMonitorSession` (Task 4) and the interstitial (Task 5) exist,
- * and mounting a Connect button that leads nowhere would put a dead control
- * on the app's most-used screen. So Task 2 ships the guard COMPLETE and
- * proven — the predicate, both staged sentences, both confirm paths, both
- * cancel paths — and Task 5's remaining job on this file is presentation:
- * render `<ConnectAction onProceed={…} />` into `WorkoutDetail`'s
- * `.action-stack` (second in the stack, after Start, per the handoff's §1),
- * add the `LAST USED · <name>` caption and the Bluetooth-off dashed
- * treatment around the button below, and gate the whole thing on a
- * transport being present. **The guard logic is not Task 5's to re-derive
- * or to move.**
+ * no screens) and the flow second: `onProceed` had nothing to hand off to
+ * until `useMonitorSession` (Task 4) and the interstitial (Task 5) existed,
+ * and mounting a Connect button that led nowhere would have put a dead
+ * control on the app's most-used screen. So Task 2 shipped the guard
+ * COMPLETE and proven — the predicate, both staged sentences, both confirm
+ * paths, both cancel paths — for Task 5 to mount as-is. **Shipped (Task
+ * 5):** `<ConnectAction onProceed={…} />` is now mounted in
+ * `WorkoutDetail`'s `.action-stack` (second in the stack, after Start, per
+ * the handoff's §1); the `LAST USED · <name>` caption and the Bluetooth-off
+ * dashed treatment live in `ConnectedInterstitial.tsx`/`WorkoutDetail.tsx`,
+ * applied from OUTSIDE this component's own markup — **the guard logic
+ * below was not re-derived or moved.**
  *
- * What the lock is for: `onProceed` ends up in `createMonitorRun`
- * (`monitorRun.ts`), whose `clearRun()` is unconditional and undoable. A
- * finished-but-unlogged `SessionRun` sitting in `RUN_KEY` is real, permanent
- * history the moment it is gone — 6B's F5 incident, shipped once already.
- * `connectGuardStage()` reads that record directly rather than through
- * `anyLiveSession()`; its own doc comment quotes ROADMAP M-1 on why, and
- * that choice is what the "route it through `anyLiveSession()`" mutation
- * targets.
+ * What the lock is for: `onProceed` (Task 5's `handleConnectProceed`)
+ * compiles the workout and mounts the interstitial, which calls
+ * `useMonitorSession`'s `connect()`/`program()`. `createMonitorRun`
+ * (`monitorRun.ts`), whose `clearRun()` is unconditional and undoable, is
+ * NOT called synchronously from here — `useMonitorSession.ts` deliberately
+ * opens the record only at the first REAL ROWING FRAME, never at a mere
+ * press or a successful pair, so a connect attempt that fails or is
+ * abandoned before rowing starts destroys nothing (verified directly:
+ * `e2e/session.spec.ts`'s "Connect anyway" test, and
+ * `WorkoutDetail.test.tsx`'s real-transport-missing test, both against the
+ * REAL hook). The guard's warning is still the honest one: a
+ * finished-but-unlogged `SessionRun` sitting in `RUN_KEY` — real, permanent
+ * history — WILL be gone once a connected session gets underway, 6B's F5
+ * incident's shape, once removed from the trigger by however long pairing
+ * and programming take. `connectGuardStage()` reads that record directly
+ * rather than through `anyLiveSession()`; its own doc comment quotes
+ * ROADMAP M-1 on why, and that choice is what the "route it through
+ * `anyLiveSession()`" mutation targets.
  *
  * The staged confirm is `WorkoutDetail`'s own idiom, not a new one: the same
  * `.baseline-confirm` panel replacing the button in place, the same

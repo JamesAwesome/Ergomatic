@@ -204,7 +204,12 @@ function WorkoutDetailView({
   // Session-only preview nudges, keyed by the RAW step index (the handoff's
   // model: one nudge covers a whole repeat block, since we render
   // workout.steps directly rather than the expanded per-repetition list) —
-  // never persisted (Phase 6 will pass them per-request).
+  // never persisted to localStorage. Phase 7B Task 5: Connect (via
+  // `buildNudgedDraft` below) and its own "Row on the phone timer instead"
+  // escape both bake the current value in before committing to a session;
+  // the phone-only `startSession`/`handleStart` path below still does NOT
+  // (a pre-existing gap this task's brief did not ask it to close) — see
+  // `buildNudgedDraft`'s own comment.
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [startError, setStartError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
