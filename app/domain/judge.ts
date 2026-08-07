@@ -35,11 +35,23 @@ export type Judgement = "under" | "within" | "over" | "stale";
  *  `heartRateBpm`/`distanceMeters` alongside `spm`/`currentSplit` — the
  *  same seam Tasks 6/7 will read all four off of — but no tolerance
  *  constant for either is pinned by this task's brief (only
- *  `PACE_TOLERANCE_SECONDS`/`SPM_TOLERANCE` are "the constants"). Rather
- *  than invent an unreviewed threshold for heart rate or distance
- *  progress, both fall through to `null` here, which `judgeActual` reads
- *  as "not judged" — the identical "within" verdict a null actual/target
- *  already gets, for the identical reason. */
+ *  `PACE_TOLERANCE_SECONDS`/`SPM_TOLERANCE` are "the constants"). Task-3
+ *  review, Adjudication 1: this is the only honest answer today, not a
+ *  shortcut — no HR field exists anywhere in the domain (`Step`,
+ *  `Baselines`, preferences all checked; `MonitorCapabilities`'s own
+ *  comment confirms this is deliberate: "heart rate is NOT here"), so
+ *  there is no programmed HR target for a real threshold to compare
+ *  against in the first place.
+ *
+ *  TRIPWIRE (task-3 review, Adjudication 1): the `null`-target branch in
+ *  `judgeActual` already covers today's actual real-world case (no HR/
+ *  meters target ever exists); THIS branch only fires if a future caller
+ *  passes a non-`null` HR/meters target. If some later phase adds a real
+ *  HR-zone (or a real meters) target without ALSO updating this switch,
+ *  the result is a silent, always-`"within"` verdict no matter how far
+ *  off the live reading is — update this function deliberately the same
+ *  change that introduces such a target, don't assume the existing
+ *  null-target tests already prove tomorrow's case too. */
 function toleranceFor(kind: "pace" | "spm" | "hr" | "meters"): number | null {
   switch (kind) {
     case "pace":

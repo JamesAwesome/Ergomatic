@@ -3288,13 +3288,20 @@ button:disabled {
    `variant="connected"` branch — no consumer exists yet (Tasks 6/7). The
    judgement-keyed classes below (`timer-card-actual-under/-within/-over/
    -stale`, from `domain/judge.ts`'s own `Judgement` union) are structural
-   hooks only; deliberately left visually IDENTICAL to plain
-   `.timer-card-actual` rather than inventing unreviewed judgement colours —
-   the app's palette has no semantic success/warning family today, and
-   `--accent` is already a closed set of four meanings
-   (docs/design/DEVIATIONS.md row 50/56) a fifth "deviation" use would
-   quietly break. Choosing real per-judgement colour is Tasks 6/7's own
-   design-review call, not this extraction's. */
+   hooks; `-under`/`-over` are left with no colour override here on
+   purpose — NOT because a colour is unreviewed (task-3 review, corrected:
+   this was never an `--accent` question), but because the connected-panes
+   handoff's own teal/ochre for those two states are ALREADY the existing
+   `--type-o2`/`--type-at` tokens (handoff §3, sanctioned for this second,
+   non-type meaning by DEVIATIONS row 3 — the same reuse `TypeBadge.tsx`'s
+   `TYPE_COLOR_VAR` pattern already establishes for a value->token lookup).
+   That two-line addition (`.timer-card-actual-under { color:
+   var(--type-o2); }` / `-over { color: var(--type-at); }`, both AA-pass
+   against `--surface`: 6.65:1 / 5.54:1) belongs to Task 6's own pane CSS,
+   applied onto these hooks, not invented here ahead of that task existing.
+   `-stale` DOES get its real colour now (below), since the handoff pins it
+   independently of the teal/ochre pair and task-3 review HIGH-1 caught
+   this file shipping the wrong token for it. */
 .timer-card-static {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -3307,8 +3314,15 @@ button:disabled {
   color: var(--ink-2);
 }
 
+/* Handoff: "every stale value greys to --ink-3" — task-3 review HIGH-1:
+   this shipped as `--ink-5` (2.76:1 against --surface, FAILS the house's
+   binding >=4.5:1 AA rule; 2.33:1 against --surface-sunken, the fill a
+   stale card moves to, worse). `--ink-3` measures 7.44:1 / 6.30:1 against
+   the same two backgrounds — both pass comfortably. Pinned structurally
+   (not just by eye) in TimerTargets.test.tsx, which reads this exact rule
+   out of this file's own source text. */
 .timer-card-actual-stale {
-  color: var(--ink-5);
+  color: var(--ink-3);
 }
 
 .timer-upnext {
