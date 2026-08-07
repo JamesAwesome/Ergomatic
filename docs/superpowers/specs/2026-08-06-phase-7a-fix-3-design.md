@@ -1,195 +1,226 @@
 # Phase 7A-fix-3 — program over a live piece
 
 **Date:** 2026-08-06
-**Status:** Approved (James, 2026-08-06: settle + readback, both; fix-3
-lands before 7B implementation starts)
+**Status:** Revised after adversarial review (same day); awaiting James's
+review of the revision. Prior approvals: settle + readback, both; fix-3
+before 7B implementation.
 
 ## Why this exists
 
-Hardware session 3 (PM5 432331249, 2026-08-06, `docs/monitor/
-pm5-interface-notes.md` §18 session 3) found and reproduced the one
-defect the merge-gate row surfaced: **programming over a RUNNING workout
-arms an empty workout** — the send acks clean, `verifyArmed` passes, and
-the monitor shows `:00` with no interval structure (rowed past the first
-interval's length: no boundary). Reproduced twice with unrelated program
-shapes (25×100m r0 and 3×500m r60 — the second a shape that had armed
-perfectly minutes earlier), after a seven-probe bisect cleared every
-shape variable. The condition is machine state, not program shape:
-`program()`'s prepare step terminates the running piece and the frames
-land during the PM's own post-terminate transition (Appendix E's
-auto-cycle, via §19's newest entry — REAL PM5 BEHAVIOUR, UNDOCUMENTED).
+Hardware session 3 (§18 session 3) found and reproduced the merge-gate
+row's one defect: **programming over a RUNNING workout arms an empty
+workout** — the send acks clean, `verifyArmed` passes, the monitor shows
+`:00`, and rowing past the first interval's length produces no boundary.
+Reproduced twice with unrelated shapes after a seven-probe bisect cleared
+every shape variable; the condition is machine state (§19's newest entry
+— REAL PM5 BEHAVIOUR, UNDOCUMENTED). Both empty arms passed `verifyArmed`
+— §17 item 12's structural upgrade, twice-justified. Item 15's captured
+byte also proved the idle-terminate "refusal" never existed.
 
-Two facts sharpen the stakes:
-
-- **Both empty arms passed `verifyArmed`.** A bare "armed" reading is
-  not evidence of structure — §17 item 12's upgrade, twice-justified by
-  hardware in one afternoon.
-- Programming from settled states (main menu, armed-unstarted, finished/
-  WorkoutLogged) worked cleanly in seven out of seven probes plus all
-  five runsheet arms.
-
-Also owed from session 3, item 15: the idle-terminate ack was captured
-(`f1 81 76 01 13 e5 f2` — toggle set, previous frame OK, slave READY):
-**the PM ACCEPTS a terminate when idle. The "refusal when nothing is
-loaded" never existed** — it was the status-byte misparse. The fake still
-models the refusal, and the prepare comments still call rejection
-"expected".
+**What the adversarial review changed (2026-08-06):** the original draft
+assumed item 12 might be answerable from archived logs and that the
+readback was "plumbing". Both false: NO 0x0031 payload has ever been
+recorded anywhere (the log's `notify-first` carries a byte count, not
+hex — deliberate flood protection, `driver.ts` ~773; and `toMonitorFrame`
+DROPS `workoutType`/`workoutDurationRaw`/`workoutDurationType` before
+any log or event — §17 item 12's own stated method has never been
+executable). Also: the two scratchpad "session logs" are byte-identical
+prefixes of one capture — there is one archive, not two. The phase is
+therefore **two-staged around a hardware reading that today's build
+cannot even take.**
 
 ## Decisions
 
 | Question | Decision |
 |---|---|
-| Remedy shape | **Both.** The settle prevents the known case; the readback converts ANY residual silent failure into a typed rejection. Detection is the load-bearing half — it is the only check that would have caught both empty arms. |
-| Sequencing | **Fix-3 before 7B implementation.** 7B's programming UX designs against verification semantics this phase changes (a new rejection reason, new timing). Spec work may overlap; implementation does not. |
-| Item 12 | **First task, gates the readback.** Archives first, hardware only if they don't settle it. A "no" answer is a tripwire to James — detection at this layer would be impossible and the design changes. |
-| Retries | None, consistent with the phase. A structure mismatch rejects; the caller decides. |
+| Remedy shape | Both: settle (prevention) + readback (detection). Unchanged. |
+| Sequencing | Fix-3 before 7B implementation. Unchanged. |
+| Staging | **Two stages, two short erg visits.** Stage 1 ships the instrumentation, the settle, and the fake prerequisites; session 4a takes the readings; Stage 2 builds the readback FROM the readings; session 4b validates detection on hardware with the settle disabled. |
+| Item 12's outcome space | **Ternary, per shape** (see §1) — the tripwire fires on "doesn't echo", "doesn't refresh until rowing", OR variation across shapes that defeats a stable comparison. |
+| Retries | None. Unchanged. |
 
 ## Design
 
-### 1. Item 12 first — does 0x0031 echo the armed program?
+### Stage 1 — instrumentation, prevention, and the fake's honesty
 
-The readback requires that the GATT status characteristic's
-`workoutType`/`workoutDuration` fields reflect the accepted program.
-Recorded as unconfirmed since fix-1 (§17 item 12). Answer it from
-evidence already in hand before touching code:
+**1a. The structure log.** Extend the driver's logging so 0x0031's three
+structure fields become capturable: a `structure` log entry recording
+`workoutType`/`workoutDurationRaw`/`workoutDurationType` **on change**
+(not per tick — the 0x0031 flood is why the raw-hex branch excludes it),
+plus the raw 19-byte hex in that same entry. This is the prerequisite
+for everything: item 12's reading, the empty arm's own bytes, and the
+eventual readback's evidence trail. Correct §17 item 12's method text,
+which currently instructs reading fields from `frame` entries that have
+never carried them.
 
-- The archived session logs (`pm5-session3-final.log` and the session-2
-  log) hold raw 0x0031 `notify-first` hex captured on connections where
-  the armed program is KNOWN (several connections, several distinct
-  known programs — including at least one `:00` empty arm). Decode the
-  duration/type fields (`parse.ts`'s own offsets) per capture and tell
-  the story: do they match the armed program? Does the EMPTY arm read
-  duration 0?
-- If the archives are insufficient (the `notify-first` moment may
-  predate the arm on some connections): ONE lab reading, James-operated,
-  ~2 minutes, no rowing — arm a known program from the main menu, dump,
-  read the raw 0x0031 bytes. The runsheet item states exactly this.
-- **Tripwire:** if the answer is NO (the fields do not echo the
-  program), STOP — the readback as designed is impossible, the
-  remaining path is the pull-path GET (§17 item 14, out of scope), and
-  the redesign goes to James. Do not improvise an alternative.
+**1b. The settle — end-state pinned by the traces, not deferred.** In
+`program()`'s prepare path, when the prepare's terminate fired while the
+machine state was `rowing`/`resting`: wait for the machine to report
+**`armed` (WaitToBegin — the auto-cycle's documented terminus) and then
+one further tick**, before sending programming frames. `terminated` and
+`idle` are NOT settled states — the session-3 traces show the cycle
+passing through both (REPRO: rowing → terminated ×2 → idle → armed,
+~0.85s; step 5: terminated → idle → armed inside 0.06s of PM clock).
+Budget: the observed dispatch-to-armed spans were 4 and 5 status ticks,
+so the wait's own bound is **10 ticks** (not the 3-tick `settleTicks`
+default, which both observations exceed — and note this wait is
+state-KEYED, a different mechanism from the state-blind `settleTicks`
+counter; it gets its own name, `prepareSettleTicks`, its own option, and
+its own pendingSettle slot — the existing slot's disconnect-resolves
+comment is only true for `terminate()`'s use). On expiry without an
+`armed` tick (a 2Hz sampler CAN coalesce the cycle — step 5's idle and
+armed shared one elapsed reading): **proceed and let Stage 2's readback
+catch any empty arm**; log `prepare-settle-expired` so the trace shows
+the gamble. Common-path latency unchanged: the wait only arms when the
+prior state was rowing/resting.
 
-### 2. The readback — verification learns structure (detection)
+**1c. The fake's prerequisite — the prepare gets its machine reaction.**
+Today the fake's `onClearingFrameComplete` acks and changes NOTHING —
+no state transition, no status delivery — while hardware visibly runs
+terminate → idle → armed off the same wire command (both empty arms and
+every clean mid-session arm). Fix: the prepare synthesizes and delivers
+the terminate transition exactly as `onArmedFrameComplete` does (cited
+to §18 session 3), followed by the auto-cycle to `armed` across
+subsequent ticks. THEN the empty arm is modelled honestly, keyed on
+machine state: **programming frames that arrive while the fake's state
+is still `rowing`/`resting` arm EMPTY** (armed, structure zeroed, no
+boundaries ever). With that model, the settle test passes BECAUSE the
+settle works (the fake reaches `armed` before frames go out), not
+because a script or a tick-count agrees with the fix.
 
-`verifyArmed`'s predicate extends. Resolution now requires, on a fresh
-post-send status tick:
+**1d. Item 15's obligations — the refusal moves, not vanishes.** The
+fake's idle-terminate refusal is WITHDRAWN as default behaviour (the
+captured byte says accepted), but per ROADMAP's own line it moves to an
+explicit synthetic hook (a prepare-scoped sibling of
+`failNextProgramFrame`, e.g. `refuseNextPrepare: true`, marked
+never-observed) — because it is the ONLY way to exercise the prepare
+swallow rule, which stays. The swallow tests re-point at the hook. Note
+the blast radius honestly: the refusal is currently the default path for
+every clean-state `program()` in the driver suite; the commit states
+that they all now take the accepted-prepare path. `sendPrepare`'s
+comments stop calling rejection "expected" (never-observed, §18 s3 item
+15).
 
-- `state === "armed"` (unchanged), AND
-- **the structural fields match the program's FIRST interval**:
-  `workoutType` is the variable-interval type (exact ordinal per item
-  12's answer), and `workoutDuration` equals interval 0's value in the
-  wire's units (time in the parse's documented resolution; distance in
-  metres — cite `parse.ts`'s existing decode, which already extracts
-  both fields; this is plumbing, not new protocol).
+### Session 4a — the readings (James-operated, ~5 min, one short row)
 
-Deliberately minimal: 0x0031 cannot describe 25 intervals, and full
-structural verification is not the claim. The claim is exactly what the
-hardware demands: both observed empty arms read `:00` — duration 0 —
-so a first-interval check catches the entire observed failure class,
-and any FUTURE silent-arm variant that zeroes structure.
+With Stage 1 on the erg:
 
-On expiry of the existing `verifyTicks` bound without a matching tick:
-`ProgramRejection` with the NEW reason `"structure-mismatch"`, the
-observed type/duration vs expected in the rejection detail, full trace
-in the log. `ProgramRejectionReason` gains the member; no other reason
-changes meaning. A tick that is armed-but-mismatched is recorded in the
-event log when first seen (one entry, not per tick) so the trace shows
-verification REJECTING structure, not merely waiting.
+1. **Item 12, per shape:** arm from main menu, read the `structure` log
+   entries while armed — for a TIME program (`program-two-time`), a
+   DISTANCE program (`program-short`), and a rest-0 program
+   (`program-no-rest`). Per shape, record: does `workoutType` echo (and
+   is it ONE ordinal across shapes, or does the PM normalise — the SDK
+   enum has four adjacent interval types and nothing proves it echoes
+   the 8 we send)? Does `workoutDurationRaw` reflect interval 0, in
+   what unit (the read-side distance scale is UNDOCUMENTED — §10's own
+   row; read/write symmetry has burned this project three named times)?
+   Does it refresh while merely armed, or only once rowing?
+2. **The empty arm's own bytes:** driver constructed with the settle
+   disabled (`prepareSettleTicks: 0`), row ~20m into a piece, program
+   over it → capture the `:00` arm's `structure` entry. ("Duration
+   reads 0" is today a hypothesis inferred from a photograph — this
+   reading tests it.)
+3. **Settle validation:** same repro with the settle ON → expect a
+   structured arm (monitor shows the real workout).
 
-### 3. The settle — conditional prevention
+**Outcome space (ternary, the tripwire):** (a) fields echo interval 0
+stably per shape → Stage 2 builds the comparison as designed; (b) fields
+echo something stable but different (a total, the last interval, a
+normalised type) → the comparison target changes; controller may
+adjudicate if the mapping is unambiguous, James rules otherwise;
+(c) fields don't echo, don't refresh until rowing, or vary
+unexplainably across shapes → STOP, redesign to James (the pull-path
+GET, §17 item 14, is the fallback avenue — out of scope).
+Also captured for free: 0x0033's `intervalCount` per shape (already
+decoded; its base is ambiguous per §15 #1, but it is the one field that
+could distinguish "25 intervals landed" from "1" — recorded as a
+candidate second signal for Stage 2, not a commitment).
 
-In `program()`'s prepare path only: if the prepare terminate fired while
-the machine state was `rowing` or `resting` (a RUNNING piece — the
-driver knows its last state), wait — tick-bounded, reusing the
-`settleTicks` idiom and default — for a post-terminate status tick
-showing a settled state (any state that is NOT `rowing`/`resting` —
-the observed post-terminate cycle passes through terminated/armed;
-which exact state ends the wait is the implementer's to pin from the
-session-3 traces, not to guess) before sending programming frames. Programs
-from settled states (the overwhelmingly common path, and 7B's only
-planned path) pay nothing. The mid-session path pays ~1.5s to land
-reliably. The mechanism comment cites §19's entry and Appendix E's
-auto-cycle, and states plainly that the settle is PREVENTION built on
-the observed correlation — the readback (§2) is what guarantees
-detection if the mechanism theory is incomplete.
+### Stage 2 — the readback (built FROM 4a's readings)
 
-### 4. The fake learns the defect — and drops the withdrawn refusal
+`verifyArmed`'s resolution requires, on fresh post-send ticks:
+`state === "armed"` AND the structure fields matching the program per
+4a's confirmed semantics (duration against interval 0 in the confirmed
+unit; the type check ONLY if 4a shows one stable ordinal across shapes,
+otherwise dropped — duration alone catches the observed class).
 
-The fake models the machine session 3 met (the CI-teachability of the
-whole fix):
+- **Early rejection, bounded both ends:** the observed clean arms show
+  the 0x0031 payload lagging the armed state by ≥1 tick (two of five
+  clean arms resolved on a tick still carrying the PREVIOUS program's
+  payload), so single-tick mismatch must NOT reject. The observed empty
+  arms show a rock-stable mismatch (100+ identical frames). Rule:
+  reject after **N consecutive stable mismatched armed ticks, N=3**
+  (> the observed 1-tick lag, << the outer bound), with `verifyTicks`
+  retained as the outer bound. Reason: `"structure-mismatch"`, detail
+  carrying observed-vs-expected, one log entry when the first mismatch
+  is seen.
+- **The unbounded-verify hole closes:** `verifyTicks` today is optional
+  and unset means wait-forever; under a structure predicate that would
+  turn a silent wrong success into an infinite hang. The readback
+  REQUIRES a bound: `verifyTicks` gains a default (20, the lab's
+  value) instead of "unbounded when omitted". Recorded as a
+  `DriverOptions` semantics change; 7B inherits a safe default.
+- The exit criterion on latency is scoped honestly: the SETTLE adds
+  nothing to settled-state programs (pinned by test); the READBACK may
+  add ~1 tick on hardware where the payload lags (observed 2-of-5) —
+  accepted, stated, not pinned-away.
+- The fake's status stream carries its loaded program's structure
+  (extending the existing statusFrames builders; the fake echoes the
+  ACCEPTED program — `script.program` remains only the pre-loaded
+  fallback for scripts that never call program(), and an un-programmed
+  fake emits zeroed structure, exactly the empty-arm shape).
 
-- **The empty arm is modelled**: programming over a RUNNING fake
-  workout without adequate settling arms EMPTY — armed state, structure
-  zeroed (duration 0), no boundaries ever. Cited to §18 session 3.
-- **The fake's status stream carries structure**: its 0x0031 frames
-  encode the loaded program's type and first-interval duration (via the
-  existing statusFrames builders — extend, don't fork), so the readback
-  is exercisable end to end.
-- CI then proves both remedies: a driver `program()` over a running
-  fake workout SUCCEEDS with structure (the settle prevented the empty
-  arm), and a SCRIPTED empty arm (a fake knob forcing the zeroed-
-  structure arm regardless of settling) is caught as
-  `"structure-mismatch"` — never silent. Both must fail against today's
-  code.
-- **Item 15's obligations**: `onClearingFrameComplete`'s idle-refusal
-  GOES (the real byte says accepted; the fake stops modelling a refusal
-  that never existed — commit body cites §18 session 3 item 15).
-  `sendPrepare`'s comments and log wording stop calling rejection
-  "expected when nothing was loaded"; a prepare rejection is now
-  NEVER-OBSERVED (the swallow rule itself stays — Task 3's reviewed
-  rule, unchanged — only the justification updates).
+### Session 4b — the merge-gate row (~3 min)
 
-### 5. The merge-gate row (~3 min, James-operated)
-
-1. If item 12 needed the lab reading and it hasn't happened: that first
-   (arm a known program from main menu, dump — no rowing).
-2. The repro, against the fix: row ~20m into any piece, program over it.
-   **Expected: EITHER a clean structured arm (settle worked; the
-   monitor shows the real workout, confirmed by its first-interval
-   display) OR a typed `structure-mismatch` rejection — and NEVER an
-   ack-verified `:00`.** Either outcome passes; the silent case is the
-   only failure.
-3. One short row into the newly-armed program (first boundary) confirms
-   structure end-to-end.
-
-Expected-vs-observed to §18 under a session-4 heading, slots pending
-until run. A disagreement is a finding. The branch merges on green +
-the row + James's explicit approval, per the house rule.
+1. The repro with everything ON: row ~20m in, program over it →
+   expected: clean structured arm (settle), monitor shows the real
+   workout, one short row confirms the first boundary.
+2. **The detection row (the honesty fix):** driver with
+   `prepareSettleTicks: 0` — the repro again → expected: **typed
+   `structure-mismatch`**, never a silent `:00`. This is the step that
+   makes the load-bearing half hardware-validated instead of CI-only.
+3. Expected-vs-observed to §18 session 4; disagreement is a finding.
+   Merge on green + this row + James's explicit approval.
 
 ## Testing
 
-The bar is unchanged: every behaviour here gets a test that fails
-against today's code. At minimum: the scripted empty arm → 
-`"structure-mismatch"`, never resolution (fails today: it resolves);
-program-over-running-fake succeeds WITH structure via the settle (fails
-today against the defect-modelling fake); the settle does NOT fire for
-settled-state programs (latency pin — no added ticks on the common
-path); the readback tolerates the armed-but-mismatched tick arriving
-BEFORE a matching one (order-independence); `structure-mismatch`'s
-detail carries observed-vs-expected; the fake's idle-terminate now acks
-accepted and the refusal tests are removed/rewritten with the
-withdrawal named. Mutations: disable the settle → the prevention test
-dies; disable the structure predicate → the scripted-empty-arm test
-dies (and dies on an ASSERTION, not a timeout); revert the fake's
-refusal → its removal test dies.
+Unchanged bar — every behaviour fails first. At minimum: the fake's
+prepare now delivers the terminate transition (fails today: no state
+change); program-over-running-fake arms EMPTY without the settle and
+STRUCTURED with it (both fail today); the scripted/un-programmed empty
+arm → `"structure-mismatch"` dying on an ASSERTION not a timeout (fails
+today: resolves); single-tick payload lag does NOT reject (the 2-of-5
+clean-arm shape, fails against a naive first-tick rule); N=3 stable
+mismatches reject early, well inside the outer bound; `verifyTicks`
+omitted now defaults bounded (fails today: hangs); settled-state
+programs gain zero settle ticks (latency pin, settle-scoped);
+`refuseNextPrepare` exercises the swallow rule (the refusal-removal's
+replacement trigger); the structure log records on change only (a
+10-tick same-structure burst yields one entry). Mutations: disable the
+settle → the prevention test dies; disable the structure predicate →
+the empty-arm test dies; drop the N-consecutive guard → the lag test
+dies; re-default the fake's refusal → its hook test dies.
 
 ## Out of scope
 
-P3b (a failed program during an open run — 7B's spec owns it); the
-pull-path GETs (§17 item 14); retry policies; full multi-interval
-structural verification (0x0031 cannot express it; item 14's answer is
-the future path if ever needed); 7B's screens.
+P3b (7B's spec); the pull-path GETs (item 14 — the fallback avenue if
+4a's tripwire fires); retry policies; full multi-interval structural
+verification (0x0031 cannot express it; `intervalCount` is recorded as
+a 4a-captured candidate, not built); 7B's screens.
 
 ## Exit criteria
 
-- Item 12 answered with cited evidence (archives or one reading), or
-  the tripwire fired and the redesign went to James.
-- `program()` over a running piece either arms with verified structure
-  or rejects `"structure-mismatch"` — the silent empty arm is
-  impossible in CI and unobserved on hardware (session-4 row).
-- The common-path latency is unchanged, pinned by test.
-- The fake models the empty arm, carries structure in its status
-  stream, and no longer models the idle-terminate refusal.
+- The structure log exists; §17 item 12's method text is executable for
+  the first time; the readings are in §18 session 4 with raw hex.
+- Item 12 answered per shape (or the tripwire fired and the redesign
+  went to James with 4a's data attached).
+- `program()` over a running piece arms with verified structure (settle
+  ON) and rejects `"structure-mismatch"` (settle OFF, session 4b step
+  2) — the silent empty arm is impossible in CI and DISPROVEN on
+  hardware in both directions.
+- `verifyTicks` is bounded by default; the N-consecutive rule is pinned
+  against the observed payload lag.
+- The fake's prepare behaves like the machine's; the empty arm is
+  state-keyed; the refusal lives only behind `refuseNextPrepare`.
 - §18 session 4 recorded; §17 items 12/15 dispositioned; ROADMAP's
-  fix-3 checklist closed.
-- Green + the row + James's explicit approval before merge.
+  fix-3 checklist closed; green + the row + James's explicit approval.
