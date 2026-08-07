@@ -1095,3 +1095,46 @@ test("log-session-manual", async ({ page }) => {
   });
   await cleanupByTitle(page, title);
 });
+
+// Phase 6H Task 7: News + Reader. Mixed read state seeded by actually
+// opening an article through the UI (click the row, wait for the reader,
+// go BACK) rather than a direct API PUT — recurring-failure #7's own
+// lesson ("seed real data, then open the image and look at it") extends
+// here to "seed it the way a rower actually would," so the capture is
+// honest about what marks something read, not just about what the read
+// state ends up looking like.
+test("news", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-news@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/news");
+  await page.locator(".news-unread-count").waitFor();
+
+  const baselinesRow = page.locator('a.news-row[href="/news/baselines"]');
+  await baselinesRow.click();
+  await expect(page).toHaveURL(/\/news\/baselines$/);
+  await page.locator(".reader-body").waitFor();
+  await page.getByRole("link", { name: "← BACK" }).click();
+  await expect(page).toHaveURL(/\/news$/);
+  // The row's own read styling (page-coloured square, grey 400-weight
+  // title) is what this capture exists to show — wait for it explicitly
+  // rather than racing the read-state PUT's own round trip.
+  await expect(baselinesRow).toHaveAttribute("data-read", "true");
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "news.png"),
+  });
+});
+
+test("news-reader", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-news-reader@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/news/baselines");
+  await page.locator(".reader-body").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "news-reader.png"),
+  });
+});
