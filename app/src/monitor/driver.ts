@@ -152,9 +152,9 @@ import type { MonitorEventLog } from "./eventLog";
  *    The ack is not sufficient evidence on its own: the identical `0x01`
  *    ack byte came back from both a real program and a complete no-op on
  *    real hardware.
- *  - `"structure-mismatch"`: fix-3 Task 4 (the SDD ledger's `## SESSION 4a`
- *    block, 2026-08-07 — the reading that ANSWERED interface-notes.md §17
- *    item 12; Task 6 files it as §18). The machine DID report `"armed"`,
+ *  - `"structure-mismatch"`: fix-3 Task 4 (interface-notes.md §18 "SESSION
+ *    4a", 2026-08-07 — the reading that ANSWERED interface-notes.md §17
+ *    item 12). The machine DID report `"armed"`,
  *    and 0x0031's own structure fields say it armed something OTHER than
  *    the program we just sent. `"not-observed"` is deliberately NOT reused
  *    for this: a monitor that never armed and a monitor that armed the
@@ -463,8 +463,8 @@ const DEFAULT_VERIFY_TICKS = 20;
  *  before `verifyArmed` rejects (fix-3 Task 4). Three. What the number
  *  actually rests on, kept strictly separate from what was merely asserted:
  *
- *  RECORDED (the SDD ledger's `## SESSION 4a` block, 2026-08-07; Task 6
- *  files it as §18) — the two observations that justify N > 1 on their own:
+ *  RECORDED (interface-notes.md §18 "SESSION 4a", 2026-08-07) — the two
+ *  observations that justify N > 1 on their own:
  *  - **MID-CYCLE TRANSIENTS**: 4a captured `workoutType=1` carrying stale,
  *    NON-ZERO durations between the accept and the steady state. A mismatch
  *    whose own payload keeps changing is a machine still settling, not a
@@ -1789,10 +1789,10 @@ export function createPm5Driver(
    * hardware session had ever read 0x0031's `workoutType`/
    * `workoutDurationRaw`/`workoutDurationType` back after an accepted
    * program, so gating on them would have been gating on a guess. **SESSION
-   * 4a (2026-08-07, PM5 432331249) read them** — the SDD ledger's own
-   * `## SESSION 4a` block is the record until Task 6 files it as §18, and
-   * it ANSWERS interface-notes.md §17 item 12. What it found, and what this
-   * function now requires of a fresh post-send arrival:
+   * 4a (2026-08-07, PM5 432331249) read them** — interface-notes.md §18
+   * "SESSION 4a" is the record, and it ANSWERS interface-notes.md §17 item
+   * 12. What it found, and what this function now requires of a fresh
+   * post-send arrival:
    * - `state === "armed"`, exactly as before, AND
    * - `workoutType === 8` — stable across TIME, DISTANCE and rest-0 arms,
    *   with no normalization to a rest-less sibling ordinal, so the type is

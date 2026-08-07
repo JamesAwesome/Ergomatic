@@ -115,8 +115,8 @@ const DURATION_TYPE_DISTANCE = 0x80;
 const TIME_DURATION_SCALE = 100;
 
 /**
- * SESSION 4a's captured EMPTY-ARM anatomy (2026-08-07, PM5 432331249; the
- * SDD ledger's `## SESSION 4a` block, "EMPTY ARM captured on the wire":
+ * SESSION 4a's captured EMPTY-ARM anatomy (2026-08-07, PM5 432331249;
+ * interface-notes.md §18, "SESSION 4a", "The empty arm's own anatomy":
  * settle-off, program-short over a running two-time piece, monitor showing
  * `:00`, driver reporting acked-armed — **steady state `workoutType=1
  * durationRaw=0 durationType=128`**). A real PM5 armed with no interval
@@ -149,8 +149,8 @@ export const PRE_ARM_BASELINE_STRUCTURE: WireArmedStructure = {
 
 /**
  * Encodes 0x0031's structure fields for a held program's interval 0, per
- * SESSION 4a's confirmed read-side semantics (the SDD ledger's `##
- * SESSION 4a` block): `workoutType` is stable at `8` across TIME, DISTANCE
+ * SESSION 4a's confirmed read-side semantics (interface-notes.md §18,
+ * "SESSION 4a"): `workoutType` is stable at `8` across TIME, DISTANCE
  * and rest-0 shapes; a TIME interval reads back `seconds × 100` at duration
  * identifier `0`; a DISTANCE interval reads back WHOLE METRES at identifier
  * `128`. An empty `intervals` array (no interval 0 to encode) returns

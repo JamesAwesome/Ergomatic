@@ -408,7 +408,7 @@ describe("buildSampleRateConfig", () => {
 
 describe("expectedArmedStructure (fix-3 Task 4 — what 0x0031 must read back)", () => {
   // The values below are SESSION 4a's own readings (2026-08-07, PM5
-  // 432331249; the SDD ledger's `## SESSION 4a` block, ANSWERING
+  // 432331249; interface-notes.md §18, "SESSION 4a", ANSWERING
   // interface-notes.md §17 item 12), restated as literals rather than
   // derived from this module's constants — a test that recomputed the
   // prediction the same way the implementation does would agree with a

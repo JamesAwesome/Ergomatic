@@ -1073,7 +1073,18 @@ commit's.
 
 ## Phase 7A-fix-3 — program over a live piece
 
-**Status:** Not started — needs design, not assumed.
+**Status:** Done except session 4b. Design approved (adversarial review,
+2026-08-06); Stage 1 (instrumentation, the settle, the fake's honest
+empty-arm model) and Stage 2 (the structural readback, the
+`"structure-mismatch"` rejection) both SHIPPED — Tasks 1-5, commits
+`5d42e01`..`78a949c` on `phase-7a-fix-3` (2334 all-projects, e2e 210; full
+detail: `.superpowers/sdd/2026-08-06-phase-7a-fix-3/progress.md`). **Session
+4a has RUN** (2026-08-07, James-operated, ~6 min) and answered item 12
+outcome (a) unanimously — the ternary tripwire did not fire, so Stage 2 was
+built as designed, not redesigned (`docs/monitor/pm5-interface-notes.md`
+§18, "SESSION 4a"). **Session 4b — the two-row detection test — has NOT
+run**; §18's own "SESSION 4b (PENDING)" scaffold holds the empty result
+slots.
 **Trigger:** FIRED — the merge-gate row's own live bisect (2026-08-06,
 laptop session 3, `docs/monitor/pm5-interface-notes.md` §18 "Live bisect",
 §19.13). Two unrelated program shapes (`program-many`, 25×100m no-rest, 7
@@ -1088,50 +1099,65 @@ to machine STATE, not program CONTENT.
 internal `sendPrepare()` terminate-shaped step fires while the machine is
 still live, and the send that follows is accepted, verified armed, and
 structurally empty.
-**Authority:** `docs/monitor/pm5-interface-notes.md` §18 (laptop session 3)
-and §19.13 for the finding; §17 items 5/12/15/16/17 for what it does and
-does not close.
+**Authority:** `docs/monitor/pm5-interface-notes.md` §18 (laptop session 3;
+SESSION 4a) and §19.13 for the finding; §17 items 5/12/15/16/17 for what it
+does and does not close.
 
-- [ ] **Candidate remedy A — settle after a mid-session terminate (DESIGN,
-      do not assume).** `program()`'s `sendPrepare()` step, sent while the
-      machine is still `rowing`/`resting`, may need to wait for the
-      documented Appendix E auto-cycle (WaitToBegin/Rearm) to actually
-      complete before the programming frames that follow are trusted — a
-      tick-bounded settle, not a blind proceed. Open questions a design
-      pass must answer: how long, what signal marks "settled" (a
-      status-characteristic state read, not a fixed delay), and whether
-      this changes `program()`'s latency for the already-working idle/
-      finished-workout cases.
-- [ ] **Candidate remedy B — item 12's structural readback, as detection
-      (DESIGN, do not assume).** Reading `0x0031`'s `workoutType`/
-      `workoutDurationRaw`/`workoutDurationType` back after arming and
-      comparing against what was sent would DETECT an empty arm — both
-      hardware-observed empty arms would have failed this check — even if
-      remedy A's timing is imperfect. Open question a design pass must
-      answer: what `program()` does on a detected mismatch (retry? surface
-      a typed error?) — the check itself is twice-justified by hardware
-      (§17 item 12), but the response to a failed check is not yet
-      designed.
-- [ ] **Remove the fake's idle-terminate refusal (§17 item 15).**
-      `src/monitor/transports/fake.ts`'s `onClearingFrameComplete` should
-      accept a bare idle terminate unconditionally; its refusal, if the
-      fake keeps one at all, moves to an explicit synthetic hook
+- [x] **Remedy A — settle after a mid-session terminate.**
+      `program()`'s `sendPrepare()` step now waits, when the prepare's
+      terminate fired while the machine was `rowing`/`resting`, for the
+      documented Appendix E auto-cycle to reach `armed` (WaitToBegin) plus
+      one further tick — `DriverOptions.prepareSettleTicks`, defaulting to
+      10, its own `pendingPrepareSettle` slot, tick-bounded (not a wall
+      clock). Session 4a measured `"armed" observed on tick 4"` twice at
+      the exact repro, confirming the budget with room to spare. Common-path
+      latency unchanged: the wait only arms when the prior state was
+      `rowing`/`resting`. Task 2 (`5d42e01`→`6fd2636`/`9421033`).
+- [x] **Remedy B — item 12's structural readback, as detection.**
+      `verifyArmed` (`src/monitor/driver.ts`) now resolves only on a fresh
+      post-send tick that is `armed` **AND** whose 0x0031 structure fields
+      match `expectedArmedStructure(p)` (`pm5/commands.ts`, sharing the
+      encoder's own constants). A mismatch rejects with
+      `ProgramRejectionReason: "structure-mismatch"` after 3 consecutive
+      armed ticks reporting the SAME wrong structure (a payload still
+      changing restarts the count — session 4a's own captured mid-cycle
+      transients are why), or at `verifyTicks`' outer bound, which now
+      DEFAULTS to 20 instead of meaning unbounded (an unbounded verify
+      under a structure predicate turned a caught defect into a hang).
+      Session 4a's per-shape readings (§18) are what this predicate was
+      built from, not a guess. Task 4 (`970bf26`/`a7ac619`).
+- [x] **Removed the fake's idle-terminate refusal (§17 item 15).**
+      `src/monitor/transports/fake.ts`'s `onClearingFrameComplete` accepts a
+      bare idle terminate unconditionally now; the refusal survives only
+      behind the explicit synthetic `FakeScript.refuseNextPrepare` hook
       (`injectNak`/`failNextProgramFrame`'s pattern) — real hardware never
-      refused it (§18, §17 item 15).
-- [ ] **Revise `sendPrepare`'s doc comment.** `src/monitor/driver.ts`'s
-      `sendPrepare` comment cites "hardware showed the PM refuses a
-      terminate when nothing is currently running or loaded" — that
-      citation is retired (§17 item 15); the comment needs to state the
-      swallow-as-routine behaviour on its own terms (ANY non-disconnected
-      prepare outcome is swallowed, by design), without the withdrawn
-      hardware claim.
+      refused it (§18 session 3, §17 item 15). Task 3 (`e92cee9`/`50eae9b`).
+- [x] **Revised `sendPrepare`'s doc comment.** `src/monitor/driver.ts`'s
+      `sendPrepare` comment no longer claims hardware showed the PM refuse
+      an idle terminate; it states the swallow-as-routine behaviour on its
+      own terms (ANY non-disconnected prepare outcome is swallowed, by
+      design) and cites the retirement directly (§18 session 3 item 15;
+      §19.4/§19.5). Task 3.
 
-**Exit:** not yet defined — waits on the design pass above. Neither
-candidate remedy is assumed; this phase exists to choose between them (or
-use both) after design, not to implement either sight-unseen. Whether this
-also resolves session 1's still-OPEN Verdict (a) (`:00`/`:00` empty
-display, §19.1/§19.2) is a hypothesis this phase may confirm, not something
-it starts by assuming.
+**Exit:** merge on green (2334 all-projects / e2e 210, unchanged by any
+docs-only close-out) **+ session 4b's two-row detection test having run
+(§18) + James's explicit approval.** Session 4b is necessary, not
+sufficient on its own, and the merge decision is his — same discipline as
+every prior hardware gate in this document. Session 4a resolving cleanly
+(outcome (a), no redesign) means this phase's own remedies ship
+UNCONDITIONALLY on 4b, not on a further design pass; 4b is validation, not
+another decision point. Whether this also resolves session 1's still-OPEN
+Verdict (a) (`:00`/`:00` empty display, §19.1/§19.2) is a hypothesis §19.13
+now treats as its leading candidate, not a fact 4b needs to confirm before
+merge.
+**Parked for the whole-branch reviewer** (not blocking, not this phase's
+own exit — full list with sources: `.superpowers/sdd/
+2026-08-06-phase-7a-fix-3/progress.md`, "Parked minors"): a byte-for-byte
+duplicated test helper (`stillArmedEmpty`/`stillArmedAtZero`,
+`driver.test.ts`); three LOW-severity comment/instrumentation nits from
+Task 2's review (a timeout-not-assertion latency pin, the settle not
+logging its own configured bound, an undocumented off-by-one in the bound's
+inclusivity).
 
 ## Phase 7B — PM5 connected surface
 
@@ -1240,6 +1266,19 @@ reconciled against 7A's shipped types before this phase starts.
       close this run on a failed re-program, reasoned fresh against the
       post-§19.2 record, not against the withdrawn wipe. Cited in the
       whole-branch fix-2 ledger (`.superpowers/sdd/2026-08-06-phase-7a-fix-2/progress.md`).
+- [ ] **A second `program()` call during the prepare-settle wait strands the
+      first.** `driver.ts`'s `pendingAck`/`pendingVerify` single-flight
+      class (immediately above) has a THIRD member as of fix-3's settle:
+      `pendingPrepareSettle`. Phase 7A-fix-3 Task 2's review (Probes C/C3)
+      confirmed the stranding reproduces with the settle both on and off,
+      and — new since the settle shipped — the window it strands in widened
+      from microtasks to up to `prepareSettleTicks` worth of wall time
+      (~5 s at the default of 10 ticks). Pre-existing class, not a fix-3
+      regression, but fix-3 makes the window big enough to hit in practice.
+      7B's connect/program flow must treat `program()` as single-flight (no
+      concurrent calls from the UI) as a hard requirement, not an assumption.
+      Cited in the fix-3 ledger (`.superpowers/sdd/
+      2026-08-06-phase-7a-fix-3/progress.md`, Task 2 review M4).
 - [ ] `src/monitor/driver.ts`'s `createPm5Driver` still hardcodes
       `capabilities.deviceName: "PM5"` (a placeholder, honestly commented
       in place) because its constructor signature (`createPm5Driver(t,

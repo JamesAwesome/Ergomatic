@@ -129,8 +129,8 @@ interface ArmedStructureFixture {
 
 /**
  * What a HEALTHY armed PM5 reads back for `p` — hardware-confirmed by
- * SESSION 4a (2026-08-07, PM5 432331249; the ledger's own `## SESSION 4a`
- * block is the interim home until Task 6 files it as §18):
+ * SESSION 4a (2026-08-07, PM5 432331249; interface-notes.md §18, "SESSION
+ * 4a"):
  *   - `workoutType` is `8` for every shape (TIME, DISTANCE, rest-0 — no
  *     normalization to 6/7/9);
  *   - a TIME interval 0 reads back seconds × 100 (`60s -> 6000`) with
