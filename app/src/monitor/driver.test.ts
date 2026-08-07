@@ -4948,10 +4948,10 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   }
 
   it(
-    "REPRO's exact trace (§18 session 3 Live bisect: 'rowing → terminated ×2 → " +
-      "idle → armed, ~0.85s') — waits through terminated/idle and sends " +
-      "frames only after armed+1 (today: frames go out immediately after the " +
-      "prepare ack)",
+    "REPRO's confirmed trace (§18 session 3 Live bisect / design spec §1b: " +
+      "'rowing → terminated → idle → armed', a ~0.85s PM-clock span) — waits " +
+      "through terminated/idle and sends frames only after armed+1 (today: " +
+      "frames go out immediately after the prepare ack)",
     async () => {
       const transport = stubTransport();
       const log = createEventLog();
@@ -4975,15 +4975,25 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
           ),
       ).toBe(true);
 
-      // Replay REPRO tick-by-tick: a leading still-"rowing" reading (the
-      // trace's own first named state — the PM has not yet reacted to the
-      // terminate), then "terminated" ×2, then "idle", matching §18 session
-      // 3's cited sequence exactly. No programming frame may go out at any
-      // point during this replay.
+      // Review finding I5/L2: the confirmed trace shape (design spec §1b,
+      // cross-checked against the raw session-3 log) is a single
+      // rowing→terminated→idle→armed transition — the event log records a
+      // `frame` entry only on a state CHANGE, so a repeated `terminated`
+      // reading could never surface as two entries even if the wire sent it
+      // twice, and no tick COUNT is recoverable from a log with no
+      // timestamps at all (only the ~0.85s PM-clock span is a real,
+      // verified observation). This replay is therefore a DELIBERATELY
+      // stricter reconstruction, not a literal quotation: a leading
+      // still-"rowing" reading (representing the gap before the PM reacts
+      // to our terminate), then "terminated" a SECOND time (one extra
+      // non-armed tick beyond the confirmed shape, making this replay's
+      // bound requirement strictly harder than the trace demands), then
+      // "idle". No programming frame may go out at any point during this
+      // replay.
       for (const workoutState of [
-        WORKOUTSTATE_INTERVALWORKTIME, // rowing
+        WORKOUTSTATE_INTERVALWORKTIME, // rowing (reconstructed leading tick)
         WORKOUTSTATE_TERMINATE, // terminated
-        WORKOUTSTATE_TERMINATE, // terminated (×2)
+        WORKOUTSTATE_TERMINATE, // terminated again (extra tick, not itself an observation)
         WORKOUTSTATE_REARM, // idle
       ]) {
         transport.notify(GENERAL_STATUS_UUID, generalStatusIn(workoutState));
@@ -5008,9 +5018,9 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
   );
 
   it(
-    "step 5's exact trace (§18 session 3 Live bisect: 'terminated → idle → " +
-      "armed inside 0.06s of PM clock') — waits through terminated/idle and " +
-      "sends frames only after armed+1",
+    "step 5's confirmed trace (§18 session 3 Live bisect / design spec §1b: " +
+      "'terminated → idle → armed', a ~0.06s PM-clock span) — waits through " +
+      "terminated/idle and sends frames only after armed+1",
     async () => {
       const transport = stubTransport();
       const log = createEventLog();
@@ -5024,13 +5034,17 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
       );
       const afterPrepare = sentCount(transport);
 
-      // Step 5's own cited span is 4 status ticks dispatch-to-armed, one
-      // more than its 3 NAMED states ("terminated → idle → armed") — same
-      // shape as REPRO's own explicitly-named leading "rowing" reading: the
-      // first post-dispatch tick still reports the pre-terminate state
-      // before the PM's Terminate->Rearm->WaitToBegin cycle catches up.
+      // Step 5's confirmed trace (design spec §1b) is the same
+      // rowing→terminated→idle→armed shape as REPRO, over a much shorter
+      // ~0.06s PM-clock span — no tick COUNT is recoverable from either
+      // trace (review finding I5: the event log has no timestamps and logs
+      // on state change only), so this replay does not claim a specific
+      // number of ticks was observed. Same reconstruction choice as REPRO's
+      // own replay above: a leading still-"rowing" reading (the gap before
+      // the PM reacts to our terminate) is included for symmetry, not
+      // because it was itself measured.
       for (const workoutState of [
-        WORKOUTSTATE_INTERVALWORKTIME, // still "rowing" (the leading tick)
+        WORKOUTSTATE_INTERVALWORKTIME, // rowing (reconstructed leading tick)
         WORKOUTSTATE_TERMINATE, // terminated
         WORKOUTSTATE_REARM, // idle
       ]) {
@@ -5077,6 +5091,49 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     await flush();
     transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS); // +1
     await waitUntil(() => sentCount(transport) > afterPrepare);
+
+    await finishRealSend(transport, pending);
+  });
+
+  it("the settle's own success path logs 'prepare-settled' with the ticks actually waited and the +1 tick's state (review finding I4 — the only mechanism able to measure this on hardware)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    primeState(transport, WORKOUTSTATE_INTERVALWORKTIME); // rowing
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+
+    // Two non-armed ticks, then "armed", then a distinctive +1 tick state
+    // ("resting") so the logged detail is unambiguous about which tick it
+    // names.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE),
+    );
+    transport.notify(GENERAL_STATUS_UUID, generalStatusIn(WORKOUTSTATE_REARM)); // idle
+    await flush();
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await flush();
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALREST), // resting — the +1 tick
+    );
+    await flush();
+
+    // Two non-armed ticks (terminated, idle) then the tick that reports
+    // "armed" itself — `ticks` counts that arrival too, landing on 3.
+    const settled = log.entries().filter((e) => e.kind === "prepare-settled");
+    expect(settled).toHaveLength(1);
+    expect(settled[0]!.detail).toContain("tick 3");
+    expect(settled[0]!.detail).toContain('"resting"');
+    // No "prepare-settle-expired" — this is the SUCCESS path, not the gamble.
+    expect(log.entries().some((e) => e.kind === "prepare-settle-expired")).toBe(
+      false,
+    );
 
     await finishRealSend(transport, pending);
   });

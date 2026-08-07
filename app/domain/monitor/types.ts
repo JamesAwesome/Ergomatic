@@ -170,16 +170,27 @@ export interface MonitorDriver {
    * clean single-connection observation is still pending: §17's merge-gate
    * row, session 3, Step 3).
    *
-   * ANSWERED, twice, by hardware (interface-notes.md §18 "Live bisect",
-   * session 3, Phase 7A-fix-3): James's empty `:00`/`:00` read (§19.1's
-   * Verdict (a)) is not unexplained mystery any more — programming over a
-   * machine that is still `rowing`/`resting` (never merely "loaded")
-   * reproducibly arms structurally EMPTY while `verifyArmed`'s
-   * `state === "armed"` check passes regardless. `src/monitor/driver.ts`'s
-   * `program()` now runs a PREPARE-SETTLE wait (`waitForPrepareSettle`,
-   * design spec §1b, fix-3 Task 2) that holds the real send until the
-   * machine reports `armed` (plus one further tick) whenever it caught a
-   * RUNNING piece, closing this in CI. Still OPEN on hardware: the
+   * LEADING CANDIDATE EXPLANATION, not answered (interface-notes.md §18
+   * "Live bisect" session 3 AND §19.13, Phase 7A-fix-3 — §19.13 states this
+   * in bold: "Verdict (a) stays OPEN; this is now its leading candidate
+   * explanation, not its answer"). §18 session 3 reproduced, twice,
+   * programming over a machine that is still `rowing`/`resting` arming
+   * structurally EMPTY while `verifyArmed`'s `state === "armed"` check
+   * passes regardless — a genuine, hardware-confirmed hazard in its own
+   * right. But James's original empty `:00`/`:00` read (§19.1's Verdict
+   * (a), session 1) was over a machine that was `idle`/`armed` WITH A
+   * WORKOUT ALREADY LOADED, not `rowing`/`resting` — a state this
+   * mechanism's own gate does not cover ("never merely loaded" is the
+   * accurate boundary, not a loophole) — so §19.13's own read is the
+   * correct one: this is the closest match on record, not independent
+   * confirmation of the same root cause. Verdict (a) remains STANDING OPEN
+   * (interface-notes.md:2583).
+   *
+   * `src/monitor/driver.ts`'s `program()` now runs a PREPARE-SETTLE wait
+   * (`waitForPrepareSettle`, design spec §1b, fix-3 Task 2) that holds the
+   * real send until the machine reports `armed` (plus one further tick)
+   * whenever it caught a RUNNING piece, closing the §18-session-3 hazard in
+   * CI. Still OPEN on hardware, on top of Verdict (a) itself: the
    * structural readback that would catch an empty arm even if the settle's
    * own bound expires (design spec Stage 2, fix-3 Tasks 3+, not built by
    * Task 2) is unbuilt, and session 4a/4b's hardware validation of both
