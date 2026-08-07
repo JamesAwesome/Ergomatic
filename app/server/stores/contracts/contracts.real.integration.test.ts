@@ -7,6 +7,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type pg from "pg";
 import { createDb, type Db } from "../../db/index.js";
 import { createUserStore } from "../../auth/users.js";
+import { createArticleReadsStore } from "../articleReads.js";
 import { createBaselinesStore } from "../baselines.js";
 import { createWorkoutsStore } from "../workouts.js";
 import { createLogsStore } from "../logs.js";
@@ -14,7 +15,9 @@ import { createPlanStateStore } from "../planState.js";
 import { createPreferencesStore } from "../preferences.js";
 import { createTestHistoryStore } from "../testHistory.js";
 import {
+  describeArticleReadsContract,
   describeStoreContracts,
+  type ArticleReadsStoresUnderTest,
   type StoresUnderTest,
 } from "./storeContracts.js";
 
@@ -64,3 +67,23 @@ async function makeStores(): Promise<StoresUnderTest> {
 }
 
 describeStoreContracts(makeStores, { label: "real Postgres" });
+
+async function makeArticleReadsStores(): Promise<ArticleReadsStoresUnderTest> {
+  const users = createUserStore(db);
+  return {
+    articleReads: createArticleReadsStore(db),
+    async makeUser() {
+      const id = crypto.randomUUID();
+      const user = await users.createUser({
+        googleSub: `contract-real-ar-${id}`,
+        email: `${id}@contracts.test`,
+        name: "Contract User",
+      });
+      return user.id;
+    },
+  };
+}
+
+describeArticleReadsContract(makeArticleReadsStores, {
+  label: "real Postgres",
+});

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkoutType } from "../../../domain/types.js";
+import type { ArticleReadsStore } from "../articleReads.js";
 import type { BaselinesStore } from "../baselines.js";
 import type { LogInput, LogsStore } from "../logs.js";
 import type { PlanStateStore } from "../planState.js";
@@ -587,6 +588,57 @@ export function describeStoreContracts(
         expect(await stores.testHistory.list(userA)).toHaveLength(1);
         expect(await stores.testHistory.list(userB)).toHaveLength(0);
       });
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6H Task 1: article_reads gets its own small contract suite rather
+// than joining StoresUnderTest above — the fake implementation doesn't
+// exist yet (Task 2 adds it to testing/fakes.ts and wires it in over
+// there), so this deliberately takes its own minimal `makeStores` shape
+// instead of the big one, and only contracts.real.integration.test.ts calls
+// it for now. Task 2 imports this same export and calls it a second time
+// from contracts.fake.test.ts once the fake exists — no change needed here.
+// ---------------------------------------------------------------------------
+
+export interface ArticleReadsStoresUnderTest {
+  articleReads: ArticleReadsStore;
+  makeUser: () => Promise<string>;
+}
+
+export function describeArticleReadsContract(
+  makeStores: () => Promise<ArticleReadsStoresUnderTest>,
+  opts: { label: string },
+) {
+  describe(`article reads store contracts (${opts.label})`, () => {
+    it("list returns [] for a user with no reads", async () => {
+      const stores = await makeStores();
+      const userId = await stores.makeUser();
+      expect(await stores.articleReads.list(userId)).toEqual([]);
+    });
+
+    it("markRead then list round-trips the slug", async () => {
+      const stores = await makeStores();
+      const userId = await stores.makeUser();
+      await stores.articleReads.markRead(userId, "workout-types");
+      expect(await stores.articleReads.list(userId)).toEqual(["workout-types"]);
+    });
+
+    it("markRead is idempotent: a repeated call doesn't duplicate the slug", async () => {
+      const stores = await makeStores();
+      const userId = await stores.makeUser();
+      await stores.articleReads.markRead(userId, "baselines");
+      await stores.articleReads.markRead(userId, "baselines");
+      expect(await stores.articleReads.list(userId)).toEqual(["baselines"]);
+    });
+
+    it("reads are scoped per user", async () => {
+      const stores = await makeStores();
+      const userA = await stores.makeUser();
+      const userB = await stores.makeUser();
+      await stores.articleReads.markRead(userA, "pain-scale");
+      expect(await stores.articleReads.list(userB)).toEqual([]);
     });
   });
 }

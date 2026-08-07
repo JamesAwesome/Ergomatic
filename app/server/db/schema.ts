@@ -6,6 +6,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -161,4 +162,21 @@ export const testHistory = pgTable(
       .defaultNow(),
   },
   (t) => [index("test_history_user_id_idx").on(t.userId)],
+);
+
+// --- Phase 6H: News read state ------------------------------------------
+
+// No FK to content: articles are bundled in the client, so a slug unknown
+// to the current bundle is simply ignored at display time (a rollback
+// keeps its reads). Composite PK makes markRead an idempotent no-op insert.
+export const articleReads = pgTable(
+  "article_reads",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.slug] })],
 );

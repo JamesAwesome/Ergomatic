@@ -4,11 +4,12 @@ import {
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
-import { preferences } from "../db/schema.js";
+import { articleReads, preferences } from "../db/schema.js";
 import { createUserStore } from "../auth/users.js";
+import { createArticleReadsStore } from "./articleReads.js";
 import { createBaselinesStore } from "./baselines.js";
 import { createWorkoutsStore, type NewWorkoutInput } from "./workouts.js";
 import { createLogsStore } from "./logs.js";
@@ -760,6 +761,64 @@ describe("domain stores against real Postgres", () => {
       });
       expect(await s.list(other.id)).toHaveLength(0);
       expect(await s.list(fresh.id)).toHaveLength(1);
+    });
+  });
+
+  describe("articleReads store", () => {
+    const store = () => createArticleReadsStore(db);
+
+    // Raw select, bypassing the store, so the idempotency case below can
+    // prove read_at genuinely didn't move on the second markRead.
+    async function readAtOf(userId: string, slug: string): Promise<Date> {
+      const [row] = await db
+        .select({ readAt: articleReads.readAt })
+        .from(articleReads)
+        .where(
+          and(eq(articleReads.userId, userId), eq(articleReads.slug, slug)),
+        );
+      return row.readAt;
+    }
+
+    it("lists nothing for a user with no reads", async () => {
+      // First test in this describe: userA has had no article_reads writes
+      // yet, so this holds even though userA is shared across the file.
+      expect(await store().list(userA)).toStrictEqual([]);
+    });
+
+    // Uses a fresh user (not userA) so this test's exact-list assertion
+    // can't be contaminated by reads other tests in this describe give
+    // userA — the store itself is scoped per user regardless.
+    it("markRead then list round-trips the slug", async () => {
+      const s = store();
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "article-reads-roundtrip",
+        email: "ar-roundtrip@stores.test",
+        name: "AR Roundtrip",
+      });
+      await s.markRead(fresh.id, "workout-types");
+      expect(await s.list(fresh.id)).toStrictEqual(["workout-types"]);
+    });
+
+    it("markRead is idempotent and keeps the original read_at", async () => {
+      const s = store();
+      const users = createUserStore(db);
+      const fresh = await users.createUser({
+        googleSub: "article-reads-idempotent",
+        email: "ar-idempotent@stores.test",
+        name: "AR Idempotent",
+      });
+      await s.markRead(fresh.id, "baselines");
+      const before = await readAtOf(fresh.id, "baselines");
+      await s.markRead(fresh.id, "baselines");
+      expect(await s.list(fresh.id)).toStrictEqual(["baselines"]);
+      expect(await readAtOf(fresh.id, "baselines")).toStrictEqual(before);
+    });
+
+    it("reads are per-user", async () => {
+      const s = store();
+      await s.markRead(userA, "pain-scale");
+      expect(await s.list(userB)).toStrictEqual([]);
     });
   });
 });
