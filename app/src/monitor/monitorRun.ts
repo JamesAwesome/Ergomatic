@@ -317,8 +317,19 @@ function monitorRunState(): RecordState {
  * gap that used to make this cell ordinarily reachable** — both halves of
  * the cross-clear rule now ship (`createMonitorRun` above clears any
  * `SessionRun`; `WorkoutDetail`'s `startSession` clears any `MonitorRun`),
- * so neither door leaves the other side's record standing and no walk
- * through the app's own screens should produce two live records. The
+ * so neither door leaves the other side's record standing.
+ *
+ * **One walk through the app's own screens still reaches this cell,
+ * though** (Task 2's review, M-2 — an earlier draft of this comment said
+ * none did, which was wrong): the cross-clears guard DESTRUCTION, and
+ * `Countdown.tsx` CREATES a `SessionRun` with no clear of its own, reachable
+ * by deep link (`/session/confirm`, `/session/countdown`) or from
+ * `ConfirmTargets`. A rower who takes that route mid-connected-session
+ * leaves both records live. Nothing is destroyed by it, and no clear was
+ * added at Countdown on purpose (that would be a new unguarded destruction
+ * path, the exact thing this phase closed) — the two record types own their
+ * own sides, and `useMonitorSession` deliberately does not consult this
+ * function for that reason, tracking its own record instead. The
  * tie-break stays anyway, and this table keeps pinning it: a half-completed
  * write, a localStorage edited by hand, or records left by an older build
  * can all still present this shape, and "unreachable by design" has never
