@@ -123,8 +123,8 @@ Commit: `fix: two doors, one lock — no silent destruction in either direction`
 - Create: `app/domain/judge.ts` (+test), `app/src/components/
   IntervalSegments.tsx`, `app/src/components/UpNextStrip.tsx`
   (+tests) — extracted with NEUTRAL VALUE PROPS
-- Modify: `app/src/workout/Timer.tsx` (consumes the extracted pair),
-  `app/src/components/TimerTargets.tsx` (variant prop: ink targets +
+- Modify: `app/src/session/Timer.tsx` (consumes the extracted pair),
+  `app/src/session/TimerTargets.tsx` (variant prop: ink targets +
   static third line + judged-actual slot; default variant renders
   byte-identical DOM), `docs/design/DEVIATIONS.md` (tolerance
   constants row; Phase-9 pointer)
@@ -247,8 +247,14 @@ table; the copy-review list is the handoff's §2.
 Failing tests: each state renders from its phase+error fixture; state
 6 renders `structure-mismatch`'s triple in DETAIL; Try-again inertness;
 the 1.2s dwell auto-advance (fake timers); Connect button's three
-states (available/BT-off/absent-transport). e2e: the interstitial walk
-fake-driven. Full gates. Commit:
+states (available/BT-off/absent-transport). **Inherited from Task 2's
+review:** the Connect confirm's e2e (the guard shipped unmounted —
+mounting it here owns its end-to-end proof); the "Connect anyway"
+string reviewed against the handoff's copy list (it is OUR invention,
+flagged); and the L-1 press-time-read test (Task 2's guard must read
+records AT PRESS, not at mount — a useMemo hoist currently survives
+every test; write the one test that kills it). e2e: the interstitial
+walk fake-driven. Full gates. Commit:
 `feat: seven states drawn, four built, three honestly declined`.
 
 ---
