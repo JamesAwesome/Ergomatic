@@ -1067,11 +1067,19 @@ describe("createFakeTransport: a machine with a workout already loaded ACCEPTS a
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
     expect(acks.map(frameStatusOf)).toStrictEqual(["ok"]);
-    // Item 15's own byte, whole — this is the frame the machine sent, not
-    // merely a status class that parses as an accept. The fake's toggle
-    // starts LOW, so this first ack is the toggle-high partner only after
-    // one prior frame; here it is the very first, hence `0x01` rather than
-    // item 15's `0x81`. What matters is the STATUS nibble, asserted above.
+    // Item 15's DECODE, all three fields, not merely a status class that
+    // parses as an accept: its `f1 81 76 01 13 e5 f2` decodes to
+    // previous-frame-OK + slave READY + frame-toggle. The toggle is the one
+    // field that cannot match here — this fake's toggle starts LOW and item
+    // 15's byte was the high partner of a pair — so it is pinned as `false`
+    // rather than glossed over ([CSAFE-DEF] p.11 Table 9: the toggle belongs
+    // to the frame counter, never to the outcome).
+    expect(acks[0]).toMatchObject({
+      kind: "parsed",
+      frameStatus: "ok",
+      slaveState: "ready",
+      frameToggle: false,
+    });
     expect(fake.loadedIntervals()).toBeNull(); // terminate loads nothing
   });
 });
@@ -1588,6 +1596,8 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
     const splits: Uint8Array[] = [];
     fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
     fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
 
     fake.tick(0);
     // No tick between the prepare and the frames: the whole sequence lands
@@ -1599,7 +1609,15 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
     // It ARMED — every checkpoint this codec reads says success — holding a
     // workout with nothing in it. `0`, never `null`: something is loaded.
     expect(fake.loadedIntervals()).toBe(0);
+
+    // §19.13's headline is "armed AND empty" — the arm half needs pinning
+    // too (review LOW-1), or a fake that suppressed the arm outright would
+    // satisfy every other assertion here and only be caught downstream as
+    // a five-second hang.
     fake.deliverArmedNow();
+    expect(
+      generals.slice(1).map((b) => decodeGeneral(b).workoutState),
+    ).toStrictEqual([WORKOUTSTATE_WAITTOBEGIN]);
 
     // Rowed past the scripted boundary: nothing on either characteristic,
     // ever (hardware: 108.4 m past a 100 m interval, no boundary at all).
@@ -1629,6 +1647,35 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
     fake.deliverArmedNow();
     fake.tick(5000);
     expect(splits).toHaveLength(1);
+  });
+
+  it("a bare programming sequence behind an explicit terminate() does NOT inherit a previous empty arm (review LOW-3/I-7)", async () => {
+    // `onArmedFrameComplete` deliberately rewinds `phase` and both
+    // programming cursors so a whole new sequence can follow the app's own
+    // `terminate()` with no prepare in front of it. The empty-arm flag has
+    // to be rewound with them, or the machine stays poisoned by a sequence
+    // that finished before the terminate — a state no hardware reading
+    // supports, and one that would silently make a future test arm empty
+    // for the wrong reason.
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [rowingAt(0, 10)],
+    });
+
+    fake.tick(0);
+    await sendPrepare(fake);
+    await sendProgram(fake, PROGRAM); // lands while rowing: arms EMPTY
+    expect(fake.loadedIntervals()).toBe(0);
+    fake.deliverArmedNow();
+
+    // An explicit terminate() — the machine now reads `terminated`, and is
+    // programmable again (§19.4/§19.5).
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    await sendProgram(fake, PROGRAM);
+
+    expect(fake.loadedIntervals()).toBe(PROGRAM.intervals.length);
   });
 
   it("the empty arm is keyed on the machine's STATE, not on how soon the frames arrive: any number of ticks can pass and a still-rowing machine still arms empty", async () => {
