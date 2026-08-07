@@ -13,6 +13,7 @@ import {
   buildProgrammingSequence,
   buildSampleRateConfig,
   buildTerminate,
+  expectedArmedStructure,
   Pm5EncodeError,
 } from "./commands.js";
 
@@ -401,5 +402,121 @@ describe("buildProgrammingSequence: M-9 — be32/be16 reject what compileProgram
 describe("buildSampleRateConfig", () => {
   it("writes the fastest documented rate, 0x03 = 100ms (BLE doc p.16)", () => {
     expect(buildSampleRateConfig()).toStrictEqual(Uint8Array.from([0x03]));
+  });
+});
+
+describe("expectedArmedStructure (fix-3 Task 4 — what 0x0031 must read back)", () => {
+  // The values below are SESSION 4a's own readings (2026-08-07, PM5
+  // 432331249; the SDD ledger's `## SESSION 4a` block, ANSWERING
+  // interface-notes.md §17 item 12), restated as literals rather than
+  // derived from this module's constants — a test that recomputed the
+  // prediction the same way the implementation does would agree with a
+  // wrong scale just as happily as a right one.
+  function timeProgram(seconds: number, restSeconds = 30): WorkoutProgram {
+    return {
+      intervals: [
+        {
+          kind: "time",
+          value: seconds,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds,
+        },
+        {
+          kind: "time",
+          value: 999,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds,
+        },
+      ],
+    };
+  }
+
+  it("a TIME interval 0 reads back seconds x 100 at duration identifier 0 (4a: 2x60s r30 -> 6000/Time)", () => {
+    expect(expectedArmedStructure(timeProgram(60))).toStrictEqual({
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    });
+  });
+
+  it("a DISTANCE interval 0 reads back WHOLE METRES at duration identifier 128 (4a: 3x500m r60 -> 500/Distance, read/write symmetric)", () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "distance",
+          value: 500,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 60,
+        },
+      ],
+    };
+    expect(expectedArmedStructure(program)).toStrictEqual({
+      workoutType: 8,
+      workoutDurationRaw: 500,
+      workoutDurationType: 128,
+    });
+  });
+
+  it("rest-0 does NOT change the type: still 8, never a rest-less sibling ordinal (4a's third row is the whole reason the type check is usable)", () => {
+    expect(expectedArmedStructure(timeProgram(60, 0))).toStrictEqual(
+      expectedArmedStructure(timeProgram(60, 30)),
+    );
+    expect(expectedArmedStructure(timeProgram(60, 0)).workoutType).toBe(8);
+  });
+
+  it("only INTERVAL 0 is predicted — a later interval's own duration never reaches 0x0031", () => {
+    // The second interval above is 999s (99900 raw); the prediction must
+    // ignore it entirely. This is the assertion that dies if the
+    // implementation ever reaches for `intervals.at(-1)` or a sum.
+    expect(expectedArmedStructure(timeProgram(60)).workoutDurationRaw).toBe(
+      6000,
+    );
+  });
+
+  it("mirrors the ENCODER exactly: the predicted raw duration is the same number buildIntervalBlock puts on the wire", () => {
+    // The drift guard. `SET_WORKOUTDURATION` (0x03) is followed by its
+    // 5-byte payload — the duration identifier, then a big-endian 32-bit
+    // value — inside interval 0's block, so the prediction and the bytes
+    // can be compared directly rather than trusted to agree.
+    const program = timeProgram(60);
+    const expected = expectedArmedStructure(program);
+    const chunks = buildProgrammingSequence(program)[0]!;
+    const wire = chunks.reduce<number[]>((acc, c) => [...acc, ...c], []);
+    const at = wire.findIndex(
+      (b, i) => b === 0x03 && wire[i + 1] === 0x05 && wire[i - 1] === 0x00,
+    );
+    expect(at).toBeGreaterThan(-1);
+    expect(wire[at + 2]).toBe(expected.workoutDurationType);
+    const encoded =
+      (wire[at + 3]! << 24) |
+      (wire[at + 4]! << 16) |
+      (wire[at + 5]! << 8) |
+      wire[at + 6]!;
+    expect(encoded).toBe(expected.workoutDurationRaw);
+  });
+
+  it("an interval-less program predicts the EMPTY ARM's own duration reading (0 at identifier 128) — the shape 4a captured on the wire", () => {
+    // Not constructible through `compileProgram`, but `WorkoutProgram` is
+    // a plain shape a persisted-replay path (`monitorRun.ts`'s shallow
+    // validator) could hand over — the prediction must be defined for it
+    // rather than reading `undefined` into a comparison.
+    expect(expectedArmedStructure({ intervals: [] })).toStrictEqual({
+      workoutType: 8,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
+    });
+  });
+
+  it("a real library workout (Sea Fret): interval 0 is the 300s warmup, so the readback owed is 30000/Time", () => {
+    const program = realProgram("Sea Fret");
+    expect(program.intervals[0]).toMatchObject({ kind: "time", value: 300 });
+    expect(expectedArmedStructure(program)).toStrictEqual({
+      workoutType: 8,
+      workoutDurationRaw: 30000,
+      workoutDurationType: 0,
+    });
   });
 });

@@ -351,6 +351,72 @@ export function buildProgrammingSequence(p: WorkoutProgram): Uint8Array[][] {
   return buildFrameGroups(units).map(packGroup);
 }
 
+/** The three 0x0031 (General Status) fields a healthy PM5 reads back for a
+ *  program it has actually armed — `parse.ts`'s `workoutType`,
+ *  `workoutDurationRaw` and `workoutDurationType`, decoded from offsets 6,
+ *  14-16 (little-endian) and 17 (interface-notes.md §10). */
+export interface ArmedStructure {
+  workoutType: number;
+  workoutDurationRaw: number;
+  workoutDurationType: number;
+}
+
+/**
+ * What 0x0031 must read back once `p` is genuinely armed — the READ-side
+ * prediction `src/monitor/driver.ts`'s `verifyArmed` compares the machine's
+ * own report against (fix-3 Task 4, design spec Stage 2).
+ *
+ * **HARDWARE-CONFIRMED, SESSION 4a (2026-08-07, PM5 432331249)** — the
+ * reading that closed interface-notes.md §17 item 12, recorded in the SDD
+ * ledger's own `## SESSION 4a` block until Task 6 files it as §18:
+ * - `workoutType` reads back `WORKOUTTYPE_VARIABLE_INTERVAL` (`8`) and is
+ *   **STABLE at 8 across all three shapes** — TIME (2×60s r30), DISTANCE
+ *   (3×500m r60) and rest-0 (2×60s r0). There is no normalization to a
+ *   rest-less sibling ordinal, so the type is a usable check, not noise.
+ * - the duration pair mirrors **INTERVAL 0** in the SAME units this file
+ *   ENCODES: a time interval reads `seconds × 100` at duration identifier
+ *   `0` (60s → 6000, the 0.01 s/lsb scale), a distance interval reads WHOLE
+ *   METRES at identifier `128` (500 → 500). Read/write symmetry was an
+ *   assumption before 4a; it is an observation now.
+ * - the fields REFRESH while the machine is merely armed — no rowing is
+ *   needed for the readback to be current.
+ *
+ * Lives HERE, next to `buildIntervalBlock`, and reuses that encoder's OWN
+ * constants rather than restating `8`/`0`/`128`/`100` anywhere else: the
+ * prediction and the bytes we put on the wire can then never drift apart
+ * (a changed scale breaks both sides at once, which is the only way this
+ * check stays honest). It is also the layering rule — `pm5/` is the only
+ * home of Concept2 ordinals; `src/monitor/driver.ts` consumes decoded
+ * fields and this predicted triple, never a raw offset or magic number.
+ *
+ * A program with NO intervals cannot be predicted from (and cannot be
+ * built either — `buildProgrammingSequence` would emit a bare screen-state
+ * unit): the duration pair falls back to the EMPTY-ARM reading session 4a
+ * captured on the wire, `0` at identifier `128`, which is exactly what such
+ * a program deserves to be compared against.
+ */
+export function expectedArmedStructure(p: WorkoutProgram): ArmedStructure {
+  const first = p.intervals[0];
+  if (!first) {
+    return {
+      workoutType: WORKOUTTYPE_VARIABLE_INTERVAL,
+      workoutDurationRaw: 0,
+      workoutDurationType: WORKOUT_DURATION_IDENTIFIER_DISTANCE,
+    };
+  }
+  return {
+    workoutType: WORKOUTTYPE_VARIABLE_INTERVAL,
+    workoutDurationRaw:
+      first.kind === "time"
+        ? first.value * WORKOUT_DURATION_TIME_SCALE
+        : first.value,
+    workoutDurationType:
+      first.kind === "time"
+        ? WORKOUT_DURATION_IDENTIFIER_TIME
+        : WORKOUT_DURATION_IDENTIFIER_DISTANCE,
+  };
+}
+
 /**
  * The documented terminate command (interface-notes.md §13, CSAFE doc
  * p.89): a single `SET_SCREENSTATE`(TERMINATEWORKOUT) command in its own

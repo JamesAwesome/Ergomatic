@@ -190,12 +190,14 @@ export interface MonitorDriver {
    * (`waitForPrepareSettle`, design spec §1b, fix-3 Task 2) that holds the
    * real send until the machine reports `armed` (plus one further tick)
    * whenever it caught a RUNNING piece, closing the §18-session-3 hazard in
-   * CI. Still OPEN on hardware, on top of Verdict (a) itself: the
-   * structural readback that would catch an empty arm even if the settle's
-   * own bound expires (design spec Stage 2, fix-3 Tasks 3+, not built by
-   * Task 2) is unbuilt, and session 4a/4b's hardware validation of both
-   * halves has not run — 7B's "prove the monitor idle before programming"
-   * still stands until it does.
+   * CI. `verifyArmed` additionally performs the STRUCTURAL READBACK that
+   * catches an empty arm even when the settle's own bound expires (fix-3
+   * Task 4, built on session 4a's hardware readings — interface-notes.md
+   * §17 item 12, now ANSWERED): a call that arms with anything other than
+   * the program just sent rejects `"structure-mismatch"` rather than
+   * resolving. Still OPEN on top of Verdict (a) itself: session 4b's own
+   * hardware validation of the pair has not run — 7B's "prove the monitor
+   * idle before programming" still stands until it does.
    */
   program(p: WorkoutProgram): Promise<void>;
   terminate(): Promise<void>; // the documented terminate command — no start() exists

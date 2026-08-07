@@ -41,11 +41,20 @@ import type { MonitorEventLog } from "../src/monitor/eventLog";
 import type { WorkoutProgram } from "../domain/monitor/program";
 
 /**
- * Fix-round 1, F4: without a `verifyTicks` bound, `program()`'s
- * verification phase waits forever — the exact hardware case laptop
- * session 1 hit (a `0x01` ack for a total no-op, D2) would leave this
- * script's "Program test workout" button spinning in total silence, with
- * nothing to press and nothing in the log explaining why.
+ * Fix-round 1, F4: the bound that stops `program()`'s verification phase
+ * waiting forever — the exact hardware case laptop session 1 hit (a `0x01`
+ * ack for a total no-op, D2) would otherwise leave this script's "Program
+ * test workout" button spinning in total silence, with nothing to press and
+ * nothing in the log explaining why.
+ *
+ * **REDUNDANT since fix-3 Task 4, deliberately kept.** `DriverOptions.
+ * verifyTicks` now has a DEFAULT — 20, this exact number, promoted out of
+ * here into `driver.ts`'s own `DEFAULT_VERIFY_TICKS` when the verification
+ * phase gained its structure predicate (an unbounded verify under one is a
+ * hang, not a leniency). Passing it explicitly below changes no behaviour;
+ * it keeps the reasoning attached to the call site that first needed it,
+ * and keeps the lab's own budget visible in the file an operator actually
+ * reads before a hardware session.
  *
  * 20 ticks. The laptop session observed GENERAL_STATUS notifications
  * arriving at roughly 2/second in practice (interface-notes.md §18) —

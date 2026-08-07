@@ -82,6 +82,7 @@ import {
   buildGetErrorType,
   buildProgrammingSequence,
   buildTerminate,
+  expectedArmedStructure,
 } from "../../../domain/monitor/pm5/commands.js";
 import { reassemble } from "../../../domain/monitor/pm5/framer.js";
 import { toMachineIndex } from "../../../domain/monitor/pm5/intervalIndex.js";
@@ -433,11 +434,13 @@ export interface FakeControls {
    *  **`0` is the EMPTY ARM** (Task 3, §19.13) — a program that landed on a
    *  still-running machine armed with no interval structure at all: the
    *  machine holds a workout (never `null` again) and that workout has zero
-   *  intervals. This is the fake's structure-zeroed introspection until
-   *  Stage 2 puts the same fact on the wire (design spec Stage 2: the
-   *  status stream carries the ACCEPTED program's structure, and an empty
-   *  arm's reads back zeroed) — the shape the readback will catch, modelled
-   *  here so there is something to catch. */
+   *  intervals. This is the fake's INTROSPECTION-ONLY model of the empty
+   *  arm: the driver's own structural readback exists now (`verifyArmed`,
+   *  fix-3 Task 4) and would reject it, but this fake does not yet put the
+   *  zeroed structure on its WIRE — its 0x0031 stream reports the workout
+   *  `FakeScript.program` names regardless (`statusBundle`'s own comment).
+   *  Closing that gap, so the empty arm is detectable end to end rather
+   *  than only assertable through this method, is Task 5's job. */
   loadedIntervals(): number | null;
 }
 
@@ -514,14 +517,29 @@ function statusBundle(
     general: {
       elapsedSeconds: e.elapsedSeconds,
       distanceMeters: e.distanceMeters,
-      workoutType: 8, // WORKOUTTYPE_VARIABLE_INTERVAL (interface-notes.md §11)
       intervalType: isDistance ? 1 : 0,
       workoutState: e.workoutState,
       rowingState: 0,
       strokeState: 0,
       totalWorkDistanceMeters: e.distanceMeters,
-      workoutDurationRaw: 0,
-      workoutDurationType: 0,
+      // 0x0031's STRUCTURE fields — `workoutType` plus the interval-0
+      // duration pair — now reflect the workout this machine is holding,
+      // in the units session 4a confirmed on real hardware
+      // (`expectedArmedStructure`, `pm5/commands.ts`, carries the readings).
+      // Before fix-3 Task 4 they were hardcoded `8 / 0 / 0`, which was fine
+      // only while `verifyArmed` looked at the state word alone; the moment
+      // the driver READS these fields back, a fake that reports a duration
+      // it does not hold is a fake that cannot arm.
+      //
+      // **This is the MINIMUM Task 4 needs and no more.** `program` here is
+      // still `FakeScript.program` (the pre-loaded/expected one), not a
+      // separately-tracked ACCEPTED program, and an EMPTY arm
+      // (`armedEmpty`) still reports this same structure rather than the
+      // zeroed one hardware showed — modelling those two, plus the
+      // one-tick payload lag and the end-to-end detection rows, is Task
+      // 5's own job (plan: "the fake carries structure; CI proves
+      // detection").
+      ...expectedArmedStructure(program),
       dragFactor: 130,
     },
   };
@@ -592,18 +610,26 @@ function boundaryBundle(
   };
 }
 
-/** The fixed WAITTOBEGIN bundle the fake sends the instant programming
- *  finishes (design spec §2: "armed" = WAITTOBEGIN) — zeroed progress, no
- *  interval active yet, and no split has ever completed (`lastSplit` is
- *  always `{0, 0}` here — nothing to root it at before the session's own
- *  first interval even starts). */
-function armedBundle(): {
+/** The WAITTOBEGIN bundle the fake sends the instant programming finishes
+ *  (design spec §2: "armed" = WAITTOBEGIN) — zeroed progress, no interval
+ *  active yet, and no split has ever completed (`lastSplit` is always
+ *  `{0, 0}` here — nothing to root it at before the session's own first
+ *  interval even starts).
+ *
+ *  Takes the workout the machine is holding (fix-3 Task 4). It used to pass
+ *  `{ intervals: [] }`, which was harmless while `statusBundle` only read
+ *  the program for its `intervalType` byte — but that placeholder now
+ *  decides the 0x0031 STRUCTURE fields too, and an empty program's
+ *  prediction is precisely the EMPTY-ARM reading (`workoutType=8`,
+ *  duration `0`/Distance). A fake that armed with that would fail its own
+ *  driver's readback on every single test. */
+function armedBundle(program: WorkoutProgram): {
   general: GeneralStatus;
   as1: AdditionalStatus1;
   as2: AdditionalStatus2;
 } {
   return statusBundle(
-    { intervals: [] },
+    program,
     {
       atMs: 0,
       kind: "status",
@@ -829,7 +855,7 @@ export function createFakeTransport(
   }
 
   function deliverArmedBundle(): void {
-    const { general, as1, as2 } = armedBundle();
+    const { general, as1, as2 } = armedBundle(script.program);
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
     notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
