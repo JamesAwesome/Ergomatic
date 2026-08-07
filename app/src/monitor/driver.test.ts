@@ -5303,6 +5303,50 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     await finishRealSend(transport, pending);
   });
 
+  it("expiry with 'armed' arriving ON the final budgeted tick does not contradict itself (whole-branch review M1, proven: the entry used to read 'no \"armed\" state observed (last state: armed)')", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 3 });
+
+    primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+    const afterPrepare = sentCount(transport);
+
+    // Two non-armed ticks, then "armed" ITSELF on the third (final
+    // budgeted) tick — the exact one-tick-early shape M1 proved: `ticks`
+    // increments before this same arrival's own state is checked, so the
+    // bound fires on the tick that FIRST reports "armed", one short of the
+    // +1 grace `armedSeen` would otherwise earn on a LATER arrival.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE),
+    );
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await waitUntil(() => sentCount(transport) > afterPrepare);
+
+    // Behaviour is unchanged: still expires and proceeds without
+    // confirmation rather than granting the grace tick.
+    const expired = log
+      .entries()
+      .filter((e) => e.kind === "prepare-settle-expired");
+    expect(expired).toHaveLength(1);
+    expect(sentCount(transport)).toBeGreaterThan(afterPrepare);
+    // The instrument must not lie: it may never claim no "armed" state was
+    // observed in the same entry that names the last state as "armed".
+    expect(expired[0]!.detail).not.toMatch(/no "armed" state observed/);
+    expect(expired[0]!.detail).toContain('"armed"');
+
+    await finishRealSend(transport, pending);
+  });
+
   it("prepareSettleTicks: 0 disables the wait entirely, even from a rowing state (session 4b's own detection row)", async () => {
     const transport = stubTransport();
     const log = createEventLog();

@@ -1550,9 +1550,21 @@ export function createPm5Driver(
           if (pendingPrepareSettle.ticks >= pendingPrepareSettle.ticksNeeded) {
             const { resolve, ticks } = pendingPrepareSettle;
             pendingPrepareSettle = null;
+            // Whole-branch review M1: `ticks` is incremented above BEFORE
+            // this same arrival's own state is checked, so the bound can be
+            // hit on the very tick that reports "armed" — the one case
+            // where the generic "no armed state observed" headline would be
+            // false (`armedSeen` is only set below, on a tick that never
+            // gets here). Behaviour is unchanged (this still expires rather
+            // than granting the +1 grace — that grace is earned by an
+            // EARLIER tick's `armedSeen`, not this one); only the message
+            // is branched, so it never asserts an absence it just
+            // contradicted in the same breath.
             log.record(
               "prepare-settle-expired",
-              `${ticks} tick(s) elapsed with no "armed" state observed (last state: ${settleState}) — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`,
+              settleState === "armed"
+                ? `${ticks} tick(s) elapsed; "armed" was first observed on this very (final) tick — one short of the required +1 grace tick — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`
+                : `${ticks} tick(s) elapsed with no "armed" state observed (last state: ${settleState}) — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`,
             );
             resolve();
           } else if (settleState === "armed") {
@@ -1928,6 +1940,25 @@ export function createPm5Driver(
    * "detection row") also resolves immediately, same "escape hatch" shape
    * as `settleAfterTerminate`'s own `ticksNeeded <= 0` branch.
    *
+   * Task 2 review M2, landed: this wait does NOT borrow `settleTicks`'s
+   * "blind ticks after the ack" discipline (`DriverOptions.settleTicks`'s
+   * own doc comment — that wait counts ticks regardless of what the
+   * machine reports, precisely because its ack means QUEUED, not APPLIED).
+   * This wait instead trusts the very FIRST `"armed"` reading it sees after
+   * the prepare's own ack, even though that ack carries the identical
+   * "queued, not applied" caveat (CSAFE-DEF p.65) — so an `armed` tick CAN
+   * predate the PM actually acting on OUR terminate (Probe F: the piece
+   * ends naturally just before dispatch, `raw` still reads stale `rowing`
+   * so this gate arms, the PM's OWN auto-cycle reaches `armed` while our
+   * terminate is still queued, and armed+1 releases before the terminate is
+   * even applied). Deliberate, not an oversight: unlike `terminate()`,
+   * which has no downstream check of its own and so needs `settleTicks`'
+   * blind buffer as its only defence, this wait already has the structural
+   * readback (`verifyArmed`, fix-3 Task 4) as the actual net underneath it
+   * — a predating `armed` reading here is caught the same way a
+   * terminated/idle-skipping one would be. Narrow and unobserved; session
+   * 4b's watch-list below carries it.
+   *
    * End condition, once armed: an `"armed"` tick FOLLOWED BY one further
    * tick of ANY state — the same "never trust an already-cached tick"
    * discipline `verifyArmed` already applies, here applied to the settle's
@@ -1944,7 +1975,12 @@ export function createPm5Driver(
    * predicate, built by fix-3 Task 4 — it now really is a net, not a
    * planned one) is the actual net under this wait, so a `program()` that
    * never resolves would trade a survivable, detectable hazard for an
-   * unsurvivable one.
+   * unsurvivable one. (Whole-branch review M1: the counter above increments
+   * BEFORE this same arrival's own state is checked, so the bound can be
+   * hit on the very tick that FIRST reports `armed` — one short of the +1
+   * grace this doc comment describes above. The log message branches on
+   * that case rather than claiming "no armed state observed" against an
+   * arrival that just reported one.)
    *
    * Session 4a VALIDATED this wait twice at the exact session-3 repro:
    * `prepare-settled` reported "armed observed on tick 4" on both runs (the
