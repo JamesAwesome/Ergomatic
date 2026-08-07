@@ -15,9 +15,7 @@ import { createPlanStateStore } from "../planState.js";
 import { createPreferencesStore } from "../preferences.js";
 import { createTestHistoryStore } from "../testHistory.js";
 import {
-  describeArticleReadsContract,
   describeStoreContracts,
-  type ArticleReadsStoresUnderTest,
   type StoresUnderTest,
 } from "./storeContracts.js";
 
@@ -50,6 +48,7 @@ async function makeStores(): Promise<StoresUnderTest> {
     planState: createPlanStateStore(db),
     preferences: createPreferencesStore(db),
     testHistory: createTestHistoryStore(db),
+    articleReads: createArticleReadsStore(db),
     async makeUser() {
       const id = crypto.randomUUID();
       const user = await users.createUser({
@@ -67,23 +66,3 @@ async function makeStores(): Promise<StoresUnderTest> {
 }
 
 describeStoreContracts(makeStores, { label: "real Postgres" });
-
-async function makeArticleReadsStores(): Promise<ArticleReadsStoresUnderTest> {
-  const users = createUserStore(db);
-  return {
-    articleReads: createArticleReadsStore(db),
-    async makeUser() {
-      const id = crypto.randomUUID();
-      const user = await users.createUser({
-        googleSub: `contract-real-ar-${id}`,
-        email: `${id}@contracts.test`,
-        name: "Contract User",
-      });
-      return user.id;
-    },
-  };
-}
-
-describeArticleReadsContract(makeArticleReadsStores, {
-  label: "real Postgres",
-});

@@ -31,6 +31,16 @@ export interface StoresUnderTest {
   preferences: PreferencesStore;
   testHistory: TestHistoryStore;
   /**
+   * Phase 6H Task 1: optional because the fake doesn't exist yet
+   * (testing/fakes.ts gets one in Task 2, which also adds this field to
+   * contracts.fake.test.ts's `makeStores()`). Optional — rather than
+   * required — is exactly what lets that file keep compiling untouched
+   * today: the "article reads" describe block below skips itself at
+   * runtime when this is absent, so contracts.fake.test.ts stays green and
+   * starts actually exercising the cases the moment Task 2 adds the field.
+   */
+  articleReads?: ArticleReadsStore;
+  /**
    * Registers a brand-new user and returns its id (real: inserts into
    * `users`; fake: mints and remembers an id). Every case below starts from
    * a fresh user nobody else has touched, so userId-scoping can be asserted
@@ -589,56 +599,50 @@ export function describeStoreContracts(
         expect(await stores.testHistory.list(userB)).toHaveLength(0);
       });
     });
-  });
-}
 
-// ---------------------------------------------------------------------------
-// Phase 6H Task 1: article_reads gets its own small contract suite rather
-// than joining StoresUnderTest above — the fake implementation doesn't
-// exist yet (Task 2 adds it to testing/fakes.ts and wires it in over
-// there), so this deliberately takes its own minimal `makeStores` shape
-// instead of the big one, and only contracts.real.integration.test.ts calls
-// it for now. Task 2 imports this same export and calls it a second time
-// from contracts.fake.test.ts once the fake exists — no change needed here.
-// ---------------------------------------------------------------------------
+    // Phase 6H Task 1: `articleReads` is optional on StoresUnderTest (see
+    // the interface above) because the fake doesn't exist until Task 2 —
+    // every `it` below guards on it and returns early when absent, so
+    // contracts.fake.test.ts runs this describe today with each case a
+    // documented no-op skip, then starts asserting for real the moment
+    // Task 2 adds the field to its `makeStores()`. Real Postgres already
+    // provides it (contracts.real.integration.test.ts), so the cases are
+    // live there now.
+    describe("article reads", () => {
+      it("list returns [] for a user with no reads", async () => {
+        const stores = await makeStores();
+        if (!stores.articleReads) return;
+        const userId = await stores.makeUser();
+        expect(await stores.articleReads.list(userId)).toEqual([]);
+      });
 
-export interface ArticleReadsStoresUnderTest {
-  articleReads: ArticleReadsStore;
-  makeUser: () => Promise<string>;
-}
+      it("markRead then list round-trips the slug", async () => {
+        const stores = await makeStores();
+        if (!stores.articleReads) return;
+        const userId = await stores.makeUser();
+        await stores.articleReads.markRead(userId, "workout-types");
+        expect(await stores.articleReads.list(userId)).toEqual([
+          "workout-types",
+        ]);
+      });
 
-export function describeArticleReadsContract(
-  makeStores: () => Promise<ArticleReadsStoresUnderTest>,
-  opts: { label: string },
-) {
-  describe(`article reads store contracts (${opts.label})`, () => {
-    it("list returns [] for a user with no reads", async () => {
-      const stores = await makeStores();
-      const userId = await stores.makeUser();
-      expect(await stores.articleReads.list(userId)).toEqual([]);
-    });
+      it("markRead is idempotent: a repeated call doesn't duplicate the slug", async () => {
+        const stores = await makeStores();
+        if (!stores.articleReads) return;
+        const userId = await stores.makeUser();
+        await stores.articleReads.markRead(userId, "baselines");
+        await stores.articleReads.markRead(userId, "baselines");
+        expect(await stores.articleReads.list(userId)).toEqual(["baselines"]);
+      });
 
-    it("markRead then list round-trips the slug", async () => {
-      const stores = await makeStores();
-      const userId = await stores.makeUser();
-      await stores.articleReads.markRead(userId, "workout-types");
-      expect(await stores.articleReads.list(userId)).toEqual(["workout-types"]);
-    });
-
-    it("markRead is idempotent: a repeated call doesn't duplicate the slug", async () => {
-      const stores = await makeStores();
-      const userId = await stores.makeUser();
-      await stores.articleReads.markRead(userId, "baselines");
-      await stores.articleReads.markRead(userId, "baselines");
-      expect(await stores.articleReads.list(userId)).toEqual(["baselines"]);
-    });
-
-    it("reads are scoped per user", async () => {
-      const stores = await makeStores();
-      const userA = await stores.makeUser();
-      const userB = await stores.makeUser();
-      await stores.articleReads.markRead(userA, "pain-scale");
-      expect(await stores.articleReads.list(userB)).toEqual([]);
+      it("reads are scoped per user", async () => {
+        const stores = await makeStores();
+        if (!stores.articleReads) return;
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        await stores.articleReads.markRead(userA, "pain-scale");
+        expect(await stores.articleReads.list(userB)).toEqual([]);
+      });
     });
   });
 }
