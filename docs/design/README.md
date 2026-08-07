@@ -218,7 +218,10 @@ control, any group: transparent fill, `--rule-3` border, `--ink-3` label.
 > Frozen handoff record — this section describes screen states as they
 > stood at hand-off time and is not re-verified against the shipped app
 > line by line. Where it's gone stale, `docs/design/DEVIATIONS.md` is the
-> current-state authority, not this prose (whole-branch review Md6).
+> current-state authority, not this prose (whole-branch review Md6). This
+> document also predates the News tab entirely — it has no News, Reader, or
+> Release notes screen at all: `docs/design/handoffs/2026-08-07-news-tab/`
+> is the News tab's own design authority.
 
 ### 1. Today
 > Current: DIFFICULTY/TIME/PAIN narrow the suggestion through a `FILTER ⌄`

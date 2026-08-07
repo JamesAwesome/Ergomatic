@@ -7,6 +7,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import type pg from "pg";
 import { createDb, type Db } from "../../db/index.js";
 import { createUserStore } from "../../auth/users.js";
+import { createArticleReadsStore } from "../articleReads.js";
 import { createBaselinesStore } from "../baselines.js";
 import { createWorkoutsStore } from "../workouts.js";
 import { createLogsStore } from "../logs.js";
@@ -47,6 +48,7 @@ async function makeStores(): Promise<StoresUnderTest> {
     planState: createPlanStateStore(db),
     preferences: createPreferencesStore(db),
     testHistory: createTestHistoryStore(db),
+    articleReads: createArticleReadsStore(db),
     async makeUser() {
       const id = crypto.randomUUID();
       const user = await users.createUser({

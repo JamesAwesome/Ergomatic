@@ -24,6 +24,15 @@ vi.mock("../session/Countdown", () => ({
 vi.mock("../session/LogSession", () => ({
   default: () => <h1>Log Session</h1>,
 }));
+vi.mock("../news/News", () => ({
+  default: () => <h1>News</h1>,
+}));
+vi.mock("../news/Reader", () => ({
+  default: () => <h1>Reader</h1>,
+}));
+vi.mock("../news/Releases", () => ({
+  default: () => <h1>Releases</h1>,
+}));
 
 describe("AppRoutes", () => {
   // NOT a proof of declaration order: react-router-dom 7.18.2 ranks a
@@ -74,13 +83,55 @@ describe("AppRoutes", () => {
     expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
   });
 
-  it("names the phase that will fill a placeholder tab", () => {
+  // Phase 6H Task 5: News takes the second tab slot; /trend is retired (Trend
+  // folds into You per the handoff) and now falls through the catch-all,
+  // same as any other unmatched route.
+  it("renders the News screen at /news", async () => {
+    render(
+      <MemoryRouter initialEntries={["/news"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "News" })).toBeVisible();
+  });
+
+  // Task 6: the reader route.
+  it("renders the reader at /news/baselines", async () => {
+    render(
+      <MemoryRouter initialEntries={["/news/baselines"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Reader" }),
+    ).toBeVisible();
+  });
+
+  // Task 6: /news/releases is registered before /news/:slug so it is never
+  // captured as a slug param — this is the regression guard for that (same
+  // spirit as the /library/import-before-/library/:id test above).
+  it("renders the release-notes list at /news/releases, not the reader", async () => {
+    render(
+      <MemoryRouter initialEntries={["/news/releases"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Releases" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "Reader" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("/trend falls through to the catch-all and lands on Today, not a placeholder", async () => {
     render(
       <MemoryRouter initialEntries={["/trend"]}>
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/Phase 8/)).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+    expect(screen.queryByText(/Phase 8/)).not.toBeInTheDocument();
   });
 
   // Task 3 (6A) replaces the /plan placeholder with the real Plan screen —

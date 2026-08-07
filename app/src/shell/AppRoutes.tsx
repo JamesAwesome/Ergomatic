@@ -9,6 +9,9 @@ import Builder from "../builder/Builder";
 import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
 import Library from "../library/Library";
+import News from "../news/News";
+import Reader from "../news/Reader";
+import Releases from "../news/Releases";
 import Plan from "../plan/Plan";
 import ConfirmTargets from "../session/ConfirmTargets";
 import Countdown from "../session/Countdown";
@@ -41,15 +44,6 @@ const HIDDEN_TABBAR_PREFIXES = [
 // eslint-disable-next-line react-refresh/only-export-components
 export function hidesTabBar(pathname: string): boolean {
   return HIDDEN_TABBAR_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
-function Placeholder({ title, phase }: { title: string; phase: string }) {
-  return (
-    <main className="screen">
-      <h1 className="screen-title">{title}</h1>
-      <p className="placeholder-note">Arrives in {phase}.</p>
-    </main>
-  );
 }
 
 // BulkImport takes its "where does a clean import send the rower" callback
@@ -107,16 +101,19 @@ export default function AppRoutes({
             so there's nothing an early exit could leave dangling — showing
             the tab bar costs this route nothing extra. */}
         <Route path="/library/:id/log" element={<LogSession />} />
+        <Route path="/news" element={<News />} />
+        {/* React Router ranks a static segment over a dynamic one regardless
+            of declaration order (same note as /library/import above), so
+            /news/releases doesn't strictly need to precede /news/:slug —
+            declared first anyway, matching this file's own convention. */}
+        <Route path="/news/releases" element={<Releases />} />
+        <Route path="/news/:slug" element={<Reader />} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/session/confirm" element={<ConfirmTargets />} />
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<Timer />} />
         <Route path="/session/complete" element={<SessionComplete />} />
         <Route path="/session/log" element={<LogSession />} />
-        <Route
-          path="/trend"
-          element={<Placeholder title="Trend" phase="Phase 8" />}
-        />
         {user && onSignedOut && (
           <Route
             path="/you"

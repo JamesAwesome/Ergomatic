@@ -19,14 +19,23 @@ describe("TabBar", () => {
     renderAt("/library");
     expect(TABS.map((t) => t.label)).toStrictEqual([
       "TODAY",
+      "NEWS",
       "LIBRARY",
       "PLAN",
-      "TREND",
       "YOU",
     ]);
     for (const tab of TABS) {
       expect(screen.getByRole("link", { name: tab.label })).toBeInTheDocument();
     }
+  });
+
+  // Phase 6H: News takes the second slot, Trend folds into You (design §8) —
+  // TREND never renders as a tab again.
+  it("renders no tab labelled TREND", () => {
+    renderAt("/library");
+    expect(
+      screen.queryByRole("link", { name: "TREND" }),
+    ).not.toBeInTheDocument();
   });
 
   it("marks only the active tab as current", () => {

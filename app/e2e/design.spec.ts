@@ -3368,3 +3368,193 @@ test.describe("iOS input zoom guard", () => {
     });
   }
 });
+
+// Phase 6H Task 7: News/Reader/Releases design sweeps. Every describe below
+// seeds a MIXED read state first (one article — "baselines" — marked read
+// via a real PUT, idempotent so re-running against a persisted database is
+// harmless) rather than the virgin state, per the brief: a virgin-state
+// sweep would never render the read-row/read-square styling this phase
+// exists to prove.
+async function markArticleRead(page: Page, slug: string): Promise<void> {
+  const result = await page.evaluate(async (s) => {
+    const res = await fetch(`/api/article-reads/${s}`, { method: "PUT" });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, slug);
+  if (!result.ok) {
+    throw new Error(`markArticleRead failed: ${result.status} ${result.body}`);
+  }
+}
+
+test.describe("news screen (mixed read state)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-news@e2e.test",
+      name: "Design News Tester",
+    });
+    await markArticleRead(page, "baselines");
+    await page.goto("/news");
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations against a mixed read state", async ({
+    page,
+  }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // News §8's own "no START anywhere on this tab" rule (design decision 2)
+  // — accent is reserved for the unread square and text links, never a
+  // level-1 button, computed structurally rather than trusted by eye.
+  test("no .button-l1 anywhere on News — the no-START rule", async ({
+    page,
+  }) => {
+    await expect(page.locator('[class*="button-l1"]')).toHaveCount(0);
+  });
+
+  test("the read row title computes --ink-3/400-weight, and clears 4.5:1 against both --page and --surface", async ({
+    page,
+  }) => {
+    const readTitle = page.locator(
+      'a.news-row[data-read="true"] .news-row-title',
+    );
+    const styles = await readTitle.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { color: s.color, fontWeight: s.fontWeight };
+    });
+    expect(styles.color).toBe("rgb(87, 84, 76)"); // --ink-3
+    expect(styles.fontWeight).toBe("400");
+
+    const pageBg = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(pageBg).toBe("rgb(244, 241, 232)"); // --page
+    // The read row itself sits inside .news-pinned, whose own background
+    // literally IS --surface — measuring it here (rather than restating
+    // the hex) means this assertion breaks if that card's background ever
+    // stops being --surface, not just if the token's value changes.
+    const surfaceBg = await page
+      .locator(".news-pinned")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(surfaceBg).toBe("rgb(255, 253, 247)"); // --surface
+
+    // WCAG 2.1 relative-luminance contrast ratio, computed from the three
+    // measured `rgb(r, g, b)` computed-style strings above — not asserted
+    // against a pre-computed constant, so a future token change that
+    // quietly drops below 4.5:1 fails here rather than only being caught
+    // by eye. Inlined into the evaluate callback (Playwright serializes
+    // the whole function across the browser boundary) rather than shared
+    // as a Node-side helper, matching this file's other `page.evaluate`
+    // computations.
+    const ratios = await page.evaluate(
+      ({ fg, bgPage, bgSurface }) => {
+        function channel(c: number) {
+          const s = c / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        }
+        function luminance(rgb: string) {
+          const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+          if (!m) throw new Error(`unparseable colour: ${rgb}`);
+          const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+          return (
+            0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+          );
+        }
+        function contrastRatio(a: string, b: string) {
+          const la = luminance(a);
+          const lb = luminance(b);
+          const lighter = Math.max(la, lb);
+          const darker = Math.min(la, lb);
+          return (lighter + 0.05) / (darker + 0.05);
+        }
+        return {
+          vsPage: contrastRatio(fg, bgPage),
+          vsSurface: contrastRatio(fg, bgSurface),
+        };
+      },
+      { fg: styles.color, bgPage: pageBg, bgSurface: surfaceBg },
+    );
+    // Measured, not the brief's own UNVERIFIED ~6.8/~7.0 estimate — see
+    // task-7-report.md for the exact numbers.
+    expect(ratios.vsPage).toBeGreaterThanOrEqual(4.5);
+    expect(ratios.vsSurface).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("unread square is --accent, read square is page-coloured", async ({
+    page,
+  }) => {
+    // workout-types stays unread throughout this describe's seed (only
+    // "baselines" is marked read), so its square is the live unread case.
+    const unreadSquare = page.locator(
+      'a.news-row[href="/news/workout-types"] .news-square',
+    );
+    await expect(unreadSquare).toHaveAttribute("data-read", "false");
+    const unreadBg = await unreadSquare.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(unreadBg).toBe("rgb(181, 52, 31)"); // --accent
+
+    const readSquare = page.locator(
+      'a.news-row[href="/news/baselines"] .news-square',
+    );
+    await expect(readSquare).toHaveAttribute("data-read", "true");
+    const readBg = await readSquare.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(readBg).toBe("rgb(244, 241, 232)"); // --page
+  });
+});
+
+test.describe("reader screen (/news/baselines, mixed read state)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-reader@e2e.test",
+      name: "Design Reader Tester",
+    });
+    await markArticleRead(page, "baselines");
+    await page.goto("/news/baselines");
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("no .button-l1 anywhere on the reader", async ({ page }) => {
+    await expect(page.locator('[class*="button-l1"]')).toHaveCount(0);
+  });
+});
+
+test.describe("releases screen (/news/releases)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-releases@e2e.test",
+      name: "Design Releases Tester",
+    });
+    await markArticleRead(page, "baselines");
+    await page.goto("/news/releases");
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("no .button-l1 anywhere on release notes", async ({ page }) => {
+    await expect(page.locator('[class*="button-l1"]')).toHaveCount(0);
+  });
+});

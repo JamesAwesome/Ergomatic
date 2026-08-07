@@ -18,9 +18,9 @@ function clearLibraryReturnState() {
 // eslint-disable-next-line react-refresh/only-export-components
 export const TABS = [
   { path: "/today", label: "TODAY" },
+  { path: "/news", label: "NEWS" },
   { path: "/library", label: "LIBRARY" },
   { path: "/plan", label: "PLAN" },
-  { path: "/trend", label: "TREND" },
   { path: "/you", label: "YOU" },
 ];
 

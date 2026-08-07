@@ -8,6 +8,7 @@ import { createUserStore } from "./auth/users.js";
 import { createDb } from "./db/index.js";
 import { checkDb } from "./db/pool.js";
 import { seedGlobalLibrary } from "./seed/seed.js";
+import { createArticleReadsStore } from "./stores/articleReads.js";
 import { createBaselinesStore } from "./stores/baselines.js";
 import { StoreConflictError } from "./stores/errors.js";
 import { createLogsStore } from "./stores/logs.js";
@@ -101,6 +102,7 @@ const stores: Stores = {
   planState: createPlanStateStore(db),
   preferences: createPreferencesStore(db),
   testHistory: createTestHistoryStore(db),
+  articleReads: createArticleReadsStore(db),
 };
 
 const port = Number(process.env.PORT ?? 8080);

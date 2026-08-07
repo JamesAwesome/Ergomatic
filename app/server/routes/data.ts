@@ -6,6 +6,7 @@ import { PLANS, type PlanCode } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
 import type { Baselines, Difficulty, Step } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
+import type { ArticleReadsStore } from "../stores/articleReads.js";
 import type { BaselinesStore } from "../stores/baselines.js";
 import type {
   ActualSource,
@@ -28,6 +29,7 @@ export interface Stores {
   planState: PlanStateStore;
   preferences: PreferencesStore;
   testHistory: TestHistoryStore;
+  articleReads: ArticleReadsStore;
 }
 
 export interface DataRouterDeps {
@@ -40,6 +42,10 @@ const ACTUAL_SOURCES: ActualSource[] = ["assumed", "stopwatch", "pm5"];
 const HELD_RESULTS: HeldResult[] = ["held", "under", "over"];
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+// Conservative slug shape, validated here rather than against the bundled
+// registry: client and server versions may skew mid-deploy, and an unknown
+// slug is harmless — it's ignored at display time.
+const SLUG_RE = /^[a-z0-9-]{1,64}$/;
 // Postgres uuid columns 500 on a malformed literal (22P02) rather than just
 // finding no row; guard the shape here so a bad id is an ordinary 404/400
 // instead of leaking a DB error as a 500.
@@ -645,6 +651,22 @@ export function createDataRouter({
 
     await stores.preferences.put(req.user!.id, patch);
     res.json(await stores.preferences.get(req.user!.id));
+  });
+
+  // -- article reads ----------------------------------------------------
+
+  router.get("/api/article-reads", async (req, res) => {
+    res.json({ slugs: await stores.articleReads.list(req.user!.id) });
+  });
+
+  router.put("/api/article-reads/:slug", async (req, res) => {
+    const { slug } = req.params;
+    if (!SLUG_RE.test(slug)) {
+      badRequest(res, "slug must match ^[a-z0-9-]{1,64}$", "slug");
+      return;
+    }
+    await stores.articleReads.markRead(req.user!.id, slug);
+    res.status(204).end();
   });
 
   // -- test history ---------------------------------------------------

@@ -813,6 +813,119 @@ record on a real device stays valid with no migration.
 structural-reference pipeline already produced its fixture data — but not
 yet scheduled.
 
+## Phase 6H — News tab core
+
+**Status:** Done (2026-08-07, PR #54)
+**Goal:** A reading and orientation surface — News replaces Trend in the
+tab bar, holds pinned explainers plus a rolling latest feed plus release
+notes, and remembers what a rower has read across a reload and a second
+device.
+**Design authority:** `docs/design/handoffs/2026-08-07-news-tab/README.md`
+(decisions 1–5 and 8 — News itself and the five-tab bar; decisions 6, 7,
+and 9 — Today onboarding and You/Trend — are Phase 6I/6J's own, not this
+phase's).
+
+- [x] **Task 1 — `article_reads`**: the table (`user_id`, `slug`,
+      `read_at`), its migration, and `ArticleReadsStore.{list,markRead}` —
+      `markRead` idempotent-forever (`onConflictDoNothing`), no
+      unread/delete route by design
+- [x] **Task 2 — the two routes**: `GET /api/article-reads` (the signed-in
+      rower's own read slugs) and `PUT /api/article-reads/:slug` (mark one
+      read), both additive and session-guarded
+- [x] **Task 3 — the content**: the `NewsArticle`/`ReleaseNote` types, a
+      four-article registry (workout types + baselines pinned; picking a
+      workout + pain scale in LATEST) of original in-app prose, and
+      `RELEASE_NOTES` seeded retroactively (v0.5.1/v0.5.0/v0.4.0)
+- [x] **Task 4 — `useArticleReads`**: optimistic reads (a PUT's failure
+      leaves the article unread on the next fetch rather than surfacing an
+      error), suppressing read/unread claims entirely while loading or on a
+      failed fetch rather than guessing
+- [x] **Task 5 — the News screen and the tab swap**: `News.tsx` at `/news`
+      (PINNED block, LATEST feed, WHAT'S NEW card), the tab bar becomes
+      TODAY · NEWS · LIBRARY · PLAN · YOU with TREND gone, and the
+      no-`.button-l1`-anywhere rule (accent reserved for the unread square
+      and text links, never a START)
+- [x] **Task 6 — the reader and release notes**: `Reader.tsx` at
+      `/news/:slug` (marks read on mount, a NEXT-unread footer, `BackLink`),
+      `Releases.tsx` at `/news/releases` listing every `RELEASE_NOTES` entry
+- [x] **Task 7 — close-out**: `news.spec.ts` (tab order, the 4→3 UNREAD
+      read-and-reload proof against the real server, the reader's NEXT
+      footer, `/news/releases`), `design.spec.ts` sweeps (axe on all three
+      screens against a mixed read state, 44px targets, the no-`.button-l1`
+      rule, the read row's `--ink-3`/400-weight contrast measured at 6.69:1
+      against `--page` and 7.43:1 against `--surface`, the unread/read
+      square colours), `news.png`/`news-reader.png`, and this record
+
+**Exit:** MET — a fresh account sees four articles and 4 UNREAD; reading
+one survives a reload and a second device (the server round-trip, not an
+in-memory hook); TREND is gone. Full e2e green ×2 back-to-back (227/227)
+plus screenshots and unit/client/integration (2408 tests, 98%+ across all
+four coverage metrics).
+
+**Next:** Phase 6I (Today onboarding) and Phase 6J (Trend charts on You),
+below — both deliberately not this phase's scope. Phase 7B's PM5 connected
+surface remains unscheduled.
+
+## Phase 6I — Today onboarding
+
+**Status:** Not started
+**Goal:** A brand-new rower with no baseline gets taught the app from
+Today itself, not from a screen they have to find.
+**Design authority:** `docs/design/handoffs/2026-08-07-news-tab/README.md`
+decisions 6 and 7.
+
+- [ ] A dismissible `START HERE` four-step block at the top of Today, a
+      44px DISMISS target in its header; read steps go grey and lose their
+      unread square
+- [ ] Until a baseline exists, Today's suggestion card reads
+      `SUGGESTED · SETS YOUR BASELINE` (6k by default, `2K INSTEAD`
+      secondary) instead of a real workout pick; the baseline chip is
+      dashed, reading `6K BASELINE · NOT SET`
+- [ ] A `Learning the app` settings row on You (`START HERE · N OF 4`)
+      opening a detail screen with `PUT IT BACK ON TODAY` (restores the
+      block, keeps read state) and `MARK ALL FOUR UNREAD` (also resets read
+      state)
+- [ ] News's own Pinned Stories gains the `Start here` pin once dismissed
+      on Today, showing `N OF 4 READ · DISMISSED ON TODAY` — the row
+      `DEVIATIONS.md` already tracks as sequenced here
+
+**Sequencing constraint:** deliberately after Phase 7B's own `Today.tsx`
+guard-wiring touch — landing onboarding's Today changes first would mean
+7B rebasing its guard wiring across this phase's edits instead of the
+other way around.
+
+**Exit:** A fresh account with no baseline is walked to a set baseline
+without ever leaving Today; dismissing and resetting the tutorial from You
+round-trips correctly.
+
+## Phase 6J — Trend charts on You
+
+**Status:** Not started
+**Goal:** A rower can see whether they're getting faster, on You, where
+Trend now lives instead of its own tab.
+**Design authority:** `docs/design/handoffs/2026-08-07-news-tab/README.md`
+decision 9 — a sketch of the fold, not a chart spec (its own open question
+#1: "the three Trend charts need real ranges, bucketing and empty states").
+Needs its own chart-spec design pass before implementation starts.
+
+- [ ] A `TREND` heading at the top of You, above baselines
+- [ ] Metres per week — eight bars, current week in ink, others in `--rule-3`
+- [ ] O2 pace per session — a line against a dashed 6k target, the latest
+      session dotted in accent, a delta callout in O2 teal
+- [ ] Time by type — a single stacked bar in the workout-type colours with
+      a percentage legend
+
+**Amends Phase 8:** Phase 8's own Progress-screen bullet (2k/6k test-trend
+bars, minutes/week stacked by type, type mix/last-30-days — currently one
+bullet covering all three chart groups) relocates onto You under this
+phase instead of shipping as its own screen, and is superseded once this
+phase starts. Phase 8's month-calendar bullet (on Plan, not Progress) and
+its test-history-list bullet (on You already) are untouched.
+
+**Exit:** A rower with at least two sessions of history sees real metres,
+pace, and type-mix trends on You, with an honest empty state below two
+sessions — not sample data.
+
 ## Phase 7A — Monitor domain (the domain beneath the screens)
 
 **Status:** Done (2026-08-05, PR #TBD)
@@ -1321,7 +1434,7 @@ monitor-measured splits.
 
 - [ ] Plan screen gains a month calendar with type marks, ALL/TO DO/DONE filters, and a legend (session rows: done sorted below upcoming; today highlighted) — layered onto the sequence list Phase 6A already built at `/plan`, not a new screen
 - [x] ~~Plan management: preset selection (2000 m sprint / 5–6 k head race), reset-to-session-1~~ — **delivered early in Phase 6A** (`/plan`'s preset cards, Reset, and Switch), since Today needed an active plan before this phase's own turn came up
-- [ ] Progress screen: 2k/6k test trend bars (longer = slower, delta callout), minutes/week stacked by type, type mix, last-30-days
+- [ ] ~~Progress screen: 2k/6k test trend bars (longer = slower, delta callout), minutes/week stacked by type, type mix, last-30-days~~ — **superseded by Phase 6J**: these three chart groups relocate onto You (Trend folded in, per the 2026-08-07 News tab handoff) instead of shipping as their own screen; this bullet stays struck-through rather than deleted so the supersession has a record
 - [ ] Test history list on **You**; test-type sessions prompt a baseline update
 
 **Exit:** Logged sessions appear on the calendar and in every chart; a logged 2k test can update the 2k baseline through the staged-confirm flow.

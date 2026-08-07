@@ -13,6 +13,7 @@ import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
 import { seedGlobalLibrary } from "../seed/seed.js";
 import { LIBRARY_WORKOUTS } from "../seed/library/index.js";
+import { createArticleReadsStore } from "../stores/articleReads.js";
 import { createBaselinesStore } from "../stores/baselines.js";
 import { createLogsStore } from "../stores/logs.js";
 import { createPlanStateStore } from "../stores/planState.js";
@@ -66,6 +67,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       planState: createPlanStateStore(db),
       preferences: createPreferencesStore(db),
       testHistory: createTestHistoryStore(db),
+      articleReads: createArticleReadsStore(db),
     };
 
     app = createApp(
@@ -440,6 +442,15 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
 
     const listB = await asB().get("/api/workouts");
     expect(listB.body).toHaveLength(LIBRARY_COUNT + 1);
+  });
+
+  it("article reads are isolated per user: A's PUT never appears in B's GET", async () => {
+    expect((await asA().put("/api/article-reads/pain-scale")).status).toBe(204);
+    const readsB = await asB().get("/api/article-reads");
+    expect(readsB.body).toStrictEqual({ slugs: [] });
+
+    const readsA = await asA().get("/api/article-reads");
+    expect(readsA.body).toStrictEqual({ slugs: ["pain-scale"] });
   });
 
   it('logging a GLOBAL workout end to end: the FK holds, and "done" status is isolated per user through /api/today', async () => {
