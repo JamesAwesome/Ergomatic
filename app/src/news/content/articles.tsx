@@ -55,10 +55,12 @@ export function pinnedArticles(): NewsArticle[] {
   return ARTICLES.filter((a) => a.pinned);
 }
 
-export function latestArticles(): NewsArticle[] {
-  return ARTICLES.filter((a) => !a.pinned).sort((a, b) =>
-    b.publishedAt.localeCompare(a.publishedAt),
-  );
+export function latestArticles(
+  articles: NewsArticle[] = ARTICLES,
+): NewsArticle[] {
+  return articles
+    .filter((a) => !a.pinned)
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 }
 
 export function unreadCount(readSlugs: ReadonlySet<string>): number {

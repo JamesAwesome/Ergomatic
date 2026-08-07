@@ -52,6 +52,32 @@ describe("article registry invariants", () => {
 });
 
 describe("selectors", () => {
+  it("latestArticles sorts by newest first with distinct dates", () => {
+    // Test with fixture having distinct dates to verify sort direction
+    const fixtureOldNew = [
+      {
+        slug: "old",
+        title: "Old article",
+        minutes: 3,
+        kind: "first-party" as const,
+        pinned: false,
+        publishedAt: "2026-08-01",
+        body: <>old</>,
+      },
+      {
+        slug: "new",
+        title: "New article",
+        minutes: 3,
+        kind: "first-party" as const,
+        pinned: false,
+        publishedAt: "2026-08-05",
+        body: <>new</>,
+      },
+    ];
+    const result = latestArticles(fixtureOldNew);
+    expect(result.map((a) => a.slug)).toStrictEqual(["new", "old"]);
+  });
+
   it("articleBySlug finds by slug and misses honestly", () => {
     expect(articleBySlug("baselines")?.title).toMatch(/baseline/i);
     expect(articleBySlug("nope")).toBeUndefined();
