@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Releases from "./Releases";
@@ -61,5 +61,16 @@ describe("Releases", () => {
     expect(
       screen.getByRole("heading", { name: "Release notes" }),
     ).toBeVisible();
+  });
+
+  it("scrolls the window to the top on mount (item 1: opened from a scrolled News feed, this screen used to keep that scroll position)", () => {
+    const scrollToSpy = vi
+      .spyOn(window, "scrollTo")
+      .mockImplementation(() => {});
+
+    renderReleases();
+
+    expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+    scrollToSpy.mockRestore();
   });
 });

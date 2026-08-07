@@ -1103,6 +1103,13 @@ test("log-session-manual", async ({ page }) => {
 // here to "seed it the way a rower actually would," so the capture is
 // honest about what marks something read, not just about what the read
 // state ends up looking like.
+//
+// News-polish round: the read article is now workout-types, not baselines —
+// it's the pinned row carrying the type chips (.news-row-chips), so this
+// capture shows that read-state treatment applied to the one row that also
+// visibly differs from an unread row in a second way (the chip strip is
+// rendered regardless of read state, but this keeps the two captures below
+// pointed at the same article throughout the flow).
 test("news", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-news@e2e.test",
@@ -1111,29 +1118,47 @@ test("news", async ({ page }) => {
   await page.goto("/news");
   await page.locator(".news-unread-count").waitFor();
 
-  const baselinesRow = page.locator('a.news-row[href="/news/baselines"]');
-  await baselinesRow.click();
-  await expect(page).toHaveURL(/\/news\/baselines$/);
+  const workoutTypesRow = page.locator(
+    'a.news-row[href="/news/workout-types"]',
+  );
+  await workoutTypesRow.click();
+  await expect(page).toHaveURL(/\/news\/workout-types$/);
   await page.locator(".reader-body").waitFor();
   await page.getByRole("link", { name: "← BACK" }).click();
   await expect(page).toHaveURL(/\/news$/);
   // The row's own read styling (page-coloured square, grey 400-weight
   // title) is what this capture exists to show — wait for it explicitly
   // rather than racing the read-state PUT's own round trip.
-  await expect(baselinesRow).toHaveAttribute("data-read", "true");
+  await expect(workoutTypesRow).toHaveAttribute("data-read", "true");
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "news.png"),
   });
 });
 
+// News-polish round: /news/workout-types replaces /news/baselines as the
+// reader capture — the richest article now that it carries inline type
+// chips (Item 4) and the training-pyramid figure (Item 5), so this is the
+// honest visual record of what the reader actually renders, not just of
+// its typographic scale.
 test("news-reader", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-news-reader@e2e.test",
     name: "Screenshot Tester",
   });
-  await page.goto("/news/baselines");
+  await page.goto("/news/workout-types");
   await page.locator(".reader-body").waitFor();
+  // The pyramid figure is the point of this capture, and it sits well below
+  // the fold on a 390x844 viewport (six paragraphs of serif prose precede
+  // it) — a viewport-only screenshot at scroll position 0 would never show
+  // it at all. Scroll it into the middle of the viewport rather than to the
+  // very top, so the capture also carries a paragraph of surrounding prose
+  // (with its own inline O2/AT chips) for context, not just a bare figure.
+  await page.evaluate(() => {
+    document
+      .querySelector(".reader-figure")
+      ?.scrollIntoView({ block: "center" });
+  });
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "news-reader.png"),
   });

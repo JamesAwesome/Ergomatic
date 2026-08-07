@@ -38,7 +38,7 @@ export const ARTICLES: NewsArticle[] = [
   },
   {
     slug: "pain-scale",
-    title: "The pain scale, without a heart rate strap",
+    title: "The pain scale, without a heart rate monitor",
     minutes: 4,
     kind: "first-party",
     pinned: false,

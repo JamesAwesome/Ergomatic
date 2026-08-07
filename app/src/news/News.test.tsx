@@ -46,7 +46,7 @@ describe("News", () => {
       screen.getByText("Picking a workout by how much it should hurt"),
     ).toBeVisible();
     expect(
-      screen.getByText("The pain scale, without a heart rate strap"),
+      screen.getByText("The pain scale, without a heart rate monitor"),
     ).toBeVisible();
 
     expect(screen.getByText("4 UNREAD")).toBeVisible();
@@ -158,7 +158,7 @@ describe("News", () => {
     renderNews();
 
     const link = screen.getByRole("link", {
-      name: /The pain scale, without a heart rate strap/,
+      name: /The pain scale, without a heart rate monitor/,
     });
     expect(link).toHaveAttribute("href", "/news/pain-scale");
   });

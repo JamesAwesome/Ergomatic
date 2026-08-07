@@ -3,9 +3,9 @@ export function BaselinesBody() {
     <>
       <p>
         Every pace in this app is written relative to you. A workout never says
-        "row 2:00.0" — it says something like 6k −2: two seconds per 500 m
-        faster than your 6k pace. That 6k pace is a baseline, and once yours is
-        set, every offset in the library resolves into a real number.
+        "row 2:00.0". It says something like 6k −2, meaning two seconds per 500
+        m faster than your 6k pace. That 6k pace is a baseline, and once yours
+        is set, every offset in the library resolves into a real number.
       </p>
 
       <p>
@@ -16,14 +16,14 @@ export function BaselinesBody() {
       </p>
 
       <aside className="reader-inset">
-        IN THE APP — 6K 2:02.4 → O2 AT 6K −2 = 2:00.4. Every target carries the
+        IN THE APP · 6K 2:02.4 → O2 AT 6K −2 = 2:00.4. Every target carries the
         offset it came from, so you can always tell where a number was born.
       </aside>
 
       <p>
         Why offsets instead of fixed paces? Because fitness moves. When your
-        baseline improves, every workout in the library gets faster with you —
-        the same piece that resolved to 2:00.4 in March might resolve to 1:58.9
+        baseline improves, every workout in the library gets faster with you.
+        The same piece that resolved to 2:00.4 in March might resolve to 1:58.9
         by June, with nobody editing anything. Your history stays honest too:
         when you log a session, the app freezes the resolved numbers into the
         log, so an old entry always shows the paces you actually rowed against,
