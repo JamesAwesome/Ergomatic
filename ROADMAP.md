@@ -815,7 +815,7 @@ yet scheduled.
 
 ## Phase 6H — News tab core
 
-**Status:** Done (2026-08-07)
+**Status:** Done (2026-08-07, PR #54)
 **Goal:** A reading and orientation surface — News replaces Trend in the
 tab bar, holds pinned explainers plus a rolling latest feed plus release
 notes, and remembers what a rower has read across a reload and a second
