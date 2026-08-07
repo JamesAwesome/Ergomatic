@@ -19,6 +19,14 @@ import {
 } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
+import {
+  loadMonitorRun,
+  saveMonitorRun,
+  type MonitorRun,
+} from "../monitor/monitorRun";
+import { compileProgram } from "../../domain/monitor/program.js";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import type { WorkoutType } from "../../domain/types.js";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -592,6 +600,184 @@ describe("WorkoutDetail", () => {
       expect(draft!.workoutId).toBe("w1");
       expect(draft!.title).toBe("Ladder Sets");
       expect(draft!.startedAt).toBeNull();
+    });
+  });
+
+  // Phase 7B Task 2, spec §3 — the OTHER direction of the same walk. Once
+  // `startSession` cross-clears the `MonitorRun` (it does, as of this
+  // commit — the mirror of `createMonitorRun` clearing the `SessionRun`),
+  // a rower who finished a CONNECTED session and hadn't logged it yet
+  // would lose it to one unwarned Start press. That record is 7C's entire
+  // prefill input; losing it is the F5 shape exactly, so `handleStart`'s
+  // guard is WIDENED to read it — the same direct-read pattern on a second
+  // record, never rerouted onto `anyLiveSession()` (ROADMAP M-1, quoted at
+  // the site).
+  describe("a MonitorRun from a connected session", () => {
+    // Realistic fixture (repo convention): a REAL seeded library workout
+    // compiled through the real assembly, not a hand-built program.
+    function monitorRunFor(completedAt: string | null): MonitorRun {
+      const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+      if (!w) throw new Error("missing library fixture: Filling Low");
+      const t0 = new Date("2026-08-05T12:00:00.000Z");
+      const phases = buildRun(
+        buildDraft({
+          id: "fl-connected",
+          title: w.title,
+          type: w.type as WorkoutType,
+          steps: w.steps,
+        }),
+        BASELINES,
+        t0,
+      ).phases;
+      const compiled = compileProgram(phases);
+      if ("code" in compiled) {
+        throw new Error(`fixture failed to compile: ${compiled.code}`);
+      }
+      const run: MonitorRun = {
+        v: 1,
+        workoutId: "fl-connected",
+        title: w.title,
+        program: compiled,
+        actuals: [],
+        deviceName: "PM5 430123456",
+        startedAt: t0.toISOString(),
+        completedAt,
+        terminated: false,
+      };
+      return JSON.parse(JSON.stringify(run)) as MonitorRun;
+    }
+
+    const FINISHED_AT = new Date("2026-08-05T12:41:00.000Z").toISOString();
+
+    it("finished but unlogged: Start stages the unlogged warning and touches nothing", async () => {
+      mockHooks(BASELINES);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+      // Survival asserted FIRST, deliberately: without the widening this
+      // line is what fails, and it fails saying the record is gone — the
+      // data loss itself, not a missing string.
+      expect(loadMonitorRun()).toStrictEqual(connected);
+      expect(
+        screen.getByText(
+          "You have an unlogged session — starting a new one discards it.",
+        ),
+      ).toBeInTheDocument();
+      expect(loadDraft()).toBeNull();
+    });
+
+    it("finished but unlogged: Cancel leaves the connected record byte-identical", async () => {
+      mockHooks(BASELINES);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+      expect(loadMonitorRun()).toStrictEqual(connected);
+      expect(loadDraft()).toBeNull();
+    });
+
+    it("finished but unlogged: Replace session clears it and proceeds — the reverse cross-clear", async () => {
+      mockHooks(BASELINES);
+      saveMonitorRun(monitorRunFor(FINISHED_AT));
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Replace session" }),
+      );
+
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadMonitorRun()).toBeNull();
+      const draft = loadDraft();
+      expect(draft).not.toBeNull();
+      expect(draft!.workoutId).toBe("w1");
+    });
+
+    it("LIVE: Start stages the 'in progress' sentence — the erg is mid-piece, not finished", async () => {
+      mockHooks(BASELINES);
+      const live = monitorRunFor(null);
+      saveMonitorRun(live);
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+      expect(
+        screen.getByText("A session is in progress — replace it?"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "You have an unlogged session — starting a new one discards it.",
+        ),
+      ).not.toBeInTheDocument();
+      expect(loadMonitorRun()).toStrictEqual(live);
+    });
+
+    it("LIVE: Cancel preserves it, Replace session clears it", async () => {
+      mockHooks(BASELINES);
+      const live = monitorRunFor(null);
+      saveMonitorRun(live);
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(loadMonitorRun()).toStrictEqual(live);
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Replace session" }),
+      );
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("an unlogged SessionRun still wins the copy when both records are stale", async () => {
+      // The severity ordering: the phone-side record is checked first, and
+      // "unlogged" is the accurate word for both, so nothing is lost by it.
+      // Replace then clears BOTH — no half-state in either direction.
+      mockHooks(BASELINES);
+      const draftA = startDraft(
+        buildDraft({
+          id: "w-other",
+          title: "Session A",
+          type: "AN",
+          steps: [{ k: "wu", minutes: 5 }],
+        }),
+      );
+      saveDraft(draftA);
+      saveRun(completedRunFor(draftA));
+      saveMonitorRun(monitorRunFor(FINISHED_AT));
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      expect(
+        screen.getByText(
+          "You have an unlogged session — starting a new one discards it.",
+        ),
+      ).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Replace session" }),
+      );
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadRun()).toBeNull();
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("no MonitorRun at all: Start is unaffected — the cross-clear is a no-op removeItem", async () => {
+      mockHooks(BASELINES);
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadMonitorRun()).toBeNull();
     });
   });
 

@@ -1,0 +1,251 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import type { Baselines, WorkoutType } from "../../domain/types.js";
+import { compileProgram } from "../../domain/monitor/program.js";
+import { buildDraft } from "../session/draft";
+import { buildRun } from "../session/engine";
+import { saveRun, loadRun, type SessionRun } from "../session/run";
+import { createMonitorRun, loadMonitorRun } from "./monitorRun";
+import ConnectAction from "./ConnectAction";
+
+// Realistic fixtures, per the repo convention monitorRun.test.ts's own
+// header states: BOTH sides of this test start from a real seeded library
+// workout run through the real assembly (buildDraft -> buildRun ->
+// compileProgram), not a hand-built minimum — the SessionRun this guard
+// protects is a genuine finished session's record, and the program the
+// Connect flow would push is a genuine compiled one.
+const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
+const t0 = new Date("2026-08-05T12:00:00.000Z");
+const finishedAt = new Date("2026-08-05T12:41:00.000Z").toISOString();
+
+function libraryWorkout(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  return w;
+}
+
+/** A real finished-but-unlogged phone session: Filling Low, rowed and
+ *  completed, sitting in RUN_KEY waiting for 6C's log screen. This is the
+ *  record 6B's F5 fix protects and the one `createMonitorRun` destroys. */
+function unloggedSessionRun(): SessionRun {
+  const w = libraryWorkout("Filling Low");
+  const draft = buildDraft({
+    id: "fl-1",
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const built = buildRun(draft, baselines, t0);
+  const run: SessionRun = {
+    ...built,
+    index: built.phases.length,
+    completedAt: finishedAt,
+  };
+  // The JSON round trip storage itself performs (WorkoutDetail.test.tsx's
+  // own `completedRunFor` explains why the raw object would not compare
+  // equal: buildRun stamps `set: undefined` on non-repeated phases).
+  return JSON.parse(JSON.stringify(run)) as SessionRun;
+}
+
+function liveSessionRun(): SessionRun {
+  const w = libraryWorkout("Filling Low");
+  const draft = buildDraft({
+    id: "fl-2",
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  return JSON.parse(
+    JSON.stringify(buildRun(draft, baselines, t0)),
+  ) as SessionRun;
+}
+
+/**
+ * EXACTLY what Task 5 wires behind Connect, reduced to its one destructive
+ * step: the flow ends in `createMonitorRun`, whose `clearRun()` is
+ * unconditional. Passing THIS as `onProceed` is what makes the tests below
+ * a data-loss proof rather than a "was the callback called" assertion — the
+ * SessionRun really is gone afterwards, from real localStorage.
+ */
+function connectAsTaskFiveWill(): void {
+  const w = libraryWorkout("Filling Low");
+  const draft = buildDraft({
+    id: "fl-connect",
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const compiled = compileProgram(buildRun(draft, baselines, t0).phases);
+  if ("code" in compiled) {
+    throw new Error(`fixture failed to compile: ${compiled.code}`);
+  }
+  createMonitorRun(
+    {
+      workoutId: "fl-connect",
+      title: w.title,
+      program: compiled,
+      deviceName: "PM5 430123456",
+    },
+    t0,
+  );
+}
+
+function renderConnect() {
+  render(<ConnectAction onProceed={connectAsTaskFiveWill} />);
+}
+
+describe("ConnectAction: the destruction it stands in front of", () => {
+  beforeEach(() => localStorage.clear());
+
+  // The proof, first and on its own: with no lock, the walk from Connect to
+  // an erased finished session is one function call long. Every guard test
+  // below is only meaningful because this one passes.
+  it("the unguarded flow really does destroy a finished-but-unlogged session", () => {
+    saveRun(unloggedSessionRun());
+    expect(loadRun()).not.toBeNull();
+
+    connectAsTaskFiveWill();
+
+    expect(loadRun()).toBeNull();
+    expect(loadMonitorRun()).not.toBeNull();
+  });
+});
+
+describe("ConnectAction: the guard", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("nothing on record: Connect proceeds immediately, no confirm", async () => {
+    renderConnect();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(loadMonitorRun()).not.toBeNull();
+    expect(
+      screen.queryByText(
+        "You have an unlogged session — connecting discards it.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  describe("over a finished-but-unlogged session (the F5 shape)", () => {
+    it("stages the confirm and touches nothing — the record survives the first press", async () => {
+      const runA = unloggedSessionRun();
+      saveRun(runA);
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(
+        screen.getByText(
+          "You have an unlogged session — connecting discards it.",
+        ),
+      ).toBeInTheDocument();
+      // Not merely "still present" — byte-identical, and no monitor run
+      // was created either.
+      expect(loadRun()).toStrictEqual(runA);
+      expect(loadMonitorRun()).toBeNull();
+      // The trigger is replaced by the panel, the house idiom.
+      expect(
+        screen.queryByRole("button", { name: "Connect" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("Cancel preserves the record byte-identical and restores Connect", async () => {
+      const runA = unloggedSessionRun();
+      saveRun(runA);
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
+      expect(
+        screen.queryByText(
+          "You have an unlogged session — connecting discards it.",
+        ),
+      ).not.toBeInTheDocument();
+      expect(loadRun()).toStrictEqual(runA);
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("Connect anyway proceeds — the destruction happens, now deliberately", async () => {
+      saveRun(unloggedSessionRun());
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Connect anyway" }),
+      );
+
+      expect(loadRun()).toBeNull();
+      const monitorRun = loadMonitorRun();
+      expect(monitorRun).not.toBeNull();
+      expect(monitorRun!.title).toBe("Filling Low");
+    });
+  });
+
+  describe("over a live phone session", () => {
+    it("stages the 'in progress' sentence, not the unlogged one", async () => {
+      const live = liveSessionRun();
+      saveRun(live);
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(
+        screen.getByText("A session is in progress — replace it?"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "You have an unlogged session — connecting discards it.",
+        ),
+      ).not.toBeInTheDocument();
+      expect(loadRun()).toStrictEqual(live);
+    });
+
+    it("Cancel preserves it; Connect anyway replaces it", async () => {
+      const live = liveSessionRun();
+      saveRun(live);
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(loadRun()).toStrictEqual(live);
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Connect anyway" }),
+      );
+      expect(loadRun()).toBeNull();
+      expect(loadMonitorRun()).not.toBeNull();
+    });
+  });
+
+  it("uses the house panel classes, not a new confirm idiom", async () => {
+    saveRun(unloggedSessionRun());
+    const { container } = render(
+      <ConnectAction onProceed={connectAsTaskFiveWill} />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(container.querySelector(".baseline-confirm")).not.toBeNull();
+    expect(container.querySelector(".baseline-confirm-line")).not.toBeNull();
+    expect(container.querySelector(".baseline-actions")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
+      "button-outline",
+    );
+    expect(screen.getByRole("button", { name: "Connect anyway" })).toHaveClass(
+      "button-primary",
+    );
+  });
+
+  it("the trigger is an L2 block (handoff §1: Connect must not compete with Start)", () => {
+    renderConnect();
+    expect(screen.getByRole("button", { name: "Connect" })).toHaveClass(
+      "button-l2",
+    );
+  });
+});

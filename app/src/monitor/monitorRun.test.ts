@@ -16,6 +16,7 @@ import {
   createMonitorRun,
   recordActual,
   anyLiveSession,
+  connectGuardStage,
   MONITOR_RUN_KEY,
   type MonitorRun,
 } from "./monitorRun";
@@ -473,5 +474,61 @@ describe("anyLiveSession: the coexistence truth table", () => {
     expect(cases).toHaveLength(9);
     const keys = new Set(cases.map((c) => `${c.sessionRun}/${c.monitorRun}`));
     expect(keys.size).toBe(9);
+  });
+});
+
+// Phase 7B Task 2, spec §3. The predicate half of the Connect guard; the
+// staged confirm it feeds is ConnectAction.test.tsx's.
+describe("connectGuardStage: the Connect door's lock", () => {
+  beforeEach(() => localStorage.clear());
+
+  const finishedAt = new Date("2026-08-05T13:00:00.000Z").toISOString();
+
+  it("nothing on record: null — Connect proceeds with no ceremony", () => {
+    expect(connectGuardStage()).toBeNull();
+  });
+
+  it("a finished-but-unlogged SessionRun: 'unlogged' — the F5 record", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a live SessionRun: 'in-progress' — destroyed just as completely, lesser loss", () => {
+    saveRun(fakeSessionRun(null));
+    expect(connectGuardStage()).toBe("in-progress");
+  });
+
+  it("reads only the SessionRun — a MonitorRun on record is not this door's business", () => {
+    // `createMonitorRun` clears `RUN_KEY`, never `MONITOR_RUN_KEY`; a stale
+    // monitor record is what the NEW one replaces, and Connect has nothing
+    // to warn about there.
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+    expect(connectGuardStage()).toBeNull();
+  });
+
+  it("garbage in RUN_KEY reads as nothing at risk (loadRun's own Resilience #5)", () => {
+    localStorage.setItem(RUN_KEY, "{{ not json");
+    expect(connectGuardStage()).toBeNull();
+  });
+
+  // THE MUTATION TARGET, stated as an assertion rather than left to a
+  // comment: for the exact record this guard exists to protect,
+  // `anyLiveSession()` answers "none". Re-routing `connectGuardStage`
+  // through it — the tempting "unify the guards" refactor ROADMAP M-1
+  // forbids — would make the two agree here, and this test would die
+  // alongside the protection.
+  it("DISAGREES with anyLiveSession() on the unlogged SessionRun — that disagreement IS the guard", () => {
+    saveRun(fakeSessionRun(finishedAt));
+
+    expect(anyLiveSession()).toBe("none");
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("still disagrees when BOTH records are stale — anyLiveSession()'s 'both-stale' row is still a discard for Connect", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+
+    expect(anyLiveSession()).toBe("none");
+    expect(connectGuardStage()).toBe("unlogged");
   });
 });
