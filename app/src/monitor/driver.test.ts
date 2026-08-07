@@ -154,8 +154,13 @@ function healthyArmedStructureFor(p: WorkoutProgram): ArmedStructureFixture {
 
 /** A General Status payload in the given machine state carrying an EXPLICIT
  *  structure triple — the by-hand 0x0031 the fix-3 Task 4 tests below need.
- *  (The shared fake does not yet put structure on its own wire; that is
- *  Task 5's job, so every structural test in this file is stub-driven.) */
+ *  The shared fake DOES put structure on its own wire since fix-3 Task 5
+ *  (`src/monitor/transports/fake.ts`'s `armedStructureFields`/
+ *  `EMPTY_ARM_STRUCTURE`) — the block below stays stub-driven anyway
+ *  because it needs EXACT, arbitrary payloads (a mid-cycle transient, a
+ *  streak-breaking reset) the fake's own honest protocol has no script hook
+ *  for; the fake-driven end-to-end rows (including the lag knob) live in
+ *  the "fix-3 Task 3" describe block above. */
 function statusWithStructure(
   structure: ArmedStructureFixture,
   workoutState: number = WORKOUTSTATE_WAITTOBEGIN,
@@ -5435,55 +5440,66 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     return a.length === b.length && a.every((v, i) => v === b[i]);
   }
 
-  it("settle DISABLED (prepareSettleTicks: 0 — session 4b's own detection row): a program sent over a ROWING machine arms EMPTY, and no boundary ever comes", async () => {
+  /** A WaitToBegin tick carrying nothing — the shape this machine's own
+   *  steady state holds while empty-armed (§19.13): fix-3 Task 5 makes the
+   *  fake report SESSION 4a's captured anatomy (`workoutType=1
+   *  durationRaw=0 durationType=128`) for every such tick, independent of
+   *  whatever the driver actually sent, for as long as `armedEmpty` stays
+   *  true. */
+  function stillArmedEmpty(atMs: number): FakeTimelineEvent {
+    return {
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: null,
+      programIntervalIndex: 0,
+    };
+  }
+
+  it("settle DISABLED (prepareSettleTicks: 0 — session 4b's own detection row): a program sent over a ROWING machine arms EMPTY, and fix-3 Task 5's honest wire gets it caught end to end, 'structure-mismatch'", async () => {
     const program = seaFretProgram();
+    // Two more WaitToBegin ticks after the arm's own — the N=3 rule
+    // (`STRUCTURE_MISMATCH_TICKS`, driver.ts) needs three CONSECUTIVE
+    // stable mismatched ARMED ticks, and an empty-armed machine's own
+    // steady state holds still exactly like this (session 4a's ledger:
+    // "fields refresh while merely ARMED").
     const { fake, driver, events } = harness(
       {
         program,
-        events: [rowingAt(0, 10), rowingAt(1000, 20), boundaryAt(2000)],
+        events: [rowingAt(0, 10), stillArmedEmpty(1), stillArmedEmpty(2)],
       },
       { prepareSettleTicks: 0 },
     );
 
     fake.tick(0); // the machine is genuinely mid-piece at dispatch
 
-    await programAndArm(driver, fake, program);
+    const pending = driver.program(program);
+    for (let i = 0; i < 100; i += 1) await Promise.resolve();
+    fake.tick(0); // flushes the empty arm's own WAITTOBEGIN bundle — mismatch #1
+    await Promise.resolve();
+    fake.tick(1); // stillArmedEmpty(1) — mismatch #2, same wrong structure
+    await Promise.resolve();
+    fake.tick(1); // stillArmedEmpty(2) — mismatch #3: the streak fires
+    await Promise.resolve();
 
-    // Success here is the FAKE's limitation, not the driver's (review
-    // I-4). Since fix-3 Task 4 `verifyArmed` reads 0x0031's structure back
-    // and would reject a real PM5's empty arm (`workoutType=1
-    // durationRaw=0 durationType=128`, captured by session 4a) — but this
-    // fake reports `script.program`'s structure on the wire whatever it is
-    // actually holding, so nothing here contradicts it. Putting the zeroed
-    // structure on the fake's wire, and turning this row into a real
-    // end-to-end `"structure-mismatch"` assertion, is TASK 5's job.
-    expect(events.some((e) => e.kind === "armed")).toBe(true);
-    // …and the machine is holding a workout with NOTHING in it. `0`, not
-    // `null`: something IS loaded, it just has nothing in it. Today that
-    // fact reaches this test only through the fake's introspection; Task 5
-    // is what puts it on the wire where the driver can read it.
+    const err = await pending.then(
+      () => {
+        throw new Error("program() resolved — the empty arm was not caught");
+      },
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ProgramRejectionError);
+    expect((err as ProgramRejectionError).reason).toBe("structure-mismatch");
+
+    // …and the machine really is holding a workout with NOTHING in it —
+    // `0`, not `null`: something IS loaded, it just has nothing in it. The
+    // fake's own introspection agrees with what the wire just proved.
     expect(fake.loadedIntervals()).toBe(0);
-
-    // Row on, well past the scripted boundary: no interval structure
-    // exists, so no boundary is ever reported for this program — hardware
-    // rowed 108.4 m past what should have been a 100 m interval and saw
-    // none.
-    //
-    // Both assertions below are scoped to what arrives AFTER the arm
-    // resolved (review IMPORTANT-1). An unscoped `some(kind === "frame")`
-    // does not bite: `events` already holds a frame from the pre-`program()`
-    // rowing tick, so the reviewer made the fake go completely silent after
-    // an empty arm and the assertion still passed — it was satisfied by
-    // data from before the behaviour it claims to describe.
-    const afterArm = events.length;
-    for (let i = 0; i < 5; i += 1) fake.tick(1000);
-    const afterRowing = events.slice(afterArm);
-    expect(afterRowing.some((e) => e.kind === "intervalComplete")).toBe(false);
-    expect(events.some((e) => e.kind === "intervalComplete")).toBe(false);
-    // The link is alive throughout — frames keep arriving once the empty
-    // workout is armed and being rowed; it is the STRUCTURE that is
-    // missing, not the stream.
-    expect(afterRowing.some((e) => e.kind === "frame")).toBe(true);
+    expect(events.some((e) => e.kind === "armed")).toBe(false);
   });
 
   it("settle ON (the default): the same program over the same rowing machine holds its frames until the machine reports armed — and the arm is real, boundaries and all", async () => {
@@ -5581,6 +5597,63 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     expect(events.some((e) => e.kind === "armed")).toBe(true);
     fake.tick(2000);
     expect(events.some((e) => e.kind === "intervalComplete")).toBe(true);
+  });
+
+  /** A WaitToBegin tick carrying nothing further — the "machine going on
+   *  reporting armed" shape `stillArmedAt` above uses, without that name's
+   *  own non-zero heart rate (irrelevant here). */
+  function stillArmedAtZero(atMs: number): FakeTimelineEvent {
+    return {
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: null,
+      programIntervalIndex: 0,
+    };
+  }
+
+  it("fix-3 Task 5: FakeScript.lagStructureOneTick exercises the driver's N=3 rule against the FAKE's OWN wire — not only stubTransport (SESSION 4a's recorded mid-cycle transients)", async () => {
+    // The machine is idle at dispatch (no rowing scripted), so
+    // `waitForPrepareSettle` resolves immediately (its own doc comment:
+    // only a prior "rowing"/"resting" state waits) and this program lands
+    // as a genuine, non-empty arm — this test is about the LAG, not the
+    // empty arm.
+    const program = seaFretProgram();
+    const { fake, log, driver } = harness({
+      program,
+      lagStructureOneTick: true,
+      events: [stillArmedAtZero(1)],
+    });
+
+    const pending = driver.program(program);
+    for (let i = 0; i < 100; i += 1) await Promise.resolve();
+    // The accept's own WAITTOBEGIN bundle — LAGGED: SESSION 4a's pre-arm
+    // baseline (`workoutType=0`), mismatched against Sea Fret's real
+    // structure (`workoutType=8 durationRaw=30000 durationType=0`). One
+    // tick is the observed lag, never a reject on its own.
+    fake.tick(0);
+    await Promise.resolve();
+
+    // The scripted second WaitToBegin tick — the lag is spent, so this one
+    // carries the TRUE structure and resolves `program()` immediately (a
+    // MATCH needs no streak at all, only a mismatch does).
+    fake.tick(1);
+    await expect(pending).resolves.toBeUndefined();
+
+    // The lag was SEEN and recorded once — observation, not verdict — and
+    // then survived, exactly like `driver.test.ts`'s stub-driven sibling
+    // ("the 1-tick payload LAG resolves SUCCESS", fix-3 Task 4's own
+    // block). No `program-rejection` entry exists anywhere in this trace.
+    expect(
+      log.entries().filter((e) => e.kind === "structure-mismatch"),
+    ).toHaveLength(1);
+    expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
+      false,
+    );
   });
 });
 

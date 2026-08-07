@@ -40,8 +40,18 @@
 //     an EMPTY workout — armed, no interval structure, no boundary ever
 //     (§19.13, reproduced 2-for-2 with unrelated shapes);
 //   - its writes fail while the link is down, the way an invalidated GATT
-//     handle does (D6).
+//     handle does (D6);
+//   - fix-3 Task 5: its 0x0031 stream now REPORTS structure — the accepted
+//     program's type/interval-0 duration pair when genuinely armed, and
+//     SESSION 4a's own captured empty-arm anatomy (`workoutType=1
+//     durationRaw=0 durationType=128`) when armed empty (§19.13) — encoded
+//     independently of `pm5/commands.ts`'s driver-side prediction
+//     (`pm5/statusFrames.ts`'s `armedStructureFields`, review I-5), so a
+//     fake-driven `program()` now exercises `driver.ts`'s structural
+//     readback (`verifyArmed`) end to end instead of only through
+//     `loadedIntervals()`'s introspection.
 //
+
 // Three ack shapes here are SYNTHETIC and say so at their definitions,
 // because nothing observed produced them: `FakeScript.failNextProgramFrame`'s
 // genuine reject and its checksum-garbled frame (§19.1 — not one of the
@@ -68,7 +78,8 @@
 // Concept2 byte-level knowledge stays confined to what this file calls INTO
 // `pm5/` (`buildProgrammingSequence`, `buildTerminate`, `buildAckFrame`,
 // `echoedCommandIds`, `reassemble`, the `buildXBytes` encoders in
-// `pm5/statusFrames.ts`,
+// `pm5/statusFrames.ts`, that same module's `armedStructureFields`/
+// `EMPTY_ARM_STRUCTURE`/`PRE_ARM_BASELINE_STRUCTURE` (fix-3 Task 5),
 // `intervalIndex.ts`'s `toMachineIndex`, and the `WORKOUTSTATE_*` ordinals
 // / `toMonitorState` / `HEARTRATE_NO_BELT` that `pm5/parse.ts` exports for
 // exactly this purpose) — this file never computes a checksum, a byte
@@ -82,7 +93,6 @@ import {
   buildGetErrorType,
   buildProgrammingSequence,
   buildTerminate,
-  expectedArmedStructure,
 } from "../../../domain/monitor/pm5/commands.js";
 import { reassemble } from "../../../domain/monitor/pm5/framer.js";
 import { toMachineIndex } from "../../../domain/monitor/pm5/intervalIndex.js";
@@ -105,11 +115,15 @@ import {
   type CsafeSlaveState,
 } from "../../../domain/monitor/pm5/response.js";
 import {
+  armedStructureFields,
   buildAdditionalSplitIntervalDataBytes,
   buildAdditionalStatus1Bytes,
   buildAdditionalStatus2Bytes,
   buildGeneralStatusBytes,
   buildSplitIntervalDataBytes,
+  EMPTY_ARM_STRUCTURE,
+  PRE_ARM_BASELINE_STRUCTURE,
+  type WireArmedStructure,
 } from "../../../domain/monitor/pm5/statusFrames.js";
 import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
@@ -319,6 +333,33 @@ export interface FakeScript {
    * is the whole point of a refusal.
    */
   refuseNextPrepare?: boolean;
+  /**
+   * Fix-3 Task 5: the WAITTOBEGIN bundle for the NEXT accept (whichever
+   * arms next — a real program or an empty arm) reports the PRIOR
+   * structure — whatever this machine's 0x0031 last told the wire, starting
+   * from `PRE_ARM_BASELINE_STRUCTURE` if nothing has armed yet — for that
+   * one bundle only; every status tick after it reports the true, current
+   * structure. One-shot per accept (`onProgrammingFrameComplete` re-arms it
+   * on the NEXT accept only if this stays `true`).
+   *
+   * Models SESSION 4a's own RECORDED observations, not the plan's
+   * unsourceable "2 of 5 clean arms lagged" figure (review I-1; that figure
+   * has no home in this repo — see `driver.ts`'s `STRUCTURE_MISMATCH_TICKS`
+   * for the full provenance split): a several-tick unsettled window before
+   * the steady state (`"armed" observed on tick 4`, measured twice at the
+   * session-3 repro) and mid-cycle transients carrying stale, non-zero
+   * durations between an accept and its steady state. A single stale tick
+   * right after an accept is exactly that shape.
+   *
+   * Off by default — every OTHER fake-driven test in this repo needs the
+   * accepted structure to be correct from the very first armed tick, and
+   * this knob exists so a test can OPT IN to exercising `driver.ts`'s
+   * N-consecutive-stable-mismatch rule (`STRUCTURE_MISMATCH_TICKS`) against
+   * this fake's own wire bytes, not only against `stubTransport`'s
+   * hand-built payloads (`driver.test.ts`'s existing lag test is the
+   * stub-driven sibling this generalizes end-to-end).
+   */
+  lagStructureOneTick?: boolean;
   /** The post-"armed" session timeline, ascending by `atMs`. `tick(ms)`
    *  advances a purely virtual clock (no timers, no wall clock anywhere in
    *  this file) and delivers every event whose `atMs` has now been
@@ -434,13 +475,13 @@ export interface FakeControls {
    *  **`0` is the EMPTY ARM** (Task 3, §19.13) — a program that landed on a
    *  still-running machine armed with no interval structure at all: the
    *  machine holds a workout (never `null` again) and that workout has zero
-   *  intervals. This is the fake's INTROSPECTION-ONLY model of the empty
-   *  arm: the driver's own structural readback exists now (`verifyArmed`,
-   *  fix-3 Task 4) and would reject it, but this fake does not yet put the
-   *  zeroed structure on its WIRE — its 0x0031 stream reports the workout
-   *  `FakeScript.program` names regardless (`statusBundle`'s own comment).
-   *  Closing that gap, so the empty arm is detectable end to end rather
-   *  than only assertable through this method, is Task 5's job. */
+   *  intervals. Since fix-3 Task 5 this is no longer introspection-only: the
+   *  0x0031 stream now puts SESSION 4a's own captured empty-arm anatomy on
+   *  the WIRE too (`EMPTY_ARM_STRUCTURE`, `pm5/statusFrames.ts`), so
+   *  `driver.ts`'s structural readback (`verifyArmed`, fix-3 Task 4) can
+   *  reject a fake-driven empty arm end to end — this method remains for
+   *  tests that want to assert the fake's own internal bookkeeping directly,
+   *  without going through the driver at all. */
   loadedIntervals(): number | null;
 }
 
@@ -476,6 +517,7 @@ function statusBundle(
   program: WorkoutProgram,
   e: FakeStatusEvent,
   lastSplit: { elapsedSeconds: number; distanceMeters: number },
+  structure: WireArmedStructure,
 ): { general: GeneralStatus; as1: AdditionalStatus1; as2: AdditionalStatus2 } {
   const interval = program.intervals[e.programIntervalIndex];
   const isDistance = interval?.kind === "distance";
@@ -523,38 +565,12 @@ function statusBundle(
       strokeState: 0,
       totalWorkDistanceMeters: e.distanceMeters,
       // 0x0031's STRUCTURE fields — `workoutType` plus the interval-0
-      // duration pair — now reflect the workout this machine is holding,
-      // in the units session 4a confirmed on real hardware
-      // (`expectedArmedStructure`, `pm5/commands.ts`, carries the readings).
-      // Before fix-3 Task 4 they were hardcoded `8 / 0 / 0`, which was fine
-      // only while `verifyArmed` looked at the state word alone; the moment
-      // the driver READS these fields back, a fake that reports a duration
-      // it does not hold is a fake that cannot arm.
-      //
-      // **This is the MINIMUM Task 4 needs and no more.** `program` here is
-      // still `FakeScript.program` (the pre-loaded/expected one), not a
-      // separately-tracked ACCEPTED program, and an EMPTY arm
-      // (`armedEmpty`) still reports this same structure rather than the
-      // zeroed one hardware showed — modelling those two, plus the
-      // one-tick payload lag and the end-to-end detection rows, is Task
-      // 5's own job (plan: "the fake carries structure; CI proves
-      // detection").
-      //
-      // ⚠ **TASK 5 MUST REPLACE THIS CALL** (review I-5). Calling the
-      // DRIVER's own predictor makes this fake a MIRROR, not a witness: a
-      // wrong prediction and a wrong wire would agree, and no fake-driven
-      // test could tell. Task 4 tolerates it only because every structural
-      // assertion it added is stub-driven against 4a's values as
-      // INDEPENDENT LITERALS (`driver.test.ts`'s
-      // `healthyArmedStructureFor`, `commands.test.ts`'s own anchors), and
-      // a reviewer's last-interval mutation of `expectedArmedStructure`
-      // killed four of those literal tests first. Task 5's plan text
-      // already points the right way — "extend the existing `statusFrames`
-      // builders — no fork" — i.e. ENCODE 4a's semantics here from the
-      // workout this machine holds, independently. If Task 5 keeps this
-      // call, its promised end-to-end row ("settle ON → success with
-      // structure") proves only that a function equals itself.
-      ...expectedArmedStructure(program),
+      // duration pair (fix-3 Task 5). The CALLER decides which structure
+      // this particular tick reports (`structureForTick()`, below) — this
+      // function just writes whatever it is given; that separation is what
+      // lets the caller model the empty arm and the one-tick lag knob
+      // without this shared bundle-builder needing to know about either.
+      ...structure,
       dragFactor: 130,
     },
   };
@@ -631,19 +647,14 @@ function boundaryBundle(
  *  `{0, 0}` here — nothing to root it at before the session's own first
  *  interval even starts).
  *
- *  Takes the workout the machine is holding (fix-3 Task 4). It used to pass
- *  `{ intervals: [] }`, which was harmless while `statusBundle` only read
- *  the program for its `intervalType` byte — but that placeholder now
- *  decides the 0x0031 STRUCTURE fields too, and an empty program's
- *  predicted DURATION PAIR is the empty arm's own (`0` at identifier 128,
- *  `expectedArmedStructure`'s fallback). Only the duration pair: session
- *  4a's captured empty arm additionally read `workoutType=1`, which no
- *  prediction ever produces, so the predicate can still catch a real empty
- *  arm on the type (review L-3 — an earlier draft of this comment said
- *  "precisely the EMPTY-ARM reading", which over-claimed). A fake that
- *  armed on the placeholder would nonetheless fail its own driver's
- *  readback on every single test. */
-function armedBundle(program: WorkoutProgram): {
+ *  `structure` is the caller's decision (`structureForTick()`), same as
+ *  `statusBundle`'s own parameter — this is the bundle SESSION 4a's
+ *  `lagStructureOneTick` scenario most often targets, since it is the very
+ *  first status delivered after an accept. */
+function armedBundle(
+  program: WorkoutProgram,
+  structure: WireArmedStructure,
+): {
   general: GeneralStatus;
   as1: AdditionalStatus1;
   as2: AdditionalStatus2;
@@ -662,6 +673,7 @@ function armedBundle(program: WorkoutProgram): {
       programIntervalIndex: 0,
     },
     { elapsedSeconds: 0, distanceMeters: 0 },
+    structure,
   );
 }
 
@@ -772,6 +784,53 @@ export function createFakeTransport(
   // (or `deliverArmedNow()`) rather than delivered synchronously — see
   // `tick()`'s own doc comment for why.
   let armedBundlePending = false;
+  // Fix-3 Task 5: `FakeScript.lagStructureOneTick`'s live, consumable copy —
+  // armed by `onProgrammingFrameComplete` on the accept that lands next,
+  // consumed by `structureForTick()` the very next time ANY status is
+  // delivered (which `flushArmedIfPending` guarantees is the WAITTOBEGIN
+  // bundle this same accept produces, since nothing else can call
+  // `deliverStatus`/`deliverArmedBundle` in between).
+  let structureLagPending = false;
+  // What this machine's 0x0031 structure fields most recently told the wire
+  // — `structureForTick()`'s only reader, and the value `lagStructureOneTick`
+  // substitutes in for one tick. Starts at SESSION 4a's own pre-arm baseline
+  // (`PRE_ARM_BASELINE_STRUCTURE`) since nothing has armed yet; a fake's
+  // FIRST-ever lagged accept therefore lags on the baseline, and a SECOND
+  // accept (no reconnect) lags on whatever the first one actually armed.
+  let lastArmedStructure: WireArmedStructure = PRE_ARM_BASELINE_STRUCTURE;
+
+  /** The TRUE structure this machine is holding right now, independent of
+   *  any lag — `EMPTY_ARM_STRUCTURE` while armed empty (§19.13), otherwise
+   *  `script.program`'s own interval-0 encoding (`armedStructureFields`,
+   *  `pm5/statusFrames.ts` — independent of `pm5/commands.ts`'s
+   *  driver-side prediction; see that function's own doc comment for why).
+   *  `script.program` is also what a script that never calls `program()` at
+   *  all reports throughout (the pre-loaded fallback) — there is only ever
+   *  ONE program value this fake can hold, since `write()` validates every
+   *  incoming byte against it (`FakeScript.program`'s own doc comment), so
+   *  "the accepted program" and "the pre-loaded one" are never actually
+   *  different values here. */
+  function currentArmedStructure(): WireArmedStructure {
+    return armedEmpty
+      ? EMPTY_ARM_STRUCTURE
+      : armedStructureFields(script.program.intervals);
+  }
+
+  /** The structure fields THIS status tick puts on the wire. The true
+   *  reading, unless a lag is pending (`structureLagPending`) — in which
+   *  case this call reports the PRIOR structure once and clears the flag,
+   *  exactly like a real settling machine's stale first tick (SESSION 4a's
+   *  recorded mid-cycle transients). Every call — lagged or not — updates
+   *  `lastArmedStructure` to what was ACTUALLY put on the wire this time,
+   *  so a later lag (a second accept) lags on the right prior value. */
+  function structureForTick(): WireArmedStructure {
+    if (structureLagPending) {
+      structureLagPending = false;
+      return lastArmedStructure;
+    }
+    lastArmedStructure = currentArmedStructure();
+    return lastArmedStructure;
+  }
 
   // What the machine is holding right now (`FakeScript.loadedWorkout`'s own
   // doc comment). REPLACED by each program that lands, never cleared: D1's
@@ -828,6 +887,7 @@ export function createFakeTransport(
       script.program,
       e,
       lastBoundaryCumulative,
+      structureForTick(),
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
@@ -875,7 +935,10 @@ export function createFakeTransport(
   }
 
   function deliverArmedBundle(): void {
-    const { general, as1, as2 } = armedBundle(script.program);
+    const { general, as1, as2 } = armedBundle(
+      script.program,
+      structureForTick(),
+    );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
     notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
@@ -1268,20 +1331,21 @@ export function createFakeTransport(
       // IS loaded; it has nothing in it), and no boundary is ever reported
       // for it (`deliverOrCache`).
       //
-      // **`verifyArmed` still passes on this row, and the reason is THIS
-      // FAKE, not the driver** (review I-4). Since fix-3 Task 4 the driver
-      // reads 0x0031's structure back and rejects `"structure-mismatch"` on
-      // a wrong one — a real PM5's empty arm reports `workoutType=1
-      // durationRaw=0 durationType=128` (session 4a captured it on the
-      // wire) and WOULD be caught. This fake simply does not put that on
-      // its wire: `statusBundle` reports `script.program`'s structure
-      // regardless of `armedEmpty`, so the empty arm is visible here only
-      // through `loadedIntervals()`. **Closing that gap is Task 5's job**
-      // ("the fake carries structure; CI proves detection"); until it
-      // lands, a test on this row asserts the fake's own introspection,
-      // never end-to-end detection.
+      // Fix-3 Task 5: `verifyArmed` now genuinely rejects this row
+      // (`"structure-mismatch"`) — `currentArmedStructure()` reads
+      // `armedEmpty` below and reports SESSION 4a's captured empty-arm
+      // anatomy (`EMPTY_ARM_STRUCTURE`: `workoutType=1 durationRaw=0
+      // durationType=128`) on the WIRE, not just through
+      // `loadedIntervals()`'s introspection (review I-4's gap, closed).
       armedEmpty = sawRunningDuringProgramming;
       loadedIntervalCount = armedEmpty ? 0 : script.program.intervals.length;
+      // Fix-3 Task 5: this accept's own WAITTOBEGIN bundle (the very next
+      // status this machine delivers, `armedBundlePending` below) lags on
+      // the PRIOR structure for one tick if the script asked for it —
+      // `FakeScript.lagStructureOneTick`'s own doc comment has the
+      // hardware citation. One-shot per accept, same as the script fields
+      // this mirrors (`failNextProgramFrame`, `refuseNextPrepare`).
+      if (script.lagStructureOneTick) structureLagPending = true;
       // Whatever the prepare's terminate left mid-flight is superseded: the
       // machine has just re-armed on a program of its own, and the Rearm
       // cycle it was walking toward `WaitToBegin` has nowhere left to go.
