@@ -430,6 +430,24 @@ export function createPm5Driver(
   // exact shape instead of catching it).
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
+  /**
+   * Task 1 (fix-3, interface-notes.md §17 item 12): the machine's own idea
+   * of the ARMED workout's shape — `workoutType`/`workoutDurationRaw`/
+   * `workoutDurationType`, decoded by `parseGeneralStatus` from 0x0031
+   * (interface-notes.md §10) but until now dropped on the floor before
+   * anything logged them (`toMonitorFrame` never carries them into
+   * `MonitorFrame`, and the raw-hex `notify` branch above deliberately
+   * excludes 0x0031 — it notifies ~2/second, a flood the 500-entry ring
+   * cannot survive). Tracks the last COMBINATION of the three fields this
+   * driver has logged, so a `"structure"` entry (below) fires only on an
+   * actual change in one of them — the same on-change discipline `"frame"`
+   * uses for `state`, and for the identical flood reason.
+   */
+  let lastLoggedStructure: {
+    workoutType: number;
+    workoutDurationRaw: number;
+    workoutDurationType: number;
+  } | null = null;
   const seen = { general: false, as1: false, as2: false };
   /**
    * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
@@ -751,7 +769,7 @@ export function createPm5Driver(
     uuid: string,
     characteristic: Pm5ParseError["characteristic"],
     decode: (bytes: Uint8Array) => T | { error: Pm5ParseError },
-    after: (decoded: T) => void,
+    after: (decoded: T, bytes: Uint8Array) => void,
   ): void {
     t.subscribe(uuid, (bytes) => {
       // NO run/terminal gate here, ever (Task 4, spec §4): this callback
@@ -787,7 +805,7 @@ export function createPm5Driver(
         return;
       }
       raw = { ...raw, ...decoded };
-      after(decoded);
+      after(decoded, bytes);
     });
   }
 
@@ -1194,48 +1212,84 @@ export function createPm5Driver(
       noteBoundaryHalf("asSplit", decoded.splitIntervalNumber);
     },
   );
-  mergeStatus(GENERAL_STATUS_UUID, "0x0031", parseGeneralStatus, () => {
-    seen.general = true;
-    // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
-    // HIGH-2): only counts while a write is genuinely awaiting its ack
-    // (`pendingAck` set) AND a policy was actually configured — otherwise
-    // a fully-connected, un-timed-out session just counts nothing, ever.
-    if (pendingAck && options.ackTimeout) {
-      pendingAckTicks += 1;
-      if (pendingAckTicks >= options.ackTimeout.ticks) {
-        const resolve = pendingAck;
-        pendingAck = null;
-        resolve("ack-timeout");
+  mergeStatus(
+    GENERAL_STATUS_UUID,
+    "0x0031",
+    parseGeneralStatus,
+    (decoded, bytes) => {
+      seen.general = true;
+      // Task 1 (fix-3): the machine's idea of the armed workout's structure,
+      // already decoded by `parseGeneralStatus` (interface-notes.md §10) —
+      // recorded ON CHANGE ONLY, comparing the three DECODED fields rather
+      // than the raw bytes (`elapsed`/`distance`/HR etc. inside the same 19
+      // bytes change on nearly every tick regardless of whether the program
+      // structure itself did, and 0x0031 notifies ~2/second — the exact flood
+      // the raw-hex `notify` branch above already excludes it for). This is
+      // the prerequisite interface-notes.md §17 item 12 has been waiting on:
+      // no 0x0031 payload has ever been recorded before now.
+      const structure = {
+        workoutType: decoded.workoutType,
+        workoutDurationRaw: decoded.workoutDurationRaw,
+        workoutDurationType: decoded.workoutDurationType,
+      };
+      if (
+        !lastLoggedStructure ||
+        structure.workoutType !== lastLoggedStructure.workoutType ||
+        structure.workoutDurationRaw !==
+          lastLoggedStructure.workoutDurationRaw ||
+        structure.workoutDurationType !==
+          lastLoggedStructure.workoutDurationType
+      ) {
+        lastLoggedStructure = structure;
+        log.record(
+          "structure",
+          `workoutType=${structure.workoutType} durationRaw=${structure.workoutDurationRaw} durationType=${structure.workoutDurationType} raw=${toHex(bytes)}`,
+        );
       }
-    }
-    maybeEmitFrame();
-
-    // `program()`'s verification tick pulse (`verifyArmed`, below) — the
-    // SAME GENERAL_STATUS_UUID arrival `maybeEmitFrame` just used, per
-    // `DriverOptions.verifyTicks`'s own doc comment on why this is a
-    // separate budget from `pendingAckTicks` above. Reads `raw.workoutState`
-    // directly via `toMonitorFrame` rather than waiting on `maybeEmitFrame`'s
-    // own `seen.general && seen.as1 && seen.as2` gate: verification only
-    // ever needs `state`, which 0x0031 alone determines, so it must not be
-    // held hostage by AS1/AS2 notifications that a real PM sends on the
-    // same cadence but that carry fields verification doesn't use.
-    if (pendingVerify) {
-      if (toMonitorFrame(raw as RawPm5Status).state === "armed") {
-        const resolve = pendingVerify.resolve;
-        pendingVerify = null;
-        resolve();
-      } else {
-        pendingVerify.ticks += 1;
-        const ticks = pendingVerify.ticks;
-        if (options.verifyTicks !== undefined && ticks >= options.verifyTicks) {
-          settleVerifyFailure(
-            "not-observed",
-            `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
-          );
+      // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
+      // HIGH-2): only counts while a write is genuinely awaiting its ack
+      // (`pendingAck` set) AND a policy was actually configured — otherwise
+      // a fully-connected, un-timed-out session just counts nothing, ever.
+      if (pendingAck && options.ackTimeout) {
+        pendingAckTicks += 1;
+        if (pendingAckTicks >= options.ackTimeout.ticks) {
+          const resolve = pendingAck;
+          pendingAck = null;
+          resolve("ack-timeout");
         }
       }
-    }
-  });
+      maybeEmitFrame();
+
+      // `program()`'s verification tick pulse (`verifyArmed`, below) — the
+      // SAME GENERAL_STATUS_UUID arrival `maybeEmitFrame` just used, per
+      // `DriverOptions.verifyTicks`'s own doc comment on why this is a
+      // separate budget from `pendingAckTicks` above. Reads `raw.workoutState`
+      // directly via `toMonitorFrame` rather than waiting on `maybeEmitFrame`'s
+      // own `seen.general && seen.as1 && seen.as2` gate: verification only
+      // ever needs `state`, which 0x0031 alone determines, so it must not be
+      // held hostage by AS1/AS2 notifications that a real PM sends on the
+      // same cadence but that carry fields verification doesn't use.
+      if (pendingVerify) {
+        if (toMonitorFrame(raw as RawPm5Status).state === "armed") {
+          const resolve = pendingVerify.resolve;
+          pendingVerify = null;
+          resolve();
+        } else {
+          pendingVerify.ticks += 1;
+          const ticks = pendingVerify.ticks;
+          if (
+            options.verifyTicks !== undefined &&
+            ticks >= options.verifyTicks
+          ) {
+            settleVerifyFailure(
+              "not-observed",
+              `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
+            );
+          }
+        }
+      }
+    },
+  );
   mergeStatus(
     SPLIT_INTERVAL_DATA_UUID,
     "0x0037",

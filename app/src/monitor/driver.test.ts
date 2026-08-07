@@ -4645,6 +4645,224 @@ describe("createPm5Driver: the log records frame STATE CHANGES, not every frame"
   });
 });
 
+describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x0031's fields legible (interface-notes.md §17 item 12)", () => {
+  /** Mirrors `driver.ts`'s own module-private `toHex` byte-for-byte — kept
+   *  local rather than exported, the same choice `L3`'s own `hex` helper
+   *  above already made for the same reason (no test-only export of an
+   *  internal formatting detail). */
+  function hex(bytes: Uint8Array): string {
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
+  }
+
+  /** A full 0x0031 payload with the three structure fields under direct
+   *  control — `generalStatusIn` above hardcodes them, so this task's tests
+   *  need their own builder. Everything else is an arbitrary-but-valid
+   *  filler value, matching `generalStatusIn`'s own choices. */
+  function structureStatus(fields: {
+    workoutType: number;
+    workoutDurationRaw: number;
+    workoutDurationType: number;
+    workoutState?: number;
+    elapsedSeconds?: number;
+    distanceMeters?: number;
+  }): Uint8Array {
+    return buildGeneralStatusBytes({
+      elapsedSeconds: fields.elapsedSeconds ?? 0,
+      distanceMeters: fields.distanceMeters ?? 0,
+      workoutType: fields.workoutType,
+      intervalType: 0,
+      workoutState: fields.workoutState ?? WORKOUTSTATE_INTERVALWORKTIME,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: fields.distanceMeters ?? 0,
+      workoutDurationRaw: fields.workoutDurationRaw,
+      workoutDurationType: fields.workoutDurationType,
+      dragFactor: 130,
+    });
+  }
+
+  it("a fresh 0x0031 notification yields a 'structure' entry carrying the decoded fields and the raw hex (today: no such kind exists)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    const bytes = structureStatus({
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    });
+    transport.notify(GENERAL_STATUS_UUID, bytes);
+
+    const entries = log.entries().filter((e) => e.kind === "structure");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe(
+      `workoutType=8 durationRaw=6000 durationType=0 raw=${hex(bytes)}`,
+    );
+  });
+
+  it("a 10-tick burst with unchanged structure yields exactly ONE entry (the flood pin — 0x0031 notifies ~2/second, exactly why the raw-hex 'notify' branch above already excludes it)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    for (let i = 0; i < 10; i += 1) {
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        structureStatus({
+          workoutType: 8,
+          workoutDurationRaw: 6000,
+          workoutDurationType: 0,
+          // Elapsed/distance change on EVERY tick, same as a real machine —
+          // proving the change-gate compares the three DECODED fields, not
+          // the raw bytes (which never repeat here).
+          elapsedSeconds: i,
+          distanceMeters: i * 4,
+        }),
+      );
+    }
+
+    expect(log.entries().filter((e) => e.kind === "structure")).toHaveLength(1);
+  });
+
+  it("a change in any one of the three fields yields a fresh entry", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    const base = {
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    };
+    const typeChanged = { ...base, workoutType: 1 };
+    const durationChanged = { ...typeChanged, workoutDurationRaw: 3000 };
+    const durationTypeChanged = { ...durationChanged, workoutDurationType: 1 };
+    const script = [base, typeChanged, durationChanged, durationTypeChanged];
+
+    for (const fields of script) {
+      transport.notify(GENERAL_STATUS_UUID, structureStatus(fields));
+    }
+
+    const entries = log.entries().filter((e) => e.kind === "structure");
+    expect(entries.map((e) => e.detail)).toStrictEqual(
+      script.map(
+        (fields) =>
+          `workoutType=${fields.workoutType} durationRaw=${fields.workoutDurationRaw} durationType=${fields.workoutDurationType} raw=${hex(structureStatus(fields))}`,
+      ),
+    );
+  });
+
+  it("interleaves correctly with the existing state-change 'frame' entries — a 'structure' entry logs BEFORE the 'frame' entry on a tick where both change (ordering pin)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    // Satisfy `maybeEmitFrame`'s `seen.general && seen.as1 && seen.as2` gate
+    // once, up front — arbitrary-but-valid-length AS1/AS2 bytes, same as
+    // the "rowing-state frame arriving before program()" test above.
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+
+    const base = {
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    };
+    // Tick 1: state null -> armed (a change) AND structure null -> base (a
+    // change) — both entries fire on the SAME notification.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      structureStatus({ ...base, workoutState: WORKOUTSTATE_WAITTOBEGIN }),
+    );
+    // Tick 2: state armed -> rowing (a change); structure unchanged.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      structureStatus({ ...base, workoutState: WORKOUTSTATE_INTERVALWORKTIME }),
+    );
+    // Tick 3: state unchanged (still rowing); structure changes
+    // (workoutType only).
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      structureStatus({
+        ...base,
+        workoutType: 1,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      }),
+    );
+    // Tick 4: BOTH change again (rowing -> armed; durationRaw changes) —
+    // the ordering pin repeats a second time.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      structureStatus({
+        ...base,
+        workoutType: 1,
+        workoutDurationRaw: 3000,
+        workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      }),
+    );
+
+    const kinds = log
+      .entries()
+      .filter((e) => e.kind === "structure" || e.kind === "frame")
+      .map((e) => e.kind);
+    expect(kinds).toStrictEqual([
+      "structure",
+      "frame",
+      "frame",
+      "structure",
+      "structure",
+      "frame",
+    ]);
+  });
+
+  // Briefing's realistic-fixture rule: at least one of this task's tests
+  // starts from a real library workout via `fromWorkout`'s own assembly
+  // (`seaFretProgram`, defined at the top of this file), not a hand-built
+  // minimum — run through the fake's honest protocol rather than a stub.
+  it("real fixture (Sea Fret): arming and rowing several ticks logs exactly one 'structure' entry — the fake's own 0x0031 structure fields never change across a session", async () => {
+    const program = seaFretProgram();
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 120,
+        distanceMeters: 400,
+        spm: 20,
+        currentSplit: 130,
+        heartRateBpm: 130,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 180,
+        distanceMeters: 600,
+        spm: 21,
+        currentSplit: 128,
+        heartRateBpm: 132,
+        programIntervalIndex: 0,
+      },
+    ];
+    const { fake, driver, log } = harness({ program, events: timeline });
+    await programAndArm(driver, fake, program);
+    fake.tick(100);
+    fake.tick(100);
+
+    // The arm tick itself is the FIRST 0x0031 this driver ever sees, so it
+    // is a change from `null` — exactly one entry, never zero. Two more
+    // ticks with a different elapsed/distance but the SAME
+    // workoutType/durationRaw/durationType (the fake hardcodes 8/0/0 for
+    // every tick, `transports/fake.ts`) must add nothing further.
+    const entries = log.entries().filter((e) => e.kind === "structure");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toMatch(
+      /^workoutType=8 durationRaw=0 durationType=0 raw=([0-9a-f]{2} ){18}[0-9a-f]{2}$/,
+    );
+  });
+});
+
 describe("createPm5Driver: D5 — the beltless heart rate never reaches a consumer as a number", () => {
   it("both the live frame and the interval's own average read null, from a wire that carried 0", async () => {
     const timeline: FakeTimelineEvent[] = [
