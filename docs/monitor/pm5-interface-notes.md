@@ -1332,10 +1332,27 @@ settle off would be worse than one that needed a reconnect.
     The empty arm's own anatomy was captured too (settle-off,
     `program-short` over a running piece, monitor showing `:00`, driver
     reporting acked-armed): the duration reads `0` AND the type degrades to
-    `1`. Mid-cycle transients (`type=1` carrying stale, non-zero durations)
-    were also seen, and the payload can LAG the armed state by ≥1 tick — 2
-    of session 3's 5 clean arms carried the previous program's payload on
-    their first armed tick.
+    `1`. **Mid-cycle transients (`type=1` carrying stale, NON-ZERO
+    durations) were also seen** between the accept and the steady state —
+    the recorded fact that a single mismatched tick is not yet evidence of
+    a wrong arm. 4a's settle validation independently measured `"armed"
+    observed on tick 4`, twice, so a several-tick unsettled window is the
+    observed normal too.
+
+    > **NOT a 4a reading, and not located anywhere in this document
+    > (review I-1, fix-3 Task 4):** the fix-3 plan and Task 4's brief both
+    > state that "2 of session 3's 5 clean arms carried the previous
+    > program's 0x0031 payload on their first armed tick". §18's session-3
+    > record contains no such observation, and could not — fix-3 Task 1
+    > built the first log able to record a 0x0031 payload at all, so
+    > session 3 predates the instrument. What session 3 did show is a
+    > related but different observable: `verifyArmed` resolving on frames
+    > whose ELAPSED fields still carried the previous workout. The figure
+    > is recorded here as **plan-asserted, pending confirmation**; session
+    > 4b confirms or retires it, and the driver's own first-sighting
+    > `"structure-mismatch"` entry is the instrument that answers it. The
+    > N=3 rule does not rest on it — the transients and the tick-4 settle
+    > measurement above carry it on their own.
 
     **CONSUMED BY (fix-3 Task 4):** `verifyArmed` (`src/monitor/driver.ts`)
     now resolves only on a fresh post-send tick that is `armed` AND whose
@@ -1343,9 +1360,10 @@ settle off would be worse than one that needed a reconnect.
     derives the prediction from the ENCODER's own constants so the two
     cannot drift). A mismatch rejects with the new
     `ProgramRejectionReason` member `"structure-mismatch"` after **3
-    consecutive armed ticks reporting the SAME wrong structure** (above the
-    observed 1-tick lag, below the outer bound; the transients are why the
-    rule counts stable ticks), or at the `verifyTicks` bound — which now
+    consecutive armed ticks reporting the SAME wrong structure** (the
+    recorded transients are why the rule counts STABLE ticks — a payload
+    that keeps changing is a machine still settling, so it restarts the
+    count), or at the `verifyTicks` bound — which now
     DEFAULTS to 20 rather than meaning "unbounded", since an unbounded
     verify under a structure predicate turns a caught defect into a hang.
     The full 4a record lives in the SDD ledger's own `## SESSION 4a` block
@@ -1814,10 +1832,31 @@ the next one; James rows when a command says to):
    not a successful clear specifically).
 3. Controller: `curl -s localhost:5178/command -d program-two-time` —
    sends `TWO_TIME_PROGRAM` (two 60s/target-120/rest-30 intervals,
-   `app/scripts/pm5-lab.ts`'s own constant), which resolves only once
-   `verifyArmed` observes `state === "armed"` on the machine (Task 2's
-   fix) — a hang here (past `VERIFY_TICKS`, ~10s) is itself a finding, not
-   something to route around.
+   `app/scripts/pm5-lab.ts`'s own constant). **UPDATED for fix-3 Task 4:**
+   this resolves only once `verifyArmed` observes `state === "armed"` **AND**
+   0x0031 reads back interval 0's own structure (`workoutType=8
+   durationRaw=6000 durationType=0` for this program — §17 item 12's
+   table). **A HANG IS NO LONGER POSSIBLE**: `verifyTicks` now defaults to
+   20 unconditionally, so within ~10s at the observed 2 Hz cadence this
+   either resolves or rejects with a typed reason. Three outcomes, all
+   findings to RECORD:
+   - resolves → a genuine, structurally-confirmed arm;
+   - rejects `"structure-mismatch"` → the machine armed something other
+     than what was sent; the rejection detail carries observed-vs-expected
+     for all three fields;
+   - rejects `"not-observed"` → it never reached WaitToBegin at all.
+
+   **EXPECT one `"structure-mismatch"` log entry on a HEALTHY arm whose
+   first armed tick lagged — that is an OBSERVATION, not a failure.** The
+   entry fires once per verify phase at first sighting and reads `first
+   sighting — …`; the verdict channel is separate (`program-rejection` is
+   written only on an actual rejection, so grep that for outcomes). This
+   entry is the instrument that confirms or retires the plan's asserted
+   "2 of 5 arms lagged" figure — **record whether it appears on each clean
+   arm, and what it observed.** Relatedly, expect a BURST of Task 1
+   `"structure"` entries around any bad arm: that log dedups on change, and
+   a payload changing every tick does not dedup (now bounded by the same
+   20-tick default).
 4. James: row both intervals to completion (through the rest between
    them, to `WorkoutEnd`).
 5. Controller: `curl -s localhost:5178/command -d dump` — prints
@@ -3388,8 +3427,9 @@ find, not just this one.
 
 **Verdict: REAL PM5 BEHAVIOUR, UNDOCUMENTED.** The PM5 accepts and
 structurally arms an empty workout when programmed over a running one, and
-the accept is indistinguishable from a real one at every checkpoint this
-codec currently reads (`frameStatus`, `state === "armed"`). This likely
+at the time of this session the accept **was** indistinguishable from a real
+one at every checkpoint this codec read (`frameStatus`,
+`state === "armed"`). This likely
 **recontextualizes session 1's Verdict (a)** — the still-STANDING-OPEN
 `:00`/`:00` empty-display transition (§19.1; §19.2's correction) — as its
 leading explanation: a program sent while the machine was still live, not
@@ -3397,5 +3437,19 @@ a rejection-driven wipe (that mechanism was withdrawn). This is offered as
 the closest match on record, not as independent confirmation of the SAME
 root cause — **Verdict (a) stays OPEN; this is now its leading candidate
 explanation, not its answer.**
+
+> **NO LONGER INDISTINGUISHABLE (2026-08-07, SESSION 4a → fix-3 Task 4).**
+> The machine's behaviour above is unchanged and still undocumented — what
+> changed is our ability to SEE it. Session 4a captured the empty arm's own
+> 0x0031 steady state on the wire (`workoutType=1 durationRaw=0
+> durationType=128`, against a healthy arm's `8` plus interval 0's real
+> duration — §17 item 12's table), and `verifyArmed`
+> (`src/monitor/driver.ts`) now reads those three fields back and rejects
+> `"structure-mismatch"`. Both `:00` arms described above would fail
+> verification today rather than resolving as successes. This section's
+> present-tense claim that no checkpoint can tell the two apart was true
+> when written and is retained above in the past tense; the fix-3 remedies
+> are the PREVENTION (`waitForPrepareSettle`, Task 2) and the DETECTION
+> (the structural readback, Task 4) together.
 
 **Follow-up:** ROADMAP's Phase 7A-fix-3 ("program over a live piece").

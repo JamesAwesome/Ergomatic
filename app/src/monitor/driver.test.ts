@@ -5449,13 +5449,19 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
 
     await programAndArm(driver, fake, program);
 
-    // Every checkpoint this codec reads says success — `frameStatus` "ok"
-    // on every frame, `verifyArmed` satisfied — which is precisely §19.13's
-    // hazard: both hardware empty arms passed exactly these.
+    // Success here is the FAKE's limitation, not the driver's (review
+    // I-4). Since fix-3 Task 4 `verifyArmed` reads 0x0031's structure back
+    // and would reject a real PM5's empty arm (`workoutType=1
+    // durationRaw=0 durationType=128`, captured by session 4a) — but this
+    // fake reports `script.program`'s structure on the wire whatever it is
+    // actually holding, so nothing here contradicts it. Putting the zeroed
+    // structure on the fake's wire, and turning this row into a real
+    // end-to-end `"structure-mismatch"` assertion, is TASK 5's job.
     expect(events.some((e) => e.kind === "armed")).toBe(true);
     // …and the machine is holding a workout with NOTHING in it. `0`, not
-    // `null`: something IS loaded (Stage 2's readback is what will read
-    // this same fact off the wire).
+    // `null`: something IS loaded, it just has nothing in it. Today that
+    // fact reaches this test only through the fake's introspection; Task 5
+    // is what puts it on the wire where the driver can read it.
     expect(fake.loadedIntervals()).toBe(0);
 
     // Row on, well past the scripted boundary: no interval structure
@@ -5812,12 +5818,22 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
   });
 
-  it("the 1-tick payload LAG resolves SUCCESS — the first armed tick carrying the PREVIOUS program's payload must never reject (session 3: 2 of 5 clean arms lagged)", async () => {
-    // The hardware shape, not a hypothetical: two of five clean session-3
-    // arms carried the previous program's 0x0031 payload on their FIRST
-    // armed tick. Written FIRST against a naive first-armed-tick-reject
-    // implementation, where it fails with reason "structure-mismatch"
-    // instead of resolving (see the task report's mutation table).
+  it("the 1-tick payload LAG resolves SUCCESS — the first armed tick carrying the PREVIOUS program's payload must never reject (session 4a's recorded mid-cycle transients)", async () => {
+    // The shape a settling machine produces. Session 4a RECORDED mid-cycle
+    // transients between the accept and the steady state, and measured
+    // `"armed" observed on tick 4` twice — so a first armed tick that does
+    // not yet describe the new program is a normal reading, and rejecting
+    // on it would fail healthy programs.
+    //
+    // NOT cited to "2 of session 3's 5 clean arms" (review I-1): that
+    // figure is asserted by the fix-3 plan and this task's brief but has no
+    // source in this repo, and session 3 predates the first log able to
+    // record a 0x0031 payload at all. `STRUCTURE_MISMATCH_TICKS`'s own doc
+    // comment carries the full provenance; 4b confirms or retires it.
+    //
+    // Written FIRST against a naive first-armed-tick-reject implementation,
+    // where it fails with reason "structure-mismatch" instead of resolving
+    // (see the task report's mutation table).
     const transport = stubTransport();
     const log = createEventLog();
     const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
