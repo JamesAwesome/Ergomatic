@@ -694,10 +694,12 @@ export function createFakeTransport(
   let autoCycle: FakeStatusEvent[] = [];
   // §19.13: a programming frame arrived while the machine was STILL
   // `rowing`/`resting`, so whatever arms out of this sequence arms EMPTY.
-  // Sticky across the sequence and reset at the prepare (the reset point
-  // for everything else too), because the hardware repro's own terminated
-  // transition landed MID-send — the later frames arrived at a machine that
-  // was no longer running, and it armed empty anyway.
+  // Sticky across the sequence — the hardware repro's own terminated
+  // transition landed MID-send, so its later frames arrived at a machine
+  // that was no longer running and it armed empty anyway — and rewound by
+  // `beginProgrammingSequence()`, wherever a NEW sequence starts, never
+  // only at the prepare (review LOW-3/I-7: that left a bare sequence behind
+  // an explicit `terminate()` inheriting the previous one's poison).
   let sawRunningDuringProgramming = false;
   // Set by an EMPTY arm and cleared by a real one: while true this machine
   // holds no interval structure, so no boundary can ever be reported for
@@ -1008,15 +1010,35 @@ export function createFakeTransport(
    * unreachable, and the settle unfalsifiable.
    *
    * Only queued when the prepare's terminate lands on a machine that is
-   * actually RUNNING (`rowing`/`resting`). A terminate sent to a machine
-   * that is not mid-piece is a plain ACCEPT that changes nothing on the
-   * monitor — §18 session 3 item 15's captured byte, taken from an
-   * armed-idle screen: the ack came back READY with no state change
-   * recorded anywhere in the trace. Same narrow gate `driver.ts`'s
-   * `waitForPrepareSettle` uses for its entry condition, for the same
-   * reason: `rowing`/`resting` is what both hardware observations show, and
-   * inventing a cycle for the states nobody has observed one from would
-   * teach CI a fiction.
+   * actually RUNNING (`rowing`/`resting`) — the same narrow gate
+   * `driver.ts`'s `waitForPrepareSettle` uses for its entry condition, and
+   * for the same reason: those two states are what both hardware
+   * observations of the cycle show. The other four are NOT one case, and
+   * are not all equally unobserved (review IMPORTANT-5):
+   *
+   * - `armed` / `idle` — a plain ACCEPT that changes nothing on the
+   *   monitor, on §18 session 3 item 15's captured byte (taken from an
+   *   armed-idle screen: READY, with no state change recorded anywhere in
+   *   the trace).
+   * - `finished` — a terminate here IS documented to move the machine, but
+   *   NOT through this cycle: §19.4 quotes Appendix E's
+   *   `WorkoutLogged -> [Terminate] -> WaitToBegin` and flags the asymmetry
+   *   explicitly — the WorkoutLogged exit skips Rearm entirely. §18 Step 3
+   *   credits the prepare with taking the monitor off the finished screen.
+   *   That one-step exit is deliberately NOT modelled: nothing observable
+   *   distinguishes it today (the new program's own arm moves the display
+   *   either way, which is what Step 3 actually recorded), the settle never
+   *   engages from `finished`, and §18 records no intermediate state for
+   *   Step 3 the way it does for Step 5 and the REPRO. **Session 4a/4b
+   *   watch-item:** programming from a finished screen, does the machine
+   *   report a `WaitToBegin` tick BETWEEN the prepare's ack and the first
+   *   programming frame? That single reading decides whether this fake
+   *   should model the documented one-step exit.
+   * - `terminated` — nothing observed in either direction, and it is not a
+   *   free choice: widening the EMPTY-ARM key to include it breaks the
+   *   documented post-terminate reprogram path (§19.4/§19.5; the repo's own
+   *   two-coherent-runs test dies), so the model stays where the evidence
+   *   is.
    */
   function queueTerminateAutoCycle(): void {
     autoCycle = [
@@ -1035,6 +1057,28 @@ export function createFakeTransport(
   function advanceAutoCycle(): void {
     const next = autoCycle.shift();
     if (next) deliverOrCache(next);
+  }
+
+  /** Everything that has to be true when a fresh programming sequence is
+   *  about to arrive, in ONE place because there are TWO ways in: behind
+   *  `program()`'s own prepare step (`onClearingFrameComplete`) and behind
+   *  the app's explicit `terminate()`, which reopens the machine with no
+   *  prepare in front of the next sequence (`onArmedFrameComplete` —
+   *  "terminate is the documented exit back to a programmable state",
+   *  §19.4/§19.5).
+   *
+   *  `sawRunningDuringProgramming` belongs here and not only at the prepare
+   *  (review LOW-3/I-7): reset at the prepare alone, a bare sequence behind
+   *  a terminate INHERITS the previous sequence's poison and arms empty on
+   *  a machine reading `terminated` — a state no hardware reading supports.
+   *  Unreachable through `driver.program()`, which always prepares, so this
+   *  is model hygiene; but a fake that can be wrong in a way no test would
+   *  explain is the thing this file exists not to be. */
+  function beginProgrammingSequence(): void {
+    phase = "programming";
+    programChunkCursor = 0;
+    programFrameCursor = 0;
+    sawRunningDuringProgramming = false;
   }
 
   /** The clear step's own chunk assertion (plan Task 2) — reuses
@@ -1099,10 +1143,7 @@ export function createFakeTransport(
         queueTerminateAutoCycle();
       }
     }
-    phase = "programming";
-    programChunkCursor = 0;
-    programFrameCursor = 0;
-    sawRunningDuringProgramming = false;
+    beginProgrammingSequence();
   }
 
   // Byte-for-byte verification happens on every individual WRITE (BLE
@@ -1239,9 +1280,7 @@ export function createFakeTransport(
     // loaded workout is NOT cleared: terminate routes to Rearm, the SAME
     // workout made ready again (§19.5), so what `loadedIntervals()` reports
     // survives this.
-    phase = "programming";
-    programChunkCursor = 0;
-    programFrameCursor = 0;
+    beginProgrammingSequence();
     const terminated = synthesizeTerminated();
     // Through `setLatestStatus`, never by direct assignment (Task 6 fix
     // round, review MED-3): that function is the only place `machineState`

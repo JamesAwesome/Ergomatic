@@ -239,15 +239,32 @@ function driverOptions(): Parameters<typeof createPm5Driver>[2] {
     : { verifyTicks: VERIFY_TICKS };
 }
 
+/** The one phrasing of "which mode is this", used by the toggle, by the
+ *  connect handler, and by the log entry each of them writes — so the page,
+ *  the console and `exportLog()` can never disagree about it. */
+function settleModeLine(): string {
+  return settleDisabled
+    ? "settle OFF (prepareSettleTicks=0) — program() sends its frames straight after the prepare ack"
+    : "settle ON (prepareSettleTicks=default) — program() waits for armed+1 when the prepare fires against a rowing/resting machine";
+}
+
 function setSettle(disabled: boolean): void {
   settleDisabled = disabled;
+  const line = settleModeLine();
   out(
-    `settle ${disabled ? "OFF (prepareSettleTicks: 0)" : "ON (default bound)"}${
+    `${line}${
       driver
         ? " — takes effect on the NEXT Scan & connect (the live driver keeps the setting it was built with)"
         : " — will apply to the driver built by Scan & connect"
     }`,
   );
+  // Into the EXPORTED log too, not just the page (review IMPORTANT-6):
+  // sessions 4a step 2/3 and 4b step 2 exist to compare settle-off against
+  // settle-on, and `exportLog()`'s dump is the artifact those readings get
+  // written up from. Absence of `prepare-settle` entries is ambiguous
+  // evidence on its own — it also means "the prior state wasn't rowing" —
+  // so the mode has to be stated, not inferred.
+  log.record("settle-mode", `${line} (requested; not yet applied)`);
 }
 
 const rawLog = createEventLog();
@@ -317,6 +334,10 @@ onClick("connect", async () => {
   await transport.connect(found.id);
   out("connect(): ok");
   driver = createPm5Driver(transport, log, driverOptions());
+  // The mode this driver was actually BUILT with — the entry every dump
+  // carries, distinct from the "requested" one `setSettle` writes.
+  log.record("settle-mode", `${settleModeLine()} (active for this driver)`);
+  out(settleModeLine());
   wireEvents(driver);
   out(`capabilities: ${JSON.stringify(driver.capabilities)}`);
 });

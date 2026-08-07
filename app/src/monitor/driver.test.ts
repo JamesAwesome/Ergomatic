@@ -180,10 +180,21 @@ async function programAndArm(
 
 /**
  * The `stubTransport` counterpart to `programAndArm`: drives one complete
- * `program()` call by hand — the prepare step's routine refusal, the real
- * send's `"ok"` ack, then a FRESH post-send "armed" status for
- * `verifyArmed()` to observe (never a cached one; that is the whole point
- * of that phase).
+ * `program()` call by hand — a refused prepare step, the real send's
+ * `"ok"` ack, then a FRESH post-send "armed" status for `verifyArmed()` to
+ * observe (never a cached one; that is the whole point of that phase).
+ *
+ * **The refusal is NOT what the machine does** (§18 s3 item 15: the one
+ * byte ever captured for a terminate sent with nothing running decodes to
+ * an ACCEPT, and fix-3 Task 3 retired the fake's always-refuse default for
+ * that reason). It is kept here only because every test below cares about
+ * ACK TIMING rather than the prepare's outcome, `sendPrepare` swallows any
+ * non-disconnect answer identically, and flipping this default would
+ * re-point dozens of by-hand exchanges for no behavioural gain. Read it as
+ * "an outcome the prepare survives", never as the machine's normal answer;
+ * the fake-driven tests are the ones that model what the PM actually
+ * sends. (Flagged for 7B: if this helper is ever rewritten, the accept is
+ * the honest default.)
  *
  * Needed wherever a test must control the TIMING of individual acks and
  * status frames by hand — an ack that never comes, one that arrives before
@@ -211,8 +222,10 @@ async function programViaStub(
   const start = sent();
   const pending = driver.program(p);
   await waitUntil(() => sent() > start);
-  // A refusal is the prepare step's expected answer (`sendPrepare`
-  // swallows anything but a disconnect).
+  // A refusal — never-observed on hardware (§18 s3 item 15), used here
+  // only because `sendPrepare` swallows anything but a disconnect and
+  // these tests are about ack TIMING, not the prepare's outcome. See this
+  // helper's own doc comment.
   transport.notify(
     TRANSMIT_CHARACTERISTIC_UUID,
     buildAckFrame({ frameStatus: "reject" }),
@@ -4319,10 +4332,19 @@ describe("createPm5Driver: programming over a loaded workout ACCEPTS and REPLACE
     await programAndArm(driver, fake, MINIMAL_PROGRAM);
 
     // §19.1's `S2 D2`/`S2 D3` rows: terminate acked "ok" with a workout
-    // loaded — so NO "prepare-rejected" entry, unlike every clean-state
-    // program() in this file, which meets the nothing-loaded refusal
-    // instead. Terminate still is not a clear (§19.5: it routes to Rearm),
-    // but that no longer implies the program after it fails.
+    // loaded — raw captured bytes, `f1 01 76 01 13 65 f2` /
+    // `f1 81 76 01 13 e5 f2`. This is the LOADED half of the accept, and
+    // it is a different byte source from item 15's empty-machine capture
+    // that the sibling removal test rests on — two independent
+    // observations of the same behaviour, which is why both tests stay.
+    //
+    // The old "unlike every clean-state program() in this file, which
+    // meets the nothing-loaded refusal instead" contrast is GONE with the
+    // refusal itself (fix-3 Task 3, review IMPORTANT-3); what this test
+    // still holds on its own is the `loadedWorkout` fixture's behaviour
+    // below — the prepare does NOT clear (§19.5: it routes to Rearm), and
+    // the program that follows REPLACES the two-interval workout the
+    // machine was holding.
     expect(log.entries().some((e) => e.kind === "prepare-rejected")).toBe(
       false,
     );
@@ -4331,6 +4353,7 @@ describe("createPm5Driver: programming over a loaded workout ACCEPTS and REPLACE
       false,
     );
     expect(log.entries().some((e) => e.kind === "programmed")).toBe(true);
+    expect(fake.loadedIntervals()).toBe(MINIMAL_PROGRAM.intervals.length);
   });
 });
 
@@ -5367,14 +5390,32 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     // exists, so no boundary is ever reported for this program — hardware
     // rowed 108.4 m past what should have been a 100 m interval and saw
     // none.
+    //
+    // Both assertions below are scoped to what arrives AFTER the arm
+    // resolved (review IMPORTANT-1). An unscoped `some(kind === "frame")`
+    // does not bite: `events` already holds a frame from the pre-`program()`
+    // rowing tick, so the reviewer made the fake go completely silent after
+    // an empty arm and the assertion still passed — it was satisfied by
+    // data from before the behaviour it claims to describe.
+    const afterArm = events.length;
     for (let i = 0; i < 5; i += 1) fake.tick(1000);
+    const afterRowing = events.slice(afterArm);
+    expect(afterRowing.some((e) => e.kind === "intervalComplete")).toBe(false);
     expect(events.some((e) => e.kind === "intervalComplete")).toBe(false);
-    // The link is alive throughout — frames keep arriving; it is the
-    // STRUCTURE that is missing, not the stream.
-    expect(events.some((e) => e.kind === "frame")).toBe(true);
+    // The link is alive throughout — frames keep arriving once the empty
+    // workout is armed and being rowed; it is the STRUCTURE that is
+    // missing, not the stream.
+    expect(afterRowing.some((e) => e.kind === "frame")).toBe(true);
   });
 
   it("settle ON (the default): the same program over the same rowing machine holds its frames until the machine reports armed — and the arm is real, boundaries and all", async () => {
+    // NOT a strict A/B against the test above (review LOW-2): this fixture
+    // carries one extra scripted status the settle-OFF one does not —
+    // `stillArmedAt(1)`, the "+1 tick" the settle's end condition needs,
+    // which the fake cannot produce on its own (no heartbeat model, see
+    // `tick()`'s doc comment) — and it builds its transport by hand to get
+    // the write spy. The PROGRAM and the machine's state at dispatch are
+    // identical; the timelines are not.
     const program = seaFretProgram();
     const fake = createFakeTransport({
       program,

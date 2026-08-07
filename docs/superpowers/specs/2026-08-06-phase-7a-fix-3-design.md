@@ -78,15 +78,46 @@ prior state was rowing/resting.
 Today the fake's `onClearingFrameComplete` acks and changes NOTHING —
 no state transition, no status delivery — while hardware visibly runs
 terminate → idle → armed off the same wire command (both empty arms and
-every clean mid-session arm). Fix: the prepare synthesizes and delivers
-the terminate transition exactly as `onArmedFrameComplete` does (cited
-to §18 session 3), followed by the auto-cycle to `armed` across
-subsequent ticks. THEN the empty arm is modelled honestly, keyed on
-machine state: **programming frames that arrive while the fake's state
-is still `rowing`/`resting` arm EMPTY** (armed, structure zeroed, no
-boundaries ever). With that model, the settle test passes BECAUSE the
-settle works (the fake reaches `armed` before frames go out), not
-because a script or a tick-count agrees with the fix.
+every clean mid-session arm). Fix: the prepare **synthesizes the
+terminate transition through the same code path `onArmedFrameComplete`
+uses** (same wire command, same reaction — cited to §18 session 3) and
+delivers it, **and the Rearm/WaitToBegin steps behind it, ONE STATUS PER
+TICK**: terminated → idle → armed. THEN the empty arm is modelled
+honestly, keyed on machine state **at the moment each programming frame
+ARRIVES**: **programming frames that arrive while the fake's state is
+still `rowing`/`resting` arm EMPTY** (armed, structure zeroed, no
+boundaries ever), sticky across the sequence. A prepare landing on a
+machine that is not mid-piece is a plain accept: no transition, no cycle
+(§18 s3 item 15's captured byte; `finished`'s documented one-step
+`WorkoutLogged -> WaitToBegin` exit, §19.4's own flagged asymmetry, is
+deliberately not modelled — a 4a/4b watch-item). With that model, the
+settle test passes BECAUSE the settle works (the fake reaches `armed`
+before frames go out), not because a script or a tick-count agrees with
+the fix.
+
+> **Corrected 2026-08-07 by implementation evidence** (Task 3's review,
+> `.superpowers/sdd/2026-08-06-phase-7a-fix-3/task-3-review.md`,
+> Priority 1 — deviation UPHELD). The adversarially-revised draft of this
+> paragraph said the prepare delivers the terminate transition "exactly
+> as `onArmedFrameComplete` does", i.e. SYNCHRONOUSLY inside the ack,
+> while its own parenthetical put `terminated` on a tick. Those cannot
+> both hold with the state-keyed empty arm this same paragraph requires:
+> `program()` always leads with the prepare, so a synchronous transition
+> means the machine reads `terminated` before any programming frame can
+> arrive, `rowing`/`resting` never latches, and the empty arm becomes
+> unreachable. The reviewer patched the literal reading in and measured
+> it (both required empty-arm tests fail), then tested and refuted the
+> only escape — widening the poison key to `terminated`, which breaks the
+> documented post-terminate reprogram path (§19.4/§19.5) and kills the
+> repo's two-coherent-runs test; widening to `idle` is refuted by §19.13
+> classing idle as *settled*. Under every evidence-consistent key,
+> synchronous delivery makes the empty arm unreachable. The record agrees
+> from the other side: §18's two empty arms BOTH report
+> `{"kind":"terminated"}` **mid-send** — after the prepare's ack, with
+> programming frames already going out — and §1b's own budget describes a
+> multi-tick reaction, not an instantaneous one. `onArmedFrameComplete`
+> keeps its synchronous delivery deliberately, as the fake's stand-in for
+> the app's own explicit `terminate()`.
 
 **1d. Item 15's obligations — the refusal moves, not vanishes.** The
 fake's idle-terminate refusal is WITHDRAWN as default behaviour (the
