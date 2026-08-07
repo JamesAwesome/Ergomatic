@@ -2490,15 +2490,13 @@ on the toggle having actually taken effect before `Scan & connect`.
 `domain/monitor/pm5/statusFrames.ts`) — see those files' own doc comments,
 now pointed at this section rather than at the ledger's interim record.
 
-### SESSION 4b (PENDING — James-operated, not yet run)
+### SESSION 4b (RUN 2026-08-07 — James-operated; PM5 432331249, watch-link
+HR; raw capture `docs/monitor/sessions/pm5-session4b-final.log.gz`)
 
-Design spec §Session-4b's two-row detection test (`docs/superpowers/specs/
-2026-08-06-phase-7a-fix-3-design.md`), scaffolded here so results have a
-destination the moment the row runs. **Every slot below is EMPTY — no
-result has been received, and nothing in this section should be read as
-anything but a template until James runs it.** Mechanics (the settle
-toggle, the repro recipe, the harness commands) are §17's — this section
-records outcomes, not procedure.
+Design spec §Session-4b's two-row detection test. Both rows ran on the
+final branch build (c1438ce, port-checked; construction `settle-mode`
+lines verified before each row — the toggle-then-connect order §17
+documents, after one aborted attempt in 4a taught it). ~4 minutes total.
 
 1. **Settle-ON repro → structured arm, short row confirms the first
    boundary.** Send: with the settle at its default (ON, 10 ticks), row a
@@ -2516,7 +2514,20 @@ records outcomes, not procedure.
    terminate (a `terminated`/`idle` `frame` entry in the dump)? A release
    with no such entry preceding it would be the predating shape landing on
    real hardware.**
-   **Observed: PENDING.**
+   **Observed: PASS, all readings.** Machine `rowing` at 25.8m when
+   `program-short` (3×500m) went out over the running two-time piece. The
+   settle walked the full cycle — `terminated` (elapsed 13.85) → `idle` →
+   `armed` — and `prepare-settled` read `"armed" observed on tick 4 of
+   the wait; released one tick later (that tick's state: "armed")` — the
+   THIRD hardware measurement of the span, third identical tick-4
+   reading. Verification then resolved on `structure` `workoutType=8
+   durationRaw=500 durationType=128` (the sent program's interval 0).
+   JAMES: monitor showed 500m; a few strokes confirmed it counting down
+   (the full-boundary conversion was 4a's; not repeated). **M2/Probe-F
+   watch-line: the terminate reaction (`terminated` frame, seq 23) was
+   visible BEFORE the releasing armed tick (seq 30) — the predating shape
+   did NOT land on this row.** Mid-cycle the structure read the
+   transitional `workoutType=1` shapes exactly as 4a recorded.
 2. **The detection row — settle OFF, repro again → typed
    `structure-mismatch`, never silent.** Send: `settle-off` (then reconnect,
    per §17's toggle note), same repro recipe. Do: no rowing required beyond
@@ -2527,7 +2538,21 @@ records outcomes, not procedure.
    hardware-validates the load-bearing half of Stage 2: CI has proven the
    predicate rejects a scripted empty arm, but no real PM5 has yet been
    caught by it.
-   **Observed: PENDING.**
+   **Observed: PASS — a real PM5 was caught.** Fresh driver constructed
+   settle-OFF (construction line verified; the refresh→toggle→connect
+   order). Machine still `rowing` in the prior 500m piece;
+   `program-two-time` sent over it. The machine empty-armed exactly as
+   §19.13 describes — the `structure` stream decayed through the
+   transitional shapes to the captured anatomy (`workoutType=1
+   durationRaw=0 durationType=128`) — and the driver REJECTED:
+   `ProgramRejectionError: PM5 reported "armed" while holding a different
+   workout than the one just sent`, after `3 consecutive armed tick(s)
+   reporting the same wrong structure`, detail carrying observed
+   (`1/0/128`) vs expected (`8/6000/0`). One `structure-mismatch` log
+   entry, first-sighting semantics as designed. JAMES: monitor showed
+   `:00` — the machine WAS empty-armed; the difference from sessions 1-3
+   is that the software now says so, typed and loud. **The load-bearing
+   half is hardware-validated in the failure direction.**
 3. **Disagreement is a finding**, not a re-run trigger — same discipline as
    every prior row in this document. **Certification honesty:** the
    settle's latency claim (zero added ticks) is settle-scoped — it says
