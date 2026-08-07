@@ -1008,6 +1008,15 @@ audit than one that shows its full history. Two-tier summary:
 > index (item 13) is now ANSWERED by laptop session 2: forward attribution
 > applies there too (§19.8).
 
+> **CORRECTION (2026-08-07, SESSION 4a, §18).** The STILL-OPEN bullet
+> above also lists item 5 as untested from a known-empty machine "whether
+> [the] DISTANCE kind program[s] correctly." Session 4a armed a genuine
+> DISTANCE program (3×500m r60) from a settled state and read its structure
+> back correctly (`8` / `500` / `128`, §18 SESSION 4a). That substantially
+> answers the DISTANCE half of item 5; the genuinely multi-FRAME retention
+> half (Sea Smoke's 25 intervals / 7 frames, from a known-empty machine) is
+> still untested and remains the item's open remainder.
+
 This session remains a **James-device event**, run with a controller
 driving the bridge (`app/scripts/pm5-bridge.mjs`) alongside him — never a
 CI gate, and not required for any task's own gates to pass.
@@ -2448,9 +2457,13 @@ driver reporting acked-armed:
 
 **The settle — TRACE-VERIFIED, twice, JAMES-VERBAL cross-confirmed.** Same
 repro, settle ON (the default, 10 ticks): both runs logged
-`prepare-settled: "armed" observed on tick 4 of the wait` — the design
-spec's derived "4-5 ticks" estimate is now a measurement, not an inference,
-and it lands inside the estimate's own range. Both times James read the
+`prepare-settled: "armed" observed on tick 4 of the wait; released one tick
+later (that tick's state: "armed")` — the design spec's derived "4-5
+ticks" estimate is now a measurement, not an inference, and it lands
+inside the estimate's own range. **This also ANSWERS Task 2 review's
+carried M1** (the +1 grace tick may itself read `rowing`, not a settled
+state): both runs' own +1 tick read `"armed"`, not `rowing` — the grace
+tick was itself clean at this repro. Both times James read the
 monitor and reported the REAL workout was showing, not `:00` — "surprisingly
 the monitor shows a 500m" (JAMES-VERBAL, `program-short`'s shape). Two runs
 is the full sample; both agree.
@@ -2496,6 +2509,13 @@ records outcomes, not procedure.
    `workoutType`/duration, not `EMPTY_ARM_STRUCTURE`'s `1`/`0`/`128`? Does
    the monitor display the real workout, not `:00`? Does `intervalComplete`
    fire at the first boundary with real data?
+   **Also observe (Task 2 review's carried M2 — an `armed` reading can
+   predate the PM acting on OUR terminate, `waitForPrepareSettle`'s own doc
+   comment, Probe F): on this settle-ON row, does the armed tick that
+   releases the settle come BEFORE or AFTER any visible reaction to our
+   terminate (a `terminated`/`idle` `frame` entry in the dump)? A release
+   with no such entry preceding it would be the predating shape landing on
+   real hardware.**
    **Observed: PENDING.**
 2. **The detection row — settle OFF, repro again → typed
    `structure-mismatch`, never silent.** Send: `settle-off` (then reconnect,
@@ -2512,9 +2532,12 @@ records outcomes, not procedure.
    every prior row in this document. **Certification honesty:** the
    settle's latency claim (zero added ticks) is settle-scoped — it says
    nothing about the readback; the readback itself may cost ~1 tick where
-   the payload lags behind the armed state (observed 2-of-5 in the pattern
-   Task 4's review located, accepted and stated as a real cost, not pinned
-   away).
+   the payload lags behind the armed state (review I-1's "2 of 5 clean
+   arms" figure, demoted in `driver.ts`'s `STRUCTURE_MISMATCH_TICKS`
+   comment to ASSERTED-NOT-LOCATED — Task 4's review is precisely where
+   this figure was found to have NO source in this repo, not where it was
+   observed; treated here as a plausible cost pending this row's own
+   confirmation or retirement, not an accepted one).
 
 **Carried watch-items — observe alongside the two rows above, not as
 separate hardware actions:**

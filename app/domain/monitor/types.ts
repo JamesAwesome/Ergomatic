@@ -193,9 +193,15 @@ export interface MonitorDriver {
    * CI. `verifyArmed` additionally performs the STRUCTURAL READBACK that
    * catches an empty arm even when the settle's own bound expires (fix-3
    * Task 4, built on session 4a's hardware readings — interface-notes.md
-   * §17 item 12, now ANSWERED): a call that arms with anything other than
-   * the program just sent rejects `"structure-mismatch"` rather than
-   * resolving. Still OPEN on top of Verdict (a) itself: session 4b's own
+   * §17 item 12, now ANSWERED): a call that arms with anything whose
+   * INTERVAL 0 differs from the program just sent rejects
+   * `"structure-mismatch"` rather than resolving. That is narrower than
+   * "anything other than the program just sent" — see `verifyArmed`'s own
+   * "What this does NOT cover (review L-2)" note for what a MATCHING
+   * interval 0 still hides (0x0031 carries only one duration pair, so a
+   * stale readback from a previous program sharing interval 0, e.g. two
+   * library workouts sharing a 300s warmup, can still verify falsely).
+   * Still OPEN on top of Verdict (a) itself: session 4b's own
    * hardware validation of the pair has not run — 7B's "prove the monitor
    * idle before programming" still stands until it does.
    */
