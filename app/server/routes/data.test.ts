@@ -1265,6 +1265,44 @@ describe("GET/PUT /api/prefs", () => {
   });
 });
 
+describe("article reads", () => {
+  it("GET returns an empty list for a fresh user", async () => {
+    const res = await asA(
+      request(appFor(makeStores())).get("/api/article-reads"),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({ slugs: [] });
+  });
+
+  it("PUT then GET round-trips; PUT is idempotent", async () => {
+    const app = appFor(makeStores());
+    expect(
+      (await asA(request(app).put("/api/article-reads/workout-types"))).status,
+    ).toBe(204);
+    expect(
+      (await asA(request(app).put("/api/article-reads/workout-types"))).status,
+    ).toBe(204);
+    const res = await asA(request(app).get("/api/article-reads"));
+    expect(res.body).toStrictEqual({ slugs: ["workout-types"] });
+  });
+
+  it("rejects a slug outside the safe shape", async () => {
+    const app = appFor(makeStores());
+    for (const bad of ["UPPER", "a b", "a/../b", "x".repeat(65), "é"]) {
+      const res = await asA(
+        request(app).put(`/api/article-reads/${encodeURIComponent(bad)}`),
+      );
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("requires a session", async () => {
+    const app = appFor(makeStores());
+    expect((await request(app).get("/api/article-reads")).status).toBe(401);
+    expect((await request(app).put("/api/article-reads/x")).status).toBe(401);
+  });
+});
+
 describe("GET /api/test-history", () => {
   it("starts empty", async () => {
     const res = await asA(

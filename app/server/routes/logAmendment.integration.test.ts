@@ -11,6 +11,7 @@ import { baseDeps } from "../testDeps.js";
 import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
+import { createArticleReadsStore } from "../stores/articleReads.js";
 import { createBaselinesStore } from "../stores/baselines.js";
 import { createLogsStore } from "../stores/logs.js";
 import { createPlanStateStore } from "../stores/planState.js";
@@ -48,6 +49,7 @@ describe("POST/GET /api/logs: optional targetSplit and paired actuals round-trip
       planState: createPlanStateStore(db),
       preferences: createPreferencesStore(db),
       testHistory: createTestHistoryStore(db),
+      articleReads: createArticleReadsStore(db),
     };
 
     app = createApp(

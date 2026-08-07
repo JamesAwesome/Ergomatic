@@ -3,6 +3,7 @@ import type { SessionStore } from "../auth/sessions.js";
 import type { UserStore } from "../auth/users.js";
 import type { WorkoutInput, WorkoutType } from "../../domain/types.js";
 import { type Stores } from "../routes/data.js";
+import type { ArticleReadsStore } from "../stores/articleReads.js";
 import type { BaselinesRow, BaselinesStore } from "../stores/baselines.js";
 import type { LogInput, LogsStore } from "../stores/logs.js";
 import type {
@@ -395,7 +396,27 @@ function makeFakeTestHistoryStore(): TestHistoryStore {
   } as unknown as TestHistoryStore;
 }
 
-/** Complete per-user in-memory implementation of all six data-router stores. */
+// Mirrors the real store's idempotency semantics (app/server/stores/
+// articleReads.ts): a repeated markRead for the same user+slug is a no-op,
+// same as the real store's onConflictDoNothing.
+function makeFakeArticleReadsStore(): ArticleReadsStore {
+  const byUser = new Map<string, Set<string>>();
+  return {
+    async list(userId: string) {
+      return [...(byUser.get(userId) ?? new Set<string>())];
+    },
+    async markRead(userId: string, slug: string) {
+      let slugs = byUser.get(userId);
+      if (!slugs) {
+        slugs = new Set();
+        byUser.set(userId, slugs);
+      }
+      slugs.add(slug);
+    },
+  } as unknown as ArticleReadsStore;
+}
+
+/** Complete per-user in-memory implementation of all seven data-router stores. */
 export function makeFakeStores(): Stores {
   const planState = makeFakePlanStateStore();
   return {
@@ -405,6 +426,7 @@ export function makeFakeStores(): Stores {
     planState,
     preferences: makeFakePreferencesStore(),
     testHistory: makeFakeTestHistoryStore(),
+    articleReads: makeFakeArticleReadsStore(),
   };
 }
 
