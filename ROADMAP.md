@@ -1382,7 +1382,7 @@ reconciled against 7A's shipped types before this phase starts.
       close this run on a failed re-program, reasoned fresh against the
       post-§19.2 record, not against the withdrawn wipe. Cited in the
       whole-branch fix-2 ledger (`.superpowers/sdd/2026-08-06-phase-7a-fix-2/progress.md`).
-- [ ] **A second `program()` call during the prepare-settle wait strands the
+- [x] **A second `program()` call during the prepare-settle wait strands the
       first.** `driver.ts`'s `pendingAck`/`pendingVerify` single-flight
       class (immediately above) has a THIRD member as of fix-3's settle:
       `pendingPrepareSettle`. Phase 7A-fix-3 Task 2's review (Probes C/C3)
@@ -1391,20 +1391,31 @@ reconciled against 7A's shipped types before this phase starts.
       from microtasks to up to `prepareSettleTicks` worth of wall time
       (~5 s at the default of 10 ticks). Pre-existing class, not a fix-3
       regression, but fix-3 makes the window big enough to hit in practice.
-      7B's connect/program flow must treat `program()` as single-flight (no
-      concurrent calls from the UI) as a hard requirement, not an assumption.
       Cited in the fix-3 ledger (`.superpowers/sdd/
-      2026-08-06-phase-7a-fix-3/progress.md`, Task 2 review M4).
-- [ ] `src/monitor/driver.ts`'s `createPm5Driver` still hardcodes
+      2026-08-06-phase-7a-fix-3/progress.md`, Task 2 review M4). **Fixed in
+      Phase 7B Task 1:** `program()` now checks an in-flight flag FIRST —
+      before `sendPrepare`, before any wire traffic — and throws a new
+      `ProgramBusyError` for a concurrent call (deliberately NOT a
+      `ProgramRejectionReason` member; that union stays
+      machine-statements-only, since no frame was ever sent for the
+      rejected call). The busy call costs zero writes and never affects the
+      first call's own outcome; the flag clears on every exit path
+      (resolve or any reject) via `program()`'s own `try`/`finally`.
+      `driver.test.ts`'s "ProgramBusyError" describe block is the coverage.
+- [x] `src/monitor/driver.ts`'s `createPm5Driver` used to hardcode
       `capabilities.deviceName: "PM5"` (a placeholder, honestly commented
       in place) because its constructor signature (`createPm5Driver(t,
-      log)`) is never given a `DiscoveredMonitor`. The real source is
+      log)`) was never given a `DiscoveredMonitor`. The real source is
       `DiscoveredMonitor.name` (`domain/monitor/types.ts`) — the advertised
-      name `Transport.scan()` already returns (e.g. "PM5 432331249"). This
-      phase's scan/connect wiring must thread that name into
-      `createPm5Driver` (e.g. an extra constructor argument) so
-      `capabilities.deviceName` reflects the actual connected device, not
-      the placeholder.
+      name `Transport.scan()` already returns (e.g. "PM5 432331249").
+      **Fixed in Phase 7B Task 1:** `createPm5Driver` now accepts
+      `options.deviceName` (`DriverOptions.deviceName`), which flows
+      straight into `capabilities.deviceName` and from there into
+      `MonitorRun.deviceName` — falling back to the `"PM5"` placeholder
+      only when no name was given at all, never fabricated otherwise.
+      `scripts/pm5-lab.ts` threads its own `scan()` result (`found.name`)
+      through as the reference caller; a future connect screen does the
+      same.
 
 **Exit:** On a real PM5: distance steps auto-advance, live pace shows
 against target, and "Connect PM5" degrades silently to manual on
