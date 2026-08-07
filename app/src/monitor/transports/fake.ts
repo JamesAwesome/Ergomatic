@@ -539,6 +539,21 @@ function statusBundle(
       // one-tick payload lag and the end-to-end detection rows, is Task
       // 5's own job (plan: "the fake carries structure; CI proves
       // detection").
+      //
+      // ⚠ **TASK 5 MUST REPLACE THIS CALL** (review I-5). Calling the
+      // DRIVER's own predictor makes this fake a MIRROR, not a witness: a
+      // wrong prediction and a wrong wire would agree, and no fake-driven
+      // test could tell. Task 4 tolerates it only because every structural
+      // assertion it added is stub-driven against 4a's values as
+      // INDEPENDENT LITERALS (`driver.test.ts`'s
+      // `healthyArmedStructureFor`, `commands.test.ts`'s own anchors), and
+      // a reviewer's last-interval mutation of `expectedArmedStructure`
+      // killed four of those literal tests first. Task 5's plan text
+      // already points the right way — "extend the existing `statusFrames`
+      // builders — no fork" — i.e. ENCODE 4a's semantics here from the
+      // workout this machine holds, independently. If Task 5 keeps this
+      // call, its promised end-to-end row ("settle ON → success with
+      // structure") proves only that a function equals itself.
       ...expectedArmedStructure(program),
       dragFactor: 130,
     },
@@ -620,9 +635,14 @@ function boundaryBundle(
  *  `{ intervals: [] }`, which was harmless while `statusBundle` only read
  *  the program for its `intervalType` byte — but that placeholder now
  *  decides the 0x0031 STRUCTURE fields too, and an empty program's
- *  prediction is precisely the EMPTY-ARM reading (`workoutType=8`,
- *  duration `0`/Distance). A fake that armed with that would fail its own
- *  driver's readback on every single test. */
+ *  predicted DURATION PAIR is the empty arm's own (`0` at identifier 128,
+ *  `expectedArmedStructure`'s fallback). Only the duration pair: session
+ *  4a's captured empty arm additionally read `workoutType=1`, which no
+ *  prediction ever produces, so the predicate can still catch a real empty
+ *  arm on the type (review L-3 — an earlier draft of this comment said
+ *  "precisely the EMPTY-ARM reading", which over-claimed). A fake that
+ *  armed on the placeholder would nonetheless fail its own driver's
+ *  readback on every single test. */
 function armedBundle(program: WorkoutProgram): {
   general: GeneralStatus;
   as1: AdditionalStatus1;
@@ -1246,9 +1266,20 @@ export function createFakeTransport(
       // EMPTY (§19.13): the machine holds a workout with NO interval
       // structure — `loadedIntervals()` reads `0`, never `null` (something
       // IS loaded; it has nothing in it), and no boundary is ever reported
-      // for it (`deliverOrCache`). `verifyArmed`'s `state === "armed"` is
-      // satisfied either way, which is precisely the hazard: on hardware
-      // both empty arms passed it.
+      // for it (`deliverOrCache`).
+      //
+      // **`verifyArmed` still passes on this row, and the reason is THIS
+      // FAKE, not the driver** (review I-4). Since fix-3 Task 4 the driver
+      // reads 0x0031's structure back and rejects `"structure-mismatch"` on
+      // a wrong one — a real PM5's empty arm reports `workoutType=1
+      // durationRaw=0 durationType=128` (session 4a captured it on the
+      // wire) and WOULD be caught. This fake simply does not put that on
+      // its wire: `statusBundle` reports `script.program`'s structure
+      // regardless of `armedEmpty`, so the empty arm is visible here only
+      // through `loadedIntervals()`. **Closing that gap is Task 5's job**
+      // ("the fake carries structure; CI proves detection"); until it
+      // lands, a test on this row asserts the fake's own introspection,
+      // never end-to-end detection.
       armedEmpty = sawRunningDuringProgramming;
       loadedIntervalCount = armedEmpty ? 0 : script.program.intervals.length;
       // Whatever the prepare's terminate left mid-flight is superseded: the

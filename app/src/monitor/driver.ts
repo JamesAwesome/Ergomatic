@@ -167,12 +167,16 @@ import type { MonitorEventLog } from "./eventLog";
  *
  *  `atFrame` is the 0-based index into the ack-gated sequence
  *  (`buildProgrammingSequence`'s outer array, or 0 for `buildTerminate`'s
- *  single frame) that failed during the SEND phase; it is `-1` for a
- *  verify-phase failure (`"not-observed"`, or `"disconnected"` while
- *  verifying) — verification has no frames of its own, only ticks, so
- *  there is no frame index to report. `hexTrace` is every write/ack
- *  exchanged during a send-phase failure (already recorded to the event
- *  log too), or a description of what verification observed instead. */
+ *  single frame) that failed during the SEND phase; it is `-1` for EVERY
+ *  verify-phase failure — `"not-observed"`, `"structure-mismatch"`, or
+ *  `"disconnected"` while verifying — since verification has no frames of
+ *  its own, only ticks, so there is no frame index to report. `hexTrace`
+ *  is every write/ack exchanged during a send-phase failure (already
+ *  recorded to the event log too), or a description of what verification
+ *  observed instead — for `"structure-mismatch"` that is the
+ *  observed-vs-expected triple `describeStructureMismatch` formats. (The
+ *  field name has outlived its literal meaning for the verify-phase
+ *  reasons; renaming it is a consumer-facing change, not this task's.) */
 export interface ProgramRejection {
   reason: ProgramRejectionReason;
   atFrame: number;
@@ -456,20 +460,40 @@ const DEFAULT_SETTLE_TICKS = 3;
 const DEFAULT_VERIFY_TICKS = 20;
 
 /** How many CONSECUTIVE armed ticks must report the SAME wrong structure
- *  before `verifyArmed` rejects (fix-3 Task 4). Three, chosen against two
- *  hardware facts and nothing else:
- *  - the 0x0031 payload can LAG the armed state — 2 of session 3's 5 clean
- *    arms carried the PREVIOUS program's payload on their first armed tick
- *    (the SDD ledger's `## SESSION 4a` block; Task 6 files it as §18) — so
- *    a one-tick mismatch is a NORMAL reading, and `1` would reject healthy
- *    programs;
- *  - session 4a also captured MID-CYCLE TRANSIENTS (`workoutType=1` with
- *    stale, non-zero durations) between the accept and the steady state,
- *    which is why the rule counts STABLE ticks — a mismatch whose own
- *    payload keeps changing is a machine still settling, not a machine
- *    holding the wrong workout, and it restarts the count.
- *  Comfortably above the observed 1-tick lag, and far below
- *  `DEFAULT_VERIFY_TICKS` so the streak (not the outer bound) is what
+ *  before `verifyArmed` rejects (fix-3 Task 4). Three. What the number
+ *  actually rests on, kept strictly separate from what was merely asserted:
+ *
+ *  RECORDED (the SDD ledger's `## SESSION 4a` block, 2026-08-07; Task 6
+ *  files it as §18) — the two observations that justify N > 1 on their own:
+ *  - **MID-CYCLE TRANSIENTS**: 4a captured `workoutType=1` carrying stale,
+ *    NON-ZERO durations between the accept and the steady state. A mismatch
+ *    whose own payload keeps changing is a machine still settling, not a
+ *    machine holding the wrong workout — which is both why `1` would reject
+ *    healthy programs and why the rule counts STABLE ticks rather than
+ *    merely mismatched ones (a changed payload restarts the count).
+ *  - **A MULTI-TICK UNSETTLED WINDOW IS NORMAL**: 4a's own settle
+ *    validation measured `"armed" observed on tick 4`, twice, at the exact
+ *    session-3 repro. Several ticks between the ack and a trustworthy
+ *    reading is the observed normal, not a pathology.
+ *
+ *  ASSERTED, NOT LOCATED (review I-1): the fix-3 plan and this task's brief
+ *  both state that "2 of session 3's 5 clean arms carried the previous
+ *  program's 0x0031 payload on their first armed tick". **No source for it
+ *  exists in this repo** — §18's session-3 record contains no such reading,
+ *  and it could not: Task 1 of THIS phase built the first log able to
+ *  record a 0x0031 payload at all (see `lastLoggedStructure`'s own comment,
+ *  "no 0x0031 payload has ever been recorded before now"), so session 3
+ *  predates the instrument. What session 3 genuinely showed was a related
+ *  but DIFFERENT observable — `verifyArmed` resolving on frames whose
+ *  ELAPSED fields still carried the previous workout. Treat the 2-of-5
+ *  figure as a plan assertion pending confirmation; **session 4b is the row
+ *  that confirms or retires it**, and this driver's own
+ *  `"structure-mismatch"` first-sighting entry is the instrument that will
+ *  answer it (a healthy lagging arm logs exactly one and still succeeds).
+ *  The rule does not depend on it either way.
+ *
+ *  Three is comfortably above a single-tick lag of any origin, and far
+ *  below `DEFAULT_VERIFY_TICKS` so the streak (not the outer bound) is what
  *  normally reports a genuine empty arm — the outer bound stays the
  *  backstop for a machine whose wrong payload never stabilizes at all. */
 const STRUCTURE_MISMATCH_TICKS = 3;
@@ -707,6 +731,19 @@ export function createPm5Driver(
      *  exact flood that evicted the programming trace from the 500-entry
      *  ring in §18 session 1). */
     mismatchLogged: boolean;
+    /** Whether ANY armed tick in this verify phase disagreed about the
+     *  structure — what the OUTER `verifyTicks` bound reads to choose
+     *  between `"structure-mismatch"` and `"not-observed"`.
+     *
+     *  Deliberately a SECOND flag rather than reusing `mismatchLogged`
+     *  (review L-4), even though the two are set on the same line today.
+     *  They answer different questions — "has the trace been written?" vs
+     *  "what did we actually see?" — and a future change to the log-once
+     *  policy (a re-log on a changed payload, say, or suppression under a
+     *  quiet mode) would silently re-point the typed rejection reason if
+     *  the two shared one boolean. The typed reason is the part callers
+     *  branch on; it must not depend on a logging decision. */
+    sawArmedMismatch: boolean;
   } | null = null;
   /** Registered while `terminate()`'s post-ack settle wait (design spec
    *  §7, interface-notes.md §19.6) is counting — `null` whenever no
@@ -1560,11 +1597,15 @@ export function createPm5Driver(
                 ? pendingVerify.mismatchStreak + 1
                 : 1;
             pendingVerify.lastMismatch = structure;
+            // The OBSERVATION (what the outer bound's typed reason reads)
+            // and the TRACE (written once, at first sighting) are recorded
+            // separately on purpose — see `sawArmedMismatch`'s own comment.
+            pendingVerify.sawArmedMismatch = true;
             if (!pendingVerify.mismatchLogged) {
               pendingVerify.mismatchLogged = true;
               log.record(
                 "structure-mismatch",
-                `first sighting — ${describeStructureMismatch(structure, pendingVerify.expected)} (one entry per verify phase, never per tick)`,
+                `first sighting — ${describeStructureMismatch(structure, pendingVerify.expected)} (one entry per verify phase, never per tick; a HEALTHY arm whose first tick lagged leaves exactly this entry and still resolves)`,
               );
             }
           } else {
@@ -1572,7 +1613,7 @@ export function createPm5Driver(
             pendingVerify.lastMismatch = null;
           }
           pendingVerify.ticks += 1;
-          const { ticks, mismatchStreak, mismatchLogged } = pendingVerify;
+          const { ticks, mismatchStreak, sawArmedMismatch } = pendingVerify;
           const bounded =
             ticks >= (options.verifyTicks ?? DEFAULT_VERIFY_TICKS);
           if (mismatchStreak >= STRUCTURE_MISMATCH_TICKS) {
@@ -1589,8 +1630,8 @@ export function createPm5Driver(
             // all has said nothing about structure and must not be
             // reported as though it had.
             settleVerifyFailure(
-              mismatchLogged ? "structure-mismatch" : "not-observed",
-              mismatchLogged
+              sawArmedMismatch ? "structure-mismatch" : "not-observed",
+              sawArmedMismatch
                 ? `${ticks} tick(s) elapsed without a matching armed structure — last ${describeStructureMismatch(structure, pendingVerify.expected)}`
                 : `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
             );
@@ -1774,14 +1815,30 @@ export function createPm5Driver(
    * durationType=128` — so the shape this predicate rejects is an observed
    * one, not an imagined one.
    *
-   * **A SINGLE MISMATCHED TICK NEVER REJECTS.** The 0x0031 payload can LAG
-   * the armed state: 2 of session 3's 5 clean arms carried the PREVIOUS
-   * program's payload on their first armed tick, and 4a additionally saw
-   * mid-cycle transients (`type=1` with stale durations). Rejection needs
+   * **A SINGLE MISMATCHED TICK NEVER REJECTS**, on 4a's own recorded
+   * evidence: it captured MID-CYCLE TRANSIENTS (`type=1` carrying stale,
+   * non-zero durations) between the accept and the steady state, and its
+   * settle validation measured `"armed" observed on tick 4` twice — a
+   * several-tick unsettled window is the observed normal. Rejection needs
    * `STRUCTURE_MISMATCH_TICKS` (3) CONSECUTIVE armed ticks reporting the
-   * SAME wrong structure — see that constant's own doc comment — or the
-   * outer `verifyTicks` bound, whichever comes first. The mismatch is
-   * logged ONCE per verify phase, at first sighting.
+   * SAME wrong structure — that constant's own doc comment carries the full
+   * provenance, INCLUDING which part of the usual justification is a plan
+   * assertion this repo holds no source for (review I-1) — or the outer
+   * `verifyTicks` bound, whichever comes first. The mismatch is logged ONCE
+   * per verify phase, at first sighting; a healthy arm whose first tick
+   * lagged therefore leaves exactly one observation entry and still
+   * succeeds.
+   *
+   * **What this does NOT cover (review L-2).** 0x0031 carries ONE duration
+   * pair, so only INTERVAL 0 can be compared — 4a supports nothing wider.
+   * A stale readback from a PREVIOUS program whose interval 0 happens to
+   * match therefore passes. That is not hypothetical for 7B: library
+   * workouts routinely share a 300 s warmup, so "program Sea Fret, then
+   * program the next O2 workout" is exactly the shape where a lagging
+   * payload could verify falsely. The prepare-settle wait
+   * (`waitForPrepareSettle`) is the other half of the defence, and 4b
+   * carries this on its watch list; widening the comparison is not
+   * available on the evidence.
    *
    * `intervalIndex` genuinely has no such upgrade path, and did not gain
    * one here: it is business-NULL for the entire armed window
@@ -1812,6 +1869,7 @@ export function createPm5Driver(
         lastMismatch: null,
         mismatchStreak: 0,
         mismatchLogged: false,
+        sawArmedMismatch: false,
       };
     });
   }
