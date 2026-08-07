@@ -110,6 +110,27 @@ describe("judgeActual: stale overrides everything", () => {
     ).toBe("stale");
   });
 
+  // Task-3 review's own mutation (stale demoted to "only wins if the
+  // non-stale path would already be 'within'"): the deep-over test above
+  // still catches that bug, but the other two tests in this block
+  // (actual===target; both null) pass EVEN UNDER the wrong precedence,
+  // because those particular fixtures already resolve to "within" on
+  // their own — coincidence, not proof. This fixture is the minimal case
+  // that isolates precedence from magnitude: `target + tolerance + 1` is
+  // the SMALLEST actual that reads "over" at all (one past the boundary),
+  // so a precedence bug has nowhere to hide behind "well, it was an
+  // extreme value anyway."
+  it("reads 'stale' even one unit past the 'over' boundary — the minimal over case, not just a deep outlier (pins precedence, not coincidence)", () => {
+    expect(
+      judgeActual({
+        kind: "pace",
+        actual: 120 + PACE_TOLERANCE_SECONDS + 1,
+        target: 120,
+        stale: true,
+      }),
+    ).toBe("stale");
+  });
+
   it("reads 'stale' even when actual exactly equals target", () => {
     expect(
       judgeActual({ kind: "spm", actual: 20, target: 20, stale: true }),

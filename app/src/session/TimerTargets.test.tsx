@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import type { EnginePhase } from "./engine";
 import TimerTargets, { rateDisplay, targetSplitDisplay } from "./TimerTargets";
 
@@ -261,5 +262,39 @@ describe("TimerTargets: variant='connected'", () => {
     );
     expect(container.querySelector(".timer-card-static")).toBeNull();
     expect(container.querySelector(".timer-card-actual")).toBeNull();
+  });
+});
+
+// Task-3 review, HIGH-1: `.timer-card-actual-stale` shipped this task
+// pointing at `--ink-5` (2.76:1 against `--surface` — FAILS the house's
+// binding >=4.5:1 AA rule), against the connected-mode handoff's explicit
+// "every stale value greys to --ink-3" (7.44:1, passes). jsdom never loads
+// `index.css` as real stylesheet rules (no browser layout engine backs
+// `getComputedStyle` here), so a rendered-element assertion can't catch a
+// wrong token the way `e2e/design.spec.ts` does for routes that actually
+// exist — this reads the CSS source text straight off disk instead (via
+// `node:fs`, not an ESM import: Vitest's own CSS handling for this project
+// mocks every `.css` import — including `?raw`/`?inline` suffixed ones,
+// verified empirically — to an empty string), pinning the resolved
+// custom-property structurally rather than "we looked and it seemed
+// right." No route renders the connected variant yet for a real
+// browser-level contrast check; this is the honest ceiling until one does.
+describe("index.css: .timer-card-actual-stale resolves to the AA-passing token (review HIGH-1)", () => {
+  it("uses var(--ink-3), never the AA-failing var(--ink-5) this task originally shipped", () => {
+    // Plain string surgery on `import.meta.url`, not the global `URL`
+    // constructor: this project's jsdom test environment resolves
+    // `new URL("../index.css", import.meta.url)` against
+    // `http://localhost:3000/` instead of the given `file://` base
+    // (verified empirically) — a jsdom quirk, not a real bug in the path
+    // being computed.
+    const indexCssPath = import.meta.url
+      .replace(/^file:\/\//, "")
+      .replace(/session\/[^/]+\.test\.tsx$/, "index.css");
+    const indexCss = readFileSync(indexCssPath, "utf-8");
+    const match = /\.timer-card-actual-stale\s*\{([^}]*)\}/.exec(indexCss);
+    expect(match).not.toBeNull();
+    const body = match![1];
+    expect(body).toContain("var(--ink-3)");
+    expect(body).not.toContain("--ink-5");
   });
 });
