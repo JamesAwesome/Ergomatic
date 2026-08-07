@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Reader from "./Reader";
 import type { ArticleReadsState } from "../api/useArticleReads";
+import type { NewsArticle } from "./content/types";
 
 // Real registry, real content (recurring-failure #3: an empty/synthetic
 // fixture hid two shipped defects before) — every scenario below reads
@@ -14,17 +15,35 @@ vi.mock("../api/useArticleReads", () => ({
 }));
 
 // The real registry currently has zero articles with `updatedAt` set (no
-// article has been updated since launch yet), so the "· UPDATED ..." meta
-// branch has no live example to render through. Same technique
-// News.test.tsx's own linked-kind describe block uses for the same reason
-// ("no linked article exists in the real registry yet, so this exercises
-// the branch directly"): keep the real registry for every other field and
-// slug, and layer in `updatedAt` for "baselines" alone.
+// article has been updated since launch yet) and zero linked-kind articles
+// published, so neither the "· UPDATED ..." meta branch nor the
+// linked-kind-slug redirect branch has a live example to render through.
+// Same technique News.test.tsx's own linked-kind describe block uses for
+// the same reason ("no linked article exists in the real registry yet, so
+// this exercises the branch directly"): keep the real registry for every
+// other field and slug, and layer in `updatedAt` for "baselines" and a
+// synthetic linked-kind fixture at "external-piece" (same slug/shape
+// News.test.tsx's own linked fixture uses).
+const LINKED_FIXTURE: NewsArticle = {
+  slug: "external-piece",
+  title: "Your 2k predicts less about your 10k than you think",
+  minutes: 9,
+  kind: "linked",
+  pinned: false,
+  publishedAt: "2026-08-01",
+  linked: {
+    url: "https://example.com/2k-10k",
+    sourceName: "ROWING NEWS",
+    commentary: "Worth it for the table halfway down.",
+  },
+};
+
 vi.mock("./content/articles", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./content/articles")>();
   return {
     ...actual,
     articleBySlug: (slug: string) => {
+      if (slug === LINKED_FIXTURE.slug) return LINKED_FIXTURE;
       const article = actual.articleBySlug(slug);
       return article && slug === "baselines"
         ? { ...article, updatedAt: "2026-07-01" }
@@ -167,6 +186,22 @@ describe("Reader", () => {
     expect(
       screen.getByText("ERGOMATIC · 3 MIN · UPDATED JUL 2026"),
     ).toBeVisible();
+  });
+
+  it("redirects to /news for a linked-kind slug, and never calls markRead for it (review finding: the mark-read effect must not fire before the redirect)", () => {
+    const markRead = vi.fn();
+    mockUseArticleReads.mockReturnValue({
+      state: "ready",
+      readSlugs: new Set(),
+      markRead,
+    });
+    renderReader(`/news/${LINKED_FIXTURE.slug}`);
+
+    expect(screen.getByText("News Screen")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: LINKED_FIXTURE.title }),
+    ).not.toBeInTheDocument();
+    expect(markRead).not.toHaveBeenCalled();
   });
 
   it("redirects to /news when rendered with no slug param at all", () => {

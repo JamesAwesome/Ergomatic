@@ -20,11 +20,18 @@ export default function Reader() {
   // per the brief: markRead is stable per ready-state, so keying on state +
   // slug is enough, and the `reads.state === "ready"` guard is what keeps
   // this from ever firing while loading (there's no markRead to call on
-  // that variant anyway).
+  // that variant anyway). Also gated on `article.kind === "first-party"`
+  // (review finding): this effect runs on every render, including the one
+  // where the component is about to redirect for an unknown or linked-kind
+  // slug — without this half of the guard, a hand-typed/shared
+  // `/news/<linked-slug>` URL would mark that article read despite the
+  // rower only ever seeing the redirect, never the content.
   useEffect(() => {
-    if (reads.state === "ready" && article) reads.markRead(article.slug);
+    if (reads.state === "ready" && article?.kind === "first-party") {
+      reads.markRead(article.slug);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reads.state, article?.slug]);
+  }, [reads.state, article?.slug, article?.kind]);
 
   if (!article || article.kind !== "first-party") {
     return <Navigate to="/news" replace />;
