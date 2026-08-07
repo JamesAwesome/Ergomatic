@@ -137,16 +137,24 @@ export function clearMonitorRun(): void {
  *  `SessionRun` is currently on record, unconditionally — a rower cannot be
  *  mid-phone-timer-session and mid-monitor-session at once, and 7B's
  *  "Connect PM5" flow replaces the phone-timer path for that session
- *  entirely rather than running alongside it. This is only HALF the rule:
- *  the reverse direction (`buildRun`/`saveRun` clearing an existing
- *  `MonitorRun`) is a documented 7B obligation, deliberately NOT made here
- *  — `session/run.ts` is untouched by this phase, since nothing in 7A ever
- *  constructs a `SessionRun` while a `MonitorRun` is live (no screen calls
- *  `createMonitorRun` yet; Today.tsx's one guard extension below is the
- *  only 7A code that even reads this module's output). Deliberately NOT
+ *  entirely rather than running alongside it. Deliberately NOT
  *  idempotent-checked against an existing live `MonitorRun` of its own —
  *  same "simplicity over precision" call `session/run.ts`'s own comments
- *  make for the identical single-session-at-a-time assumption. */
+ *  make for the identical single-session-at-a-time assumption.
+ *
+ *  **This function destroys data, and nothing in it asks first.** That is
+ *  by design and it is why `connectGuardStage()` below exists: the ONLY
+ *  caller a rower can reach — 7B's Connect affordance (`ConnectAction.tsx`)
+ *  — must stage a confirm before ever getting here. Do not add a second
+ *  unguarded caller.
+ *
+ *  **7B: the reverse half of this rule now ships too** (7A left it as a
+ *  documented obligation here, since no 7A code ever constructed a
+ *  `SessionRun` while a `MonitorRun` was live). A phone-timer session
+ *  committing — `WorkoutDetail`'s `startSession`, downstream of the staged
+ *  confirm its `handleStart` puts in front of it — calls `clearMonitorRun`
+ *  for the mirrored reason. See `session/run.ts`'s own note on why that
+ *  clear is NOT inside `saveRun` despite the spec's prose naming it. */
 export function createMonitorRun(
   args: {
     workoutId: string | null;
@@ -261,14 +269,17 @@ function monitorRunState(): RecordState {
  * | unlogged    | live        | `"monitor"` | monitor live; phone record is stale |
  * | unlogged    | unlogged    | `"none"`    | "both-stale" — neither is live |
  *
- * The `live`/`live` tie-break (row 5) picks `"monitor"`. This cell
- * shouldn't be reachable at all given the cross-clear rule
- * (`createMonitorRun` above always clears any `SessionRun` first) — but
- * 7A only implements HALF of that rule (`createMonitorRun` -> clears
- * `SessionRun`; the reverse, `buildRun`/`saveRun` clearing an existing
- * `MonitorRun`, is 7B's obligation), so a `SessionRun` started while an
- * OLD `MonitorRun` is still live and un-cleared is exactly the gap this
- * function must still answer through today. `"monitor"` is chosen because
+ * The `live`/`live` tie-break (row 5) picks `"monitor"`. **7B closed the
+ * gap that used to make this cell ordinarily reachable** — both halves of
+ * the cross-clear rule now ship (`createMonitorRun` above clears any
+ * `SessionRun`; `WorkoutDetail`'s `startSession` clears any `MonitorRun`),
+ * so neither door leaves the other side's record standing and no walk
+ * through the app's own screens should produce two live records. The
+ * tie-break stays anyway, and this table keeps pinning it: a half-completed
+ * write, a localStorage edited by hand, or records left by an older build
+ * can all still present this shape, and "unreachable by design" has never
+ * been a reason for a resilience path to answer undefined. `"monitor"` is
+ * chosen because
  * a `MonitorRun` only ever exists once a rower has actually connected real
  * hardware — a strictly narrower, more deliberate action than the
  * always-available phone timer — so if both somehow claim to be live at
@@ -284,4 +295,50 @@ export function anyLiveSession(): "none" | "phone" | "monitor" {
   const phone = sessionRunState();
   if (phone === "live") return "phone";
   return "none";
+}
+
+/** What a Connect press has to warn about before it is allowed through, or
+ *  `null` when nothing is at risk. Mirrors `WorkoutDetail`'s own
+ *  `replaceStage` union 1:1 so both doors speak the same two sentences. */
+export type ConnectGuardStage = "unlogged" | "in-progress" | null;
+
+/**
+ * The Connect guard (7B, spec §3 — "the F5 walk, closed"). Answers "would
+ * connecting a monitor right now destroy something the rower still needs?"
+ * by reading the `SessionRun` record DIRECTLY, which is the whole point of
+ * this function existing separately from `anyLiveSession()` directly above.
+ *
+ * ROADMAP M-1, verbatim, because routing this through the function above is
+ * the exact mistake it was written to prevent:
+ *
+ * > **Guard wiring is NOT uniform (final-review M-1 — read before touching
+ * > any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** ... Routing either
+ * > through `anyLiveSession()` silently downgrades "unlogged" to "none" and
+ * > reintroduces the F5 data-loss class (a real, previously-shipped bug: a
+ * > stale run record silently discarded instead of protected). When adding
+ * > a NEW guard, ask "does this care about unlogged specifically, or just
+ * > live-vs-not" before picking which of the two patterns to follow.
+ *
+ * For Connect the answer is **YES, it cares about unlogged specifically**:
+ * the action behind it is `createMonitorRun` above, whose `clearRun()` is
+ * unconditional, and a finished-but-unlogged `SessionRun` is precisely the
+ * record 6B's F5 fix exists to protect — `anyLiveSession()`'s own pinned
+ * table returns `"none"` for it (rows 7 and 9), so a Connect guard wired
+ * that way would walk straight past the one case it is FOR. This is the
+ * same direct-read pattern `Today.tsx`'s cold-start guard already uses, and
+ * for the same reason its own comment gives.
+ *
+ * A LIVE `SessionRun` (`completedAt === null`) is staged too, with the
+ * "in progress" sentence rather than the "unlogged" one: `clearRun()`
+ * destroys that record just as completely, and the spec's own constraint is
+ * that **no silent destruction path exists in either direction**. It is a
+ * lesser loss than the unlogged case (an abandoned session was never going
+ * to be logged), which is why the two get different copy — the identical
+ * severity ordering, and the identical pair of sentences, that
+ * `WorkoutDetail`'s `handleStart` already applies at the other door.
+ */
+export function connectGuardStage(): ConnectGuardStage {
+  const run = loadRun();
+  if (run === null) return null;
+  return run.completedAt === null ? "in-progress" : "unlogged";
 }

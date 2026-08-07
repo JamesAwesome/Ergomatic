@@ -90,7 +90,31 @@ function isSessionRun(value: unknown): value is SessionRun {
 
 /** Persists the run. localStorage can throw (quota, private-mode Safari,
  *  disabled storage) — this never lets that escape uncaught; callers get a
- *  boolean instead, same contract as `saveDraft`. */
+ *  boolean instead, same contract as `saveDraft`.
+ *
+ *  **The 7B reverse cross-clear is deliberately NOT here** — read this
+ *  before "fixing" that. Phase 7B's own spec §3 names "`buildRun`/`saveRun`
+ *  (`session/run.ts`) clears an existing live `MonitorRun`" as the mirror of
+ *  `monitor/monitorRun.ts`'s `createMonitorRun` clearing a `SessionRun`, and
+ *  neither of those two functions is a safe home for it:
+ *
+ *  - `saveRun` is called on EVERY engine transition (`Timer.tsx`:
+ *    `if (next !== prev) saveRun(next)`) — hundreds of times per session,
+ *    with no rower decision anywhere near it. A cross-clear here would be
+ *    the silent destruction the spec forbids, not a guarded one.
+ *  - `buildRun` (`engine.ts`) runs from `Countdown.tsx`'s build effect,
+ *    which a deep link to `/session/countdown` reaches without ever passing
+ *    the confirm.
+ *  - Either placement would also make this module import
+ *    `monitor/monitorRun.ts`, which already imports `clearRun`/`loadRun`
+ *    from here — a cycle, and one that would drag the monitor tree into
+ *    every phone-timer screen.
+ *
+ *  The clear therefore lives at the one point a rower actually commits to a
+ *  phone-timer session — `WorkoutDetail`'s `startSession`, on the line after
+ *  its own `clearRun()` call and downstream of the staged confirm
+ *  `handleStart` puts in front of it. Same shape, same reason, same place as
+ *  the 6B F5 fix that put `clearRun()` there. */
 export function saveRun(r: SessionRun): boolean {
   try {
     localStorage.setItem(RUN_KEY, JSON.stringify(r));

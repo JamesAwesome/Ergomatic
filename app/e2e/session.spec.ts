@@ -1009,3 +1009,128 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
     await cleanupByTitle(page, title);
   });
 });
+
+test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 walk, reversed)", () => {
+  // `startSession` now cross-clears `MONITOR_RUN_KEY` as well as
+  // `RUN_KEY` — the mirror of `createMonitorRun` clearing the phone-side
+  // record, and 7A's own documented obligation. That clear is only safe
+  // because `handleStart`'s guard was WIDENED to read the monitor record
+  // in the same commit: without it, a rower who finished a PM5-driven
+  // session and hadn't logged it yet would lose it (7C's whole prefill
+  // input) to one unwarned press. These tests drive the real browser
+  // against the real screen; `ergomatic.monitorRun` is monitorRun.ts's own
+  // MONITOR_RUN_KEY, spelled out literally since an e2e file can't import
+  // a client module.
+  //
+  // The record is SEEDED rather than produced by a real connected session:
+  // no Connect affordance exists until Task 5, and there is no PM5 (or
+  // Bluetooth radio) in CI at all. The shape below is exactly what
+  // `isMonitorRun` validates and `createMonitorRun` writes.
+  async function seedMonitorRun(
+    page: Page,
+    completedAt: string | null,
+  ): Promise<void> {
+    await page.evaluate((completed) => {
+      localStorage.setItem(
+        "ergomatic.monitorRun",
+        JSON.stringify({
+          v: 1,
+          workoutId: "seeded-connected",
+          title: "Connected Session",
+          program: { intervals: [] },
+          actuals: [],
+          deviceName: "PM5 430123456",
+          startedAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+          completedAt: completed,
+          terminated: false,
+        }),
+      );
+    }, completedAt);
+  }
+
+  async function monitorRunRaw(page: Page): Promise<string | null> {
+    return page.evaluate(() => localStorage.getItem("ergomatic.monitorRun"));
+  }
+
+  /** Opens the first library row's detail screen. Any workout will do —
+   *  the guard is about what's in storage, not which workout is starting. */
+  async function openFirstWorkout(page: Page): Promise<void> {
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator("h1.workout-detail-title")).toBeVisible();
+  }
+
+  test("a finished-but-unlogged monitor run: Start stages the warning, Cancel preserves it byte-identical", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "session-monitor-unlogged@e2e.test",
+      name: "Monitor Unlogged Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await seedMonitorRun(page, new Date().toISOString());
+    const before = await monitorRunRaw(page);
+    expect(before).not.toBeNull();
+
+    await openFirstWorkout(page);
+    await page.getByRole("button", { name: "Start" }).click();
+
+    // Warned, not walked past — and still on the detail screen.
+    await expect(
+      page.getByText(
+        "You have an unlogged session — starting a new one discards it.",
+      ),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    expect(await monitorRunRaw(page)).toBe(before);
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+    // Byte-identical after the round trip, not merely still present.
+    expect(await monitorRunRaw(page)).toBe(before);
+  });
+
+  test("Replace session clears the connected record and proceeds to Confirm", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "session-monitor-replace@e2e.test",
+      name: "Monitor Replace Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await seedMonitorRun(page, new Date().toISOString());
+
+    await openFirstWorkout(page);
+    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Replace session" }).click();
+
+    await expect(page).toHaveURL(/\/session\/confirm$/);
+    // The reverse cross-clear, through the real browser's own storage.
+    expect(await monitorRunRaw(page)).toBeNull();
+  });
+
+  test("a LIVE monitor run (the erg is mid-piece) stages the 'in progress' sentence instead", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "session-monitor-live@e2e.test",
+      name: "Monitor Live Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await seedMonitorRun(page, null);
+    const before = await monitorRunRaw(page);
+
+    await openFirstWorkout(page);
+    await page.getByRole("button", { name: "Start" }).click();
+
+    await expect(
+      page.getByText("A session is in progress — replace it?"),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "You have an unlogged session — starting a new one discards it.",
+      ),
+    ).toHaveCount(0);
+    expect(await monitorRunRaw(page)).toBe(before);
+  });
+});

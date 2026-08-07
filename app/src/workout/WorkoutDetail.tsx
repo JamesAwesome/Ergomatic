@@ -10,6 +10,7 @@ import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import { buildDraft, loadDraft, saveDraft } from "../session/draft";
 import { clearRun, loadRun } from "../session/run";
+import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
@@ -143,10 +144,24 @@ function WorkoutDetailView({
   // `clearRun` is a no-op `localStorage.removeItem` when there was nothing
   // to clear, so this needs no extra branching for the common case where
   // there wasn't a stale run at all.
+  //
+  // Phase 7B Task 2 — THE REVERSE CROSS-CLEAR. `clearMonitorRun` is the
+  // mirror of `monitor/monitorRun.ts`'s `createMonitorRun` clearing a
+  // `SessionRun`: 7A shipped only that half and named this one as an open
+  // obligation. It sits HERE, and not in `saveRun`/`buildRun` where the
+  // spec's prose named it — `session/run.ts`'s own comment on `saveRun`
+  // carries the three reasons in full (every-tick call site, deep-linkable
+  // `buildRun`, import cycle). "Behind the confirm only" is the same
+  // property `clearRun` above already has, achieved the same way: by the
+  // time control reaches this function either `handleStart` found no
+  // monitor run at all (a no-op `removeItem`) or the rower read the
+  // warning and pressed Replace. Nothing else on this screen calls
+  // `startSession`.
   function startSession() {
     const draft = buildDraft(workout);
     if (saveDraft(draft)) {
       clearRun();
+      clearMonitorRun();
       navigate("/session/confirm");
     } else {
       setStartError("Couldn't start this session. Try again.");
@@ -165,10 +180,47 @@ function WorkoutDetailView({
   // "in progress." A STARTED draft with no matching run (shouldn't happen
   // in the normal flow, but costs nothing to keep guarding) still falls
   // through to the "in-progress" copy exactly as before this fix round.
+  //
+  // Phase 7B Task 2 — THE GUARD IS WIDENED, NOT REROUTED. A second record
+  // is read (`loadMonitorRun()`), by the same direct-read pattern, for the
+  // same reason, into the same two sentences. It is emphatically NOT moved
+  // onto `anyLiveSession()`; ROADMAP M-1, verbatim:
+  //
+  // > Two do NOT, because they need the UNLOGGED distinction
+  // > `anyLiveSession()` deliberately collapses to "none":
+  // > WorkoutDetail's unlogged-run staged confirm (the 6B F5 fix — a
+  // > completed-but-unlogged prior session is exactly what its "Replace"
+  // > warning is FOR) and Today's cold-start stale-draft-discard guard...
+  // > Routing either through `anyLiveSession()` silently downgrades
+  // > "unlogged" to "none" and reintroduces the F5 data-loss class.
+  //
+  // ROADMAP's "two exceptions untouched" is amended by 7B's spec §3 only in
+  // that THIS one now reads two records instead of one; Today's is
+  // untouched, byte-identical. The new read is load-bearing because
+  // `startSession` below now clears the `MonitorRun` too: without these
+  // four lines, a rower who finished a connected session and hadn't logged
+  // it yet would lose it — 7C's entire prefill input — to a single
+  // unwarned Start press. The F5 shape exactly, in the other direction.
+  //
+  // Both `MonitorRun` states stage, with the same severity split the
+  // `SessionRun` side uses: finished-but-unlogged is the data loss and gets
+  // the "unlogged" sentence; a LIVE monitor run (the erg is mid-piece right
+  // now) gets "in progress". Checked AFTER the `SessionRun` branch and
+  // BEFORE the draft branch, which is the same descending-severity order
+  // that block already establishes — and in the one case where a stale
+  // `SessionRun` and a stale `MonitorRun` are both on record, "unlogged" is
+  // the right word either way, so the ordering costs nothing.
   function handleStart() {
     const existingRun = loadRun();
     if (existingRun !== null && existingRun.completedAt !== null) {
       setReplaceStage("unlogged");
+      return;
+    }
+    const existingMonitorRun = loadMonitorRun();
+    if (existingMonitorRun !== null) {
+      setReplaceStage(
+        existingMonitorRun.completedAt !== null ? "unlogged" : "in-progress",
+      );
       return;
     }
     const existingDraft = loadDraft();
@@ -289,6 +341,14 @@ function WorkoutDetailView({
           </div>
         )}
         {startError && <p className="baseline-error">{startError}</p>}
+        {/* PHASE 7B TASK 5 SOCKET — the Connect block goes HERE, second in
+            the stack (handoff §1: an L2 below Start, "it must not compete
+            with Start"). Task 2 has already built and proven the whole
+            control, guard included: mount `<ConnectAction onProceed={…} />`
+            from `../monitor/ConnectAction` and add only presentation around
+            it (the `LAST USED · <name>` caption, the Bluetooth-off dashed
+            treatment, the transport-present gate). Its own doc comment says
+            why it ships unmounted and what is NOT Task 5's to re-derive. */}
         {/* Task 3 (the manual door): gated on baselines with the exact same
             "no target" idiom Start's own footer uses at ConfirmTargets.tsx
             (`baselines ? <button> : <span className="step-row-no-target">`)
