@@ -395,8 +395,13 @@ describe("useMonitorSession: connect", () => {
       await result.current.connect();
     });
 
-    expect(result.current.error).toMatchObject({
-      reason: "bluetooth-off",
+    // `link-failed`, NOT `bluetooth-off`: the picker worked and the rower
+    // picked a device, so the adapter is demonstrably fine — telling them
+    // to check Bluetooth would be advice for a problem they do not have
+    // (task-4 review, MEDIUM-4).
+    expect(result.current.error).toStrictEqual({
+      reason: "link-failed",
+      detail: "The link to the monitor failed.",
       raw: "GATT operation failed",
     });
   });
@@ -748,6 +753,33 @@ describe("useMonitorSession: ending", () => {
     });
   });
 
+  it("End while the monitor has gone silent still closes the record", async () => {
+    // The ordering pin (task-4 review, MEDIUM-1): `endSession()` stamps
+    // `completedAt` BEFORE it awaits `terminate()`, and this is the walk
+    // that proves the ordering is load-bearing rather than stylistic. The
+    // link is UP but the machine stops acking, so `terminate()` never
+    // settles — close the record after the await instead and it stays
+    // permanently OPEN, and 7C later reads an unclosed record for a
+    // session the rower ended.
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    fake.injectTimeout();
+    await act(async () => {
+      void result.current.endSession();
+      await flush();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(loadMonitorRun()?.completedAt).toBe(t0.toISOString());
+  });
+
   it("the machine's own TERMINATE (ended on the PM5's menu) reaches ended too, marked terminated", async () => {
     const { result, fake } = harness({
       program: TWO_INTERVALS,
@@ -811,9 +843,12 @@ describe("useMonitorSession: the double-fire pin", () => {
 
     expect(result.current.phase).toBe("ready");
     expect(result.current.error).toBeNull();
-    // One prepare frame + the programming sequence, once. A second
-    // conversation would roughly double this; the exact count is the
-    // program's own chunk count and is asserted as "the same as one call".
+    // One prepare frame + the programming sequence, once. DEFENCE IN
+    // DEPTH, not the discriminator (task-4 review, LOW-8: measured at 5
+    // writes vs 5 under the late-flip mutant): the driver's own
+    // single-flight gate keeps this count right no matter what the hook
+    // does, so it would only move if that gate went too. The render
+    // assertion above is what actually pins the hook's behaviour.
     const oneConversation = transport.wireWrites - before;
     expect(oneConversation).toBeGreaterThan(0);
 
@@ -928,7 +963,9 @@ describe("useMonitorSession: failures", () => {
     });
 
     expect(result.current.phase).toBe("failed");
-    expect(result.current.error?.reason).toBe("bluetooth-off");
+    // Same distinction as the connect-side one above: the handle died, the
+    // radio did not.
+    expect(result.current.error?.reason).toBe("link-failed");
     expect(result.current.error?.raw).toContain("no longer valid");
   });
 });
@@ -1083,7 +1120,7 @@ describe("useMonitorSession: cancel", () => {
 });
 
 describe("useMonitorSession: the seams and their defaults", () => {
-  it("no identity and no injected clock: the record still opens, anonymous and stamped now", async () => {
+  it("an explicitly anonymous identity and no injected clock: the record still opens, stamped now", async () => {
     const fake = createFakeTransport({
       program: TWO_INTERVALS,
       deviceName: DEVICE_NAME,
@@ -1104,9 +1141,11 @@ describe("useMonitorSession: the seams and their defaults", () => {
     await connect(result);
     await act(async () => {
       let settled = false;
-      const pending = result.current.program(TWO_INTERVALS).finally(() => {
-        settled = true;
-      });
+      const pending = result.current
+        .program(TWO_INTERVALS, { workoutId: null, title: "" })
+        .finally(() => {
+          settled = true;
+        });
       await flush();
       for (let i = 0; i < 25 && !settled; i += 1) {
         fake.tick(0);
@@ -1394,7 +1433,8 @@ function frame(over: Partial<MonitorFrame>): MonitorFrame {
   };
 }
 
-/** log lines 2836-2842: the last rowing frame of interval 0, the boundary's
+/** log line 2835 and lines 2837-2841 (2836 is the `intervalComplete`
+ *  between them): the last rowing frame of interval 0, the boundary's
  *  own reset frame (carrying the PREVIOUS interval's split and spm over a
  *  zeroed clock), THREE identical zeroed frames, then the clock resuming.
  *  The no-rest changeover — the recorded FALSE POSITIVE. */
@@ -1425,10 +1465,14 @@ const RECORDED_BOUNDARY_RESET: MonitorFrame[] = [
   }),
 ];
 
-/** log lines 3546-3552: the rower stops. Two moving frames, then the four
- *  metrics freeze at `57.78 / 108.4 / 236.75 / 16` — and stay frozen for
- *  215 consecutive frames (to line 3762), with the heart rate moving the
- *  whole time. spm PINNED at 16, not zeroed: the observation that killed
+/** log lines 3546-3551, plus one later frame from the same stretch: the
+ *  rower stops. Two moving frames, then the four metrics freeze at
+ *  `57.78 / 108.4 / 236.75 / 16` — and stay frozen for 216 consecutive
+ *  frames (3548-3763, where split and spm finally zero), with the heart
+ *  rate moving the whole time. The seventh fixture frame below (HR 60) is
+ *  a real frame from further down that stretch, not line 3552 — HR 60
+ *  occurs 24 times inside it; it is here to carry the HR movement into the
+ *  fixture, and its four metrics are the same frozen four. spm PINNED at 16, not zeroed: the observation that killed
  *  the original `spm === 0` predicate. */
 const RECORDED_STOP: MonitorFrame[] = [
   frame({
@@ -1482,8 +1526,9 @@ const RECORDED_STOP: MonitorFrame[] = [
   }),
 ];
 
-/** log lines 4631-4635: elapsed ticking BACKWARDS, twice — `0.75 -> 0.18`
- *  is the −0.57 s the spec's own M2 note cites. */
+/** log lines 4632-4633: elapsed ticking BACKWARDS, `0.75 -> 0.18` — the
+ *  −0.57 s the spec's own M2 note cites, and the largest of the five
+ *  intra-stream backwards ticks in the whole capture. */
 const RECORDED_BACKWARDS: MonitorFrame[] = [
   frame({ elapsedSeconds: 0.75, currentSplit: 0, spm: 0, heartRateBpm: 63 }),
   frame({ elapsedSeconds: 0.18, currentSplit: 0, spm: 0, heartRateBpm: 63 }),
@@ -1532,9 +1577,70 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
   it("heart rate is not one of the four: the stop holds through every HR change in it", () => {
     // The last recorded frame of the stop fixture drops HR from 81 to 60
     // while the four stay frozen — if HR were in the key, the rower would
-    // flicker out of PAUSED every few frames for the whole 215-frame stop.
+    // flicker out of PAUSED every few frames for the whole 216-frame stop.
     const { runs } = replay(RECORDED_STOP);
     expect(isPausedRun(runs[runs.length - 1]!)).toBe(true);
+  });
+
+  /**
+   * THE KEY'S COMPOSITION, one metric at a time (task-4 review, MEDIUM-2).
+   * The threshold mutants (`PAUSED_FRAME_HOLD` 2 and 3) pin HOW LONG the
+   * hold is; nothing pinned WHAT it holds on. The recorded fixtures cannot:
+   * in the boundary reset, the reset frame (`0|0|338.97|66`) differs from
+   * the three zeroed ones by BOTH split and spm, so dropping either alone
+   * from the key stays invisible — the review measured three clean green
+   * runs against exactly that. Each row below is the frame pair that only
+   * ONE metric distinguishes, so dropping that metric makes the hold run on
+   * through a machine that is visibly still moving.
+   *
+   * Deltas are the record's own: the stop fixture's frozen values
+   * (`57.78 / 108.4 / 236.75 / 16`) against the kind of step the frames
+   * either side of it take (`pm5-session3-final.log:3546-3547` moves
+   * elapsed ~0.5 s and distance ~0.8 m per frame).
+   */
+  const FROZEN = {
+    elapsedSeconds: 57.78,
+    distanceMeters: 108.4,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 61,
+  };
+
+  it.each([
+    ["elapsedSeconds", { elapsedSeconds: 58.28 }],
+    ["distanceMeters", { distanceMeters: 109.2 }],
+    ["currentSplit", { currentSplit: 231.4 }],
+    ["spm", { spm: 17 }],
+  ] as const)(
+    "a frame that changes ONLY %s breaks a three-frame hold",
+    (_metric, moved) => {
+      const held = frame(FROZEN);
+      let run = nextFreezeRun(null, held);
+      run = nextFreezeRun(run, held);
+      run = nextFreezeRun(run, held);
+      expect(run.frames).toBe(3);
+
+      run = nextFreezeRun(run, frame({ ...FROZEN, ...moved }));
+
+      // Drop this metric from the key and the count reaches 4 here — the
+      // session renders PAUSED at a rower who is still moving.
+      expect(run.frames).toBe(1);
+      expect(isPausedRun(run)).toBe(false);
+    },
+  );
+
+  it("...and a frame that changes ONLY the heart rate does not break it", () => {
+    // The deliberate asymmetry, from the same stretch of record: HR is the
+    // one field that keeps moving while the four freeze, so it is the one
+    // field the key must NOT contain.
+    const held = frame(FROZEN);
+    let run = nextFreezeRun(null, held);
+    run = nextFreezeRun(run, held);
+    run = nextFreezeRun(run, held);
+    run = nextFreezeRun(run, frame({ ...FROZEN, heartRateBpm: 59 }));
+
+    expect(run.frames).toBe(4);
+    expect(isPausedRun(run)).toBe(true);
   });
 
   it("a backwards elapsed tick is a CHANGE, not a hold", () => {
@@ -1549,9 +1655,12 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
   it("a non-rowing frame resets the count outright — a rest cannot lend its frames to the next stroke", () => {
     // Three frozen rowing frames, a rest, then the same frozen values
     // again. Merely NOT COUNTING the rest would leave the run standing and
-    // let that fourth frame tip the session into PAUSED across a
-    // changeover — which is the false positive the whole derivation exists
-    // to avoid. The rest has to clear it.
+    // let that fourth frame tip the session into PAUSED across a REST
+    // boundary. A SECOND mechanism from the 4-frame hold, guarding a
+    // different shape (task-4 review, Audit 3): every frame of the
+    // recorded no-rest reset reads `state: "rowing"`, so the hold alone
+    // clears that one — this clears the rest-boundary one, which the hold
+    // cannot see.
     const rowing = frame({
       elapsedSeconds: 10,
       distanceMeters: 30,

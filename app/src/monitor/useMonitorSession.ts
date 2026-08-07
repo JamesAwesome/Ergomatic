@@ -88,7 +88,7 @@ export type ConnectedPhase =
  * Every way this flow can fail, typed (the spec's exit criterion: "every
  * failure path is typed and rendered; no untyped path"). The first arm is
  * the driver's own union — MACHINE STATEMENTS, things the PM5 said or
- * failed to say (`ProgramRejection`'s own doc comment) — and the other four
+ * failed to say (`ProgramRejection`'s own doc comment) — and the other five
  * are OURS, about the phone side of the radio:
  *
  * - `"busy"` — `ProgramBusyError`, thrown before a second `program()` ever
@@ -99,16 +99,22 @@ export type ConnectedPhase =
  * - `"scan-dismissed"` — the rower closed the OS picker (or it returned
  *   nothing). Not an error in any moral sense; it renders on state 6's
  *   skeleton with a retry, per the C2 ruling.
- * - `"bluetooth-off"` — the radio is present but unusable. **This is also
- *   the bucket every OTHERWISE-UNTYPED radio failure lands in**, with the
- *   original message in `raw`: the union the spec fixed has no generic
- *   "something else went wrong" member, and an untyped path is the one
- *   thing the exit criteria forbid outright. A dead GATT handle mid-program
- *   (D6's `InvalidStateError`), a `connect()` that throws for a reason no
- *   adapter documents — all of them reach a screen as "check Bluetooth",
- *   which is the only actionable advice available, plus the verbatim raw
- *   string in the DETAIL panel. Flagged in the task report as a spec gap
- *   rather than papered over here.
+ * - `"bluetooth-off"` — the ADAPTER itself is unavailable: off, blocked, or
+ *   absent from this browser. The one remedy is "turn Bluetooth on", and
+ *   that is the only situation this reason is allowed to describe.
+ * - `"link-failed"` — **WIDENS THE SPEC'S FIXED UNION** (design spec §2's
+ *   error block, DEVIATIONS row; task-4 review MEDIUM-4 adjudicated it).
+ *   The radio worked, the pairing may well have succeeded, and then the
+ *   link failed anyway: a dead GATT handle mid-program (D6's
+ *   `InvalidStateError`), a `connect()` that throws for a reason no adapter
+ *   documents. Without this member all of those collapsed onto
+ *   `"bluetooth-off"` and rendered "check Bluetooth" at a rower whose
+ *   Bluetooth is demonstrably ON — the review found the argument inside
+ *   this very file: the two mappers below already wrote DIFFERENT prose for
+ *   the same tag, so the code did not itself believe they were one failure.
+ *   Task 5's copy keys on `reason`, so the tag is what a rower actually
+ *   reads. The remedy differs too: try again / wake the monitor, not
+ *   "turn something on".
  *
  * `detail` is copy-ready prose; `raw` is the un-prettified evidence (a
  * `ProgramRejectionError`'s own hex trace, or a thrown error's message) for
@@ -119,6 +125,7 @@ export interface ConnectedError {
     | ProgramRejectionReason
     | "busy"
     | "bluetooth-off"
+    | "link-failed"
     | "transport-missing"
     | "scan-dismissed";
   detail: string;
@@ -128,14 +135,23 @@ export interface ConnectedError {
 /** Which side of the record a run's `title`/`workoutId` come from. The
  *  program alone cannot supply them — `WorkoutProgram` is the compiled
  *  wire IR and carries no identity at all — and `MonitorRun` needs both
- *  (7C's log prefill reads them). Optional on `program()` only so the
- *  interface the plan fixed (`program(p: WorkoutProgram)`) still typechecks
- *  verbatim; every real caller passes it. */
+ *  (7C's log prefill reads them).
+ *
+ *  REQUIRED on `program()`, deliberately (task-4 review): the plan's
+ *  interface block writes `program(p: WorkoutProgram)`, and an optional
+ *  second parameter would have kept that literal true — but there will
+ *  never be a caller that doesn't know its workout, and forgetting to pass
+ *  one fails SILENTLY, as a blank-titled record in 7C's log prefill. A
+ *  compile error is the cheaper reminder. */
 export interface RunIdentity {
   workoutId: string | null;
   title: string;
 }
 
+/** A run with no library workout behind it (a hand-built or ad-hoc
+ *  program). `workoutId: null` is a real, supported state — `MonitorRun`
+ *  and `SessionRun` both type it that way — and a caller says so
+ *  EXPLICITLY; this is not a default the hook falls back to. */
 const ANONYMOUS_RUN: RunIdentity = { workoutId: null, title: "" };
 
 /** What a run would be filed under if one could open before `program()`
@@ -170,7 +186,7 @@ export interface MonitorSession {
    *  Assumes the Connect guard has already cleared (see this file's
    *  header). */
   connect(): Promise<void>;
-  program(p: WorkoutProgram, identity?: RunIdentity): Promise<void>;
+  program(p: WorkoutProgram, identity: RunIdentity): Promise<void>;
   /** The rower's End. Idempotent, and idempotent specifically against a
    *  terminal event racing it (spec §2). */
   endSession(): Promise<void>;
@@ -239,7 +255,7 @@ function defaultTransport(): Transport | null {
  * Why not `spm === 0`, the obvious predicate: the record says the opposite
  * of what that assumes.
  * - A STOPPED rower's spm stays PINNED at its last value. Session 3's
- *   frozen stretch (`pm5-session3-final.log:3548-3762`, 215 consecutive
+ *   frozen stretch (`pm5-session3-final.log:3548-3763`, 216 consecutive
  *   frames) reads `elapsed 57.78 / distance 108.4 / split 236.75 / spm 16`
  *   unchanged the whole way through — with the heart rate moving the entire
  *   time (82 → 60 → 67 → 59 → 61), which is what proves these are live
@@ -250,7 +266,7 @@ function defaultTransport(): Transport | null {
  *   for a real stop.
  *
  * **The false positive this threshold exists to clear** (the regression
- * fixture, `pm5-session3-final.log:2837-2842`): at a no-rest boundary the
+ * fixture, `pm5-session3-final.log:2835`+`2837-2841`): at a no-rest boundary the
  * machine emits one frame carrying the previous interval's split/spm over
  * a zeroed clock (`el 0 / d 0 / split 338.97 / spm 66`), then THREE
  * identical `el 0 / d 0 / split 0 / spm 0` frames, then resumes counting
@@ -261,11 +277,11 @@ function defaultTransport(): Transport | null {
  *
  * Exit is on ANY CHANGE, never on "advance": elapsed ticks BACKWARDS in
  * the record, by up to −0.57 s (`pm5-session3-final.log:4632-4633`,
- * `0.75 → 0.18`), so a monotonic-advance test would hold PAUSED through a
+ * `0.75 → 0.18`, the largest of the capture's five), so a monotonic-advance test would hold PAUSED through a
  * genuinely live stream. Equality is the whole predicate.
  *
  * CAVEATS, carried in code because they are not resolved (spec §2):
- * - **Empty-arm-only evidence.** The 215-frame frozen stretch above was
+ * - **Empty-arm-only evidence.** The 216-frame frozen stretch above was
  *   recorded during session 3's structurally EMPTY arm (§19.13) — a
  *   machine holding a workout with no intervals. `domain/monitor/types.ts`
  *   says plainly that mid-workout "the clock runs whether or not the rower
@@ -369,24 +385,32 @@ function mapProgramFailure(err: unknown): ConnectedError {
   }
   // An untyped throw out of `program()` — in practice a write against a
   // dead GATT handle (D6: Chrome's `InvalidStateError: Characteristic ...
-  // is no longer valid`), which `sendSequence` does not wrap. See
-  // `ConnectedError` for why this lands on `bluetooth-off` rather than
-  // staying untyped.
+  // is no longer valid`), which `sendSequence` does not wrap. The link
+  // failed; Bluetooth did not (this program only got dispatched because a
+  // pairing had already succeeded), which is the distinction
+  // `"link-failed"` exists to keep — see `ConnectedError`.
   return {
-    reason: "bluetooth-off",
+    reason: "link-failed",
     detail: "The link to the monitor failed while programming.",
     raw: String(err),
   };
 }
 
-/** A `scan()`/`connect()` failure, typed. A dismissed picker is the
- *  ORDINARY outcome here (the rower changed their mind), and both adapters
- *  surface it as a `NotFoundError`-shaped rejection — Web Bluetooth's
- *  "User cancelled the requestDevice() chooser", the Capacitor client's own
- *  cancellation. The same `NotFoundError` name is ALSO what Chrome uses
- *  when the adapter itself is unavailable, so the message is what separates
- *  the two; anything else at all is a radio failure (see `ConnectedError`
- *  on why that funnels to `bluetooth-off`). */
+/** A `scan()`/`connect()` failure, sorted into the three things it can
+ *  actually be. A dismissed picker is the ORDINARY outcome (the rower
+ *  changed their mind), and both adapters surface it as a
+ *  `NotFoundError`-shaped rejection — Web Bluetooth's "User cancelled the
+ *  requestDevice() chooser", the Capacitor client's own cancellation. The
+ *  same `NotFoundError` name is ALSO what Chrome uses when the ADAPTER is
+ *  unavailable, so the message is what separates those two.
+ *
+ *  Everything else is `"link-failed"`, not `"bluetooth-off"` (task-4
+ *  review, MEDIUM-4): a `connect()` that throws after the rower already
+ *  picked a device is a failure of THAT LINK, and telling them to check a
+ *  Bluetooth stack that just produced a working picker is advice for a
+ *  problem they do not have. `"bluetooth-off"` is reserved for the branch
+ *  the `unavailable` test isolates, where "turn Bluetooth on" is the real
+ *  remedy. */
 function mapRadioFailure(err: unknown): ConnectedError {
   const message = err instanceof Error ? err.message : String(err);
   const name = err instanceof Error ? err.name : "";
@@ -394,7 +418,14 @@ function mapRadioFailure(err: unknown): ConnectedError {
     /adapter|not enabled|not available|unavailable|disabled|powered off|turned off/i.test(
       message,
     );
-  if (!unavailable && (name === "NotFoundError" || /cancel/i.test(message))) {
+  if (unavailable) {
+    return {
+      reason: "bluetooth-off",
+      detail: "Bluetooth isn't available.",
+      raw: message,
+    };
+  }
+  if (name === "NotFoundError" || /cancel/i.test(message)) {
     return {
       reason: "scan-dismissed",
       detail: "No monitor was picked.",
@@ -402,8 +433,8 @@ function mapRadioFailure(err: unknown): ConnectedError {
     };
   }
   return {
-    reason: "bluetooth-off",
-    detail: "Bluetooth isn't available.",
+    reason: "link-failed",
+    detail: "The link to the monitor failed.",
     raw: message,
   };
 }
@@ -553,6 +584,14 @@ export function useMonitorSession(
         // The driver emits this only after `verifyArmed` has confirmed the
         // machine is holding OUR program (structure and all) — so "ready"
         // means ready, not "the ack came back".
+        //
+        // The `error: null` is belt-and-braces and known to be so (task-4
+        // review, LOW-5: a mutant removing it survives). `program()` has
+        // already cleared the error on its way in, and under the
+        // synchronous flip nothing can set one between there and here.
+        // Kept because "we are ready" and "an error is on screen" must
+        // never be simultaneously true, and that invariant should not rest
+        // on a second function's ordering.
         update({ phase: "ready", error: null });
         return;
       }
@@ -669,7 +708,7 @@ export function useMonitorSession(
   }, [fail, handleEvent, update]);
 
   const program = useCallback(
-    async (p: WorkoutProgram, identity?: RunIdentity): Promise<void> => {
+    async (p: WorkoutProgram, identity: RunIdentity): Promise<void> => {
       // THE DOUBLE-FIRE PIN (spec's I6 ruling: "DESIGNED, not asserted").
       // Two presses in one tick — a double-tap on Try again, a component
       // that fires an effect twice — must produce ONE wire conversation.
@@ -688,7 +727,7 @@ export function useMonitorSession(
         });
         return;
       }
-      identityRef.current = { program: p, ...(identity ?? ANONYMOUS_RUN) };
+      identityRef.current = { program: p, ...identity };
       update({ phase: "programming", error: null });
       try {
         await driver.program(p);
