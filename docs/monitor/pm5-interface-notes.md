@@ -1796,7 +1796,19 @@ re-run until it looks right:**
   `WORKOUTTYPE_VARIABLE_INTERVAL` (`0x08`) and the first interval's
   programmed 60s? If yes, `verifyArmed` has a real structural check to
   upgrade to; if no, the state-only check stays the honest option (§17
-  item 12 above).
+  item 12 above). **CORRECTION (2026-08-06, fix-3 Task 1): this method
+  never worked and could never have worked.** `toMonitorFrame`
+  (`domain/monitor/pm5/parse.ts`) never carried `workoutType`/
+  `workoutDurationRaw`/`workoutDurationType` into `MonitorFrame`, so no
+  `"frame"` log entry has ever contained them, in any session past or
+  future — the field never existed at that call site to read back. The
+  driver now records a dedicated `"structure"` log entry instead
+  (`src/monitor/driver.ts`'s `GENERAL_STATUS_UUID` handler, on a change in
+  any of the three decoded fields only — 0x0031 notifies ~2/second and a
+  per-tick entry would flood the ring the same way the old per-tick
+  `"frame"` entry did): `workoutType=<n> durationRaw=<n> durationType=<n>
+  raw=<19-byte hex>`. Read item 12 back from `"structure"` entries, never
+  `"frame"` ones.
 - **TWO `intervalComplete` events, carrying OUR indices 0 and 1** — not
   the one mixed-boundary event D4 produced before the fix. This is the
   direct hardware retest of plan Task 1's diagnosis and Task 4's fix
