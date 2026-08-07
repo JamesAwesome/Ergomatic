@@ -15,9 +15,15 @@
 // (`sendPrepare` — renamed from "clear" by Phase 7A-fix-2 Task 3, since
 // nothing here clears anything; it is the documented exit to WaitToBegin,
 // see that function's own doc comment) whose outcome, apart from a
-// confirmed disconnect, is swallowed as routine (fix-round 1's F3), the
-// real ack-gated programming send (`sendSequence`), then a tick-bounded
-// VERIFICATION (`verifyArmed`) against the machine's own reported state,
+// confirmed disconnect, is swallowed as routine (fix-round 1's F3), an
+// optional PREPARE-SETTLE wait (`waitForPrepareSettle`, fix-3 Task 2, design
+// spec §1b) that only arms when the prepare fired against a machine still
+// `rowing`/`resting` — session 3's hardware traces (interface-notes.md §18)
+// showed that cycle passing through `terminated`/`idle` before ever
+// reaching `armed`, and a program sent into that window arms structurally
+// EMPTY — the real ack-gated programming send (`sendSequence`), then a
+// tick-bounded VERIFICATION (`verifyArmed`) against the machine's own
+// reported state,
 // observed STRICTLY AFTER the send FULLY COMPLETED — the last frame's ack,
 // not the first frame going out (fix-round 2; fix-round 1's own snapshot
 // point was too early for a multi-frame program, so a stale "armed" tick
@@ -312,6 +318,51 @@ export interface DriverOptions {
    */
   settleTicks?: number;
   /**
+   * Bounds `program()`'s PREPARE-SETTLE wait (design spec §1b, fix-3 plan
+   * Task 2) in GENERAL_STATUS_UUID ticks — `waitForPrepareSettle`'s own
+   * doc comment carries the full citation. A DIFFERENT, STATE-KEYED
+   * mechanism from `settleTicks` above (which counts blindly, regardless of
+   * what the machine reports): this wait only ever arms when the machine's
+   * state AT THE MOMENT `program()`'s prepare step was sent was `rowing` or
+   * `resting` — i.e. only when `sendPrepare()`'s leading terminate is
+   * actually closing a RUNNING piece, the exact condition session 3's
+   * hardware traces reproduced twice with unrelated program shapes
+   * (interface-notes.md §18 "Live bisect": REPRO and Step 5 both landed a
+   * structurally EMPTY arm — `verifyArmed` passing regardless — while the
+   * machine was still `rowing`). For a program sent from an already-settled
+   * state (armed/idle/finished/terminated — the ordinary main-menu case),
+   * this wait never registers at all and costs ZERO ticks (latency pin,
+   * `waitForPrepareSettle`'s own doc comment).
+   *
+   * `terminated` and `idle` do NOT satisfy this wait — the traces show the
+   * PM's own Terminate -> Rearm -> WaitToBegin auto-cycle (CSAFE-DEF
+   * Appendix E) passing through BOTH on its way to `armed`, so treating
+   * either as "settled" would resolve while the machine is still mid-cycle.
+   * The end condition is `armed` FOLLOWED BY one further tick (any state) —
+   * the observed clean arms all needed at least one more tick after `armed`
+   * before the structure genuinely reflected the new program (the same
+   * "never trust an already-cached tick" discipline `verifyArmed` already
+   * applies), so this wait holds itself to the identical standard rather
+   * than resolving on the very tick that first reports `armed`.
+   *
+   * UNLIKE `verifyTicks`, omitting this is never "no bound" — it means the
+   * default, `10` (`waitForPrepareSettle`'s own doc comment has the exact
+   * observed spans this covers). Passing `0` disables the wait entirely
+   * (session 4b's own "detection row" needs exactly this: settle OFF,
+   * confirming the empty arm still reproduces so the eventual structural
+   * readback — Stage 2, not built by this task — has something real to
+   * catch). On expiry without ever observing `armed`, this NEVER rejects:
+   * `program()` proceeds and logs `prepare-settle-expired` — a 2Hz sampler
+   * CAN coalesce the whole terminated/idle/armed cycle into fewer ticks
+   * than expected (session 3's own Step 5: idle and armed shared one
+   * elapsed reading), so a bound that never fires would just trade one
+   * hazard (an unconfirmed empty arm) for another (a `program()` call that
+   * never resolves) — the eventual structural readback (design spec Stage
+   * 2) is what actually catches an empty arm; this wait is prevention, not
+   * the last line of defense.
+   */
+  prepareSettleTicks?: number;
+  /**
    * Bounds `sendGetErrorType`'s own reply wait (Task 3 review,
    * IMPORTANT-1) in GENERAL_STATUS_UUID ticks — ALWAYS ACTIVE, unlike
    * `ackTimeout`'s bound on every OTHER write, which only counts when the
@@ -341,6 +392,15 @@ export interface DriverOptions {
 /** `DriverOptions.settleTicks`'s own default — see that field's doc
  *  comment for why "omitted" means this number, not "no bound". */
 const DEFAULT_SETTLE_TICKS = 3;
+
+/** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc
+ *  comment for the full citation. `10`, not `3` (`DEFAULT_SETTLE_TICKS`
+ *  above): session 3's two observed dispatch-to-armed spans were 4 and 5
+ *  status ticks (interface-notes.md §18 "Live bisect" REPRO and Step 5;
+ *  design spec §1b cites both verbatim), both of which the state-blind
+ *  `settleTicks` default already exceeds — this wait needs its own,
+ *  larger budget, not a shared one. */
+const DEFAULT_PREPARE_SETTLE_TICKS = 10;
 
 /** `DriverOptions.errorTypeTicks`'s own default — same rationale as
  *  `DEFAULT_SETTLE_TICKS`, a separate constant so the two budgets can
@@ -548,6 +608,28 @@ export function createPm5Driver(
     ticks: number;
     ticksNeeded: number;
   } | null = null;
+  /** Registered while `program()`'s PREPARE-SETTLE wait
+   *  (`waitForPrepareSettle`, design spec §1b, fix-3 plan Task 2) is
+   *  counting — `null` whenever no `program()` call is currently in that
+   *  phase. A NEW, single-purpose slot — deliberately NOT `pendingSettle`
+   *  above, whose disconnect handling RESOLVES (routine for `terminate()`,
+   *  which already got its own ack and has nothing left to protect). THIS
+   *  wait sits before the real programming send ever goes out, so a
+   *  disconnect here means genuinely fatal work is still pending — the
+   *  `onDisconnect` handler below REJECTS it instead, with the identical
+   *  `ProgramRejectionError({reason: "disconnected"})` shape `sendSequence`
+   *  itself would produce for a disconnect during the real send, so the
+   *  wait's own failure is indistinguishable from "the send's disconnected
+   *  failure" to any caller. `armedSeen` tracks the end condition's own two
+   *  halves (`armed`, then one further tick of any kind) — see
+   *  `waitForPrepareSettle`'s doc comment. */
+  let pendingPrepareSettle: {
+    resolve: () => void;
+    reject: (err: unknown) => void;
+    ticks: number;
+    ticksNeeded: number;
+    armedSeen: boolean;
+  } | null = null;
   /** Task 3 review, IMPORTANT-1: registered ONLY while `sendGetErrorType`'s
    *  own `awaitAck()` is outstanding — an ALWAYS-ACTIVE bound, independent
    *  of whether the caller configured `options.ackTimeout` (see
@@ -736,6 +818,29 @@ export function createPm5Driver(
       const resolve = pendingSettle.resolve;
       pendingSettle = null;
       resolve();
+    }
+    // `program()`'s PREPARE-SETTLE wait (`pendingPrepareSettle`, design
+    // spec §1b) — UNLIKE `pendingSettle` just above, this REJECTS rather
+    // than resolves: the real programming send has not gone out yet, so a
+    // dead link here is not "a queued command probably landed", it is a
+    // genuine failure of the work `program()` still has left to do. Same
+    // `ProgramRejectionError({reason: "disconnected"})` shape `sendSequence`
+    // produces for a disconnect during the real send — a caller sees the
+    // identical failure whichever phase the link actually died in.
+    if (pendingPrepareSettle) {
+      const reject = pendingPrepareSettle.reject;
+      pendingPrepareSettle = null;
+      log.record(
+        "program-rejection",
+        `disconnected during prepare-settle wait: ${reason}`,
+      );
+      reject(
+        new ProgramRejectionError({
+          reason: "disconnected",
+          atFrame: -1,
+          hexTrace: reason,
+        }),
+      );
     }
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
@@ -1260,6 +1365,38 @@ export function createPm5Driver(
       }
       maybeEmitFrame();
 
+      // `program()`'s PREPARE-SETTLE tick pulse (`waitForPrepareSettle`,
+      // below, design spec §1b) — STATE-KEYED, unlike `pendingSettle`'s raw
+      // tick-blind subscription (below): needs the DECODED state this same
+      // arrival just merged into `raw`, exactly like `pendingVerify`'s own
+      // pulse just below reads it. Ticks are counted only while the end
+      // condition's first half (`armed`) has not yet been observed — the
+      // instant it is, the very NEXT arrival (any state at all) satisfies
+      // the second half and resolves, uncounted against `ticksNeeded`
+      // (`waitForPrepareSettle`'s own doc comment: the observed spans name
+      // the ticks needed to REACH `armed`, not the one grace tick after).
+      if (pendingPrepareSettle) {
+        const settleState = toMonitorFrame(raw as RawPm5Status).state;
+        if (pendingPrepareSettle.armedSeen) {
+          const resolve = pendingPrepareSettle.resolve;
+          pendingPrepareSettle = null;
+          resolve();
+        } else {
+          pendingPrepareSettle.ticks += 1;
+          if (pendingPrepareSettle.ticks >= pendingPrepareSettle.ticksNeeded) {
+            const { resolve, ticks } = pendingPrepareSettle;
+            pendingPrepareSettle = null;
+            log.record(
+              "prepare-settle-expired",
+              `${ticks} tick(s) elapsed with no "armed" state observed (last state: ${settleState}) — proceeding without confirmation; the structural readback (design spec Stage 2) is the net`,
+            );
+            resolve();
+          } else if (settleState === "armed") {
+            pendingPrepareSettle.armedSeen = true;
+          }
+        }
+      }
+
       // `program()`'s verification tick pulse (`verifyArmed`, below) — the
       // SAME GENERAL_STATUS_UUID arrival `maybeEmitFrame` just used, per
       // `DriverOptions.verifyTicks`'s own doc comment on why this is a
@@ -1446,6 +1583,75 @@ export function createPm5Driver(
     if (ticksNeeded <= 0) return Promise.resolve();
     return new Promise((resolve) => {
       pendingSettle = { resolve, ticks: 0, ticksNeeded };
+    });
+  }
+
+  /**
+   * `program()`'s PREPARE-SETTLE wait (design spec §1b, fix-3 plan Task 2).
+   * Session 3's hardware traces (interface-notes.md §18 "Live bisect")
+   * reproduced, twice, with unrelated program shapes, a structurally EMPTY
+   * arm — `verifyArmed` passing regardless — whenever `program()`'s leading
+   * `sendPrepare()` terminate closed a machine that was still `rowing`. Both
+   * traces show the PM's own Terminate -> Rearm -> WaitToBegin auto-cycle
+   * (CSAFE-DEF Appendix E) passing through `terminated` AND `idle` before
+   * ever reaching `armed` — cited verbatim from design spec §1b: **REPRO:
+   * rowing → terminated ×2 → idle → armed, ~0.85s; step 5: terminated →
+   * idle → armed inside 0.06s of PM clock.** Neither `terminated` nor
+   * `idle` is a settled state for this wait's purposes — the observed
+   * dispatch-to-armed spans were 4 and 5 status ticks, and a 2Hz sampler CAN
+   * coalesce that cycle (step 5's own `idle` and `armed` shared one elapsed
+   * reading), so this wait's bound (`DriverOptions.prepareSettleTicks`,
+   * default `10`) is sized well past both, not tight against either.
+   *
+   * Arms ONLY when `priorState` (the machine's decoded state read from
+   * `raw` at the MOMENT `program()` called `sendPrepare()`, before that
+   * step's terminate ever went out) is `"rowing"` or `"resting"` — a
+   * program sent from any already-settled state (armed/idle/finished/
+   * terminated, the ordinary main-menu case) never registers a wait at all,
+   * costing zero ticks (the latency pin `DriverOptions.prepareSettleTicks`'s
+   * own doc comment names). `ticksNeeded <= 0` (`prepareSettleTicks: 0`,
+   * session 4b's own "detection row") also resolves immediately, same
+   * "escape hatch" shape as `settleAfterTerminate`'s own `ticksNeeded <= 0`
+   * branch.
+   *
+   * End condition, once armed: an `"armed"` tick FOLLOWED BY one further
+   * tick of ANY state — the same "never trust an already-cached tick"
+   * discipline `verifyArmed` already applies, here applied to the settle's
+   * own evidence rather than final verification's. On expiry with `armed`
+   * never observed, this PROCEEDS (never rejects) and logs
+   * `prepare-settle-expired`: the structural readback (design spec Stage 2,
+   * not built by this task) is the actual net under this wait, so a
+   * `program()` that never resolves would trade a survivable, detectable
+   * hazard for an unsurvivable one.
+   *
+   * A disconnect while this wait is outstanding is the ONE outcome that
+   * does NOT proceed — `createPm5Driver`'s `onDisconnect` handler rejects
+   * `pendingPrepareSettle` with the same `ProgramRejectionError({reason:
+   * "disconnected"})` shape `sendSequence` produces for a disconnect during
+   * the real send (see `pendingPrepareSettle`'s own doc comment for why
+   * this, unlike `pendingSettle`, cannot simply resolve).
+   */
+  function waitForPrepareSettle(
+    priorState: MonitorFrame["state"],
+  ): Promise<void> {
+    const ticksNeeded =
+      options.prepareSettleTicks ?? DEFAULT_PREPARE_SETTLE_TICKS;
+    if (ticksNeeded <= 0) return Promise.resolve();
+    if (priorState !== "rowing" && priorState !== "resting") {
+      return Promise.resolve();
+    }
+    log.record(
+      "prepare-settle",
+      `waiting for "armed" (+1 tick) before the real send — prior state was "${priorState}"`,
+    );
+    return new Promise((resolve, reject) => {
+      pendingPrepareSettle = {
+        resolve,
+        reject,
+        ticks: 0,
+        ticksNeeded,
+        armedSeen: false,
+      };
     });
   }
 
@@ -1753,13 +1959,18 @@ export function createPm5Driver(
     // a destruction claim that did not survive (`MonitorDriver.program`'s
     // own JSDoc, `domain/monitor/types.ts`, carries the full statement).
     //
-    // Three phases (design spec §3): `sendPrepare()` is the documented
-    // exit to WaitToBegin (interface-notes.md §19.4/§19.5) — NOT a clear,
-    // nothing here clears anything — with any non-disconnect outcome
-    // swallowed as routine (fix-round 1, F3; broadened by Task 3, see
-    // `sendPrepare`'s own doc comment); `sendSequence` is the real
-    // ack-gated programming send, now firing `sendGetErrorType` on a
-    // genuine reject (Task 3); `verifyArmed` is what actually decides
+    // Three phases, plus one conditional one (design spec §3, §1b):
+    // `sendPrepare()` is the documented exit to WaitToBegin (interface-
+    // notes.md §19.4/§19.5) — NOT a clear, nothing here clears anything —
+    // with any non-disconnect outcome swallowed as routine (fix-round 1,
+    // F3; broadened by Task 3, see `sendPrepare`'s own doc comment);
+    // `waitForPrepareSettle` (fix-3 Task 2) then waits for the machine to
+    // finish reacting to that terminate, but ONLY if it was still
+    // `rowing`/`resting` when the terminate was sent — see that function's
+    // own doc comment for the hardware traces this exists to survive;
+    // `sendSequence` is the real ack-gated programming send, now firing
+    // `sendGetErrorType` on a genuine reject (Task 3); `verifyArmed` is what
+    // actually decides
     // success, from the machine's OWN reported state observed STRICTLY
     // AFTER the COMPLETE send (fix-round 2 — fix-round 1's own snapshot
     // point, taken before the first frame went out, was too early: a
@@ -1771,7 +1982,18 @@ export function createPm5Driver(
     // from any point during the send either (verifyArmed's own doc
     // comment).
     async program(p: WorkoutProgram): Promise<void> {
+      // Fix-3 Task 2 (design spec §1b): the machine's state AT THE MOMENT
+      // the prepare is about to be sent — read from `raw` directly (never
+      // from a fresh notification; this is a snapshot of whatever the
+      // driver already knows, the same source `verifyArmed`'s tick pulse
+      // reads), BEFORE `sendPrepare()` ever dispatches its terminate. This
+      // is what `waitForPrepareSettle` gates on: only a machine that was
+      // genuinely `rowing`/`resting` right now can have its terminate land
+      // on a RUNNING piece, the one condition session 3 reproduced the
+      // empty arm from (`waitForPrepareSettle`'s own doc comment).
+      const stateAtPrepare = toMonitorFrame(raw as RawPm5Status).state;
       await sendPrepare();
+      await waitForPrepareSettle(stateAtPrepare);
       await sendSequence(buildProgrammingSequence(p), "programmed", {
         fetchErrorTypeOnNak: true,
       });

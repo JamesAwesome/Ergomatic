@@ -1529,9 +1529,17 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
     // either. The realistic hardware path never reaches this branch:
     // `program()`'s leading prepare Terminate makes the PM report
     // "terminated" first, closing run 1 with a real event.
+    //
+    // `prepareSettleTicks: 0` — this test's own focus is `run-replaced`
+    // logging, not fix-3 Task 2's settle: without this, the SECOND
+    // `program()` call below (dispatched while `raw` still reports
+    // "rowing" from run 1) would arm `waitForPrepareSettle`'s wait, and
+    // `programViaStub` does not know to feed it the extra ticks — same
+    // convention `harness()`'s own doc comment already documents for
+    // `settleTicks: 0`.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 0 });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
@@ -4860,6 +4868,322 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
     expect(entries[0]!.detail).toMatch(
       /^workoutType=8 durationRaw=0 durationType=0 raw=([0-9a-f]{2} ){18}[0-9a-f]{2}$/,
     );
+  });
+});
+
+describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before the real send, design spec §1b)", () => {
+  // NOTE for Task 3: `createFakeTransport`'s `onClearingFrameComplete` acks
+  // the prepare and changes NOTHING — no state transition, no status
+  // delivery (design spec Stage 1c, not yet built). Every test below
+  // therefore drives a bare `stubTransport` by hand, the `driver.test.ts`
+  // house pattern for edges the honest fake cannot yet reach (see
+  // `stubTransport`'s own doc comment) — an end-to-end test where the FAKE
+  // itself synthesizes the terminate->idle->armed cycle behind a running
+  // program is Task 3's own to add once that model exists.
+
+  function sentCount(transport: ReturnType<typeof stubTransport>): number {
+    return transport.writes.filter(
+      (w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID,
+    ).length;
+  }
+
+  /** Delivers a General Status tick in the given state BEFORE `program()`
+   *  is ever called, so the driver's persistent `raw` — the value
+   *  `program()` snapshots as `stateAtPrepare` — already reflects it. */
+  function primeState(
+    transport: ReturnType<typeof stubTransport>,
+    workoutState: number,
+  ): void {
+    transport.notify(GENERAL_STATUS_UUID, generalStatusIn(workoutState));
+  }
+
+  /** Drives `program()` through its prepare step's own ack and returns the
+   *  still-pending `program()` promise — every test below starts from
+   *  immediately after this, the exact point where `waitForPrepareSettle`
+   *  registers (or skips) its wait. */
+  // Returns `{ pending }` rather than the bare promise: an `async function`
+  // that `return`s a thenable value has its OWN returned promise ADOPT that
+  // thenable's state (plain JS semantics, not a TS quirk) — `await
+  // driveThroughPrepareAck(...)` would then block until `program()` itself
+  // resolved, defeating the entire point of handing the still-open promise
+  // back for further manual tick-driving. Wrapping it in a plain object
+  // sidesteps that adoption.
+  async function driveThroughPrepareAck(
+    transport: ReturnType<typeof stubTransport>,
+    driver: ReturnType<typeof createPm5Driver>,
+    p: WorkoutProgram,
+  ): Promise<{ pending: Promise<void> }> {
+    const start = sentCount(transport);
+    const pending = driver.program(p);
+    await waitUntil(() => sentCount(transport) > start);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    for (let i = 0; i < 50; i += 1) await Promise.resolve();
+    return { pending };
+  }
+
+  /** Drains enough microtask hops for a (possibly buggy) settle resolution
+   *  to have actually scheduled `sendSequence`'s first write, if one was
+   *  going to happen — resolving a Promise never synchronously resumes its
+   *  awaiter. */
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  }
+
+  /** Finishes a `program()` call already past its prepare-settle wait: the
+   *  real send's own ack, then ONE fresh "armed" status for `verifyArmed`. */
+  async function finishRealSend(
+    transport: ReturnType<typeof stubTransport>,
+    pending: Promise<void>,
+  ): Promise<void> {
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    for (let i = 0; i < 50; i += 1) await Promise.resolve();
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await expect(pending).resolves.toBeUndefined();
+  }
+
+  it(
+    "REPRO's exact trace (§18 session 3 Live bisect: 'rowing → terminated ×2 → " +
+      "idle → armed, ~0.85s') — waits through terminated/idle and sends " +
+      "frames only after armed+1 (today: frames go out immediately after the " +
+      "prepare ack)",
+    async () => {
+      const transport = stubTransport();
+      const log = createEventLog();
+      const driver = createPm5Driver(transport, log);
+
+      primeState(transport, WORKOUTSTATE_INTERVALWORKTIME); // rowing, at prepare-send
+      const { pending } = await driveThroughPrepareAck(
+        transport,
+        driver,
+        MINIMAL_PROGRAM,
+      );
+      const afterPrepare = sentCount(transport);
+
+      // The gate armed — `program()`'s captured `stateAtPrepare` was
+      // "rowing", not a fresh notification.
+      expect(
+        log
+          .entries()
+          .some(
+            (e) => e.kind === "prepare-settle" && e.detail.includes('"rowing"'),
+          ),
+      ).toBe(true);
+
+      // Replay REPRO tick-by-tick: a leading still-"rowing" reading (the
+      // trace's own first named state — the PM has not yet reacted to the
+      // terminate), then "terminated" ×2, then "idle", matching §18 session
+      // 3's cited sequence exactly. No programming frame may go out at any
+      // point during this replay.
+      for (const workoutState of [
+        WORKOUTSTATE_INTERVALWORKTIME, // rowing
+        WORKOUTSTATE_TERMINATE, // terminated
+        WORKOUTSTATE_TERMINATE, // terminated (×2)
+        WORKOUTSTATE_REARM, // idle
+      ]) {
+        transport.notify(GENERAL_STATUS_UUID, generalStatusIn(workoutState));
+        await flush();
+        expect(sentCount(transport)).toBe(afterPrepare);
+      }
+
+      // "armed" alone is NOT the end condition — one further tick is owed
+      // (write-ordering assertion: no frame yet).
+      transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+      await flush();
+      expect(sentCount(transport)).toBe(afterPrepare);
+
+      // The one further tick (any state) completes the wait — frames go
+      // out now, not before.
+      transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+      await waitUntil(() => sentCount(transport) > afterPrepare);
+      expect(sentCount(transport)).toBeGreaterThan(afterPrepare);
+
+      await finishRealSend(transport, pending);
+    },
+  );
+
+  it(
+    "step 5's exact trace (§18 session 3 Live bisect: 'terminated → idle → " +
+      "armed inside 0.06s of PM clock') — waits through terminated/idle and " +
+      "sends frames only after armed+1",
+    async () => {
+      const transport = stubTransport();
+      const log = createEventLog();
+      const driver = createPm5Driver(transport, log);
+
+      primeState(transport, WORKOUTSTATE_INTERVALWORKTIME); // rowing, at prepare-send
+      const { pending } = await driveThroughPrepareAck(
+        transport,
+        driver,
+        MINIMAL_PROGRAM,
+      );
+      const afterPrepare = sentCount(transport);
+
+      // Step 5's own cited span is 4 status ticks dispatch-to-armed, one
+      // more than its 3 NAMED states ("terminated → idle → armed") — same
+      // shape as REPRO's own explicitly-named leading "rowing" reading: the
+      // first post-dispatch tick still reports the pre-terminate state
+      // before the PM's Terminate->Rearm->WaitToBegin cycle catches up.
+      for (const workoutState of [
+        WORKOUTSTATE_INTERVALWORKTIME, // still "rowing" (the leading tick)
+        WORKOUTSTATE_TERMINATE, // terminated
+        WORKOUTSTATE_REARM, // idle
+      ]) {
+        transport.notify(GENERAL_STATUS_UUID, generalStatusIn(workoutState));
+        await flush();
+        expect(sentCount(transport)).toBe(afterPrepare);
+      }
+
+      transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+      await flush();
+      expect(sentCount(transport)).toBe(afterPrepare); // armed alone: not yet
+
+      transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+      await waitUntil(() => sentCount(transport) > afterPrepare);
+      expect(sentCount(transport)).toBeGreaterThan(afterPrepare);
+
+      await finishRealSend(transport, pending);
+    },
+  );
+
+  it("resting at prepare-send also arms the wait (the gate's other half)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    primeState(transport, WORKOUTSTATE_INTERVALREST); // resting
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+    const afterPrepare = sentCount(transport);
+
+    expect(
+      log
+        .entries()
+        .some(
+          (e) => e.kind === "prepare-settle" && e.detail.includes('"resting"'),
+        ),
+    ).toBe(true);
+    expect(sentCount(transport)).toBe(afterPrepare); // still waiting
+
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await flush();
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS); // +1
+    await waitUntil(() => sentCount(transport) > afterPrepare);
+
+    await finishRealSend(transport, pending);
+  });
+
+  it("expiry PROCEEDS (never rejects) and logs 'prepare-settle-expired' when the bound is hit with no 'armed' ever observed", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 3 });
+
+    primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+    const afterPrepare = sentCount(transport);
+
+    // Exactly `prepareSettleTicks` (3) ticks, "armed" never observed —
+    // session 3's own step 5 showed a 2Hz sampler CAN coalesce the whole
+    // cycle, so this must proceed, not hang or reject.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE),
+    );
+    transport.notify(GENERAL_STATUS_UUID, generalStatusIn(WORKOUTSTATE_REARM));
+    await waitUntil(() => sentCount(transport) > afterPrepare);
+
+    expect(log.entries().some((e) => e.kind === "prepare-settle-expired")).toBe(
+      true,
+    );
+
+    await finishRealSend(transport, pending);
+  });
+
+  it("prepareSettleTicks: 0 disables the wait entirely, even from a rowing state (session 4b's own detection row)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 0 });
+
+    primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+
+    // No wait was ever registered — the real send's frames already went
+    // out, right after the prepare's own ack.
+    expect(sentCount(transport)).toBeGreaterThan(prepareChunkCount);
+    expect(log.entries().some((e) => e.kind === "prepare-settle")).toBe(false);
+    expect(log.entries().some((e) => e.kind === "prepare-settle-expired")).toBe(
+      false,
+    );
+
+    await finishRealSend(transport, pending);
+  });
+
+  it("latency pin: a main-menu-state program() (state 'armed' at prepare-send) consumes ZERO prepare-settle ticks — exactly today's sequence (prepare ack, send ack, ONE fresh armed tick)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log); // default prepareSettleTicks (10)
+
+    primeState(transport, WORKOUTSTATE_WAITTOBEGIN); // armed — a settled, main-menu state
+
+    // `programViaStub` IS today's pre-Task-2 sequence: prepare ack, the
+    // real send's own ack, then exactly ONE fresh "armed" status. If the
+    // settle machinery ever consumed a tick here, this single notify inside
+    // `programViaStub` would not be enough and this call would hang.
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    expect(log.entries().some((e) => e.kind === "prepare-settle")).toBe(false);
+    expect(log.entries().some((e) => e.kind === "prepare-settle-expired")).toBe(
+      false,
+    );
+  });
+
+  it("a disconnect during the prepare-settle wait rejects with reason 'disconnected' — the identical failure the real send would produce, without ever sending the real programming frames", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+    const afterPrepare = sentCount(transport);
+    expect(log.entries().some((e) => e.kind === "prepare-settle")).toBe(true);
+
+    transport.fireDisconnect("radio out of range");
+
+    await expect(pending).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(ProgramRejectionError);
+      expect((err as ProgramRejectionError).reason).toBe("disconnected");
+      return true;
+    });
+
+    // The real programming frames were never written — the wait's own
+    // rejection short-circuited `program()` before `sendSequence` ever ran
+    // (NOT `pendingSettle`'s "resolve and proceed" shape — that would have
+    // sent frames onto a link already known to be down).
+    expect(sentCount(transport)).toBe(afterPrepare);
   });
 });
 
