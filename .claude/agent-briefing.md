@@ -91,3 +91,12 @@ files you touched, each self-mutation with its fail-then-pass evidence, the
 commit SHA(s), and anything that contradicted your brief. Your final message
 back is ONLY: status (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED),
 commit SHA(s), a one-line test summary, gate results, and concerns.
+
+## Test invocation (a trap that has bitten three agents)
+
+NEVER run bare `vitest run` / `pnpm vitest run`: Node 26's experimental
+webStorage global collides with jsdom's `localStorage` and ~445 client
+tests fail with `localStorage.clear()` errors that look like a real
+regression. Always `pnpm test` / `pnpm test:coverage` (their scripts set
+`NODE_OPTIONS=--no-experimental-webstorage`), or export that flag
+yourself if you must invoke vitest directly.
