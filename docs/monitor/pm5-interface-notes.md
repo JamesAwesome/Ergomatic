@@ -1185,6 +1185,19 @@ every flagged item either numbered here or explicitly excused — holds.)
    `WorkoutProgram` — Sea Smoke's 25 intervals need 7) and confirm every
    interval the PM ends up armed with matches what was sent, not only the
    last frame's.
+   > **CORRECTION (2026-08-06, laptop session 3, §18): STATUS: PARTIALLY
+   > ANSWERED.** The merge-gate row's Step 5 sent a genuine 7-frame program
+   > (25×100m, no rest) and every frame acked — the FIRST multi-frame
+   > program completion this codec has ever achieved against real hardware.
+   > The live bisect that followed (§18 "Live bisect") sent six further
+   > shapes (single-frame and multi-frame, distance and count varied) from a
+   > settled/armed-idle machine and every one armed correctly, including a
+   > second 7-frame send (`bisect-frames`, 25×500m). But Step 5's own 7-frame
+   > send was rowed only 108.4m into a program that turned out structurally
+   > EMPTY (§19.13) — it landed on a RUNNING workout, not a clean one — so it
+   > answers "does a 7-frame send ack and arm" (yes, from a settled state)
+   > without yet answering "does a full 7-frame program retain all 25
+   > intervals when rowed to completion." That remains UNROWED.
 6. **STATUS: OPEN — ANSWERED then WEAKENED; the single top open question
    for the next hardware row (§18 #6).** The RULE is confirmed (D1: the PM
    accepts a program only when nothing is loaded; a rejected program WIPES
@@ -1295,6 +1308,17 @@ every flagged item either numbered here or explicitly excused — holds.)
     length); if no (or if the PM doesn't refresh these fields until
     rowing starts), the current state-only check stays the strongest
     honest option.
+    > **CORRECTION (2026-08-06, laptop session 3, §18/§19.13): STATUS
+    > remains OPEN, now TWICE-justified by hardware rather than
+    > once-theorized.** The live bisect's Step 5 send and its REPRO row each
+    > produced a structurally EMPTY arm that nonetheless passed today's
+    > state-only `verifyArmed` (`state === "armed"`) and acked every frame
+    > cleanly — two independent, hardware-confirmed cases where the bare
+    > state check reports success on a program with no interval structure at
+    > all. This item's proposed upgrade (reading `0x0031`'s `workoutType`/
+    > `workoutDurationRaw`/`workoutDurationType` back against what was sent)
+    > would have caught both. Folded into ROADMAP's Phase 7A-fix-3 as one of
+    > two candidate remedies, to be DESIGNED rather than assumed.
 13. **STATUS: ANSWERED (§19.8) — the rest-keyed rule was wrong for
     0x0037/38; `index-unverified` retired.** Needs a
     `restSeconds: 0` interior interval, which the pending verification
@@ -1344,6 +1368,11 @@ every flagged item either numbered here or explicitly excused — holds.)
     > driver's `"index-unverified"` log entry, which existed to flag this
     > item while it was open, is RETIRED — the question it was flagging is
     > this correction.
+    > **Cross-reference (2026-08-06, laptop session 3, §18):** the minus-1
+    > rule this item settled for TIME intervals now also holds for a
+    > DISTANCE interval's boundary — see item 17's own conversion,
+    > `program-short`'s 500m first interval (`interval-complete index=0
+    > (machine reported 1)`, raw `0x0037`/`0x0038` captured).
 14. **STATUS: OPEN — added by Phase 7A-fix-2 Task 3's review (MINOR-1);
     did not exist before this commit, so no data yet.** Which wrapper a
     GET/pull command should actually carry on the REQUEST side — `0x1A`
@@ -1377,10 +1406,11 @@ every flagged item either numbered here or explicitly excused — holds.)
 
     > **Cross-reference (2026-08-06, Phase 7A-fix-2 Task 7): this item pairs
     > naturally with the session-3 merge-gate row below** (§17, "The
-    > merge-gate row (session 3, prepared, NOT yet run)") — the lab is
-    > already connected and idle right before that row's step 1, exactly
-    > the state this item needs. It stays its OWN hardware action, not a
-    > sixth step of that row: `app/scripts/pm5-lab.ts`'s `REMOTE` map has no
+    > merge-gate row (session 3, RUN 2026-08-06 — results in §18)") — the
+    > lab is already connected and idle right before that row's step 1,
+    > exactly the state this item needs. **It did not get folded into
+    > session 3** (§18) — still its OWN hardware action, not a sixth step of
+    > that row: `app/scripts/pm5-lab.ts`'s `REMOTE` map has no
     > command that sends a bare `buildGetErrorType()` outside a genuine
     > programming reject (`src/monitor/driver.ts`'s `sendGetErrorType` is
     > only ever called internally, on a real `"nak"`), so answering this
@@ -1427,6 +1457,22 @@ every flagged item either numbered here or explicitly excused — holds.)
     swallow-as-routine BEHAVIOUR itself likely survives either way (ANY
     non-disconnected prepare outcome is already swallowed, by design) — only
     the STATED REASON for expecting a reject specifically would not.
+    > **CORRECTION (2026-08-06, laptop session 3, §18): STATUS: ANSWERED.**
+    > A standalone `terminate` (not `program()`'s internal prepare step) sent
+    > from the machine's post-`program-many` armed-idle screen acked
+    > `f1 81 76 01 13 e5 f2` with `slaveState=ready`, logged `terminate-sent`
+    > (distinct from the `prepare-sent` kind `program()`'s internal step
+    > logs). Decoded: bit 7 (`0x80`) = frame-count toggle, set; bits 4-5
+    > (`0x30`) = `00` = previous-frame status OK; bits 0-3 (`0x0F`) = `01` =
+    > slave state READY. **An ACCEPT, not a reject.** The idle-terminate
+    > refusal `fake.ts`'s `onClearingFrameComplete` models never existed on
+    > real hardware — it was exactly the pre-fix misparse this item's own
+    > text predicted it might be. Two obligations follow, named here, NOT
+    > implemented in this commit: `fake.ts`'s refusal should accept
+    > unconditionally (moving any scripted refusal to an explicit synthetic
+    > hook, `injectNak`'s pattern); `driver.ts`'s `sendPrepare` comment must
+    > drop its "hardware showed the PM refuses…" clause. Both are scoped to
+    > ROADMAP's Phase 7A-fix-3.
 16. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; one of the "index
     shapes the merge row does not convert" (design spec §5).** Whether
     `toActualIndex`'s minus-1 rule (and 0x0033's own rest-keyed
@@ -1452,6 +1498,16 @@ every flagged item either numbered here or explicitly excused — holds.)
     boundary — does the second normalize to 1 the same clean way the first
     normalizes to 0, or does something drift? (`program-short`, 3×500m,
     remains the dedicated fallback if step 5 is cut short.)
+    > **CORRECTION (2026-08-06, laptop session 3, §18): STATUS: NOT
+    > converted; fallback stands.** Step 5's `program-many` armed
+    > structurally EMPTY (§19.13) — it produced no boundary of any kind,
+    > converted or not, because it landed on a running workout instead of a
+    > clean one. `program-short`'s work0→work1 boundary (the dedicated
+    > fallback) WAS rowed and captured (item 17's own conversion, below),
+    > but interval 2 (the program's actual middle boundary, work1→work2) was
+    > never rowed — this item's own question, a program's SECOND boundary
+    > behaving like its first, remains open and still needs its own
+    > dedicated hardware action.
 17. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; the other unconverted
     shape (design spec §5).** A DISTANCE-kind interval's ACTUAL. What
     0x0037/38 report when a DISTANCE interval actually completes has never
@@ -1468,6 +1524,16 @@ every flagged item either numbered here or explicitly excused — holds.)
     (~100m, `value` in metres) and not silently coerced toward a TIME
     reading anywhere in the pipeline. (`program-short`'s 500m first
     interval remains the dedicated fallback.)
+    > **CORRECTION (2026-08-06, laptop session 3, §18): STATUS: ANSWERED /
+    > converted.** Step 5's own `program-many` rowing could not answer this
+    > (it armed structurally empty, §19.13), but the dedicated fallback did:
+    > `program-short` (3×500m r60) rowed to its first boundary, and the
+    > state transitioned to a REAL `resting` (not the empty program's stuck
+    > `rowing`). `intervalComplete` reported `index=0 (machine reported 1)`;
+    > raw `0x0037`/`0x0038` were captured (`distanceMeters: 500`,
+    > `avgSpm: 26`, `avgHeartRateBpm: 107`). A DISTANCE interval's actual
+    > normalizes via the same minus-1 rule as a TIME interval's — CONFIRMED,
+    > not merely expected.
 18. **STATUS: OPEN — added by Phase 7A-fix-2 Task 7; the third unconverted
     shape (design spec §5).** A single-interval program has no INTERIOR
     boundary at all — only `WorkoutEnd` — so whatever forward-attribution/
@@ -1508,7 +1574,7 @@ every flagged item either numbered here or explicitly excused — holds.)
     though the driver discards it, since footnote 12 predicts it may be a
     value this document has not yet catalogued)?
 
-### The merge-gate row (session 3, prepared, NOT yet run)
+### The merge-gate row (session 3, RUN 2026-08-06 — results in §18)
 
 **Update (Task 7 close-out, phase-7a-fix-2, 2026-08-06): this is the design
 spec's own §8 merge-gate row** — the ONE short hardware row (~8 min,
@@ -1520,9 +1586,19 @@ is a RE-DERIVATION from raw bytes, not a fresh observation under the fix.
 This row is the first time anything gets sent to real hardware running
 Tasks 2-6's corrected code. Prepared here exactly like §17's earlier
 "pending verification row"; its results destination is §18's own
-session-3 heading below, with every slot deliberately EMPTY — nobody has
-run this yet, and no result below should be read as anything but a
-template until it is.
+session-3 heading below.
+
+**Update (laptop session 3, 2026-08-06): the row has RUN.** All five steps
+PASSED as designed (§18) and item 15 was answered alongside it. The row's
+own live bisect then surfaced a NEW defect outside this row's own scope —
+programming over a RUNNING workout arms structurally empty (§19.13) — which
+does not fail any step below (none of the five programs a running workout)
+but is scoped to its own follow-up, Phase 7A-fix-3 (ROADMAP). The port-check
+paragraph immediately below turned out to matter in practice: the session
+opened against a stale origin (repeated `ProgramRejectionError`s, the
+pre-fix symptom) until the page was reloaded onto the corrected port —
+recorded in §18's own setup note, evidenced by a Web-Bluetooth device
+identifier change tied to page origin, not merely asserted.
 
 **Port check, before anything else.** This repo runs multiple worktrees'
 dev servers concurrently — Vite silently moves to 5174/5175/… whenever
@@ -1654,6 +1730,14 @@ remain future, untouched by this row.
 **PR #52 leaves draft only after this row's five steps are run, §18 records
 Expected-vs-Observed for each, AND James gives explicit approval** — running
 the row is necessary, not sufficient.
+
+> **Update (2026-08-06): the row has RUN and §18 records Expected-vs-Observed
+> for all five steps (all PASSED) plus item 15 (ANSWERED).** James's
+> explicit approval is a separate act from this row having run or from this
+> documentation being written — **the merge decision remains James's**, not
+> automatic on either. The row's own live bisect surfaced a defect outside
+> this row's scope (§19.13); it is scoped to Phase 7A-fix-3 (ROADMAP), not
+> treated here as a reason to re-run the merge-gate row itself.
 
 ### The pending verification row (prepared, NOT yet run)
 
@@ -2032,50 +2116,179 @@ the single top open question. "The pending verification row" in §17 is
 this close-out's prepared, not-yet-run sequence for verifying Tasks 2-4's
 fixes and picking up item 12 as a free extra observation.
 
-### 2026-08-06 session (PM5 TBD) — LAPTOP SESSION 3 (PENDING — not yet run)
+### 2026-08-06 session (PM5 432331249) — LAPTOP SESSION 3
 
-**Results destination for §17's "The merge-gate row (session 3, prepared,
-NOT yet run)."** This heading exists so the row has somewhere to write its
-results the moment it runs; every slot below is deliberately EMPTY, not a
-placeholder value, and none of them should be read as anything but pending
-until a real session fills them in. **The row is JAMES-OPERATED and has NOT
-happened as of this commit — nothing in this subsection is an observation.**
+**Results for §17's "The merge-gate row (session 3, RUN 2026-08-06 —
+results in §18)," plus a live bisect James drove immediately afterward on
+the same connection.** Raw trace: the archived `pm5-session3-final.log`
+(5,694 lines, nine `exportLog()` dumps); monitor photo: `IMG_6702.jpeg`
+(Step 5's finding). Heart-rate source: James's Apple Watch, paired to the
+PM5 as its own HR source per the PM5's own menu (not something this
+codebase drives — §19.9's "one thing we are not doing" still holds; this
+session only observes the reading, never the pairing).
 
-- **Step 1** (`program-two-time`, first clean accept under the corrected
-  parse — `frameStatus "ok"`, `verifyArmed` resolves, no rejection in the
-  trace): PENDING.
-- **Step 2** (row both intervals; actuals carry OUR indices 0 and 1;
-  `workoutComplete` fires once; "first boundary WITH rest" converts from
-  unobserved to observed): PENDING.
-- **Step 2 — heart rate** (OWNER ADDITION, watch paired: live `frame`
-  events' `heartRateBpm` while rowing — non-null and plausible, or a `null`
-  worth recording the raw bytes for; the two actuals' `avgHeartRateBpm`):
-  PENDING.
-- **Step 3** (`program-no-rest` sent over the loaded two-time program
-  without reconnecting; James reads the monitor — the no-rest workout
-  visible, no `0:30` rest screen between intervals): PENDING.
-- **Step 4** (row the no-rest program's first boundary; a NEW run opens
-  with no reconnect; minus-1 re-confirmed at a no-rest boundary): PENDING.
-- **Step 4 — heart rate** (OWNER ADDITION: same live-frame expectation as
-  Step 2; PLUS what the 0x0038 rest-average HR field reads on a NO-REST
-  boundary — raw bytes, not just the decoded value): PENDING.
-- **Step 5** (`program-many`, 25×100m DISTANCE / 7 frames, no rest; rowed
-  through 2-3 boundaries — clean multi-frame ack; interval counter
-  advancing against 25; frames' `intervalIndex` 0 → 1 → 2; actuals with
-  OUR indices carrying ~100m distance data): PENDING.
-- **Step 5 — items 16/17 conversions** (the crossed MIDDLE boundary's
-  actual; the DISTANCE actual's fields; both raw 0x0037/38 captured):
-  PENDING.
-- **Item 15** (idle-terminate raw ack byte, decoded): PENDING.
-- **Items 16-19** (a ≥3-interval program's middle boundary; a DISTANCE
-  interval's actual; a single-interval program's boundary-less completion;
-  a mid-interval terminate's reported number): PENDING — each is its own
-  hardware action, not part of the five-step row above.
+**Setup note — the port DID move, and the row's own check caught it.** The
+session opened against a STALE origin: every `program-two-time`/
+`program-no-rest`/bare `terminate` sent before the reconnect noted below
+came back `ProgramRejectionError: PM5 rejected frame 0` — the pre-fix
+whole-byte-comparison symptom this entire phase exists to eliminate — across
+twelve rejected sends and four reconnect cycles
+(`pm5-session3-final.log:1-1857`). This is not asserted from the "port
+moved" framing alone; it is visible IN the trace: Chrome's Web Bluetooth
+device identifier is scoped to page origin, and for the SAME physical PM5
+(432331249) it changes from `7UKkpFY5BiYqJRWFRRXkfQ==` to
+`YPTJMh6WltwefIHNjXatJQ==` at the exact line the rejections stop
+(`pm5-session3-final.log:1858`) — a fresh page navigation to the corrected
+port, not a mere BLE reconnect (which reuses the same identifier). Every
+result below is read from AFTER that line; the stale-origin preamble
+produced no findings of its own and is recorded here only so the "port
+moved again" note in this session's own briefing is traceable to evidence,
+not just restated.
 
-**James's explicit approval:** PENDING. Per the design spec's own merge
-gate and §17's own closing line, PR #52 stays in draft until every slot
-above is filled in from a real session AND this line records that approval
-was given.
+- **Step 1 — PASSED.** `program-two-time` (`pm5-session3-final.log:1956`):
+  FIRST CLEAN ACCEPT in project history. `program(2 TIME intervals,
+  discriminator): sending 2 interval(s)…` → ack → `verify: machine acked
+  the send — waiting…` → `{"kind":"armed"}` two lines later (a fresh tick,
+  no polling delay) → `acked, armed`. Zero `program-rejection`/
+  `ProgramRejectionError` entries anywhere from line 1858 onward. JAMES:
+  monitor showed the first interval, 1 min.
+- **Step 2 — PASSED.** Rowed 2×1:00/0:30 to completion. `intervalComplete`
+  index 0 (elapsedSeconds 60, distanceMeters 88, avgSplit 340.9,
+  avgSpm 57, avgHeartRateBpm 77) and index 1 (elapsedSeconds 60,
+  distanceMeters 82, avgSplit 365.8, avgSpm 13, avgHeartRateBpm 83); ONE
+  `workoutComplete`. States traced exactly `armed`(154 frames)→
+  `rowing`(117)→`resting`(58)→`rowing`(122)→`resting`(58)→`finished`(1) —
+  no un-finishing. Frames kept flowing after `workoutComplete`: **92
+  frames** before the next command was dispatched — the run-scoped latch,
+  proven on hardware. **avgSpm 57 here, and avgSpm 66 at Step 4, are
+  recorded as a machine-reported field oddity, observed twice — NOT
+  explained.**
+- **Step 2 — heart rate (OWNER ADDITION) — PASSED, with a correction to
+  the pre-session compilation.** HR PRESENT end-to-end for the first time
+  on real hardware — every frame before the reconnect (line 1858) was
+  `heartRateBpm: null`; every one after carries a real reading. The first
+  non-null frame in the entire log is **HR 59** (`line 1861`), not 61 as
+  pre-compiled — 61 appears two frames later. Live HR during Step 2's
+  `rowing`/`resting` states ranged **58–90** (53–90 if the pre-roll `armed`
+  idle period is included) — narrower/wider by a few bpm than the
+  pre-compiled "61–89," not a different story: never 0, never 255, always
+  plausible. The two `intervalComplete` events' `avgHeartRateBpm` (77, 83)
+  are both real numbers, confirmed above.
+- **Step 3 — PASSED.** `program-no-rest` dispatched at line 2569,
+  immediately after Step 2's `workoutComplete` (line 2476) — zero
+  `scan()`/`connect()` events between them, confirming NO reconnect. Clean
+  accept + `armed` (`program(2 TIME intervals, NO rest, §17 #13): acked,
+  armed`). JAMES: monitor moved from the finished screen straight to a new
+  1-min first interval, no `0:30` rest screen. First clean
+  program-over-loaded observation on a single connection — closes the
+  weakened Verdict (b) gap phase-7A-fix-2 flagged — and confirms
+  `sendPrepare`'s documented `WorkoutLogged` exit working on hardware.
+- **Step 4 — PASSED.** Rowed through the first boundary; JAMES: no rest
+  screen at the changeover. `intervalComplete` reported `index=0 (machine
+  reported 1)` (elapsedSeconds 60, distanceMeters 74, avgSplit 405.4,
+  avgSpm 66, avgHeartRateBpm 94), opening a second run on the one
+  connection. The trace's own `divergence` entry reads exactly
+  `intervalIndex=0 (0x0033) vs actual.index=1 (0x0037/38)` — the EXPECTED
+  forward-attribution disagreement; this log kind fires BY DESIGN at
+  no-rest boundaries (§19.8), not a defect. Live HR ranged 56–97 during
+  this interval.
+- **Step 4 — heart rate (OWNER ADDITION) — PASSED, and answered.** Raw
+  `0x0038` at this boundary: `09 00 00 42 5e 00 d6 0f 05 00 3e 01 d1 04 05
+  00 58 01 00`. Decoded against §10's own byte table: offset 3 (Avg Stroke
+  Rate) = `0x42` = 66, offset 4 (Work Heartrate) = `0x5e` = 94 — both
+  cross-check the decoded event exactly, confirming the offset table — and
+  offset 5 (**Rest Heartrate**) = `0x00`, the no-data sentinel, exactly as
+  predicted ("a sentinel there is plausible — there was no rest to average
+  over"). Raw `0x0037` for the same boundary: `09 00 00 00 00 00 58 02 00
+  4a 00 00 00 00 00 00 00 01` — offset 9-11 (Split/Interval Distance) =
+  `4a` = 74 m, offset 17 (Split/Interval Number) = `01` = 1, both matching
+  the decoded event and each other.
+- **Step 5 — PASSED. THE FINDING.** `program-many` (25×100m, no rest, 7
+  frames) sent at `pm5-session3-final.log:2947`, ~52 s into the
+  HALF-FINISHED no-rest workout (elapsedSeconds 51.4–51.9 at dispatch) —
+  the trace shows `{"kind":"terminated"}` firing mid-send. All 7
+  write-chunk groups acked (seven distinct `ack` entries in the dump): the
+  FIRST genuinely multi-frame program completion against real hardware
+  ever. `verifyArmed` PASSED (`{"kind":"armed"}` /
+  `programmed 25 interval(s)`). JAMES + photo (`IMG_6702.jpeg`): the
+  monitor showed **`:00`** — time zeroed, `/500m` split `:00`/`:00.0` both
+  zeroed, 0 m, projected 30:00, **HR 67 with the heart icon live** on
+  screen (matching the frame trace's HR 62–68 at that moment). Rowed to
+  **108.4 m**: `intervalIndex` stayed pinned at `0` and `state` stayed
+  `rowing` the entire way — no `resting` transition, no boundary, no
+  `intervalComplete` at all. **No interval structure existed, despite
+  `verifyArmed` reporting success.** The program that was accepted,
+  verified, and displayed correctly was structurally empty.
+- **Item 15 — ANSWERED.** A standalone `terminate` (`terminate-sent`, not
+  `program()`'s internal `prepare-sent`) dispatched from the empty
+  program-many's armed-idle screen (`line 3795`) acked
+  `f1 81 76 01 13 e5 f2`, `slaveState=ready`. Decoded: bit 7 (`0x80`) set =
+  frame-count toggle; bits 4-5 (`0x30`) = `00` = previous-frame status OK;
+  bits 0-3 (`0x0F`) = `01` = slave state READY. **ACCEPTED.** The
+  idle-terminate refusal `fake.ts`'s `onClearingFrameComplete` models never
+  existed on real hardware — it was the pre-fix misparse this item's own
+  text predicted it might be. Consequence, named but NOT implemented in
+  this commit: `fake.ts`'s refusal and `driver.ts`'s `sendPrepare`
+  "hardware showed the PM refuses…" comment both need revision — ROADMAP's
+  Phase 7A-fix-3.
+- **Items 16-19:** item 16 (a program's SECOND interior boundary) — NOT
+  converted; the fallback (`program-short`'s work1→work2 boundary) was
+  never rowed. Item 17 (a DISTANCE interval's actual) — ANSWERED via the
+  same fallback (see "Live bisect," Extra row, below); Step 5 itself
+  produced no boundary data of any kind, converted or not, because its
+  program was empty. Items 18-19 (single-interval boundary-less completion;
+  mid-interval terminate's reported number) — untouched this session, still
+  their own hardware actions.
+
+#### Live bisect (James-driven; monitor readings only, no rowing except where marked)
+
+THE FINDING (Step 5) left one open question: which variable of
+`program-many` (25 intervals × 100 m × no rest, 7 frames) — versus
+`program-short` (3 intervals × 500 m × 60 s rest, 1 frame, already proven
+good) — caused the empty arm. James drove a bisect on the same connection
+immediately after Step 5/item 15, reading the monitor with NO rowing except
+at the two rows marked.
+
+| Row | Shape sent | State programmed over | Screen (JAMES) | Trace |
+| --- | --- | --- | --- | --- |
+| Extra | `program-short` (3×500m r60) | main menu, post item-15 `terminate` | 500 m ✓; **rowed** to the first boundary | armed; state rolled to a REAL `resting` (not stuck `rowing`); `interval-complete index=0 (machine reported 1)`, raw `0x0037`/`0x0038` captured — **§17 item 17 CONVERTED** (a DISTANCE actual, forward-attributed, minus-1 correct); item 16 NOT converted (interval 2 not rowed; fallback stands) |
+| Round 1 | `bisect-100m` (3×100m r60 — isolates VALUE) | main menu | 100 m ✓ | armed cleanly |
+| Round 1 | `bisect-rest0` (3×500m r0 — isolates REST) | main menu | 500 m ✓ | armed cleanly |
+| Round 1 | `bisect-frames` (25×500m r60, 7 frames — isolates COUNT) | main menu | 500 m ✓ | armed cleanly, all frames acked |
+| Round 2 | `bisect-count-value` (25×100m r60 — COUNT+VALUE pair) | main menu | 100 m ✓ | armed cleanly |
+| Round 2 | `bisect-value-rest` (3×100m r0 — VALUE+REST pair) | main menu | 100 m ✓ | armed cleanly |
+| Control | `program-many` (the original triple) re-sent | **ARMED-UNSTARTED** `bisect-value-rest` workout (JAMES correction: not main menu) | 100 m ✓ | armed cleanly; trace confirms `state=armed, elapsedSeconds=0, distanceMeters=0` at the moment of dispatch |
+| REPRO | `program-short` (a shape proven good at the Extra row) | **RUNNING** `bisect-count-value` (25×100m), **rowed** to ~24 m (`state=rowing`) | `:00` | `{"kind":"terminated"}` mid-send; an out-of-run/mid-terminate boundary correctly emitted `{"index":null,...,"distanceMeters":24,...}`; all frames acked; `{"kind":"armed"}` / `programmed 3 interval(s)` — **`verifyArmed` PASSED** |
+
+Every single-variable probe (Round 1) and every pair probe (Round 2) armed
+correctly from a settled/idle machine — the program's SHAPE, alone or in
+pairs, is innocent. The Control row (the original triple re-sent)
+confirmed this the hard way: it too armed cleanly once corrected for what
+it actually landed on — an armed-but-unstarted workout, not a running one.
+The REPRO then sent an entirely DIFFERENT, already-proven-good shape
+(`program-short`) over a SECOND running workout and reproduced the
+identical empty arm.
+
+**CONFIRMED, 2-for-2 with two unrelated shapes: programming over a RUNNING
+workout arms empty. The condition is machine state, not program shape.**
+The original bisect hypothesis (find the guilty variable among
+count/value/rest) was the wrong axis; the real variable was WHEN the send
+happened relative to the machine's own state, not WHAT was sent.
+`program-many` (Step 5) and `program-short` (REPRO) both landed on a
+machine that was still `rowing` and both armed structurally empty while
+every checkpoint this codec currently reads — `frameStatus`, `verifyArmed`
+— reported success.
+
+**Both `:00` arms passed `verifyArmed`** (Step 5 and the REPRO) — the
+current check (`state === "armed"` alone) cannot distinguish a real arm
+from an empty one. §17 item 12's structural-readback upgrade (reading
+`0x0031`'s `workoutType`/`workoutDurationRaw`/`workoutDurationType` back
+against what was sent) is now **twice-justified by hardware**, not merely
+theorized.
+
+**James's explicit approval:** recorded separately from this document —
+the merge-gate row having run and this section being written are both
+necessary, neither is sufficient. **The merge decision remains James's.**
 
 ## 19. Idiosyncrasies, and whether they were ours
 
@@ -2096,6 +2309,7 @@ observed, what the sources actually say, and a verdict.
 | **[OSS]**      | A survey of open-source PM5/CSAFE implementations (named per item).                                                                                                                                                                                                                              |
 | **[S1]**       | Laptop session 1, 2026-08-05, PM5 432331249 — §18, raw trace in `.superpowers/sdd/2026-08-05-phase-7a-monitor-domain/progress.md`.                                                                                                                                                               |
 | **[S2]**       | Laptop session 2, 2026-08-06, same erg and harness — raw trace in that session's own scratchpad log.                                                                                                                                                                                             |
+| **[S3]**       | Laptop session 3, 2026-08-06 (the merge-gate row + live bisect), PM5 432331249 — §18, raw trace `pm5-session3-final.log`, photo `IMG_6702.jpeg`.                                                                                                                                                 |
 
 **The verdicts** are drawn from exactly four values:
 
@@ -3067,3 +3281,52 @@ computed value against the rule, never the printed value. Two further
 [CSAFE-DEF] examples ("Fixed Time" p.86, "Predefined List #3" p.86) print a
 single checksum where the status is given as "81 or 01", so neither
 alternative matches — the authors simply forgot to dualise those two cells.
+
+### 19.13 Programming over a running workout arms empty — **REAL PM5 BEHAVIOUR, UNDOCUMENTED**
+
+**What we observed.** [S3] (laptop session 3, 2026-08-06, §18): `program-many`
+(25×100m, no rest, 7 frames) sent ~52 s into a HALF-FINISHED `program-no-rest`
+workout — the machine still `rowing` — acked all 7 frames, passed
+`verifyArmed`, and displayed a workout with NO interval structure: rowed to
+108.4 m with `intervalIndex` pinned at 0 and no boundary ever firing. The
+monitor's own screen showed `:00` throughout — time, both splits, distance
+all zeroed (`IMG_6702.jpeg`). A live bisect immediately afterward (§18,
+"Live bisect") isolated the cause: seven single- and pair-shape probes
+(100m vs 500m VALUE; rest-0 vs rest-60 REST; 3- vs 25-interval/7-frame
+COUNT) sent from a settled `armed`/idle machine all armed CORRECTLY; the
+SAME triple shape (`program-many`) also armed cleanly once it landed on an
+armed-but-unstarted workout instead of a running one (the "Control" row).
+The REPRO row then sent an entirely DIFFERENT, already-proven-good shape
+(`program-short`, 3×500m r60) over a SECOND running workout (25×100m,
+~24 m in) and reproduced the identical empty arm — `terminated` mid-send,
+all frames acked, `verifyArmed` PASSED, monitor `:00`.
+
+**Two shapes, one condition, 2-for-2.** The variable is not the program's
+content — it is whether the target machine is mid-piece (`rowing`/
+`resting`) versus settled (`armed`, idle, or a finished/logged workout) at
+the moment `program()`'s `sendPrepare()` step fires and the frames that
+follow are sent.
+
+**What the sources say.** Nothing directly. [CSAFE-DEF]'s Appendix E
+auto-cycle diagrams document `WaitToBegin`/Rearm as the recovery path a
+terminate-shaped prepare step drives the machine through (§19.5), but
+neither source document describes what happens to a NEW program's payload
+if it is written while the machine is still executing an OLD one — every
+worked example in both documents programs from an idle state. No
+open-source PM5 implementation surveyed for §19.10 sends a program
+mid-piece either; this is untested territory across every project we could
+find, not just this one.
+
+**Verdict: REAL PM5 BEHAVIOUR, UNDOCUMENTED.** The PM5 accepts and
+structurally arms an empty workout when programmed over a running one, and
+the accept is indistinguishable from a real one at every checkpoint this
+codec currently reads (`frameStatus`, `state === "armed"`). This likely
+**recontextualizes session 1's Verdict (a)** — the still-STANDING-OPEN
+`:00`/`:00` empty-display transition (§19.1; §19.2's correction) — as its
+leading explanation: a program sent while the machine was still live, not
+a rejection-driven wipe (that mechanism was withdrawn). This is offered as
+the closest match on record, not as independent confirmation of the SAME
+root cause — **Verdict (a) stays OPEN; this is now its leading candidate
+explanation, not its answer.**
+
+**Follow-up:** ROADMAP's Phase 7A-fix-3 ("program over a live piece").
