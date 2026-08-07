@@ -115,25 +115,87 @@ const THREE_INTERVAL_PROGRAM: WorkoutProgram = {
 // for that leading exchange too, not just the programming sequence's own.
 const prepareChunkCount = buildTerminate()[0]!.length;
 
+/**
+ * The three 0x0031 readback fields `verifyArmed` compares against the
+ * program it just sent (fix-3 Task 4) — `workoutType` (offset 6),
+ * `workoutDurationRaw` (14-16, little-endian) and `workoutDurationType`
+ * (17), interface-notes.md §10.
+ */
+interface ArmedStructureFixture {
+  workoutType: number;
+  workoutDurationRaw: number;
+  workoutDurationType: number;
+}
+
+/**
+ * What a HEALTHY armed PM5 reads back for `p` — hardware-confirmed by
+ * SESSION 4a (2026-08-07, PM5 432331249; the ledger's own `## SESSION 4a`
+ * block is the interim home until Task 6 files it as §18):
+ *   - `workoutType` is `8` for every shape (TIME, DISTANCE, rest-0 — no
+ *     normalization to 6/7/9);
+ *   - a TIME interval 0 reads back seconds × 100 (`60s -> 6000`) with
+ *     `workoutDurationType = 0`;
+ *   - a DISTANCE interval 0 reads back WHOLE METRES (`500 -> 500`) with
+ *     `workoutDurationType = 128`.
+ *
+ * Restated here as literals ON PURPOSE: computing the fixture through the
+ * production helper (`expectedArmedStructure`, `pm5/commands.ts`) would
+ * make every assertion below tautological — the tests would agree with the
+ * driver about a wrong scale just as happily as a right one.
+ */
+function healthyArmedStructureFor(p: WorkoutProgram): ArmedStructureFixture {
+  const first = p.intervals[0]!;
+  return {
+    workoutType: 8,
+    workoutDurationRaw: first.kind === "time" ? first.value * 100 : first.value,
+    workoutDurationType: first.kind === "time" ? 0 : 128,
+  };
+}
+
+/** A General Status payload in the given machine state carrying an EXPLICIT
+ *  structure triple — the by-hand 0x0031 the fix-3 Task 4 tests below need.
+ *  (The shared fake does not yet put structure on its own wire; that is
+ *  Task 5's job, so every structural test in this file is stub-driven.) */
+function statusWithStructure(
+  structure: ArmedStructureFixture,
+  workoutState: number = WORKOUTSTATE_WAITTOBEGIN,
+): Uint8Array {
+  return buildGeneralStatusBytes({
+    elapsedSeconds: 0,
+    distanceMeters: 0,
+    workoutType: structure.workoutType,
+    intervalType: structure.workoutDurationType === 0 ? 0 : 1,
+    workoutState,
+    rowingState: 0,
+    strokeState: 0,
+    totalWorkDistanceMeters: 0,
+    workoutDurationRaw: structure.workoutDurationRaw,
+    workoutDurationType: structure.workoutDurationType,
+    dragFactor: 130,
+  });
+}
+
+/** The armed 0x0031 a healthy machine sends back for `p` — what
+ *  `verifyArmed` now requires before `program()` may resolve. */
+function armedStatusFor(p: WorkoutProgram): Uint8Array {
+  return statusWithStructure(healthyArmedStructureFor(p));
+}
+
 /** A WAITTOBEGIN (armed) General Status payload — `program()`'s
  *  verification phase (`verifyArmed`, driver.ts) resolves the instant this
  *  arrives, regardless of when relative to the ack: it merges straight
  *  into the driver's persistent `raw` state, so it is always safe to send
  *  right after (or even interleaved with) a `stubTransport` test's own ack
- *  notifications rather than needing precise interleaving. */
-const ARMED_GENERAL_STATUS = buildGeneralStatusBytes({
-  elapsedSeconds: 0,
-  distanceMeters: 0,
-  workoutType: 8,
-  intervalType: 0,
-  workoutState: WORKOUTSTATE_WAITTOBEGIN,
-  rowingState: 0,
-  strokeState: 0,
-  totalWorkDistanceMeters: 0,
-  workoutDurationRaw: 0,
-  workoutDurationType: 0,
-  dragFactor: 130,
-});
+ *  notifications rather than needing precise interleaving.
+ *
+ *  Fix-3 Task 4: the payload now carries `MINIMAL_PROGRAM`'s OWN structure
+ *  (`60s -> 6000`, duration type Time), because armed alone is no longer
+ *  enough — the machine must report the workout we actually sent. Every
+ *  test below that uses this constant programs `MINIMAL_PROGRAM`,
+ *  `THREE_INTERVAL_PROGRAM` or another all-60s-first-interval fixture, so
+ *  one shared constant still serves them all; anything else builds its own
+ *  through `armedStatusFor`. */
+const ARMED_GENERAL_STATUS = armedStatusFor(MINIMAL_PROGRAM);
 
 /** Polls the microtask queue until `check()` passes (bounded, never a real
  *  wait). `stubTransport`'s writes/acks all resolve through chained
@@ -586,7 +648,11 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
     // actually happened, or this "armed" notify would land BEFORE the
     // snapshot and not count (see verifyArmed's own doc comment).
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
-    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    // Fix-3 Task 4: `verifyArmed` now also requires 0x0031 to report THIS
+    // program's own structure — a DISTANCE 1000m interval 0, i.e. raw 1000
+    // at duration type Distance — so the shared `ARMED_GENERAL_STATUS`
+    // (`MINIMAL_PROGRAM`'s 60s/Time) will not arm this one.
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(program));
     await pending;
 
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20)); // lastSplitDistanceMeters = 0
@@ -4915,12 +4981,18 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
     // The arm tick itself is the FIRST 0x0031 this driver ever sees, so it
     // is a change from `null` — exactly one entry, never zero. Two more
     // ticks with a different elapsed/distance but the SAME
-    // workoutType/durationRaw/durationType (the fake hardcodes 8/0/0 for
-    // every tick, `transports/fake.ts`) must add nothing further.
+    // workoutType/durationRaw/durationType must add nothing further.
+    //
+    // Fix-3 Task 4 changed WHAT those three fields are, not how often they
+    // are logged: the fake used to hardcode `8/0/0` on every tick, and now
+    // reports the structure of the workout it is actually holding — Sea
+    // Fret's interval 0 is the 300s warmup, so `durationRaw=30000` at
+    // duration type Time. Unchanged across the session, hence still one
+    // entry.
     const entries = log.entries().filter((e) => e.kind === "structure");
     expect(entries).toHaveLength(1);
     expect(entries[0]!.detail).toMatch(
-      /^workoutType=8 durationRaw=0 durationType=0 raw=([0-9a-f]{2} ){18}[0-9a-f]{2}$/,
+      /^workoutType=8 durationRaw=30000 durationType=0 raw=([0-9a-f]{2} ){18}[0-9a-f]{2}$/,
     );
   });
 });
@@ -5564,5 +5636,516 @@ describe("createPm5Driver: D5 — the beltless heart rate never reaches a consum
       kind: "intervalComplete",
       actual: { avgHeartRateBpm: null },
     });
+  });
+});
+
+describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout we sent (the structural readback; §17 item 12 ANSWERED by SESSION 4a)", () => {
+  /**
+   * SESSION 4a's captured EMPTY ARM, verbatim (2026-08-07, PM5 432331249;
+   * settle-off, `program-short` over a running two-time piece, the monitor
+   * showing `:00`, the driver reporting acked-armed): **steady state
+   * `workoutType=1 durationRaw=0 durationType=128`.** Both halves of the I7
+   * hypothesis confirmed on the wire — the duration reads 0 AND the type
+   * degrades from 8 to 1. This is the anatomy Stage 2 exists to catch.
+   */
+  const EMPTY_ARM: ArmedStructureFixture = {
+    workoutType: 1,
+    workoutDurationRaw: 0,
+    workoutDurationType: 128,
+  };
+
+  /** SESSION 4a's other captured wrong shape: a MID-CYCLE TRANSIENT —
+   *  `type=1` carrying stale (non-zero) durations, seen while the machine
+   *  was still working through its own cycle. A second reason single-tick
+   *  rejection is wrong, and the reason the N-consecutive rule counts
+   *  STABLE ticks rather than merely mismatched ones. */
+  const MID_CYCLE_TRANSIENT: ArmedStructureFixture = {
+    workoutType: 1,
+    workoutDurationRaw: 3000,
+    workoutDurationType: 0,
+  };
+
+  /** SESSION 4a's DISTANCE row's own shape (3×500m r60): `type=8
+   *  durationRaw=500 durationType=128` — whole metres read-side, i.e.
+   *  read/write symmetric, now observed rather than assumed. */
+  const DISTANCE_PROGRAM: WorkoutProgram = {
+    intervals: Array.from({ length: 3 }, () => ({
+      kind: "distance" as const,
+      value: 500,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 60,
+    })),
+  };
+
+  /** SESSION 4a's REST-0 row (2×60s r0) — the shape that proved
+   *  `workoutType` does NOT normalize to a rest-less sibling ordinal. */
+  const REST_ZERO_PROGRAM: WorkoutProgram = {
+    intervals: Array.from({ length: 2 }, () => ({
+      kind: "time" as const,
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 0,
+    })),
+  };
+
+  async function drain(hops = 30): Promise<void> {
+    for (let i = 0; i < hops; i += 1) await Promise.resolve();
+  }
+
+  /**
+   * Drives `program()` up to — and no further than — the point where
+   * `verifyArmed` has registered its tick counter: the prepare step's ack,
+   * then every programming frame's own `"ok"` ack, then a generous
+   * microtask drain. Each test below then feeds exactly the 0x0031 ticks it
+   * wants and asserts on WHEN (and how) the returned promise settles.
+   *
+   * The outcome is tracked through a mutable record rather than returned as
+   * a bare promise on purpose: every "must fail today" assertion in this
+   * block is about a promise NOT having settled yet, which cannot be
+   * written as `await expect(...)` without hanging the run on today's code
+   * instead of failing it.
+   */
+  async function driveToVerify(
+    driver: ReturnType<typeof createPm5Driver>,
+    transport: ReturnType<typeof stubTransport>,
+    p: WorkoutProgram,
+  ): Promise<{
+    pending: Promise<void>;
+    outcome: { settled: boolean; error: unknown };
+  }> {
+    const sent = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const pending = driver.program(p);
+    const outcome: { settled: boolean; error: unknown } = {
+      settled: false,
+      error: null,
+    };
+    void pending.then(
+      () => {
+        outcome.settled = true;
+      },
+      (err: unknown) => {
+        outcome.settled = true;
+        outcome.error = err;
+      },
+    );
+    // The prepare step's own ack (accepted — §18 s3 item 15's captured
+    // byte), then one ack per programming frame.
+    await waitUntil(() => sent() > 0);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    const frameCount = buildProgrammingSequence(p).length;
+    for (let frame = 0; frame < frameCount; frame += 1) {
+      await drain(50);
+      transport.notify(
+        TRANSMIT_CHARACTERISTIC_UUID,
+        buildAckFrame({ frameStatus: "ok" }),
+      );
+    }
+    await drain(50);
+    return { pending, outcome };
+  }
+
+  function rejection(outcome: { error: unknown }): ProgramRejectionError {
+    expect(outcome.error).toBeInstanceOf(ProgramRejectionError);
+    return outcome.error as ProgramRejectionError;
+  }
+
+  /** A successful `program()` must leave NO rejection in the trace. */
+  function rejectionsLogged(log: ReturnType<typeof createEventLog>): number {
+    return log.entries().filter((e) => e.kind === "program-rejection").length;
+  }
+
+  /** How many `"structure-mismatch"` entries this verify phase produced —
+   *  at most ONE, by the first-sighting rule, whatever the tick count. A
+   *  LAGGING arm legitimately produces one and still succeeds: the entry
+   *  is the observation, not the verdict. */
+  function structureEntries(log: ReturnType<typeof createEventLog>): number {
+    return log.entries().filter((e) => e.kind === "structure-mismatch").length;
+  }
+
+  it("the CAPTURED empty arm (type=1, durationRaw=0, durationType=128) rejects 'structure-mismatch' inside the bound — never the false success hardware has now produced three times", async () => {
+    // TODAY: the very first armed tick resolves `program()` successfully —
+    // `verifyArmed` asks only `state === "armed"`. The `outcome.settled`
+    // assertion below therefore FAILS ON AN ASSERTION (not a timeout) on
+    // today's code, which is the point of tracking settlement by flag.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    const empty = statusWithStructure(EMPTY_ARM);
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    await drain();
+    expect(outcome.settled).toBe(false); // one tick is the OBSERVED lag — never a reject
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    await drain();
+    expect(outcome.settled).toBe(false); // two is still not evidence
+
+    transport.notify(GENERAL_STATUS_UUID, empty); // the third CONSECUTIVE, STABLE mismatch
+    await drain();
+    expect(outcome.settled).toBe(true);
+
+    const err = rejection(outcome);
+    expect(err.reason).toBe("structure-mismatch");
+    expect(err.atFrame).toBe(-1);
+    // Well inside the 20-tick outer bound: the N-consecutive rule fired,
+    // not the timeout.
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "program-rejection" &&
+            e.detail.includes("structure-mismatch"),
+        ),
+    ).toBe(true);
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the 1-tick payload LAG resolves SUCCESS — the first armed tick carrying the PREVIOUS program's payload must never reject (session 3: 2 of 5 clean arms lagged)", async () => {
+    // The hardware shape, not a hypothetical: two of five clean session-3
+    // arms carried the previous program's 0x0031 payload on their FIRST
+    // armed tick. Written FIRST against a naive first-armed-tick-reject
+    // implementation, where it fails with reason "structure-mismatch"
+    // instead of resolving (see the task report's mutation table).
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      DISTANCE_PROGRAM,
+    );
+
+    // Tick 1: the PRIOR program's payload — session 4a's TIME row
+    // (2×60s r30 -> 6000, duration type Time), still sitting in 0x0031.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      statusWithStructure({
+        workoutType: 8,
+        workoutDurationRaw: 6000,
+        workoutDurationType: 0,
+      }),
+    );
+    await drain();
+    expect(outcome.settled).toBe(false);
+
+    // Tick 2: the payload catches up — 500 whole metres, duration type
+    // Distance (session 4a's DISTANCE row).
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(DISTANCE_PROGRAM));
+    await expect(pending).resolves.toBeUndefined();
+    expect(rejectionsLogged(log)).toBe(0);
+    // The lag was SEEN and recorded — one first-sighting entry — and then
+    // survived. Observation, not verdict: a trace that stayed silent here
+    // would hide the very phenomenon the N-consecutive rule exists for.
+    expect(structureEntries(log)).toBe(1);
+  });
+
+  it("verifyTicks OMITTED is BOUNDED at 20 — under a structure predicate an unbounded verify turns a wrong success into an infinite hang", async () => {
+    // TODAY: `options.verifyTicks === undefined` means NO bound at all, so
+    // this never-arming stub leaves `program()` pending forever. Both
+    // assertions below are settlement-flag assertions, so today's code
+    // fails the `expect(outcome.settled).toBe(true)` line rather than
+    // hanging the suite.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log); // NO verifyTicks
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    const stuck = generalStatusIn(WORKOUTSTATE_REARM);
+    for (let i = 0; i < 19; i += 1)
+      transport.notify(GENERAL_STATUS_UUID, stuck);
+    await drain();
+    expect(outcome.settled).toBe(false); // 19 ticks: still inside the default
+
+    transport.notify(GENERAL_STATUS_UUID, stuck); // the 20th
+    await drain();
+    expect(outcome.settled).toBe(true);
+    // Never armed at all, so the reason stays "not-observed" — a machine
+    // that never reached WaitToBegin has not told us anything about
+    // STRUCTURE, and must not be reported as if it had.
+    expect(rejection(outcome).reason).toBe("not-observed");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the 3-consecutive counter RESETS on a tick that is not a mismatched armed tick — the streak must be CONSECUTIVE, not cumulative", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    const empty = statusWithStructure(EMPTY_ARM);
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    // A NON-armed tick — the machine is mid-cycle, not making a claim about
+    // the armed workout at all. The streak restarts from here.
+    transport.notify(GENERAL_STATUS_UUID, generalStatusIn(WORKOUTSTATE_REARM));
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    await drain();
+    // Five ticks, FOUR of them mismatched-and-armed: a cumulative counter
+    // would already have rejected.
+    expect(outcome.settled).toBe(false);
+
+    transport.notify(GENERAL_STATUS_UUID, empty); // third CONSECUTIVE since the reset
+    await drain();
+    expect(outcome.settled).toBe(true);
+    expect(rejection(outcome).reason).toBe("structure-mismatch");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the counter also resets when the mismatched payload CHANGES — 'stable' is part of the rule (session 4a's mid-cycle transients)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    const empty = statusWithStructure(EMPTY_ARM);
+    const transient = statusWithStructure(MID_CYCLE_TRANSIENT);
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    transport.notify(GENERAL_STATUS_UUID, empty);
+    transport.notify(GENERAL_STATUS_UUID, transient); // a DIFFERENT wrong payload
+    transport.notify(GENERAL_STATUS_UUID, transient);
+    await drain();
+    expect(outcome.settled).toBe(false);
+
+    transport.notify(GENERAL_STATUS_UUID, transient); // third stable transient
+    await drain();
+    expect(outcome.settled).toBe(true);
+    expect(rejection(outcome).reason).toBe("structure-mismatch");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the rejection detail carries OBSERVED and EXPECTED for all three fields — a trace that says only 'mismatch' cannot be diagnosed at the erg", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      DISTANCE_PROGRAM,
+    );
+
+    const empty = statusWithStructure(EMPTY_ARM);
+    for (let i = 0; i < 3; i += 1) transport.notify(GENERAL_STATUS_UUID, empty);
+    await drain();
+
+    const detail = rejection(outcome).hexTrace;
+    // OBSERVED — the empty arm's own three fields, verbatim.
+    expect(detail).toContain(
+      "observed workoutType=1 durationRaw=0 durationType=128",
+    );
+    // EXPECTED — interval 0 of the DISTANCE program, in its confirmed unit.
+    expect(detail).toContain(
+      "expected workoutType=8 durationRaw=500 durationType=128",
+    );
+    // And the same pair reaches the event log, not only the thrown error.
+    const logged = log
+      .entries()
+      .find(
+        (e) => e.kind === "program-rejection" && e.detail.includes("observed"),
+      );
+    expect(logged?.detail).toContain("durationRaw=0");
+    expect(logged?.detail).toContain("durationRaw=500");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("exactly ONE 'structure-mismatch' log entry across a long mismatch run — logged at first sighting, never per tick (0x0031 notifies ~2/s; the 500-entry ring does not survive per-tick entries)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    // Alternating wrong payloads: every tick is armed-and-mismatched, but
+    // no THREE consecutive ones are stable, so the streak never fires and
+    // the run goes all the way to the outer bound.
+    const a = statusWithStructure(EMPTY_ARM);
+    const b = statusWithStructure(MID_CYCLE_TRANSIENT);
+    for (let i = 0; i < 19; i += 1) {
+      transport.notify(GENERAL_STATUS_UUID, i % 2 === 0 ? a : b);
+    }
+    await drain();
+    expect(outcome.settled).toBe(false);
+    expect(
+      log.entries().filter((e) => e.kind === "structure-mismatch"),
+    ).toHaveLength(1);
+
+    transport.notify(GENERAL_STATUS_UUID, a); // the 20th tick — the outer bound
+    await drain();
+    expect(outcome.settled).toBe(true);
+    // The bound fired while a structural mismatch was in evidence, so the
+    // typed reason is the structural one, not the state-only
+    // "not-observed": the machine DID reach armed, it just armed the wrong
+    // thing.
+    expect(rejection(outcome).reason).toBe("structure-mismatch");
+    expect(
+      log.entries().filter((e) => e.kind === "structure-mismatch"),
+    ).toHaveLength(1);
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the TYPE check is IN: durations correct but workoutType=1 still rejects (session 4a: the type is STABLE at 8 across TIME, DISTANCE and rest-0 — a 1 is a real signal, not normalization)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    const typeOnly = statusWithStructure({
+      workoutType: 1,
+      workoutDurationRaw: 6000, // MINIMAL_PROGRAM's own 60s, correct
+      workoutDurationType: 0, // correct
+    });
+    for (let i = 0; i < 3; i += 1)
+      transport.notify(GENERAL_STATUS_UUID, typeOnly);
+    await drain();
+    expect(outcome.settled).toBe(true);
+    expect(rejection(outcome).reason).toBe("structure-mismatch");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the DURATION TYPE check is IN: 500 read back as a TIME duration rejects, even though the number matches", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      DISTANCE_PROGRAM,
+    );
+
+    const wrongUnit = statusWithStructure({
+      workoutType: 8,
+      workoutDurationRaw: 500,
+      workoutDurationType: 0, // Time, not the confirmed 128 for distance
+    });
+    for (let i = 0; i < 3; i += 1)
+      transport.notify(GENERAL_STATUS_UUID, wrongUnit);
+    await drain();
+    expect(outcome.settled).toBe(true);
+    expect(rejection(outcome).reason).toBe("structure-mismatch");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the rest-0 shape still expects type 8 and the plain TIME duration (session 4a: 2×60s r0 read back type=8 dur=6000 durType=0 — no normalization)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      REST_ZERO_PROGRAM,
+    );
+
+    expect(healthyArmedStructureFor(REST_ZERO_PROGRAM)).toStrictEqual({
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    });
+
+    // A rest-less sibling ordinal is NOT an acceptable rest-0 readback:
+    // session 4a's own rest-0 row read back `8`, so the normalization
+    // hypothesis (6/7/9 for the rest-less variants) is refuted, and a `6`
+    // arriving here means the machine armed something we did not send.
+    const normalizedType = statusWithStructure({
+      workoutType: 6,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    });
+    for (let i = 0; i < 3; i += 1)
+      transport.notify(GENERAL_STATUS_UUID, normalizedType);
+    await drain();
+    expect(outcome.settled).toBe(true);
+    expect(rejection(outcome).reason).toBe("structure-mismatch");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("the healthy rest-0 readback resolves — the same 8/6000/Time triple a rest-30 program produces (no rest-keyed difference on the wire)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      REST_ZERO_PROGRAM,
+    );
+
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(REST_ZERO_PROGRAM));
+    await expect(pending).resolves.toBeUndefined();
+    expect(outcome.settled).toBe(true);
+    expect(rejectionsLogged(log)).toBe(0);
+    // A clean arm on the FIRST tick: nothing to observe, nothing logged.
+    expect(structureEntries(log)).toBe(0);
+  });
+
+  it("a REAL library workout arms for real: Sea Fret's 300s warmup reads back 30000/Time and program() resolves", async () => {
+    // The briefing's realistic-fixture rule — Sea Fret through the exact
+    // `buildDraft -> buildRun -> compileProgram` assembly `startSession`
+    // uses, not a hand-built minimum. Its interval 0 is the 300s warmup, so
+    // the readback the machine owes us is 30000 at duration type Time.
+    const program = seaFretProgram();
+    expect(program.intervals[0]).toMatchObject({ kind: "time", value: 300 });
+    expect(healthyArmedStructureFor(program)).toStrictEqual({
+      workoutType: 8,
+      workoutDurationRaw: 30000,
+      workoutDurationType: 0,
+    });
+
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const { pending, outcome } = await driveToVerify(
+      driver,
+      transport,
+      program,
+    );
+
+    // A near-miss first: 30000 metres instead of 30000 centiseconds. One
+    // tick of it must not reject (the lag rule), and the correct payload
+    // that follows resolves normally.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      statusWithStructure({
+        workoutType: 8,
+        workoutDurationRaw: 30000,
+        workoutDurationType: 128,
+      }),
+    );
+    await drain();
+    expect(outcome.settled).toBe(false);
+
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(program));
+    await expect(pending).resolves.toBeUndefined();
+    expect(rejectionsLogged(log)).toBe(0);
+    expect(structureEntries(log)).toBe(1); // the near-miss, seen and survived
   });
 });

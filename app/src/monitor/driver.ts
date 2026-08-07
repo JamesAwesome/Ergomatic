@@ -23,13 +23,15 @@
 // reaching `armed`, and a program sent into that window arms structurally
 // EMPTY — the real ack-gated programming send (`sendSequence`), then a
 // tick-bounded VERIFICATION (`verifyArmed`) against the machine's own
-// reported state,
-// observed STRICTLY AFTER the send FULLY COMPLETED — the last frame's ack,
-// not the first frame going out (fix-round 2; fix-round 1's own snapshot
-// point was too early for a multi-frame program, so a stale "armed" tick
-// from partway through the send could satisfy it). The ack is never
-// trusted alone — the same ack byte has meant both "programmed" and
-// "nothing happened at all" on real hardware.
+// reported state AND 0x0031's own readback of the armed workout's
+// STRUCTURE (fix-3 Task 4, on session 4a's hardware readings — armed alone
+// was never enough; three hardware arms have reported "armed" while
+// holding nothing), observed STRICTLY AFTER the send FULLY COMPLETED — the
+// last frame's ack, not the first frame going out (fix-round 2; fix-round
+// 1's own snapshot point was too early for a multi-frame program, so a
+// stale "armed" tick from partway through the send could satisfy it). The
+// ack is never trusted alone — the same ack byte has meant both
+// "programmed" and "nothing happened at all" on real hardware.
 //
 // Phase 7A-fix-2 Task 3 gave the ack path its real vocabulary
 // (`pm5/response.ts` §19.1's bitfield, already parsed by Task 2): success
@@ -57,6 +59,8 @@ import {
   buildProgrammingSequence,
   buildSampleRateConfig,
   buildTerminate,
+  expectedArmedStructure,
+  type ArmedStructure,
 } from "../../domain/monitor/pm5/commands.js";
 import { chunkFrames, reassemble } from "../../domain/monitor/pm5/framer.js";
 import {
@@ -105,7 +109,7 @@ import type { MonitorEventLog } from "./eventLog";
 
 /** A programming/terminate write that never got acked "ok", OR a
  *  programming call whose verification phase never saw the machine report
- *  "armed" (design spec §1/§3), for exactly SEVEN distinct reasons —
+ *  "armed" (design spec §1/§3), for exactly EIGHT distinct reasons —
  *  Phase 7A-fix-2 Task 3 split what used to be a single `"nak"` bucket
  *  into the four the wire actually distinguishes (`pm5/response.ts`
  *  §19.1's bitfield):
@@ -148,6 +152,18 @@ import type { MonitorEventLog } from "./eventLog";
  *    The ack is not sufficient evidence on its own: the identical `0x01`
  *    ack byte came back from both a real program and a complete no-op on
  *    real hardware.
+ *  - `"structure-mismatch"`: fix-3 Task 4 (the SDD ledger's `## SESSION 4a`
+ *    block, 2026-08-07 — the reading that ANSWERED interface-notes.md §17
+ *    item 12; Task 6 files it as §18). The machine DID report `"armed"`,
+ *    and 0x0031's own structure fields say it armed something OTHER than
+ *    the program we just sent. `"not-observed"` is deliberately NOT reused
+ *    for this: a monitor that never armed and a monitor that armed the
+ *    WRONG THING are different failures with different fixes, and the
+ *    second one is the failure hardware has actually produced — three
+ *    separate `:00` empty arms (§19.13's two, plus 4a's captured repro)
+ *    every one of which passed the old state-only check. See
+ *    `verifyArmed`'s own doc comment for the predicate and the
+ *    N-consecutive rule.
  *
  *  `atFrame` is the 0-based index into the ack-gated sequence
  *  (`buildProgrammingSequence`'s outer array, or 0 for `buildTerminate`'s
@@ -170,7 +186,8 @@ export type ProgramRejectionReason =
   | "garbled"
   | "disconnected"
   | "timeout"
-  | "not-observed";
+  | "not-observed"
+  | "structure-mismatch";
 
 const REJECTION_VERBS: Record<ProgramRejectionReason, string> = {
   nak: "rejected",
@@ -181,6 +198,8 @@ const REJECTION_VERBS: Record<ProgramRejectionReason, string> = {
   timeout: "never acked (ack-timeout policy)",
   "not-observed":
     'never reported "armed" after programming (verification timed out)',
+  "structure-mismatch":
+    'reported "armed" while holding a different workout than the one just sent',
 };
 
 /** `pm5/response.ts` §19.1's bitfield -> this driver's typed reason, for
@@ -284,9 +303,24 @@ export interface DriverOptions {
    * fast-but-lying monitor and a slow-but-honest one produce the SAME
    * typed reason, purely depending on which clock happened to win —
    * exactly the ambiguity a typed `ProgramRejectionReason` exists to
-   * remove. Omitted entirely (the default, matching `ackTimeout`'s own
-   * precedent) means no bound: verification waits for "armed" or a
-   * disconnect, forever, never a wall clock.
+   * remove.
+   *
+   * **SEMANTICS CHANGED, fix-3 Task 4: omitting this no longer means "no
+   * bound" — it means the DEFAULT, `20`** (`DEFAULT_VERIFY_TICKS`, the
+   * value `scripts/pm5-lab.ts` reasoned its way to on hardware cadence and
+   * still passes explicitly, now redundantly). Until this task,
+   * verification's only success condition was `state === "armed"`, so an
+   * omitted bound merely meant "wait for a state word that a live PM
+   * reliably produces". Verification now also requires the STRUCTURE to
+   * match (`verifyArmed`'s own doc comment), and under a structure
+   * predicate an unbounded wait is a genuinely different hazard: the case
+   * it would hang on — a machine that arms the WRONG workout and keeps
+   * saying so — is precisely the case this task exists to detect, so
+   * "unbounded" would convert a caught defect into a silent hang. A caller
+   * that wants a longer leash passes a bigger number; there is no way to
+   * ask for "forever" any more, on purpose. 7B inherits the safe default
+   * rather than having to remember the option exists. Still ticks, never a
+   * wall clock.
    */
   verifyTicks?: number;
   /**
@@ -360,21 +394,22 @@ export interface DriverOptions {
    * applies), so this wait holds itself to the identical standard rather
    * than resolving on the very tick that first reports `armed`.
    *
-   * UNLIKE `verifyTicks`, omitting this is never "no bound" — it means the
-   * default, `10` (`waitForPrepareSettle`'s own doc comment has the exact
-   * observed spans this covers). Passing `0` disables the wait entirely
-   * (session 4b's own "detection row" needs exactly this: settle OFF,
-   * confirming the empty arm still reproduces so the eventual structural
-   * readback — Stage 2, not built by this task — has something real to
-   * catch). On expiry without ever observing `armed`, this NEVER rejects:
-   * `program()` proceeds and logs `prepare-settle-expired` — a 2Hz sampler
-   * CAN coalesce the whole terminated/idle/armed cycle into fewer ticks
-   * than expected (session 3's own Step 5: idle and armed shared one
-   * elapsed reading), so a bound that never fires would just trade one
-   * hazard (an unconfirmed empty arm) for another (a `program()` call that
-   * never resolves) — the eventual structural readback (design spec Stage
-   * 2) is what actually catches an empty arm; this wait is prevention, not
-   * the last line of defense.
+   * Omitting this is never "no bound" — it means the default, `10`
+   * (`waitForPrepareSettle`'s own doc comment has the exact observed spans
+   * this covers), the same shape `verifyTicks` itself now has since fix-3
+   * Task 4 gave that option a default too. Passing `0` disables the wait
+   * entirely (session 4b's own "detection row" needs exactly this: settle
+   * OFF, confirming the empty arm still reproduces so the structural
+   * readback has something real to catch). On expiry without ever observing
+   * `armed`, this NEVER rejects: `program()` proceeds and logs
+   * `prepare-settle-expired` — a 2Hz sampler CAN coalesce the whole
+   * terminated/idle/armed cycle into fewer ticks than expected (session 3's
+   * own Step 5: idle and armed shared one elapsed reading), so a bound that
+   * never fires would just trade one hazard (an unconfirmed empty arm) for
+   * another (a `program()` call that never resolves) — the structural
+   * readback (`verifyArmed`'s own predicate, built by fix-3 Task 4) is what
+   * actually catches an empty arm; this wait is prevention, not the last
+   * line of defense.
    */
   prepareSettleTicks?: number;
   /**
@@ -407,6 +442,37 @@ export interface DriverOptions {
 /** `DriverOptions.settleTicks`'s own default — see that field's doc
  *  comment for why "omitted" means this number, not "no bound". */
 const DEFAULT_SETTLE_TICKS = 3;
+
+/** `DriverOptions.verifyTicks`'s own default (fix-3 Task 4) — the number
+ *  `scripts/pm5-lab.ts` already reasoned its way to against the OBSERVED
+ *  ~2 Hz status cadence (interface-notes.md §18), i.e. ~10 real seconds:
+ *  generous enough to absorb the PM's own Appendix-E auto-cycle plus BLE
+ *  jitter, still bounded. Promoted from "the lab's local constant" to the
+ *  driver's default because verification now carries a STRUCTURE predicate
+ *  and an unbounded verify under one is a hang, not a leniency — see
+ *  `DriverOptions.verifyTicks`'s own doc comment. The lab's explicit `20`
+ *  is now redundant and deliberately left in place: it documents the
+ *  reasoning at the call site that first needed it. */
+const DEFAULT_VERIFY_TICKS = 20;
+
+/** How many CONSECUTIVE armed ticks must report the SAME wrong structure
+ *  before `verifyArmed` rejects (fix-3 Task 4). Three, chosen against two
+ *  hardware facts and nothing else:
+ *  - the 0x0031 payload can LAG the armed state — 2 of session 3's 5 clean
+ *    arms carried the PREVIOUS program's payload on their first armed tick
+ *    (the SDD ledger's `## SESSION 4a` block; Task 6 files it as §18) — so
+ *    a one-tick mismatch is a NORMAL reading, and `1` would reject healthy
+ *    programs;
+ *  - session 4a also captured MID-CYCLE TRANSIENTS (`workoutType=1` with
+ *    stale, non-zero durations) between the accept and the steady state,
+ *    which is why the rule counts STABLE ticks — a mismatch whose own
+ *    payload keeps changing is a machine still settling, not a machine
+ *    holding the wrong workout, and it restarts the count.
+ *  Comfortably above the observed 1-tick lag, and far below
+ *  `DEFAULT_VERIFY_TICKS` so the streak (not the outer bound) is what
+ *  normally reports a genuine empty arm — the outer bound stays the
+ *  backstop for a machine whose wrong payload never stabilizes at all. */
+const STRUCTURE_MISMATCH_TICKS = 3;
 
 /** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc
  *  comment for the full citation. `10`, not `3` (`DEFAULT_SETTLE_TICKS`
@@ -621,6 +687,26 @@ export function createPm5Driver(
     resolve: () => void;
     reject: (err: unknown) => void;
     ticks: number;
+    /** What 0x0031 must report for THIS `program()` call's own program to
+     *  count as armed (fix-3 Task 4) — captured per call from
+     *  `expectedArmedStructure(p)` (`pm5/commands.ts`, which owns the
+     *  ordinals and the scales), never re-read at tick time. */
+    expected: ArmedStructure;
+    /** The mismatched structure the last armed tick reported, or `null`
+     *  when the previous tick was not a mismatched armed tick at all —
+     *  the STABILITY half of `STRUCTURE_MISMATCH_TICKS`'s rule. */
+    lastMismatch: ArmedStructure | null;
+    /** How many CONSECUTIVE armed ticks have now reported `lastMismatch`.
+     *  Reset to 0 by any tick that is not a mismatched armed tick, and to
+     *  1 by a mismatched armed tick whose payload differs from the last
+     *  one. */
+    mismatchStreak: number;
+    /** Whether the ONE `"structure-mismatch"` log entry for this verify
+     *  phase has already been written — the entry fires at FIRST sighting,
+     *  never per tick (0x0031 notifies ~2/second; a per-tick entry is the
+     *  exact flood that evicted the programming trace from the 500-entry
+     *  ring in §18 session 1). */
+    mismatchLogged: boolean;
   } | null = null;
   /** Registered while `terminate()`'s post-ack settle wait (design spec
    *  §7, interface-notes.md §19.6) is counting — `null` whenever no
@@ -1429,7 +1515,7 @@ export function createPm5Driver(
             pendingPrepareSettle = null;
             log.record(
               "prepare-settle-expired",
-              `${ticks} tick(s) elapsed with no "armed" state observed (last state: ${settleState}) — proceeding without confirmation; the structural readback (design spec Stage 2) is the net`,
+              `${ticks} tick(s) elapsed with no "armed" state observed (last state: ${settleState}) — proceeding without confirmation; the structural readback (verifyArmed, fix-3 Task 4) is the net`,
             );
             resolve();
           } else if (settleState === "armed") {
@@ -1447,21 +1533,66 @@ export function createPm5Driver(
       // ever needs `state`, which 0x0031 alone determines, so it must not be
       // held hostage by AS1/AS2 notifications that a real PM sends on the
       // same cadence but that carry fields verification doesn't use.
+      //
+      // Fix-3 Task 4: the predicate is now `armed` AND the STRUCTURE, read
+      // from THIS arrival's own decode (`structure` above — the same tap
+      // Task 1's log takes, deliberately not routed through `MonitorFrame`,
+      // which has never carried these three fields and gains nothing by
+      // starting to; consumers are unchanged by this task).
       if (pendingVerify) {
-        if (toMonitorFrame(raw as RawPm5Status).state === "armed") {
+        const armed = toMonitorFrame(raw as RawPm5Status).state === "armed";
+        if (armed && sameStructure(structure, pendingVerify.expected)) {
           const resolve = pendingVerify.resolve;
           pendingVerify = null;
           resolve();
         } else {
+          // The N-consecutive-STABLE-mismatch rule
+          // (`STRUCTURE_MISMATCH_TICKS`'s own doc comment carries both
+          // hardware facts it is built on). A tick that is not a
+          // mismatched ARMED tick — the machine mid-cycle, still
+          // terminated/idle/rowing — makes no claim about the armed
+          // workout at all and restarts the count; so does a mismatched
+          // armed tick whose payload differs from the previous one.
+          if (armed) {
+            pendingVerify.mismatchStreak =
+              pendingVerify.lastMismatch !== null &&
+              sameStructure(structure, pendingVerify.lastMismatch)
+                ? pendingVerify.mismatchStreak + 1
+                : 1;
+            pendingVerify.lastMismatch = structure;
+            if (!pendingVerify.mismatchLogged) {
+              pendingVerify.mismatchLogged = true;
+              log.record(
+                "structure-mismatch",
+                `first sighting — ${describeStructureMismatch(structure, pendingVerify.expected)} (one entry per verify phase, never per tick)`,
+              );
+            }
+          } else {
+            pendingVerify.mismatchStreak = 0;
+            pendingVerify.lastMismatch = null;
+          }
           pendingVerify.ticks += 1;
-          const ticks = pendingVerify.ticks;
-          if (
-            options.verifyTicks !== undefined &&
-            ticks >= options.verifyTicks
-          ) {
+          const { ticks, mismatchStreak, mismatchLogged } = pendingVerify;
+          const bounded =
+            ticks >= (options.verifyTicks ?? DEFAULT_VERIFY_TICKS);
+          if (mismatchStreak >= STRUCTURE_MISMATCH_TICKS) {
             settleVerifyFailure(
-              "not-observed",
-              `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
+              "structure-mismatch",
+              `${mismatchStreak} consecutive armed tick(s) reporting the same wrong structure — ${describeStructureMismatch(structure, pendingVerify.expected)}`,
+            );
+          } else if (bounded) {
+            // Which reason the OUTER bound reports depends on what was
+            // actually seen. A machine that reached `armed` at least once
+            // and disagreed about the structure has told us something
+            // specific, even if its wrong payload never held still long
+            // enough for the streak to fire; a machine that never armed at
+            // all has said nothing about structure and must not be
+            // reported as though it had.
+            settleVerifyFailure(
+              mismatchLogged ? "structure-mismatch" : "not-observed",
+              mismatchLogged
+                ? `${ticks} tick(s) elapsed without a matching armed structure — last ${describeStructureMismatch(structure, pendingVerify.expected)}`
+                : `${ticks} tick(s) elapsed with no "armed" state observed (last raw workoutState: ${raw.workoutState})`,
             );
           }
         }
@@ -1516,16 +1647,44 @@ export function createPm5Driver(
     }
   });
 
+  /** Are two 0x0031 structure triples the same reading? (fix-3 Task 4.)
+   *  All three fields, compared exactly — no tolerance anywhere: session
+   *  4a read the duration back in the SAME unit this codec encodes it in
+   *  (`expectedArmedStructure`'s own doc comment), so a near-miss is a real
+   *  disagreement, not rounding. */
+  function sameStructure(a: ArmedStructure, b: ArmedStructure): boolean {
+    return (
+      a.workoutType === b.workoutType &&
+      a.workoutDurationRaw === b.workoutDurationRaw &&
+      a.workoutDurationType === b.workoutDurationType
+    );
+  }
+
+  /** The observed-vs-expected phrasing every structural log entry and
+   *  rejection detail shares (fix-3 Task 4) — one formatter so the event
+   *  log and `ProgramRejectionError.hexTrace` can never describe the same
+   *  disagreement two different ways. Both sides carry all three fields
+   *  explicitly: "structure mismatch" alone is undiagnosable at the erg,
+   *  which is the whole reason this task exists. */
+  function describeStructureMismatch(
+    observed: ArmedStructure,
+    expected: ArmedStructure,
+  ): string {
+    return `observed workoutType=${observed.workoutType} durationRaw=${observed.workoutDurationRaw} durationType=${observed.workoutDurationType}; expected workoutType=${expected.workoutType} durationRaw=${expected.workoutDurationRaw} durationType=${expected.workoutDurationType} (the sent program's interval 0)`;
+  }
+
   /** Settles `pendingVerify` with a typed rejection: the general-status
    *  tick handler above calls this on `verifyTicks` expiry
-   *  (`reason: "not-observed"`); `onDisconnect` calls it with
+   *  (`reason: "not-observed"`, or `"structure-mismatch"` once an armed
+   *  tick has disagreed about the structure) and on the N-consecutive
+   *  stable-mismatch rule firing; `onDisconnect` calls it with
    *  `reason: "disconnected"` so a real link drop during verification fails
    *  loudly instead of waiting on ticks that will now never arrive. Always
    *  logs the failure (design spec §1: "the full trace in the event log")
    *  before rejecting, same as `sendSequence`'s own `"program-rejection"`
    *  entries for a send-phase failure. */
   function settleVerifyFailure(
-    reason: "not-observed" | "disconnected",
+    reason: "not-observed" | "disconnected" | "structure-mismatch",
     detail: string,
   ): void {
     // No `if (!pendingVerify) return` guard here: both call sites (the
@@ -1549,7 +1708,9 @@ export function createPm5Driver(
    * real program and a complete no-op (interface-notes.md §18, progress.md's
    * D2). This instead waits for the machine's OWN reported state to reach
    * "armed" (WAITTOBEGIN/COUNTDOWNPAUSE, `pm5/parse.ts`'s `toMonitorFrame`)
-   * before `program()` is allowed to resolve.
+   * **AND for 0x0031's own structure fields to describe the workout we just
+   * sent** (fix-3 Task 4 — the predicate, the N-consecutive rule and the
+   * hardware that forced both are all spelled out further down).
    *
    * NEVER checks the already-cached `raw` value at call time — it always
    * registers `pendingVerify` and waits for the NEXT GENERAL_STATUS_UUID
@@ -1582,31 +1743,76 @@ export function createPm5Driver(
    * arrival costs at most one extra tick of latency to make the evidence
    * unambiguous, never a meaningfully longer wait.
    *
-   * What "the machine reporting the programmed structure" (design spec §1)
-   * concretely checks TODAY: `state === "armed"` (from a post-send
-   * arrival), nothing more. This is NOT because no stronger signal exists
-   * on the wire — 0x0031 already decodes `workoutType` (our own writes
-   * always send `WORKOUTTYPE_VARIABLE_INTERVAL`) and `workoutDurationRaw`/
-   * `workoutDurationType`, which a real structural check could compare
-   * against `p`. It is because no laptop session has yet read those three
-   * fields back AFTER an accepted program to confirm they echo what was
-   * sent (interface-notes.md §17's runsheet now carries this as an open
-   * item) — gating on unconfirmed bytes would be a worse dishonesty than
-   * this narrower check. `intervalIndex` genuinely has no such upgrade
-   * path: it is business-NULL for the entire armed window (`toMonitorFrame`'s
-   * own rule — an interval is only ever "current" while rowing/resting).
+   * **THE STRUCTURAL PREDICATE (fix-3 Task 4).** Until this task the check
+   * was `state === "armed"` and nothing else, for an honest reason: no
+   * hardware session had ever read 0x0031's `workoutType`/
+   * `workoutDurationRaw`/`workoutDurationType` back after an accepted
+   * program, so gating on them would have been gating on a guess. **SESSION
+   * 4a (2026-08-07, PM5 432331249) read them** — the SDD ledger's own
+   * `## SESSION 4a` block is the record until Task 6 files it as §18, and
+   * it ANSWERS interface-notes.md §17 item 12. What it found, and what this
+   * function now requires of a fresh post-send arrival:
+   * - `state === "armed"`, exactly as before, AND
+   * - `workoutType === 8` — stable across TIME, DISTANCE and rest-0 arms,
+   *   with no normalization to a rest-less sibling ordinal, so the type is
+   *   a real check rather than noise, AND
+   * - `workoutDurationRaw`/`workoutDurationType` equal to INTERVAL 0's own
+   *   value in its confirmed unit — seconds × 100 at identifier `0` for a
+   *   time interval (60s → 6000), whole metres at identifier `128` for a
+   *   distance one (500 → 500). The prediction is computed by
+   *   `expectedArmedStructure` (`pm5/commands.ts`), which reuses the very
+   *   constants the ENCODER puts on the wire, so the two can never drift.
+   * The fields also refresh while the machine is merely armed — no rowing
+   * is needed for this reading to be current, which is what makes the
+   * check usable at all.
+   *
+   * Why it matters: three separate hardware arms have now reported
+   * `"armed"` while holding NOTHING (§19.13's two `:00` empty arms, plus
+   * session 4a's own deliberate repro). Every one of them passed the
+   * state-only check with clean acks throughout. 4a captured the empty
+   * arm's steady state on the wire — `workoutType=1 durationRaw=0
+   * durationType=128` — so the shape this predicate rejects is an observed
+   * one, not an imagined one.
+   *
+   * **A SINGLE MISMATCHED TICK NEVER REJECTS.** The 0x0031 payload can LAG
+   * the armed state: 2 of session 3's 5 clean arms carried the PREVIOUS
+   * program's payload on their first armed tick, and 4a additionally saw
+   * mid-cycle transients (`type=1` with stale durations). Rejection needs
+   * `STRUCTURE_MISMATCH_TICKS` (3) CONSECUTIVE armed ticks reporting the
+   * SAME wrong structure — see that constant's own doc comment — or the
+   * outer `verifyTicks` bound, whichever comes first. The mismatch is
+   * logged ONCE per verify phase, at first sighting.
+   *
+   * `intervalIndex` genuinely has no such upgrade path, and did not gain
+   * one here: it is business-NULL for the entire armed window
+   * (`toMonitorFrame`'s own rule — an interval is only ever "current" while
+   * rowing/resting). Nor do the three structure fields enter `MonitorFrame`
+   * — they are read straight off this arrival's own decode, the same tap
+   * Task 1's `"structure"` log entry takes, so no consumer's type changes
+   * for a check that is entirely the driver's business.
    *
    * Bounded by `options.verifyTicks` GENERAL_STATUS_UUID ticks — no wall
    * clock, ever (same tick pulse as `ackTimeout`, tracked as its own
    * budget; see `DriverOptions.verifyTicks`'s doc comment for why).
-   * Omitted entirely (like `ackTimeout`) means no bound: waits for "armed"
-   * or a disconnect, forever. On expiry, or a disconnect first, rejects
-   * with `ProgramRejectionError({ reason: "not-observed" | "disconnected",
-   * atFrame: -1 })` — verification has no frames of its own, only ticks.
+   * **Omitting it means `DEFAULT_VERIFY_TICKS` (20), NOT "no bound"**
+   * (semantics changed by this task, for the reason that field's doc
+   * comment gives: unbounded + a structure predicate = a hang exactly where
+   * detection was wanted). On expiry, on the N-consecutive rule firing, or
+   * on a disconnect first, rejects with `ProgramRejectionError({ reason:
+   * "not-observed" | "structure-mismatch" | "disconnected", atFrame: -1 })`
+   * — verification has no frames of its own, only ticks.
    */
-  function verifyArmed(): Promise<void> {
+  function verifyArmed(p: WorkoutProgram): Promise<void> {
     return new Promise((resolve, reject) => {
-      pendingVerify = { resolve, reject, ticks: 0 };
+      pendingVerify = {
+        resolve,
+        reject,
+        ticks: 0,
+        expected: expectedArmedStructure(p),
+        lastMismatch: null,
+        mismatchStreak: 0,
+        mismatchLogged: false,
+      };
     });
   }
 
@@ -1676,10 +1882,17 @@ export function createPm5Driver(
    * which carries no timestamps), so a future hardware run gets a real
    * number instead of another derived estimate. On expiry with `armed`
    * never observed, this PROCEEDS (never rejects) and logs
-   * `prepare-settle-expired`: the structural readback (design spec Stage 2,
-   * not built by this task) is the actual net under this wait, so a
-   * `program()` that never resolves would trade a survivable, detectable
-   * hazard for an unsurvivable one.
+   * `prepare-settle-expired`: the structural readback (`verifyArmed`'s own
+   * predicate, built by fix-3 Task 4 — it now really is a net, not a
+   * planned one) is the actual net under this wait, so a `program()` that
+   * never resolves would trade a survivable, detectable hazard for an
+   * unsurvivable one.
+   *
+   * Session 4a VALIDATED this wait twice at the exact session-3 repro:
+   * `prepare-settled` reported "armed observed on tick 4" on both runs (the
+   * derived 4-5 estimate `DEFAULT_PREPARE_SETTLE_TICKS`'s own comment
+   * flagged as UNMEASURED is now measured), and the monitor showed the real
+   * workout both times rather than `:00`.
    *
    * A disconnect while this wait is outstanding is the ONE outcome that
    * does NOT proceed — `createPm5Driver`'s `onDisconnect` handler rejects
@@ -2067,7 +2280,7 @@ export function createPm5Driver(
       // at SOME point before the send finished (see verifyArmed's own doc
       // for why waiting here, never trusting anything already cached, is
       // the correct trade-off, not an overcorrection).
-      await verifyArmed();
+      await verifyArmed(p);
       // THE ONE PLACE A RUN IS OPENED (Task 4, spec §4 — `activeRun`'s own
       // doc comment has the full reasoning). Deliberately here, on the
       // success path past verification, and deliberately nowhere else: no

@@ -979,16 +979,17 @@ audit than one that shows its full history. Two-tier summary:
   making the doc's three printed values errata as encoded); 0-based
   write-side interval indices; the GATT status parse (distance/elapsed/
   pace/spm cross-check); `intervalRemaining`'s checkpoint computation; the
-  terminal-state latch (no un-finishing, confirmed in the field); and
-  multi-interval programming working end to end from a clean state. See
-  "Answered by laptop session 1" just below for the full list with
-  citations.
+  terminal-state latch (no un-finishing, confirmed in the field);
+  multi-interval programming working end to end from a clean state; and
+  **the structural readback (item 12 — SESSION 4a, 2026-08-07: outcome (a),
+  unanimous across TIME/DISTANCE/rest-0, with the empty arm's own anatomy
+  captured on the wire)**. See "Answered by laptop session 1" just below
+  for the full list with citations.
 - **STILL OPEN — must survive as executable runsheet items:** the real
   clear/wipe command remains UNFOUND (item 6 — `terminate()` was tried and
   is NOT it: accepted once with a completed workout present, yet the
-  program sent right after was still rejected, twice); whether an accepted
-  program's structure is readable back from 0x0031 rather than trusted on
-  the bare `armed` ack (item 12); the no-rest work→work boundary index
+  program sent right after was still rejected, twice); the no-rest
+  work→work boundary index
   (item 13); and distance-kind intervals plus a genuinely multi-FRAME
   program (Sea Smoke's 25 intervals / 7 frames), neither of which has ever
   been tried from a known-empty machine (item 5 — every distance/25-
@@ -1304,37 +1305,62 @@ settle off would be worse than one that needed a reconnect.
     truncated frame on the PM5's response path) or a `ProgramRejectionError`
     with reason `"nak"` that wouldn't otherwise be expected — either would
     suggest a dropped chunk under this write mode.
-12. **STATUS: OPEN — not yet tested; folded into "The pending
-    verification row" below as an extra observation on the same row
-    (§18 #12).** Whether an accepted program's structure is readable back (plan
-    7A-fix Task 2 review, F2 — `src/monitor/driver.ts`'s `verifyArmed`).
-    `program()`'s verification today checks only `state === "armed"`: no
-    laptop session has yet read 0x0031's `workoutType`/`workoutDurationRaw`/
-    `workoutDurationType` back AFTER a program the PM accepted, so there is
-    no confirmed evidence either way that these fields echo what was sent.
-    Expected: unknown — `workoutType` should read back
-    `WORKOUTTYPE_VARIABLE_INTERVAL` (`0x08`, the only type this codec ever
-    sends) and `workoutDurationRaw`/`Type` should match the FIRST
-    interval's programmed duration, if the PM treats 0x0031 as an honest
-    mirror of its own configuration. Observed: program a workout, wait for
-    `"armed"`, and dump `exportLog()`'s `"frame"` entries around that
-    point — do `workoutType`/`workoutDurationRaw`/`workoutDurationType`
-    match what was sent? If yes, `verifyArmed` can upgrade from "armed
-    alone" to a real structural check (comparing against `p`, not just its
-    length); if no (or if the PM doesn't refresh these fields until
-    rowing starts), the current state-only check stays the strongest
-    honest option.
-    > **CORRECTION (2026-08-06, laptop session 3, §18/§19.13): STATUS
-    > remains OPEN, now TWICE-justified by hardware rather than
-    > once-theorized.** The live bisect's Step 5 send and its REPRO row each
-    > produced a structurally EMPTY arm that nonetheless passed today's
-    > state-only `verifyArmed` (`state === "armed"`) and acked every frame
-    > cleanly — two independent, hardware-confirmed cases where the bare
-    > state check reports success on a program with no interval structure at
-    > all. This item's proposed upgrade (reading `0x0031`'s `workoutType`/
-    > `workoutDurationRaw`/`workoutDurationType` back against what was sent)
-    > would have caught both. Folded into ROADMAP's Phase 7A-fix-3 as one of
-    > two candidate remedies, to be DESIGNED rather than assumed.
+12. **STATUS: ANSWERED (SESSION 4a, 2026-08-07, PM5 432331249) — outcome
+    (a), unanimous across all three shapes. The structure IS readable back,
+    and `verifyArmed` now gates on it.** Whether an accepted program's
+    structure is readable back (plan 7A-fix Task 2 review, F2 —
+    `src/monitor/driver.ts`'s `verifyArmed`). This item asked whether
+    0x0031's `workoutType`/`workoutDurationRaw`/`workoutDurationType` echo
+    what was sent, after a program the PM accepted. **Observed, on the
+    wire:**
+
+    | Arm | `workoutType` | `workoutDurationRaw` | `workoutDurationType` |
+    |---|---|---|---|
+    | TIME, 2×60s r30 | `8` | `6000` (60s × 100) | `0` (Time) |
+    | DISTANCE, 3×500m r60 | `8` | `500` (whole metres) | `128` (Distance) |
+    | REST-0, 2×60s r0 | `8` | `6000` | `0` (Time) |
+    | pre-arm baseline | `0` | `0` | `128` |
+    | **EMPTY ARM** (steady state) | **`1`** | **`0`** | **`128`** |
+
+    Four findings this settles: the read-side TIME scale is 0.01 s/lsb, the
+    same one we ENCODE with; distance is read/write symmetric in whole
+    metres (previously assumed, now observed); `workoutType` is **STABLE at
+    `8`** across all three shapes — no normalization to a rest-less sibling
+    ordinal — so the type is a usable check rather than noise; and the
+    fields **REFRESH while the machine is merely ARMED**, no rowing needed,
+    which is what makes the readback usable at verification time at all.
+    The empty arm's own anatomy was captured too (settle-off,
+    `program-short` over a running piece, monitor showing `:00`, driver
+    reporting acked-armed): the duration reads `0` AND the type degrades to
+    `1`. Mid-cycle transients (`type=1` carrying stale, non-zero durations)
+    were also seen, and the payload can LAG the armed state by ≥1 tick — 2
+    of session 3's 5 clean arms carried the previous program's payload on
+    their first armed tick.
+
+    **CONSUMED BY (fix-3 Task 4):** `verifyArmed` (`src/monitor/driver.ts`)
+    now resolves only on a fresh post-send tick that is `armed` AND whose
+    structure equals `expectedArmedStructure(p)` (`pm5/commands.ts`, which
+    derives the prediction from the ENCODER's own constants so the two
+    cannot drift). A mismatch rejects with the new
+    `ProgramRejectionReason` member `"structure-mismatch"` after **3
+    consecutive armed ticks reporting the SAME wrong structure** (above the
+    observed 1-tick lag, below the outer bound; the transients are why the
+    rule counts stable ticks), or at the `verifyTicks` bound — which now
+    DEFAULTS to 20 rather than meaning "unbounded", since an unbounded
+    verify under a structure predicate turns a caught defect into a hang.
+    The full 4a record lives in the SDD ledger's own `## SESSION 4a` block
+    (`.superpowers/sdd/2026-08-06-phase-7a-fix-3/progress.md`) until Task 6
+    files it as a §18 session-4 section; this table is the disposition, not
+    the raw log.
+
+    > **Superseded correction, kept for the trail (2026-08-06, laptop
+    > session 3, §18/§19.13):** the live bisect's Step 5 send and its REPRO
+    > row each produced a structurally EMPTY arm that nonetheless passed
+    > the then-current state-only `verifyArmed` and acked every frame
+    > cleanly — two hardware-confirmed cases where the bare state check
+    > reported success on a program with no interval structure at all.
+    > Both would have been caught by the check 4a's readings made
+    > buildable, and session 4a's own deliberate repro is the third.
 13. **STATUS: ANSWERED (§19.8) — the rest-keyed rule was wrong for
     0x0037/38; `index-unverified` retired.** Needs a
     `restSeconds: 0` interior interval, which the pending verification
@@ -1824,7 +1850,9 @@ re-run until it looks right:**
   per-tick entry would flood the ring the same way the old per-tick
   `"frame"` entry did): `workoutType=<n> durationRaw=<n> durationType=<n>
   raw=<19-byte hex>`. Read item 12 back from `"structure"` entries, never
-  `"frame"` ones.
+  `"frame"` ones. **DONE — SESSION 4a (2026-08-07) read it back exactly
+  this way and item 12 is ANSWERED; this bullet is kept as the method
+  record, not as an outstanding ask.**
 - **TWO `intervalComplete` events, carrying OUR indices 0 and 1** — not
   the one mixed-boundary event D4 produced before the fix. This is the
   direct hardware retest of plan Task 1's diagnosis and Task 4's fix
@@ -2094,6 +2122,8 @@ establish about programming over a live session.
     noticing 0x0031 already decodes `workoutType`/`workoutDurationRaw`/
     `workoutDurationType` but nothing has confirmed whether those fields
     echo an accepted program's real content. Open for the next session.
+    **CLOSED by SESSION 4a (2026-08-07) — they do; §17 item 12 carries the
+    readings and `verifyArmed` now gates on them.**
 
 **Also fixed live this session** (retro-tested by plan Task 4, D6): the
 discovery filter (0x0030 is not advertised — filtering on it left Chrome's
@@ -2308,11 +2338,22 @@ every checkpoint this codec currently reads — `frameStatus`, `verifyArmed`
 — reported success.
 
 **Both `:00` arms passed `verifyArmed`** (Step 5 and the REPRO) — the
-current check (`state === "armed"` alone) cannot distinguish a real arm
-from an empty one. §17 item 12's structural-readback upgrade (reading
+state-only check (`state === "armed"` alone) could not distinguish a real
+arm from an empty one. §17 item 12's structural-readback upgrade (reading
 `0x0031`'s `workoutType`/`workoutDurationRaw`/`workoutDurationType` back
-against what was sent) is now **twice-justified by hardware**, not merely
+against what was sent) was **twice-justified by hardware** here, not merely
 theorized.
+
+> **RESOLVED (2026-08-07, SESSION 4a → fix-3 Task 4).** Item 12 is
+> ANSWERED — the fields do echo an accepted program, in the units this
+> codec encodes, and they refresh while merely armed (§17 item 12 carries
+> the full table; the raw record is the SDD ledger's `## SESSION 4a` block
+> until Task 6 files it as a §18 session-4 section). `verifyArmed`
+> (`src/monitor/driver.ts`) now gates on that readback and rejects
+> `"structure-mismatch"`, so the two arms described above would no longer
+> report success. 4a additionally captured the empty arm's own steady state
+> on the wire — `workoutType=1 durationRaw=0 durationType=128` — which is
+> the exact anatomy the new check catches.
 
 **James's explicit approval:** recorded separately from this document —
 the merge-gate row having run and this section being written are both
