@@ -10,6 +10,8 @@ import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
 import Library from "../library/Library";
 import News from "../news/News";
+import Reader from "../news/Reader";
+import Releases from "../news/Releases";
 import Plan from "../plan/Plan";
 import ConfirmTargets from "../session/ConfirmTargets";
 import Countdown from "../session/Countdown";
@@ -100,6 +102,12 @@ export default function AppRoutes({
             the tab bar costs this route nothing extra. */}
         <Route path="/library/:id/log" element={<LogSession />} />
         <Route path="/news" element={<News />} />
+        {/* React Router ranks a static segment over a dynamic one regardless
+            of declaration order (same note as /library/import above), so
+            /news/releases doesn't strictly need to precede /news/:slug —
+            declared first anyway, matching this file's own convention. */}
+        <Route path="/news/releases" element={<Releases />} />
+        <Route path="/news/:slug" element={<Reader />} />
         <Route path="/plan" element={<Plan />} />
         <Route path="/session/confirm" element={<ConfirmTargets />} />
         <Route path="/session/countdown" element={<Countdown />} />

@@ -4189,3 +4189,83 @@ section:not(.news-pinned) .news-row:last-of-type {
   align-items: center;
   min-height: var(--tap);
 }
+
+/* Reader (Phase 6H Task 6) — the in-app long-form screen. Newsreader for
+   the title and body; nothing else in the app reads long-form prose, so
+   these are new rules, kept minimal per the brief rather than growing a
+   whole typographic scale for one screen. `.reader-meta` reuses the
+   existing mono-label idiom already used by `.news-row-meta` etc.
+   `.reader-inset` reuses the `--surface-sunken` card fill `.news-whatsnew`
+   already established, in mono rather than sans since the content
+   (baselines.tsx's own aside) is itself an exact-numbers worked example,
+   not narrative prose. */
+.reader-meta {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.reader-title {
+  margin: 0 0 20px;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 31px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.reader-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reader-body p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.reader-body h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.reader-inset {
+  display: block;
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* Text link, not `.button-l1` (design rule: accent is reserved for text
+   links and the unread square, same rule News's own CSS block documents).
+   `min-height: var(--tap)` plus `align-items: center` gets the ≥44px hit
+   target without adding visible padding around the two-line label. */
+.reader-next {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-decoration: none;
+}
