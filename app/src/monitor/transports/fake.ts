@@ -30,13 +30,25 @@
 //   - it takes a SECOND program with no reconnect, after a terminate, the
 //     way the machine does (§19.4/§19.5: terminate is the documented exit
 //     back to a programmable state);
+//   - `program()`'s PREPARE step gets the machine reaction the wire command
+//     actually produces (§18 session 3, Phase 7A-fix-3 Task 3): a terminate
+//     sent to a RUNNING machine drives it terminated → idle → armed across
+//     subsequent status ticks — CSAFE-DEF Appendix E's own
+//     Terminate -> Rearm -> WaitToBegin cycle — rather than acking and
+//     changing nothing (`onClearingFrameComplete`);
+//   - programming frames that land while the machine is STILL running arm
+//     an EMPTY workout — armed, no interval structure, no boundary ever
+//     (§19.13, reproduced 2-for-2 with unrelated shapes);
 //   - its writes fail while the link is down, the way an invalidated GATT
 //     handle does (D6).
 //
-// Two ack shapes here are SYNTHETIC and say so at their definitions,
+// Three ack shapes here are SYNTHETIC and say so at their definitions,
 // because nothing observed produced them: `FakeScript.failNextProgramFrame`'s
 // genuine reject and its checksum-garbled frame (§19.1 — not one of the
-// twelve captured bytes was a rejection).
+// twelve captured bytes was a rejection), and
+// `FakeScript.refuseNextPrepare`'s refused prepare step (§18 session 3 item
+// 15 — the captured byte for the one send this fake used to refuse by
+// default decodes to an ACCEPT).
 //
 // Verifies each programming chunk byte-for-byte against
 // `buildProgrammingSequence`'s output (asserts — a wrong byte is a test
@@ -46,8 +58,9 @@
 // advances time); six injection hooks (design spec §4, plan Task 4, plus
 // fix-round HIGH-2's `injectTimeout`, distinct from `injectDisconnect`: the
 // link stays up, only the ack never comes); a leading "clearing" phase
-// (plan Task 2) modeling `program()`'s own best-effort prepare step,
-// rejected when nothing is loaded and ACCEPTED when something is.
+// (plan Task 2) modeling `program()`'s own best-effort prepare step, which
+// is ACCEPTED (item 15's captured byte) and drives the machine's own
+// terminate auto-cycle when it lands on a running piece.
 // `sendAck`'s own doc comment covers how each ack's status byte is
 // assembled since Phase 7A-fix-2's corrected bitfield parse
 // (pm5/response.ts §19.1).
@@ -75,6 +88,7 @@ import { toMachineIndex } from "../../../domain/monitor/pm5/intervalIndex.js";
 import {
   HEARTRATE_NO_BELT,
   toMonitorState,
+  WORKOUTSTATE_REARM,
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
   type AdditionalSplitIntervalData,
@@ -221,19 +235,15 @@ export interface FakeScript {
    * So what this models now, each half cited:
    * - a program sent while a workout is loaded is ACCEPTED, and the loaded
    *   workout is REPLACED by the one just programmed (§19.1 Verdict (b));
-   * - the prepare step (`buildTerminate()`) is ACCEPTED while a workout is
-   *   loaded — §19.1's `S2 D2` rows, raw captured bytes — and REJECTED when
-   *   nothing is. **That second half is the LAST behaviour in this fake
-   *   still resting on the withdrawn parse.** Its only source is §19.1's
-   *   `S1 CLEAN RUN 2` row, classed `NARR-NB`: "no byte at all — the old
-   *   parse's accept/reject label is all that survives, undecodable". The
-   *   surviving "rejected — nothing to terminate" label was produced by the
-   *   very whole-byte compare §19.1 withdrew, and every byte in that
-   *   document the compare called a rejection turned out to be an accept.
-   *   It is kept because it is not in §19.2's withdrawn list, because
-   *   `sendPrepare` swallows the outcome either way, and because inventing
-   *   the opposite would be no better sourced — NOT because it is
-   *   corroborated. One terminate sent to an idle machine settles it;
+   * - the prepare step (`buildTerminate()`) is ACCEPTED, whatever is or is
+   *   not loaded — §19.1's `S2 D2` rows for the loaded case, and §18
+   *   session 3's **item 15** for the empty one: the standalone terminate
+   *   this fake used to refuse by default acked `f1 81 76 01 13 e5 f2`,
+   *   which decodes to toggle-high / previous-frame-OK / slave READY, an
+   *   ACCEPT. That was the LAST behaviour in this fake resting on the
+   *   withdrawn whole-byte parse, and item 15 settled it against the model:
+   *   the idle-terminate refusal never existed. It survives only as the
+   *   explicitly-synthetic `refuseNextPrepare` hook below;
    * - terminate does NOT unload the workout — its documented destination is
    *   *Rearm*, Concept2's own word for making the SAME workout ready again
    *   (§19.5), so the count below survives a terminate. It does return the
@@ -279,12 +289,35 @@ export interface FakeScript {
    *
    * Scoped to the PROGRAMMING sequence's own frames — which is why the
    * field is named for the frame and not for "the next write". Same scope
-   * `injectNak` has always had (`injectNak`'s own doc comment): the prepare
-   * step's ack is decided by the machine's load state, and `program()`
-   * swallows anything but a disconnect there anyway, so a failure aimed at
-   * it could never reach a driver-visible outcome.
+   * `injectNak` has always had (`injectNak`'s own doc comment). The prepare
+   * step has its own one-shot sibling, `refuseNextPrepare` below, rather
+   * than sharing this one: the two answer different frames, and only the
+   * prepare's is aimed at `program()`'s swallow rule.
    */
   failNextProgramFrame?: "reject" | "garbled";
+  /**
+   * One-shot: the NEXT prepare (clearing-phase) frame is answered with a
+   * genuine `0x11`-class reject instead of the accept it would otherwise
+   * get. Consumed by the first prepare frame that completes, so a
+   * subsequent `program()` over the same fake prepares normally.
+   *
+   * **NEVER OBSERVED ON HARDWARE — synthetic** (interface-notes.md §18
+   * session 3, item 15). This fake used to refuse EVERY prepare sent to a
+   * machine with nothing loaded, sourced from §19.1's `S1 CLEAN RUN 2` row
+   * — classed `NARR-NB`, "no byte at all", the withdrawn whole-byte
+   * parse's label and nothing else. Item 15 finally captured that byte
+   * (`f1 81 76 01 13 e5 f2`, a standalone terminate from an armed-idle
+   * screen): an ACCEPT. The default refusal is gone.
+   *
+   * The hook stays because the refusal is the ONLY way to exercise
+   * `driver.ts`'s prepare SWALLOW rule (`sendPrepare`: any non-disconnect
+   * outcome is logged `prepare-rejected` and programming proceeds anyway),
+   * and that rule stays — a rule with no way to be exercised is a rule
+   * with no test. A refused prepare changes nothing on the machine: no
+   * terminate transition, no auto-cycle (`onClearingFrameComplete`), which
+   * is the whole point of a refusal.
+   */
+  refuseNextPrepare?: boolean;
   /** The post-"armed" session timeline, ascending by `atMs`. `tick(ms)`
    *  advances a purely virtual clock (no timers, no wall clock anywhere in
    *  this file) and delivers every event whose `atMs` has now been
@@ -310,7 +343,13 @@ export interface FakeControls {
    *  phone's radio — design spec §4's iOS note) but are NOT delivered as
    *  notifications; only their values are cached for `completeReconnect()`
    *  to flush, which is what makes the reconnect path re-derive position
-   *  instead of assuming continuity. */
+   *  instead of assuming continuity.
+   *
+   *  ALSO advances the machine's own terminate AUTO-CYCLE by one step, when
+   *  a prepare step left one pending (`queueTerminateAutoCycle`, Task 3):
+   *  the PM's reaction to a terminate is not instantaneous — it is three
+   *  status ticks (terminated → idle → armed), reported on the same 0x0031
+   *  pulse as everything else this machine says. */
   tick(ms: number): void;
   /** The programming ack-gated FRAME at `atFrame` (0-based index into
    *  `buildProgrammingSequence`'s outer array — the same index a driver's
@@ -323,10 +362,11 @@ export interface FakeControls {
    *  This is the POSITIONAL selector for the same one SYNTHETIC reject path
    *  `FakeScript.failNextProgramFrame` reaches: `takeNextAckFailure` is the
    *  single consumer of both hooks, so Task 6 added no second way to ASK
-   *  for a reject. (The machine has one other, entirely legitimate reason
-   *  to answer `"reject"` — `onClearingFrameComplete`'s nothing-loaded
-   *  refusal of the prepare step. That is a load-state answer, not a
-   *  scripted failure.) Unlike `failNextProgramFrame` this one is STICKY:
+   *  for a reject. (`FakeScript.refuseNextPrepare` is a THIRD way to see a
+   *  reject on the wire, but never for one of these frames: it answers the
+   *  prepare step, which `takeNextAckFailure` has never been able to reach.
+   *  Task 3 — it too is marked never-observed.) Unlike
+   *  `failNextProgramFrame` this one is STICKY:
    *  the frame cursor does not advance past a rejected frame, and a retry
    *  restarts the sequence from frame 0, so the same frame index meets the
    *  same answer on every attempt. Where both are set,
@@ -388,7 +428,16 @@ export interface FakeControls {
    *  fake that never had one and has not been programmed yet; never `null`
    *  again once a program has landed, since nothing this codec can send
    *  unloads a workout (§19.5 — terminate routes to Rearm, not to an empty
-   *  slot). */
+   *  slot).
+   *
+   *  **`0` is the EMPTY ARM** (Task 3, §19.13) — a program that landed on a
+   *  still-running machine armed with no interval structure at all: the
+   *  machine holds a workout (never `null` again) and that workout has zero
+   *  intervals. This is the fake's structure-zeroed introspection until
+   *  Stage 2 puts the same fact on the wire (design spec Stage 2: the
+   *  status stream carries the ACCEPTED program's structure, and an empty
+   *  arm's reads back zeroed) — the shape the readback will catch, modelled
+   *  here so there is something to catch. */
   loadedIntervals(): number | null;
 }
 
@@ -600,10 +649,13 @@ export function createFakeTransport(
   // PREPARE step before the real programming sequence — so the very first
   // write(s) this fake ever sees are the SAME bytes as `terminateChunks`
   // (below), not `flatProgramChunks`. `"clearing"` models exactly that
-  // window. Its ack depends on what the machine is HOLDING: rejected when
-  // nothing is loaded — the [S1] clean-run narrative, and the common case
-  // for a fresh connection — but ACCEPTED when a workout is loaded, which
-  // [S2]'s own raw dumps show directly (§19.1's `S2 D2`/`S2 D3` rows).
+  // window. Its ack is an ACCEPT, whatever the machine is holding — [S2]'s
+  // own raw dumps for the loaded case (§19.1's `S2 D2`/`S2 D3` rows) and
+  // §18 session 3's item 15 for the empty one, which is the byte that
+  // retired this phase's old nothing-loaded refusal (Task 3;
+  // `onClearingFrameComplete`). What the ACCEPT does to the machine depends
+  // on what the machine was doing: a terminate landing on a running piece
+  // starts the Appendix-E auto-cycle (`queueTerminateAutoCycle`).
   // `injectNak` deliberately does NOT reach into this phase — `nakAtFrame`
   // addresses the PROGRAMMING sequence's own frames only (its own doc
   // comment), and neither does `FakeScript.failNextProgramFrame`, for the reason
@@ -630,6 +682,28 @@ export function createFakeTransport(
   // by `takeNextAckFailure` the first time a programming frame completes.
   let failNextProgrammingAck: "reject" | "garbled" | null =
     script.failNextProgramFrame ?? null;
+  // `FakeScript.refuseNextPrepare`'s live, consumable copy — one-shot,
+  // cleared by the first prepare frame that completes (SYNTHETIC; item 15's
+  // captured byte says the real machine accepts).
+  let refusePrepare = script.refuseNextPrepare ?? false;
+  // The machine's own Terminate -> Rearm -> WaitToBegin auto-cycle
+  // (CSAFE-DEF Appendix E), queued by an ACCEPTED prepare that landed on a
+  // RUNNING machine and drained one status per `tick()` —
+  // `queueTerminateAutoCycle` has the citations. Empty whenever the machine
+  // has nothing left to react to.
+  let autoCycle: FakeStatusEvent[] = [];
+  // §19.13: a programming frame arrived while the machine was STILL
+  // `rowing`/`resting`, so whatever arms out of this sequence arms EMPTY.
+  // Sticky across the sequence and reset at the prepare (the reset point
+  // for everything else too), because the hardware repro's own terminated
+  // transition landed MID-send — the later frames arrived at a machine that
+  // was no longer running, and it armed empty anyway.
+  let sawRunningDuringProgramming = false;
+  // Set by an EMPTY arm and cleared by a real one: while true this machine
+  // holds no interval structure, so no boundary can ever be reported for
+  // the program it is holding (§19.13 — rowed to 108.4 m past a 100 m
+  // interval with no boundary of any kind).
+  let armedEmpty = false;
   // Bit 7 of the next ack's status byte ([CSAFE-DEF] p.11 Table 9: "Toggles
   // between 0 and 1 on alternate frames"; interface-notes.md §19.1/§19.2).
   // Starts LOW and flips after every ack this fake emits — including the
@@ -731,22 +805,33 @@ export function createFakeTransport(
     );
   }
 
-  function deliverArmedBundle(): void {
-    const { general, as1, as2 } = armedBundle();
-    notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
-    notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
-    notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
-    setLatestStatus({
+  /** A status event with nothing rowed yet, in the given wire state — the
+   *  shape every "the machine is not mid-piece" reading this file
+   *  synthesizes has: armed after a program lands, and each step of the
+   *  post-terminate auto-cycle (`queueTerminateAutoCycle`), where the PM's
+   *  own readout is back at zero (§18's Control row records exactly that
+   *  for a re-armed machine: `state=armed, elapsedSeconds=0,
+   *  distanceMeters=0`). */
+  function zeroedStatus(workoutState: number): FakeStatusEvent {
+    return {
       atMs: virtualClock,
       kind: "status",
-      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      workoutState,
       elapsedSeconds: 0,
       distanceMeters: 0,
       spm: 0,
       currentSplit: 0,
       heartRateBpm: null,
       programIntervalIndex: 0,
-    });
+    };
+  }
+
+  function deliverArmedBundle(): void {
+    const { general, as1, as2 } = armedBundle();
+    notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
+    notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
+    notify(GENERAL_STATUS_UUID, buildGeneralStatusBytes(general));
+    setLatestStatus(zeroedStatus(WORKOUTSTATE_WAITTOBEGIN));
   }
 
   /** Fix-round 1, F1: the single place `armedBundlePending` is consumed —
@@ -862,6 +947,96 @@ export function createFakeTransport(
     return nakAtFrame === programFrameCursor ? "reject" : null;
   }
 
+  /**
+   * The TERMINATE status the machine reports in reaction to a terminate
+   * command, carried over from whatever it last reported. ONE definition,
+   * two callers on purpose (Task 3): the app's own explicit `terminate()`
+   * (`onArmedFrameComplete`) and `program()`'s leading PREPARE step
+   * (`queueTerminateAutoCycle` via `onClearingFrameComplete`) send the SAME
+   * wire command — `buildTerminate()`, byte for byte — so they get the SAME
+   * machine reaction. That equivalence is the finding, not an
+   * implementation convenience: interface-notes.md §18 session 3 shows
+   * `{"kind":"terminated"}` firing off the prepare step's terminate in
+   * every mid-session arm it recorded (Step 5 and the REPRO row, both
+   * mid-send), and this file used to ack that frame and change NOTHING —
+   * no transition, no status — which is why CI could never see either the
+   * empty arm or the settle that prevents it.
+   *
+   * `latestStatus` CAN be null here (an untouched fake, or a terminate that
+   * lands after `phase` became `"armed"` but before fix-round 1's F1
+   * withheld armed bundle has been flushed): the fallback below is the
+   * state the machine is in at that moment — armed, nothing rowed — not a
+   * defensive guess.
+   */
+  function synthesizeTerminated(): FakeStatusEvent {
+    const previous: FakeStatusEvent =
+      latestStatus ?? zeroedStatus(WORKOUTSTATE_WAITTOBEGIN);
+    return {
+      atMs: virtualClock,
+      kind: "status",
+      workoutState: WORKOUTSTATE_TERMINATE,
+      elapsedSeconds: previous.elapsedSeconds,
+      distanceMeters: previous.distanceMeters,
+      spm: 0,
+      currentSplit: previous.currentSplit,
+      heartRateBpm: previous.heartRateBpm,
+      programIntervalIndex: previous.programIntervalIndex,
+    };
+  }
+
+  /**
+   * The machine's own reaction to `program()`'s prepare step, queued one
+   * status per `tick()` (Task 3, design spec §1c): **terminated → idle →
+   * armed**, which is CSAFE-DEF Appendix E's `Terminate -> Rearm ->
+   * WaitToBegin` cycle in `MonitorFrame` terms — `WORKOUTSTATE_REARM` is
+   * the ordinal `pm5/parse.ts` maps to `"idle"`, and `WORKOUTSTATE_WAITTOBEGIN`
+   * the one it maps to `"armed"`. Both hardware traces of the cycle show
+   * exactly this ordering (interface-notes.md §18 session 3 "Live bisect":
+   * REPRO ran rowing → terminated → idle → armed over ~0.85 s of PM clock;
+   * Step 5 the same shape inside 0.06 s).
+   *
+   * TICK-DRIVEN, not synchronous — unlike `onArmedFrameComplete`'s single
+   * terminated status, which this file has always delivered inline as "the
+   * fake's own synchronous stand-in for the PM's real, near-instant
+   * response." The distinction is the whole point of the settle
+   * (`driver.ts`'s `waitForPrepareSettle`): the PM's reaction to a terminate
+   * is not instantaneous, it is several 0x0031 ticks long, and a program
+   * whose frames go out INSIDE that window lands on a machine that is still
+   * running. Delivering all three states synchronously inside the prepare's
+   * ack would make the fake's machine settle before any programming frame
+   * could possibly arrive — i.e. it would make §19.13's empty arm
+   * unreachable, and the settle unfalsifiable.
+   *
+   * Only queued when the prepare's terminate lands on a machine that is
+   * actually RUNNING (`rowing`/`resting`). A terminate sent to a machine
+   * that is not mid-piece is a plain ACCEPT that changes nothing on the
+   * monitor — §18 session 3 item 15's captured byte, taken from an
+   * armed-idle screen: the ack came back READY with no state change
+   * recorded anywhere in the trace. Same narrow gate `driver.ts`'s
+   * `waitForPrepareSettle` uses for its entry condition, for the same
+   * reason: `rowing`/`resting` is what both hardware observations show, and
+   * inventing a cycle for the states nobody has observed one from would
+   * teach CI a fiction.
+   */
+  function queueTerminateAutoCycle(): void {
+    autoCycle = [
+      synthesizeTerminated(),
+      zeroedStatus(WORKOUTSTATE_REARM),
+      zeroedStatus(WORKOUTSTATE_WAITTOBEGIN),
+    ];
+  }
+
+  /** One step of the queued auto-cycle per `tick()`, delivered through the
+   *  same `deliverOrCache` path a scripted status takes (so a cycle that
+   *  elapses while the link is down is cached and flushed by
+   *  `completeReconnect()`, exactly like the rest of the machine's
+   *  bookkeeping — the PM does not pause its own state machine for the
+   *  phone's radio). A no-op once the cycle has drained. */
+  function advanceAutoCycle(): void {
+    const next = autoCycle.shift();
+    if (next) deliverOrCache(next);
+  }
+
   /** The clear step's own chunk assertion (plan Task 2) — reuses
    *  `terminateChunks`, the SAME bytes `assertArmedChunk` below checks for
    *  the app's own, later, explicit `terminate()` call. Separate cursor
@@ -878,24 +1053,30 @@ export function createFakeTransport(
     clearChunkCursor += 1;
   }
 
-  /** Called once the prepare step's chunks have all arrived. The ack
-   *  depends on the machine's LOAD STATE: rejected with nothing loaded and
-   *  ACCEPTED with a workout loaded (§19.1's `S2 D2`/`S2 D3` rows, raw
-   *  `f1 01 76 01 13 65 f2` / `f1 81 76 01 13 e5 f2`). The nothing-loaded
-   *  refusal is the ONE behaviour here still sourced from the withdrawn
-   *  parse — §19.1's `S1 CLEAN RUN 2` row is `NARR-NB`, no byte at all, and
-   *  its "rejected — nothing to terminate" label came from the very
-   *  whole-byte compare §19.1 overturned. Kept, with that stated:
-   *  `FakeScript.loadedWorkout`'s own doc comment has the full reasoning.
-   *  Either way the
-   *  loaded workout SURVIVES: terminate's documented destination is *Rearm*
-   *  — the SAME workout made ready again (§19.5) — which is the whole
-   *  reason `program()` cannot treat this step as a clear. Advances into
-   *  `"programming"` regardless: the driver sends the program next no
-   *  matter which ack it got. `timeoutInjected` short-circuits this exactly
-   *  like the other two frame-complete handlers below: the bytes were
-   *  already verified correct, but no ack goes out and `phase` does not
-   *  advance.
+  /** Called once the prepare step's chunks have all arrived. **ACCEPTED**
+   *  — always, whatever is or is not loaded (§19.1's `S2 D2`/`S2 D3` rows,
+   *  raw `f1 01 76 01 13 65 f2` / `f1 81 76 01 13 e5 f2`, for the loaded
+   *  case; §18 session 3 **item 15**'s `f1 81 76 01 13 e5 f2` for the empty
+   *  one). The nothing-loaded REFUSAL this function used to send by default
+   *  is gone: it was the last behaviour in this file sourced from the
+   *  withdrawn whole-byte parse (§19.1's `S1 CLEAN RUN 2` row, `NARR-NB` —
+   *  no byte at all), and item 15 finally captured the byte, which decodes
+   *  to an accept. It survives only as `FakeScript.refuseNextPrepare`,
+   *  marked never-observed at its own definition, because the driver's
+   *  prepare SWALLOW rule still needs something to swallow.
+   *
+   *  An ACCEPTED prepare that lands on a RUNNING machine gets the machine
+   *  reaction the wire command actually produces —
+   *  `queueTerminateAutoCycle()` above, terminated → idle → armed across
+   *  the next three ticks. A refused one changes nothing, which is what a
+   *  refusal means. Either way the loaded workout SURVIVES: terminate's
+   *  documented destination is *Rearm* — the SAME workout made ready again
+   *  (§19.5) — which is the whole reason `program()` cannot treat this step
+   *  as a clear. Advances into `"programming"` regardless: the driver sends
+   *  the program next no matter which ack it got. `timeoutInjected`
+   *  short-circuits this exactly like the other two frame-complete handlers
+   *  below: the bytes were already verified correct, but no ack goes out
+   *  and `phase` does not advance.
    *
    *  THIS IS THE RESET POINT for the programming sequence (Task 6 fix
    *  round, review MED-1). `program()` always leads with this step and then
@@ -909,13 +1090,19 @@ export function createFakeTransport(
    *  `programming chunk 12 mismatch` on the retry's very first chunk. */
   function onClearingFrameComplete(frame: Uint8Array): void {
     if (timeoutInjected) return;
-    sendAck(
-      loadedIntervalCount === null ? "reject" : "ok",
-      echoedCommandIds(frame),
-    );
+    if (refusePrepare) {
+      refusePrepare = false;
+      sendAck("reject", echoedCommandIds(frame));
+    } else {
+      sendAck("ok", echoedCommandIds(frame));
+      if (machineState === "rowing" || machineState === "resting") {
+        queueTerminateAutoCycle();
+      }
+    }
     phase = "programming";
     programChunkCursor = 0;
     programFrameCursor = 0;
+    sawRunningDuringProgramming = false;
   }
 
   // Byte-for-byte verification happens on every individual WRITE (BLE
@@ -949,6 +1136,20 @@ export function createFakeTransport(
    *  also flips `linkDown` and fires `onDisconnect`; this does neither). */
   function onProgrammingFrameComplete(frame: Uint8Array): void {
     if (timeoutInjected) return;
+    // §19.13, THE EMPTY ARM, state-keyed: a programming frame that arrives
+    // while the machine is STILL mid-piece poisons the whole sequence's
+    // arm. Recorded per frame and sticky to the end of the sequence,
+    // because that is the shape the hardware repro had — `program-many`
+    // went out ~52 s into a running workout and the trace shows
+    // `{"kind":"terminated"}` firing MID-send, so its last frames landed on
+    // a machine that had already stopped running, and it armed empty
+    // anyway. Keyed on the machine's STATE and never on a tick count: a
+    // tick-counted trigger would be modelling `driver.ts`'s settle budget
+    // (the fix) instead of the machine (the defect), and would go on
+    // "passing" if that budget were ever wrong.
+    if (machineState === "rowing" || machineState === "resting") {
+      sawRunningDuringProgramming = true;
+    }
     const echo = echoedCommandIds(frame);
     const failure = takeNextAckFailure();
     if (failure !== null) {
@@ -973,7 +1174,22 @@ export function createFakeTransport(
       // resting state at all. What the machine holds is now what was just
       // programmed, whatever it held before; nothing is ever wiped to
       // `null` here.
-      loadedIntervalCount = script.program.intervals.length;
+      //
+      // …EXCEPT that a sequence which landed on a running machine arms
+      // EMPTY (§19.13): the machine holds a workout with NO interval
+      // structure — `loadedIntervals()` reads `0`, never `null` (something
+      // IS loaded; it has nothing in it), and no boundary is ever reported
+      // for it (`deliverOrCache`). `verifyArmed`'s `state === "armed"` is
+      // satisfied either way, which is precisely the hazard: on hardware
+      // both empty arms passed it.
+      armedEmpty = sawRunningDuringProgramming;
+      loadedIntervalCount = armedEmpty ? 0 : script.program.intervals.length;
+      // Whatever the prepare's terminate left mid-flight is superseded: the
+      // machine has just re-armed on a program of its own, and the Rearm
+      // cycle it was walking toward `WaitToBegin` has nowhere left to go.
+      // (Only ever non-empty on the settle-disabled path — with the settle
+      // on, the driver holds its frames until this cycle has finished.)
+      autoCycle = [];
       // …and the SESSION bookkeeping that belonged to the previous workout
       // goes with it (Task 6 fix round, review MED-2). 0x0033's Last Split
       // Time/Distance is "where the interval currently running began",
@@ -1006,14 +1222,11 @@ export function createFakeTransport(
   /** Called once the terminate frame's chunks have all arrived — acks and
    *  immediately reports the TERMINATE status (the fake's own synchronous
    *  stand-in for the PM's real, near-instant response), carried over from
-   *  whatever the machine last reported.
-   *
-   *  `latestStatus` CAN be null here, which an earlier version of this
-   *  function asserted away: since fix-round 1's F1 the armed bundle is
-   *  withheld until the next `tick()`/`deliverArmedNow()`, so a terminate
-   *  can legitimately arrive after `phase` became `"armed"` but before any
-   *  status has ever gone out. The fallback below is the state the machine
-   *  is in at that moment — armed, nothing rowed — not a defensive guess. */
+   *  whatever the machine last reported by `synthesizeTerminated()`, which
+   *  is the SAME synthesis `program()`'s prepare step now gets (that
+   *  function's own doc comment: same wire command, same reaction — the
+   *  difference is only that the prepare's arrives spread across ticks,
+   *  because that window is what the settle exists to wait out). */
   function onArmedFrameComplete(frame: Uint8Array): void {
     if (timeoutInjected) return; // same short-circuit as onProgrammingFrameComplete
     terminateChunkCursor = 0;
@@ -1024,33 +1237,12 @@ export function createFakeTransport(
     // the cursors rewound to its first frame. (A FURTHER terminate is legal
     // too — `write()`'s own terminate recognition below picks that up.) The
     // loaded workout is NOT cleared: terminate routes to Rearm, the SAME
-    // workout made ready again (§19.5), so the next prepare step acks "ok"
-    // rather than the nothing-loaded refusal a fresh connection gets.
+    // workout made ready again (§19.5), so what `loadedIntervals()` reports
+    // survives this.
     phase = "programming";
     programChunkCursor = 0;
     programFrameCursor = 0;
-    const previous: FakeStatusEvent = latestStatus ?? {
-      atMs: virtualClock,
-      kind: "status",
-      workoutState: WORKOUTSTATE_WAITTOBEGIN,
-      elapsedSeconds: 0,
-      distanceMeters: 0,
-      spm: 0,
-      currentSplit: 0,
-      heartRateBpm: null,
-      programIntervalIndex: 0,
-    };
-    const terminated: FakeStatusEvent = {
-      atMs: virtualClock,
-      kind: "status",
-      workoutState: WORKOUTSTATE_TERMINATE,
-      elapsedSeconds: previous.elapsedSeconds,
-      distanceMeters: previous.distanceMeters,
-      spm: 0,
-      currentSplit: previous.currentSplit,
-      heartRateBpm: previous.heartRateBpm,
-      programIntervalIndex: previous.programIntervalIndex,
-    };
+    const terminated = synthesizeTerminated();
     // Through `setLatestStatus`, never by direct assignment (Task 6 fix
     // round, review MED-3): that function is the only place `machineState`
     // is kept in step with what the machine last reported, and since Task 6
@@ -1067,6 +1259,16 @@ export function createFakeTransport(
       setLatestStatus(event);
       if (!linkDown) deliverStatus(event);
     } else {
+      // §19.13: an EMPTY arm has NO interval structure, so this machine
+      // reports no boundary for it — ever. The script's boundary events
+      // describe a workout the machine is not holding, so they are consumed
+      // by the timeline and dropped whole: not delivered, and not booked
+      // into `lastBoundaryCumulative` either (that field is "where the
+      // interval currently running began", and there are no intervals).
+      // Hardware: rowed to 108.4 m past what should have been a 100 m
+      // interval with `intervalIndex` pinned at 0, no `resting` transition
+      // and no `intervalComplete` of any kind.
+      if (armedEmpty) return;
       latestBoundary = event;
       // The machine's own bookkeeping updates HERE, unconditionally —
       // never gated on `linkDown` (see `lastBoundaryCumulative`'s own
@@ -1232,6 +1434,11 @@ export function createFakeTransport(
       // scripted event, so a script's own first timeline entry is never
       // delivered "ahead of" the session actually arming.
       flushArmedIfPending();
+      // Then one step of the machine's own reaction to a prepare step
+      // (Task 3) — ahead of the script's timeline for the same reason: the
+      // machine finishes reacting to what it was just sent before the
+      // session the script describes carries on.
+      advanceAutoCycle();
       runDueEvents();
     },
     deliverArmedNow(): void {

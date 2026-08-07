@@ -8,6 +8,7 @@ import {
   buildTerminate,
 } from "../../domain/monitor/pm5/commands.js";
 import {
+  parseGeneralStatus,
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_REARM,
@@ -868,13 +869,17 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // Trace-assertion #1: programming emitted exactly these command/ack
     // pairs — one "write" per BLE chunk, then one "ack" — filtered
     // straight out of the injectable event log. Scoped to entries AFTER
-    // the prepare step's own "prepare-rejected" marker (plan Task 2/
-    // design spec §3: `program()` now sends `buildTerminate()` as a
-    // leading prepare, which contributes its own write/ack pair to the
-    // SAME log kinds first).
+    // the prepare step's own "prepare-sent" marker (plan Task 2/design
+    // spec §3: `program()` now sends `buildTerminate()` as a leading
+    // prepare, which contributes its own write/ack pair to the SAME log
+    // kinds first). The marker used to be "prepare-rejected" — fix-3 Task
+    // 3 retired the fake's always-refuse prepare (§18 s3 item 15's
+    // captured byte is an ACCEPT), so a clean-state `program()` no longer
+    // records one, and "prepare-sent" is the entry that now ends the
+    // prepare exchange.
     const prepareSeq = log
       .entries()
-      .find((e) => e.kind === "prepare-rejected")!.seq;
+      .find((e) => e.kind === "prepare-sent")!.seq;
     const trace = log
       .entries()
       .filter(
@@ -2338,20 +2343,27 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — terminate()'s post-ack sett
 });
 
 describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejection, verify", () => {
-  it("a prepare-rejected step still proceeds to program the real workout (interface-notes.md §18/§19.4: expected, never fatal)", async () => {
+  it("a REFUSED prepare step still proceeds to program the real workout — swallowed, logged, never fatal (interface-notes.md §19.4; the refusal itself is synthetic, §18 s3 item 15)", async () => {
     // Realistic fixture (briefing: "at least one test per client task
     // starts from a real library workout"): Sea Fret, not a hand-built
-    // minimum. Against TODAY's code (no prepare step at all), `program()`
-    // never records a "prepare-rejected" entry — this assertion fails there.
+    // minimum.
+    //
+    // Fix-3 Task 3: the refusal is no longer the fake's DEFAULT — item
+    // 15's captured byte proved the PM accepts a terminate with nothing
+    // running (`f1 81 76 01 13 e5 f2`, an accept) — so this test asks for
+    // one explicitly through the never-observed `refuseNextPrepare` hook.
+    // Against a fake without the hook the prepare acks "ok" and the
+    // `prepare-rejected` assertion below fails.
     const program = seaFretProgram();
-    const { fake, driver, log, events } = harness({ program });
+    const { fake, driver, log, events } = harness({
+      program,
+      refuseNextPrepare: true,
+    });
 
     await programAndArm(driver, fake, program);
 
-    // The fake's clearing phase ALWAYS rejects — the common
-    // "nothing was loaded" case (interface-notes.md §18) — and `program()`
-    // must treat that as informational, not fatal: it logs and proceeds
-    // straight into the real send.
+    // `program()` must treat a refused prepare as informational, not
+    // fatal: it logs and proceeds straight into the real send.
     expect(log.entries().some((e) => e.kind === "prepare-rejected")).toBe(true);
     // The real program still landed and was verified: `createFakeTransport`
     // itself asserts every programming byte against
@@ -2359,11 +2371,28 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     // reaching "armed" here is proof the real sequence was actually sent —
     // not skipped, not corrupted by the leading prepare attempt.
     expect(events.some((e) => e.kind === "armed")).toBe(true);
-    // F7 (fix-round 1): a HEALTHY program must never show a spurious
-    // "program-rejection" from its own routine, swallowed prepare-step nak.
+    // F7 (fix-round 1): a swallowed prepare-step refusal must never show
+    // up as a spurious "program-rejection" on an otherwise healthy call.
     expect(log.entries().some((e) => e.kind === "program-rejection")).toBe(
       false,
     );
+  });
+
+  it("the same program with NO hook records no rejection at all — the always-refuse default is gone (§18 s3 item 15: the captured byte is an accept)", async () => {
+    // The blast-radius test, stated as a behaviour rather than left
+    // implicit in the suite: every clean-state `program()` in this file
+    // now takes the ACCEPTED-prepare path. Restoring the fake's old
+    // nothing-loaded refusal makes this fail.
+    const program = seaFretProgram();
+    const { fake, driver, log, events } = harness({ program });
+
+    await programAndArm(driver, fake, program);
+
+    expect(log.entries().some((e) => e.kind === "prepare-rejected")).toBe(
+      false,
+    );
+    expect(log.entries().some((e) => e.kind === "prepare-sent")).toBe(true);
+    expect(events.some((e) => e.kind === "armed")).toBe(true);
   });
 
   it.each([
@@ -3923,13 +3952,15 @@ describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-fra
     const { fake, driver, log } = harness({ program });
     await programAndArm(driver, fake, program);
 
-    // Scoped to entries AFTER the prepare step's own "prepare-rejected"
+    // Scoped to entries AFTER the prepare step's own "prepare-sent"
     // marker (plan Task 2/design spec §3) — `program()`'s leading
     // `buildTerminate()` prepare contributes its own write/ack pair to
-    // these SAME log kinds first.
+    // these SAME log kinds first. ("prepare-rejected" until fix-3 Task 3
+    // retired the fake's always-refuse prepare — item 15's byte is an
+    // accept, so a clean-state program() records no rejection at all.)
     const prepareSeq = log
       .entries()
-      .find((e) => e.kind === "prepare-rejected")!.seq;
+      .find((e) => e.kind === "prepare-sent")!.seq;
     const trace = log
       .entries()
       .filter(
@@ -4872,14 +4903,14 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
 });
 
 describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before the real send, design spec §1b)", () => {
-  // NOTE for Task 3: `createFakeTransport`'s `onClearingFrameComplete` acks
-  // the prepare and changes NOTHING — no state transition, no status
-  // delivery (design spec Stage 1c, not yet built). Every test below
-  // therefore drives a bare `stubTransport` by hand, the `driver.test.ts`
-  // house pattern for edges the honest fake cannot yet reach (see
-  // `stubTransport`'s own doc comment) — an end-to-end test where the FAKE
-  // itself synthesizes the terminate->idle->armed cycle behind a running
-  // program is Task 3's own to add once that model exists.
+  // Every test below drives a bare `stubTransport` by hand: they pin the
+  // WAIT's own mechanics (which tick counts, which states release it, what
+  // a disconnect mid-wait does), and that needs tick-by-tick control the
+  // fake's honest protocol will not hand over. The END-TO-END pair — the
+  // same program over a rowing FAKE, settle off vs settle on, where the
+  // fake itself synthesizes the terminate → idle → armed cycle — is Task
+  // 3's, further down this file ("fix-3 Task 3 — the settle and the empty
+  // arm, end to end over the honest fake").
 
   function sentCount(transport: ReturnType<typeof stubTransport>): number {
     return transport.writes.filter(
@@ -5241,6 +5272,196 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     // (NOT `pendingSettle`'s "resolve and proceed" shape — that would have
     // sent frames onto a link already known to be down).
     expect(sentCount(transport)).toBe(afterPrepare);
+  });
+});
+
+describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to end over the honest fake (design spec §1c, interface-notes.md §19.13)", () => {
+  // Task 2 could only pin the settle against a hand-driven
+  // `stubTransport`, because the fake's prepare step acked and changed
+  // nothing. Now that it reacts the way the wire command actually makes
+  // the machine react, these two tests run the SAME program over the SAME
+  // rowing machine and differ only in whether the settle is on — which is
+  // exactly the pair sessions 4a/4b take to the erg.
+
+  function rowingAt(atMs: number, elapsedSeconds: number): FakeTimelineEvent {
+    return {
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds,
+      distanceMeters: elapsedSeconds * 4,
+      spm: 24,
+      currentSplit: 120,
+      heartRateBpm: 140,
+      programIntervalIndex: 0,
+    };
+  }
+
+  /** The machine going on reporting WaitToBegin at its own ~2Hz — the tick
+   *  the settle's "armed AND one further tick" end condition needs after
+   *  the auto-cycle has finished. */
+  function stillArmedAt(atMs: number): FakeTimelineEvent {
+    return {
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_WAITTOBEGIN,
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: 140,
+      programIntervalIndex: 0,
+    };
+  }
+
+  /** Sea Fret's interval 0 (a 300 s warmup, no trailing rest) completing. */
+  function boundaryAt(atMs: number): FakeTimelineEvent {
+    return {
+      atMs,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 300,
+        distanceMeters: 1100,
+        avgSplit: 136,
+        avgSpm: 22,
+        avgHeartRateBpm: 140,
+      },
+      cumulativeElapsedSeconds: 300,
+      cumulativeDistanceMeters: 1100,
+    };
+  }
+
+  async function flush(): Promise<void> {
+    for (let i = 0; i < 100; i += 1) await Promise.resolve();
+  }
+
+  function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+    return a.length === b.length && a.every((v, i) => v === b[i]);
+  }
+
+  it("settle DISABLED (prepareSettleTicks: 0 — session 4b's own detection row): a program sent over a ROWING machine arms EMPTY, and no boundary ever comes", async () => {
+    const program = seaFretProgram();
+    const { fake, driver, events } = harness(
+      {
+        program,
+        events: [rowingAt(0, 10), rowingAt(1000, 20), boundaryAt(2000)],
+      },
+      { prepareSettleTicks: 0 },
+    );
+
+    fake.tick(0); // the machine is genuinely mid-piece at dispatch
+
+    await programAndArm(driver, fake, program);
+
+    // Every checkpoint this codec reads says success — `frameStatus` "ok"
+    // on every frame, `verifyArmed` satisfied — which is precisely §19.13's
+    // hazard: both hardware empty arms passed exactly these.
+    expect(events.some((e) => e.kind === "armed")).toBe(true);
+    // …and the machine is holding a workout with NOTHING in it. `0`, not
+    // `null`: something IS loaded (Stage 2's readback is what will read
+    // this same fact off the wire).
+    expect(fake.loadedIntervals()).toBe(0);
+
+    // Row on, well past the scripted boundary: no interval structure
+    // exists, so no boundary is ever reported for this program — hardware
+    // rowed 108.4 m past what should have been a 100 m interval and saw
+    // none.
+    for (let i = 0; i < 5; i += 1) fake.tick(1000);
+    expect(events.some((e) => e.kind === "intervalComplete")).toBe(false);
+    // The link is alive throughout — frames keep arriving; it is the
+    // STRUCTURE that is missing, not the stream.
+    expect(events.some((e) => e.kind === "frame")).toBe(true);
+  });
+
+  it("settle ON (the default): the same program over the same rowing machine holds its frames until the machine reports armed — and the arm is real, boundaries and all", async () => {
+    const program = seaFretProgram();
+    const fake = createFakeTransport({
+      program,
+      events: [
+        rowingAt(0, 10),
+        stillArmedAt(1),
+        rowingAt(1500, 20),
+        boundaryAt(2000),
+      ],
+    });
+
+    // One ordered trace of BOTH sides of the race this test exists to
+    // decide: every status the machine reports, and the moment the first
+    // programming chunk is written.
+    const order: string[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (bytes) => {
+      const decoded = parseGeneralStatus(bytes);
+      if ("error" in decoded) throw new Error("unparseable fixture status");
+      order.push(`state:${decoded.workoutState}`);
+    });
+    const firstProgramChunk = buildProgrammingSequence(program)[0]![0]!;
+    const spy: Transport = {
+      ...fake,
+      async write(uuid: string, bytes: Uint8Array): Promise<void> {
+        if (
+          uuid === RECEIVE_CHARACTERISTIC_UUID &&
+          sameBytes(bytes, firstProgramChunk)
+        ) {
+          order.push("programming-frames-out");
+        }
+        await fake.write(uuid, bytes);
+      },
+    };
+    const log = createEventLog();
+    const driver = createPm5Driver(spy, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    fake.tick(0); // rowing at dispatch — the settle's entry condition
+    const pending = driver.program(program);
+    await flush();
+
+    // The prepare has gone out and the wait is registered: not one
+    // programming byte has been written.
+    expect(order).toStrictEqual([`state:${WORKOUTSTATE_INTERVALWORKTIME}`]);
+    expect(log.entries().some((e) => e.kind === "prepare-settle")).toBe(true);
+
+    // The machine's own reaction, one status tick at a time…
+    for (let i = 0; i < 3; i += 1) {
+      fake.tick(0);
+      await flush();
+    }
+    expect(order).toStrictEqual([
+      `state:${WORKOUTSTATE_INTERVALWORKTIME}`,
+      `state:${WORKOUTSTATE_TERMINATE}`,
+      `state:${WORKOUTSTATE_REARM}`,
+      `state:${WORKOUTSTATE_WAITTOBEGIN}`,
+    ]);
+
+    // …and the one further tick the settle holds out for before releasing.
+    fake.tick(1);
+    await flush();
+
+    // THE ORDERING: every programming frame went out after the machine had
+    // finished changing its mind. Without the settle (the test above) this
+    // marker sits between the rowing tick and the terminate one.
+    expect(order.indexOf("programming-frames-out")).toBe(5);
+    expect(order.indexOf(`state:${WORKOUTSTATE_WAITTOBEGIN}`)).toBeLessThan(
+      order.indexOf("programming-frames-out"),
+    );
+    expect(
+      log
+        .entries()
+        .some(
+          (e) => e.kind === "prepare-settled" && e.detail.includes("tick 3"),
+        ),
+    ).toBe(true);
+
+    fake.tick(0); // the armed bundle the real send produced
+    await expect(pending).resolves.toBeUndefined();
+
+    // The arm is REAL: the whole program is loaded, and rowing it produces
+    // the boundary the empty arm never could.
+    expect(fake.loadedIntervals()).toBe(program.intervals.length);
+    expect(events.some((e) => e.kind === "armed")).toBe(true);
+    fake.tick(2000);
+    expect(events.some((e) => e.kind === "intervalComplete")).toBe(true);
   });
 });
 
