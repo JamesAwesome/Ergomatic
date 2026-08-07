@@ -146,6 +146,67 @@ const SHORT_PROGRAM: WorkoutProgram = {
   })),
 };
 
+/** Session-3 live bisect: `program-many` (25×100m rest 0, 7 frames) armed
+ *  EMPTY (`:00`, no boundary past 100m) while `program-short` (3×500m rest
+ *  60, single frame) armed correctly — three variables differ, so three
+ *  one-variable probes, each read off the monitor with NO rowing. Named for
+ *  the variable they isolate against SHORT_PROGRAM's known-good shape. */
+const BISECT_100M: WorkoutProgram = {
+  // only the VALUE changes vs SHORT (500 → 100, the Table 19 minimum)
+  intervals: Array.from({ length: 3 }, () => ({
+    kind: "distance" as const,
+    value: 100,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 60,
+  })),
+};
+const BISECT_REST0: WorkoutProgram = {
+  // only the REST changes vs SHORT (60 → 0)
+  intervals: Array.from({ length: 3 }, () => ({
+    kind: "distance" as const,
+    value: 500,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 0,
+  })),
+};
+const BISECT_FRAMES: WorkoutProgram = {
+  // only the COUNT changes vs SHORT (3 → 25: multi-frame, like fix-1's
+  // original MANY shape)
+  intervals: Array.from({ length: 25 }, () => ({
+    kind: "distance" as const,
+    value: 500,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 60,
+  })),
+};
+
+/** Round 2: every single variable armed correctly (100m ✓, rest0 ✓,
+ *  25-count/7-frames ✓) while the triple (25×100m r0) arms EMPTY — so the
+ *  defect is an interaction. Two pair-probes isolate which pair. */
+const BISECT_PAIR_COUNT_VALUE: WorkoutProgram = {
+  // 25 × 100m, rest 60 — count+value together, rest normal
+  intervals: Array.from({ length: 25 }, () => ({
+    kind: "distance" as const,
+    value: 100,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 60,
+  })),
+};
+const BISECT_PAIR_VALUE_REST: WorkoutProgram = {
+  // 3 × 100m, rest 0 — value+rest together, count small
+  intervals: Array.from({ length: 3 }, () => ({
+    kind: "distance" as const,
+    value: 100,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 0,
+  })),
+};
+
 const rawLog = createEventLog();
 // Fix-round 1, F4: taps every entry as it's recorded so the page/console
 // gets a live line the INSTANT verification begins — `sendSequence`
@@ -273,6 +334,19 @@ const REMOTE: Record<string, () => void | Promise<void>> = {
     ),
   "program-short": () =>
     programNamed("program(3 intervals, §17 #6)", SHORT_PROGRAM),
+  "bisect-100m": () =>
+    programNamed("bisect(3×100m r60 — isolates VALUE)", BISECT_100M),
+  "bisect-rest0": () =>
+    programNamed("bisect(3×500m r0 — isolates REST)", BISECT_REST0),
+  "bisect-frames": () =>
+    programNamed("bisect(25×500m r60 — isolates COUNT/frames)", BISECT_FRAMES),
+  "bisect-count-value": () =>
+    programNamed(
+      "bisect(25×100m r60 — COUNT+VALUE pair)",
+      BISECT_PAIR_COUNT_VALUE,
+    ),
+  "bisect-value-rest": () =>
+    programNamed("bisect(3×100m r0 — VALUE+REST pair)", BISECT_PAIR_VALUE_REST),
   terminate,
   disconnect,
   dump,

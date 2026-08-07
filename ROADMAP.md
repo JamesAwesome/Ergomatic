@@ -959,11 +959,16 @@ observation, never as something Concept2 documents.
 ## Phase 7A-fix-2 — the status bitfield, and what it invalidates
 
 **Status:** Code complete (Tasks 1-6, commits `0d0af28`..`fcb7a4c` on
-`phase-7a-monitor-domain`). **The merge-gate row is the ONLY remaining
-item — James-operated, and has NOT happened yet**
-(`docs/monitor/pm5-interface-notes.md` §17, "The merge-gate row (session 3,
-prepared, NOT yet run)"; §18's session-3 heading holds its EMPTY,
-explicitly-pending observation slots). **Heart-rate verification joins this
+`phase-7a-monitor-domain`). **The merge-gate row has RUN** (2026-08-06,
+laptop session 3 — `docs/monitor/pm5-interface-notes.md` §17, "The
+merge-gate row (session 3, RUN 2026-08-06 — results in §18)"; §18's
+session-3 heading records Expected-vs-Observed for all five steps, all
+PASSED, plus item 15 (ANSWERED)). The row's own live bisect surfaced a NEW
+defect outside this phase's own scope — programming over a RUNNING workout
+arms structurally empty (`docs/monitor/pm5-interface-notes.md` §19.13) —
+scoped to its own follow-up, Phase 7A-fix-3, below; it does not reopen any
+bullet in this phase. **The merge decision remains James's, not automatic
+on the row having run.** **Heart-rate verification joined this
 row** (owner addition, whole-branch fix wave, 2026-08-06): James's Apple
 Watch is now paired to the PM5 as its HR source, so Steps 2 and 4 also
 observe live `heartRateBpm` and the actuals' `avgHeartRateBpm` PRESENT for
@@ -1056,11 +1061,77 @@ generated, now shipped.
 **Exit:** every bullet above has a passing test (2282 all-projects / 111
 files, e2e 210 — Task 6's count, unchanged by Task 7's docs-only close-out);
 no test encodes a whole-byte status comparison; §18/§19's corrected record
-and the code agree. **PR #52 leaves draft only after the merge-gate row
-(`docs/monitor/pm5-interface-notes.md` §17's five steps, James-operated and
-NOT yet run) is completed, §18 records its Expected-vs-Observed for each
-step, AND James gives explicit approval** — code-complete is necessary, not
-sufficient.
+and the code agree. **The merge-gate row
+(`docs/monitor/pm5-interface-notes.md` §17's five steps, James-operated) has
+RUN (2026-08-06, laptop session 3), and §18 records Expected-vs-Observed for
+each step — all five PASSED, and item 15 is ANSWERED alongside it.** The
+row's own live bisect found a new, scoped-out defect (Phase 7A-fix-3,
+below) that no bullet in this phase claimed as in scope. **PR #52 leaves
+draft until James gives explicit approval** — the row having run is
+necessary, not sufficient, and the merge decision is his, not this
+commit's.
+
+## Phase 7A-fix-3 — program over a live piece
+
+**Status:** Not started — needs design, not assumed.
+**Trigger:** FIRED — the merge-gate row's own live bisect (2026-08-06,
+laptop session 3, `docs/monitor/pm5-interface-notes.md` §18 "Live bisect",
+§19.13). Two unrelated program shapes (`program-many`, 25×100m no-rest, 7
+frames; `program-short`, 3×500m r60, 1 frame) each armed structurally
+EMPTY — `verifyArmed` PASSED, every frame acked, the monitor showed `:00` —
+the one time each was sent while the target machine was still `rowing`.
+Seven other sends of six different shapes (single-variable and paired, from
+a settled/armed-idle machine) all armed correctly, isolating the variable
+to machine STATE, not program CONTENT.
+**Repro recipe:** terminate a workout that is currently mid-piece (state
+`rowing`/`resting`) by sending `program()` again immediately — its own
+internal `sendPrepare()` terminate-shaped step fires while the machine is
+still live, and the send that follows is accepted, verified armed, and
+structurally empty.
+**Authority:** `docs/monitor/pm5-interface-notes.md` §18 (laptop session 3)
+and §19.13 for the finding; §17 items 5/12/15/16/17 for what it does and
+does not close.
+
+- [ ] **Candidate remedy A — settle after a mid-session terminate (DESIGN,
+      do not assume).** `program()`'s `sendPrepare()` step, sent while the
+      machine is still `rowing`/`resting`, may need to wait for the
+      documented Appendix E auto-cycle (WaitToBegin/Rearm) to actually
+      complete before the programming frames that follow are trusted — a
+      tick-bounded settle, not a blind proceed. Open questions a design
+      pass must answer: how long, what signal marks "settled" (a
+      status-characteristic state read, not a fixed delay), and whether
+      this changes `program()`'s latency for the already-working idle/
+      finished-workout cases.
+- [ ] **Candidate remedy B — item 12's structural readback, as detection
+      (DESIGN, do not assume).** Reading `0x0031`'s `workoutType`/
+      `workoutDurationRaw`/`workoutDurationType` back after arming and
+      comparing against what was sent would DETECT an empty arm — both
+      hardware-observed empty arms would have failed this check — even if
+      remedy A's timing is imperfect. Open question a design pass must
+      answer: what `program()` does on a detected mismatch (retry? surface
+      a typed error?) — the check itself is twice-justified by hardware
+      (§17 item 12), but the response to a failed check is not yet
+      designed.
+- [ ] **Remove the fake's idle-terminate refusal (§17 item 15).**
+      `src/monitor/transports/fake.ts`'s `onClearingFrameComplete` should
+      accept a bare idle terminate unconditionally; its refusal, if the
+      fake keeps one at all, moves to an explicit synthetic hook
+      (`injectNak`/`failNextProgramFrame`'s pattern) — real hardware never
+      refused it (§18, §17 item 15).
+- [ ] **Revise `sendPrepare`'s doc comment.** `src/monitor/driver.ts`'s
+      `sendPrepare` comment cites "hardware showed the PM refuses a
+      terminate when nothing is currently running or loaded" — that
+      citation is retired (§17 item 15); the comment needs to state the
+      swallow-as-routine behaviour on its own terms (ANY non-disconnected
+      prepare outcome is swallowed, by design), without the withdrawn
+      hardware claim.
+
+**Exit:** not yet defined — waits on the design pass above. Neither
+candidate remedy is assumed; this phase exists to choose between them (or
+use both) after design, not to implement either sight-unseen. Whether this
+also resolves session 1's still-OPEN Verdict (a) (`:00`/`:00` empty
+display, §19.1/§19.2) is a hypothesis this phase may confirm, not something
+it starts by assuming.
 
 ## Phase 7B — PM5 connected surface
 
@@ -1126,18 +1197,28 @@ reconciled against 7A's shipped types before this phase starts.
         `[0, L+1]` with `null` + a `"divergence"` log entry outside it.
       - **The `:00`/`:00` empty-display transition remains STANDING OPEN**
         (§19.1's Verdict (a)) — not explained, not re-explained as a
-        rejection-wipe artifact (that mechanism was our own parse bug);
+        rejection-wipe artifact (that mechanism was our own parse bug).
+        Laptop session 3's live bisect (§19.13) found a REAL, hardware-
+        confirmed mechanism that produces the identical `:00` symptom
+        (programming over a running workout arms empty) and is now
+        Verdict (a)'s LEADING candidate explanation — not independently
+        confirmed as the same root cause, so Verdict (a) itself stays open.
         7B's "confirm the monitor idle before programming" connect-flow
-        warning re-founds on THIS open finding, not on the withdrawn
-        destruction claim.
-      - Distance-kind intervals and a genuine multi-FRAME program from a
-        known-empty machine remain untested on real hardware — §17's
-        merge-gate row (Step 5, `program-many`) is prepared to close this,
-        NOT yet run.
-      §17's operative row is now "The merge-gate row (session 3, prepared,
-      NOT yet run)" — a hardware confirmation of Tasks 2-6's CORRECTED
-      parse, not a fresh diagnosis session; results append to §18's
-      session-3 heading, every slot EMPTY pending that row.
+        warning re-founds on this open finding plus its new leading
+        candidate, not on the withdrawn destruction claim.
+      - Distance-kind intervals and a genuine multi-FRAME program landed
+        on real hardware (§17 item 5's merge-gate Step 5) — but that send
+        happened to land on a running workout and armed structurally empty
+        (§19.13), so "does a full multi-frame DISTANCE program retain all
+        its intervals when rowed to completion from a clean state" is
+        STILL untested; it needs its own row, not a re-run of Step 5.
+      §17's operative row, "The merge-gate row (session 3, RUN 2026-08-06 —
+      results in §18)," has run: all five steps PASSED, item 15 is
+      ANSWERED, and results are recorded in §18's session-3 heading. Its own
+      live bisect opened Phase 7A-fix-3 (above) as a separate, scoped
+      follow-up — this phase's own guard/connect-flow work should read that
+      phase's repro recipe before assuming "confirm idle" is sufficient on
+      its own.
 - [ ] Full behavior tested against the fake transport in CI; the laptop
       session above is this phase's live-hardware verification, never a CI
       gate
