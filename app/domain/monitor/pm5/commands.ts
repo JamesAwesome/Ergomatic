@@ -367,8 +367,8 @@ export interface ArmedStructure {
  * own report against (fix-3 Task 4, design spec Stage 2).
  *
  * **HARDWARE-CONFIRMED, SESSION 4a (2026-08-07, PM5 432331249)** — the
- * reading that closed interface-notes.md §17 item 12, recorded in the SDD
- * ledger's own `## SESSION 4a` block until Task 6 files it as §18:
+ * reading that closed interface-notes.md §17 item 12, recorded in
+ * interface-notes.md §18, "SESSION 4a":
  * - `workoutType` reads back `WORKOUTTYPE_VARIABLE_INTERVAL` (`8`) and is
  *   **STABLE at 8 across all three shapes** — TIME (2×60s r30), DISTANCE
  *   (3×500m r60) and rest-0 (2×60s r0). There is no normalization to a

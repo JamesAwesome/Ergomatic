@@ -1366,10 +1366,8 @@ settle off would be worse than one that needed a reconnect.
     count), or at the `verifyTicks` bound — which now
     DEFAULTS to 20 rather than meaning "unbounded", since an unbounded
     verify under a structure predicate turns a caught defect into a hang.
-    The full 4a record lives in the SDD ledger's own `## SESSION 4a` block
-    (`.superpowers/sdd/2026-08-06-phase-7a-fix-3/progress.md`) until Task 6
-    files it as a §18 session-4 section; this table is the disposition, not
-    the raw log.
+    The full 4a record lives in §18, "2026-08-07 session (PM5 432331249) —
+    SESSION 4a" below; this table is the disposition, not the raw log.
 
     > **Superseded correction, kept for the trail (2026-08-06, laptop
     > session 3, §18/§19.13):** the live bisect's Step 5 send and its REPRO
@@ -2386,8 +2384,8 @@ theorized.
 > **RESOLVED (2026-08-07, SESSION 4a → fix-3 Task 4).** Item 12 is
 > ANSWERED — the fields do echo an accepted program, in the units this
 > codec encodes, and they refresh while merely armed (§17 item 12 carries
-> the full table; the raw record is the SDD ledger's `## SESSION 4a` block
-> until Task 6 files it as a §18 session-4 section). `verifyArmed`
+> the full table; the raw record is §18's "SESSION 4a" section below).
+> `verifyArmed`
 > (`src/monitor/driver.ts`) now gates on that readback and rejects
 > `"structure-mismatch"`, so the two arms described above would no longer
 > report success. 4a additionally captured the empty arm's own steady state
@@ -2397,6 +2395,161 @@ theorized.
 **James's explicit approval:** recorded separately from this document —
 the merge-gate row having run and this section being written are both
 necessary, neither is sufficient. **The merge decision remains James's.**
+
+### 2026-08-07 session (PM5 432331249) — SESSION 4a
+
+Results for design spec §Session-4a (`docs/superpowers/specs/
+2026-08-06-phase-7a-fix-3-design.md`) — the reading Stage 1's instrumentation
+(fix-3 Tasks 1-3) existed to take. James-operated, ~6 minutes, one short row.
+Raw trace: the archived `pm5-session4a-final.log` (line/dump counts not
+carried into this ledger's summary — read the archive directly for the raw
+`structure`/`prepare-settled`/`ack` entries this section disposes). Filed by
+Task 6 from `.superpowers/sdd/2026-08-06-phase-7a-fix-3/progress.md`'s own
+`## SESSION 4a` block, which remains the process record; this section is the
+durable one. **Outcome: (a), unanimous** — the ternary tripwire (design spec
+§1, "Outcome space") did not fire; Stage 2 was built as designed, not
+redesigned.
+
+**Item 12, per shape — TRACE-VERIFIED** (read directly off the driver's
+`"structure"` log entries; not a monitor-screen reading). Three armed shapes
+plus the pre-arm baseline, each read while the machine was merely `armed`,
+no rowing:
+
+| Arm | `workoutType` | `workoutDurationRaw` | `workoutDurationType` |
+|---|---|---|---|
+| TIME, 2×60s r30 (`program-two-time`) | `8` | `6000` (60s × 100) | `0` (Time) |
+| DISTANCE, 3×500m r60 (`program-short`) | `8` | `500` (whole metres) | `128` (Distance) |
+| REST-0, 2×60s r0 (`program-no-rest`) | `8` | `6000` | `0` (Time) |
+| pre-arm baseline (nothing ever armed) | `0` | `0` | `128` |
+
+`workoutType` held at `8` across all three shapes — no normalization to a
+rest-less sibling ordinal (`6`/`7`/`9`) anywhere in the sample. The duration
+pair mirrors interval 0 in the same units the encoder writes: seconds × 100
+at identifier `0`, whole metres at identifier `128`. All three shapes and
+the baseline refreshed with the machine merely `armed`; none needed a
+stroke.
+
+**The empty arm's own anatomy — TRACE-VERIFIED, cross-confirmed
+JAMES-VERBAL.** Settle disabled (`settle-off`, so `prepareSettleTicks: 0`),
+`program-short` sent over a running two-time piece, monitor showing `:00`,
+driver reporting acked-armed:
+
+- **Steady state:** `workoutType=1 durationRaw=0 durationType=128` — the
+  duration-reads-0 hypothesis (a photograph-only inference before this
+  session) is CONFIRMED on the wire, and the type degrades from `8` to `1`,
+  which is what makes the type field alone sufficient to catch this shape
+  (`EMPTY_ARM_STRUCTURE`, `domain/monitor/pm5/statusFrames.ts`).
+- **Mid-cycle transients:** before the steady state settled, `structure`
+  entries showed `workoutType=1` carrying STALE, NON-ZERO durations — raw
+  hex for these is in the archived log, not reproduced here. This is the
+  recorded fact that a single mismatched tick is not yet evidence of a
+  wrong arm (`STRUCTURE_MISMATCH_TICKS`'s N=3 rule, `src/monitor/
+  driver.ts`).
+
+**The settle — TRACE-VERIFIED, twice, JAMES-VERBAL cross-confirmed.** Same
+repro, settle ON (the default, 10 ticks): both runs logged
+`prepare-settled: "armed" observed on tick 4 of the wait` — the design
+spec's derived "4-5 ticks" estimate is now a measurement, not an inference,
+and it lands inside the estimate's own range. Both times James read the
+monitor and reported the REAL workout was showing, not `:00` — "surprisingly
+the monitor shows a 500m" (JAMES-VERBAL, `program-short`'s shape). Two runs
+is the full sample; both agree.
+
+**Prepare ack from a rowing machine — TRACE-VERIFIED.** `f1 89 …`: bit 7
+(`0x80`) set = frame-count toggle; bits 4-5 (`0x30`) = `00` = previous-frame
+status OK; bits 0-3 (`0x0F`) = `09` = slave state OFFLINE. Consistent with
+§19.3 (`0x09` mid-session is the documented reading for an erg being rowed
+outside CSAFE master control) — the prepare's own terminate-shaped frame
+gets the same "offline" ack any poll would get from a live erg, not a
+rejection.
+
+**Lab lesson — OPERATIONAL, JAMES-OBSERVED, not a wire finding.** A page
+refresh resets the settle toggle (module state, `scripts/pm5-lab.ts`) — the
+robust order is refresh → toggle → connect, never toggle → refresh →
+connect. This is what makes the toggle command's own "which state it left
+the flag in" echo (§17, "The settle toggle") load-bearing rather than
+cosmetic; the session's own empty-arm and settle readings above both depend
+on the toggle having actually taken effect before `Scan & connect`.
+
+**Consumed by:** fix-3 Task 4 (`verifyArmed`'s structural predicate,
+`STRUCTURE_MISMATCH_TICKS = 3`, `DEFAULT_VERIFY_TICKS = 20`) and Task 5
+(`EMPTY_ARM_STRUCTURE`/`PRE_ARM_BASELINE_STRUCTURE`,
+`domain/monitor/pm5/statusFrames.ts`) — see those files' own doc comments,
+now pointed at this section rather than at the ledger's interim record.
+
+### SESSION 4b (PENDING — James-operated, not yet run)
+
+Design spec §Session-4b's two-row detection test (`docs/superpowers/specs/
+2026-08-06-phase-7a-fix-3-design.md`), scaffolded here so results have a
+destination the moment the row runs. **Every slot below is EMPTY — no
+result has been received, and nothing in this section should be read as
+anything but a template until James runs it.** Mechanics (the settle
+toggle, the repro recipe, the harness commands) are §17's — this section
+records outcomes, not procedure.
+
+1. **Settle-ON repro → structured arm, short row confirms the first
+   boundary.** Send: with the settle at its default (ON, 10 ticks), row a
+   few metres into a piece (any armed program), then `program()` a second
+   shape over it while the machine is still `rowing`/`resting` (the §19.13
+   repro recipe). Do: row through the resulting program's first boundary.
+   Read: the `structure` log entries — do they show the SENT program's real
+   `workoutType`/duration, not `EMPTY_ARM_STRUCTURE`'s `1`/`0`/`128`? Does
+   the monitor display the real workout, not `:00`? Does `intervalComplete`
+   fire at the first boundary with real data?
+   **Observed: PENDING.**
+2. **The detection row — settle OFF, repro again → typed
+   `structure-mismatch`, never silent.** Send: `settle-off` (then reconnect,
+   per §17's toggle note), same repro recipe. Do: no rowing required beyond
+   getting the machine mid-piece before the repro send. Read: does
+   `program()` reject with `ProgramRejectionReason: "structure-mismatch"` —
+   never a bare resolve, never a silent `:00` accept — with the rejection
+   detail carrying the observed-vs-expected triple? This is the step that
+   hardware-validates the load-bearing half of Stage 2: CI has proven the
+   predicate rejects a scripted empty arm, but no real PM5 has yet been
+   caught by it.
+   **Observed: PENDING.**
+3. **Disagreement is a finding**, not a re-run trigger — same discipline as
+   every prior row in this document. **Certification honesty:** the
+   settle's latency claim (zero added ticks) is settle-scoped — it says
+   nothing about the readback; the readback itself may cost ~1 tick where
+   the payload lags behind the armed state (observed 2-of-5 in the pattern
+   Task 4's review located, accepted and stated as a real cost, not pinned
+   away).
+
+**Carried watch-items — observe alongside the two rows above, not as
+separate hardware actions:**
+
+- **Healthy-lag entry frequency on clean arms** (retires or confirms review
+  I-1's "2 of 5 clean arms" figure, demoted in `driver.ts`'s
+  `STRUCTURE_MISMATCH_TICKS` comment to ASSERTED-NOT-LOCATED). On every
+  clean arm sent this session (both rows above, plus any additional
+  settled-state program), watch for a `"structure-mismatch"` first-sighting
+  log entry that does NOT escalate to a rejection — record whether it fires,
+  and on how many of the clean arms sent. Read: does a healthy arm still
+  resolve successfully after logging one?
+- **Structure-entry count across a multi-interval row** (Task 1's own
+  carried item, never exercised on a real multi-interval program). Row a
+  full multi-interval program to `workoutComplete` and count `structure`
+  entries in the dump — does it stay at one per genuine reprogram, or does
+  something on real hardware change the fields mid-row the on-change dedup
+  would need to catch?
+- **Programming from a finished screen — the WaitToBegin-tick question**
+  (Task 3 review's FINISHED ruling: the gate is right, no cycle is modelled,
+  because Appendix E's `WorkoutLogged → WaitToBegin` exit is documented as
+  direct — but never observed). Let a program reach `finished`/
+  `workoutComplete`, then `program()` again with no reconnect. Read: does an
+  intermediate `WaitToBegin`/`armed` tick appear between the prepare's ack
+  and the first programming frame, or does it go straight through as the
+  fake (and the driver's gate) currently assume?
+- **The mid-auto-cycle dispatch row — unobserved territory** (Task 2
+  review's M3: `waitForPrepareSettle`'s gate excludes `terminated`/`idle` at
+  DISPATCH time, on the reasoning that a dispatch landing there is already
+  past the interesting window — never tested). If the auto-cycle can be
+  caught mid-transition (dispatching `program()` right as the machine
+  reports `terminated` or `idle`, rather than `rowing`/`resting`), read
+  whether the resulting arm comes back real or empty — the settle's own gate
+  does not wait in this case today, by design, and no hardware reading
+  confirms that is safe.
 
 ## 19. Idiosyncrasies, and whether they were ours
 
