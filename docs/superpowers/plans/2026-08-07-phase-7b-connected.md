@@ -247,7 +247,10 @@ table; the copy-review list is the handoff's §2.
 Failing tests: each state renders from its phase+error fixture; state
 6 renders `structure-mismatch`'s triple in DETAIL; Try-again inertness;
 the 1.2s dwell auto-advance (fake timers); Connect button's three
-states (available/BT-off/absent-transport). **Inherited from Task 2's
+states (available/BT-off/absent-transport). **Inherited from Task 4 (binding):** pass the workout identity to
+`program(p, identity)` — it is REQUIRED (a missed pass is a blank-titled
+7C record) — and pass `createTransport` until Task 8's seam lands.
+**Inherited from Task 2's
 review:** the Connect confirm's e2e (the guard shipped unmounted —
 mounting it here owns its end-to-end proof); the "Connect anyway"
 string reviewed against the handoff's copy list (it is OUR invention,
@@ -260,6 +263,10 @@ walk fake-driven. Full gates. Commit:
 ---
 
 ### Task 6: The surface — shell, panes A and B, mid-session states
+
+**Inherited from Task 4:** decide and state whether the surface stays
+mounted after End — if yes, the hook needs an explicit hang-up added
+(its implementer offered; unmount currently owns disconnect).
 
 **Files:**
 - Create: `app/src/workout/ConnectedSurface.tsx`,
