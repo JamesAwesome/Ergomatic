@@ -24,7 +24,7 @@ const WORKOUT_TYPES_TITLE =
   "The four workout types, and how hard each should feel";
 const BASELINES_TITLE = "What a baseline is, and why every pace comes from one";
 const PICKING_A_WORKOUT_TITLE = "Picking a workout by how much it should hurt";
-const PAIN_SCALE_TITLE = "The pain scale, without a heart rate strap";
+const PAIN_SCALE_TITLE = "The pain scale, without a heart rate monitor";
 
 test("tab order: TODAY · NEWS · LIBRARY · PLAN · YOU, TREND gone", async ({
   page,
@@ -152,6 +152,36 @@ test("/news/releases lists all three versions", async ({ page }) => {
   await expect(versions.nth(0)).toContainText("v0.5.1");
   await expect(versions.nth(1)).toContainText("v0.5.0");
   await expect(versions.nth(2)).toContainText("v0.4.0");
+});
+
+test("item 1: opening an article from a scrolled News feed lands the reader at the top, not cut off mid-page", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `news-scroll-${RUN_ID}@e2e.test`,
+    name: "News Scroll",
+  });
+  // The default 390x844 mobile viewport fits all four rows of News plus
+  // WHAT'S NEW without overflow (measured: 844px of content in an 844px
+  // viewport) — there's nothing to scroll there, which would make this test
+  // a no-op on the very bug it exists to catch. A shorter viewport (a small
+  // phone, or a feed grown by more articles) is the realistic scrollable
+  // case, so this test shrinks the viewport just enough to force it.
+  await page.setViewportSize({ width: 390, height: 500 });
+  await page.goto("/news");
+  await expect(page.locator(".news-unread-count")).toBeVisible();
+
+  await page.evaluate(() => window.scrollTo(0, 800));
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(0);
+
+  const baselinesRow = page.locator('a.news-row[href="/news/baselines"]');
+  await baselinesRow.click();
+  await expect(page).toHaveURL(/\/news\/baselines$/);
+  await page.locator(".reader-body").waitFor();
+
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 
 // Sanity check the titles above actually match the registry, so a future

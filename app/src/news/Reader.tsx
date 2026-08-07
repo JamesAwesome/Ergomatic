@@ -16,6 +16,15 @@ export default function Reader() {
   const reads = useArticleReads();
   const article = slug ? articleBySlug(slug) : undefined;
 
+  // Item 1 (2026-08-07 device report): a linked-from-a-scrolled-feed reader
+  // used to keep the window's scroll position, opening cut off mid-page.
+  // Keyed on the slug (not just mount) because the NEXT footer navigates
+  // within this same mounted component — a fresh push into a new article
+  // needs its own scroll-to-top, not just the first one.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [article?.slug]);
+
   // Mark read once ready — in an effect keyed on (reads.state, article.slug)
   // per the brief: markRead is stable per ready-state, so keying on state +
   // slug is enough, and the `reads.state === "ready"` guard is what keeps

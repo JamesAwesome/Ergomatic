@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Reader from "./Reader";
 import type { ArticleReadsState } from "../api/useArticleReads";
@@ -84,7 +85,7 @@ describe("Reader", () => {
     expect(screen.getByText(/ERGOMATIC · 3 MIN/)).toBeVisible();
     expect(
       screen.getByText(
-        /A baseline is nothing more than the average split you can hold for the/,
+        /A baseline is nothing more than the average split \(your time per 500 m\) you can hold for the/,
       ),
     ).toBeVisible();
   });
@@ -134,7 +135,7 @@ describe("Reader", () => {
     renderReader("/news/baselines");
 
     const next = screen.getByRole("link", {
-      name: /NEXT · 3 MIN — Picking a workout by how much it should hurt/,
+      name: /NEXT · 2 MIN — Picking a workout by how much it should hurt/,
     });
     expect(next).toHaveAttribute("href", "/news/picking-a-workout");
   });
@@ -161,7 +162,7 @@ describe("Reader", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        /A baseline is nothing more than the average split you can hold for the/,
+        /A baseline is nothing more than the average split \(your time per 500 m\) you can hold for the/,
       ),
     ).toBeVisible();
     expect(
@@ -202,6 +203,28 @@ describe("Reader", () => {
       screen.queryByRole("heading", { name: LINKED_FIXTURE.title }),
     ).not.toBeInTheDocument();
     expect(markRead).not.toHaveBeenCalled();
+  });
+
+  it("scrolls the window to the top on mount, and again when the NEXT footer navigates to a different slug (item 1: the reader used to open mid-page against the feed's own scroll position)", async () => {
+    mockUseArticleReads.mockReturnValue(readyState([]));
+    const scrollToSpy = vi
+      .spyOn(window, "scrollTo")
+      .mockImplementation(() => {});
+    const user = userEvent.setup();
+
+    renderReader("/news/workout-types");
+    expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+    scrollToSpy.mockClear();
+
+    await user.click(screen.getByRole("link", { name: /NEXT/ }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "What a baseline is, and why every pace comes from one",
+      }),
+    ).toBeVisible();
+    expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+
+    scrollToSpy.mockRestore();
   });
 
   it("redirects to /news when rendered with no slug param at all", () => {

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import BackLink from "../shell/BackLink";
 import { RELEASE_NOTES } from "./content/releaseNotes";
 import { releaseDate } from "./newsDates";
@@ -8,6 +9,14 @@ import { releaseDate } from "./newsDates";
 // `.news-release-version`/`.news-release-items` card styling per entry —
 // this screen doesn't invent new visual language, just repeats the card.
 export default function Releases() {
+  // Item 1 (2026-08-07 device report): opened from a scrolled News feed,
+  // this screen used to keep that scroll position too. This screen only
+  // ever mounts once per visit (no in-place slug navigation like Reader
+  // has), so `[]` deps are enough.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   return (
     <main className="screen releases-screen">
       <BackLink fallback="/news" />

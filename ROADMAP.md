@@ -1471,6 +1471,16 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-07) — News polish: the reader and release notes
+  scroll to the top on open instead of keeping the feed's scroll position;
+  "heart rate monitor" replaces "heart rate strap" throughout; a prose pass
+  removes em dashes and AI-tell constructions from all four articles;
+  workout-types' four type mentions render as inline `TypeBadge` chips;
+  a new training-pyramid SVG figure illustrates the four-type stack;
+  workout-types now names the four types properly (aerobic, anaerobic
+  threshold, transport, anaerobic) rather than just describing the job;
+  baselines gains a paragraph on why 2k/6k are the two reference distances
+  (racing: sprint and head-race lengths).
 - **PR #TBD** (2026-08-02) — history-aware `← BACK`: every back link now
   returns to wherever its screen was entered from (Today → suggestion →
   detail → BACK lands on Today, not a hardcoded `/library`) via a shared
