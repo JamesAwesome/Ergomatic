@@ -10,6 +10,7 @@ import {
   parseGeneralStatus,
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
+  WORKOUTSTATE_REARM,
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
 } from "../../../domain/monitor/pm5/parse.js";
@@ -112,8 +113,10 @@ async function programIt(
   // Plan Task 2 (renamed by Phase 7A-fix-2 Task 3): `program()`'s own
   // best-effort PREPARE step precedes the real programming sequence
   // (`src/monitor/driver.ts`'s `sendPrepare()`) — the fake's `"clearing"`
-  // phase expects the SAME `buildTerminate()` bytes first, always
-  // rejecting before advancing to `"programming"`.
+  // phase expects the SAME `buildTerminate()` bytes first, ACCEPTS them
+  // (fix-3 Task 3, §18 s3 item 15) and advances to `"programming"`. The
+  // fakes driven through this helper are all idle at that moment, so the
+  // accept starts no auto-cycle (`queueTerminateAutoCycle`) either.
   for (const chunk of buildTerminate()[0]!) {
     await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
   }
@@ -372,7 +375,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     await sendPrepare();
     await sendFrames(3);
     expect(acks.map(frameStatusOf)).toStrictEqual([
-      "reject", // the prepare step — nothing loaded
+      "ok", // the prepare step — ACCEPTED (§18 s3 item 15)
       "ok",
       "ok",
       "reject", // frame 2
@@ -387,7 +390,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     await sendFrames(4);
 
     expect(acks.slice(4).map(frameStatusOf)).toStrictEqual([
-      "reject", // prepare again — still nothing loaded
+      "ok", // prepare again — accepted again
       "ok",
       "ok",
       "ok",
@@ -438,9 +441,10 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
       acks.push(parseCsafeResponse(b)),
     );
-    // A whole second attempt: prepare step, then the same frame again.
+    // A whole second attempt: prepare step (accepted, §18 s3 item 15),
+    // then the same frame again (refused again — `injectNak` is sticky).
     await programIt(fake, PROGRAM);
-    expect(acks.map(frameStatusOf)).toStrictEqual(["reject", "reject"]);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok", "reject"]);
 
     // A chunk that belongs to neither sequence still throws, and at the
     // position the machine is genuinely at: the refusal itself rewinds
@@ -1045,7 +1049,13 @@ describe("createFakeTransport: a machine with a workout already loaded ACCEPTS a
     expect(generals).toHaveLength(1); // and it really did arm
   });
 
-  it("a fake with nothing loaded reports nothing loaded, and rejects the prepare step instead", async () => {
+  it("a fake with nothing loaded reports nothing loaded, and ACCEPTS the prepare step anyway (§18 s3 item 15: the captured byte is an accept)", async () => {
+    // Fix-3 Task 3. This test asserted `["reject"]` until item 15 captured
+    // the byte the refusal rested on — a standalone terminate sent to a
+    // machine with nothing running acked `f1 81 76 01 13 e5 f2`:
+    // toggle-high, previous-frame OK, slave READY. An ACCEPT. The
+    // nothing-loaded refusal was the last behaviour in this fake sourced
+    // from the withdrawn whole-byte parse, and it never existed.
     const fake = createFakeTransport({ program: PROGRAM });
     expect(fake.loadedIntervals()).toBeNull();
 
@@ -1056,7 +1066,13 @@ describe("createFakeTransport: a machine with a workout already loaded ACCEPTS a
     for (const chunk of buildTerminate()[0]!) {
       await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
     }
-    expect(acks.map(frameStatusOf)).toStrictEqual(["reject"]);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok"]);
+    // Item 15's own byte, whole — this is the frame the machine sent, not
+    // merely a status class that parses as an accept. The fake's toggle
+    // starts LOW, so this first ack is the toggle-high partner only after
+    // one prior frame; here it is the very first, hence `0x01` rather than
+    // item 15's `0x81`. What matters is the STATUS nibble, asserted above.
+    expect(fake.loadedIntervals()).toBeNull(); // terminate loads nothing
   });
 });
 
@@ -1272,9 +1288,11 @@ describe("createFakeTransport: FakeScript.failNextProgramFrame — the two never
     );
 
     await programIt(fake, PROGRAM);
-    // The prepare step is untouched by the hook (its own doc comment): it
-    // refuses because nothing is loaded, not because of `failNextProgramFrame`.
-    expect(acks.map(frameStatusOf)).toStrictEqual(["reject", "reject"]);
+    // The prepare step is untouched by the hook (its own doc comment):
+    // it acks "ok" like every prepare does, and only the PROGRAMMING
+    // frame behind it is refused. (`refuseNextPrepare` is the hook that
+    // reaches the other one.)
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok", "reject"]);
     // A genuine reject, not the `0x81` that never meant one: bits 4-5 say
     // Reject, and the toggle is still just the toggle.
     expect(acks[1]).toMatchObject({
@@ -1283,14 +1301,12 @@ describe("createFakeTransport: FakeScript.failNextProgramFrame — the two never
       frameToggle: true,
     });
 
-    // One-shot: the retry of the very same frame is accepted. (Its own
-    // prepare step is refused again — nothing is loaded yet, which is a
-    // statement about the machine, not about the spent hook.)
+    // One-shot: the retry of the very same frame is accepted.
     await programIt(fake, PROGRAM);
     expect(acks.map(frameStatusOf)).toStrictEqual([
-      "reject", // prepare — nothing loaded
+      "ok", // prepare — accepted
       "reject", // the program: failNextProgramFrame, consumed here
-      "reject", // prepare again — still nothing loaded
+      "ok", // prepare again — accepted again
       "ok", // the program lands
     ]);
     expect(fake.loadedIntervals()).toBe(PROGRAM.intervals.length);
@@ -1416,5 +1432,234 @@ describe("createFakeTransport: a multi-frame programming sequence", () => {
     expect(generals).toHaveLength(0); // acked, but armed delivery is withheld until a tick (fix-round 1, F1)
     fake.deliverArmedNow();
     expect(generals).toHaveLength(1); // armed now
+  });
+});
+
+// Fix-3 Task 3 (design spec §1c/§1d, interface-notes.md §18 session 3).
+// Until this task the fake's `onClearingFrameComplete` acked the prepare
+// step and changed NOTHING — no transition, no status — while the hardware
+// visibly ran terminate → idle → armed off the same wire command in every
+// mid-session arm it recorded. That gap is why CI could see neither the
+// empty arm (§19.13) nor the settle that prevents it.
+describe("createFakeTransport: the prepare step's own machine reaction (§18 session 3)", () => {
+  /** A machine mid-piece: one rowing status tick, due immediately. */
+  function rowingAt(atMs: number, elapsedSeconds: number): FakeTimelineEvent {
+    return {
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds,
+      distanceMeters: elapsedSeconds * 4,
+      spm: 24,
+      currentSplit: 120,
+      heartRateBpm: 140,
+      programIntervalIndex: 0,
+    };
+  }
+
+  async function sendPrepare(
+    fake: ReturnType<typeof createFakeTransport>,
+  ): Promise<void> {
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+  }
+
+  async function sendProgram(
+    fake: ReturnType<typeof createFakeTransport>,
+    program: WorkoutProgram,
+  ): Promise<void> {
+    for (const frame of buildProgrammingSequence(program)) {
+      for (const chunk of frame) {
+        await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+      }
+    }
+  }
+
+  it("a prepare landing on a RUNNING machine reports TERMINATE and then walks Rearm → WaitToBegin, one status tick each (today: acks and changes nothing)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [rowingAt(0, 10)],
+    });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+
+    fake.tick(0);
+    expect(decodeGeneral(generals[0]!).workoutState).toBe(
+      WORKOUTSTATE_INTERVALWORKTIME,
+    );
+
+    await sendPrepare(fake);
+    // The ack is immediate; the machine's REACTION is not. It arrives on
+    // the same 0x0031 pulse as everything else this machine says, which is
+    // precisely the window `driver.ts`'s settle exists to wait out.
+    expect(generals).toHaveLength(1);
+
+    fake.tick(0);
+    fake.tick(0);
+    fake.tick(0);
+    expect(
+      generals.slice(1).map((b) => decodeGeneral(b).workoutState),
+    ).toStrictEqual([
+      WORKOUTSTATE_TERMINATE,
+      WORKOUTSTATE_REARM,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+    // Carried over from what the machine last reported, exactly as the
+    // app's own explicit `terminate()` does (`synthesizeTerminated` is one
+    // function with two callers): the terminate reading keeps the piece's
+    // own elapsed/distance, and the re-arm zeroes them.
+    expect(decodeGeneral(generals[1]!).elapsedSeconds).toBe(10);
+    expect(decodeGeneral(generals[1]!).distanceMeters).toBe(40);
+    expect(decodeGeneral(generals[3]!).elapsedSeconds).toBe(0);
+
+    // Three states, not a heartbeat: the cycle has drained and the machine
+    // has nothing further to say on its own.
+    fake.tick(0);
+    expect(generals).toHaveLength(4);
+  });
+
+  it("a prepare landing on an IDLE machine is a plain accept — no transition, no cycle (§18 s3 item 15's captured byte)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+
+    await sendPrepare(fake);
+
+    expect(acks.map(frameStatusOf)).toStrictEqual(["ok"]);
+    expect(generals).toHaveLength(0);
+    fake.tick(0);
+    fake.tick(0);
+    fake.tick(0);
+    fake.tick(0);
+    expect(generals).toHaveLength(0);
+  });
+
+  it("refuseNextPrepare answers ONE prepare with a genuine reject and changes nothing on the machine; the next prepare acks and cycles normally", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      refuseNextPrepare: true,
+      events: [rowingAt(0, 10)],
+    });
+    const acks: ReturnType<typeof parseCsafeResponse>[] = [];
+    fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) =>
+      acks.push(parseCsafeResponse(b)),
+    );
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+
+    fake.tick(0);
+    await sendPrepare(fake);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["reject"]);
+    // A refusal means the machine did not act: no terminate reading, no
+    // auto-cycle, however long the master waits.
+    fake.tick(0);
+    fake.tick(0);
+    fake.tick(0);
+    expect(generals).toHaveLength(1);
+    expect(decodeGeneral(generals[0]!).workoutState).toBe(
+      WORKOUTSTATE_INTERVALWORKTIME,
+    );
+
+    // One-shot. The retry's prepare is accepted, and NOW the machine reacts.
+    await sendPrepare(fake);
+    expect(acks.map(frameStatusOf)).toStrictEqual(["reject", "ok"]);
+    fake.tick(0);
+    fake.tick(0);
+    fake.tick(0);
+    expect(
+      generals.slice(1).map((b) => decodeGeneral(b).workoutState),
+    ).toStrictEqual([
+      WORKOUTSTATE_TERMINATE,
+      WORKOUTSTATE_REARM,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+  });
+
+  it("§19.13 THE EMPTY ARM: programming frames that land while the machine is STILL rowing arm zero intervals, and no boundary is ever reported for that program", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [rowingAt(0, 10), TIMELINE_EVENTS[1]!],
+    });
+    const splits: Uint8Array[] = [];
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
+
+    fake.tick(0);
+    // No tick between the prepare and the frames: the whole sequence lands
+    // inside the machine's own reaction window, exactly as it did on
+    // hardware (§19.13's REPRO — `{"kind":"terminated"}` fired MID-send).
+    await sendPrepare(fake);
+    await sendProgram(fake, PROGRAM);
+
+    // It ARMED — every checkpoint this codec reads says success — holding a
+    // workout with nothing in it. `0`, never `null`: something is loaded.
+    expect(fake.loadedIntervals()).toBe(0);
+    fake.deliverArmedNow();
+
+    // Rowed past the scripted boundary: nothing on either characteristic,
+    // ever (hardware: 108.4 m past a 100 m interval, no boundary at all).
+    fake.tick(5000);
+    expect(splits).toStrictEqual([]);
+  });
+
+  it("the SAME frames sent to a machine that has finished its cycle arm the real program, boundaries and all — the key is the machine's state", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [rowingAt(0, 10), TIMELINE_EVENTS[1]!],
+    });
+    const splits: Uint8Array[] = [];
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
+
+    fake.tick(0);
+    await sendPrepare(fake);
+    // Three ticks: the machine walks terminated → idle → armed and is done
+    // reacting before the first programming chunk goes out — which is what
+    // `driver.ts`'s prepare-settle wait buys on real hardware.
+    fake.tick(0);
+    fake.tick(0);
+    fake.tick(0);
+    await sendProgram(fake, PROGRAM);
+
+    expect(fake.loadedIntervals()).toBe(PROGRAM.intervals.length);
+    fake.deliverArmedNow();
+    fake.tick(5000);
+    expect(splits).toHaveLength(1);
+  });
+
+  it("the empty arm is keyed on the machine's STATE, not on how soon the frames arrive: any number of ticks can pass and a still-rowing machine still arms empty", async () => {
+    // The tick-counted trigger this rules out would be modelling
+    // `driver.ts`'s settle budget (the fix) instead of the machine (the
+    // defect). A REFUSED prepare leaves the machine running — it never
+    // acted — so the master can wait as long as it likes and the frames
+    // still land on a rowing piece.
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      refuseNextPrepare: true,
+      events: [
+        rowingAt(0, 10),
+        rowingAt(100, 12),
+        rowingAt(200, 14),
+        rowingAt(300, 16),
+        rowingAt(400, 18),
+      ],
+    });
+
+    fake.tick(0);
+    await sendPrepare(fake);
+    // FOUR ticks — more than the auto-cycle's own three, so a trigger that
+    // counted ticks instead of reading the state would have "settled" by
+    // now and armed this program for real.
+    fake.tick(100);
+    fake.tick(100);
+    fake.tick(100);
+    fake.tick(100);
+    await sendProgram(fake, PROGRAM);
+
+    expect(fake.loadedIntervals()).toBe(0);
   });
 });

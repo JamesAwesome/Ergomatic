@@ -23,6 +23,13 @@
 //    console (identical output, `out()` writes both). "Dump event log"
 //    prints `eventLog.exportLog()` — the full chunk-by-chunk trace design
 //    spec §5 describes.
+// 5b. Two REMOTE-only commands, `settle-off` and `settle-on`, flip
+//    `program()`'s prepare-settle wait for the NEXT driver this page builds
+//    (`settleDisabled` below) — sessions 4a step 2 and 4b step 2 need the
+//    settle off to reproduce the empty arm. Send the command, then click
+//    Scan & connect again; there is no button for either, deliberately (a
+//    session that silently ran with the settle off would be worse than one
+//    that needed a reconnect).
 // 6. Record what you observe against each §17 item's expected reading;
 //    append the results to §18 ("Laptop session observations").
 
@@ -207,6 +214,42 @@ const BISECT_PAIR_VALUE_REST: WorkoutProgram = {
   })),
 };
 
+/**
+ * Session 4a/4b's own switch (fix-3 plan Task 3, design spec §Session-4a
+ * step 2 and §Session-4b step 2): `settle-off` makes the NEXT driver
+ * constructed here pass `prepareSettleTicks: 0`, disabling `program()`'s
+ * prepare-settle wait entirely; `settle-on` puts it back to the default.
+ * Both are REMOTE commands, so the two erg sessions that need the settle
+ * disabled — 4a's empty-arm capture and 4b's detection row — need no code
+ * edit and no rebuild at the erg.
+ *
+ * Consumed at DRIVER CONSTRUCTION (the `connect` handler below), which is
+ * the only safe place: `createPm5Driver` subscribes to five
+ * characteristics and has no teardown, so rebuilding a live driver would
+ * leave the old one's subscriptions double-processing every notification.
+ * Toggling therefore takes effect on the next **Scan & connect** — the
+ * command says so in its own output rather than leaving the operator to
+ * find out from the trace.
+ */
+let settleDisabled = false;
+
+function driverOptions(): Parameters<typeof createPm5Driver>[2] {
+  return settleDisabled
+    ? { verifyTicks: VERIFY_TICKS, prepareSettleTicks: 0 }
+    : { verifyTicks: VERIFY_TICKS };
+}
+
+function setSettle(disabled: boolean): void {
+  settleDisabled = disabled;
+  out(
+    `settle ${disabled ? "OFF (prepareSettleTicks: 0)" : "ON (default bound)"}${
+      driver
+        ? " — takes effect on the NEXT Scan & connect (the live driver keeps the setting it was built with)"
+        : " — will apply to the driver built by Scan & connect"
+    }`,
+  );
+}
+
 const rawLog = createEventLog();
 // Fix-round 1, F4: taps every entry as it's recorded so the page/console
 // gets a live line the INSTANT verification begins — `sendSequence`
@@ -273,7 +316,7 @@ onClick("connect", async () => {
   out(`scan(): found ${found.name} (${found.id})`);
   await transport.connect(found.id);
   out("connect(): ok");
-  driver = createPm5Driver(transport, log, { verifyTicks: VERIFY_TICKS });
+  driver = createPm5Driver(transport, log, driverOptions());
   wireEvents(driver);
   out(`capabilities: ${JSON.stringify(driver.capabilities)}`);
 });
@@ -347,6 +390,8 @@ const REMOTE: Record<string, () => void | Promise<void>> = {
     ),
   "bisect-value-rest": () =>
     programNamed("bisect(3×100m r0 — VALUE+REST pair)", BISECT_PAIR_VALUE_REST),
+  "settle-off": () => setSettle(true),
+  "settle-on": () => setSettle(false),
   terminate,
   disconnect,
   dump,

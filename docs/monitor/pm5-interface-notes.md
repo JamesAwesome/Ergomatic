@@ -1102,6 +1102,22 @@ every flagged item either numbered here or explicitly excused — holds.)
    entry per item number, dated. §18 is the only place these results live —
    this section (§17) stays a fixed runsheet across sessions, not a log.
 
+**The settle toggle (`settle-off` / `settle-on`), added by Phase 7A-fix-3
+Task 3.** Two REMOTE-only bridge commands (`curl -X POST
+http://127.0.0.1:5178/command -d settle-off`) that decide whether the NEXT
+driver this page builds passes `prepareSettleTicks: 0` — i.e. whether
+`program()`'s prepare-settle wait (design spec §1b) runs at all. Session
+4a's empty-arm capture and session 4b's detection row both need it OFF, so
+that the §19.13 empty arm still reproduces and the structural readback has
+something real to catch; everything else wants it ON (the default, 10
+ticks). **It takes effect at driver CONSTRUCTION, so send the command and
+then click Scan & connect again** — `createPm5Driver` has no teardown, and
+rebuilding a live driver would leave the previous one's subscriptions
+double-processing every notification. The command's own output says which
+state it left the flag in and whether a reconnect is pending; there is no
+BUTTON for either, deliberately, since a session that silently ran with the
+settle off would be worse than one that needed a reconnect.
+
 ### The runsheet
 
 1. **STATUS: ANSWERED (§18 #1).** The three confirmed checksum errata

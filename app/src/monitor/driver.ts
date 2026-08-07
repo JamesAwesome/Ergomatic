@@ -1790,19 +1790,23 @@ export function createPm5Driver(
    * disconnected" now that `sendSequence` can produce `"bad"`/
    * `"not-ready"`/`"garbled"` too — the ORIGINAL rule was always "only a
    * confirmed dead link is fatal here", these two lines just make the
-   * code match that stated rule now that more reasons exist). A refusal
-   * (`"nak"`) is treated as the EXPECTED, routine case here — but NOT on
-   * confirmed hardware evidence that the PM refuses a terminate when
-   * nothing is running or loaded. That claim's own citation
-   * (interface-notes.md §18's clean-run observation) is, per §17 item 15,
-   * an uncaptured byte: the OLD (withdrawn) whole-byte parse's "rejected —
-   * nothing to terminate" label is all that survives for that send, and
-   * this is the ONE behaviour in this file still sourced from that
-   * withdrawn parse (matched on the fake side, `fake.ts`'s own comment on
-   * the same gap). The behaviour above — swallow any non-disconnect
-   * outcome here — does not depend on this claim; it is independently
-   * justified by the broadened rule already stated (only a confirmed dead
-   * link is fatal). Only `"disconnected"` propagates: that
+   * code match that stated rule now that more reasons exist).
+   *
+   * A refusal (`"nak"`) here has **NEVER BEEN OBSERVED ON HARDWARE**
+   * (interface-notes.md §18 session 3, item 15) — an earlier version of
+   * this comment called it the "expected, routine" case, which was the
+   * withdrawn whole-byte parse talking. Item 15 captured the one byte the
+   * claim rested on (a standalone terminate to a machine with nothing
+   * running: `f1 81 76 01 13 e5 f2`) and it decodes to an ACCEPT. The
+   * PM has never refused a terminate, in any state anyone has put it in.
+   * The swallow rule below is unchanged and does not depend on that claim
+   * either way: it is justified by the broadened rule already stated —
+   * only a confirmed dead link is fatal here — and it stays because a
+   * prepare step whose outcome we cannot verify must never be the thing
+   * that fails a `program()` call. The fake models the refusal only
+   * through an explicitly synthetic, never-observed hook
+   * (`FakeScript.refuseNextPrepare`), which is what exercises these lines.
+   * Only `"disconnected"` propagates: that
    * means the link itself is confirmed down, a genuinely different and
    * fatal condition regardless of which step hit it — attempting to write
    * a whole program onto a link already known to be down would just hang
@@ -1826,7 +1830,7 @@ export function createPm5Driver(
       ) {
         log.record(
           "prepare-rejected",
-          `PM's response to the prepare step was "${err.reason}" — swallowed as routine, not a clear and never fatal on its own (interface-notes.md §19.4/§19.5): ${err.hexTrace}`,
+          `PM's response to the prepare step was "${err.reason}" — swallowed, never fatal on its own, and NOT expected: no hardware session has ever seen this machine refuse a terminate (interface-notes.md §18 session 3 item 15; §19.4/§19.5): ${err.hexTrace}`,
         );
         return;
       }
@@ -1854,9 +1858,10 @@ export function createPm5Driver(
    * `isPrepareStep` (fix-round 1, F7; renamed with the step itself, Task
    * 3) suppresses the generic `"program-rejection"` log entry for
    * anything but a disconnect — `sendPrepare`'s own caller already logs
-   * those as informational `"prepare-rejected"`, and without this every
-   * HEALTHY `program()` call would show a spurious rejection in the trace
-   * (the prepare step's own refusal is the routine case). A
+   * those as informational `"prepare-rejected"`, and one log entry per
+   * refusal is enough (the entry `sendPrepare` writes carries the reason
+   * and the hex; this one would add nothing but noise at a severity the
+   * step does not have). A
    * `"disconnected"` failure still logs `"program-rejection"` regardless
    * — that one is never swallowed, by either this function or
    * `sendPrepare`.
@@ -1966,10 +1971,10 @@ export function createPm5Driver(
                 response.frameStatus as Exclude<CsafeFrameStatus, "ok">
               ];
         const hexTrace = trace.join(" | ");
-        // F7: a prepare-step refusal is the routine, expected case
-        // (`sendPrepare`'s own doc comment) — it already logs
-        // "prepare-rejected" itself, so logging THIS too would make every
-        // healthy `program()` call show a spurious rejection in the trace.
+        // F7: a prepare-step refusal is never fatal (`sendPrepare`'s own
+        // doc comment — and, per §18 s3 item 15, never observed either) and
+        // it already logs "prepare-rejected" itself, so logging THIS too
+        // would double-report one swallowed outcome as a rejection.
         if (!isPrepareStep) {
           log.record(
             "program-rejection",
