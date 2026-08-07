@@ -170,13 +170,21 @@ export interface MonitorDriver {
    * clean single-connection observation is still pending: §17's merge-gate
    * row, session 3, Step 3).
    *
-   * Still OPEN, and the reason a caller should nonetheless confirm with the
-   * rower first: James read an empty `:00`/`:00` session off the monitor
-   * immediately after a 2-interval send that the corrected parse says was
-   * accepted. Nothing explains what emptied that display (§19.1's Verdict
-   * (a)). Programming over a live or loaded workout remains the prime
-   * suspect, so 7B's "prove the monitor idle before programming" stands —
-   * on this open finding, not on a destruction claim that did not survive.
+   * ANSWERED, twice, by hardware (interface-notes.md §18 "Live bisect",
+   * session 3, Phase 7A-fix-3): James's empty `:00`/`:00` read (§19.1's
+   * Verdict (a)) is not unexplained mystery any more — programming over a
+   * machine that is still `rowing`/`resting` (never merely "loaded")
+   * reproducibly arms structurally EMPTY while `verifyArmed`'s
+   * `state === "armed"` check passes regardless. `src/monitor/driver.ts`'s
+   * `program()` now runs a PREPARE-SETTLE wait (`waitForPrepareSettle`,
+   * design spec §1b, fix-3 Task 2) that holds the real send until the
+   * machine reports `armed` (plus one further tick) whenever it caught a
+   * RUNNING piece, closing this in CI. Still OPEN on hardware: the
+   * structural readback that would catch an empty arm even if the settle's
+   * own bound expires (design spec Stage 2, fix-3 Tasks 3+, not built by
+   * Task 2) is unbuilt, and session 4a/4b's hardware validation of both
+   * halves has not run — 7B's "prove the monitor idle before programming"
+   * still stands until it does.
    */
   program(p: WorkoutProgram): Promise<void>;
   terminate(): Promise<void>; // the documented terminate command — no start() exists
