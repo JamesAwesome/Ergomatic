@@ -329,16 +329,31 @@ export interface DriverOptions {
    * hardware traces reproduced twice with unrelated program shapes
    * (interface-notes.md §18 "Live bisect": REPRO and Step 5 both landed a
    * structurally EMPTY arm — `verifyArmed` passing regardless — while the
-   * machine was still `rowing`). For a program sent from an already-settled
-   * state (armed/idle/finished/terminated — the ordinary main-menu case),
-   * this wait never registers at all and costs ZERO ticks (latency pin,
-   * `waitForPrepareSettle`'s own doc comment).
+   * machine was still `rowing`). For a program DISPATCHED from any state
+   * other than `rowing`/`resting` — armed/idle/finished/terminated, the
+   * ordinary main-menu case — this wait never registers at all and costs
+   * ZERO ticks (latency pin, `waitForPrepareSettle`'s own doc comment).
    *
-   * `terminated` and `idle` do NOT satisfy this wait — the traces show the
-   * PM's own Terminate -> Rearm -> WaitToBegin auto-cycle (CSAFE-DEF
-   * Appendix E) passing through BOTH on its way to `armed`, so treating
-   * either as "settled" would resolve while the machine is still mid-cycle.
-   * The end condition is `armed` FOLLOWED BY one further tick (any state) —
+   * Two different senses of "settled" are in play here, on purpose — name
+   * them so neither reads as contradicting the other. The paragraph above
+   * is the ENTRY gate's question only: "was a piece genuinely running AT
+   * DISPATCH?" Both hardware observations answer that with `rowing`
+   * (§19.13); there is no observation, in either direction, of a dispatch
+   * that instead catches the machine already reading `terminated`/`idle`
+   * FROM AN EARLIER terminate, still mid-auto-cycle. This gate stays narrow
+   * on purpose (widening it would tax 7B's ordinary "program the next
+   * workout" flow on zero evidence) — that is a design choice, not a
+   * finding that such a dispatch is safe. It is unobserved territory,
+   * flagged for a future hardware reading, not ruled on here.
+   *
+   * `terminated` and `idle` do NOT satisfy the RELEASE condition, once this
+   * wait IS already running — a DIFFERENT question from the entry gate
+   * above ("has the machine finished reacting to OUR terminate?"). The
+   * traces show the PM's own Terminate -> Rearm -> WaitToBegin auto-cycle
+   * (CSAFE-DEF Appendix E) passing through BOTH on its way to `armed`, so
+   * treating either as the release signal would resolve while the machine
+   * is still mid-cycle. The end condition is `armed` FOLLOWED BY one
+   * further tick (any state) —
    * the observed clean arms all needed at least one more tick after `armed`
    * before the structure genuinely reflected the new program (the same
    * "never trust an already-cached tick" discipline `verifyArmed` already
@@ -395,11 +410,21 @@ const DEFAULT_SETTLE_TICKS = 3;
 
 /** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc
  *  comment for the full citation. `10`, not `3` (`DEFAULT_SETTLE_TICKS`
- *  above): session 3's two observed dispatch-to-armed spans were 4 and 5
- *  status ticks (interface-notes.md §18 "Live bisect" REPRO and Step 5;
- *  design spec §1b cites both verbatim), both of which the state-blind
- *  `settleTicks` default already exceeds — this wait needs its own,
- *  larger budget, not a shared one. */
+ *  above): session 3's two dispatch-to-armed spans were PM-clock durations
+ *  of ~0.85s and ~0.06s (design spec §1b — `waitForPrepareSettle`'s own doc
+ *  comment carries the full citation; §18's own table does not, contra an
+ *  earlier draft of this comment). A literal TICK COUNT is not directly
+ *  recoverable from that record — the event log carries no timestamps by
+ *  design (`eventLog.ts`) and logs 0x0031 on state change only — so "4 and
+ *  5 status ticks" (an earlier draft of this comment, and of design spec
+ *  §1b) was a derived estimate stated as an observation, review-corrected.
+ *  At the ~2Hz sample rate those two spans put the REAL ticks-to-armed at
+ *  roughly 0-2, not 4-5. Either way, both spans exceed the state-blind
+ *  `settleTicks` default (3) — this wait needs its own, larger budget, not
+ *  a shared one — and `10` is comfortably ahead of the real spans, not
+ *  tight against an inflated one. The new `"prepare-settled"` log entry
+ *  (`waitForPrepareSettle`'s own tick-pulse handler) is the first thing in
+ *  this file able to measure the real number on a future hardware run. */
 const DEFAULT_PREPARE_SETTLE_TICKS = 10;
 
 /** `DriverOptions.errorTypeTicks`'s own default — same rationale as
@@ -1373,13 +1398,29 @@ export function createPm5Driver(
       // condition's first half (`armed`) has not yet been observed — the
       // instant it is, the very NEXT arrival (any state at all) satisfies
       // the second half and resolves, uncounted against `ticksNeeded`
-      // (`waitForPrepareSettle`'s own doc comment: the observed spans name
-      // the ticks needed to REACH `armed`, not the one grace tick after).
+      // (`waitForPrepareSettle`'s own doc comment: `ticksNeeded` bounds the
+      // ticks spent waiting to REACH `armed`, not the one grace tick after).
       if (pendingPrepareSettle) {
         const settleState = toMonitorFrame(raw as RawPm5Status).state;
         if (pendingPrepareSettle.armedSeen) {
-          const resolve = pendingPrepareSettle.resolve;
+          // Review finding I4: the success path used to record nothing —
+          // the ONE number a future hardware session most needs (how many
+          // ticks this wait actually consumed) was computed here and then
+          // silently discarded. `ticks` counts every arrival since the wait
+          // began UP TO AND INCLUDING the one that first reported `armed`
+          // (incremented once more per arrival, below, before that
+          // arrival's own state is even checked — never incremented again
+          // once `armedSeen` is set) — i.e. the tick NUMBER, within this
+          // wait, at which `armed` was observed. This is the genuine,
+          // live-measured dispatch-to-armed span the historical session-3
+          // log could never produce (no timestamps, on-change logging
+          // only, per `DEFAULT_PREPARE_SETTLE_TICKS`'s own doc comment).
+          const { resolve, ticks } = pendingPrepareSettle;
           pendingPrepareSettle = null;
+          log.record(
+            "prepare-settled",
+            `"armed" observed on tick ${ticks} of the wait; released one tick later (that tick's state: "${settleState}")`,
+          );
           resolve();
         } else {
           pendingPrepareSettle.ticks += 1;
@@ -1594,30 +1635,46 @@ export function createPm5Driver(
    * `sendPrepare()` terminate closed a machine that was still `rowing`. Both
    * traces show the PM's own Terminate -> Rearm -> WaitToBegin auto-cycle
    * (CSAFE-DEF Appendix E) passing through `terminated` AND `idle` before
-   * ever reaching `armed` — cited verbatim from design spec §1b: **REPRO:
-   * rowing → terminated ×2 → idle → armed, ~0.85s; step 5: terminated →
-   * idle → armed inside 0.06s of PM clock.** Neither `terminated` nor
-   * `idle` is a settled state for this wait's purposes — the observed
-   * dispatch-to-armed spans were 4 and 5 status ticks, and a 2Hz sampler CAN
-   * coalesce that cycle (step 5's own `idle` and `armed` shared one elapsed
-   * reading), so this wait's bound (`DriverOptions.prepareSettleTicks`,
-   * default `10`) is sized well past both, not tight against either.
+   * ever reaching `armed` — the confirmed shape (design spec §1b) is
+   * **REPRO: rowing → terminated → idle → armed, a ~0.85s PM-clock span;
+   * step 5: the same shape, ~0.06s.** (An earlier draft of this comment
+   * additionally claimed "terminated ×2" for REPRO and "4 and 5 status
+   * ticks" for both — review-corrected: the event log records a `frame`
+   * entry only on a state CHANGE, so a repeated `terminated` reading could
+   * never appear twice even if the wire sent it twice, and no tick COUNT is
+   * recoverable from a log with no timestamps at all. The two PM-clock
+   * spans above are the real, verified observations; `DEFAULT_PREPARE_SETTLE_TICKS`'s
+   * own comment has the honest tick-budget reasoning.) Neither `terminated`
+   * nor `idle` satisfies this wait's RELEASE condition — see below.
    *
    * Arms ONLY when `priorState` (the machine's decoded state read from
    * `raw` at the MOMENT `program()` called `sendPrepare()`, before that
    * step's terminate ever went out) is `"rowing"` or `"resting"` — a
-   * program sent from any already-settled state (armed/idle/finished/
+   * program DISPATCHED from any other state (armed/idle/finished/
    * terminated, the ordinary main-menu case) never registers a wait at all,
    * costing zero ticks (the latency pin `DriverOptions.prepareSettleTicks`'s
-   * own doc comment names). `ticksNeeded <= 0` (`prepareSettleTicks: 0`,
-   * session 4b's own "detection row") also resolves immediately, same
-   * "escape hatch" shape as `settleAfterTerminate`'s own `ticksNeeded <= 0`
-   * branch.
+   * own doc comment names). This is the ENTRY gate's question ("was a piece
+   * genuinely running at dispatch?"), answered `rowing` by both hardware
+   * observations (§19.13) — a dispatch that instead catches the machine
+   * ALREADY reading `terminated`/`idle` from an earlier terminate, still
+   * mid-auto-cycle, is unobserved territory this gate deliberately does not
+   * rule on (`DriverOptions.prepareSettleTicks`'s own doc comment states
+   * the asymmetry explicitly; a 4a runsheet question, not a closed one).
+   * `ticksNeeded <= 0` (`prepareSettleTicks: 0`, session 4b's own
+   * "detection row") also resolves immediately, same "escape hatch" shape
+   * as `settleAfterTerminate`'s own `ticksNeeded <= 0` branch.
    *
    * End condition, once armed: an `"armed"` tick FOLLOWED BY one further
    * tick of ANY state — the same "never trust an already-cached tick"
    * discipline `verifyArmed` already applies, here applied to the settle's
-   * own evidence rather than final verification's. On expiry with `armed`
+   * own evidence rather than final verification's. On SUCCESS, this logs
+   * `"prepare-settled"` carrying the tick NUMBER (within this wait) at
+   * which `armed` was observed and the +1 tick's own state — review
+   * finding I4: this live tick pulse is the first thing in the codebase
+   * actually able to MEASURE a dispatch-to-armed span (unlike the
+   * historical session-3 log,
+   * which carries no timestamps), so a future hardware run gets a real
+   * number instead of another derived estimate. On expiry with `armed`
    * never observed, this PROCEEDS (never rejects) and logs
    * `prepare-settle-expired`: the structural readback (design spec Stage 2,
    * not built by this task) is the actual net under this wait, so a
