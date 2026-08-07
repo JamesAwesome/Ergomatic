@@ -1139,9 +1139,12 @@ does and does not close.
       design) and cites the retirement directly (§18 session 3 item 15;
       §19.4/§19.5). Task 3.
 
-**Exit:** merge on green (2334 all-projects / e2e 210, unchanged by any
-docs-only close-out) **+ session 4b's two-row detection test having run
-(§18) + James's explicit approval.** Session 4b is necessary, not
+**Exit: MET (2026-08-07).** Green (2335 all-projects — the whole-branch
+wave's MED-1 test joined after this line was first written — / e2e 210)
+**+ session 4b RUN with both rows PASS (§18 session 4b: the settle's third
+tick-4 arm; a real PM5 caught by the readback — typed `structure-mismatch`
+on a live empty arm) + James's explicit approval given.** Session 4b was
+necessary, not
 sufficient on its own, and the merge decision is his — same discipline as
 every prior hardware gate in this document. Session 4a resolving cleanly
 (outcome (a), no redesign) means this phase's own remedies ship
