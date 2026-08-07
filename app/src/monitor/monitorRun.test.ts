@@ -15,6 +15,7 @@ import {
   clearMonitorRun,
   createMonitorRun,
   recordActual,
+  completeMonitorRun,
   anyLiveSession,
   connectGuardStage,
   MONITOR_RUN_KEY,
@@ -417,6 +418,71 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
       terminated: true,
     };
     expect(recordActual(terminated, actual1).actuals).toStrictEqual([]);
+  });
+});
+
+describe("completeMonitorRun: the completion writer (7B Task 4's own first caller)", () => {
+  beforeEach(() => localStorage.clear());
+
+  const finishedAt = new Date("2026-08-05T12:41:00.000Z");
+
+  it("stamps completedAt and how it ended, and persists the result", () => {
+    const run = { ...freshMonitorRun(), actuals: [actual1] };
+    saveMonitorRun(run);
+
+    const done = completeMonitorRun(run, { terminated: false }, finishedAt);
+
+    expect(done.completedAt).toBe(finishedAt.toISOString());
+    // An honest WORKOUTEND: 7C reads this to say "logged 4 of 4" rather
+    // than "abandoned at 1".
+    expect(done.terminated).toBe(false);
+    expect(done.actuals).toStrictEqual([actual1]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(done));
+    // A new record, the caller's own copy untouched (`recordActual`'s
+    // idiom).
+    expect(run.completedAt).toBeNull();
+  });
+
+  it("records a TERMINATE as terminated — the same close, a different story", () => {
+    const run = freshMonitorRun();
+
+    const done = completeMonitorRun(run, { terminated: true }, finishedAt);
+
+    expect(done).toMatchObject({
+      completedAt: finishedAt.toISOString(),
+      terminated: true,
+    });
+  });
+
+  it("an already-closed run is returned UNCHANGED — a second terminal event never re-stamps it", () => {
+    // The race this guard exists for: End closes the record, its own
+    // terminate() makes the erg report `terminated`, and that event comes
+    // straight back. Without the guard the record would carry the LATER
+    // time and flip `terminated` after the fact.
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: finishedAt.toISOString(),
+      terminated: true,
+    };
+    saveMonitorRun(closed);
+    const later = new Date("2026-08-05T12:45:00.000Z");
+
+    const after = completeMonitorRun(closed, { terminated: false }, later);
+
+    expect(after).toBe(closed);
+    expect(after.completedAt).toBe(finishedAt.toISOString());
+    expect(after.terminated).toBe(true);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
+  });
+
+  it("a closed record refuses later actuals — completeMonitorRun is what turns the guard on", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+
+    const done = completeMonitorRun(run, { terminated: false }, finishedAt);
+
+    expect(recordActual(done, actual1)).toBe(done);
+    expect(loadMonitorRun()?.actuals).toStrictEqual([]);
   });
 });
 

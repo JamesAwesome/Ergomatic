@@ -209,15 +209,59 @@ export function recordActual(
   run: MonitorRun,
   actual: IntervalActual,
 ): MonitorRun {
-  // OPEN OBLIGATION (fix round, A2): nothing in the codebase sets
-  // `completedAt` on a `MonitorRun` yet — `createMonitorRun` stamps it
-  // `null` and no writer ever moves it off that. **7B's completion writer
-  // (whatever turns a `workoutComplete`/`terminated` event into a
-  // finished record) is this guard's first real caller**; until it ships,
-  // the closed branch is exercised only by tests. The guard lands now, in
-  // the task that scopes runs, rather than being remembered later.
+  // OBLIGATION DISCHARGED (7B Task 4): the completion writer the fix
+  // round's A2 note promised is `completeMonitorRun` below, and its one
+  // caller is `useMonitorSession` — so this guard's closed branch is now
+  // reachable in production, not only from tests. The hook closes the
+  // record on `workoutComplete`/`terminated`, on End, and on P3b (a
+  // program failure with a run still open, design spec's own Decisions
+  // row); a boundary the machine reports after any of those lands here
+  // and is refused.
   if (run.completedAt !== null) return run;
   const next: MonitorRun = { ...run, actuals: [...run.actuals, actual] };
+  saveMonitorRun(next);
+  return next;
+}
+
+/**
+ * Closes a live run — the COMPLETION WRITER `recordActual`'s own A2 note
+ * has been promising since Phase 7A ("whatever turns a `workoutComplete`/
+ * `terminated` event into a finished record"), landing here in the task
+ * that finally has a caller for it (7B Task 4, `useMonitorSession`).
+ *
+ * Two fields move, together and only here: `completedAt` (the
+ * "live" vs "finished but not yet logged" boundary
+ * `MonitorRun.completedAt`'s own comment draws — after this the record is
+ * immutable, and `recordActual` above refuses every later boundary) and
+ * `terminated` (HOW it ended, `MonitorRun.terminated`'s own comment: 7C
+ * has to tell "logged 12 of 12" from "abandoned at 8"). They are one
+ * call rather than two setters precisely because a record that says
+ * "finished" without saying how is the shape 7C cannot read.
+ *
+ * **Idempotent by the same rule `recordActual` uses**: an already-closed
+ * run is returned UNCHANGED and nothing is persisted — a second terminal
+ * event, an End press racing the machine's own `workoutComplete`, or a
+ * P3b close followed by the terminal event that was already in flight
+ * must never re-stamp a later `completedAt` over the real one, nor flip
+ * `terminated` after the fact. The hook has its own guard in front of
+ * this (it ignores terminal events for a run it already closed, the
+ * spec's P3b pin); this one is independent, for the same reason
+ * `recordActual`'s is: the record outlives the driver and the hook that
+ * wrote it.
+ *
+ * Returns a NEW record rather than mutating, matching `recordActual`.
+ */
+export function completeMonitorRun(
+  run: MonitorRun,
+  args: { terminated: boolean },
+  now: Date,
+): MonitorRun {
+  if (run.completedAt !== null) return run;
+  const next: MonitorRun = {
+    ...run,
+    completedAt: now.toISOString(),
+    terminated: args.terminated,
+  };
   saveMonitorRun(next);
   return next;
 }
