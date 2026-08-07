@@ -16,6 +16,14 @@
 // once the driver/fake existed to consume it — the identical situation
 // `response.ts` was added to resolve mid-Task-3.
 //
+// Fix-3 Task 5 added this module's second responsibility: `armedStructureFields`
+// (plus `EMPTY_ARM_STRUCTURE`/`PRE_ARM_BASELINE_STRUCTURE`) independently
+// encodes 0x0031's structure fields from a held program, so `fake.ts` has a
+// WIRE-side computation of SESSION 4a's semantics that shares no call path
+// with `pm5/commands.ts`'s `expectedArmedStructure` (the DRIVER-side
+// prediction `verifyArmed` checks the wire against). See that function's own
+// doc comment for why the two must stay independent.
+//
 // domain/monitor/** imports nothing from src/.
 
 import type {
@@ -65,6 +73,107 @@ function writeHeartRate(
   bpm: number | null,
 ): void {
   writeU8(bytes, offset, bpm === null ? HEARTRATE_INVALID : bpm);
+}
+
+/** The minimal shape this module's structure encoder needs from a held
+ *  program's interval 0 — deliberately narrower than `domain/monitor/
+ *  program.ts`'s `ProgramInterval` (only `kind`/`value` decide 0x0031's
+ *  STRUCTURE fields), so this module does not need to import `program.ts` at
+ *  all. `src/monitor/transports/fake.ts` passes `WorkoutProgram.intervals`
+ *  straight through — any array assignable to `ProgramInterval[]` also
+ *  satisfies this. */
+export interface StructureInterval {
+  kind: "time" | "distance";
+  value: number;
+}
+
+/** 0x0031's three STRUCTURE fields — `workoutType`, `workoutDurationRaw` and
+ *  `workoutDurationType` (interface-notes.md §10, offsets 6, 14-16, 17). */
+export interface WireArmedStructure {
+  workoutType: number;
+  workoutDurationRaw: number;
+  workoutDurationType: number;
+}
+
+// Fix-3 Task 5 (review I-5, `src/monitor/transports/fake.ts`'s own ⚠
+// tripwire at the old call site): these four literals are declared HERE,
+// independently of `domain/monitor/pm5/commands.ts`'s `WORKOUTTYPE_
+// VARIABLE_INTERVAL` / `WORKOUT_DURATION_IDENTIFIER_TIME` / `WORKOUT_
+// DURATION_IDENTIFIER_DISTANCE` / `WORKOUT_DURATION_TIME_SCALE` — on
+// purpose, and never imported from there. `commands.ts`'s
+// `expectedArmedStructure` is the DRIVER's prediction of what a healthy
+// PM5 will read back; this module is the WIRE `fake.ts` actually sends. If
+// the fake computed its bytes by calling the driver's own predictor (as it
+// did before this task), a wrong prediction and a wrong wire would always
+// agree, and no fake-driven test could ever catch a real drift between the
+// two — a function would only be proving it equals itself. Keeping the
+// numbers duplicated, not shared, is what makes the fake a WITNESS rather
+// than a mirror.
+const WORKOUT_TYPE_VARIABLE_INTERVAL = 8;
+const DURATION_TYPE_TIME = 0;
+const DURATION_TYPE_DISTANCE = 0x80;
+const TIME_DURATION_SCALE = 100;
+
+/**
+ * SESSION 4a's captured EMPTY-ARM anatomy (2026-08-07, PM5 432331249; the
+ * SDD ledger's `## SESSION 4a` block, "EMPTY ARM captured on the wire":
+ * settle-off, program-short over a running two-time piece, monitor showing
+ * `:00`, driver reporting acked-armed — **steady state `workoutType=1
+ * durationRaw=0 durationType=128`**). A real PM5 armed with no interval
+ * structure at all reports THIS, not the pre-arm baseline (`workoutType=0`,
+ * `PRE_ARM_BASELINE_STRUCTURE` below) and not a normal armed program's own
+ * encoding (`workoutType=8`, `armedStructureFields` below) — the type byte
+ * alone is enough for a structure-reading driver to catch a real empty arm,
+ * which is why `armedStructureFields`'s own empty-interval branch returns
+ * this rather than an invented all-zero shape.
+ */
+export const EMPTY_ARM_STRUCTURE: WireArmedStructure = {
+  workoutType: 1,
+  workoutDurationRaw: 0,
+  workoutDurationType: DURATION_TYPE_DISTANCE,
+};
+
+/**
+ * SESSION 4a's captured PRE-ARM baseline ("Fields refresh while merely
+ * ARMED (no rowing). Pre-arm baseline: type=0 dur=0 durType=128.") — what a
+ * PM5's 0x0031 structure fields read before anything has ever been armed.
+ * `src/monitor/transports/fake.ts` uses this as the seed for
+ * `FakeScript.lagStructureOneTick`'s "prior structure" (a fake's first-ever
+ * arm has no earlier PROGRAM to lag on, only this).
+ */
+export const PRE_ARM_BASELINE_STRUCTURE: WireArmedStructure = {
+  workoutType: 0,
+  workoutDurationRaw: 0,
+  workoutDurationType: DURATION_TYPE_DISTANCE,
+};
+
+/**
+ * Encodes 0x0031's structure fields for a held program's interval 0, per
+ * SESSION 4a's confirmed read-side semantics (the SDD ledger's `##
+ * SESSION 4a` block): `workoutType` is stable at `8` across TIME, DISTANCE
+ * and rest-0 shapes; a TIME interval reads back `seconds × 100` at duration
+ * identifier `0`; a DISTANCE interval reads back WHOLE METRES at identifier
+ * `128`. An empty `intervals` array (no interval 0 to encode) returns
+ * `EMPTY_ARM_STRUCTURE` — 4a's own captured anatomy for a program with no
+ * structure, not this function's own non-empty encoding with a zeroed
+ * duration.
+ *
+ * INDEPENDENT of `domain/monitor/pm5/commands.ts`'s `expectedArmedStructure`
+ * — see the literals' own comment above for why the two must never share a
+ * call path.
+ */
+export function armedStructureFields(
+  intervals: readonly StructureInterval[],
+): WireArmedStructure {
+  const first = intervals[0];
+  if (!first) return EMPTY_ARM_STRUCTURE;
+  return {
+    workoutType: WORKOUT_TYPE_VARIABLE_INTERVAL,
+    workoutDurationRaw:
+      first.kind === "time" ? first.value * TIME_DURATION_SCALE : first.value,
+    workoutDurationType:
+      first.kind === "time" ? DURATION_TYPE_TIME : DURATION_TYPE_DISTANCE,
+  };
 }
 
 /** 0x0031 — inverse of `parse.ts`'s `parseGeneralStatus`, 19 bytes. */

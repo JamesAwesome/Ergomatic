@@ -1619,6 +1619,20 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
       generals.slice(1).map((b) => decodeGeneral(b).workoutState),
     ).toStrictEqual([WORKOUTSTATE_WAITTOBEGIN]);
 
+    // Fix-3 Task 5: the WIRE now says so too — SESSION 4a's own captured
+    // empty-arm anatomy (`workoutType=1 durationRaw=0 durationType=128`),
+    // NOT `PROGRAM`'s real structure (`{8, 6000, 0}`, `60s -> 6000` — what
+    // this exact fixture reported before this task, and what a fake calling
+    // the driver's own predictor would still report today, since an empty
+    // arm is invisible to `expectedArmedStructure` — it only ever sees the
+    // program actually sent). This is the reading `driver.ts`'s
+    // `verifyArmed` now catches end to end.
+    expect(decodeGeneral(generals[1]!)).toMatchObject({
+      workoutType: 1,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
+    });
+
     // Rowed past the scripted boundary: nothing on either characteristic,
     // ever (hardware: 108.4 m past a 100 m interval, no boundary at all).
     fake.tick(5000);
@@ -1708,5 +1722,112 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
     await sendProgram(fake, PROGRAM);
 
     expect(fake.loadedIntervals()).toBe(0);
+  });
+});
+
+describe("createFakeTransport: fix-3 Task 5 — 0x0031 carries structure, independently of the driver's own prediction", () => {
+  it("a TIME program's WAITTOBEGIN bundle reads back seconds x 100 at duration identifier 0 (60s -> 6000, SESSION 4a's TIME row)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    await programIt(fake, PROGRAM);
+    expect(decodeGeneral(generals[0]!)).toMatchObject({
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    });
+  });
+
+  it("a DISTANCE program's WAITTOBEGIN bundle reads back WHOLE METRES at duration identifier 128 (500 -> 500, SESSION 4a's DISTANCE row)", async () => {
+    const fake = createFakeTransport({ program: DISTANCE_PROGRAM });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    await programIt(fake, DISTANCE_PROGRAM);
+    expect(decodeGeneral(generals[0]!)).toMatchObject({
+      workoutType: 8,
+      workoutDurationRaw: 500,
+      workoutDurationType: 128,
+    });
+  });
+
+  it("a script that never calls program() at all reports script.program's OWN structure throughout — the pre-loaded fallback stays exactly what it was", async () => {
+    // No `programIt` call anywhere here: `deliverStatus` is reached purely
+    // through the scripted timeline, never through an accept.
+    const fake = createFakeTransport({
+      program: DISTANCE_PROGRAM,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 10,
+          distanceMeters: 50,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+      ],
+    });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.tick(100);
+    expect(decodeGeneral(generals[0]!)).toMatchObject({
+      workoutType: 8,
+      workoutDurationRaw: 500,
+      workoutDurationType: 128,
+    });
+  });
+
+  it("FakeScript.lagStructureOneTick: the WAITTOBEGIN bundle right after an accept carries the PRIOR structure once, then the true one from the next tick on (SESSION 4a's recorded mid-cycle transients)", async () => {
+    // This fake's FIRST-ever arm: nothing has armed before it, so the
+    // "prior" structure it lags on is SESSION 4a's own pre-arm baseline
+    // (`workoutType=0 durationRaw=0 durationType=128`), not a zero of this
+    // test's own invention.
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      lagStructureOneTick: true,
+      events: [
+        {
+          atMs: 1,
+          kind: "status",
+          workoutState: WORKOUTSTATE_WAITTOBEGIN,
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: null,
+          programIntervalIndex: 0,
+        },
+      ],
+    });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    await programIt(fake, PROGRAM); // consumes the lag via deliverArmedNow()
+
+    expect(decodeGeneral(generals[0]!)).toMatchObject({
+      workoutType: 0,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
+    });
+
+    fake.tick(1); // the scripted second WaitToBegin tick — the lag is spent
+    expect(decodeGeneral(generals[1]!)).toMatchObject({
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    });
+  });
+
+  it("FakeScript.lagStructureOneTick OMITTED (the default): the very first armed tick already carries the true structure — every other fake-driven test in this repo depends on this", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    await programIt(fake, PROGRAM);
+    expect(decodeGeneral(generals[0]!)).toMatchObject({
+      workoutType: 8,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+    });
   });
 });

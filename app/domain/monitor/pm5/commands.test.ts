@@ -16,6 +16,7 @@ import {
   expectedArmedStructure,
   Pm5EncodeError,
 } from "./commands.js";
+import { armedStructureFields } from "./statusFrames.js";
 
 // Mirrors domain/monitor/program.test.ts's real-workout fixture plumbing
 // (same BASELINES, same Phase->CompiledPhase rename) so this file can drive
@@ -517,6 +518,93 @@ describe("expectedArmedStructure (fix-3 Task 4 — what 0x0031 must read back)",
       workoutType: 8,
       workoutDurationRaw: 30000,
       workoutDurationType: 0,
+    });
+  });
+});
+
+describe("expectedArmedStructure (the DRIVER's prediction) vs armedStructureFields (fix-3 Task 5, the FAKE's own wire encoding) — independent implementations agreeing about the machine", () => {
+  // Fix-3 Task 5 / review I-5: `src/monitor/transports/fake.ts` used to
+  // compute its 0x0031 bytes by calling `expectedArmedStructure` directly —
+  // a MIRROR, not a witness, since a wrong prediction and a wrong wire would
+  // then always agree and no fake-driven test could ever catch a real drift
+  // between the two. `pm5/statusFrames.ts`'s `armedStructureFields` now
+  // re-declares SESSION 4a's constants independently (its own literals, not
+  // imported from `commands.ts`) — this describe block is what actually
+  // PROVES the two stayed in agreement, rather than merely asserting it in
+  // a comment. If either function's own literals ever drift from the
+  // other's (e.g. one file's TIME scale becomes 10 instead of 100), this is
+  // the test that catches it — see the task report's mutation table.
+  function timeProgram(seconds: number): WorkoutProgram {
+    return {
+      intervals: [
+        {
+          kind: "time",
+          value: seconds,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 30,
+        },
+      ],
+    };
+  }
+
+  function distanceProgram(meters: number): WorkoutProgram {
+    return {
+      intervals: [
+        {
+          kind: "distance",
+          value: meters,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 60,
+        },
+      ],
+    };
+  }
+
+  it("a TIME program: both computations agree (60s -> 6000/Time)", () => {
+    const program = timeProgram(60);
+    expect(armedStructureFields(program.intervals)).toStrictEqual(
+      expectedArmedStructure(program),
+    );
+  });
+
+  it("a DISTANCE program: both computations agree (500m -> 500/Distance)", () => {
+    const program = distanceProgram(500);
+    expect(armedStructureFields(program.intervals)).toStrictEqual(
+      expectedArmedStructure(program),
+    );
+  });
+
+  it("a real library workout (Sea Fret, 300s warmup): both computations agree", () => {
+    const program = realProgram("Sea Fret");
+    expect(armedStructureFields(program.intervals)).toStrictEqual(
+      expectedArmedStructure(program),
+    );
+  });
+
+  it("an interval-less program: the two DISAGREE ON PURPOSE — the driver's fallback prediction (8/0/128) is not the fake's empty-arm anatomy (1/0/128)", () => {
+    // Not a bug: `expectedArmedStructure({intervals: []})`'s own doc
+    // comment explains its fallback exists only to give the duration PAIR
+    // something to compare against; `armedStructureFields([])` instead
+    // returns SESSION 4a's own captured empty-arm reading, `workoutType=1`,
+    // which no prediction has ever produced (review L-3, fix-3 Task 4).
+    // This asymmetry is exactly what lets `verifyArmed` catch a real empty
+    // arm on the type byte even though the duration pair alone would not
+    // distinguish it.
+    const driverPrediction = expectedArmedStructure({ intervals: [] });
+    const fakeWire = armedStructureFields([]);
+    expect(driverPrediction.workoutDurationRaw).toBe(
+      fakeWire.workoutDurationRaw,
+    );
+    expect(driverPrediction.workoutDurationType).toBe(
+      fakeWire.workoutDurationType,
+    );
+    expect(driverPrediction.workoutType).not.toBe(fakeWire.workoutType);
+    expect(fakeWire).toStrictEqual({
+      workoutType: 1,
+      workoutDurationRaw: 0,
+      workoutDurationType: 128,
     });
   });
 });
