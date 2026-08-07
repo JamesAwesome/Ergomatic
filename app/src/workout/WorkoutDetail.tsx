@@ -5,16 +5,117 @@ import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
+import {
+  compileProgram,
+  type WorkoutProgram,
+} from "../../domain/monitor/program.js";
 import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
-import { buildDraft, loadDraft, saveDraft } from "../session/draft";
+import {
+  buildDraft,
+  loadDraft,
+  saveDraft,
+  withNudge,
+  type SessionDraft,
+} from "../session/draft";
+import { buildRun } from "../session/engine";
 import { clearRun, loadRun } from "../session/run";
 import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
+import ConnectAction from "../monitor/ConnectAction";
+import type { RunIdentity } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
+import ConnectedInterstitial, { loadLastDevice } from "./ConnectedInterstitial";
+
+// `navigator.bluetooth`'s own type comes from `monitor/transports/
+// webBluetooth.ts`'s ambient `declare global { interface Navigator {...} }`
+// augmentation — a MODULE-PRIVATE `Bluetooth` interface (that file has no
+// `export`, so its name isn't reachable here to extend by declaration
+// merging). Rather than fight that with a second global augmentation of a
+// name this file cannot see, this probes for `getAvailability` at runtime
+// and types the result narrowly, right where it's used — TypeScript's DOM
+// lib ships no Web Bluetooth types at all (`webBluetooth.ts`'s own header
+// comment: verified, nothing in lib.dom.d.ts), and `getAvailability` is
+// Chromium-only, genuinely absent on older Chromium/other engines.
+interface BluetoothAvailabilityProbe {
+  getAvailability?(): Promise<boolean>;
+}
+
+/** The Connect button's own three states (handoff §1): a real, available
+ *  radio; the adapter present but switched off (Chromium can tell us this
+ *  via `getAvailability()`); and no Web Bluetooth API on this
+ *  platform/browser at all (`navigator.bluetooth` undefined — Safari,
+ *  Firefox, a non-secure context). `"unknown"` is the brief instant before
+ *  the async probe resolves — rendered identically to `"available"` so the
+ *  button never flashes a dashed state it may not deserve. */
+type BluetoothStatus = "unknown" | "available" | "off" | "absent";
+
+function useBluetoothStatus(): BluetoothStatus {
+  const [status, setStatus] = useState<BluetoothStatus>("unknown");
+  useEffect(() => {
+    let cancelled = false;
+    const bt = navigator.bluetooth;
+    if (bt === undefined) {
+      // Routed through a resolved microtask, same idiom `Countdown.tsx`'s
+      // own build effect uses — react-hooks' set-state-in-effect rule
+      // flags a setState call made directly, synchronously, in an effect
+      // body; a microtask has no perceptible delay and reads as "setState
+      // in a callback" to the rule.
+      void Promise.resolve().then(() => {
+        if (!cancelled) setStatus("absent");
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const probe = bt as unknown as BluetoothAvailabilityProbe;
+    if (typeof probe.getAvailability !== "function") {
+      // Can't tell — fail open rather than dashing a button that may work
+      // fine; a genuinely-off adapter still surfaces honestly once pressed
+      // (`useMonitorSession.ts`'s own `mapRadioFailure`).
+      void Promise.resolve().then(() => {
+        if (!cancelled) setStatus("available");
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    probe
+      .getAvailability()
+      .then((available) => {
+        if (!cancelled) setStatus(available ? "available" : "off");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("available");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return status;
+}
+
+/** Bakes the WorkoutDetail preview stack's own cumulative nudges into a
+ *  fresh draft — the same shape `startSession` would build, minus the
+ *  nudges it currently drops (this screen's "Phase 6 will pass them
+ *  per-request" comment, still true for the phone-timer Start button
+ *  itself; NOT touched here — see this file's own header note on why
+ *  Connect gets this and Start does not). `withNudge` takes a cumulative
+ *  DELTA against a fresh (zeroed) draft, so applying the whole stored
+ *  value once reproduces the same cumulative nudge the preview shows. */
+function buildNudgedDraft(
+  workout: LibraryWorkout,
+  nudges: Record<number, number>,
+): SessionDraft {
+  let draft = buildDraft(workout);
+  for (const [key, value] of Object.entries(nudges)) {
+    if (value !== 0) draft = withNudge(draft, Number(key), value);
+  }
+  return draft;
+}
 
 export default function WorkoutDetail() {
   const { id } = useParams();
@@ -106,6 +207,28 @@ function WorkoutDetailView({
   // never persisted (Phase 6 will pass them per-request).
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [startError, setStartError] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  // `null` = the button/stack is showing; non-null = the full-screen
+  // interstitial has taken over (handoff §2: "full screen... a sheet was
+  // rejected"). Carries everything the interstitial needs so it never has
+  // to re-derive baselines/identity itself — screens talk only to
+  // `useMonitorSession` (the plan's layering rule), and this is the one
+  // seam above that hook where the workout's OWN data still lives.
+  const [connecting, setConnecting] = useState<{
+    program: WorkoutProgram;
+    identity: RunIdentity;
+    baselines: Baselines;
+    nudgedCount: number;
+  } | null>(null);
+  // Lazy read-once, refreshed explicitly when the interstitial hands
+  // control back (see `handleInterstitialExit`/`handleRowInstead` below) —
+  // the same idiom `Countdown.tsx`'s own `existingRun`/`draft` lazy reads
+  // use, so a real first-pair updates the caption the instant the rower is
+  // back on this screen, without polling storage on every render.
+  const [lastDevice, setLastDevice] = useState<string | null>(() =>
+    loadLastDevice(),
+  );
+  const bluetoothStatus = useBluetoothStatus();
   // Staged-confirm idiom (src/you/BaselineEditor.tsx, also copied by this
   // file's own OwnerActions delete flow): gates the one-shot replacement of
   // an in-progress OR completed-but-unlogged session behind an explicit
@@ -231,6 +354,86 @@ function WorkoutDetailView({
     startSession();
   }
 
+  // Phase 7B Task 5 — Connect's `onProceed`. Runs AFTER `ConnectAction`'s
+  // own guard has already cleared (the staged confirm, if any, resolved to
+  // "proceed") — this function's only job is compiling THIS workout, at
+  // its current preview-nudged targets, into the `WorkoutProgram` the
+  // interstitial will hand to `useMonitorSession.program()`. Compiling
+  // HERE rather than inside the interstitial keeps a `CompileError` (a
+  // real, named, copy-ready failure — `domain/monitor/program.ts`'s own
+  // `CompileError.message`) off the interstitial's OWN `ConnectedError`
+  // union entirely: nothing has been sent to a monitor yet, so this is not
+  // a `useMonitorSession` failure and does not deserve a phase transition
+  // or a driver connection at all.
+  function handleConnectProceed() {
+    setConnectError(null);
+    if (baselines === null) {
+      // No screen exists yet to nudge/resolve a target without baselines
+      // (Connect has no Confirm step to defer to, unlike Start) — the same
+      // "no target" fact "Log it after"'s footer already states, worded
+      // for this door instead.
+      setConnectError(
+        "Set your baselines first — Connect needs a target to program.",
+      );
+      return;
+    }
+    const draft = buildNudgedDraft(workout, nudges);
+    const run = buildRun(draft, baselines, new Date());
+    const compiled = compileProgram(run.phases);
+    if ("code" in compiled) {
+      setConnectError(compiled.message);
+      return;
+    }
+    const nudgedCount = Object.values(nudges).filter((v) => v !== 0).length;
+    setConnecting({
+      program: compiled,
+      identity: { workoutId: workout.id, title: workout.title },
+      baselines,
+      nudgedCount,
+    });
+  }
+
+  // Cancel, from any interstitial state: "always lands back on Workout
+  // detail with nothing lost" (handoff §2) — nothing here has committed a
+  // phone session, so there is nothing to clear beyond re-reading the
+  // caption in case this was the rower's first-ever successful pair.
+  function handleInterstitialExit() {
+    setConnecting(null);
+    setLastDevice(loadLastDevice());
+  }
+
+  // State 6's "Row on the phone timer instead" — the existing Start path,
+  // but with the SAME nudged targets Connect was about to send, not the
+  // always-empty ones `startSession` above builds (its own header comment
+  // names that gap; fixing it for Start itself is out of this task's
+  // scope, but the escape hatch's own copy promises "targets intact" and
+  // must actually keep that promise). Mirrors `startSession`'s cross-clear
+  // exactly — this commits to a phone session just as surely.
+  function handleRowInstead() {
+    setConnecting(null);
+    const draft = buildNudgedDraft(workout, nudges);
+    if (saveDraft(draft)) {
+      clearRun();
+      clearMonitorRun();
+      navigate("/session/confirm");
+    } else {
+      setStartError("Couldn't start this session. Try again.");
+    }
+  }
+
+  if (connecting !== null) {
+    return (
+      <ConnectedInterstitial
+        program={connecting.program}
+        identity={connecting.identity}
+        baselines={connecting.baselines}
+        nudgedCount={connecting.nudgedCount}
+        onExit={handleInterstitialExit}
+        onRowInstead={handleRowInstead}
+      />
+    );
+  }
+
   const minutesLabel = baselines
     ? `${estimateMinutes(workout.steps, baselines).minutes} MIN`
     : "— MIN";
@@ -341,14 +544,17 @@ function WorkoutDetailView({
           </div>
         )}
         {startError && <p className="baseline-error">{startError}</p>}
-        {/* PHASE 7B TASK 5 SOCKET — the Connect block goes HERE, second in
-            the stack (handoff §1: an L2 below Start, "it must not compete
-            with Start"). Task 2 has already built and proven the whole
-            control, guard included: mount `<ConnectAction onProceed={…} />`
-            from `../monitor/ConnectAction` and add only presentation around
-            it (the `LAST USED · <name>` caption, the Bluetooth-off dashed
-            treatment, the transport-present gate). Its own doc comment says
-            why it ships unmounted and what is NOT Task 5's to re-derive. */}
+        {/* PHASE 7B TASK 5 — second in the stack (handoff §1: an L2 below
+            Start, "it must not compete with Start"). `ConnectAction` (Task
+            2) owns the trigger AND the staged confirm guard end to end;
+            this block adds only presentation around it: the caption and
+            the Bluetooth-off/absent dashed treatment. */}
+        <ConnectBlock
+          bluetoothStatus={bluetoothStatus}
+          lastDevice={lastDevice}
+          onProceed={handleConnectProceed}
+        />
+        {connectError && <p className="baseline-error">{connectError}</p>}
         {/* Task 3 (the manual door): gated on baselines with the exact same
             "no target" idiom Start's own footer uses at ConfirmTargets.tsx
             (`baselines ? <button> : <span className="step-row-no-target">`)
@@ -383,6 +589,47 @@ function WorkoutDetailView({
         )}
       </div>
     </main>
+  );
+}
+
+/** The Connect button's own presentation shell (handoff §1) — `ConnectAction`
+ *  (Task 2) supplies the trigger and the staged confirm; this wraps it from
+ *  OUTSIDE (its own doc comment: "add only presentation around it") rather
+ *  than reaching into its markup, so the guard logic stays untouched. The
+ *  dashed treatment is a CSS descendant rule (`.connect-block-dashed
+ *  .button-l2`) reskinning `ConnectAction`'s own `<button>`, not a second
+ *  button — "still tappable" (handoff) means the SAME control, restyled. */
+function ConnectBlock({
+  bluetoothStatus,
+  lastDevice,
+  onProceed,
+}: {
+  bluetoothStatus: BluetoothStatus;
+  lastDevice: string | null;
+  onProceed: () => void;
+}) {
+  const dashed = bluetoothStatus === "off" || bluetoothStatus === "absent";
+  return (
+    <div
+      className={
+        dashed ? "connect-block connect-block-dashed" : "connect-block"
+      }
+    >
+      <ConnectAction onProceed={onProceed} />
+      {bluetoothStatus === "off" && (
+        <p className="mono-status connect-block-caption">BLUETOOTH IS OFF</p>
+      )}
+      {bluetoothStatus === "absent" && (
+        <p className="mono-status connect-block-caption">
+          NO BLUETOOTH ON THIS DEVICE
+        </p>
+      )}
+      {bluetoothStatus === "available" && lastDevice !== null && (
+        <p className="mono-status connect-block-caption">
+          LAST USED · {lastDevice}
+        </p>
+      )}
+    </div>
   );
 }
 

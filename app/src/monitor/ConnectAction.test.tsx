@@ -248,4 +248,31 @@ describe("ConnectAction: the guard", () => {
       "button-l2",
     );
   });
+
+  // L-1 (Task 2's review, carried forward as Task 5's own obligation): a
+  // `useMemo(() => connectGuardStage(), [])` hoist at MOUNT would pass
+  // every test above, since every one of them seeds storage BEFORE
+  // `render()` — mount-time and press-time are indistinguishable there.
+  // This is the one test that tells them apart: nothing is on record when
+  // this component mounts, a SECOND TAB finishes a session while it sits
+  // open, and only THEN is Connect pressed. `handleConnect` in the shipped
+  // component calls `connectGuardStage()` fresh, inside the click handler
+  // — reading it at mount instead would see the empty storage that was
+  // true when this component rendered and let the press straight through.
+  it("reads the record at press time, not at mount", async () => {
+    renderConnect();
+    expect(loadRun()).toBeNull();
+
+    saveRun(unloggedSessionRun());
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      screen.getByText(
+        "You have an unlogged session — connecting discards it.",
+      ),
+    ).toBeInTheDocument();
+    expect(loadRun()).not.toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+  });
 });

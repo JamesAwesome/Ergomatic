@@ -4382,4 +4382,182 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.08em;
   color: var(--accent);
   text-decoration: none;
+
+/* -- Connect + the interstitial (Phase 7B Task 5, handoff §§1-2) --------
+   Tokens only — reuses --ink/--ink-3/--surface/--surface-sunken/--rule-3/
+   --accent, the mono/serif families, and the house .button-l1/.button-l2/
+   .action-stack/.mono-status classes; no new hex, no new custom property. */
+
+.connect-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.connect-block-caption {
+  margin: 0;
+}
+
+/* Bluetooth-off / absent (handoff §1): "Same dashed idiom as a disabled
+   SHUFFLE. Still tappable." Applied from OUTSIDE `ConnectAction`'s own
+   markup (that component's own doc comment: Task 5's job is presentation
+   "around" the mounted control) via a descendant selector on its trigger
+   button — nothing here disables the control, only its border/label read
+   as inert. `--ink-3`, NOT the handoff's own literal `--ink-5`: this
+   button stays genuinely tappable (unlike a real `:disabled` control,
+   which is where `--ink-5` stays reserved throughout this file — the
+   contrast sweep's own standing rule, this file's Countdown/Live-timer
+   comments), and the handoff's own header states the same standing law
+   ("no small mono label lighter than --ink-3") one paragraph above the
+   literal it names here. Computed contrast: --ink-3 on --surface 7.44:1,
+   the same figure already verified elsewhere in this file — clears the
+   4.5:1 AA floor comfortably; --ink-5 measured 2.48:1 the one time this
+   exact literal was tried on live text before (see this file's Live-timer
+   comment block), nowhere close. */
+.connect-block-dashed .button-l2 {
+  border-style: dashed;
+  border-color: var(--rule-3);
+  color: var(--ink-3);
+}
+
+/* Full screen, "borrowing Countdown's geometry" (handoff §2) — a sheet was
+   rejected. Unlike Countdown's own centered digit display, this screen's
+   content is a top-to-bottom read (status/serif/detail, then the bottom
+   action stack), so this only borrows the fill-the-frame sizing, not
+   Countdown's centering. */
+.connected-interstitial {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+      26px
+  );
+}
+
+.connected-interstitial-actions {
+  margin-top: auto;
+}
+
+.connected-status-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.connected-serif-line {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  color: var(--ink);
+  margin: 0;
+}
+
+.connected-body-line {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.connected-reassurance {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+/* The no-spinner checklist (handoff §2, DEVIATIONS #5): three mono lines,
+   a leading marker each — "✓" done, a filled ink square current, a
+   `--rule-3`-bordered square pending. This is the ONLY progress indicator
+   anywhere in the connected flow. */
+.connected-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.connected-checklist-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.connected-checklist-done {
+  color: var(--ink);
+}
+
+.connected-checklist-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+.connected-checklist-current .connected-checklist-marker {
+  background: var(--ink);
+}
+
+.connected-checklist-pending .connected-checklist-marker {
+  border: 1px solid var(--rule-3);
+}
+
+.connected-panel-sunken {
+  background: var(--surface-sunken);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.connected-panel-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.connected-panel-line {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.connected-detail-panel {
+  background: var(--surface-sunken);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.connected-detail-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.connected-detail-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  margin: 0;
+  word-break: break-word;
+}
+
+.connected-detail-raw {
+  color: var(--ink-3);
 }
