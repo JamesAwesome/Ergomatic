@@ -12,33 +12,34 @@ export function WorkoutTypesBody() {
       </p>
 
       <p>
-        <TypeBadge type="O2" /> <strong>General endurance.</strong> Steady
-        rowing at a moderate effort, usually thirty minutes or more. You should
-        be able to hold a conversation. Nothing about an <TypeBadge type="O2" />{" "}
-        piece feels impressive while you're doing it. That is the point: this is
-        the work that builds the engine everything else borrows from. Most of
-        your metres should be <TypeBadge type="O2" /> metres.
+        <TypeBadge type="O2" /> <strong>Aerobic.</strong> General endurance:
+        steady rowing at a moderate effort, usually thirty minutes or more. You
+        should be able to hold a conversation. Nothing about an{" "}
+        <TypeBadge type="O2" /> piece feels impressive while you're doing it.
+        That is the point: this is the work that builds the engine everything
+        else borrows from. Most of your metres should be <TypeBadge type="O2" />{" "}
+        metres.
       </p>
 
       <p>
-        <TypeBadge type="AT" /> <strong>Threshold.</strong> Moderate intervals
-        with roughly as much rest as work. An <TypeBadge type="AT" /> piece
-        lives at an odd, specific effort: you could still speak, but you would
-        rather not. Call it conversational pace while totally out of breath. The
-        job is to find the line where your body stops keeping up with the
-        effort, then row just under that line for longer each time.
+        <TypeBadge type="AT" /> <strong>Anaerobic threshold.</strong> Moderate
+        intervals with roughly as much rest as work. An <TypeBadge type="AT" />{" "}
+        piece lives at an odd, specific effort: you could still speak, but you
+        would rather not. Call it conversational pace while totally out of
+        breath. The job is to find the line where your body stops keeping up
+        with the effort, then row just under that line for longer each time.
       </p>
 
       <p>
-        <TypeBadge type="TR" /> <strong>Hard intervals.</strong> Short,
-        high-intensity pieces with rests around three times the work.{" "}
-        <TypeBadge type="TR" /> exists to put you past the threshold on purpose,
-        so your body learns to deal with the build-up and you learn to keep
-        rowing through it. These pieces are as much mental as physical.
+        <TypeBadge type="TR" /> <strong>Transport.</strong> Short,
+        high-intensity pieces with rests around three times the work. The name
+        is about moving lactic acid: these pieces put you past the threshold on
+        purpose, so your body learns to deal with the build-up and you learn to
+        keep rowing through it. These pieces are as much mental as physical.
       </p>
 
       <p>
-        <TypeBadge type="AN" /> <strong>Speed.</strong> Very short bursts of
+        <TypeBadge type="AN" /> <strong>Anaerobic.</strong> Very short bursts of
         half a minute to a minute and a half, with long rests of four or five
         times the work. <TypeBadge type="AN" /> is never about endurance. The
         job is power, and turning your top speed up.

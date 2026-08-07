@@ -40,6 +40,17 @@ export function BaselinesBody() {
       </p>
 
       <p>
+        Why those two distances? Racing. A 2k is the standard sprint race, the
+        distance every competitive rower trains toward. Head races, the longer
+        events rowed through autumn, run about five to six thousand metres.
+        Training culture calibrated itself around those two efforts long ago,
+        and the app's own plan presets, sprint and head race, point at the same
+        pair. You never need to enter a race for the numbers to work. They are
+        simply well-studied reference points for two different engines: one flat
+        out, one sustained.
+      </p>
+
+      <p>
         Don't overthink the first one. An honest, unheroic 6k this week beats a
         perfect one someday. You can re-row it whenever fitness (or honesty)
         demands.
