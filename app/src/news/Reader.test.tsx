@@ -85,7 +85,7 @@ describe("Reader", () => {
     expect(screen.getByText(/ERGOMATIC · 3 MIN/)).toBeVisible();
     expect(
       screen.getByText(
-        /A baseline is nothing more than the average split you can hold for the/,
+        /A baseline is nothing more than the average split \(your time per 500 m\) you can hold for the/,
       ),
     ).toBeVisible();
   });
@@ -135,7 +135,7 @@ describe("Reader", () => {
     renderReader("/news/baselines");
 
     const next = screen.getByRole("link", {
-      name: /NEXT · 3 MIN — Picking a workout by how much it should hurt/,
+      name: /NEXT · 2 MIN — Picking a workout by how much it should hurt/,
     });
     expect(next).toHaveAttribute("href", "/news/picking-a-workout");
   });
@@ -162,7 +162,7 @@ describe("Reader", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        /A baseline is nothing more than the average split you can hold for the/,
+        /A baseline is nothing more than the average split \(your time per 500 m\) you can hold for the/,
       ),
     ).toBeVisible();
     expect(

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import TypeBadge from "../../../components/TypeBadge";
 import { PyramidFigure } from "./PyramidFigure";
 
@@ -8,7 +9,8 @@ export function WorkoutTypesBody() {
         Every workout in the library carries a type chip:{" "}
         <TypeBadge type="O2" /> <TypeBadge type="AT" /> <TypeBadge type="TR" />{" "}
         <TypeBadge type="AN" />. The chip names the job that workout does, and
-        each job feels different from the inside.
+        each job feels different from the inside. You'll meet the same four
+        chips on every workout card in Today and the Library.
       </p>
 
       <p>
@@ -23,19 +25,23 @@ export function WorkoutTypesBody() {
 
       <p>
         <TypeBadge type="AT" /> <strong>Anaerobic threshold.</strong> Moderate
-        intervals with roughly as much rest as work. An <TypeBadge type="AT" />{" "}
-        piece lives at an odd, specific effort: you could still speak, but you
-        would rather not. Call it conversational pace while totally out of
-        breath. The job is to find the line where your body stops keeping up
-        with the effort, then row just under that line for longer each time.
+        intervals with roughly as much rest as work; a typical shape is four
+        4-minute pieces with four minutes of easy rowing between them. An{" "}
+        <TypeBadge type="AT" /> piece lives at an odd, specific effort: you
+        could still speak, but you would rather not. Call it conversational pace
+        while totally out of breath. The job is to find the line where your body
+        stops keeping up with the effort, then row just under that line for
+        longer each time.
       </p>
 
       <p>
-        <TypeBadge type="TR" /> <strong>Transport.</strong> Short,
-        high-intensity pieces with rests around three times the work. The name
-        is about moving lactic acid: these pieces put you past the threshold on
-        purpose, so your body learns to deal with the build-up and you learn to
-        keep rowing through it. These pieces are as much mental as physical.
+        <TypeBadge type="TR" /> <strong>Transport.</strong> The hard-intervals
+        band of the pyramid: short, high-intensity pieces with rests around
+        three times the work, like 1-minute efforts with three minutes between
+        them. The odd name is shorthand for lactate clearance: these pieces put
+        you past the threshold on purpose, so your body gets better at clearing
+        the build-up and you learn to keep rowing through it. These pieces are
+        as much mental as physical.
       </p>
 
       <p>
@@ -68,7 +74,9 @@ export function WorkoutTypesBody() {
         One caveat: the types blur at the edges. A hard interval session for a
         fit rower can be a threshold piece for a newer one. This is why every
         workout also carries a difficulty and an expected pain. The type names
-        the job; the other two say how big it is.
+        the job; the other two say how big it is.{" "}
+        <Link to="/news/picking-a-workout">Picking a workout</Link> covers how
+        to use those two numbers.
       </p>
     </>
   );

@@ -4275,6 +4275,17 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 0 auto;
 }
 
+/* Inline cross-links inside running prose (persona-review fix wave): the
+   app's own accent text-link idiom, matching `.news-text-link`/`.reader-next`
+   below's `text-decoration: none` treatment rather than an underline.
+   Contrast unchanged — `--accent` on `--page`/`--surface` is already
+   recorded at 5.94:1 app-wide (the same pairing `.button-primary`/
+   `.type-badge` use), so this adds a call site, not a new pairing. */
+.reader-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 /* Text link, not `.button-l1` (design rule: accent is reserved for text
    links and the unread square, same rule News's own CSS block documents).
    `min-height: var(--tap)` plus `align-items: center` gets the ≥44px hit

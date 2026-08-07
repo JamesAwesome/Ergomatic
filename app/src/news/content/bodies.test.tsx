@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { WorkoutTypesBody } from "./bodies/workoutTypes";
 import { BaselinesBody } from "./bodies/baselines";
 import { PickingAWorkoutBody } from "./bodies/pickingAWorkout";
@@ -8,7 +9,13 @@ import { PyramidFigure } from "./bodies/PyramidFigure";
 
 describe("article body components", () => {
   it("WorkoutTypesBody renders with distinctive text, the sentence surviving intact across the inline O2 chip that now splits it", () => {
-    const { container } = render(<WorkoutTypesBody />);
+    // Wrapped in MemoryRouter: this body now carries a real `<Link>` (item I,
+    // persona-review fix wave), which throws outside a router context.
+    const { container } = render(
+      <MemoryRouter>
+        <WorkoutTypesBody />
+      </MemoryRouter>,
+    );
     const paragraphs = [...container.querySelectorAll("p")].map(
       (p) => p.textContent,
     );
@@ -19,16 +26,35 @@ describe("article body components", () => {
     ).toBe(true);
   });
 
+  it("WorkoutTypesBody's closing cross-link points at /news/picking-a-workout (item I)", () => {
+    render(
+      <MemoryRouter>
+        <WorkoutTypesBody />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("link", { name: "Picking a workout" }),
+    ).toHaveAttribute("href", "/news/picking-a-workout");
+  });
+
   it("BaselinesBody renders with distinctive text and reader-inset aside", () => {
     render(<BaselinesBody />);
     expect(
       screen.getByText(/A baseline is nothing more than the average split/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/IN THE APP · 6K 2:02.4/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/IN THE APP · Your 6k baseline: 2:02.4/),
+    ).toBeInTheDocument();
   });
 
   it("PickingAWorkoutBody renders with distinctive text", () => {
-    render(<PickingAWorkoutBody />);
+    // Wrapped in MemoryRouter: this body now carries a real `<Link>` (item J,
+    // persona-review fix wave), which throws outside a router context.
+    render(
+      <MemoryRouter>
+        <PickingAWorkoutBody />
+      </MemoryRouter>,
+    );
     expect(
       screen.getByText(
         /Standing in front of a library of three hundred workouts/,
@@ -36,10 +62,28 @@ describe("article body components", () => {
     ).toBeInTheDocument();
   });
 
+  it("PickingAWorkoutBody's inline cross-link points at /news/pain-scale (item J)", () => {
+    render(
+      <MemoryRouter>
+        <PickingAWorkoutBody />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("link", { name: "pain from 1 to 5" }),
+    ).toHaveAttribute("href", "/news/pain-scale");
+  });
+
   it("PainScaleBody renders with distinctive text", () => {
     render(<PainScaleBody />);
     expect(
       screen.getByText(/You don't need a heart rate monitor to train well/),
+    ).toBeInTheDocument();
+  });
+
+  it("PainScaleBody draws the sharp-pain boundary before the numbered levels (item K)", () => {
+    render(<PainScaleBody />);
+    expect(
+      screen.getByText(/stop, and let it settle before you row again/),
     ).toBeInTheDocument();
   });
 });

@@ -10,6 +10,15 @@ export function PainScaleBody() {
       </p>
 
       <p>
+        One boundary before the numbers: everything below describes effort. It
+        is the discomfort a hard row is supposed to produce, and it fades within
+        the session or by the next day. Sharp, sudden, or joint-specific pain (a
+        rib, a wrist, your lower back on the drive) is not a high number on this
+        scale. It is a different signal entirely: stop, and let it settle before
+        you row again.
+      </p>
+
+      <p>
         <strong>1 · Motion.</strong> Warm, loose, unhurried. Conversation is
         easy; you could row like this while thinking about something else
         entirely. Warm-ups and recovery paddles live here.
