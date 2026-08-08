@@ -171,10 +171,18 @@ describe("SheetShell", () => {
         import: "default",
       }) as Record<string, string>;
 
-      const callers = Object.entries(sources).filter(
-        ([file, text]) =>
-          !file.includes(".test.") && text.includes("<SheetShell"),
-      );
+      // COMMENTS STRIPPED FIRST, for the same reason `PaneGrid.test.tsx`
+      // strips `index.css` (task-7 review, M1): this file's own prose says
+      // `button-l3` twice, and a sweep that reads prose is a sweep that
+      // passes for a sheet whose buttons were deleted. Caught by mutating
+      // exactly that.
+      const code = (text: string): string =>
+        text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+      const callers = Object.entries(sources)
+        .filter(([file]) => !file.includes(".test."))
+        .map(([file, text]) => [file, code(text)] as const)
+        .filter(([, text]) => text.includes("<SheetShell"));
 
       // Three today: Library's FilterSheet, Today's FilterSheet, and the
       // connected-mode ConnectionLogSheet. A fourth is exactly the thing
