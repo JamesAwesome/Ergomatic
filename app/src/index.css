@@ -5231,7 +5231,16 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* --- The two columns ------------------------------------------------ */
 
-/* PORTRAIT: the wrappers disappear. `display: contents` promotes their
+/* TRAP FOR WHOEVER ADDS A FOCUSABLE ELEMENT TO A PANE (task-6 review, L4):
+   the `order` declarations below make PORTRAIT reading order diverge from DOM
+   order, and `order` moves the paint, never the tab sequence or the screen
+   reader's. Harmless today — neither pane contains anything focusable; every
+   control on this surface belongs to the shell (End, the pager) and sits
+   outside both panes. Put a button in a reordered slot and it will be read
+   and tabbed to in the wrong place. The fix then is to reorder the DOM and
+   drop the `order` for that item, not to add a `tabindex`.
+
+   PORTRAIT: the wrappers disappear. `display: contents` promotes their
    children to direct flex items of `.connected-pane`, and `order` puts them
    back into the handoff's portrait sequence — so one markup serves both
    orientations and nothing re-mounts on rotation. LANDSCAPE (below) turns
