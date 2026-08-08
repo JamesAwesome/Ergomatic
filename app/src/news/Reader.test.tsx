@@ -205,26 +205,36 @@ describe("Reader", () => {
     expect(markRead).not.toHaveBeenCalled();
   });
 
-  it("scrolls the window to the top on mount, and again when the NEXT footer navigates to a different slug (item 1: the reader used to open mid-page against the feed's own scroll position)", async () => {
+  // Round 4 (architectural): the reader scrolls in its own overlay element
+  // instead of the window (see .overlay-screen, index.css) — a freshly
+  // mounted scroller starts at scrollTop 0 by construction, so there is no
+  // scrollTo call to spy on any more. `tabIndex={-1}` is the keyboard focus
+  // stop axe's scrollable-region-focusable rule wants on a scroll region
+  // (same idiom Plan.tsx's 84-row sequence used, Phase 6A).
+  it("the root carries the overlay-screen class and a tabIndex=-1 focus stop", () => {
     mockUseArticleReads.mockReturnValue(readyState([]));
-    const scrollToSpy = vi
-      .spyOn(window, "scrollTo")
-      .mockImplementation(() => {});
+    const { container } = renderReader("/news/baselines");
+
+    const root = container.querySelector("main");
+    expect(root).toHaveClass("overlay-screen");
+    expect((root as HTMLElement).tabIndex).toBe(-1);
+  });
+
+  it("NEXT navigation remounts the root: a fresh scroller for the new article, not the same DOM node reused mid-scroll", async () => {
+    mockUseArticleReads.mockReturnValue(readyState([]));
     const user = userEvent.setup();
+    const { container } = renderReader("/news/workout-types");
 
-    renderReader("/news/workout-types");
-    expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-    scrollToSpy.mockClear();
-
+    const firstRoot = container.querySelector("main");
     await user.click(screen.getByRole("link", { name: /NEXT/ }));
+
     expect(
       await screen.findByRole("heading", {
         name: "What a baseline is, and why every pace comes from one",
       }),
     ).toBeVisible();
-    expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-
-    scrollToSpy.mockRestore();
+    const secondRoot = container.querySelector("main");
+    expect(secondRoot).not.toBe(firstRoot);
   });
 
   it("redirects to /news when rendered with no slug param at all", () => {

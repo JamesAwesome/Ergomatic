@@ -154,7 +154,7 @@ test("/news/releases lists all three versions", async ({ page }) => {
   await expect(versions.nth(2)).toContainText("v0.4.0");
 });
 
-test("item 1: opening an article from a scrolled News feed lands the reader at the top, not cut off mid-page", async ({
+test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
@@ -181,7 +181,67 @@ test("item 1: opening an article from a scrolled News feed lands the reader at t
   await expect(page).toHaveURL(/\/news\/baselines$/);
   await page.locator(".reader-body").waitFor();
 
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  // Round 4 (architectural): the reader is its own scroller now, not the
+  // window — assert the READER element itself sits at scrollTop 0 AND that
+  // it really is the scrolling element (scrollHeight > clientHeight), not
+  // an unscrollable div that trivially reads 0 either way.
+  const reader = page.locator(".reader-screen");
+  const readerScroll = await reader.evaluate((el) => ({
+    scrollTop: el.scrollTop,
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  }));
+  expect(readerScroll.scrollTop).toBe(0);
+  expect(readerScroll.scrollHeight).toBeGreaterThan(readerScroll.clientHeight);
+
+  // NOT asserted here, deliberately (brief contradiction, see PR body/report):
+  // the brief predicted the window's own scrollY would stay untouched behind
+  // the overlay, restoring News's position for free on BACK. Verified false
+  // on this real stack — `position: fixed` removes the routed screen from
+  // `.app-shell`'s document flow entirely, so `document.body.scrollHeight`
+  // collapses to the app-shell padding alone the instant the overlay mounts,
+  // and the browser clamps `window.scrollY` to 0 as a consequence (the same
+  // clamp Library.tsx's own scroll-memory comment describes for a shorter
+  // list). BACK still lands News at the top, unchanged from round 3 — round
+  // 4 fixes the reader-opens-mid-scroll bug this suite is named for, but
+  // does NOT undo #56's BACK-position tradeoff the way the brief predicted.
+  await page.getByRole("link", { name: "← BACK" }).click();
+  await expect(page).toHaveURL(/\/news$/);
+});
+
+test("round 4: NEXT navigates into a freshly mounted scroller that starts at 0, even though the first article was scrolled down", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `news-next-scroll-${RUN_ID}@e2e.test`,
+    name: "News Next Scroll",
+  });
+  // A short viewport again, so workout-types' body actually overflows its
+  // own overlay scroller — otherwise there'd be nothing to scroll down
+  // before clicking NEXT, and this test would prove nothing.
+  await page.setViewportSize({ width: 390, height: 500 });
+  await page.goto("/news/workout-types");
+  await expect(page.locator(".reader-title")).toHaveText(WORKOUT_TYPES_TITLE);
+
+  // Scroll the CONTAINER, not the window — the whole point of round 4 is
+  // that the window never moves at all any more.
+  const reader = page.locator(".reader-screen");
+  await reader.evaluate((el) => {
+    el.scrollTop = 300;
+  });
+  await expect
+    .poll(() => reader.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+
+  await page.locator(".reader-next").click();
+  await expect(page.locator(".reader-title")).toHaveText(BASELINES_TITLE);
+
+  // Same `.reader-screen` selector, now the NEW article's freshly mounted
+  // scroller (React remounts on the slug-keyed root) — it starts at 0 by
+  // construction, with nothing to hold or re-assert.
+  expect(
+    await page.locator(".reader-screen").evaluate((el) => el.scrollTop),
+  ).toBe(0);
 });
 
 // Sanity check the titles above actually match the registry, so a future

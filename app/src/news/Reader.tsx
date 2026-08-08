@@ -1,7 +1,6 @@
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import BackLink from "../shell/BackLink";
-import { holdScrollTop } from "../shell/holdScrollTop";
 import { useArticleReads } from "../api/useArticleReads";
 import { articleBySlug, nextUnreadSlug } from "./content/articles";
 import { updatedLabel } from "./newsDates";
@@ -16,11 +15,6 @@ export default function Reader() {
   const location = useLocation();
   const reads = useArticleReads();
   const article = slug ? articleBySlug(slug) : undefined;
-
-  // Scroll-to-top, round 3: see holdScrollTop's comment for why a single
-  // scrollTo isn't enough on real iOS WebKit. Keyed on the slug because the
-  // NEXT footer navigates within this same mounted component.
-  useLayoutEffect(() => holdScrollTop(), [article?.slug]);
 
   // Mark read once ready — in an effect keyed on (reads.state, article.slug)
   // per the brief: markRead is stable per ready-state, so keying on state +
@@ -49,7 +43,17 @@ export default function Reader() {
       : undefined;
 
   return (
-    <main className="screen reader-screen">
+    // Round 4 (architectural): scrolls in its own element — see
+    // .overlay-screen's comment in index.css for why. `key={article.slug}`
+    // forces a fresh DOM node (fresh scroller, position 0) on every NEXT
+    // navigation instead of reusing this one mid-scroll; `tabIndex={-1}` is
+    // the keyboard focus stop axe's scrollable-region-focusable rule wants
+    // on a scroll region (Plan.tsx's 84-row sequence hit this in Phase 6A).
+    <main
+      className="screen reader-screen overlay-screen"
+      key={article.slug}
+      tabIndex={-1}
+    >
       <BackLink fallback="/news" />
       <p className="reader-meta">
         ERGOMATIC · {article.minutes} MIN

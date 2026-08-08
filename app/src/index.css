@@ -390,6 +390,11 @@ button:disabled {
   /* Background still spans to the physical edge; this keeps the tab
      labels themselves clear of the home indicator. */
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  /* Round 4: explicit, so it stays above `.overlay-screen` (the reader/
+     releases overlay, z-index 10) regardless of DOM order — it already
+     renders after those screens in AppRoutes.tsx, but this makes the
+     stacking intentional rather than incidental. */
+  z-index: 20;
 }
 
 .tab {
@@ -4188,6 +4193,31 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
+}
+
+/* Round 4 of the reader-opens-mid-scroll saga (ROADMAP bugfix rounds):
+   these two screens scroll in their OWN element instead of the window.
+   Three window-scroll fixes in a row lost to real iOS WebKit's touch
+   machinery (single scrollTo, restoration=manual + pre-paint timing, a
+   rAF hold-loop) — an overlay scroller can't lose that fight because a
+   freshly mounted element STARTS at 0 and the window never moves at all,
+   which also hands News its BACK position back for free. Fixed instead of
+   flowing inside `.app-shell`, so `.app-shell`'s own tab-bar-aware bottom
+   padding never reaches this element — `padding-bottom` below supplies the
+   same `calc(var(--tap) + env(safe-area-inset-bottom, 0px))` directly,
+   overriding `.screen`'s flat 20px so the last paragraph still clears the
+   tab bar's touch area. Added to the existing `screen reader-screen`/
+   `screen releases-screen` class list, not a replacement, so `.screen`'s
+   top/side safe-area padding keeps applying. `z-index` sits below
+   `.tabbar`'s (see that rule) so the tab bar stays on top and tappable. */
+.overlay-screen {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--page);
+  padding-bottom: calc(var(--tap) + env(safe-area-inset-bottom, 0px));
+  z-index: 10;
 }
 
 /* Reader (Phase 6H Task 6) — the in-app long-form screen. Newsreader for
