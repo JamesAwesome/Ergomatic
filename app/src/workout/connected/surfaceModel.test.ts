@@ -60,6 +60,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     state: "rowing",
+    rowingActive: true,
     ...overrides,
   };
 }

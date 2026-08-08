@@ -398,6 +398,7 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
     currentSplit: raw.currentSplit,
     spm: raw.spm,
     heartRateBpm: raw.heartRateBpm,
+    rowingActive: raw.rowingState === 1,
     // RAW machine value — see this function's own doc comment above.
     intervalIndex: intervalActive ? raw.intervalCount : null,
     intervalRemaining: null,

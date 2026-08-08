@@ -158,6 +158,7 @@ const NO_FRAME: MonitorFrame = {
   currentSplit: null,
   spm: null,
   heartRateBpm: null,
+  rowingActive: false,
   intervalIndex: 0,
   intervalRemaining: null,
   state: "armed",

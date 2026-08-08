@@ -4973,7 +4973,8 @@ describe("createPm5Driver: the log records frame STATE CHANGES, not every frame"
     expect(
       log
         .entries()
-        .find((e) => e.kind === "frame" && e.detail.includes("rowing"))?.detail,
+        .find((e) => e.kind === "frame" && e.detail.includes("state=rowing"))
+        ?.detail,
     ).toContain("state=rowing");
   });
 });

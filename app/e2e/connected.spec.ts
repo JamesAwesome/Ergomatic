@@ -565,6 +565,19 @@ async function walkSurfaceToLog(page: Page, title: string): Promise<void> {
   // `/session/log`.
   await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
   await expect(page.locator("h1.screen-title")).toHaveText(`Log ${title}`);
+
+  // THE STASH (hardware walk 2's loss, pinned in a real browser): the
+  // surface is gone, the session is over, and the wire log is still
+  // copyable from this very screen — teardown wrote it on the way out.
+  const stash = await page.evaluate(() =>
+    sessionStorage.getItem("ergomatic:last-monitor-log"),
+  );
+  expect(
+    stash,
+    "teardown stashes the wire log for the ended session",
+  ).not.toBeNull();
+  const entries = JSON.parse(stash!) as { kind: string }[];
+  expect(entries.some((e) => e.kind === "write")).toBe(true);
 }
 
 // `STORY_START_MS` (8s) plus the story's own ~7.3s span (`FREEZE_OFFSETS`'s
