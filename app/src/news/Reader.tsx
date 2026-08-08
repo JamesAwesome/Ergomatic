@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import BackLink from "../shell/BackLink";
+import { holdScrollTop } from "../shell/holdScrollTop";
 import { useArticleReads } from "../api/useArticleReads";
 import { articleBySlug, nextUnreadSlug } from "./content/articles";
 import { updatedLabel } from "./newsDates";
@@ -16,19 +17,10 @@ export default function Reader() {
   const reads = useArticleReads();
   const article = slug ? articleBySlug(slug) : undefined;
 
-  // Item 1 (2026-08-07 device report): a linked-from-a-scrolled-feed reader
-  // used to keep the window's scroll position, opening cut off mid-page.
-  // Keyed on the slug (not just mount) because the NEXT footer navigates
-  // within this same mounted component — a fresh push into a new article
-  // needs its own scroll-to-top, not just the first one. useLayoutEffect,
-  // not useEffect (same-day iOS follow-up, Library.tsx's own precedent):
-  // post-paint scrolling both flashes one mis-scrolled frame and lines up
-  // behind iOS Safari's own late scroll pass — before-paint runs first and
-  // wins. App.tsx's scrollRestoration opt-out removes the competitor
-  // entirely; this ordering is the belt to that braces.
-  useLayoutEffect(() => {
-    window.scrollTo(0, 0);
-  }, [article?.slug]);
+  // Scroll-to-top, round 3: see holdScrollTop's comment for why a single
+  // scrollTo isn't enough on real iOS WebKit. Keyed on the slug because the
+  // NEXT footer navigates within this same mounted component.
+  useLayoutEffect(() => holdScrollTop(), [article?.slug]);
 
   // Mark read once ready — in an effect keyed on (reads.state, article.slug)
   // per the brief: markRead is stable per ready-state, so keying on state +
