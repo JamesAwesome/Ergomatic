@@ -387,6 +387,13 @@ export function toMonitorState(workoutState: number): MonitorFrame["state"] {
  * field whose type (`domain/monitor/types.ts`) documents it as OUR
  * numbering everywhere else — a trap for any future direct caller of this
  * function that isn't `driver.ts`.
+ *
+ * `sessionElapsedSeconds`/`sessionDistanceMeters` carry the identical trap,
+ * for the identical reason: this function sets both equal to 0x0031's own
+ * (PER-INTERVAL, walk 4) `elapsedSeconds`/`distanceMeters`, because a single
+ * decoded status has no history to accumulate across. `driver.ts`'s own
+ * accumulator overwrites them with real session totals before a frame ever
+ * reaches a consumer.
  */
 export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
   const state = toMonitorState(raw.workoutState);
@@ -395,6 +402,14 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
   return {
     elapsedSeconds: raw.elapsedSeconds,
     distanceMeters: raw.distanceMeters,
+    // A parse-level frame has no HISTORY, so it has nothing to accumulate
+    // from: the session pair equals the raw pair here, and only a frame
+    // that has passed through `src/monitor/driver.ts` carries real
+    // accumulation across 0x0031's per-interval resets (walk 4,
+    // interface-notes.md §18). Same shape of caveat as `intervalIndex`
+    // below — see this function's own doc comment.
+    sessionElapsedSeconds: raw.elapsedSeconds,
+    sessionDistanceMeters: raw.distanceMeters,
     currentSplit: raw.currentSplit,
     spm: raw.spm,
     heartRateBpm: raw.heartRateBpm,
