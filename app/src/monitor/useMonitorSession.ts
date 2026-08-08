@@ -334,7 +334,9 @@ export interface MonitorSessionDeps {
 export const PAUSED_FRAME_HOLD = 4;
 
 /** How many consecutive frames have now carried IDENTICAL values for the
- *  four rowing metrics. `frames` counts the frames themselves (a fresh
+ *  three rowing metrics `freezeKey` keys on — distance, split and rate;
+ *  elapsed and heart rate are both deliberately out of it (see
+ *  `freezeKey`). `frames` counts the frames themselves (a fresh
  *  value is 1, not 0), so `frames >= PAUSED_FRAME_HOLD` reads exactly as
  *  the spec's sentence does. */
 export interface FreezeRun {
@@ -380,6 +382,71 @@ export function isPausedRun(run: FreezeRun): boolean {
 }
 
 const NO_FREEZE: FreezeRun = { key: "", frames: 0 };
+
+/**
+ * THE `rowingActive` FALLBACK (erg-day review, HIGH-1).
+ *
+ * The ready gate's third leg is 0x0031's Rowing State byte, and the repo
+ * has never captured that byte on a real first-pull frame. Replaying every
+ * `armed -> rowing` transition in `docs/monitor/sessions/pm5-session3-
+ * final.log.gz` (eight of them) shows the gate's OTHER two legs are already
+ * satisfied on the first rowing frame of every single arm — banked distance
+ * on all eight. So on real hardware `rowingActive` is not a third
+ * confirmation, it IS the gate, and an unexpected byte value (the parse is
+ * a strict `raw.rowingState === 1`) silently loses the whole session: the
+ * phase never leaves `ready`, `createMonitorRun` never runs, the panes keep
+ * painting live numbers off the fall-through `update({ frame })`, and End
+ * produces a session with no record and no error anywhere.
+ *
+ * The asymmetry is what decides this. A stuck-Inactive byte is the worst
+ * class of failure there is — silent total data loss, discovered only after
+ * the piece. What this fallback re-opens is the walk-3 coast, whose cost is
+ * cosmetic: the numbers appear a beat early on a piece the rower is about
+ * to start anyway. So the fallback is deliberately generous about the coast
+ * and unforgiving about losing a session.
+ *
+ * Five CONSECUTIVE frames of STRICTLY INCREASING distance in a rowing state
+ * is the shape a coast cannot hold and a rower cannot fail. A decelerating
+ * flywheel breaks strict increase as soon as the wheel stalls (0.01 m
+ * resolution, ~2.5 s of streak at the observed 2 Hz cadence), while an
+ * actually-rowing athlete banks meters on every frame of it. The instant
+ * path below is UNCHANGED — a machine that says Active still promotes on
+ * the very first frame, and this counter never runs on that path.
+ */
+export const ROWING_ACTIVE_FALLBACK_FRAMES = 5;
+
+/** The run of consecutive strictly-progressing rowing frames seen while the
+ *  session sits at `ready`. `distanceMeters` is the previous frame's reading,
+ *  kept so "strictly increasing" can be evaluated without holding the whole
+ *  frame. */
+export interface RowingStreak {
+  frames: number;
+  distanceMeters: number;
+}
+
+/**
+ * Pure, exported for the fallback's own tests. `null` means "no streak" —
+ * the frame was not a rowing frame at all, which resets outright rather
+ * than merely failing to increment (an `armed`/`resting` frame must not
+ * lend its position to the next rowing frame's count).
+ *
+ * A frame that IS rowing but does not strictly beat the previous distance
+ * does not reset to zero: it starts a NEW streak of one, seeded with its
+ * own reading. That is what makes a stalled wheel hold at 1 forever (the
+ * next frame cannot strictly beat a distance it just matched) while a rower
+ * who pauses and resumes simply starts counting again from the resume.
+ */
+export function nextRowingStreak(
+  previous: RowingStreak | null,
+  frame: MonitorFrame,
+): RowingStreak | null {
+  if (frame.state !== "rowing") return null;
+  const distanceMeters = frame.distanceMeters;
+  if (previous !== null && distanceMeters > previous.distanceMeters) {
+    return { frames: previous.frames + 1, distanceMeters };
+  }
+  return { frames: 1, distanceMeters };
+}
 
 interface SessionState {
   phase: ConnectedPhase;
@@ -522,6 +589,10 @@ export function useMonitorSession(
    *  is), not at `live`. */
   const identityRef = useRef(NO_IDENTITY);
   const freezeRef = useRef<FreezeRun>(NO_FREEZE);
+  /** The `ready`-only streak behind `ROWING_ACTIVE_FALLBACK_FRAMES`. Only
+   *  ever written while the phase is `ready`; once the session is live it is
+   *  dead weight until the next `cancel()` clears it. */
+  const rowingStreakRef = useRef<RowingStreak | null>(null);
   /** One `connect()` at a time — a second press while the OS picker is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
@@ -569,38 +640,73 @@ export function useMonitorSession(
       // start the interval") — 0x0031's Rowing State byte is where it
       // says so, and `rowingActive` is that byte. All three legs are
       // required: the workout-state ordinal (rowing-mapped), the
-      // machine's own Active declaration, and flywheel evidence. This is
-      // also where the run opens: the record exists once the rower is
-      // actually rowing, never at `armed` — a programmed-then-abandoned
+      // machine's own Active declaration, and flywheel evidence — which is
+      // BANKED DISTANCE, and only that. `spm > 0` used to be a second,
+      // disjunctive form of flywheel evidence and was dropped by the
+      // erg-day review (MEDIUM-2): the capture shows spm SURVIVING the
+      // resets distance honours. At an `idle -> armed` transition
+      // (`pm5-session3-final.log:5582`) and at the no-rest boundary the
+      // paused fixture is built from (`:2837`) elapsed and distance zero
+      // while split and spm carry the PREVIOUS interval's values over. A
+      // mid-session reprogram landing a rowing-mapped frame while spm is
+      // still pinned would satisfy an spm leg with zero flywheel evidence
+      // for THIS piece — the same class of bug walk 3 found through the
+      // other leg. Distance has the reset semantics this gate wants, and
+      // every real first-rowing frame in the record carries it.
+      //
+      // This is also where the run opens: the record exists once the rower
+      // is actually rowing, never at `armed` — a programmed-then-abandoned
       // workout leaves no record behind, and `createMonitorRun`'s
       // `clearRun()` (which destroys a phone session) fires only once
       // this session is genuinely underway.
-      if (
-        phase === "ready" &&
-        frame.state === "rowing" &&
-        frame.rowingActive &&
-        (frame.distanceMeters > 0 || (frame.spm ?? 0) > 0)
-      ) {
-        const identity = identityRef.current;
-        runRef.current = createMonitorRun(
-          {
-            workoutId: identity.workoutId,
-            title: identity.title,
-            // The program we actually sent, not one re-derived from the
-            // wire (spec §4: "nothing re-derived from bytes").
-            program: identity.program,
-            // The REAL advertised name the picker returned, threaded
-            // through `createPm5Driver` by Task 1 — never the `"PM5"`
-            // placeholder (spec's I5 ruling). Read off the driver that
-            // delivered this very frame, so there is no "which driver?"
-            // question to answer here.
-            deviceName: driver.capabilities.deviceName,
-          },
-          nowDate(),
-        );
-        freezeRef.current = nextFreezeRun(null, frame);
-        update({ frame, phase: "live", actuals: [] });
-        return;
+      if (phase === "ready") {
+        const streak = nextRowingStreak(rowingStreakRef.current, frame);
+        rowingStreakRef.current = streak;
+        const declared =
+          frame.state === "rowing" &&
+          frame.rowingActive &&
+          frame.distanceMeters > 0;
+        // `ROWING_ACTIVE_FALLBACK_FRAMES`' own comment carries the whole
+        // rationale: a stuck Inactive byte must not cost the rower a
+        // session.
+        const fallback =
+          !declared &&
+          streak !== null &&
+          streak.frames >= ROWING_ACTIVE_FALLBACK_FRAMES;
+        if (declared || fallback) {
+          if (fallback) {
+            // The hook reaches the wire log only through the ref it owns;
+            // this is the one entry the hook itself writes, and it is what
+            // answers "did the machine ever say Active?" from a stashed
+            // trace after the fact.
+            logRef.current?.record(
+              "rowing-active-fallback",
+              `state=${frame.state} elapsed=${frame.elapsedSeconds} ` +
+                `distance=${frame.distanceMeters} ` +
+                `rowingActive=${frame.rowingActive} spm=${frame.spm}`,
+            );
+          }
+          const identity = identityRef.current;
+          runRef.current = createMonitorRun(
+            {
+              workoutId: identity.workoutId,
+              title: identity.title,
+              // The program we actually sent, not one re-derived from the
+              // wire (spec §4: "nothing re-derived from bytes").
+              program: identity.program,
+              // The REAL advertised name the picker returned, threaded
+              // through `createPm5Driver` by Task 1 — never the `"PM5"`
+              // placeholder (spec's I5 ruling). Read off the driver that
+              // delivered this very frame, so there is no "which driver?"
+              // question to answer here.
+              deviceName: driver.capabilities.deviceName,
+            },
+            nowDate(),
+          );
+          freezeRef.current = nextFreezeRun(null, frame);
+          update({ frame, phase: "live", actuals: [] });
+          return;
+        }
       }
       if (phase === "live" || phase === "paused") {
         const freeze = nextFreezeRun(freezeRef.current, frame);
@@ -984,6 +1090,7 @@ export function useMonitorSession(
     teardown(armed, driver);
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
+    rowingStreakRef.current = null;
     runRef.current = null;
     update(INITIAL_STATE);
   }, [teardown, update]);
