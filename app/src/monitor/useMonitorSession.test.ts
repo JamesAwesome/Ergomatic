@@ -587,6 +587,40 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     ];
   }
 
+  it("a rowing-state frame with ZERO progress holds ready — the real PM5 reports a rowing-mapped state at 'row to begin' (the 2026-08-08 recording)", async () => {
+    // The regression the erg found: two seconds after arming, READY
+    // skipped its own "Show me the numbers" tap and the surface appeared
+    // with the clock at :00.0 and 0 meters — the machine's workout state
+    // ordinal maps to "rowing" before any pull. The first PULL is
+    // progress (elapsed or distance above zero), and only progress may
+    // open the record.
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, {
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+        }),
+        status(200, { elapsedSeconds: 0.34, distanceMeters: 1.1 }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    tick(fake, 100);
+    // Rowing state, zero progress: still READY, still no record.
+    expect(result.current.phase).toBe("ready");
+    expect(loadMonitorRun()).toBeNull();
+
+    tick(fake, 100);
+    // The first stroke's progress is what flips it.
+    expect(result.current.phase).toBe("live");
+    expect(loadMonitorRun()).not.toBeNull();
+  });
+
   it("picking -> pairing -> programming -> ready -> live -> ended, with the record written the whole way", async () => {
     const { result, fake } = harness({
       program: LIBRARY.program,
@@ -1758,13 +1792,17 @@ function replay(frames: MonitorFrame[]): {
 }
 
 describe("the paused derivation, replayed frame by frame from the record", () => {
-  it("the recorded no-rest boundary reset NEVER fires it — three identical frames, one short", () => {
+  it("the recorded no-rest boundary reset NEVER fires it — every changeover frame carries a zeroed distance, and zero-distance frames do not count", () => {
     const { runs, everPaused } = replay(RECORDED_BOUNDARY_RESET);
 
     expect(everPaused).toBe(false);
-    // Exactly how close it gets: the margin is one frame wide, and it is
-    // the record's margin, not a chosen one.
-    expect(Math.max(...runs.map((r) => r.frames))).toBe(3);
+    // Before §17 item 20's answer, elapsed in the key cleared this by a
+    // one-frame margin (the resume frame's fresh clock). With elapsed OUT
+    // of the key — the clock runs while a stopped rower sits still — the
+    // `distanceMeters > 0` guard clears it STRUCTURALLY instead: only the
+    // old interval's last frame (d 74.4) ever counts, as a fresh 1; the
+    // reset frame and the zeros all carry d 0 and reset the run outright.
+    expect(runs.map((r) => r.frames)).toStrictEqual([1, 0, 0, 0, 0, 0]);
   });
 
   it("the recorded stop DOES fire it, on the fourth frozen frame", () => {
@@ -1817,7 +1855,6 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
   };
 
   it.each([
-    ["elapsedSeconds", { elapsedSeconds: 58.28 }],
     ["distanceMeters", { distanceMeters: 109.2 }],
     ["currentSplit", { currentSplit: 231.4 }],
     ["spm", { spm: 17 }],
@@ -1853,12 +1890,32 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     expect(isPausedRun(run)).toBe(true);
   });
 
-  it("a backwards elapsed tick is a CHANGE, not a hold", () => {
+  it("a frame that changes ONLY elapsedSeconds SUSTAINS the hold — the clock runs while a stopped rower sits still (§17 item 20, the 2026-08-08 recording)", () => {
+    // THE fix the erg demanded: on a real programmed interval, LEFT IN
+    // INTERVAL counted 4:38 -> 3:47 while meters sat pinned at 30, split
+    // at 4:16.1, rate at 68. With elapsed in the key, the key never
+    // repeats on real hardware and PAUSED can never fire at all.
+    const held = frame(FROZEN);
+    let run = nextFreezeRun(null, held);
+    run = nextFreezeRun(run, held);
+    run = nextFreezeRun(run, held);
+    run = nextFreezeRun(run, frame({ ...FROZEN, elapsedSeconds: 58.28 }));
+
+    expect(run.frames).toBe(4);
+    expect(isPausedRun(run)).toBe(true);
+  });
+
+  it("zero-distance rowing frames never count, whatever their elapsed does — the recorded backwards tick lands on the guard, not the key", () => {
+    // RECORDED_BACKWARDS (elapsed 0.75 -> 0.18, the capture's largest
+    // backwards tick) sits at distance 0: under the old key this pair was
+    // the backwards-tick-is-a-change pin; under the guard neither frame
+    // accumulates at all.
     const frozen: FreezeRun = { key: "", frames: 0 };
     const first = nextFreezeRun(frozen, RECORDED_BACKWARDS[0]!);
     const second = nextFreezeRun(first, RECORDED_BACKWARDS[1]!);
 
-    expect(second.frames).toBe(1);
+    expect(first.frames).toBe(0);
+    expect(second.frames).toBe(0);
     expect(isPausedRun(second)).toBe(false);
   });
 

@@ -247,12 +247,24 @@ export interface MonitorSessionDeps {
 
 /**
  * THE PAUSED DERIVATION (design spec §2's C1 block, redefined from the
- * record — the ORIGINAL predicate was backwards and is superseded).
+ * record TWICE — the ORIGINAL predicate was backwards, and the four-metric
+ * revision died at the erg; both are superseded).
  *
- * All four rowing metrics — `elapsedSeconds`, `distanceMeters`,
- * `currentSplit`, `spm` — unchanged TOGETHER across `PAUSED_FRAME_HOLD`
- * consecutive frames while the machine reads `rowing`. Exit on ANY change
- * to any of them.
+ * THREE rowing metrics — `distanceMeters`, `currentSplit`, `spm` —
+ * unchanged TOGETHER across `PAUSED_FRAME_HOLD` consecutive frames while
+ * the machine reads `rowing` AND the interval has banked distance
+ * (`distanceMeters > 0`). Exit on ANY change to any of the three.
+ *
+ * Why `elapsedSeconds` is NOT in the key (§17 item 20, ANSWERED by the
+ * 2026-08-08 hardware recording): on a real PROGRAMMED timed interval the
+ * PM5's clock runs whether or not the rower pulls — the recording shows
+ * LEFT IN INTERVAL counting 4:38 → 3:47 while meters sat pinned at 30,
+ * split at 4:16.1, rate at 68, and the heart rate moved the whole hold
+ * (85 → 63, the exclusion theory confirmed on hardware). With elapsed in
+ * the key the key never repeats and PAUSED can never fire on a real
+ * program; session 3's frozen-elapsed stretch was an artifact of the
+ * structurally EMPTY arm it was recorded on, exactly the caveat this
+ * derivation shipped behind.
  *
  * Why not `spm === 0`, the obvious predicate: the record says the opposite
  * of what that assumes.
@@ -267,34 +279,38 @@ export interface MonitorSessionDeps {
  *   stopped at all. The old predicate fired at every changeover and never
  *   for a real stop.
  *
- * **The false positive this threshold exists to clear** (the regression
- * fixture, `pm5-session3-final.log:2835`+`2837-2841`): at a no-rest boundary the
+ * **The no-rest-boundary false positive and why `distanceMeters > 0`
+ * guards it** (the regression fixture,
+ * `pm5-session3-final.log:2835`+`2837-2841`): at a no-rest boundary the
  * machine emits one frame carrying the previous interval's split/spm over
  * a zeroed clock (`el 0 / d 0 / split 338.97 / spm 66`), then THREE
  * identical `el 0 / d 0 / split 0 / spm 0` frames, then resumes counting
- * (`el 0.34`). Three — so a 4-frame hold clears it by exactly one frame,
- * and a 2-frame or 3-frame hold would render PAUSED at every changeover.
- * The margin is one frame wide; it is the record's margin, not a chosen
- * one.
+ * (`el 0.34`). When elapsed was in the key, the resume frame's fresh
+ * elapsed broke the run one frame before the 4-hold fired; without
+ * elapsed, the zeros could keep matching for as long as the rower's first
+ * strokes take to move split/spm — an unbounded run no fixed hold clears.
+ * Every boundary frame carries `d 0`, and a genuine mid-interval stop has
+ * distance already banked, so freeze frames simply do not COUNT until the
+ * interval has distance: the boundary case resets on the guard, not on a
+ * one-frame margin. (The rower who stops at the exact instant of a
+ * changeover, having moved zero meters in the new interval, reads as the
+ * interval's own waiting state rather than PAUSED — the display cost is
+ * nothing.) The 4-frame hold itself is retained as recorded-margin
+ * against single-frame repeats.
  *
- * Exit is on ANY CHANGE, never on "advance": elapsed ticks BACKWARDS in
- * the record, by up to −0.57 s (`pm5-session3-final.log:4632-4633`,
- * `0.75 → 0.18`, the largest of the capture's five), so a monotonic-advance test would hold PAUSED through a
- * genuinely live stream. Equality is the whole predicate.
+ * Exit is on ANY CHANGE, never on "advance" — equality is the whole
+ * predicate. (The record's backwards elapsed ticks, up to −0.57 s,
+ * `pm5-session3-final.log:4632-4633`, no longer matter to the key, but
+ * the same discipline holds for the three that remain: split and spm can
+ * genuinely wobble DOWN between frames.)
  *
- * CAVEATS, carried in code because they are not resolved (spec §2):
- * - **Empty-arm-only evidence.** The 216-frame frozen stretch above was
- *   recorded during session 3's structurally EMPTY arm (§19.13) — a
- *   machine holding a workout with no intervals. `domain/monitor/types.ts`
- *   says plainly that mid-workout "the clock runs whether or not the rower
- *   pulls (C4/H1)", so whether these four freeze on a PROPERLY ARMED
- *   workout is genuinely unknown. This derivation ships behind that
- *   uncertainty rather than pretending it away.
- * - **§17 runsheet row pending.** The reading that answers it is Task 8's
- *   James-operated row: stop rowing mid-interval on a real program, read
- *   whether the four freeze. If they do not, PAUSED simply never renders
- *   on a healthy session and this predicate costs nothing; if they do, it
- *   is confirmed on the shape that matters.
+ * CAVEATS still carried:
+ * - **§17 item 20 is ANSWERED** (the 2026-08-08 recording, above): the
+ *   clock runs, the other three freeze, HR moves. What remains unread is
+ *   the tick count from a Connection-log capture (the recording samples
+ *   at 1 fps) and a distance-interval stop — the three-metric key is
+ *   expected to behave identically there (the clock keeps running on
+ *   distance intervals too), but it has only been WATCHED on a timed one.
  * - **FRAMES, not seconds.** No wall clock is involved on purpose, and the
  *   hold cannot be restated in seconds honestly: the driver requests 100 ms
  *   sampling (`buildSampleRateConfig`) but the record shows ~500 ms
@@ -314,13 +330,15 @@ export interface FreezeRun {
   frames: number;
 }
 
-/** The four metrics, and only those four — see `PAUSED_FRAME_HOLD` for why
- *  heart rate is excluded (it is the field that keeps MOVING when the rower
- *  stops, and the one that proves the stream is alive). A string key rather
- *  than a tuple compare because `currentSplit`/`spm` are `number | null`
- *  and `null` is a value here like any other. */
+/** The three metrics, and only those three — `elapsedSeconds` is excluded
+ *  because the PM5's clock runs while a stopped rower sits still (§17 item
+ *  20's answer; see `PAUSED_FRAME_HOLD`), and heart rate is excluded
+ *  because it is the field that keeps MOVING when the rower stops, the one
+ *  that proves the stream is alive. A string key rather than a tuple
+ *  compare because `currentSplit`/`spm` are `number | null` and `null` is
+ *  a value here like any other. */
 function freezeKey(frame: MonitorFrame): string {
-  return `${frame.elapsedSeconds}|${frame.distanceMeters}|${frame.currentSplit}|${frame.spm}`;
+  return `${frame.distanceMeters}|${frame.currentSplit}|${frame.spm}`;
 }
 
 /** Exported for the recorded-fixture tests, which replay real captured
@@ -330,12 +348,15 @@ export function nextFreezeRun(
   frame: MonitorFrame,
 ): FreezeRun {
   // Only a ROWING machine can be paused: `resting` legitimately freezes
-  // three of the four (spm 0, split 0, distance still) for its whole
-  // duration, and armed/finished/terminated freeze all four indefinitely.
-  // A non-rowing frame resets the count outright rather than merely not
-  // incrementing it, so a rest cannot lend its frames to the next
-  // interval's first stroke.
-  if (frame.state !== "rowing") return { key: "", frames: 0 };
+  // spm 0 / split 0 / distance-still for its whole duration, and
+  // armed/finished/terminated freeze everything indefinitely. A non-rowing
+  // frame resets the count outright rather than merely not incrementing
+  // it, so a rest cannot lend its frames to the next interval's first
+  // stroke. The `distanceMeters > 0` guard is the no-rest-boundary
+  // clearer — see `PAUSED_FRAME_HOLD`'s own comment.
+  if (frame.state !== "rowing" || frame.distanceMeters <= 0) {
+    return { key: "", frames: 0 };
+  }
   const key = freezeKey(frame);
   return previous !== null && previous.key === key
     ? { key, frames: previous.frames + 1 }
@@ -518,13 +539,25 @@ export function useMonitorSession(
   const handleFrame = useCallback(
     (frame: MonitorFrame, driver: MonitorDriver): void => {
       const phase = stateRef.current.phase;
-      // FIRST ROWING FRAME -> live (spec §2: every transition maps to a
-      // real event or frame field). This is also where the run opens: the
-      // record exists once the rower is actually rowing, never at `armed`
-      // — a programmed-then-abandoned workout leaves no record behind, and
-      // `createMonitorRun`'s `clearRun()` (which destroys a phone session)
-      // fires only once this session is genuinely underway.
-      if (phase === "ready" && frame.state === "rowing") {
+      // FIRST ROWING FRAME WITH PROGRESS -> live (spec §2: every
+      // transition maps to a real event or frame field). The state
+      // ordinal alone is NOT the rower's first pull: the 2026-08-08
+      // hardware recording shows a just-armed PM5 sitting at "row to
+      // begin" already reporting a rowing-mapped workout state with the
+      // clock at 0.0 and 0 meters — on the ordinal alone, READY skipped
+      // its own "Show me the numbers" tap two seconds after arming. The
+      // machine's evidence of an actual first stroke is progress:
+      // elapsed or distance above zero. This is also where the run
+      // opens: the record exists once the rower is actually rowing,
+      // never at `armed` — a programmed-then-abandoned workout leaves no
+      // record behind, and `createMonitorRun`'s `clearRun()` (which
+      // destroys a phone session) fires only once this session is
+      // genuinely underway.
+      if (
+        phase === "ready" &&
+        frame.state === "rowing" &&
+        (frame.elapsedSeconds > 0 || frame.distanceMeters > 0)
+      ) {
         const identity = identityRef.current;
         runRef.current = createMonitorRun(
           {
