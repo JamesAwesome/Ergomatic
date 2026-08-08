@@ -201,6 +201,27 @@ function representableSeconds(raw: number): number | null {
   return Math.abs(raw - rounded) < WHOLE_SECOND_EPSILON ? rounded : null;
 }
 
+/** The pace twin of `representableSeconds`, at the pace field's OWN wire
+ *  resolution: `SET_TARGETPACETIME` is 0.01 sec/lsb (interface-notes.md
+ *  §11, confirmed by §12's worked example — `1:40` = 100 s encodes as raw
+ *  `10000`), so a half-second split like `134.5` is the perfectly
+ *  representable integer `13450`, NOT an error. Rounds to the nearest
+ *  hundredth IF the raw value is within noise of one — the SAME
+ *  strict-`<` `WHOLE_SECOND_EPSILON` tolerance as `representableSeconds`,
+ *  still measured in SECONDS (hence `* 100` on the epsilon too, since the
+ *  comparison happens on the scaled value): a value `representableSeconds`
+ *  would accept as noise must not become a rejection here just because
+ *  pace's wire unit is finer. Returns `null` for a genuinely
+ *  sub-hundredth pace so the caller raises `unrepresentable-value`
+ *  instead of silently clamping. */
+function representableCentiseconds(raw: number): number | null {
+  const scaled = raw * 100;
+  const rounded = Math.round(scaled);
+  return Math.abs(scaled - rounded) < WHOLE_SECOND_EPSILON * 100
+    ? rounded / 100
+    : null;
+}
+
 /**
  * Compiles the phone timer's own phase list into a `WorkoutProgram` the PM5
  * can be programmed with, or a typed `CompileError` naming exactly why it
@@ -294,7 +315,7 @@ export function compileProgram(
         return {
           code: "leading-rest",
           message:
-            "This workout starts with rest before any work — the PM5 has no way to program a rest before the first interval.",
+            "This workout starts with rest before any work. The PM5 has no way to program a rest before the first interval.",
           phaseIndex: i,
         };
       }
@@ -309,7 +330,7 @@ export function compileProgram(
       if (restSeconds === null) {
         return {
           code: "unrepresentable-value",
-          message: `A rest of ${phase.seconds}s isn't a whole second — the PM5 can't program it.`,
+          message: `A rest of ${phase.seconds}s isn't a whole second. The PM5 can't program it.`,
           phaseIndex: i,
         };
       }
@@ -322,7 +343,7 @@ export function compileProgram(
       if (restSeconds < 0) {
         return {
           code: "unrepresentable-value",
-          message: `A rest of ${restSeconds}s is negative — the PM5's minimum rest is :00.`,
+          message: `A rest of ${restSeconds}s is negative. The PM5's minimum rest is :00.`,
           phaseIndex: i,
         };
       }
@@ -354,7 +375,7 @@ export function compileProgram(
       return {
         code: "unrepresentable-value",
         message:
-          "An open-ended (all-out/test) interval has no fixed time or distance — the PM5 requires one to program a workout.",
+          "An open-ended (all-out/test) interval has no fixed time or distance. The PM5 requires one to program a workout.",
         phaseIndex: i,
       };
     }
@@ -365,7 +386,7 @@ export function compileProgram(
       if (rounded === null) {
         return {
           code: "unrepresentable-value",
-          message: `An interval of ${rawValue}s isn't a whole second — the PM5 can't program it.`,
+          message: `An interval of ${rawValue}s isn't a whole second. The PM5 can't program it.`,
           phaseIndex: i,
         };
       }
@@ -374,7 +395,7 @@ export function compileProgram(
       if (!Number.isInteger(rawValue)) {
         return {
           code: "unrepresentable-value",
-          message: `An interval of ${rawValue}m isn't a whole meter — the PM5 can't program it.`,
+          message: `An interval of ${rawValue}m isn't a whole meter. The PM5 can't program it.`,
           phaseIndex: i,
         };
       }
@@ -396,7 +417,7 @@ export function compileProgram(
     if (intervals.length >= MAX_INTERVALS) {
       return {
         code: "too-many-intervals",
-        message: `This workout has more than ${MAX_INTERVALS} intervals — the PM5 supports at most ${MAX_INTERVALS}.`,
+        message: `This workout has more than ${MAX_INTERVALS} intervals. The PM5 supports at most ${MAX_INTERVALS}.`,
         phaseIndex: i,
       };
     }
@@ -406,33 +427,36 @@ export function compileProgram(
     // estimate), and programming it as a hard target would turn every
     // "ALL OUT"/"EASY" step into a fabricated pace.
     //
-    // M-9 (final-review, whole-branch): a "split" phase's targetSplit gets
-    // the SAME whole-second representability contract `value`/`restSeconds`
-    // already get (`representableSeconds`) — deliberately checked here,
-    // AFTER interval-too-short/too-many-intervals (an unrepresentable pace
-    // is a secondary property of an interval whose own length/count is
-    // already known to be fine, not a disqualifying shape question the
-    // check-ordering comment above governs), but still before this phase is
-    // ever pushed. Without this, `commands.ts`'s `SET_TARGETPACETIME`
-    // encoder (`paceSeconds * TARGET_PACE_SCALE`, fed straight into `be32`)
-    // would receive a non-integer and either throw its own defensive
-    // `Pm5EncodeError` or, before that guard existed, silently TRUNCATE via
-    // `>>>` — either way breaking the "never silently truncate" rule every
-    // other field in this module already holds. Reachable in practice:
-    // `domain/pace.ts`'s `resolveSplit` (a baseline + an arbitrary
-    // `2k+1.5`-style offset + a session-only preview nudge, none of them
-    // integer-constrained on input) can produce a genuinely fractional
-    // split, unlike duration/rest, which only ever carry whole seconds by
-    // construction upstream.
+    // M-9 (final-review, whole-branch) as CORRECTED after PR #59's first
+    // hardware walk: a "split" phase's targetSplit gets a representability
+    // check at the pace field's OWN wire resolution — hundredths of a
+    // second (`representableCentiseconds`), NOT `value`/`restSeconds`'s
+    // whole-second contract. M-9 as first shipped copied duration's
+    // contract onto pace, and since half-second splits (`2:14.5`) are the
+    // NORM for baseline-derived targets, it refused to program most of the
+    // library. Deliberately checked here, AFTER interval-too-short/
+    // too-many-intervals (an unrepresentable pace is a secondary property
+    // of an interval whose own length/count is already known to be fine,
+    // not a disqualifying shape question the check-ordering comment above
+    // governs), but still before this phase is ever pushed. Without this,
+    // `commands.ts`'s `SET_TARGETPACETIME` encoder would receive a value
+    // whose `× TARGET_PACE_SCALE` product is a non-integer and throw its
+    // own defensive `Pm5EncodeError` — this check keeps "never silently
+    // truncate" while the encoder's `Math.round` kills only float noise.
+    // Reachable in practice: `domain/pace.ts`'s `resolveSplit` (a baseline
+    // + an arbitrary `2k+1.5`-style offset + a session-only preview nudge,
+    // none of them integer-constrained on input) can produce genuinely
+    // sub-hundredth splits, unlike duration/rest, which only ever carry
+    // whole seconds by construction upstream.
     let targetSplit: number | null;
     if (phase.targetKind === "effort" || phase.targetSplit === undefined) {
       targetSplit = null;
     } else {
-      const roundedSplit = representableSeconds(phase.targetSplit);
+      const roundedSplit = representableCentiseconds(phase.targetSplit);
       if (roundedSplit === null) {
         return {
           code: "unrepresentable-value",
-          message: `A target pace of ${phase.targetSplit}s/500m isn't a whole second — the PM5 can't program it.`,
+          message: `A target pace of ${phase.targetSplit}s/500m isn't representable in hundredths of a second. The PM5 programs pace in 0.01s steps.`,
           phaseIndex: i,
         };
       }
