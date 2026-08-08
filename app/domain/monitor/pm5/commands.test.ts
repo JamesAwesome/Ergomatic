@@ -280,6 +280,42 @@ describe("buildProgrammingSequence: encoding, cited against interface-notes.md �
     ]);
   });
 
+  it("a HALF-SECOND targetSplit reaches the wire at 0.01s/lsb: 106.5 -> 06 04 00 00 29 9a", () => {
+    // The byte-level half of `86963ff` (erg-day review, MEDIUM-7). The
+    // COMPILE side is pinned in `program.test.ts` — that a 2:14.5 split
+    // survives `representableCentiseconds` instead of being rejected — but
+    // nothing pinned that the encoder then puts it on the wire correctly,
+    // and interface-notes.md §18 records that a half-second pace has still
+    // never been sent to a real PM5. Computed, not quoted: 106.5 s x 100
+    // (`TARGET_PACE_SCALE`, 0.01 s/lsb per interface-notes.md §11) = 10650,
+    // and 10650 = 0x299A (0x2000 + 0x900 + 0x90 + 0xA), big-endian over four
+    // bytes per `be32`.
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: 106.5,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const commandBytes = unwrapFrame(buildProgrammingSequence(program)[0]!);
+    const idx = commandBytes.indexOf(0x06);
+    expect(commandBytes.slice(idx, idx + 6)).toStrictEqual([
+      0x06, 0x04, 0x00, 0x00, 0x29, 0x9a,
+    ]);
+    // ...and the value really is 10650, not a truncation that happens to
+    // land on those bytes.
+    expect(
+      (commandBytes[idx + 2]! << 24) |
+        (commandBytes[idx + 3]! << 16) |
+        (commandBytes[idx + 4]! << 8) |
+        commandBytes[idx + 5]!,
+    ).toBe(10650);
+  });
+
   it("matches the CSAFE doc's own Variable Interval worked example byte-for-byte (interface-notes.md §12)", () => {
     // v500m/1:00r...4 (CSAFE doc pp.84-86): reconstructing this exact
     // WorkoutProgram and comparing against the doc's own transcribed bytes
