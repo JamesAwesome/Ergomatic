@@ -34,6 +34,7 @@ import {
 import {
   isPausedRun,
   nextFreezeRun,
+  nextRowingStreak,
   useMonitorSession,
   type FreezeRun,
   type MonitorSessionDeps,
@@ -671,6 +672,184 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     // Active + a stroke: the rower, not the wheel.
     expect(result.current.phase).toBe("live");
     expect(loadMonitorRun()).not.toBeNull();
+  });
+
+  it("a CARRIED-OVER stroke rate is not flywheel evidence: Active plus spm with zero distance holds ready (erg-day review, MEDIUM-2)", async () => {
+    // `spm > 0` used to be a disjunctive second form of flywheel evidence.
+    // The record kills it: at `pm5-session3-final.log:5582` an `idle ->
+    // armed` frame reads `distance 0 / split 413.4 / spm 43`, and at the
+    // no-rest boundary (`:2837`) a ROWING frame reads `distance 0 / split
+    // 338.97 / spm 66` — both the PREVIOUS piece's rate over a zeroed
+    // clock and a zeroed distance. Walk 1 recorded the same thing
+    // independently (the rate holds its last value through a stop). So a
+    // frame that lands rowing-mapped and Active while spm is still pinned
+    // carries no evidence at all about THIS piece; only banked distance
+    // does, and every real first-rowing frame in the record has it.
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        // Line 2837's shape exactly, with the Active byte set — the
+        // strongest form of the mistake, since two of three legs pass.
+        status(100, {
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          currentSplit: 338.97,
+          spm: 66,
+          rowingState: 1,
+        }),
+        status(200, {
+          elapsedSeconds: 0.34,
+          distanceMeters: 0,
+          currentSplit: 338.97,
+          spm: 66,
+          rowingState: 1,
+        }),
+        // Meters at last: the pull.
+        status(300, {
+          elapsedSeconds: 0.84,
+          distanceMeters: 1.9,
+          currentSplit: 338.97,
+          spm: 66,
+          rowingState: 1,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ready");
+    expect(loadMonitorRun()).toBeNull();
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ready");
+    expect(loadMonitorRun()).toBeNull();
+
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    expect(loadMonitorRun()).not.toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // The `rowingActive` fallback (erg-day review, HIGH-1)
+  // -------------------------------------------------------------------------
+  //
+  // The gate's Active leg rests on a byte the repo has never captured on a
+  // real first-pull frame, and the replay of session 3 shows the OTHER two
+  // legs are satisfied on the first rowing frame of all eight recorded arms
+  // — so a stuck Inactive byte would silently produce no record at all for
+  // a whole piece. Five consecutive strictly-progressing rowing frames
+  // promote anyway. See `ROWING_ACTIVE_FALLBACK_FRAMES`.
+
+  function logKinds(result: Session): string[] {
+    return (JSON.parse(result.current.exportLog()) as { kind: string }[]).map(
+      (e) => e.kind,
+    );
+  }
+
+  it("the STUCK Inactive byte does not cost the session: five frames of strictly increasing distance promote to live anyway, and the log says so", async () => {
+    // The unobserved-premise failure, made survivable. `rowingState: 0` on
+    // every frame — a real rower whose PM5 never declares Active.
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, { elapsedSeconds: 0.5, distanceMeters: 1.2, spm: 0 }),
+        status(200, { elapsedSeconds: 1.0, distanceMeters: 2.5, spm: 14 }),
+        status(300, { elapsedSeconds: 1.5, distanceMeters: 4.1, spm: 18 }),
+        status(400, { elapsedSeconds: 2.0, distanceMeters: 6.0, spm: 20 }),
+        status(500, { elapsedSeconds: 2.5, distanceMeters: 8.2, spm: 21 }),
+      ].map((e) => ({ ...e, rowingState: 0 })),
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    // Frames 1-4: the streak is building and the machine still says
+    // Inactive, so READY holds — the coast is still refused this whole time.
+    for (let i = 0; i < 4; i += 1) {
+      tick(fake, 100);
+      expect(result.current.phase).toBe("ready");
+      expect(loadMonitorRun()).toBeNull();
+    }
+    expect(logKinds(result)).not.toContain("rowing-active-fallback");
+
+    // Frame 5 — five consecutive strictly-progressing rowing frames. The
+    // record opens even though `rowingActive` never once read true.
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    expect(result.current.frame?.rowingActive).toBe(false);
+    const opened = loadMonitorRun();
+    expect(opened).not.toBeNull();
+    expect(opened?.completedAt).toBeNull();
+
+    // The one entry the hook itself writes: what a stashed trace needs to
+    // answer "did the machine ever say Active?" after the fact.
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const fallback = entries.filter((e) => e.kind === "rowing-active-fallback");
+    expect(fallback).toHaveLength(1);
+    expect(fallback[0]!.detail).toContain("rowingActive=false");
+    expect(fallback[0]!.detail).toContain("distance=8.2");
+    expect(fallback[0]!.detail).toContain("state=rowing");
+  });
+
+  it("the COASTING flywheel, extended: meters that stop climbing break the streak, and ready holds indefinitely", async () => {
+    // Walk 3's coast, run past the fallback's own window. The wheel banks
+    // two more meters and then stalls — from there no frame can strictly
+    // beat the one before it, so the streak restarts at one every frame and
+    // never reaches five. This is the whole reason the fallback keys on
+    // STRICT increase rather than on "a rowing frame".
+    const stalled = [4.7, 4.7, 4.7, 4.7, 4.7, 4.7, 4.7];
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, { elapsedSeconds: 0.78, distanceMeters: 1.2, spm: 0 }),
+        status(200, { elapsedSeconds: 1.3, distanceMeters: 3.1, spm: 0 }),
+        status(300, { elapsedSeconds: 1.8, distanceMeters: 4.7, spm: 0 }),
+        ...stalled.map((d, i) =>
+          status(400 + i * 100, {
+            elapsedSeconds: 2.3 + i * 0.5,
+            distanceMeters: d,
+            spm: 0,
+          }),
+        ),
+      ].map((e) => ({ ...e, rowingState: 0 })),
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+
+    // Ten frames — twice the fallback's window — and the session never
+    // leaves ready.
+    for (let i = 0; i < 10; i += 1) {
+      tick(fake, 100);
+      expect(result.current.phase).toBe("ready");
+      expect(loadMonitorRun()).toBeNull();
+    }
+    expect(logKinds(result)).not.toContain("rowing-active-fallback");
+  });
+
+  it("the INSTANT path is untouched: Active plus banked distance promotes on the very first frame, with no fallback entry", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, {
+          elapsedSeconds: 0.6,
+          distanceMeters: 2.7,
+          spm: 0,
+          rowingState: 1,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    expect(loadMonitorRun()).not.toBeNull();
+    // The fallback never ran: the machine's own word was there on frame one.
+    expect(logKinds(result)).not.toContain("rowing-active-fallback");
   });
 
   it("picking -> pairing -> programming -> ready -> live -> ended, with the record written the whole way", async () => {
@@ -1766,7 +1945,8 @@ describe("useMonitorSession: coexistence with a phone SessionRun (Task 2's M-2)"
 /** Frames lifted VERBATIM from `docs/monitor/sessions/pm5-session3-final.log.gz`
  *  (gzcat it; §18 session 3 names the file). Only the fields the predicate
  *  reads are kept — the log lines carry `intervalIndex`/`intervalRemaining`
- *  too, which are not part of the four metrics and are irrelevant here. */
+ *  too, which are not part of the three keyed metrics and are irrelevant
+ *  here. */
 function frame(over: Partial<MonitorFrame>): MonitorFrame {
   return {
     elapsedSeconds: 0,
@@ -1815,14 +1995,16 @@ const RECORDED_BOUNDARY_RESET: MonitorFrame[] = [
 ];
 
 /** log lines 3546-3551, plus one later frame from the same stretch: the
- *  rower stops. Two moving frames, then the four metrics freeze at
- *  `57.78 / 108.4 / 236.75 / 16` — and stay frozen for 216 consecutive
+ *  rower stops. Two moving frames, then the three keyed metrics freeze at
+ *  `108.4 / 236.75 / 16` (the elapsed `57.78` alongside them is the empty
+ *  arm's own artifact, not part of the key) — and stay frozen for 216 consecutive
  *  frames (3548-3763, where split and spm finally zero), with the heart
  *  rate moving the whole time. The seventh fixture frame below (HR 60) is
  *  a real frame from further down that stretch, not line 3552 — HR 60
  *  occurs 24 times inside it; it is here to carry the HR movement into the
- *  fixture, and its four metrics are the same frozen four. spm PINNED at 16, not zeroed: the observation that killed
- *  the original `spm === 0` predicate. */
+ *  fixture, and its keyed metrics are the same frozen three. spm PINNED at
+ *  16, not zeroed: the observation that killed the original `spm === 0`
+ *  predicate. */
 const RECORDED_STOP: MonitorFrame[] = [
   frame({
     elapsedSeconds: 57.04,
@@ -1927,9 +2109,9 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     ]);
   });
 
-  it("heart rate is not one of the four: the stop holds through every HR change in it", () => {
+  it("heart rate is not one of the three: the stop holds through every HR change in it", () => {
     // The last recorded frame of the stop fixture drops HR from 81 to 60
-    // while the four stay frozen — if HR were in the key, the rower would
+    // while the three stay frozen — if HR were in the key, the rower would
     // flicker out of PAUSED every few frames for the whole 216-frame stop.
     const { runs } = replay(RECORDED_STOP);
     expect(isPausedRun(runs[runs.length - 1]!)).toBe(true);
@@ -1983,7 +2165,7 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
 
   it("...and a frame that changes ONLY the heart rate does not break it", () => {
     // The deliberate asymmetry, from the same stretch of record: HR is the
-    // one field that keeps moving while the four freeze, so it is the one
+    // one field that keeps moving while the three freeze, so it is the one
     // field the key must NOT contain.
     const held = frame(FROZEN);
     let run = nextFreezeRun(null, held);
@@ -2050,6 +2232,37 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     run = nextFreezeRun(run, rowing);
     expect(run.frames).toBe(1);
     expect(isPausedRun(run)).toBe(false);
+  });
+});
+
+describe("nextRowingStreak: the rowingActive fallback's own counter", () => {
+  it("a NON-ROWING frame resets outright — an armed or resting frame cannot lend its position to the next pull", () => {
+    // The same discipline `nextFreezeRun` applies for the same reason: a
+    // rest's frames are not the next interval's first strokes. Without the
+    // reset, four rowing frames either side of a rest would add up to the
+    // fallback's five and open a record on a machine that is resting.
+    let streak = nextRowingStreak(null, frame({ distanceMeters: 1 }));
+    streak = nextRowingStreak(streak, frame({ distanceMeters: 2 }));
+    streak = nextRowingStreak(streak, frame({ distanceMeters: 3 }));
+    streak = nextRowingStreak(streak, frame({ distanceMeters: 4 }));
+    expect(streak?.frames).toBe(4);
+
+    streak = nextRowingStreak(
+      streak,
+      frame({ state: "resting", distanceMeters: 5 }),
+    );
+    expect(streak).toBeNull();
+
+    // ...and the next rowing frame starts over at one, not five.
+    streak = nextRowingStreak(streak, frame({ distanceMeters: 6 }));
+    expect(streak?.frames).toBe(1);
+  });
+
+  it("a frame that merely MATCHES the previous distance restarts the count at one, so a stalled wheel can never reach the threshold", () => {
+    let streak = nextRowingStreak(null, frame({ distanceMeters: 4.7 }));
+    streak = nextRowingStreak(streak, frame({ distanceMeters: 4.7 }));
+    streak = nextRowingStreak(streak, frame({ distanceMeters: 4.7 }));
+    expect(streak).toStrictEqual({ frames: 1, distanceMeters: 4.7 });
   });
 });
 
