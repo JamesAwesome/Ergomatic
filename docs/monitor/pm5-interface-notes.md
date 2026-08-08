@@ -1963,17 +1963,26 @@ deliberately clockless (DEVIATIONS' diagnostics-sheet row), so item 21's
 DURATIONS come from a phone stopwatch or a screen recording of the
 interstitial checklist, never from the log.
 
-20. **STATUS: OPEN — `useMonitorSession.ts`'s own `PAUSED_FRAME_HOLD`
-    doc comment, carried forward by Task 8.** The paused derivation (four
-    consecutive identical frames — `elapsedSeconds`/`distanceMeters`/
-    `currentSplit`/`spm` — while `state === "rowing"`) is built entirely
-    from session 3's 216-frame frozen stretch, which that session's own
-    record shows was captured during a STRUCTURALLY EMPTY arm (§19.13) — a
-    machine holding a workout with no interval structure at all. Whether a
-    genuinely stopped rower mid-piece on a PROPERLY ARMED, non-empty
-    workout freezes the same four fields the same way has never been
-    observed. Expected: unknown — this is exactly the caveat
-    `PAUSED_FRAME_HOLD`'s own doc comment names as unresolved. Sequence
+20. **STATUS: ANSWERED — 2026-08-08, hardware walks 1-2 (§18's
+    2026-08-08 entry). The four-field premise was WRONG and the
+    derivation is corrected in code.** Walk 1 (recording `test-20.mp4`):
+    a stopped rower on a properly armed TIMED interval freezes only
+    THREE fields — meters (pinned at 30), split (4:16.1), rate (68) —
+    while the interval clock RUNS (LEFT IN INTERVAL counted 4:38 → 3:47)
+    and the heart rate moves the whole hold (85 → 63, the exclusion
+    theory confirmed). With `elapsedSeconds` in the freeze key the key
+    never repeats on real hardware, so PAUSED could never fire; session
+    3's frozen-elapsed stretch was an artifact of its structurally EMPTY
+    arm (§19.13), exactly the caveat this item existed to test. The key
+    is now `distanceMeters`/`currentSplit`/`spm` with a
+    `distanceMeters > 0` guard replacing elapsed as the no-rest-boundary
+    clearer, and walk 2 (`pause-worked.mp4`) CONFIRMED the corrected
+    derivation firing on a real program. Still unread (any later
+    full-log capture closes them): the exact tick count from the last
+    stroke to the flip (the recordings sample at 1 fps), and a
+    distance-interval stop (only WATCHED on a timed one; the clock runs
+    on distance intervals too, so the same behavior is expected).
+    The original sequence, kept executable for that re-run. Sequence
     (pair already established by item 21; the Setup workout is the
     program — `TWO_TIME_PROGRAM` is a lab constant and does not exist
     here): (1) from the workout detail press Connect and walk the
@@ -1988,9 +1997,15 @@ interstitial checklist, never from the log.
     excludes, on the theory that it is the one that keeps moving when the
     rower stops — `PAUSED_FRAME_HOLD`'s own doc comment); (6) start rowing
     again — the paused chrome should clear on the first changed frame;
-    (7) open the Connection log sheet, COPY LOG once, paste into §18 —
-    step 4's tick count is read from the copied entries. A genuine finding
-    either way, not a pass/fail gate.
+    (7) capture the log: mid-row, triple-tap a pager-rail button and
+    COPY LOG; or after the row ends, from the SAME TAB's console,
+    `copy(sessionStorage.getItem("ergomatic:last-rowed-log"))` — teardown
+    stashes every session's trace on the way out (the rowed-only key
+    survives later never-rowed attempts), because the ended frame
+    navigates away before the sheet can be reached. Paste into §18 —
+    step 4's tick count is read from the entries (`frame` entries carry
+    state, elapsed, distance, `rowingActive`, and spm since walk 3). A
+    genuine finding either way, not a pass/fail gate.
 21. **STATUS: OPEN — `transports/index.ts`'s own `AUTO_TICK_MS`/
     `e2e/connected.spec.ts`'s `delayWritesMs` doc comments, added by Task
     8.** The fake's real-time auto-tick (100ms) and this task's e2e/
@@ -2019,6 +2034,87 @@ interstitial checklist, never from the log.
     particular latency).
 
 ## 18. Laptop session observations (results destination for §17)
+
+### 2026-08-08 session (PM5 432331249) — HARDWARE WALKS 1-3 (the PR #59 verification row, IN PROGRESS)
+
+The first product-app walks — Connect from a workout detail against the
+compose stack's production build, not the lab page. Three walks so far;
+every finding below shipped as a fix on `phase-7b-connected` the same
+day (commits `86963ff..`). Capture instruments grew mid-session: walk 1
+is a 1 fps screen recording (`test-20.mp4`), walk 2 the same
+(`pause-worked.mp4`), walk 3 the first wire log (the diagnostics sheet
+mid-session, then the sessionStorage stash).
+
+**Walk 1 (`test-20.mp4`, 111 s):**
+
+- The interstitial walk was CLEAN on real hardware: scan dismissed →
+  "No monitor was picked" → re-pair → programming with the correct
+  structural readback → ready. The 0x81 accept, the prepare's leading
+  terminate, and the two-interval arm all behaved.
+- **Item 20 ANSWERED** (see the item): the interval clock runs while a
+  stopped rower sits still; meters/split/rate freeze; HR moves. PAUSED
+  as shipped (four-field key) could never fire; corrected to the
+  three-field key + `distance > 0` guard.
+- The pace validation refused the workout outright — `2:14.5`-style
+  splits, i.e. most baseline-derived targets. M-9's check had copied
+  duration's whole-second contract onto a field whose wire unit is
+  0.01 s (§12's own worked example). Corrected
+  (`representableCentiseconds`); NOTE: a half-second pace value (e.g.
+  raw `13450`) has still never been sent to a real PM5 — every workout
+  programmed since carried whole-second targets. One row with a `.5`
+  target settles it silently.
+- READY auto-advanced without a tap (chased through two wrong gate
+  fixes; resolved in walk 3).
+- RATE read 57-68 at barely-moving stroke work — consistent with the
+  PM5's instantaneous per-stroke rate (60 ÷ stroke period) and with the
+  rate HOLDING its last value through a stop (walk 1 froze at 68), but
+  unverified: no capture carries raw 0x0032 yet. Watch it at normal
+  pace; if still absurd, log a raw 0x0032 sample.
+
+**Walk 2 (`pause-worked.mp4`, 41 s):**
+
+- **PAUSED CONFIRMED on a real program** — the corrected derivation
+  fired mid-interval and cleared on resume. The operator missed the
+  sunken-grey presentation entirely; the band is now ink-inverted
+  (DEVIATIONS row).
+- READY still skipped: TOTAL LEFT read 1:52 with 0 meters and rate 0 —
+  the PM5 RUNS THE WORKOUT CLOCK at "row to begin", killing the
+  elapsed-based gate v2.
+
+**Walk 3 (the first wire logs):**
+
+- A mid-session reprogram flipped READY on
+  `state=rowing elapsed=0.78 distance=1.2` — real meters banked by a
+  flywheel still coasting from the previous piece, on a workout the
+  PM5's own glass did not consider started ("the pm5 knew i didnt start
+  the interval"). 0x0031 byte 9 (Rowing State, 0=Inactive 1=Active —
+  §10's table, parsed since 7A, never consumed) is where the machine
+  says so; `MonitorFrame.rowingActive` now carries it and the
+  ready→live/record-open gate requires it alongside flywheel evidence.
+  **UNOBSERVED PREMISE, the next row's first reading:** that byte has
+  never been captured on a first-pull frame — the gate's correctness on
+  real hardware rests on it, and `frame` log entries now record it.
+- The NEXT stash (17 entries, ending at `armed`) showed NO rowing frame
+  ever reached the driver during a skip — the skip was never the hook's
+  gate: `ConnectedInterstitial`'s own `READY_DWELL_MS` (handoff §2's
+  "Ready dwell 1.2 s") auto-advanced past the ready screen on a
+  setTimeout. Removed as an operator ruling (DEVIATIONS row); ready now
+  holds until the button or the first pull, and the connected flow runs
+  on no wall clock at all.
+- The structural readback's healthy lag-tick was WITNESSED mid-session:
+  first sighting `durationRaw=0`, one tick later the true
+  `durationRaw=100`, then armed — fix-3's detector behaving exactly as
+  designed over a real radio.
+- The ended hand-off frame navigates away on first render, which killed
+  every early attempt to copy the log post-row; teardown now stashes
+  `ergomatic:last-monitor-log` (every exit) and
+  `ergomatic:last-rowed-log` (record-opening sessions only) into
+  sessionStorage.
+
+**Readings still owed by the next row(s):** `rowingActive` on the
+first-pull frame; item 21's three timing spans; the PAUSED tick count
+from a full log; RATE at normal pace; one `.5` pace target accepted by
+the machine.
 
 ### 2026-08-05 session (PM5 432331249) — LAPTOP SESSION 1
 
