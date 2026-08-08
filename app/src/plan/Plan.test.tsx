@@ -218,7 +218,7 @@ describe("Plan (RESET — staged confirm)", () => {
 
     expect(reset).not.toHaveBeenCalled();
     expect(
-      screen.getByText("This resets your progress — session 1 becomes today."),
+      screen.getByText("This resets your progress. Session 1 becomes today."),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Reset progress" }),
@@ -330,7 +330,7 @@ describe("Plan (SWITCH — staged confirm)", () => {
     expect(choose).not.toHaveBeenCalled();
     expect(
       screen.getByText(
-        "Switching to Head Race Prep resets your progress — session 1 becomes today.",
+        "Switching to Head Race Prep resets your progress. Session 1 becomes today.",
       ),
     ).toBeVisible();
   });

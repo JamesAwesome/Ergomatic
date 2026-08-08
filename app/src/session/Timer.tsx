@@ -560,7 +560,7 @@ export default function Timer() {
         // spells out `2k 1:52.0 → 1:50.0` rather than a bare "Save?".
         <div className="timer-end-confirm">
           <p className="timer-end-copy">
-            Abandon this session? Nothing will be saved — no log, no actuals.
+            Abandon this session? Nothing will be saved: no log, no actuals.
           </p>
           <div className="timer-end-actions">
             <button
@@ -633,7 +633,7 @@ export default function Timer() {
         // so the copy can't say "longer than expected" any more.
         <div className="timer-suspect">
           <p className="timer-suspect-copy">
-            This split looks off — keep it, or discard it and move on?
+            This split looks off. Keep it, or discard it and move on?
           </p>
           <div className="timer-suspect-actions">
             <button

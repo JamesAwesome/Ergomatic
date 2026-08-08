@@ -109,7 +109,7 @@ function ReadyEditor({
     <div className="baselines-card">
       {seeded && (
         <p className="baseline-prompt">
-          No baselines yet — these are starting points to adjust with ± below.
+          No baselines yet. These are starting points to adjust with ± below.
         </p>
       )}
       <BaselineRow

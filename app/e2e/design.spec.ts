@@ -2998,7 +2998,7 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
     test.beforeEach(async ({ page }) => {
       await page.getByRole("button", { name: /COUNTS TOWARD PLAN/ }).click();
       await expect(
-        page.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+        page.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
       ).toBeVisible();
     });
 
@@ -3007,7 +3007,7 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
     }) => {
       await assertTapTargets(page);
       const toggle = page.getByRole("button", {
-        name: "OUTSIDE THE PLAN — won't advance",
+        name: "OUTSIDE THE PLAN · won't advance",
       });
       const box = await toggle.boundingBox();
       expect(box).not.toBeNull();
@@ -3029,7 +3029,7 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
     // assertion before this one.
     test("the toggled state fills ink, not accent", async ({ page }) => {
       const toggle = page.getByRole("button", {
-        name: "OUTSIDE THE PLAN — won't advance",
+        name: "OUTSIDE THE PLAN · won't advance",
       });
       const styles = await toggle.evaluate((el) => {
         const s = getComputedStyle(el);

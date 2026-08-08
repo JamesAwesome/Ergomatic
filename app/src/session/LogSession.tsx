@@ -596,7 +596,7 @@ function LogScreen({
           onClick={onToggleOutsidePlan}
         >
           {outsidePlan
-            ? "OUTSIDE THE PLAN — won't advance"
+            ? "OUTSIDE THE PLAN · won't advance"
             : `COUNTS TOWARD PLAN · SESSION ${plan.doneN + 1} OF ${plan.sequence.length}`}
         </button>
       )}

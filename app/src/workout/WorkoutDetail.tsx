@@ -385,7 +385,7 @@ function WorkoutDetailView({
       // "no target" fact "Log it after"'s footer already states, worded
       // for this door instead.
       setConnectError(
-        "Set your baselines first — Connect needs a target to program.",
+        "Set your baselines first. Connect needs a target to program.",
       );
       return;
     }
@@ -514,7 +514,7 @@ function WorkoutDetailView({
       <p className="mono-status">
         {minutesLabel} · PAIN {workout.pain}/5 · {daysLabel}
       </p>
-      <p className="workout-detail-note">PREVIEW — NUDGE ANY TARGET</p>
+      <p className="workout-detail-note">PREVIEW · NUDGE ANY TARGET</p>
       <div className="step-list">
         {workout.steps.map((step, index) =>
           step.k === "reps" ? (
@@ -550,8 +550,8 @@ function WorkoutDetailView({
           <div className="baseline-confirm">
             <p className="baseline-confirm-line">
               {replaceStage === "unlogged"
-                ? "You have an unlogged session — starting a new one discards it."
-                : "A session is in progress — replace it?"}
+                ? "You have an unlogged session. Starting a new one discards it."
+                : "A session is in progress. Replace it?"}
             </p>
             <div className="baseline-actions">
               <button
@@ -769,7 +769,7 @@ function OwnerActions({
           one tap from firing) rather than permanently above the stack. */}
       {armed && (
         <p className="baseline-confirm-line">
-          Your logged sessions are kept — they keep their own copy of the title
+          Your logged sessions are kept. They keep their own copy of the title
           and type.
         </p>
       )}
