@@ -36,6 +36,7 @@ import type {
 } from "../../monitor/useMonitorSession";
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
+import { commentStrippedSource } from "../../test/cssView";
 import ConnectedInterstitial from "../ConnectedInterstitial";
 import ConnectedSurface, { LAST_PANE_KEY } from "../ConnectedSurface";
 import { buildGridModel, DASH, type JudgedValue } from "./surfaceModel";
@@ -59,9 +60,10 @@ function indexCssPath(): string {
 }
 
 /**
- * `index.css` WITH EVERY COMMENT STRIPPED, and the only view of the
- * stylesheet this file has. Nothing here can read prose, because the prose
- * is gone before the first assertion runs.
+ * `index.css` WITH EVERY COMMENT STRIPPED (`commentStrippedSource`,
+ * `../../test/cssView` — Task 8's house extraction of this exact idiom),
+ * and the only view of the stylesheet this file has. Nothing here can read
+ * prose, because the prose is gone before the first assertion runs.
  *
  * The task-7 review found why this matters (M1), and it is the same defect
  * `562ef55` fixed one commit before this pane existed: a rule-body regex
@@ -73,9 +75,8 @@ function indexCssPath(): string {
  * assertion in this file read code; a per-assertion strip is a thing the
  * next test to be added forgets.
  */
-const DECLARATIONS = readFileSync(indexCssPath(), "utf-8").replace(
-  /\/\*[\s\S]*?\*\//g,
-  "",
+const DECLARATIONS = commentStrippedSource(
+  readFileSync(indexCssPath(), "utf-8"),
 );
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");

@@ -1277,20 +1277,31 @@ inclusivity).
 
 ## Phase 7B — PM5 connected surface
 
-**Status:** Not started
+**Status:** Done (2026-08-08, Tasks 1-8, Task 8 close-out this entry) — the
+core exit criterion below is met; this section's own bullets were never
+checked off as Tasks 1-7 landed them, so this update reconciles the
+checklist against shipped reality in one pass rather than pretending the
+phase is still "Not started."
 **Goal:** A rower can actually connect a PM5 from the app and row against
 it — the screens 7A's domain was built to sit underneath.
 **Design:** returned to design for the connected surface's own handoff,
 reconciled against 7A's shipped types before this phase starts.
 
-- [ ] "Connect PM5" affordance on Confirm targets, shown only where a
-      transport (`webBluetooth.ts`/`capacitorBle.ts`) is available; manual
-      NEXT always remains; disconnect mid-workout degrades silently to
-      manual
-- [ ] Live actual pace vs target range + live stroke rate vs prescribed SPM
-      in the timer, fed by `MonitorDriver`'s `frame` events; distance steps
-      auto-advance on `intervalComplete`
-- [ ] **Guard wiring is NOT uniform (final-review M-1 — read before touching
+- [x] "Connect PM5" affordance — shipped as `WorkoutDetail`'s `ConnectAction`
+      button (not literally "on Confirm targets," the plan's own original
+      wording — the handoff moved it to the workout DETAIL screen instead,
+      ahead of Confirm, `ConnectedInterstitial.tsx`'s own header), gated on
+      `resolveDefaultTransport()`/`navigator.bluetooth` availability
+      (`src/monitor/transports/index.ts`); manual NEXT remains untouched;
+      disconnect mid-workout degrades to `"disconnected"` phase, never a
+      crash
+- [x] Live actual pace vs target + live stroke rate vs prescribed SPM —
+      shipped as `ConnectedSurface`'s three panes (Timer/Live/Grid,
+      `src/workout/connected/`), fed by `useMonitorSession`'s `frame`
+      events; distance steps auto-advance on `intervalComplete`
+      (`toActualIndex`'s forward-attribution rule, `domain/monitor/pm5/
+      intervalIndex.ts`)
+- [x] **Guard wiring is NOT uniform (final-review M-1 — read before touching
       any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** Most guards that
       only need "is anything live, and on which side" migrate onto
       `src/monitor/monitorRun.ts`'s `anyLiveSession()` mechanically, as
@@ -1308,7 +1319,7 @@ reconciled against 7A's shipped types before this phase starts.
       adding a NEW guard, ask "does this care about unlogged specifically,
       or just live-vs-not" before picking which of the two patterns to
       follow.
-- [ ] The reverse cross-clear direction: `buildRun`/`saveRun`
+- [x] The reverse cross-clear direction: `buildRun`/`saveRun`
       (`session/run.ts`) clears an existing live `MonitorRun` the same way
       `createMonitorRun` already clears a `SessionRun` — 7A shipped only
       its own half (`src/monitor/monitorRun.ts`'s own header comment names
@@ -1361,9 +1372,12 @@ reconciled against 7A's shipped types before this phase starts.
       follow-up — this phase's own guard/connect-flow work should read that
       phase's repro recipe before assuming "confirm idle" is sufficient on
       its own.
-- [ ] Full behavior tested against the fake transport in CI; the laptop
+- [x] Full behavior tested against the fake transport in CI; the laptop
       session above is this phase's live-hardware verification, never a CI
-      gate
+      gate — Task 8 closes this out: `e2e/connected.spec.ts`'s browser-
+      driven walk (Connect → pairing → programming → ready → the surface
+      via rail AND swipe → paused → resumed → End → the log screen, both
+      390×844 and 844×390) plus 2812 passing unit/client tests
 - [ ] **A failed `program()` during an OPEN run leaves the old run open and
       numbering.** `driver.ts`'s `program()` runs `sendPrepare()` →
       `sendSequence()` → `verifyArmed()` and only replaces `activeRun` at
@@ -1416,6 +1430,25 @@ reconciled against 7A's shipped types before this phase starts.
       `scripts/pm5-lab.ts` threads its own `scan()` result (`found.name`)
       through as the reference caller; a future connect screen does the
       same.
+- [ ] **Deferred, deliberately — a follow-on, not this phase's scope
+      (Task 8 close-out).** Reconnect and background-scan: today's
+      `resolveDefaultTransport()`/`useMonitorSession.connect()` chain
+      always starts from `scan()`'s OS picker — there is no "reconnect to
+      the last-paired PM5 without re-picking" path, and no background scan
+      that could surface a PM5 already in range before the rower presses
+      Connect (`loadLastDevice()`/`saveLastDevice()`,
+      `ConnectedInterstitial.tsx`, already persist the LAST device's name
+      for a "LAST USED · <name>" caption — nothing reads it back to attempt
+      a silent reconnect). `driver.ts`'s own `resolveDefaultTransport`
+      doc comment names the adjacent gap this shares a root cause with:
+      `createCapacitorBleTransport` has no call site here either — a
+      native-build caller passes its own factory through
+      `MonitorSessionDeps.createTransport` today, and choosing between it
+      and Web Bluetooth is a platform conditional that belongs in the
+      adapter layer (`src/platform.ts`/`src/adapters/`), not this hook.
+      Both — reconnect-by-identity and the platform-conditional default —
+      are the same "wire the adapter layer into the default transport"
+      follow-on, scoped out of 7B/Task 8 on purpose.
 
 **Exit:** On a real PM5: distance steps auto-advance, live pace shows
 against target, and "Connect PM5" degrades silently to manual on

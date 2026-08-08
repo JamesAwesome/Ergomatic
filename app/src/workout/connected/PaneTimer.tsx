@@ -8,16 +8,19 @@
 // quarter ruler), and `TimerTargets`'s own `targetSplitDisplay` for the
 // TARGET SPLIT card's value/ref pair (via `surfaceModel.ts`).
 //
-// What is NOT reused: `TimerTargets`'s `variant="connected"` JSX. That
-// variant renders the actual INSIDE the target card; the handoff is
-// explicit that the actual is a SEPARATE card of the same geometry beside
-// it ("The machine's actual is the big numeral beside it, same card
-// geometry, same size — distinguished by its label (`NOW · /500M` vs
-// `TARGET SPLIT`)"), and §3's own row layout is `[NOW][TARGET]` then
-// `[RATE][METERS]`. The handoff is the visual authority, so the four cards
-// below follow it; see the task-6 report for the flag raised against that
-// variant. Its CSS hooks (`timer-card-actual-{judgement}`) ARE used, by
-// `JudgedCard`.
+// What is NOT reused, and no longer exists to reuse: `TimerTargets`'s own
+// `variant="connected"` JSX, which used to render the actual INSIDE the
+// target card. The handoff is explicit that the actual is a SEPARATE card
+// of the same geometry beside it ("The machine's actual is the big numeral
+// beside it, same card geometry, same size — distinguished by its label
+// (`NOW · /500M` vs `TARGET SPLIT`)"), and §3's own row layout is
+// `[NOW][TARGET]` then `[RATE][METERS]`. The handoff is the visual
+// authority, so the four cards below follow it; the task-6 review flagged
+// that variant as dead code with no consumer, and Task 8 deleted it —
+// `TimerTargets` now renders only the phone timer's own unlabelled cards.
+// Its CSS hooks (`timer-card-actual-{judgement}`) survive that deletion —
+// they were never PART of the JSX being removed, only exercised through
+// it — and ARE used, by `JudgedCard`.
 //
 // TWO COLUMNS THAT VANISH IN PORTRAIT. `.connected-col` is
 // `display: contents` in portrait — the wrappers disappear and their

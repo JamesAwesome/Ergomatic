@@ -1259,6 +1259,217 @@ test("connected-interstitial-failed-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// --- Phase 7B Task 8: the connected interstitial's DRIVEN states -----------
+//
+// States 4/5/7 (pairing/programming/ready) could not be captured for real
+// when Task 5's screenshots above were taken — no seam existed to drive them
+// without a real radio, which is exactly why the comment above
+// `stubNoBluetooth` named `failed` as "the one state HIGH-3's own
+// measurement named by number". Task 8's fake-injection seam
+// (`src/monitor/transports/index.ts`) removes that constraint: this compose
+// stack's `web` image is built with `VITE_ENABLE_FAKE_MONITOR=1`
+// (`compose.e2e.yml`), so `window.__pm5FakeScript__` — set via
+// `page.addInitScript`, exactly like `e2e/connected.spec.ts` — drives a REAL
+// `createFakeTransport()` through the REAL `ConnectedInterstitial` component.
+// No `navigator.bluetooth` stub involved, so none of the hanging-picker
+// hazard above applies to any of these three.
+//
+// `delayWritesMs` (200ms — `connected.spec.ts`'s own proven-reliable
+// 120ms, plus margin) delays EVERY write, including each individual
+// 20-byte BLE chunk of the programming frame (`driver.ts`'s per-frame send
+// loop awaits one chunk at a time, never in parallel) — so the REAL
+// duration "Sending the workout" stays on screen scales with chunk COUNT,
+// not just this one constant. A single 100m distance interval's program
+// packs into very few chunks, and measured directly, that left too short a
+// real window for a screenshot taken right after a polled `expect` to
+// reliably still be looking at it (this file's own first attempt, a
+// single-interval program at up to 1500ms/write, still intermittently
+// raced past "Sending the workout" before the screenshot call landed).
+// Five intervals — `connected.spec.ts`'s own `FIXTURE_PROGRAM` shape,
+// proven reliable there at 120ms — packs enough chunks that the
+// programming state holds for a real, comfortable multiple of one write's
+// own delay.
+const SCREENSHOT_DELAY_WRITES_MS = 200;
+
+async function injectFakeMonitorForScreenshots(
+  page: Page,
+  deviceName: string,
+): Promise<void> {
+  await page.addInitScript(
+    ({ program, deviceName: name, delayWritesMs }) => {
+      window.__pm5FakeScript__ = {
+        program,
+        deviceName: name,
+        delayWritesMs,
+      };
+    },
+    {
+      // Five 100m distance steps — `connected.spec.ts`'s own
+      // `FIXTURE_PROGRAM` shape (`SCREENSHOT_DELAY_WRITES_MS`'s own doc
+      // comment for why chunk count, not just delay, is what actually
+      // holds "Sending the workout" on screen long enough to capture).
+      program: {
+        intervals: Array.from({ length: 5 }, () => ({
+          kind: "distance" as const,
+          value: 100,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        })),
+      },
+      deviceName,
+      delayWritesMs: SCREENSHOT_DELAY_WRITES_MS,
+    },
+  );
+}
+
+async function openConnectedInterstitial(
+  page: Page,
+  title: string,
+  email: string,
+  deviceName: string,
+): Promise<void> {
+  await injectFakeMonitorForScreenshots(page, deviceName);
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  // Five "w 100m max" lines — MUST match `injectFakeMonitorForScreenshots`'s
+  // own five-interval `program` exactly (`connected.spec.ts`'s own header
+  // comment: `createFakeTransport` asserts every incoming programming byte
+  // against its OWN `script.program`, so the bulk-import text and the
+  // injected fixture have to agree BY CONSTRUCTION — an earlier draft of
+  // this file left this at a single line after the fixture above grew to
+  // five intervals, and got a genuine "programming chunk 0 mismatch" from
+  // the fake for it).
+  await importBulk(
+    page,
+    [
+      `${title} | AN | easy | 1`,
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+    ].join("\n"),
+  );
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Connect" }).click();
+}
+
+test("connected-interstitial-pairing", async ({ page }) => {
+  const title = "Screenshot Connected Pairing Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-pairing@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Connecting" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-pairing.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-pairing-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Pairing Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-pairing-landscape@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Connecting" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-pairing-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-programming", async ({ page }) => {
+  const title = "Screenshot Connected Programming Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-programming@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Sending the workout" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-programming.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-programming-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Programming Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-programming-landscape@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Sending the workout" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-programming-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-ready", async ({ page }) => {
+  const title = "Screenshot Connected Ready Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-ready@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-ready.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-ready-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Ready Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-ready-landscape@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-ready-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
 // --- Phase 7B Task 6: the connected surface, both orientations -------------
 //
 // The panes cannot be REACHED in this stack: they only render once a monitor

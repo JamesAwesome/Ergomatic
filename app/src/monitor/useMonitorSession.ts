@@ -59,7 +59,7 @@ import {
   recordActual,
   type MonitorRun,
 } from "./monitorRun";
-import { createWebBluetoothTransport } from "./transports/webBluetooth";
+import { resolveDefaultTransport } from "./transports/index";
 
 /** The session state machine (design spec §2, verbatim). Every value here
  *  is reached by a REAL event or frame field — never by a timer and never
@@ -226,9 +226,13 @@ export interface MonitorSession {
  */
 export interface MonitorSessionDeps {
   /** Builds the radio. `null` means "this platform/build has none" →
-   *  `transport-missing`. See `defaultTransport` for what the default one
-   *  can and cannot do today. */
-  createTransport?: () => Transport | null;
+   *  `transport-missing`. May return a `Promise` — `connect()` always
+   *  `await`s the result, so a caller building a real, synchronous
+   *  transport (every existing test) and the DEV fake-injection seam's
+   *  dynamic `import()` (`transports/index.ts`'s `resolveDefaultTransport`,
+   *  the default when this is omitted) are indistinguishable to it. See
+   *  that function for what the default one can and cannot do today. */
+  createTransport?: () => Transport | null | Promise<Transport | null>;
   /** The driver's event log. Injectable so Task 7's diagnostics sheet can
    *  own the log it renders (`exportLog()` — the sheet reads on open; the
    *  log has no subscribe and doesn't get one, spec §5). */
@@ -239,28 +243,6 @@ export interface MonitorSessionDeps {
    *  comes from the picker result, never from a caller's guess (spec's I5
    *  ruling: no screen ever renders the `"PM5"` placeholder). */
   driverOptions?: Omit<DriverOptions, "deviceName">;
-}
-
-/**
- * The default radio: Web Bluetooth when the browser has it, otherwise
- * nothing.
- *
- * **This is deliberately NOT the whole story, and Task 8 finishes it.** The
- * native (Capacitor) adapter is the PRIMARY path on iOS, but choosing
- * between the two is a platform conditional, and platform conditionals are
- * lint-enforced to the adapter layer (`src/platform.ts`, `src/adapters/`,
- * CLAUDE.md's native-first policy) — this hook is not an adapter. The
- * plan already names the file that will make this choice: Task 8's
- * `src/monitor/transports/index.ts`, the same `import.meta.env.DEV`-gated
- * seam that keeps `fake.ts` out of the production bundle. Until it lands,
- * a caller on a native build passes its own factory through
- * `MonitorSessionDeps.createTransport`; the default here keeps James's
- * laptop-vs-real-PM5 path (Chromium + `navigator.bluetooth`,
- * interface-notes.md §17) working and answers `transport-missing` honestly
- * everywhere else, rather than pretending a radio exists.
- */
-function defaultTransport(): Transport | null {
-  return navigator.bluetooth ? createWebBluetoothTransport() : null;
 }
 
 /**
@@ -717,7 +699,15 @@ export function useMonitorSession(
     if (connectingRef.current || driverRef.current !== null) return;
     connectingRef.current = true;
     update({ phase: "picking", error: null });
-    const transport = (depsRef.current.createTransport ?? defaultTransport)();
+    // Awaited unconditionally — the DEV fake-injection seam's
+    // `resolveDefaultTransport` (`transports/index.ts`) returns a `Promise`
+    // only when it is about to dynamic-`import()` `fake.ts`; every other
+    // path (a real `createWebBluetoothTransport()`, and every test's own
+    // synchronous `createTransport` override) resolves on the same tick,
+    // so `await` costs nothing observable there.
+    const transport = await (
+      depsRef.current.createTransport ?? resolveDefaultTransport
+    )();
     if (transport === null) {
       connectingRef.current = false;
       fail({
