@@ -1,6 +1,4 @@
-import { useLayoutEffect } from "react";
 import BackLink from "../shell/BackLink";
-import { holdScrollTop } from "../shell/holdScrollTop";
 import { RELEASE_NOTES } from "./content/releaseNotes";
 import { releaseDate } from "./newsDates";
 
@@ -10,14 +8,17 @@ import { releaseDate } from "./newsDates";
 // `.news-release-version`/`.news-release-items` card styling per entry —
 // this screen doesn't invent new visual language, just repeats the card.
 export default function Releases() {
-  // Scroll-to-top, round 3: see holdScrollTop's comment for why a single
-  // scrollTo isn't enough on real iOS WebKit. This screen only ever mounts
-  // once per visit (no in-place slug navigation like Reader has), so `[]`
-  // deps are enough.
-  useLayoutEffect(() => holdScrollTop(), []);
-
   return (
-    <main className="screen releases-screen">
+    // Round 4 (architectural): scrolls in its own element — see
+    // .overlay-screen's comment in index.css for why. `tabIndex={0}`
+    // matches Plan.tsx's 84-row sequence (Phase 6A, commit a3e5ee6): it
+    // puts the scroll region itself in the tab order so a keyboard user can
+    // Tab to it and scroll with arrow/Page keys — genuinely useful here,
+    // not required by axe's scrollable-region-focusable rule, which this
+    // screen would already satisfy via BackLink, its own focusable
+    // descendant (`focusable-content`), tabIndex or not. No `key` here —
+    // unlike Reader, this screen has no in-place navigation.
+    <main className="screen releases-screen overlay-screen" tabIndex={0}>
       <BackLink fallback="/news" />
       <h1 className="screen-title">Release notes</h1>
       {RELEASE_NOTES.map((release) => (

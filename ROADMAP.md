@@ -1471,6 +1471,44 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-08, round 4 on the same bug, architectural) — round
+  3's `holdScrollTop` rAF hold-loop (below) also lost on real iOS, in both
+  browsers, on fresh bundles — the third window-scroll fix in a row to fail
+  on device. This round fires the recorded next step: stop policing the
+  window scroller and remove it from the fight. The reader and
+  release-notes screens become fixed overlays
+  (`.overlay-screen`, `position: fixed; inset: 0; overflow-y: auto`)
+  scrolling in their OWN element instead of the window. Three window-scroll
+  fixes in a row (this round's two predecessors below) each targeted a
+  different layer of the same fight and each lost on real iOS WebKit; an
+  overlay scroller can't lose that fight the same way, because a freshly
+  mounted element starts at `scrollTop 0` by construction — nothing to
+  scroll to, nothing for iOS to restore. `Reader.tsx`'s root also gains
+  `key={article.slug}` so the NEXT footer's in-place navigation remounts a
+  fresh scroller rather than reusing one that's mid-scroll; both screens'
+  roots gain `tabIndex={0}`, matching Plan.tsx's 84-row sequence (Phase 6A,
+  commit a3e5ee6) exactly — it puts the scroll region itself in the tab
+  order so a keyboard user can Tab to it and scroll with arrow/Page keys.
+  Not required by axe's `scrollable-region-focusable` rule here either way:
+  both screens already carry a focusable `BackLink` descendant, which
+  satisfies the rule's `focusable-content` check regardless of the root's
+  own tabIndex — verified by reading axe-core's own rule source, not
+  assumed. Round 3's
+  `holdScrollTop` helper and its test are deleted outright (grepped clean
+  across `src/`/`e2e/`). **Correction to this round's own original premise:**
+  the architecture does NOT restore News's BACK scroll position the way the
+  round was originally expected to — `position: fixed` removes the routed
+  screen from `.app-shell`'s document flow entirely, so `document.body`'s
+  scroll height collapses to just the app-shell's own padding the instant
+  the overlay mounts, and the browser clamps `window.scrollY` to 0 as an
+  automatic consequence (proven on the real compose stack, not just
+  reasoned about — the same clamp `Library.tsx`'s own scroll-memory comment
+  already describes for a shorter list). BACK still lands News at the top,
+  unchanged from round 2's tradeoff below — round 4 fixes the
+  reader-opens-mid-scroll bug this whole saga is about, but a
+  Library-style scroll-memory addition for News, not this architecture, is
+  what an actual BACK-position fix would take, and that's out of this
+  round's scope.
 - **PR #TBD** (2026-08-07/08, round 3 on the same bug) — the single-shot
   `window.scrollTo(0, 0)` from the round below (pre-paint, plus
   `scrollRestoration = "manual"` claimed) still lost on real iOS WebKit —
@@ -1503,6 +1541,12 @@ next phase. One line per round, newest first.
   (Safari's auto-restore used to cover that) — the feed is ~1.15 screens
   today, so this costs one small flick; if the shelf grows, News gets the
   Library's own scroll-memory pattern rather than browser restoration.
+  **Round 4 update:** the overlay-scroller architecture (round 4, above)
+  was expected to undo this tradeoff for free and does NOT — verified on
+  the real compose stack that `window.scrollY` still clamps to 0 the moment
+  the reader mounts, for an unrelated reason (the fixed overlay collapses
+  `document.body`'s scroll height), so this tradeoff still stands exactly
+  as written above.
 - **PR #TBD** (2026-08-07) — News polish: the reader and release notes
   scroll to the top on open instead of keeping the feed's scroll position;
   "heart rate monitor" replaces "heart rate strap" throughout; a prose pass

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Releases from "./Releases";
@@ -63,14 +63,17 @@ describe("Releases", () => {
     ).toBeVisible();
   });
 
-  it("scrolls the window to the top on mount (item 1: opened from a scrolled News feed, this screen used to keep that scroll position)", () => {
-    const scrollToSpy = vi
-      .spyOn(window, "scrollTo")
-      .mockImplementation(() => {});
+  // Round 4 (architectural): this screen scrolls in its own overlay element
+  // instead of the window (see .overlay-screen, index.css) — a freshly
+  // mounted scroller starts at scrollTop 0 by construction, so there is no
+  // scrollTo call to spy on any more. `tabIndex={0}` matches Plan.tsx's
+  // 84-row sequence (Phase 6A): it puts the scroll region in the tab order
+  // so a keyboard user can Tab to it and scroll with arrow/Page keys.
+  it("the root carries the overlay-screen class and is keyboard-tabbable (tabIndex 0)", () => {
+    const { container } = renderReleases();
 
-    renderReleases();
-
-    expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
-    scrollToSpy.mockRestore();
+    const root = container.querySelector("main");
+    expect(root).toHaveClass("overlay-screen");
+    expect((root as HTMLElement).tabIndex).toBe(0);
   });
 });

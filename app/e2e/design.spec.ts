@@ -3532,6 +3532,28 @@ test.describe("reader screen (/news/baselines, mixed read state)", () => {
   test("no .button-l1 anywhere on the reader", async ({ page }) => {
     await expect(page.locator('[class*="button-l1"]')).toHaveCount(0);
   });
+
+  // Round 4 (architectural): the reader is now a `position: fixed` overlay
+  // (`.overlay-screen`) — the risk that change carries is the tab bar
+  // ending up underneath it. Pinned computed, not judged by eye: the tab
+  // bar is visible and its stacking context sits above the overlay's.
+  test("the tab bar stays visible and above the reader overlay in stacking", async ({
+    page,
+  }) => {
+    const tabbar = page.locator(".tabbar");
+    await expect(tabbar).toBeVisible();
+    const stacking = await page.evaluate(() => {
+      const bar = document.querySelector(".tabbar");
+      const overlay = document.querySelector(".overlay-screen");
+      if (!bar || !overlay) return null;
+      return {
+        barZ: Number(getComputedStyle(bar).zIndex),
+        overlayZ: Number(getComputedStyle(overlay).zIndex),
+      };
+    });
+    expect(stacking).not.toBeNull();
+    expect(stacking!.barZ).toBeGreaterThan(stacking!.overlayZ);
+  });
 });
 
 test.describe("releases screen (/news/releases)", () => {

@@ -1,7 +1,6 @@
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import BackLink from "../shell/BackLink";
-import { holdScrollTop } from "../shell/holdScrollTop";
 import { useArticleReads } from "../api/useArticleReads";
 import { articleBySlug, nextUnreadSlug } from "./content/articles";
 import { updatedLabel } from "./newsDates";
@@ -16,11 +15,6 @@ export default function Reader() {
   const location = useLocation();
   const reads = useArticleReads();
   const article = slug ? articleBySlug(slug) : undefined;
-
-  // Scroll-to-top, round 3: see holdScrollTop's comment for why a single
-  // scrollTo isn't enough on real iOS WebKit. Keyed on the slug because the
-  // NEXT footer navigates within this same mounted component.
-  useLayoutEffect(() => holdScrollTop(), [article?.slug]);
 
   // Mark read once ready — in an effect keyed on (reads.state, article.slug)
   // per the brief: markRead is stable per ready-state, so keying on state +
@@ -49,7 +43,21 @@ export default function Reader() {
       : undefined;
 
   return (
-    <main className="screen reader-screen">
+    // Round 4 (architectural): scrolls in its own element — see
+    // .overlay-screen's comment in index.css for why. `key={article.slug}`
+    // forces a fresh DOM node (fresh scroller, position 0) on every NEXT
+    // navigation instead of reusing this one mid-scroll. `tabIndex={0}`
+    // matches Plan.tsx's 84-row sequence (Phase 6A, commit a3e5ee6): it
+    // puts the scroll region itself in the tab order so a keyboard user can
+    // Tab to it and scroll with arrow/Page keys — genuinely useful here,
+    // not required by axe's scrollable-region-focusable rule, which this
+    // screen would already satisfy via BackLink, its own focusable
+    // descendant (`focusable-content`), tabIndex or not.
+    <main
+      className="screen reader-screen overlay-screen"
+      key={article.slug}
+      tabIndex={0}
+    >
       <BackLink fallback="/news" />
       <p className="reader-meta">
         ERGOMATIC · {article.minutes} MIN
