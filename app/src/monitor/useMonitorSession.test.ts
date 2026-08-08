@@ -146,6 +146,17 @@ function spyTransport(inner: Transport & FakeControls): Transport &
      *  would close the run through the ORDINARY path before the
      *  rejection this test is about ever surfaces. */
     deaf: boolean;
+    /** Delivers notifications on a LATER microtask instead of inline
+     *  inside `write()` — the fix wave's H1 pin. The fake answers a
+     *  terminate synchronously (`onArmedFrameComplete` echoes the ack AND
+     *  the `WORKOUTSTATE_TERMINATE` status before `write()` returns
+     *  anything), and that single fake-only property is what made
+     *  MEDIUM-9's double terminate unreachable from this file. A real PM5
+     *  delivers both as later BLE notifications; with this set, `cancel()`
+     *  genuinely suspends on `await driver.terminate()` with the phase
+     *  still reading `"ready"`, which is the window an interleaved unmount
+     *  lands in. */
+    deferNotifications: boolean;
   } {
   const spy = {
     ...inner,
@@ -154,6 +165,7 @@ function spyTransport(inner: Transport & FakeControls): Transport &
     disconnects: 0,
     scans: 0,
     deaf: false,
+    deferNotifications: false,
     async scan(): Promise<DiscoveredMonitor[]> {
       spy.scans += 1;
       return inner.scan();
@@ -169,6 +181,10 @@ function spyTransport(inner: Transport & FakeControls): Transport &
       spy.subscriptions += 1;
       const off = inner.subscribe(characteristicId, (bytes) => {
         if (spy.deaf && characteristicId === GENERAL_STATUS_UUID) return;
+        if (spy.deferNotifications) {
+          queueMicrotask(() => cb(bytes));
+          return;
+        }
         cb(bytes);
       });
       return () => {
@@ -1118,9 +1134,17 @@ describe("useMonitorSession: cancel", () => {
     expect(loadMonitorRun()?.completedAt).toBeNull();
   });
 
-  // Task 5 re-review, MEDIUM-9 (PARKED — "idempotent-safe, no user harm;
-  // needs a wire-level once pin"), landed here now that `delayWrites` exists
-  // to make the race real rather than hand-waved: `ConnectedInterstitial
+  // Task 5 re-review, MEDIUM-9. **This pin does NOT close MEDIUM-9** — the
+  // whole-branch review (H1) showed the reason it is green is fake-only,
+  // and the account below, though accurate about the mechanism, drew the
+  // wrong conclusion from it. The real close is the next test down
+  // ("…even when the monitor answers asynchronously"), which removes the
+  // one fake-only property and makes the double terminate appear. This one
+  // is kept as-is because the SYNCHRONOUS-echo path is still a path worth
+  // pinning; it just is not the hardware one.
+  //
+  // Original note, `delayWrites` making the race real rather than
+  // hand-waved: `ConnectedInterstitial
   // .tsx`'s own `handleCancel` does `void session.cancel(); onExit();` —
   // fire-and-forget, immediately followed by a synchronous `setConnecting
   // (null)` that unmounts this hook while `cancel()`'s own promise is still
@@ -1139,12 +1163,12 @@ describe("useMonitorSession: cancel", () => {
   // reads `"ended"`, not `"ready"` — `teardown`'s own phase check
   // (`"programming" | "ready"`) closes the door on its own, independent of
   // the `alreadyTerminated` flag `cancel()` hasn't even gotten around to
-  // passing yet. The guard holds for a REASON slightly different from the
-  // one MEDIUM-9 pictured (the machine's own honest echo beats the clock,
-  // not a flag beating a flag) — confirmed genuine, not vacuous, by
-  // temporarily forcing `teardown`'s branch to fire unconditionally: the
-  // count below jumps to 2 immediately (restored after verifying).
-  it("cancel() racing an interleaved unmount sends at most ONE physical terminate on the wire, even under realistic write latency", async () => {
+  // passing yet. The guard holds for a REASON different from the one
+  // MEDIUM-9 pictured (the machine's own echo beats the clock, not a flag
+  // beating a flag) — and, as H1 pointed out, that reason is available only
+  // to a fake. Since the fix wave, `cancel()` claims the ref synchronously
+  // and this pin passes for BOTH reasons.
+  it("cancel() racing an interleaved unmount sends at most ONE physical terminate on the wire, even under realistic write latency (the fake's synchronous-echo path)", async () => {
     const { result, fake, transport, unmount } = harness({
       program: TWO_INTERVALS,
     });
@@ -1166,6 +1190,64 @@ describe("useMonitorSession: cancel", () => {
       await flush();
     });
 
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    expect(transport.disconnects).toBe(1);
+  });
+
+  // Fix wave H1. The pin above was recorded as closing MEDIUM-9; the
+  // whole-branch review showed it passes for a FAKE-ONLY reason (see its own
+  // comment: the fake's synchronous terminate echo moves `phase` to
+  // `"ended"` before `cancel()` ever suspends, so `teardown`'s phase guard
+  // is what holds — not anything `cancel()` does). The one condition making
+  // it green cannot occur on the hardware this phase exists for: a real PM5
+  // delivers the ack and the TERMINATE status as later BLE notifications.
+  //
+  // `deferNotifications` reproduces exactly that one difference, and with it
+  // the double terminate is real: `cancel()` suspends on
+  // `await driver.terminate()` with `driverRef.current` still populated and
+  // the phase still `"ready"`, so the interleaved unmount's `teardown()`
+  // finds a live driver in an armed phase and sends a SECOND physical
+  // terminate. The fix is MEDIUM-9's own: `cancel()` CLAIMS the ref
+  // synchronously, before its first `await`, and hands the captured driver
+  // to `teardown` so the disconnect still happens exactly once.
+  it("cancel() racing an interleaved unmount sends at most ONE physical terminate even when the monitor answers asynchronously, as real hardware does (MEDIUM-9, for real this time)", async () => {
+    const { result, fake, transport, unmount } = harness({
+      program: TWO_INTERVALS,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+    fake.delayWrites(50);
+    transport.deferNotifications = true;
+    const writesAtReady = transport.wireWrites;
+
+    const cancelling = result.current.cancel();
+    // The phase has NOT moved — this is the property the previous pin was
+    // silently relying on the fake to break, and the reason it could not
+    // see the defect.
+    expect(result.current.phase).toBe("ready");
+    unmount();
+
+    // Deliberately NOT a bare `await cancelling`. Against the unfixed hook
+    // that promise never settles at all — `sendSequence()` opens with
+    // `discardStaleAcks()`, so `teardown`'s second terminate purges the
+    // `pendingAck` the FIRST one is still waiting on and `cancel()`'s own
+    // `await driver.terminate()` deadlocks. Fire-and-forget hides that from
+    // the rower, but a 5-second test timeout is a useless failure message,
+    // so the settlement is asserted explicitly and on a budget.
+    const settled = await act(async () => {
+      const outcome = await Promise.race([
+        cancelling.then(() => "settled" as const),
+        new Promise<"deadlocked">((resolve) =>
+          setTimeout(() => resolve("deadlocked"), 600),
+        ),
+      ]);
+      fake.tick(0);
+      await flush();
+      return outcome;
+    });
+
+    expect(settled).toBe("settled");
     expect(transport.wireWrites - writesAtReady).toBe(1);
     expect(transport.disconnects).toBe(1);
   });

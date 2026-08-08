@@ -673,22 +673,38 @@ export function useMonitorSession(
    *  rejected promise escaping an unmount cleanup is an unhandled
    *  rejection. `terminate()` runs to completion (or failure) BEFORE
    *  `disconnect()` fires — sending a terminate over a link that is
-   *  already hung up would never reach the erg at all. */
-  const teardown = useCallback((alreadyTerminated = false): void => {
-    unsubscribeRef.current?.();
-    unsubscribeRef.current = null;
-    const driver = driverRef.current;
-    driverRef.current = null;
-    if (driver === null) return;
-    const phase = stateRef.current.phase;
-    if (!alreadyTerminated && (phase === "programming" || phase === "ready")) {
-      bestEffort(
-        driver.terminate().finally(() => bestEffort(driver.disconnect())),
-      );
-      return;
-    }
-    bestEffort(driver.disconnect());
-  }, []);
+   *  already hung up would never reach the erg at all.
+   *
+   *  **`claimed` (fix wave H1, MEDIUM-9's real fix).** `cancel()` nulls
+   *  `driverRef` synchronously, before its own first `await`, so an
+   *  unmount interleaved with it finds nothing to terminate a second time.
+   *  It then hands the driver it claimed back here, so the hang-up still
+   *  happens exactly once — without it, `cancel()`'s own `teardown()` call
+   *  would find a null ref and skip the `disconnect()`. Whoever gets here
+   *  first with a real driver does the work; the other becomes a no-op.
+   *  React never passes arguments to an effect cleanup, so the unmount
+   *  path always takes the `driverRef.current` branch. */
+  const teardown = useCallback(
+    (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+      const driver = claimed ?? driverRef.current;
+      driverRef.current = null;
+      if (driver === null) return;
+      const phase = stateRef.current.phase;
+      if (
+        !alreadyTerminated &&
+        (phase === "programming" || phase === "ready")
+      ) {
+        bestEffort(
+          driver.terminate().finally(() => bestEffort(driver.disconnect())),
+        );
+        return;
+      }
+      bestEffort(driver.disconnect());
+    },
+    [],
+  );
 
   const fail = useCallback(
     (error: ConnectedError): void => update({ phase: "failed", error }),
@@ -840,6 +856,20 @@ export function useMonitorSession(
     // a live run would be the destruction path the spec forbids.
     if (phase === "live" || phase === "paused" || phase === "ended") return;
     const driver = driverRef.current;
+    // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
+    // ref synchronously, before the `await driver.terminate()` below
+    // suspends. `ConnectedInterstitial.tsx`'s `handleCancel` is
+    // fire-and-forget — `void session.cancel(); onExit();` — so the unmount
+    // runs DURING that await, and with the ref still populated (and the
+    // phase still `programming`/`ready`, since `update` has not run yet)
+    // `teardown` sent a SECOND physical terminate. Worse than the
+    // "idempotent duplicate" MEDIUM-9 pictured: `sendSequence()` opens with
+    // `discardStaleAcks()`, so the second send purged the `pendingAck` the
+    // first was waiting on and this function's own promise never settled.
+    // Previously unreachable in tests only because `fake.ts` answers a
+    // terminate synchronously, which a real PM5 does not — see this hook's
+    // test file, "…even when the monitor answers asynchronously".
+    driverRef.current = null;
     // Cancel's machine semantics per state (spec §2's M3 ruling): before
     // `programming` it is FREE — nothing has been sent, so nothing is
     // undone. From `programming`/`ready` it terminates what we armed,
@@ -860,8 +890,10 @@ export function useMonitorSession(
     // `alreadyTerminated: armed` — `teardown` would otherwise repeat the
     // SAME terminate a second time (the phase hasn't changed yet; `update`
     // below is what moves it), which is harmless on real hardware but is
-    // not what "best-effort" is supposed to mean here.
-    teardown(armed);
+    // not what "best-effort" is supposed to mean here. `driver` is handed
+    // back explicitly because the ref was claimed above; without it the
+    // hang-up would be skipped entirely (`teardown`'s own doc comment).
+    teardown(armed, driver);
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
     runRef.current = null;
