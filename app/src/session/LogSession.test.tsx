@@ -1725,7 +1725,7 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
     expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("tapping the toggle flips it to OUTSIDE THE PLAN — won't advance, and back again", async () => {
+  it("tapping the toggle flips it to OUTSIDE THE PLAN · won't advance, and back again", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -1737,7 +1737,7 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
     });
     await userEvent.click(toggle);
     const toggled = screen.getByRole("button", {
-      name: "OUTSIDE THE PLAN — won't advance",
+      name: "OUTSIDE THE PLAN · won't advance",
     });
     expect(toggled).toHaveAttribute("aria-pressed", "true");
 
@@ -1979,7 +1979,7 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+      screen.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 
@@ -2007,7 +2007,7 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+      screen.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
     ).toHaveAttribute("aria-pressed", "true");
   });
 });

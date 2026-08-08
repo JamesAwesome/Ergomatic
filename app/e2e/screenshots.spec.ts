@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
@@ -1163,3 +1164,521 @@ test("news-reader", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "news-reader.png"),
   });
 });
+
+// -- Phase 7B Task 5: the connected interstitial (task-5 review, HIGH-3) ---
+//
+// `pnpm screenshots` was not run for this screen when it first shipped — a
+// brand-new full-screen route is the strongest possible trigger for the
+// briefing's own gate table, and running it here is what would have caught
+// the 151px landscape overflow (Cancel and "Row on the phone timer instead"
+// starting 132px behind the fixed tab bar) the review measured directly.
+//
+// The FAILED state is reached by removing `navigator.bluetooth` itself
+// BEFORE the app loads — never through a real
+// `navigator.bluetooth.requestDevice()` call: this environment's real
+// Chromium exposes the Web Bluetooth API even headless, and with no adapter
+// and no way to render/dismiss a chooser, `requestDevice()` HANGS rather
+// than rejecting (the identical hazard `session.spec.ts`'s own "Connect
+// anyway" comment documents, LOW-1). With `navigator.bluetooth` gone no
+// picker is ever opened, so there is nothing to hang on, and `failed` is
+// the one state HIGH-3's own measurement named by number.
+//
+// **Corrected by the fix wave (review H4).** This block used to go on to
+// say that states 4/5/7 (pairing/programming/ready) were "deliberately NOT
+// driven", that this capture was "the one real-browser check the CSS fix
+// (the `var(--tap)` term, the centred body) actually holds up under real
+// fonts and the real fixed tab bar", and that
+// `ConnectedInterstitial.test.tsx` had 52 DOM assertions. All three were
+// superseded by Task 8 in the SAME commit that left them standing:
+//
+// - Six more captures live ~90 lines below — pairing, programming and
+//   ready, both orientations, driven for real through the fake seam.
+// - Task 8 DELETED the `var(--tap)` term (`index.css`: "No `- var(--tap)`
+//   term (Task 8)").
+// - Task 8's `:has()` conversion HIDES the tab bar on this exact screen
+//   (`index.css`'s `.app-shell:has(.connected-interstitial)` rule), so this
+//   capture is not a check on the tab bar's presence at all.
+// - `ConnectedInterstitial.test.tsx` has 35 `it(` blocks and 80 `expect(`
+//   calls, not 52 assertions.
+//
+// What is still true: all four built states share the same
+// `.connected-interstitial`/`.connected-interstitial-body` layout classes,
+// and this file's connected captures are the real-browser check that the
+// interstitial's height and centring hold up under real fonts.
+async function stubNoBluetooth(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, "bluetooth", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+}
+
+async function openConnectedFailedState(
+  page: Page,
+  title: string,
+  email: string,
+): Promise<void> {
+  await stubNoBluetooth(page);
+  await signInViaBackdoor(page, {
+    email,
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // A single 100m distance work step — the PM5's own minimum distance
+  // interval, so `compileProgram` succeeds and Connect actually reaches the
+  // interstitial rather than staying on the button with an inline
+  // CompileError (the "test"/open-ended step the handoff's own reference
+  // fixtures elsewhere in this file are not compilable for the monitor).
+  await importBulk(page, [`${title} | AN | easy | 1`, "w 100m max"].join("\n"));
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.locator(".connected-serif-line", {
+      hasText: "This device has no Bluetooth transport.",
+    }),
+  ).toBeVisible();
+}
+
+test("connected-interstitial-failed", async ({ page }) => {
+  const title = "Screenshot Connected Failed Workout";
+  await openConnectedFailedState(
+    page,
+    title,
+    "screenshots-connected-failed@e2e.test",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-failed.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-failed-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Failed Landscape Workout";
+  await openConnectedFailedState(
+    page,
+    title,
+    "screenshots-connected-failed-landscape@e2e.test",
+  );
+  // The phase's own landscape-first reference frame (same as
+  // "timer-landscape"/"session-complete-landscape" above) — the orientation
+  // HIGH-3's own 151px overflow measurement was taken in.
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-failed-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+// --- Phase 7B Task 8: the connected interstitial's DRIVEN states -----------
+//
+// States 4/5/7 (pairing/programming/ready) could not be captured for real
+// when Task 5's screenshots above were taken — no seam existed to drive them
+// without a real radio, which is exactly why the comment above
+// `stubNoBluetooth` named `failed` as "the one state HIGH-3's own
+// measurement named by number". Task 8's fake-injection seam
+// (`src/monitor/transports/index.ts`) removes that constraint: this compose
+// stack's `web` image is built with `VITE_ENABLE_FAKE_MONITOR=1`
+// (`compose.e2e.yml`), so `window.__pm5FakeScript__` — set via
+// `page.addInitScript`, exactly like `e2e/connected.spec.ts` — drives a REAL
+// `createFakeTransport()` through the REAL `ConnectedInterstitial` component.
+// No `navigator.bluetooth` stub involved, so none of the hanging-picker
+// hazard above applies to any of these three.
+//
+// `delayWritesMs` (200ms — `connected.spec.ts`'s own proven-reliable
+// 120ms, plus margin) delays EVERY write, including each individual
+// 20-byte BLE chunk of the programming frame (`driver.ts`'s per-frame send
+// loop awaits one chunk at a time, never in parallel) — so the REAL
+// duration "Sending the workout" stays on screen scales with chunk COUNT,
+// not just this one constant. A single 100m distance interval's program
+// packs into very few chunks, and measured directly, that left too short a
+// real window for a screenshot taken right after a polled `expect` to
+// reliably still be looking at it (this file's own first attempt, a
+// single-interval program at up to 1500ms/write, still intermittently
+// raced past "Sending the workout" before the screenshot call landed).
+// Five intervals — `connected.spec.ts`'s own `FIXTURE_PROGRAM` shape,
+// proven reliable there at 120ms — packs enough chunks that the
+// programming state holds for a real, comfortable multiple of one write's
+// own delay.
+const SCREENSHOT_DELAY_WRITES_MS = 200;
+
+async function injectFakeMonitorForScreenshots(
+  page: Page,
+  deviceName: string,
+): Promise<void> {
+  await page.addInitScript(
+    ({ program, deviceName: name, delayWritesMs }) => {
+      window.__pm5FakeScript__ = {
+        program,
+        deviceName: name,
+        delayWritesMs,
+      };
+    },
+    {
+      // Five 100m distance steps — `connected.spec.ts`'s own
+      // `FIXTURE_PROGRAM` shape (`SCREENSHOT_DELAY_WRITES_MS`'s own doc
+      // comment for why chunk count, not just delay, is what actually
+      // holds "Sending the workout" on screen long enough to capture).
+      program: {
+        intervals: Array.from({ length: 5 }, () => ({
+          kind: "distance" as const,
+          value: 100,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        })),
+      },
+      deviceName,
+      delayWritesMs: SCREENSHOT_DELAY_WRITES_MS,
+    },
+  );
+}
+
+async function openConnectedInterstitial(
+  page: Page,
+  title: string,
+  email: string,
+  deviceName: string,
+): Promise<void> {
+  await injectFakeMonitorForScreenshots(page, deviceName);
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  // Five "w 100m max" lines — MUST match `injectFakeMonitorForScreenshots`'s
+  // own five-interval `program` exactly (`connected.spec.ts`'s own header
+  // comment: `createFakeTransport` asserts every incoming programming byte
+  // against its OWN `script.program`, so the bulk-import text and the
+  // injected fixture have to agree BY CONSTRUCTION — an earlier draft of
+  // this file left this at a single line after the fixture above grew to
+  // five intervals, and got a genuine "programming chunk 0 mismatch" from
+  // the fake for it).
+  await importBulk(
+    page,
+    [
+      `${title} | AN | easy | 1`,
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+    ].join("\n"),
+  );
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Connect" }).click();
+}
+
+test("connected-interstitial-pairing", async ({ page }) => {
+  const title = "Screenshot Connected Pairing Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-pairing@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Connecting" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-pairing.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-pairing-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Pairing Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-pairing-landscape@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Connecting" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-pairing-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-programming", async ({ page }) => {
+  const title = "Screenshot Connected Programming Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-programming@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Sending the workout" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-programming.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-programming-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Programming Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-programming-landscape@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Sending the workout" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-programming-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-ready", async ({ page }) => {
+  const title = "Screenshot Connected Ready Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-ready@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-ready.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-ready-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Ready Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-ready-landscape@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-ready-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
+});
+
+// --- Phase 7B Task 6: the connected surface, both orientations -------------
+//
+// The panes cannot be REACHED in this stack: they only render once a monitor
+// is programmed and rowing, the DEV-gated fake-transport injection seam is
+// Task 8's (`src/monitor/transports/index.ts`), the stack serves a
+// PRODUCTION bundle where such a seam cannot fire, and a real
+// `requestDevice()` hangs here rather than rejecting (the note above
+// `stubNoBluetooth`).
+//
+// So the markup comes from `src/workout/ConnectedSurface.screens.test.tsx`,
+// which renders the REAL component tree on the REAL "Filling Low" library
+// fixture and writes each state to `e2e/fixtures/`, kept honest by
+// `toMatchFileSnapshot` (the fixture cannot drift from the component without
+// that test failing). This spec loads the real app — so the real `index.css`
+// cascade and the real self-hosted fonts are live — and swaps the fixture
+// into the page.
+//
+// What that buys: real LAYOUT, at both reference frames, which is exactly
+// what would have caught the 151px landscape overflow Task 5 shipped. What
+// it does not buy: proof that a live monitor's numbers reach these nodes —
+// `ConnectedSurface.test.tsx`'s fake-driven walk covers that in jsdom, and
+// Task 8's `connected.spec.ts` covers it in a browser once the seam exists.
+const CONNECTED_FIXTURES = path.resolve(process.cwd(), "e2e/fixtures");
+
+/** The real shell's own tab bar, reproduced structurally (`shell/TabBar.tsx`
+ *  renders `<nav class="tabbar">` with five `.tab` links, as a SIBLING of the
+ *  routed screen inside `.app-shell`). It is here because
+ *  `.app-shell:has(.connected-surface)` hides it and drops the 44px
+ *  `.app-shell` reserves for it — 44px of landscape height the panes cannot
+ *  do without — and a wrapper with no bar in it photographs a DOM the device
+ *  never produces, exercising neither half of that rule (task-6 review, M1).
+ *  With the rule in place these captures are byte-identical to the ones taken
+ *  before this node existed; with it deleted, the bar appears in all fourteen
+ *  and the frame shrinks. */
+const TAB_BAR_MARKUP = `<nav class="tabbar" aria-label="Main">
+  <a class="tab tab-active" href="#">TODAY</a>
+  <a class="tab" href="#">LIBRARY</a>
+  <a class="tab" href="#">PLAN</a>
+  <a class="tab" href="#">TREND</a>
+  <a class="tab" href="#">YOU</a>
+</nav>`;
+
+/** Loads the app (for its stylesheet and fonts), then replaces the document
+ *  body with one fixture inside the same `.app-shell` wrapper the real
+ *  routes render into — tab bar included. No sign-in: nothing here talks to
+ *  the API. */
+async function showConnectedFixture(page: Page, name: string): Promise<void> {
+  const html = readFileSync(path.join(CONNECTED_FIXTURES, `${name}.html`), {
+    encoding: "utf-8",
+  });
+  await page.goto("/", { waitUntil: "load" });
+  // The app's own stylesheet has to be APPLIED before the swap, or the
+  // capture is unstyled markup. `networkidle` never settles on this stack
+  // (the signed-out page holds a connection open), so this waits on the
+  // observable fact instead: `--page` resolving means tokens.css is live.
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--page")
+        .trim() !== "",
+  );
+  await page.evaluate(
+    ({ markup, tabBar }) => {
+      document.body.innerHTML = `<div class="app-shell">${markup}${tabBar}</div>`;
+    },
+    { markup: html, tabBar: TAB_BAR_MARKUP },
+  );
+  await expect(page.locator(".connected-surface")).toBeVisible();
+  // The other half of the same rule, asserted rather than assumed: with a
+  // connected surface on screen the shell's bar is gone. Without this the
+  // node above would just be decoration a deleted rule could ignore.
+  await expect(page.locator(".tabbar")).toBeHidden();
+  // The fonts are self-hosted (@fontsource) and already requested by the
+  // app's own first paint; this makes the wait explicit so a capture can
+  // never land on a fallback face.
+  await page.evaluate(() => document.fonts.ready);
+}
+
+const CONNECTED_STATES = [
+  "connected-pane-timer",
+  "connected-pane-live",
+  "connected-pane-live-nohr",
+  "connected-paused",
+  "connected-disconnected",
+  // Task 7: pane C mid-session (one row of each state), the 25-interval
+  // case that forces the contained scroll (DEVIATIONS row 2), and the
+  // diagnostics sheet the triple-tap opens over it.
+  "connected-pane-grid",
+  "connected-pane-grid-long",
+  "connected-log-sheet",
+  "connected-ended",
+] as const;
+
+for (const name of CONNECTED_STATES) {
+  test(name, async ({ page }) => {
+    await showConnectedFixture(page, name);
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `${name}.png`),
+    });
+  });
+
+  test(`${name}-landscape`, async ({ page }) => {
+    // The phase's own landscape-first reference frame (handoff §3's
+    // 844×390), the frame every pane spec's landscape column sizes are
+    // quoted in.
+    await page.setViewportSize({ width: 844, height: 390 });
+    await showConnectedFixture(page, name);
+    if (name === "connected-log-sheet") {
+      // THE FOUR `.connected-surface .filter-sheet*` RULES, PINNED (task-7
+      // review, L2b). They are the only thing standing between the log list
+      // and the 35px — one and a half lines — it got at `.filter-sheet`'s
+      // shipped defaults on this frame. Nothing in a unit test can see them:
+      // the standard modal refactor (portalling `SheetShell` to
+      // `document.body`) silently deletes all four by removing the
+      // `.connected-surface` ancestor, and every other gate stays green. So
+      // the measurement lives here, beside the five-row one, for the same
+      // reason.
+      const visible = await page.evaluate(() => {
+        const list = document.querySelector(".connected-log-list")!;
+        const box = list.getBoundingClientRect();
+        return Array.from(list.children).filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+        }).length;
+      });
+      expect(visible).toBeGreaterThanOrEqual(5);
+      // Both controls are on the frame, and both clear the 44px floor.
+      for (const label of ["COPY LOG", "Close"]) {
+        const box = await page
+          .locator(".filter-sheet button", { hasText: label })
+          .boundingBox();
+        expect(box, label).not.toBeNull();
+        expect(box!.height, label).toBeGreaterThanOrEqual(44);
+        expect(box!.y + box!.height).toBeLessThanOrEqual(390);
+      }
+    }
+    if (name === "connected-pane-grid-long") {
+      // THE REAL TAB ORDER, measured in the browser (task-7 review, M3).
+      // Chromium makes a scroll container keyboard-focusable when it has no
+      // focusable children, so this pane's scroller was ALREADY the
+      // surface's first tab stop before it carried a `tabindex` — as an
+      // unnamed `<div>`, invisible to a jsdom pin. It is declared now, so
+      // the two engines agree and iOS Safari (which supplies no implicit
+      // focus) behaves the same. This is also the reading order: the grid
+      // sits above End on screen.
+      const tabOrder = await page.evaluate(() => {
+        const stops: string[] = [];
+        const focusables = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            "[tabindex], button, a[href], input, select, textarea",
+          ),
+        ).filter((el) => el.tabIndex >= 0);
+        for (const el of focusables) {
+          stops.push(
+            el.getAttribute("aria-label") ??
+              (el.textContent ?? "").trim().slice(0, 20),
+          );
+        }
+        return stops;
+      });
+      expect(tabOrder.slice(0, 5)).toStrictEqual([
+        "Interval grid",
+        "End session",
+        "Timer pane",
+        "Live pane",
+        "Grid pane",
+      ]);
+      // Handoff §3's own number for pane C's contained scroll: "five fit at
+      // 390px". Asserted in the BROWSER, because it is a measurement — the
+      // row height, the header, the caption and End all have to land inside
+      // 390px of real layout for it to be true, and jsdom computes none of
+      // them. The first run of this pane fitted four (the column headings
+      // were rendering at the row type size, and the rows were 4px too
+      // tall); the CSS carries the arithmetic that fixed it.
+      const visible = await page.evaluate(() => {
+        const scroller = document.querySelector(".connected-grid-rows")!;
+        const box = scroller.getBoundingClientRect();
+        return Array.from(scroller.children).filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+        }).length;
+      });
+      expect(visible).toBeGreaterThanOrEqual(5);
+      // ...and the pane itself never scrolls: only the rows do (DEVIATIONS
+      // row 2). The document is exactly the viewport.
+      const overflow = await page.evaluate(
+        () =>
+          document.documentElement.scrollHeight -
+          document.documentElement.clientHeight,
+      );
+      expect(overflow).toBe(0);
+    }
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `${name}-landscape.png`),
+    });
+  });
+}

@@ -26,6 +26,31 @@ import {
 } from "./run";
 import TimerTargets from "./TimerTargets";
 import TimerRuler from "./TimerRuler";
+import IntervalSegments from "../components/IntervalSegments";
+import UpNextStrip from "../components/UpNextStrip";
+
+/** Maps an `EnginePhase.type` onto `IntervalSegments`'s own neutral
+ *  `kinds` shape (`"work" | "rest" | "wu"`, Phase 7B Task 3's pinned prop
+ *  interface for the extracted dot strip — `src/components/
+ *  IntervalSegments.tsx`). That shape has no dedicated bucket for `"test"`
+ *  (an open-ended piece, e.g. a bare "2k test" step) — folded into `"work"`
+ *  here, the closest semantic match (an effortful interval, not a rest or a
+ *  warm-up) — since the strip's own rendering doesn't discriminate by kind
+ *  yet regardless (see that file's own doc comment), this mapping has no
+ *  visible effect today; it only matters once a future consumer actually
+ *  paints dots by kind. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function segmentKind(type: EnginePhase["type"]): "work" | "rest" | "wu" {
+  switch (type) {
+    case "warmup":
+      return "wu";
+    case "rest":
+      return "rest";
+    case "work":
+    case "test":
+      return "work";
+  }
+}
 
 /** STEP N OF M's own kind word — a fixed vocabulary independent of the
  *  phase's resolved TARGET (that lives on `EnginePhase.label`; this reads
@@ -103,7 +128,20 @@ export function phaseProgressPct(phase: EnginePhase, elapsed: number): number {
  *  of its formula. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function totalSessionSeconds(run: SessionRun): number {
-  return run.phases.reduce((sum, p) => sum + (phaseSeconds(p) ?? 0), 0);
+  return totalSessionSecondsOf(run.phases);
+}
+
+/** The same sum over a bare phase list. The connected surface (7B Task 6)
+ *  never has a `SessionRun`: a monitor session's phases come from
+ *  `buildRun`'s output on the workout detail and are handed to the panes as
+ *  a plain array, with the CURRENT index arriving from the machine
+ *  (`MonitorFrame.intervalIndex`) rather than from a stored record. Each of
+ *  the three run-shaped readers here therefore grew an index-based twin
+ *  rather than a second copy of its arithmetic — the run-shaped functions
+ *  delegate, so there is still exactly one implementation of each rule. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function totalSessionSecondsOf(phases: EnginePhase[]): number {
+  return phases.reduce((sum, p) => sum + (phaseSeconds(p) ?? 0), 0);
 }
 
 /** "KIND · label", except when the phase's own resolved `label` IS its kind
@@ -135,7 +173,13 @@ function phaseAnnouncement(phase: EnginePhase): string {
  *  prototype phrase built from data this app doesn't have. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function upNextText(run: SessionRun): string {
-  const next = run.phases[run.index + 1];
+  return upNextTextAt(run.phases, run.index);
+}
+
+/** `upNextText`'s index-based twin — see `totalSessionSecondsOf`. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function upNextTextAt(phases: EnginePhase[], index: number): string {
+  const next = phases[index + 1];
   if (next === undefined) return "FINISH";
   return phaseAnnouncement(next);
 }
@@ -150,9 +194,18 @@ export function upNextText(run: SessionRun): string {
  *  phase" contract one phase further out. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function thenNextText(run: SessionRun): string | null {
-  const next = run.phases[run.index + 1];
+  return thenNextTextAt(run.phases, run.index);
+}
+
+/** `thenNextText`'s index-based twin — see `totalSessionSecondsOf`. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function thenNextTextAt(
+  phases: EnginePhase[],
+  index: number,
+): string | null {
+  const next = phases[index + 1];
   if (next === undefined) return null;
-  const afterNext = run.phases[run.index + 2];
+  const afterNext = phases[index + 2];
   if (afterNext === undefined) return "FINISH";
   return phaseAnnouncement(afterNext);
 }
@@ -507,7 +560,7 @@ export default function Timer() {
         // spells out `2k 1:52.0 → 1:50.0` rather than a bare "Save?".
         <div className="timer-end-confirm">
           <p className="timer-end-copy">
-            Abandon this session? Nothing will be saved — no log, no actuals.
+            Abandon this session? Nothing will be saved: no log, no actuals.
           </p>
           <div className="timer-end-actions">
             <button
@@ -528,20 +581,11 @@ export default function Timer() {
         </div>
       )}
 
-      <div className="timer-dots">
-        {currentRun.phases.map((_, i) => (
-          <span
-            key={i}
-            className={
-              i < currentRun.index
-                ? "timer-dot timer-dot-past"
-                : i === currentRun.index
-                  ? "timer-dot timer-dot-current"
-                  : "timer-dot timer-dot-future"
-            }
-          />
-        ))}
-      </div>
+      <IntervalSegments
+        total={currentRun.phases.length}
+        current={currentRun.index}
+        kinds={currentRun.phases.map((p) => segmentKind(p.type))}
+      />
 
       <div className="timer-phase">
         <div className="timer-phase-head">
@@ -562,21 +606,14 @@ export default function Timer() {
 
       <TimerTargets phase={phase} />
 
-      <div className="timer-upnext">
-        <div className="timer-upnext-main">
-          <span className="timer-upnext-label">UP NEXT</span>
-          <span className="timer-upnext-value">{upNextText(currentRun)}</span>
-        </div>
-        {/* Landscape-only second line (handoff §6) — hidden in portrait via
-            CSS (`.timer-upnext-then`'s own base rule), not a conditional
-            render keyed off orientation: this component has no JS notion of
-            the device's current orientation, and CSS's own media query is
-            the one thing that actually knows it. `thenText` itself is
-            data-driven (null past the last phase), independent of layout. */}
-        {thenText !== null && (
-          <span className="timer-upnext-then">then {thenText}</span>
-        )}
-      </div>
+      {/* `UpNextStrip` (src/components/UpNextStrip.tsx, Phase 7B Task 3) —
+          the landscape-only "then …" second line it renders is still
+          governed entirely by CSS (`.timer-upnext-then`'s own base rule),
+          not a conditional keyed off orientation: neither this component
+          nor the strip has any JS notion of the device's current
+          orientation. `upNextText`/`thenNextText` stay here, unchanged —
+          the strip only ever sees their already-computed output. */}
+      <UpNextStrip upNext={upNextText(currentRun)} thenNext={thenText} />
 
       <TimerRuler
         totalLeftSeconds={totalRemainingSeconds(currentRun, now)}
@@ -596,7 +633,7 @@ export default function Timer() {
         // so the copy can't say "longer than expected" any more.
         <div className="timer-suspect">
           <p className="timer-suspect-copy">
-            This split looks off — keep it, or discard it and move on?
+            This split looks off. Keep it, or discard it and move on?
           </p>
           <div className="timer-suspect-actions">
             <button

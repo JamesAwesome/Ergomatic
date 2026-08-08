@@ -871,7 +871,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await toggle.click();
     const toggledOff = page.getByRole("button", {
-      name: "OUTSIDE THE PLAN — won't advance",
+      name: "OUTSIDE THE PLAN · won't advance",
     });
     await expect(toggledOff).toHaveAttribute("aria-pressed", "true");
 
@@ -1005,6 +1005,280 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
         : (JSON.parse(raw) as { completedAt: string | null }).completedAt;
     });
     expect(completedAtAfterSecondBack).toBe(completedAtBefore);
+
+    await cleanupByTitle(page, title);
+  });
+});
+
+test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 walk, reversed)", () => {
+  // `startSession` now cross-clears `MONITOR_RUN_KEY` as well as
+  // `RUN_KEY` — the mirror of `createMonitorRun` clearing the phone-side
+  // record, and 7A's own documented obligation. That clear is only safe
+  // because `handleStart`'s guard was WIDENED to read the monitor record
+  // in the same commit: without it, a rower who finished a PM5-driven
+  // session and hadn't logged it yet would lose it (7C's whole prefill
+  // input) to one unwarned press. These tests drive the real browser
+  // against the real screen; `ergomatic.monitorRun` is monitorRun.ts's own
+  // MONITOR_RUN_KEY, spelled out literally since an e2e file can't import
+  // a client module.
+  //
+  // The record is SEEDED rather than produced by a real connected session:
+  // no Connect affordance exists until Task 5, and there is no PM5 (or
+  // Bluetooth radio) in CI at all. The shape below is exactly what
+  // `isMonitorRun` validates and `createMonitorRun` writes.
+  async function seedMonitorRun(
+    page: Page,
+    completedAt: string | null,
+  ): Promise<void> {
+    await page.evaluate((completed) => {
+      localStorage.setItem(
+        "ergomatic.monitorRun",
+        JSON.stringify({
+          v: 1,
+          workoutId: "seeded-connected",
+          title: "Connected Session",
+          program: { intervals: [] },
+          actuals: [],
+          deviceName: "PM5 430123456",
+          startedAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+          completedAt: completed,
+          terminated: false,
+        }),
+      );
+    }, completedAt);
+  }
+
+  async function monitorRunRaw(page: Page): Promise<string | null> {
+    return page.evaluate(() => localStorage.getItem("ergomatic.monitorRun"));
+  }
+
+  /** Opens the first library row's detail screen. Any workout will do —
+   *  the guard is about what's in storage, not which workout is starting. */
+  async function openFirstWorkout(page: Page): Promise<void> {
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator("h1.workout-detail-title")).toBeVisible();
+  }
+
+  test("a finished-but-unlogged monitor run: Start stages the warning, Cancel preserves it byte-identical", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "session-monitor-unlogged@e2e.test",
+      name: "Monitor Unlogged Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await seedMonitorRun(page, new Date().toISOString());
+    const before = await monitorRunRaw(page);
+    expect(before).not.toBeNull();
+
+    await openFirstWorkout(page);
+    await page.getByRole("button", { name: "Start" }).click();
+
+    // Warned, not walked past — and still on the detail screen.
+    await expect(
+      page.getByText(
+        "You have an unlogged session. Starting a new one discards it.",
+      ),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    expect(await monitorRunRaw(page)).toBe(before);
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+    // Byte-identical after the round trip, not merely still present.
+    expect(await monitorRunRaw(page)).toBe(before);
+  });
+
+  test("Replace session clears the connected record and proceeds to Confirm", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "session-monitor-replace@e2e.test",
+      name: "Monitor Replace Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await seedMonitorRun(page, new Date().toISOString());
+
+    await openFirstWorkout(page);
+    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Replace session" }).click();
+
+    await expect(page).toHaveURL(/\/session\/confirm$/);
+    // The reverse cross-clear, through the real browser's own storage.
+    expect(await monitorRunRaw(page)).toBeNull();
+  });
+
+  test("a LIVE monitor run (the erg is mid-piece) stages the 'in progress' sentence instead", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "session-monitor-live@e2e.test",
+      name: "Monitor Live Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await seedMonitorRun(page, null);
+    const before = await monitorRunRaw(page);
+
+    await openFirstWorkout(page);
+    await page.getByRole("button", { name: "Start" }).click();
+
+    await expect(
+      page.getByText("A session is in progress. Replace it?"),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "You have an unlogged session. Starting a new one discards it.",
+      ),
+    ).toHaveCount(0);
+    expect(await monitorRunRaw(page)).toBe(before);
+  });
+});
+
+test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged session — the F5 door's own e2e", () => {
+  // `ConnectAction` (Task 2) shipped unmounted with no reachable e2e —
+  // "mounting it here owns its end-to-end proof" (Task 5's own inherited
+  // obligation). Unlike the Task 2 describe block above (which seeds a
+  // `MonitorRun` by raw JSON, since no Connect affordance existed to
+  // produce one), the `SessionRun` this guard protects is driven through a
+  // REAL completed phone session.
+  //
+  // A SINGLE 100m distance work step, not this file's own `"w 0:03 6k"`
+  // one-liner (the "whole-branch review F1" describe block's own fixture):
+  // that 3s TIME phase is exactly what `compileProgram` exists to refuse
+  // (`interval-too-short` — the PM5's documented 20s time-interval floor,
+  // `domain/monitor/program.ts`'s `MIN_TIME_SECONDS`), which the SECOND
+  // test below needs to compile cleanly to ever reach "Connect anyway" at
+  // all. 100m is the PM5's own distance floor (`MIN_DISTANCE_METERS`) —
+  // met exactly, not padded — and doubles as this file's OWN proven
+  // distance-phase fixture (`k2Seconds: 60` prices the 100m estimate at
+  // ~12s, same reasoning as the "Tiny E2E Session" test above), so the
+  // same NEXT -> "Finish this session?" -> Finish session walk that test
+  // already proves against the real compose stack completes it without a
+  // real per-phase wait for a TIME phase to elapse.
+  async function finishATinySession(page: Page, title: string): Promise<void> {
+    await setBaselines(page, { k2Seconds: 60, k6Seconds: 120 });
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 100m max"].join("\n"),
+    );
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    // Same non-suspect window as "Tiny E2E Session" above (Timer.tsx's
+    // `isSuspectActual`: suspect below 6s or above 24s against a 12s
+    // estimate) — ~8.5s lands centered with margin either side.
+    await page.waitForTimeout(8500);
+    await page.getByRole("button", { name: "NEXT →" }).click();
+    await expect(page.getByText("Finish this session?")).toBeVisible();
+    await page.getByRole("button", { name: "Finish session" }).click();
+    await expect(page).toHaveURL(/\/session\/complete$/);
+  }
+
+  async function reopenDetail(page: Page, title: string): Promise<void> {
+    await page.goto("/library");
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  }
+
+  async function sessionRunRaw(page: Page): Promise<string | null> {
+    return page.evaluate(() => localStorage.getItem("ergomatic.sessionRun"));
+  }
+
+  async function monitorRunRaw(page: Page): Promise<string | null> {
+    return page.evaluate(() => localStorage.getItem("ergomatic.monitorRun"));
+  }
+
+  test("Connect over a real finished-but-unlogged session stages the confirm; Cancel preserves it byte-identical", async ({
+    page,
+  }) => {
+    const title = "Connect Guard Cancel";
+    await signInViaBackdoor(page, {
+      email: "connect-guard-cancel@e2e.test",
+      name: "Connect Guard Cancel Tester",
+    });
+    await finishATinySession(page, title);
+    await reopenDetail(page, title);
+    const before = await sessionRunRaw(page);
+    expect(before).not.toBeNull();
+
+    // `exact: true` on every "Connect" query below: Playwright's default
+    // name match is a substring, and "Connect anyway" (the staged panel's
+    // own primary) contains "Connect" — without `exact` the plain trigger
+    // and the staged confirm's button are indistinguishable to this query.
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+    await expect(
+      page.getByText("You have an unlogged session. Connecting discards it."),
+    ).toBeVisible();
+    // Not walked past — the Connect trigger itself is gone, the panel
+    // replaced it, and NOTHING has been written to the monitor side yet.
+    await expect(
+      page.getByRole("button", { name: "Connect", exact: true }),
+    ).toHaveCount(0);
+    expect(await monitorRunRaw(page)).toBeNull();
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Connect", exact: true }),
+    ).toBeVisible();
+    // Byte-identical after the round trip, not merely still present.
+    expect(await sessionRunRaw(page)).toBe(before);
+
+    await cleanupByTitle(page, title);
+  });
+
+  // "Connect anyway proceeds" is deliberately NOT driven further than this
+  // in Playwright. Tried first, and reverted: this environment's real
+  // Chromium (unlike jsdom, which has no `navigator.bluetooth` at all) DOES
+  // expose the Web Bluetooth API, so the real `useMonitorSession`'s default
+  // transport genuinely calls `navigator.bluetooth.requestDevice(...)` —
+  // which, with no adapter and no user gesture able to dismiss a chooser
+  // that headless Chromium cannot render, HANGS rather than rejecting
+  // (observed directly: the click on "Connect anyway" itself never
+  // resolves, and the whole test times out tearing down the browser
+  // context). That is a genuine, useful finding about the real risk on a
+  // laptop with Bluetooth support but no adapter — worth a note for
+  // whoever builds Task 8's transport seam — but it makes this exact path
+  // actively unsafe to drive in CI without a fake transport this task does
+  // not wire into the production bundle (see ConnectedInterstitial.test.tsx's
+  // own header comment on why the fake-driven walk lives at the client
+  // level instead). The "Connect anyway proceeds" walk is fully covered
+  // there and in WorkoutDetail.test.tsx's own real-hook, real-jsdom
+  // "transport-missing" integration test — both deterministic, because
+  // jsdom simply has no `navigator.bluetooth` to hang on.
+  //
+  // LOW-1 (task-5 review): the blast radius is WIDER than "pressing Connect
+  // anyway" — `ConnectedInterstitial`'s own mount effect calls `connect()`
+  // UNCONDITIONALLY, so ANY future e2e test that so much as reaches the
+  // interstitial's mount (not only one that presses through the staged
+  // confirm) will hang in this same real-Chromium environment. Task 8's
+  // transport seam needs to land, or a test-safe injection point needs to
+  // exist, before any e2e spec drives PAST the Connect button itself.
+  test("Connect anyway is reachable and staged copy is exact — proceeding further belongs to the client-level suite (see comment above)", async ({
+    page,
+  }) => {
+    const title = "Connect Guard Proceed";
+    await signInViaBackdoor(page, {
+      email: "connect-guard-proceed@e2e.test",
+      name: "Connect Guard Proceed Tester",
+    });
+    await finishATinySession(page, title);
+    await reopenDetail(page, title);
+    const before = await sessionRunRaw(page);
+
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Connect anyway" }),
+    ).toBeVisible();
+    // Nothing has moved yet — the button exists and is enabled, and that is
+    // as far as this file drives it.
+    await expect(
+      page.getByRole("button", { name: "Connect anyway" }),
+    ).toBeEnabled();
+    expect(await sessionRunRaw(page)).toBe(before);
+    expect(await monitorRunRaw(page)).toBeNull();
 
     await cleanupByTitle(page, title);
   });

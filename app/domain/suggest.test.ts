@@ -435,7 +435,7 @@ describe("suggest", () => {
         library: fellbackLib,
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/time filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty/time filters. Closest match, last done 33 days ago.",
       );
     });
 
@@ -450,7 +450,7 @@ describe("suggest", () => {
         library: fellbackLib,
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty filters. Closest match, last done 33 days ago.",
       );
     });
 
@@ -461,7 +461,7 @@ describe("suggest", () => {
         library: fellbackLib,
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty filters. Closest match, last done 33 days ago.",
       );
     });
 
@@ -476,7 +476,7 @@ describe("suggest", () => {
         library: fellbackLib,
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/time/pain filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty/time/pain filters. Closest match, last done 33 days ago.",
       );
     });
 
@@ -490,7 +490,7 @@ describe("suggest", () => {
         library: fellbackLib,
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/pain filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty/pain filters. Closest match, last done 33 days ago.",
       );
     });
 
@@ -505,7 +505,7 @@ describe("suggest", () => {
         library: fellbackLib,
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/time filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty/time filters. Closest match, last done 33 days ago.",
       );
     });
   });
@@ -570,7 +570,7 @@ describe("suggest", () => {
       expect(r.fellBack).toBe(true);
       expect(r.poolIds).toStrictEqual(["only"]);
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/recency filters — closest match, last done 40 days ago.",
+        "Nothing fit your difficulty/recency filters. Closest match, last done 40 days ago.",
       );
     });
   });
@@ -632,7 +632,7 @@ describe("suggest", () => {
       expect(r.fellBack).toBe(true);
       expect(r.poolIds).toStrictEqual(["only"]);
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/source filters — closest match, last done 40 days ago.",
+        "Nothing fit your difficulty/source filters. Closest match, last done 40 days ago.",
       );
     });
 
@@ -653,7 +653,7 @@ describe("suggest", () => {
         ],
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/recency/source filters — closest match, last done 40 days ago.",
+        "Nothing fit your difficulty/recency/source filters. Closest match, last done 40 days ago.",
       );
     });
 
@@ -978,7 +978,7 @@ describe("suggestFreestyle", () => {
         painLevels: [1, 3],
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/time/pain filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty/time/pain filters. Closest match, last done 33 days ago.",
       );
     });
 
@@ -988,7 +988,7 @@ describe("suggestFreestyle", () => {
         painLevels: [1, 2, 3],
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/pain filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty/pain filters. Closest match, last done 33 days ago.",
       );
     });
 
@@ -999,7 +999,7 @@ describe("suggestFreestyle", () => {
         painLevels: [],
       });
       expect(r.reason).toBe(
-        "Nothing fit your difficulty/time filters — closest match, last done 33 days ago.",
+        "Nothing fit your difficulty/time filters. Closest match, last done 33 days ago.",
       );
     });
   });

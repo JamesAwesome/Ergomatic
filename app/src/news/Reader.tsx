@@ -71,7 +71,7 @@ export default function Reader() {
           to={`/news/${next.slug}`}
           state={{ from: location.pathname }}
         >
-          NEXT · {next.minutes} MIN — {next.title}
+          NEXT · {next.minutes} MIN · {next.title}
         </Link>
       )}
     </main>

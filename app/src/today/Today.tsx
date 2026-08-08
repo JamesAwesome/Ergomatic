@@ -435,7 +435,7 @@ function ErrorScreen({
  *  matters for the suggestion card.
  *
  *  Arming swaps the ROW'S CONTENTS, not its layout: the DEFAULT state's
- *  "{title} — unlogged session." line, "Log it" link, and outlined ✕ button
+ *  "{title}: unlogged session." line, "Log it" link, and outlined ✕ button
  *  become the ARMED state's "Discard {title} without logging?" line and a
  *  single solid-accent "Tap again" button — same `.today-unlogged-line`
  *  wrapper, same border-box sizing, so the row's height and position never
@@ -500,7 +500,7 @@ function UnloggedRow({ run }: { run: SessionRun }) {
       ) : (
         <>
           <p className="today-unlogged-text">
-            <strong>{run.title}</strong> — unlogged session.
+            <strong>{run.title}</strong>: unlogged session.
           </p>
           <div className="today-unlogged-actions">
             {/* The run record is the source LogSession.tsx itself reads, so
@@ -863,7 +863,7 @@ function TodayView({
               TODAY" was redundant on the Today screen anyway, so the label
               is just "SUGGESTED" in both modes now (freestyle already used
               that). Never pick-state — suggestion.reason already says
-              "YOUR PICK — …" when pickOverride is set, so this label
+              "YOUR PICK: …" when pickOverride is set, so this label
               staying constant avoids saying the same thing twice in two
               different places on the card. */}
           {suggestion.recommendationId ? "SUGGESTED" : ""}

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -19,6 +19,14 @@ import {
 } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
+import {
+  loadMonitorRun,
+  saveMonitorRun,
+  type MonitorRun,
+} from "../monitor/monitorRun";
+import { compileProgram } from "../../domain/monitor/program.js";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import type { WorkoutType } from "../../domain/types.js";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -438,7 +446,7 @@ describe("WorkoutDetail", () => {
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
     expect(
-      screen.getByText("A session is in progress — replace it?"),
+      screen.getByText("A session is in progress. Replace it?"),
     ).toBeInTheDocument();
     // The first press must not have touched storage at all.
     expect(loadDraft()).toStrictEqual(inProgress);
@@ -462,7 +470,7 @@ describe("WorkoutDetail", () => {
 
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
     expect(
-      screen.queryByText("A session is in progress — replace it?"),
+      screen.queryByText("A session is in progress. Replace it?"),
     ).not.toBeInTheDocument();
     expect(loadDraft()).toStrictEqual(inProgress);
   });
@@ -508,7 +516,7 @@ describe("WorkoutDetail", () => {
 
     expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
     expect(
-      screen.queryByText("A session is in progress — replace it?"),
+      screen.queryByText("A session is in progress. Replace it?"),
     ).not.toBeInTheDocument();
   });
 
@@ -550,11 +558,11 @@ describe("WorkoutDetail", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session — starting a new one discards it.",
+          "You have an unlogged session. Starting a new one discards it.",
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByText("A session is in progress — replace it?"),
+        screen.queryByText("A session is in progress. Replace it?"),
       ).not.toBeInTheDocument();
       // The first press must not have touched storage at all.
       expect(loadDraft()).toStrictEqual(draftA);
@@ -592,6 +600,184 @@ describe("WorkoutDetail", () => {
       expect(draft!.workoutId).toBe("w1");
       expect(draft!.title).toBe("Ladder Sets");
       expect(draft!.startedAt).toBeNull();
+    });
+  });
+
+  // Phase 7B Task 2, spec §3 — the OTHER direction of the same walk. Once
+  // `startSession` cross-clears the `MonitorRun` (it does, as of this
+  // commit — the mirror of `createMonitorRun` clearing the `SessionRun`),
+  // a rower who finished a CONNECTED session and hadn't logged it yet
+  // would lose it to one unwarned Start press. That record is 7C's entire
+  // prefill input; losing it is the F5 shape exactly, so `handleStart`'s
+  // guard is WIDENED to read it — the same direct-read pattern on a second
+  // record, never rerouted onto `anyLiveSession()` (ROADMAP M-1, quoted at
+  // the site).
+  describe("a MonitorRun from a connected session", () => {
+    // Realistic fixture (repo convention): a REAL seeded library workout
+    // compiled through the real assembly, not a hand-built program.
+    function monitorRunFor(completedAt: string | null): MonitorRun {
+      const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+      if (!w) throw new Error("missing library fixture: Filling Low");
+      const t0 = new Date("2026-08-05T12:00:00.000Z");
+      const phases = buildRun(
+        buildDraft({
+          id: "fl-connected",
+          title: w.title,
+          type: w.type as WorkoutType,
+          steps: w.steps,
+        }),
+        BASELINES,
+        t0,
+      ).phases;
+      const compiled = compileProgram(phases);
+      if ("code" in compiled) {
+        throw new Error(`fixture failed to compile: ${compiled.code}`);
+      }
+      const run: MonitorRun = {
+        v: 1,
+        workoutId: "fl-connected",
+        title: w.title,
+        program: compiled,
+        actuals: [],
+        deviceName: "PM5 430123456",
+        startedAt: t0.toISOString(),
+        completedAt,
+        terminated: false,
+      };
+      return JSON.parse(JSON.stringify(run)) as MonitorRun;
+    }
+
+    const FINISHED_AT = new Date("2026-08-05T12:41:00.000Z").toISOString();
+
+    it("finished but unlogged: Start stages the unlogged warning and touches nothing", async () => {
+      mockHooks(BASELINES);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+      // Survival asserted FIRST, deliberately: without the widening this
+      // line is what fails, and it fails saying the record is gone — the
+      // data loss itself, not a missing string.
+      expect(loadMonitorRun()).toStrictEqual(connected);
+      expect(
+        screen.getByText(
+          "You have an unlogged session. Starting a new one discards it.",
+        ),
+      ).toBeInTheDocument();
+      expect(loadDraft()).toBeNull();
+    });
+
+    it("finished but unlogged: Cancel leaves the connected record byte-identical", async () => {
+      mockHooks(BASELINES);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+      expect(loadMonitorRun()).toStrictEqual(connected);
+      expect(loadDraft()).toBeNull();
+    });
+
+    it("finished but unlogged: Replace session clears it and proceeds — the reverse cross-clear", async () => {
+      mockHooks(BASELINES);
+      saveMonitorRun(monitorRunFor(FINISHED_AT));
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Replace session" }),
+      );
+
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadMonitorRun()).toBeNull();
+      const draft = loadDraft();
+      expect(draft).not.toBeNull();
+      expect(draft!.workoutId).toBe("w1");
+    });
+
+    it("LIVE: Start stages the 'in progress' sentence — the erg is mid-piece, not finished", async () => {
+      mockHooks(BASELINES);
+      const live = monitorRunFor(null);
+      saveMonitorRun(live);
+      await renderDetail();
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+      expect(
+        screen.getByText("A session is in progress. Replace it?"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          "You have an unlogged session. Starting a new one discards it.",
+        ),
+      ).not.toBeInTheDocument();
+      expect(loadMonitorRun()).toStrictEqual(live);
+    });
+
+    it("LIVE: Cancel preserves it, Replace session clears it", async () => {
+      mockHooks(BASELINES);
+      const live = monitorRunFor(null);
+      saveMonitorRun(live);
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(loadMonitorRun()).toStrictEqual(live);
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Replace session" }),
+      );
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("an unlogged SessionRun still wins the copy when both records are stale", async () => {
+      // The severity ordering: the phone-side record is checked first, and
+      // "unlogged" is the accurate word for both, so nothing is lost by it.
+      // Replace then clears BOTH — no half-state in either direction.
+      mockHooks(BASELINES);
+      const draftA = startDraft(
+        buildDraft({
+          id: "w-other",
+          title: "Session A",
+          type: "AN",
+          steps: [{ k: "wu", minutes: 5 }],
+        }),
+      );
+      saveDraft(draftA);
+      saveRun(completedRunFor(draftA));
+      saveMonitorRun(monitorRunFor(FINISHED_AT));
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      expect(
+        screen.getByText(
+          "You have an unlogged session. Starting a new one discards it.",
+        ),
+      ).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Replace session" }),
+      );
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadRun()).toBeNull();
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("no MonitorRun at all: Start is unaffected — the cross-clear is a no-op removeItem", async () => {
+      mockHooks(BASELINES);
+      await renderDetailWithConfirmRoute("/library/w1");
+
+      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(loadMonitorRun()).toBeNull();
     });
   });
 
@@ -778,7 +964,7 @@ describe("WorkoutDetail", () => {
 
     expect(
       screen.getByText(
-        "Your logged sessions are kept — they keep their own copy of the title and type.",
+        "Your logged sessions are kept. They keep their own copy of the title and type.",
       ),
     ).toBeInTheDocument();
   });
@@ -963,5 +1149,376 @@ describe("custom badge on the detail screen", () => {
   it("shows no CUSTOM tag for a seeded global workout", async () => {
     await renderDetail("/library/w1"); // WORKOUT, isGlobal: true
     expect(screen.queryByText("CUSTOM")).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 7B Task 5 — Connect: the button's three states, the caption, and the
+// hand-off into the interstitial.
+// ---------------------------------------------------------------------------
+
+const LAST_DEVICE_KEY = "ergomatic.lastMonitorDevice";
+
+/** Installs (or removes) a `navigator.bluetooth` stub for exactly one test.
+ *  jsdom has no Web Bluetooth of its own — `navigator.bluetooth` is
+ *  `undefined` by default, which IS the "absent" case; the other two
+ *  states are stubbed in directly, restored after. */
+function stubBluetooth(
+  bt: { getAvailability?: () => Promise<boolean> } | undefined,
+) {
+  const original = Object.getOwnPropertyDescriptor(
+    Navigator.prototype,
+    "bluetooth",
+  );
+  Object.defineProperty(navigator, "bluetooth", {
+    value: bt,
+    configurable: true,
+  });
+  return () => {
+    delete (navigator as { bluetooth?: unknown }).bluetooth;
+    if (original)
+      Object.defineProperty(Navigator.prototype, "bluetooth", original);
+  };
+}
+
+describe("Connect (handoff §1: the button, the caption, the Bluetooth states)", () => {
+  afterEach(() => {
+    delete (navigator as { bluetooth?: unknown }).bluetooth;
+  });
+
+  it("available: a plain L2 'Connect' trigger, no dashed treatment", async () => {
+    const restore = stubBluetooth({
+      getAvailability: () => Promise.resolve(true),
+    });
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const button = await screen.findByRole("button", { name: "Connect" });
+    expect(button).toHaveClass("button-l2");
+    expect(button).not.toHaveClass("connect-block-dashed");
+    expect(screen.queryByText("BLUETOOTH IS OFF")).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("Bluetooth off: dashed treatment, 'BLUETOOTH IS OFF' caption, still tappable", async () => {
+    const restore = stubBluetooth({
+      getAvailability: () => Promise.resolve(false),
+    });
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    expect(await screen.findByText("BLUETOOTH IS OFF")).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Connect" });
+    expect(button.closest(".connect-block-dashed")).not.toBeNull();
+    expect(button).not.toBeDisabled();
+    restore();
+  });
+
+  it("no Web Bluetooth API at all: dashed treatment, a different caption", async () => {
+    // No stub installed at all — the real jsdom default.
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    expect(
+      await screen.findByText("NO BLUETOOTH ON THIS DEVICE"),
+    ).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Connect" });
+    expect(button.closest(".connect-block-dashed")).not.toBeNull();
+    expect(button).not.toBeDisabled();
+  });
+
+  it("LAST USED · <name> appears only once available and only after a first pair", async () => {
+    localStorage.setItem(LAST_DEVICE_KEY, "PM5 430123456");
+    const restore = stubBluetooth({
+      getAvailability: () => Promise.resolve(true),
+    });
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    expect(
+      await screen.findByText("LAST USED · PM5 430123456"),
+    ).toBeInTheDocument();
+    restore();
+  });
+
+  it("no LAST USED caption before any pair has ever succeeded", async () => {
+    const restore = stubBluetooth({
+      getAvailability: () => Promise.resolve(true),
+    });
+    mockHooks(BASELINES);
+    await renderDetail();
+    await screen.findByRole("button", { name: "Connect" });
+
+    expect(screen.queryByText(/LAST USED/)).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("no baselines set: pressing Connect shows an inline error, no interstitial", async () => {
+    mockHooks({ k2Seconds: null, k6Seconds: null });
+    await renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      await screen.findByText(
+        "Set your baselines first. Connect needs a target to program.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
+  });
+
+  // WORKOUT's own "test" step (an open-ended all-out, no fixed time or
+  // distance) is exactly what `compileProgram` exists to refuse — a real
+  // `CompileError`, not a hand-built one, surfacing verbatim as the inline
+  // error rather than ever mounting the interstitial.
+  it("a workout that cannot be compiled for the PM5: the CompileError's own message shows inline, no interstitial", async () => {
+    mockHooks(BASELINES); // defaults to [WORKOUT], which has a "test" step
+    await renderDetail();
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      await screen.findByText(
+        "An open-ended (all-out/test) interval has no fixed time or distance. The PM5 requires one to program a workout.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
+  });
+
+  // Chromium ships `navigator.bluetooth` without `getAvailability` on some
+  // versions (the probe's own "can't tell" branch) — fails OPEN to
+  // "available" rather than dashing a button that may work fine.
+  it("Bluetooth API present but getAvailability is missing: fails open to available", async () => {
+    const restore = stubBluetooth({});
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const button = await screen.findByRole("button", { name: "Connect" });
+    expect(button).not.toHaveClass("connect-block-dashed");
+    expect(screen.queryByText("BLUETOOTH IS OFF")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("NO BLUETOOTH ON THIS DEVICE"),
+    ).not.toBeInTheDocument();
+    restore();
+  });
+
+  // MEDIUM-8, task-5 review: `getAvailability()` REJECTING (a real Chromium
+  // behaviour in sandboxed/permission-policy contexts) is a different
+  // branch than the "not a function" one above — both fail open the same
+  // way, but only the second had a test.
+  it("Bluetooth API present but getAvailability() rejects: also fails open to available", async () => {
+    const restore = stubBluetooth({
+      getAvailability: () => Promise.reject(new Error("permission denied")),
+    });
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const button = await screen.findByRole("button", { name: "Connect" });
+    expect(button).not.toHaveClass("connect-block-dashed");
+    expect(screen.queryByText("BLUETOOTH IS OFF")).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("Row on the phone timer instead: a saveDraft failure shows the inline error instead of navigating", async () => {
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetailWithConfirmRoute("/library/w3");
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await screen.findByText("This device has no Bluetooth transport.", {
+      selector: ".connected-serif-line",
+    });
+
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Row on the phone timer instead" }),
+    );
+
+    expect(
+      screen.getByText("Couldn't start this session. Try again."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
+    spy.mockRestore();
+  });
+
+  // The full wiring, real (unmocked) hook included: nothing on record, so
+  // ConnectAction's guard proceeds immediately; jsdom has no
+  // `navigator.bluetooth`, so the REAL `useMonitorSession` genuinely fails
+  // `transport-missing` — a deterministic real failure, not a mock. "Row on
+  // the phone timer instead" then has to prove its own promise: the SAME
+  // nudge this screen's preview stack applied survives into the phone
+  // session's own draft (not the always-empty one `startSession` builds).
+  it("Connect -> a real transport-missing failure -> 'Row on the phone timer instead' keeps the nudge", async () => {
+    // PERSONAL_WORKOUT, not WORKOUT: WORKOUT's own "test" step is
+    // deliberately open-ended (no fixed time/distance) and so cannot
+    // compile to a `WorkoutProgram` at all — the wrong fixture for a test
+    // whose whole point is reaching the interstitial. PERSONAL_WORKOUT's
+    // single time-duration work step is a real, compilable program.
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    const { default: WorkoutDetail } = await import("./WorkoutDetail");
+    render(
+      <MemoryRouter initialEntries={["/library/w3"]}>
+        <Routes>
+          <Route path="/library/:id" element={<WorkoutDetail />} />
+          <Route path="/session/confirm" element={<p>CONFIRM SCREEN</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Nudge the (only) work step one press faster (-1s) before connecting —
+    // "targets intact" only means something if a real nudge is on record.
+    await userEvent.click(screen.getByRole("button", { name: "Nudge faster" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      await screen.findByText("This device has no Bluetooth transport.", {
+        selector: ".connected-serif-line",
+      }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Row on the phone timer instead" }),
+    );
+
+    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    const draft = loadDraft();
+    expect(draft).not.toBeNull();
+    expect(draft!.nudges[0]).toBe(-1);
+  });
+
+  it("Cancel from the interstitial returns to Workout detail with nothing lost", async () => {
+    mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+    await renderDetail("/library/w3");
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await screen.findByText("This device has no Bluetooth transport.", {
+      selector: ".connected-serif-line",
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Start" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+  });
+
+  // Task 5 review, HIGH-1 — the mirror of the "Start over a connected
+  // session's record" describe block above, now for Connect's own door.
+  // Before the fix: Start staged (Task 2's widened guard), Connect did not
+  // (`connectGuardStage()` read only `RUN_KEY`) — a rower who finished a
+  // connected session and pressed Connect on ANOTHER workout lost 7C's
+  // entire prefill input with no sentence shown.
+  describe("a finished-but-unlogged MonitorRun on record (HIGH-1)", () => {
+    function monitorRunFor(completedAt: string | null): MonitorRun {
+      const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+      if (!w) throw new Error("missing library fixture: Filling Low");
+      const t0 = new Date("2026-08-05T12:00:00.000Z");
+      const phases = buildRun(
+        buildDraft({
+          id: "fl-connected",
+          title: w.title,
+          type: w.type as WorkoutType,
+          steps: w.steps,
+        }),
+        BASELINES,
+        t0,
+      ).phases;
+      const compiled = compileProgram(phases);
+      if ("code" in compiled) {
+        throw new Error(`fixture failed to compile: ${compiled.code}`);
+      }
+      const run: MonitorRun = {
+        v: 1,
+        workoutId: "fl-connected",
+        title: w.title,
+        program: compiled,
+        actuals: [],
+        deviceName: "PM5 430123456",
+        startedAt: t0.toISOString(),
+        completedAt,
+        terminated: false,
+      };
+      return JSON.parse(JSON.stringify(run)) as MonitorRun;
+    }
+
+    const FINISHED_AT = new Date("2026-08-05T12:41:00.000Z").toISOString();
+
+    it("Connect stages the confirm too — not a straight walk into the interstitial", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      // Survival asserted FIRST — without the widening this line is what
+      // fails, and it fails saying the record is gone, not a missing
+      // string (the same discipline `handleStart`'s own sibling test uses).
+      expect(loadMonitorRun()).toStrictEqual(connected);
+      expect(
+        screen.getByText(
+          "You have an unlogged session. Connecting discards it.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
+    });
+
+    it("Cancel preserves the connected record byte-identical", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
+      expect(loadMonitorRun()).toStrictEqual(connected);
+    });
+
+    it("Connect anyway destroys it — deliberately, now with a warning first", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Connect anyway" }),
+      );
+
+      // The compiled PERSONAL_WORKOUT program is a different one than the
+      // stale connected record's own "Filling Low" — proceeding here
+      // replaces the stale record outright once a new one opens (this
+      // screen's own compile step never touches storage itself; the
+      // destruction is `WorkoutDetail.handleRowInstead`'s `clearMonitorRun`
+      // below, reached the same way Start's own "Connect anyway" analogue
+      // reaches `startSession`'s cross-clear).
+      await screen.findByText("This device has no Bluetooth transport.", {
+        selector: ".connected-serif-line",
+      });
+      await userEvent.click(
+        screen.getByRole("button", { name: "Row on the phone timer instead" }),
+      );
+
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("a LIVE MonitorRun (the erg is mid-piece) stages the 'in progress' sentence instead", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      saveMonitorRun(monitorRunFor(null));
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(
+        screen.getByText("A session is in progress. Replace it?"),
+      ).toBeInTheDocument();
+    });
   });
 });

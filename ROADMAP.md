@@ -1277,20 +1277,40 @@ inclusivity).
 
 ## Phase 7B — PM5 connected surface
 
-**Status:** Not started
+**Status:** Done (2026-08-08, Tasks 1-8, Task 8 close-out this entry) — the
+core exit criterion below is met **against the fake transport**; the
+**hardware exit is PENDING**, and it is §17 items 20-21, which nobody has
+run. Everything claimed in this section is fake-driven:
+`e2e/connected.spec.ts` walks connect → pairing → programming → ready →
+the surface → paused → resumed → End → the log screen in a real browser,
+in both orientations, through the real component chain — but through
+`createFakeTransport()`, never a radio. No PM5 has been connected to this
+build. (Whole-branch review H3: this line previously asserted the exit
+criterion below was simply met.) This section's own bullets were never
+checked off as Tasks 1-7 landed them, so this update reconciles the
+checklist against shipped reality in one pass rather than pretending the
+phase is still "Not started."
 **Goal:** A rower can actually connect a PM5 from the app and row against
 it — the screens 7A's domain was built to sit underneath.
 **Design:** returned to design for the connected surface's own handoff,
 reconciled against 7A's shipped types before this phase starts.
 
-- [ ] "Connect PM5" affordance on Confirm targets, shown only where a
-      transport (`webBluetooth.ts`/`capacitorBle.ts`) is available; manual
-      NEXT always remains; disconnect mid-workout degrades silently to
-      manual
-- [ ] Live actual pace vs target range + live stroke rate vs prescribed SPM
-      in the timer, fed by `MonitorDriver`'s `frame` events; distance steps
-      auto-advance on `intervalComplete`
-- [ ] **Guard wiring is NOT uniform (final-review M-1 — read before touching
+- [x] "Connect PM5" affordance (the plan's name; the shipped button reads
+      `Connect`, one word) — shipped as `WorkoutDetail`'s `ConnectAction`
+      button (not literally "on Confirm targets," the plan's own original
+      wording — the handoff moved it to the workout DETAIL screen instead,
+      ahead of Confirm, `ConnectedInterstitial.tsx`'s own header), gated on
+      `resolveDefaultTransport()`/`navigator.bluetooth` availability
+      (`src/monitor/transports/index.ts`); manual NEXT remains untouched;
+      disconnect mid-workout degrades to `"disconnected"` phase, never a
+      crash
+- [x] Live actual pace vs target + live stroke rate vs prescribed SPM —
+      shipped as `ConnectedSurface`'s three panes (Timer/Live/Grid,
+      `src/workout/connected/`), fed by `useMonitorSession`'s `frame`
+      events; distance steps auto-advance on `intervalComplete`
+      (`toActualIndex`'s forward-attribution rule, `domain/monitor/pm5/
+      intervalIndex.ts`)
+- [x] **Guard wiring is NOT uniform (final-review M-1 — read before touching
       any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** Most guards that
       only need "is anything live, and on which side" migrate onto
       `src/monitor/monitorRun.ts`'s `anyLiveSession()` mechanically, as
@@ -1308,11 +1328,14 @@ reconciled against 7A's shipped types before this phase starts.
       adding a NEW guard, ask "does this care about unlogged specifically,
       or just live-vs-not" before picking which of the two patterns to
       follow.
-- [ ] The reverse cross-clear direction: `buildRun`/`saveRun`
-      (`session/run.ts`) clears an existing live `MonitorRun` the same way
-      `createMonitorRun` already clears a `SessionRun` — 7A shipped only
-      its own half (`src/monitor/monitorRun.ts`'s own header comment names
-      this as a documented 7B obligation)
+- [x] The reverse cross-clear direction: an existing live `MonitorRun` is
+      cleared the same way `createMonitorRun` already clears a `SessionRun`
+      — 7A shipped only its own half (`src/monitor/monitorRun.ts`'s own
+      header comment named this as a documented 7B obligation). Shipped in
+      `WorkoutDetail.tsx`'s `startSession` (behind the Replace confirm),
+      NOT in the spec-named `buildRun`/`saveRun` home — `session/run.ts`'s
+      `saveRun` comment carries the three reasons, and the DEVIATIONS
+      table's reverse-cross-clear row (task-2 review M-1) records the move
 - [ ] **The James laptop-vs-real-PM5 session named above has now run
       TWICE** (laptop session 1, plus a same-day diagnosis row; laptop
       session 2, 2026-08-06, both under the OLD whole-byte status parse —
@@ -1361,9 +1384,12 @@ reconciled against 7A's shipped types before this phase starts.
       follow-up — this phase's own guard/connect-flow work should read that
       phase's repro recipe before assuming "confirm idle" is sufficient on
       its own.
-- [ ] Full behavior tested against the fake transport in CI; the laptop
+- [x] Full behavior tested against the fake transport in CI; the laptop
       session above is this phase's live-hardware verification, never a CI
-      gate
+      gate — Task 8 closes this out: `e2e/connected.spec.ts`'s browser-
+      driven walk (Connect → pairing → programming → ready → the surface
+      via rail AND swipe → paused → resumed → End → the log screen, both
+      390×844 and 844×390) plus 2812 passing unit/client tests
 - [ ] **A failed `program()` during an OPEN run leaves the old run open and
       numbering.** `driver.ts`'s `program()` runs `sendPrepare()` →
       `sendSequence()` → `verifyArmed()` and only replaces `activeRun` at
@@ -1382,7 +1408,7 @@ reconciled against 7A's shipped types before this phase starts.
       close this run on a failed re-program, reasoned fresh against the
       post-§19.2 record, not against the withdrawn wipe. Cited in the
       whole-branch fix-2 ledger (`.superpowers/sdd/2026-08-06-phase-7a-fix-2/progress.md`).
-- [ ] **A second `program()` call during the prepare-settle wait strands the
+- [x] **A second `program()` call during the prepare-settle wait strands the
       first.** `driver.ts`'s `pendingAck`/`pendingVerify` single-flight
       class (immediately above) has a THIRD member as of fix-3's settle:
       `pendingPrepareSettle`. Phase 7A-fix-3 Task 2's review (Probes C/C3)
@@ -1391,24 +1417,69 @@ reconciled against 7A's shipped types before this phase starts.
       from microtasks to up to `prepareSettleTicks` worth of wall time
       (~5 s at the default of 10 ticks). Pre-existing class, not a fix-3
       regression, but fix-3 makes the window big enough to hit in practice.
-      7B's connect/program flow must treat `program()` as single-flight (no
-      concurrent calls from the UI) as a hard requirement, not an assumption.
       Cited in the fix-3 ledger (`.superpowers/sdd/
-      2026-08-06-phase-7a-fix-3/progress.md`, Task 2 review M4).
-- [ ] `src/monitor/driver.ts`'s `createPm5Driver` still hardcodes
+      2026-08-06-phase-7a-fix-3/progress.md`, Task 2 review M4). **Fixed in
+      Phase 7B Task 1:** `program()` now checks an in-flight flag FIRST —
+      before `sendPrepare`, before any wire traffic — and throws a new
+      `ProgramBusyError` for a concurrent call (deliberately NOT a
+      `ProgramRejectionReason` member; that union stays
+      machine-statements-only, since no frame was ever sent for the
+      rejected call). The busy call costs zero writes and never affects the
+      first call's own outcome; the flag clears on every exit path
+      (resolve or any reject) via `program()`'s own `try`/`finally`.
+      `driver.test.ts`'s "ProgramBusyError" describe block is the coverage.
+- [x] `src/monitor/driver.ts`'s `createPm5Driver` used to hardcode
       `capabilities.deviceName: "PM5"` (a placeholder, honestly commented
       in place) because its constructor signature (`createPm5Driver(t,
-      log)`) is never given a `DiscoveredMonitor`. The real source is
+      log)`) was never given a `DiscoveredMonitor`. The real source is
       `DiscoveredMonitor.name` (`domain/monitor/types.ts`) — the advertised
-      name `Transport.scan()` already returns (e.g. "PM5 432331249"). This
-      phase's scan/connect wiring must thread that name into
-      `createPm5Driver` (e.g. an extra constructor argument) so
-      `capabilities.deviceName` reflects the actual connected device, not
-      the placeholder.
+      name `Transport.scan()` already returns (e.g. "PM5 432331249").
+      **Fixed in Phase 7B Task 1:** `createPm5Driver` now accepts
+      `options.deviceName` (`DriverOptions.deviceName`), which flows
+      straight into `capabilities.deviceName` and from there into
+      `MonitorRun.deviceName` — falling back to the `"PM5"` placeholder
+      only when no name was given at all, never fabricated otherwise.
+      `scripts/pm5-lab.ts` threads its own `scan()` result (`found.name`)
+      through as the reference caller; a future connect screen does the
+      same.
+- [ ] **Deferred, deliberately — a follow-on, not this phase's scope
+      (Task 8 close-out).** Reconnect and background-scan: today's
+      `resolveDefaultTransport()`/`useMonitorSession.connect()` chain
+      always starts from `scan()`'s OS picker — there is no "reconnect to
+      the last-paired PM5 without re-picking" path, and no background scan
+      that could surface a PM5 already in range before the rower presses
+      Connect (`loadLastDevice()`/`saveLastDevice()`,
+      `ConnectedInterstitial.tsx`, already persist the LAST device's name
+      for a "LAST USED · <name>" caption — nothing reads it back to attempt
+      a silent reconnect). `driver.ts`'s own `resolveDefaultTransport`
+      doc comment names the adjacent gap this shares a root cause with:
+      `createCapacitorBleTransport` has no call site here either — a
+      native-build caller passes its own factory through
+      `MonitorSessionDeps.createTransport` today, and choosing between it
+      and Web Bluetooth is a platform conditional that belongs in the
+      adapter layer (`src/platform.ts`/`src/adapters/`), not this hook.
+      Both — reconnect-by-identity and the platform-conditional default —
+      are the same "wire the adapter layer into the default transport"
+      follow-on, scoped out of 7B/Task 8 on purpose. The full item, per the
+      7B plan's Task 8 close-out, is FIVE pieces, not two: (1) Capacitor
+      id-keyed reconnect; (2) DRIVER RE-SUBSCRIBE — `createPm5Driver`
+      subscribes once at construction, so a transport that silently regains
+      its link still needs the driver to re-attach its notification
+      handler; (3) a `Transport.scan()` background variant that can watch
+      for a known PM5 without the OS picker; (4) `DiscoveredMonitor.rssi`,
+      so a future picker/auto-connect can rank by signal; (5) MISSED-rows
+      inheritance — the handoff §4 `— · MISSED` treatment exists only to
+      catch what a reconnect BACKFILL fails to fill, so it lands with
+      reconnect or not at all (today's descope: the DEVIATIONS MISSED-rows
+      row and `surfaceModel.ts`'s completed-row dashes).
 
 **Exit:** On a real PM5: distance steps auto-advance, live pace shows
-against target, and "Connect PM5" degrades silently to manual on
-disconnect.
+against target, and Connect degrades silently to manual on disconnect.
+**NOT MET — pending.** The fake-transport analogue of all three is met and
+gated in CI (`e2e/connected.spec.ts`, both orientations); the hardware run
+is §17 items 20-21 and has not happened. (The button is one word,
+`Connect` — `ConnectAction.tsx` — not "Connect PM5"; the label above is
+corrected to match what ships.)
 
 ## Phase 7C — PM5 logging
 

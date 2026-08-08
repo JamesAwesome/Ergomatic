@@ -2998,7 +2998,7 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
     test.beforeEach(async ({ page }) => {
       await page.getByRole("button", { name: /COUNTS TOWARD PLAN/ }).click();
       await expect(
-        page.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+        page.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
       ).toBeVisible();
     });
 
@@ -3007,7 +3007,7 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
     }) => {
       await assertTapTargets(page);
       const toggle = page.getByRole("button", {
-        name: "OUTSIDE THE PLAN — won't advance",
+        name: "OUTSIDE THE PLAN · won't advance",
       });
       const box = await toggle.boundingBox();
       expect(box).not.toBeNull();
@@ -3029,7 +3029,7 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
     // assertion before this one.
     test("the toggled state fills ink, not accent", async ({ page }) => {
       const toggle = page.getByRole("button", {
-        name: "OUTSIDE THE PLAN — won't advance",
+        name: "OUTSIDE THE PLAN · won't advance",
       });
       const styles = await toggle.evaluate((el) => {
         const s = getComputedStyle(el);
@@ -3578,5 +3578,450 @@ test.describe("releases screen (/news/releases)", () => {
 
   test("no .button-l1 anywhere on release notes", async ({ page }) => {
     await expect(page.locator('[class*="button-l1"]')).toHaveCount(0);
+  });
+});
+
+// --- Phase 7B, fix wave H2: the connected screens --------------------------
+//
+// Task-7 review L7 named this and it was then silently dropped: two
+// full-screen surfaces plus a sheet, in two orientations, shipped with no
+// browser accessibility gate in a repo that applies `assertNoA11yViolations`
+// at ~40 other call sites. This section closes it with the SAME three
+// helpers every other screen in this file uses — no bespoke assertions, no
+// argument in place of a gate.
+//
+// Reaching these screens needs the fake-transport seam
+// (`src/monitor/transports/index.ts`), which this compose stack's `web`
+// image enables via `VITE_ENABLE_FAKE_MONITOR=1` (`compose.e2e.yml`). The
+// injection idiom is `e2e/connected.spec.ts`'s, duplicated rather than
+// shared, the same precedent as `cleanupByTitle` at the top of this file.
+//
+// The interstitial's pairing/programming/ready states are TRANSIENT — each
+// one holds for a real fraction of a second and then the app moves on — so
+// each state gets ONE test that runs all three sweeps back to back rather
+// than this file's usual one-assertion-per-test shape. There is no way to
+// re-enter a state a second time from the same walk; splitting them would
+// mean three full walks each and three chances to catch a different moment.
+
+/** Five 100m distance steps. `createFakeTransport` asserts every incoming
+ *  programming byte against its OWN `script.program`
+ *  (`connected.spec.ts`'s header), so this and `CONNECTED_BULK_TEXT` below
+ *  have to agree BY CONSTRUCTION. Five (not one) so pane C renders its full
+ *  grid rather than a single row. */
+const CONNECTED_PROGRAM = {
+  intervals: Array.from({ length: 5 }, () => ({
+    kind: "distance" as const,
+    value: 100,
+    targetSplit: null,
+    displaySpm: null,
+    restSeconds: 0,
+  })),
+};
+
+const CONNECTED_BULK_TEXT = (title: string): string =>
+  [`${title} | AN | easy | 1`, ...Array<string>(5).fill("w 100m max")].join(
+    "\n",
+  );
+
+/** `pm5/parse.ts`'s `WORKOUTSTATE_INTERVALWORKTIME`, copied as a plain
+ *  number — this file drives the app from outside and never imports its
+ *  modules (`connected.spec.ts` makes the same copy for the same reason). */
+const WORKOUTSTATE_ROWING = 4;
+
+/** Far enough out that nothing in the story can land during sign-in,
+ *  import, pairing or programming — the walk pumps the clock itself once
+ *  the surface is up. */
+const CONNECTED_STORY_START_MS = 8000;
+
+interface StoryStatus {
+  atMs: number;
+  kind: "status";
+  workoutState: number;
+  elapsedSeconds: number;
+  distanceMeters: number;
+  spm: number;
+  currentSplit: number;
+  heartRateBpm: number | null;
+  programIntervalIndex: number;
+}
+
+function rowingAt(
+  atMs: number,
+  over: Partial<StoryStatus> = {},
+): StoryStatus & Record<string, unknown> {
+  return {
+    atMs,
+    kind: "status",
+    workoutState: WORKOUTSTATE_ROWING,
+    elapsedSeconds: 10,
+    distanceMeters: 70,
+    spm: 24,
+    currentSplit: 108,
+    heartRateBpm: 142,
+    programIntervalIndex: 0,
+    ...over,
+  };
+}
+
+/** A session that rows through interval 0's boundary into interval 1 and
+ *  then STOPS SPEAKING. No further frames arrive, so nothing accumulates
+ *  toward `PAUSED_FRAME_HOLD` and the surface holds this reading for as
+ *  long as the sweeps need — the paused footer is swept by
+ *  `FREEZING_STORY` below instead, which is the fixture that reaches it. */
+const ROWING_STORY = [
+  rowingAt(CONNECTED_STORY_START_MS, { elapsedSeconds: 5, distanceMeters: 30 }),
+  {
+    atMs: CONNECTED_STORY_START_MS + 300,
+    kind: "boundary" as const,
+    actual: {
+      index: 0,
+      elapsedSeconds: 15,
+      distanceMeters: 100,
+      avgSplit: 112,
+      avgSpm: 24,
+      avgHeartRateBpm: 141,
+    },
+    cumulativeElapsedSeconds: 15,
+    cumulativeDistanceMeters: 100,
+  },
+  rowingAt(CONNECTED_STORY_START_MS + 600, {
+    elapsedSeconds: 17,
+    distanceMeters: 115,
+    programIntervalIndex: 1,
+  }),
+];
+
+/** The same opening, then many IDENTICAL frames and no resume — four is all
+ *  `PAUSED_FRAME_HOLD` needs, and with nothing after them the paused footer
+ *  stays on screen indefinitely instead of racing the sweep. */
+const FREEZING_STORY = [
+  ...ROWING_STORY,
+  ...Array.from({ length: 12 }, (_, i) =>
+    rowingAt(CONNECTED_STORY_START_MS + 900 + i * 300, {
+      elapsedSeconds: 20,
+      distanceMeters: 140,
+      currentSplit: 110,
+      heartRateBpm: 140,
+      programIntervalIndex: 1,
+    }),
+  ),
+];
+
+/** 200 ms per write for the SURFACE walks — `connected.spec.ts` proved
+ *  120 ms enough to make pairing and programming observable at all, and
+ *  `screenshots.spec.ts` raised it to 200 ms for the same reason. These
+ *  walks only pass THROUGH the interstitial, so the delay is kept low. */
+const CONNECTED_DELAY_WRITES_MS = 200;
+
+/** …and 1200 ms for the INTERSTITIAL sweeps, which have to stand still on
+ *  a state rather than pass through it. `delayWrites` gates `connect()`
+ *  and every individual 20-byte chunk, so this is also how long the
+ *  PAIRING screen holds (one `connect()`), while PROGRAMMING holds for the
+ *  whole five-interval chunk count times this. READY needs no budget at
+ *  all since the dwell's removal (2026-08-08 operator ruling): it holds
+ *  until the rower acts. Each test below still asserts its state is STILL
+ *  on screen after its sweep — without that assertion an over-slow axe
+ *  run would silently sweep the NEXT screen and report a pass. */
+const INTERSTITIAL_DELAY_WRITES_MS = 1200;
+
+async function injectConnectedFake(
+  page: Page,
+  events: unknown[],
+  delayWritesMs = CONNECTED_DELAY_WRITES_MS,
+): Promise<void> {
+  await page.addInitScript(
+    ({ program, events: e, delayWritesMs: delay }) => {
+      window.__pm5FakeScript__ = {
+        program,
+        events: e,
+        deviceName: "PM5 918273645",
+        delayWritesMs: delay,
+      } as typeof window.__pm5FakeScript__;
+    },
+    { program: CONNECTED_PROGRAM, events, delayWritesMs },
+  );
+}
+
+/** Signs in, seeds baselines, imports the fixture and presses Connect —
+ *  stopping the instant the interstitial mounts, so the caller can catch
+ *  whichever transient state it came for. */
+/** `cleanupByTitle` deletes ONE match. These walks import their fixture on
+ *  every run and a run that fails before its own cleanup leaves a copy
+ *  behind, so the next run's `.workout-row` filter — a strict locator —
+ *  resolves to two elements and fails for the wrong reason. Called on the
+ *  way IN as well as out. */
+async function cleanupAllConnected(page: Page, title: string): Promise<void> {
+  for (let i = 0; i < 5; i += 1) await cleanupByTitle(page, title);
+}
+
+async function openConnected(
+  page: Page,
+  title: string,
+  email: string,
+): Promise<void> {
+  await signInViaBackdoor(page, { email, name: "Connected Design Tester" });
+  await setBaselines(page);
+  await cleanupAllConnected(page, title);
+  await importBulk(page, CONNECTED_BULK_TEXT(title));
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Connect" }).click();
+}
+
+/** The three sweeps this file applies everywhere else, in one call —
+ *  ordered axe FIRST because it is by far the slowest of the three and the
+ *  interstitial states it runs against are on a clock. */
+async function sweep(page: Page): Promise<void> {
+  await assertNoA11yViolations(page);
+  await assertTapTargets(page);
+  await assertNoFailingInk4Labels(page);
+}
+
+/** Advances the fake's virtual clock in one `page.evaluate` round trip and
+ *  reads a predicate off the DOM in the same trip — `connected.spec.ts`'s
+ *  own `pumpUntilPaused` idiom, and for its reason: the in-page auto-tick
+ *  clock contributes ticks concurrently, so a Node-side tick and a
+ *  separately-polling `expect` leave a gap neither side controls. */
+async function pumpUntil(
+  page: Page,
+  selector: string,
+  maxRealMs = 20_000,
+): Promise<void> {
+  const deadline = Date.now() + maxRealMs;
+  for (;;) {
+    const found = await page.evaluate((sel) => {
+      window.__pm5FakeControls__?.tick(200);
+      return !!document.querySelector(sel);
+    }, selector);
+    if (found) return;
+    if (Date.now() >= deadline) {
+      await expect(page.locator(selector).first()).toBeVisible();
+      return;
+    }
+  }
+}
+
+/** The same pump, keyed on painted TEXT rather than a class — the pane the
+ *  surface lands on (B, live) shares no class with the pane whose data
+ *  proves the story arrived, and "INTERVAL 2 OF 5" is the reading that says
+ *  interval 0's boundary has been crossed. */
+async function pumpUntilText(
+  page: Page,
+  text: string,
+  maxRealMs = 20_000,
+): Promise<void> {
+  const deadline = Date.now() + maxRealMs;
+  for (;;) {
+    const found = await page.evaluate((t) => {
+      window.__pm5FakeControls__?.tick(200);
+      return (document.body.textContent ?? "").includes(t);
+    }, text);
+    if (found) return;
+    if (Date.now() >= deadline) {
+      await expect(page.getByText(text).first()).toBeVisible();
+      return;
+    }
+  }
+}
+
+/** Presses past the ready screen onto the three-pane surface. */
+async function walkToSurface(page: Page): Promise<void> {
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 20_000 });
+  // Unconditional (erg-day review, MEDIUM-5): the ready dwell is gone, so
+  // the button is always there — a guard here could only mask the dwell
+  // regression coming back.
+  const showNumbers = page.getByRole("button", { name: "Show me the numbers" });
+  await expect(showNumbers).toBeVisible();
+  await showNumbers.click();
+  await expect(
+    page.getByRole("navigation", { name: "Connected panes" }),
+  ).toBeVisible();
+}
+
+// The connected walk is minutes of real setup per test (sign-in, import,
+// a 200ms-per-chunk five-interval program, a pumped session), well past
+// Playwright's 30s default.
+test.describe("connected screens (fake-driven)", () => {
+  test.setTimeout(120_000);
+
+  test("the interstitial's PAIRING state: axe, the 44px floor and the ink-4 rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Pairing Workout";
+    await injectConnectedFake(page, [], INTERSTITIAL_DELAY_WRITES_MS);
+    await openConnected(page, title, "design-connected-pairing@e2e.test");
+    // Scoped to `.connected-serif-line`: the status label and the
+    // checklist's current-line marker also read "CONNECTING", and
+    // Playwright's text matching is case-insensitive.
+    const pairing = page.locator(".connected-serif-line", {
+      hasText: "Connecting",
+    });
+    await expect(pairing).toBeVisible({ timeout: 10_000 });
+    await sweep(page);
+    await expect(pairing).toBeVisible({ timeout: 1000 });
+    await cleanupAllConnected(page, title);
+  });
+
+  test("the interstitial's PROGRAMMING state: axe, the 44px floor and the ink-4 rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Programming Workout";
+    await injectConnectedFake(page, [], INTERSTITIAL_DELAY_WRITES_MS);
+    await openConnected(page, title, "design-connected-programming@e2e.test");
+    const programming = page.locator(".connected-serif-line", {
+      hasText: "Sending the workout",
+    });
+    await expect(programming).toBeVisible({ timeout: 30_000 });
+    await sweep(page);
+    await expect(programming).toBeVisible({ timeout: 1000 });
+    await cleanupAllConnected(page, title);
+  });
+
+  test("the interstitial's READY state: axe, the 44px floor and the ink-4 rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Ready Workout";
+    await injectConnectedFake(page, [], INTERSTITIAL_DELAY_WRITES_MS);
+    await openConnected(page, title, "design-connected-ready@e2e.test");
+    const ready = page.locator(".connected-serif-line", {
+      hasText: "Ready when you pull",
+    });
+    await expect(ready).toBeVisible({ timeout: 60_000 });
+    await sweep(page);
+    // Since the dwell's removal this screen holds until the rower acts,
+    // so this assertion can no longer lose a race — it stays because it is
+    // what proves the sweep measured THIS screen and not the next one.
+    await expect(ready).toBeVisible({ timeout: 1000 });
+    await cleanupAllConnected(page, title);
+  });
+
+  test("the interstitial's FAILED state (no Bluetooth transport): axe, the 44px floor and the ink-4 rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Failed Workout";
+    // `screenshots.spec.ts`'s own `stubNoBluetooth`: removing
+    // `navigator.bluetooth` BEFORE the app loads reaches `failed` via
+    // `transport-missing` with no picker to hang on. Duplicated here for
+    // the same reason the other helpers in this file are.
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, "bluetooth", {
+        value: undefined,
+        configurable: true,
+      });
+    });
+    await openConnected(page, title, "design-connected-failed@e2e.test");
+    const failed = page.locator(".connected-serif-line", {
+      hasText: "This device has no Bluetooth transport.",
+    });
+    await expect(failed).toBeVisible({ timeout: 10_000 });
+    await sweep(page);
+    await expect(failed).toBeVisible({ timeout: 1000 });
+    await cleanupAllConnected(page, title);
+  });
+
+  test("the surface's three panes and the diagnostics sheet — portrait", async ({
+    page,
+  }) => {
+    const title = "Design Connected Surface Workout";
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(page, title, "design-connected-surface@e2e.test");
+    await walkToSurface(page);
+    // Real numbers, not the pre-first-stroke placeholders: pumped until
+    // interval 0's boundary has landed, so pane C paints a completed row
+    // and panes A/B paint live readings.
+    await pumpUntilText(page, "2 OF 5");
+
+    // Pane B (`DEFAULT_PANE`, the first-connected-session landing pane).
+    await expect(
+      page.getByRole("button", { name: "Live pane" }),
+    ).toHaveAttribute("aria-current", "page");
+    await sweep(page);
+
+    await page.getByRole("button", { name: "Timer pane" }).click();
+    await expect(
+      page.getByRole("button", { name: "Timer pane" }),
+    ).toHaveAttribute("aria-current", "page");
+    await sweep(page);
+
+    await page.getByRole("button", { name: "Grid pane" }).click();
+    await expect(
+      page.getByRole("button", { name: "Grid pane" }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(page.locator(".connected-grid-row")).toHaveCount(5);
+    await expect(page.locator(".connected-grid-completed")).toHaveCount(1);
+    await expect(page.locator(".connected-grid-active")).toHaveCount(1);
+    await sweep(page);
+
+    // The diagnostics sheet: three deliberate presses on the ACTIVE pane's
+    // own rail target (`ConnectedSurface.tsx`'s `useTripleTap`), inside its
+    // 600ms window. Pressed in a loop that stops as soon as the sheet is up
+    // rather than a fixed three: the pane switch above already counts as
+    // this target's first tap whenever it lands inside the window, and a
+    // third press then hits the sheet's own backdrop instead.
+    const gridTarget = page.getByRole("button", { name: "Grid pane" });
+    const sheetTitle = page.getByRole("heading", { name: "Connection log" });
+    for (let i = 0; i < 6 && !(await sheetTitle.isVisible()); i += 1) {
+      await gridTarget.click();
+    }
+    await expect(sheetTitle).toBeVisible();
+    await sweep(page);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  test("the surface's three panes and the diagnostics sheet — landscape (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Surface Landscape Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(
+      page,
+      title,
+      "design-connected-surface-landscape@e2e.test",
+    );
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    await sweep(page);
+
+    await page.getByRole("button", { name: "Timer pane" }).click();
+    await expect(
+      page.getByRole("button", { name: "Timer pane" }),
+    ).toHaveAttribute("aria-current", "page");
+    await sweep(page);
+
+    await page.getByRole("button", { name: "Grid pane" }).click();
+    await expect(
+      page.getByRole("button", { name: "Grid pane" }),
+    ).toHaveAttribute("aria-current", "page");
+    await sweep(page);
+
+    const gridTarget = page.getByRole("button", { name: "Grid pane" });
+    const sheetTitle = page.getByRole("heading", { name: "Connection log" });
+    for (let i = 0; i < 6 && !(await sheetTitle.isVisible()); i += 1) {
+      await gridTarget.click();
+    }
+    await expect(sheetTitle).toBeVisible();
+    await sweep(page);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  test("the surface's PAUSED footer: axe, the 44px floor and the ink-4 rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Paused Workout";
+    await injectConnectedFake(page, FREEZING_STORY);
+    await openConnected(page, title, "design-connected-paused@e2e.test");
+    await walkToSurface(page);
+    // `FREEZING_STORY` never resumes, so once the hold trips the footer
+    // stays swapped for as long as the sweep needs.
+    await pumpUntil(page, ".connected-paused");
+    await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
+    await sweep(page);
+    await cleanupAllConnected(page, title);
   });
 });

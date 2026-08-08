@@ -41,6 +41,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test:coverage
       - run: pnpm build
+      # Phase 7B Task 8: `pnpm build`'s own dist/client must never contain
+      # this repo's dev-only monitor tooling (fake.ts's simulator, the
+      # pm5-lab/pm5-bridge dev harness) — see scripts/dist-grep.sh's own
+      # header for the full reasoning and why its needles are string
+      # literals rather than identifiers a minifier could rename away.
+      - run: pnpm dist:grep
 
   docker:
     runs-on: ubuntu-latest

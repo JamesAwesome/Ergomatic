@@ -239,6 +239,36 @@ export class ProgramRejectionError extends Error implements ProgramRejection {
   }
 }
 
+/**
+ * Thrown BEFORE `program()`'s lifecycle ever begins (before `sendPrepare`,
+ * before any write) when a PREVIOUS `program()` call on this same driver
+ * is still in flight — the fix this task pays off (ROADMAP: "a second
+ * `program()` call during the prepare-settle wait strands the first",
+ * fix-3 Task 2's own Probes C/C3). `program()` was never designed to be
+ * called concurrently with itself — the single in-flight slots
+ * (`pendingAck`/`pendingVerify`/`pendingPrepareSettle`) below all assume
+ * exactly one call is ever using them — and a caller that tries anyway
+ * used to have the SECOND call's writes interleave with the first's,
+ * silently stranding whichever call's promise never got resolved.
+ *
+ * Deliberately NOT a `ProgramRejectionReason` member: that union is
+ * machine-statements-only (`ProgramRejection`'s own doc comment) — every
+ * existing member describes something the PM5 itself said or failed to
+ * say over the wire. This is neither: no frame was ever sent for the
+ * rejected call, so there is nothing the machine could have said about
+ * it. The message is worded to match — it never attributes this to the
+ * PM5 (contrast `ProgramRejectionError`'s own `"PM5 <verb>"` phrasing).
+ */
+export class ProgramBusyError extends Error {
+  readonly name = "ProgramBusyError";
+
+  constructor() {
+    super(
+      "program() is already in flight on this driver. A second call must wait for the first to settle (resolve or reject) before it may be dispatched",
+    );
+  }
+}
+
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
 }
@@ -441,6 +471,20 @@ export interface DriverOptions {
    * it never changes the outer outcome.
    */
   errorTypeTicks?: number;
+  /**
+   * The advertised name `Transport.scan()` returned for the device the
+   * caller connected to (`DiscoveredMonitor.name`, `domain/monitor/
+   * types.ts` — e.g. "PM5 432331249") — 7B's scan/connect flow is expected
+   * to thread its own scan result straight through here (ROADMAP's own
+   * obligation: `createPm5Driver`'s old two-argument signature had no
+   * `DiscoveredMonitor` to source a real name from at all). Flows verbatim
+   * into `capabilities.deviceName`. Omitted (the constructor is still
+   * reachable with no name at all — a caller mid-migration, or a test with
+   * nothing to assert about the name) falls back to the literal `"PM5"`
+   * placeholder, same as before this option existed; never fabricated from
+   * anything else.
+   */
+  deviceName?: string;
 }
 
 /** `DriverOptions.settleTicks`'s own default — see that field's doc
@@ -528,16 +572,18 @@ export function createPm5Driver(
   options: DriverOptions = {},
 ): MonitorDriver {
   // PM5-intrinsic capabilities — a PM5 always programs, always reports
-  // stroke rate, always reports intervals; `deviceName` has no source in
-  // this constructor's signature (createPm5Driver(t, log) — no
-  // DiscoveredMonitor passed in), so it is a placeholder pending the
-  // scan/connect wiring a screen (7B) will do ahead of constructing this
-  // driver. Not something this task's brief specifies further.
+  // stroke rate, always reports intervals; `deviceName` carries whatever
+  // `options.deviceName` the caller threaded through from its own
+  // `Transport.scan()` result (`DriverOptions.deviceName`'s own doc
+  // comment — the picked device's real advertised name, e.g.
+  // "PM5 432331249"). Falls back to the literal `"PM5"` placeholder ONLY
+  // when no name was given at all — never fabricated from anything else,
+  // and never shown to a screen that had a real name available.
   const capabilities: MonitorCapabilities = {
     canProgram: true,
     hasStrokeRate: true,
     reportsIntervals: true,
-    deviceName: "PM5",
+    deviceName: options.deviceName ?? "PM5",
   };
 
   /**
@@ -589,6 +635,19 @@ export function createPm5Driver(
     actuals: number;
   } | null = null;
   let reconnectPending = false;
+  /** This task's single-flight gate (`ProgramBusyError`'s own doc comment,
+   *  ROADMAP's "a second `program()` call ... strands the first"): `true`
+   *  for exactly the span of one `program()` call, from before its first
+   *  await to whichever of resolve/reject settles it — checked FIRST, at
+   *  the very top of `program()`, before `sendPrepare` or any wire
+   *  traffic. Cleared on EVERY exit path via `program()`'s own
+   *  `try`/`finally` (a JS `finally` runs whether the `try` block returned
+   *  normally or threw, so a rejection — a genuine NAK, a disconnect, a
+   *  `"structure-mismatch"`, anything `sendPrepare`/`sendSequence`/
+   *  `verifyArmed` can throw — clears this exactly like a clean resolve
+   *  does; there is deliberately no separate "only on success" branch to
+   *  get wrong). */
+  let programInFlight = false;
   let raw: Partial<RawPm5Status> = {};
   // The last RAW machine interval index this driver has actually SEEN on
   // 0x0033 (Interval Count) — deliberately the UNNORMALIZED value (not
@@ -1167,9 +1226,12 @@ export function createPm5Driver(
     const stateChanged = frame.state !== lastLoggedFrameState;
     if (stateChanged) {
       lastLoggedFrameState = frame.state;
+      // rowingActive and spm ride along since walk 3 (2026-08-08): the
+      // ready-gate postmortem needed exactly these two on the flip frame
+      // and the capture did not carry them.
       log.record(
         "frame",
-        `state=${frame.state} elapsed=${frame.elapsedSeconds} distance=${frame.distanceMeters}`,
+        `state=${frame.state} elapsed=${frame.elapsedSeconds} distance=${frame.distanceMeters} rowingActive=${frame.rowingActive} spm=${frame.spm}`,
       );
     }
     emit({ kind: "frame", frame });
@@ -2351,77 +2413,94 @@ export function createPm5Driver(
     // from any point during the send either (verifyArmed's own doc
     // comment).
     async program(p: WorkoutProgram): Promise<void> {
-      // Fix-3 Task 2 (design spec §1b): the machine's state AT THE MOMENT
-      // the prepare is about to be sent — read from `raw` directly (never
-      // from a fresh notification; this is a snapshot of whatever the
-      // driver already knows, the same source `verifyArmed`'s tick pulse
-      // reads), BEFORE `sendPrepare()` ever dispatches its terminate. This
-      // is what `waitForPrepareSettle` gates on: only a machine that was
-      // genuinely `rowing`/`resting` right now can have its terminate land
-      // on a RUNNING piece, the one condition session 3 reproduced the
-      // empty arm from (`waitForPrepareSettle`'s own doc comment).
-      const stateAtPrepare = toMonitorFrame(raw as RawPm5Status).state;
-      await sendPrepare();
-      await waitForPrepareSettle(stateAtPrepare);
-      await sendSequence(buildProgrammingSequence(p), "programmed", {
-        fetchErrorTypeOnNak: true,
-      });
-      // Fix-round 2: called only AFTER the full send resolves — i.e.
-      // after the LAST frame's ack, not before the first frame went out.
-      // A multi-frame program's send can itself span several general-status
-      // ticks; an "armed" reading from partway through it is not evidence
-      // that THIS complete program landed, only that the machine was armed
-      // at SOME point before the send finished (see verifyArmed's own doc
-      // for why waiting here, never trusting anything already cached, is
-      // the correct trade-off, not an overcorrection).
-      await verifyArmed(p);
-      // THE ONE PLACE A RUN IS OPENED (Task 4, spec §4 — `activeRun`'s own
-      // doc comment has the full reasoning). Deliberately here, on the
-      // success path past verification, and deliberately nowhere else: no
-      // state word, no `armed` tick, no boundary and no reconnect ever
-      // opens a run, because the PM's own Terminate -> Rearm ->
-      // WaitToBegin cycle produces all of those unaided and would
-      // otherwise fabricate runs out of housekeeping.
-      //
-      // Any PREVIOUS run — open or closed — is replaced outright, which is
-      // what makes a second workout possible in one driver lifetime with
-      // no reconnect (the §19.4 regression this task fixes). Replacing an
-      // OPEN one is the single lifecycle transition with no event of its
-      // own: that run closes without a `workoutComplete`/`terminated`
-      // (stated on `MonitorEvent`, `domain/monitor/types.ts`), so it gets
-      // a `run-replaced` entry instead — every other transition here is
-      // already visible in the trace, and a run ending in silence is the
-      // exact class of invisibility §19.4 punished. The realistic
-      // hardware path does NOT reach this branch: `program()`'s own
-      // leading prepare Terminate makes the PM report "terminated" first,
-      // which closes run 1 through the normal path with a real event. So
-      // this entry marks the shape that would otherwise be a mystery in a
-      // trace, not the common one. A boundary
-      // half still waiting for its partner belongs to the run being
-      // replaced, so it is dropped here rather than left to pair with the
-      // NEW run's first boundary: `noteBoundaryHalf`'s pairing gate
-      // matches on the Split/Interval NUMBER, and both runs number their
-      // splits from the same low integers, so a cross-run pairing is
-      // otherwise entirely constructible (it would emit this run's
-      // identity carrying the last run's averages — D4's corruption, one
-      // level up).
-      if (runIsOpen()) {
-        log.record(
-          "run-replaced",
-          `program() replaced a run that was still OPEN (its ${activeRun!.program.intervals.length}-interval program had accumulated ${activeRun!.actuals} actual(s)) — that run closes here with no workoutComplete/terminated event of its own`,
-        );
+      // This task's single-flight gate (`ProgramBusyError`'s own doc
+      // comment) — checked FIRST, before anything else in this method,
+      // including the `stateAtPrepare` snapshot below: a busy rejection
+      // must cost NOTHING, not even a read of `raw`, so it can never be
+      // mistaken for genuine progress on the call it is refusing to start.
+      if (programInFlight) {
+        throw new ProgramBusyError();
       }
-      if (boundaryHalves.split !== null || boundaryHalves.asSplit !== null) {
-        log.record(
-          "boundary-orphan",
-          `a boundary half was still pending when a new run opened (0x0037=${boundaryHalves.split}, 0x0038=${boundaryHalves.asSplit}) — discarded rather than paired with the new run's first boundary`,
-        );
+      programInFlight = true;
+      try {
+        // Fix-3 Task 2 (design spec §1b): the machine's state AT THE MOMENT
+        // the prepare is about to be sent — read from `raw` directly (never
+        // from a fresh notification; this is a snapshot of whatever the
+        // driver already knows, the same source `verifyArmed`'s tick pulse
+        // reads), BEFORE `sendPrepare()` ever dispatches its terminate. This
+        // is what `waitForPrepareSettle` gates on: only a machine that was
+        // genuinely `rowing`/`resting` right now can have its terminate land
+        // on a RUNNING piece, the one condition session 3 reproduced the
+        // empty arm from (`waitForPrepareSettle`'s own doc comment).
+        const stateAtPrepare = toMonitorFrame(raw as RawPm5Status).state;
+        await sendPrepare();
+        await waitForPrepareSettle(stateAtPrepare);
+        await sendSequence(buildProgrammingSequence(p), "programmed", {
+          fetchErrorTypeOnNak: true,
+        });
+        // Fix-round 2: called only AFTER the full send resolves — i.e.
+        // after the LAST frame's ack, not before the first frame went out.
+        // A multi-frame program's send can itself span several general-status
+        // ticks; an "armed" reading from partway through it is not evidence
+        // that THIS complete program landed, only that the machine was armed
+        // at SOME point before the send finished (see verifyArmed's own doc
+        // for why waiting here, never trusting anything already cached, is
+        // the correct trade-off, not an overcorrection).
+        await verifyArmed(p);
+        // THE ONE PLACE A RUN IS OPENED (Task 4, spec §4 — `activeRun`'s own
+        // doc comment has the full reasoning). Deliberately here, on the
+        // success path past verification, and deliberately nowhere else: no
+        // state word, no `armed` tick, no boundary and no reconnect ever
+        // opens a run, because the PM's own Terminate -> Rearm ->
+        // WaitToBegin cycle produces all of those unaided and would
+        // otherwise fabricate runs out of housekeeping.
+        //
+        // Any PREVIOUS run — open or closed — is replaced outright, which is
+        // what makes a second workout possible in one driver lifetime with
+        // no reconnect (the §19.4 regression this task fixes). Replacing an
+        // OPEN one is the single lifecycle transition with no event of its
+        // own: that run closes without a `workoutComplete`/`terminated`
+        // (stated on `MonitorEvent`, `domain/monitor/types.ts`), so it gets
+        // a `run-replaced` entry instead — every other transition here is
+        // already visible in the trace, and a run ending in silence is the
+        // exact class of invisibility §19.4 punished. The realistic
+        // hardware path does NOT reach this branch: `program()`'s own
+        // leading prepare Terminate makes the PM report "terminated" first,
+        // which closes run 1 through the normal path with a real event. So
+        // this entry marks the shape that would otherwise be a mystery in a
+        // trace, not the common one. A boundary
+        // half still waiting for its partner belongs to the run being
+        // replaced, so it is dropped here rather than left to pair with the
+        // NEW run's first boundary: `noteBoundaryHalf`'s pairing gate
+        // matches on the Split/Interval NUMBER, and both runs number their
+        // splits from the same low integers, so a cross-run pairing is
+        // otherwise entirely constructible (it would emit this run's
+        // identity carrying the last run's averages — D4's corruption, one
+        // level up).
+        if (runIsOpen()) {
+          log.record(
+            "run-replaced",
+            `program() replaced a run that was still OPEN (its ${activeRun!.program.intervals.length}-interval program had accumulated ${activeRun!.actuals} actual(s)) — that run closes here with no workoutComplete/terminated event of its own`,
+          );
+        }
+        if (boundaryHalves.split !== null || boundaryHalves.asSplit !== null) {
+          log.record(
+            "boundary-orphan",
+            `a boundary half was still pending when a new run opened (0x0037=${boundaryHalves.split}, 0x0038=${boundaryHalves.asSplit}) — discarded rather than paired with the new run's first boundary`,
+          );
+        }
+        boundaryHalves.split = null;
+        boundaryHalves.asSplit = null;
+        activeRun = { program: p, closed: false, actuals: 0 };
+        log.record("armed", `programmed ${p.intervals.length} interval(s)`);
+        emit({ kind: "armed" });
+      } finally {
+        // Cleared on EVERY exit — resolve, every reject (a typed
+        // `ProgramRejectionError` of any reason including `"disconnected"`,
+        // or anything else the three phases above could throw) — never
+        // only on the success path (`programInFlight`'s own doc comment).
+        programInFlight = false;
       }
-      boundaryHalves.split = null;
-      boundaryHalves.asSplit = null;
-      activeRun = { program: p, closed: false, actuals: 0 };
-      log.record("armed", `programmed ${p.intervals.length} interval(s)`);
-      emit({ kind: "armed" });
     },
 
     // `terminate()`'s ack means the documented `SET_SCREENSTATE` command

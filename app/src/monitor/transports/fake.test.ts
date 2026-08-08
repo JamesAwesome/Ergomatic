@@ -466,6 +466,120 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     );
   });
 
+  it("the armed reading is a LEVEL, not a one-shot: a tick that lands before anyone subscribes does NOT consume it (fix wave F-CRIT)", async () => {
+    // The exact race `e2e/connected.spec.ts` hit 100% of the time.
+    // `transports/index.ts`'s `autoTicking` pump (100ms) fires while
+    // `program()` is still suspended on a `delayWrites(120)` write, i.e.
+    // AFTER the last frame's synchronous ack but BEFORE `driver.ts`'s
+    // `verifyArmed()` has registered its listener. With a one-shot flush
+    // that tick swallowed the only "armed" notification the fake would
+    // ever send, and `verifyArmed` ran its whole 20-tick budget against a
+    // silent machine. A level cannot be swallowed.
+    const fake = createFakeTransport({ program: PROGRAM });
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    // The unrelated pump, landing in the gap — nobody is listening yet.
+    fake.tick(0);
+    // NOW the listener registers, exactly as `verifyArmed()` does.
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.tick(0);
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+  });
+
+  it("one 0x0031 reading per tick, including the tick that first reports the arm — the repeat never doubles up with the F1 first report", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    expect(generals).toHaveLength(1); // the F1 first report, not it plus a repeat
+    fake.tick(0);
+    expect(generals).toHaveLength(2);
+  });
+
+  it("the FIRST armed report precedes a scripted event that is due on the same tick — a timeline's opening entry never lands ahead of the arm (fix-round 1, F1's ordering half)", async () => {
+    // The level alone is not enough. A script whose very first entry is
+    // already due on the first tick after the accept would otherwise take
+    // that tick's single 0x0031 reading for itself, dropping the level
+    // (`deliverOrCache`) before the arm was ever reported at all — and
+    // `driver.ts`'s `verifyArmed()` would wait out its whole budget on a
+    // machine that had moved on. So the first report is unconditional and
+    // goes out FIRST; only the repeats yield.
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 0,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 5,
+          distanceMeters: 20,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+      ],
+    });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_INTERVALWORKTIME,
+    ]);
+  });
+
+  it("the armed level DROPS the moment a new programming sequence begins — a stale arm can never be re-reported into the next send (fix wave F-CRIT, driver.ts's F1 pins)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    await programIt(fake, PROGRAM);
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    // A SECOND program lands over the first. Its prepare step is where the
+    // next sequence begins (`beginProgrammingSequence`), so from that byte
+    // on the machine reports nothing armed until the new sequence accepts —
+    // the single TERMINATE status below is the prepare's own documented
+    // reaction (`onArmedFrameComplete`), and no tick after it repeats an
+    // arm the machine is no longer holding.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_TERMINATE,
+    ]);
+    // …and the arm comes back the moment the new sequence accepts.
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_TERMINATE,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+  });
+
   it("a distance-kind program's status bundle carries intervalType=1", async () => {
     const fake = createFakeTransport({
       program: DISTANCE_PROGRAM,
@@ -554,13 +668,34 @@ describe("createFakeTransport: write() target validation", () => {
 describe("createFakeTransport: tick-driven timeline", () => {
   const events = TIMELINE_EVENTS;
 
-  it("delivers nothing before a scheduled event's atMs is reached", async () => {
+  it("delivers no SCHEDULED event before its atMs is reached — the ticks in between carry the armed LEVEL, repeated (fix wave F-CRIT)", async () => {
     const fake = createFakeTransport({ program: PROGRAM, events });
     await programIt(fake, PROGRAM);
     const generals: Uint8Array[] = [];
     fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
-    fake.tick(500);
-    expect(generals).toHaveLength(0);
+    // Three ticks, none of them reaching the first scheduled event at
+    // 1000ms. Nothing from the SCRIPT goes out — but the machine is
+    // holding an un-pulled program and says so on every one of them, which
+    // is what a real PM5 does at its configured sample rate. Modelling
+    // this as a single edge is what let an unrelated pump consume the
+    // one-and-only "armed" reading before `driver.ts`'s `verifyArmed()`
+    // registered (`fake.ts`'s `armedLevel`).
+    fake.tick(300);
+    fake.tick(300);
+    fake.tick(300);
+    expect(generals).toHaveLength(3);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+    // …and the scripted event at 1000ms REPLACES the repeat on the tick it
+    // becomes due — one 0x0031 reading per tick, never two.
+    fake.tick(300);
+    expect(generals).toHaveLength(4);
+    expect(decodeGeneral(generals[3]!).workoutState).toBe(
+      WORKOUTSTATE_INTERVALWORKTIME,
+    );
   });
 
   it("delivers a due status event exactly once its atMs is reached", async () => {
@@ -654,6 +789,28 @@ describe("createFakeTransport: disconnect / reconnect", () => {
     fake.injectDisconnect();
     fake.tick(1000); // the 1000ms status event becomes due, but is suppressed
     expect(generals).toHaveLength(0);
+  });
+
+  it("the armed LEVEL is suppressed while disconnected too, and completeReconnect flushes 'still armed' (fix wave F-CRIT)", async () => {
+    // No timeline at all: the machine is armed and the rower has not
+    // pulled, so the only thing it has to say is the arm — which it goes on
+    // holding while the radio is down, and reports as its next status frame
+    // the moment the link is back. Same rule `deliverOrCache` applies to a
+    // scripted status; the level must not notify straight through
+    // `linkDown` just because it is generated inside the fake rather than
+    // read off a script.
+    const fake = createFakeTransport({ program: PROGRAM });
+    await programIt(fake, PROGRAM);
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.injectDisconnect();
+    fake.tick(500);
+    fake.tick(500);
+    expect(generals).toHaveLength(0);
+    fake.completeReconnect();
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
   });
 
   it("completeReconnect flushes the latest cached status (re-derived, not interpolated)", async () => {
@@ -1829,5 +1986,124 @@ describe("createFakeTransport: fix-3 Task 5 — 0x0031 carries structure, indepe
       workoutDurationRaw: 6000,
       workoutDurationType: 0,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 8: the timing-realism knobs (task-5 re-review, MEDIUM-9/LOW-8)
+// ---------------------------------------------------------------------------
+
+describe("createFakeTransport: delayWrites — the promise, not the wire, is what's delayed", () => {
+  it("defaults to instant (same-microtask) settlement, unchanged from before this knob existed", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    let settled = false;
+    void fake.connect("fake-pm5").then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+  });
+
+  it("connect() does not resolve until the configured delay elapses", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeTransport({ program: PROGRAM });
+      fake.delayWrites(500);
+      let settled = false;
+      void fake.connect("fake-pm5").then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(499);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("write() does not resolve until the configured delay elapses, but still processes the frame (acks, cursor advances) SYNCHRONOUSLY at call time", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeTransport({ program: PROGRAM });
+      fake.delayWrites(300);
+      const acks: Uint8Array[] = [];
+      fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) => acks.push(b));
+      let settled = false;
+      void fake
+        .write(RECEIVE_CHARACTERISTIC_UUID, buildTerminate()[0]![0]!)
+        .then(() => {
+          settled = true;
+        });
+      // The ack for a clearing-phase frame only fires once the WHOLE frame
+      // has reassembled (`onClearingFrameComplete`) — `buildTerminate()`'s
+      // single chunk is the whole frame, so this one write is enough to
+      // prove the point: the ack lands before any real time has passed at
+      // all, independent of `delayWrites`.
+      expect(acks.length).toBeGreaterThan(0);
+      // Flushed WITHOUT advancing the fake clock — proves `settled` reads
+      // `false` because of the CONFIGURED DELAY, not merely because the
+      // `.then()` callback above has not had a turn yet (a same-microtask
+      // `write()` resolution — the actual bug this pin caught: `write()`'s
+      // own implementation called `Promise.resolve()` directly rather than
+      // `settleWrite()`, so this exact assertion PASSED anyway with ZERO
+      // real delay, for a reason having nothing to do with `delayWrites` —
+      // flushing every pending microtask first, with the clock held still,
+      // is what actually tells the two apart. `advanceTimersByTimeAsync(0)`,
+      // not a bare `await Promise.resolve()`: vitest's own fake-timer
+      // microtask flush needs its OWN async tick loop to drain an
+      // `async function`'s implicit Promise-wrapping hops — a couple of
+      // bare `await Promise.resolve()`s measured directly here were not
+      // enough to surface the mutation this pin exists to catch.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a rejected write() (a genuine byte mismatch) is NOT delayed — only a successful settlement is", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    fake.delayWrites(10_000);
+    await expect(
+      fake.write(RECEIVE_CHARACTERISTIC_UUID, Uint8Array.from([0xff])),
+    ).rejects.toThrow();
+  });
+});
+
+describe("createFakeTransport: subscriptionCount", () => {
+  it("starts at zero", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    expect(fake.subscriptionCount()).toBe(0);
+  });
+
+  it("counts one per live subscribe() call, summed across characteristics, and drops back to zero once every unsubscribe fires", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const unsubA = fake.subscribe(GENERAL_STATUS_UUID, () => undefined);
+    expect(fake.subscriptionCount()).toBe(1);
+    const unsubB = fake.subscribe(ADDITIONAL_STATUS_1_UUID, () => undefined);
+    expect(fake.subscriptionCount()).toBe(2);
+    // A SECOND callback on the SAME characteristic is a distinct
+    // subscription (a `Set`, not a single slot) — `driver.ts` itself never
+    // double-subscribes one characteristic, but this method's own contract
+    // (its doc comment) is general, not driver-specific.
+    const unsubC = fake.subscribe(GENERAL_STATUS_UUID, () => undefined);
+    expect(fake.subscriptionCount()).toBe(3);
+    unsubA();
+    expect(fake.subscriptionCount()).toBe(2);
+    unsubB();
+    unsubC();
+    expect(fake.subscriptionCount()).toBe(0);
+  });
+
+  it("calling the SAME unsubscribe function twice never goes negative", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const unsub = fake.subscribe(GENERAL_STATUS_UUID, () => undefined);
+    unsub();
+    unsub();
+    expect(fake.subscriptionCount()).toBe(0);
   });
 });

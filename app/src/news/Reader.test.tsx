@@ -135,7 +135,7 @@ describe("Reader", () => {
     renderReader("/news/baselines");
 
     const next = screen.getByRole("link", {
-      name: /NEXT · 2 MIN — Picking a workout by how much it should hurt/,
+      name: /NEXT · 2 MIN · Picking a workout by how much it should hurt/,
     });
     expect(next).toHaveAttribute("href", "/news/picking-a-workout");
   });

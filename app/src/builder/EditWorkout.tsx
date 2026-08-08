@@ -78,7 +78,7 @@ export default function EditWorkout() {
     return (
       <main className="screen">
         <p className="mono-status">
-          This workout can't be edited yet — it has a step type the builder
+          This workout can't be edited yet. It has a step type the builder
           doesn't support.
         </p>
         <Link to={`/library/${workout.id}`} className="back-link">
@@ -97,7 +97,7 @@ export default function EditWorkout() {
     return (
       <main className="screen">
         <p className="mono-status">
-          This workout can't be edited yet — its repeat structure can't be
+          This workout can't be edited yet. Its repeat structure can't be
           represented here.
         </p>
         <Link to={`/library/${workout.id}`} className="back-link">

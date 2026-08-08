@@ -33,6 +33,15 @@ export interface MonitorFrame {
   currentSplit: number | null;
   spm: number | null;
   heartRateBpm: number | null; // null = no belt data THIS frame
+  rowingActive: boolean;
+  // ^ 0x0031's own Rowing State byte (offset 9: 0=Inactive, 1=Active) —
+  //   the machine's OWN declaration of "is this person rowing", distinct
+  //   from the workout state's broad rowing-mapped ordinals. The
+  //   2026-08-08 hardware walks proved every proxy for it lies somewhere:
+  //   the workout state reads rowing-mapped at "row to begin", the clock
+  //   runs while a stopped rower sits still, and a coasting flywheel
+  //   banks meters on a piece the PM5 itself does not consider started.
+  //   This byte is what the PM5 knew each time.
   intervalIndex: number | null;
   // ^ OUR program index (0-based per work interval), never the raw machine
   //   value straight off the wire — normalized by the driver via

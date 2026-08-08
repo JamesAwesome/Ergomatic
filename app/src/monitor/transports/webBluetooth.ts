@@ -175,7 +175,7 @@ export function createWebBluetoothTransport(): Transport {
     async scan(): Promise<DiscoveredMonitor[]> {
       if (!navigator.bluetooth) {
         throw new Error(
-          "webBluetooth: navigator.bluetooth is unavailable — Chromium only (design spec's own research note)",
+          "webBluetooth: navigator.bluetooth is unavailable. Chromium only (design spec's own research note)",
         );
       }
       // Chrome's picker matches filters against ADVERTISED UUIDs only.

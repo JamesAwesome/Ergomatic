@@ -1,0 +1,1183 @@
+// Pane C — the grid (7B Task 7, handoff §3). Same two strategies as
+// `ConnectedSurface.test.tsx`, for the same reasons:
+//
+// - **One fake-driven walk** rows a REAL seeded library workout through the
+//   real `ConnectedInterstitial` -> real `useMonitorSession` -> real driver
+//   -> `transports/fake.ts`'s CSAFE-correct simulator, past two real
+//   interval boundaries, so the completed rows this grid draws are built
+//   from actuals that came off a (simulated) wire.
+// - **Per-state rendering** hands `ConnectedSurface` a session directly, so
+//   a row state can be put on screen without scripting the machine into it.
+//
+// Every fixture is a real library workout with MIXED time and distance
+// intervals: "Filling Low" (8:00 warm-up, then 3 x 2000 m / 3:00), "Split
+// Front" (10:00, 8000 m, then 4 x 3:00) and "Sea Smoke" (6:00 then 24 x
+// 500 m — the 25-interval scroll case the handoff itself works through).
+
+import { readFileSync } from "node:fs";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  compileProgram,
+  type WorkoutProgram,
+} from "../../../domain/monitor/program.js";
+import type {
+  IntervalActual,
+  MonitorFrame,
+} from "../../../domain/monitor/types.js";
+import type { Baselines, WorkoutType } from "../../../domain/types.js";
+import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
+import { createFakeTransport } from "../../monitor/transports/fake";
+import type {
+  ConnectedPhase,
+  MonitorSession,
+  RunIdentity,
+} from "../../monitor/useMonitorSession";
+import { buildDraft } from "../../session/draft";
+import { buildRun, type EnginePhase } from "../../session/engine";
+import { commentStrippedSource } from "../../test/cssView";
+import ConnectedInterstitial from "../ConnectedInterstitial";
+import ConnectedSurface, { LAST_PANE_KEY } from "../ConnectedSurface";
+import { buildGridModel, DASH, type JudgedValue } from "./surfaceModel";
+
+/** The active row's live cells when the machine has said nothing — enough
+ *  for a caption-grammar test, which never looks at them. */
+const NO_READING: JudgedValue = {
+  display: DASH,
+  judgement: "within",
+  absent: true,
+};
+
+/** `index.css`'s path on disk — the same jsdom-quirk-avoiding string
+ *  surgery `ConnectedSurface.test.tsx` documents. Vitest mocks every `.css`
+ *  import to an empty string for this project, so a rule can only be
+ *  asserted by reading the source text. */
+function indexCssPath(): string {
+  return import.meta.url
+    .replace(/^file:\/\//, "")
+    .replace(/workout\/connected\/[^/]+\.test\.tsx$/, "index.css");
+}
+
+/**
+ * `index.css` WITH EVERY COMMENT STRIPPED (`commentStrippedSource`,
+ * `../../test/cssView` — Task 8's house extraction of this exact idiom),
+ * and the only view of the stylesheet this file has. Nothing here can read
+ * prose, because the prose is gone before the first assertion runs.
+ *
+ * The task-7 review found why this matters (M1), and it is the same defect
+ * `562ef55` fixed one commit before this pane existed: a rule-body regex
+ * captures the block's own doc comment, so a comment that happens to say
+ * `min-height: 0` in prose satisfies `toContain("min-height: 0")` after the
+ * DECLARATION has been deleted. The scroll guard below shipped green through
+ * every gate — unit AND browser — with `min-height: 0` gone, because its own
+ * comment said the words. Stripping once, at the source, is what makes every
+ * assertion in this file read code; a per-assertion strip is a thing the
+ * next test to be added forgets.
+ */
+const DECLARATIONS = commentStrippedSource(
+  readFileSync(indexCssPath(), "utf-8"),
+);
+const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
+const t0 = new Date("2026-08-07T09:00:00.000Z");
+const DEVICE = "PM5 432331249";
+
+interface Fixture {
+  program: WorkoutProgram;
+  phases: EnginePhase[];
+  identity: RunIdentity;
+}
+
+function libraryFixture(title: string): Fixture {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  const id = title.toLowerCase().replace(/ /g, "-");
+  const draft = buildDraft({
+    id,
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const phases = buildRun(draft, baselines, t0).phases;
+  const program = compileProgram(phases);
+  if ("code" in program) {
+    throw new Error(`fixture failed to compile: ${program.code}`);
+  }
+  return { program, phases, identity: { workoutId: id, title: w.title } };
+}
+
+/** 4 intervals: `time 480` warm-up, then 3 x `distance 2000` with 180 s of
+ *  rest. Mixed, and short enough to assert every row of. */
+const FILLING_LOW = libraryFixture("Filling Low");
+/** 6 intervals: `time 600`, ONE `distance 8000`, then 4 x `time 180` — the
+ *  handoff's own single-distance-row caption case, and the mirror of
+ *  Filling Low's shape. */
+const SPLIT_FRONT = libraryFixture("Split Front");
+/** 25 intervals: `time 360` then 24 x `distance 500`. The scroll case. */
+const SEA_SMOKE = libraryFixture("Sea Smoke");
+
+/** Sanity on the fixtures themselves, so a later library edit that changed
+ *  their shape would break HERE with a clear message rather than in a
+ *  dozen assertions about row 3. */
+function kindsOf(f: Fixture): ("time" | "distance")[] {
+  return f.program.intervals.map((i) => i.kind);
+}
+
+function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
+  return {
+    elapsedSeconds: 828,
+    distanceMeters: 800,
+    currentSplit: 117.8,
+    spm: 21,
+    heartRateBpm: 164,
+    intervalIndex: 1,
+    intervalRemaining: { kind: "distance", value: 1200 },
+    state: "rowing",
+    rowingActive: true,
+    ...overrides,
+  };
+}
+
+/** A completed interval's actuals, derived from the PROGRAM's own numbers
+ *  (never literals typed into this file): the programmed distance rowed 6
+ *  s/500m faster than asked and one stroke under the rate, which is the
+ *  ochre/teal pair the handoff's mockup draws on its completed rows. */
+function actualFor(index: number, program: WorkoutProgram): IntervalActual {
+  const interval = program.intervals[index]!;
+  const split = interval.targetSplit ?? 132;
+  const meters = interval.kind === "distance" ? interval.value : 2384;
+  return {
+    index,
+    elapsedSeconds:
+      interval.kind === "time" ? interval.value : (meters / 500) * split,
+    distanceMeters: meters,
+    avgSplit: split - 6,
+    avgSpm: (interval.displaySpm ?? 20) - 4,
+    avgHeartRateBpm: 158 + index,
+  };
+}
+
+function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
+  return {
+    phase: "live" as ConnectedPhase,
+    error: null,
+    deviceName: DEVICE,
+    frame: frame(),
+    actuals: [],
+    endedBy: null,
+    connect: vi.fn().mockResolvedValue(undefined),
+    program: vi.fn().mockResolvedValue(undefined),
+    endSession: vi.fn().mockResolvedValue(undefined),
+    cancel: vi.fn().mockResolvedValue(undefined),
+    exportLog: vi.fn().mockReturnValue("[]"),
+    ...overrides,
+  };
+}
+
+function renderGrid(
+  overrides: Partial<MonitorSession> = {},
+  fixture: Fixture = FILLING_LOW,
+) {
+  localStorage.setItem(LAST_PANE_KEY, "grid");
+  const current = session(overrides);
+  const view = render(
+    <ConnectedSurface
+      phases={fixture.phases}
+      program={fixture.program}
+      session={current}
+      onEnded={vi.fn()}
+    />,
+  );
+  return { ...view, session: current };
+}
+
+/** Every row, in program order. */
+function rows(): HTMLElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>(".connected-grid-rows > *"),
+  );
+}
+
+function row(n: number): HTMLElement {
+  const found = rows()[n - 1];
+  if (found === undefined) throw new Error(`no row ${n}`);
+  return found;
+}
+
+/** One row's six columns as plain text, in the handoff's own order. The
+ *  inline `SPM `/`HR `/`REST ` prefixes are portrait's labels for line 2
+ *  and are stripped so the assertion reads as the value. */
+function cells(el: HTMLElement): Record<string, string> {
+  const read = (cls: string): string =>
+    (el.querySelector(`.connected-grid-${cls}`)?.textContent ?? "")
+      .replace(/^(SPM|HR|REST)\s/, "")
+      .trim();
+  return {
+    num: read("num"),
+    time: read("time"),
+    meters: read("meters"),
+    pace: read("pace"),
+    spm: read("spm"),
+    hr: read("hr"),
+    rest: read("rest"),
+  };
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  // jsdom implements no scrolling at all, so `scrollIntoView` is simply
+  // absent from `Element.prototype`. Every test in this file needs it
+  // defined for the pane to exercise its pin; the "scrolls the active row
+  // into view" block is the one that reads the calls back.
+  Element.prototype.scrollIntoView = vi.fn();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// The three row states, on a real workout, from the real machine
+// ---------------------------------------------------------------------------
+
+describe("the fixtures are what this file says they are", () => {
+  it("Filling Low is a time warm-up then three distance reps", () => {
+    expect(kindsOf(FILLING_LOW)).toStrictEqual([
+      "time",
+      "distance",
+      "distance",
+      "distance",
+    ]);
+  });
+
+  it("Split Front is time, ONE distance, then four time intervals", () => {
+    expect(kindsOf(SPLIT_FRONT)).toStrictEqual([
+      "time",
+      "distance",
+      "time",
+      "time",
+      "time",
+      "time",
+    ]);
+  });
+
+  it("Sea Smoke is the 25-interval case the handoff works through", () => {
+    expect(SEA_SMOKE.program.intervals).toHaveLength(25);
+  });
+});
+
+describe("row states (handoff §3's three treatments)", () => {
+  it("draws completed actuals, the active card and upcoming programmed values", () => {
+    renderGrid({ actuals: [actualFor(0, FILLING_LOW.program)] });
+    expect(rows()).toHaveLength(4);
+
+    // 1 — COMPLETED: the machine's own numbers, over a solid rule.
+    expect(row(1).className).toContain("connected-grid-completed");
+    const done = cells(row(1));
+    expect(done.num).toBe("1");
+    // The warm-up's programmed 480 s, as the machine reported rowing it.
+    expect(done.time).toBe("8:00");
+    expect(done.meters).toBe("2384");
+    expect(done.hr).toBe("158");
+
+    // 2 — ACTIVE: a card, a now-marker, a bold index, a third line.
+    expect(row(2).className).toContain("connected-grid-active");
+    expect(row(2).querySelector(".connected-grid-marker")).not.toBeNull();
+    expect(row(2)).toHaveAttribute("aria-current", "step");
+    expect(row(2).textContent).toContain("REMAINING · TARGET 2:06.0 · 6K +4");
+
+    // 3 and 4 — UPCOMING: the PROGRAMMED values, never an actual.
+    for (const n of [3, 4]) {
+      expect(row(n).className).toContain("connected-grid-upcoming");
+      const next = cells(row(n));
+      expect(next.meters).toBe("2000");
+      expect(next.pace).toBe("2:06.0");
+      expect(next.spm).toBe("22");
+      // Nothing has happened here, so there is no heart rate to report.
+      expect(next.hr).toBe("—");
+    }
+  });
+
+  it("the ACTIVE row is the machine's interval, and it moves with it", () => {
+    const first = renderGrid();
+    expect(cells(row(2)).num).toBe("2");
+    first.unmount();
+
+    renderGrid({ frame: frame({ intervalIndex: 3 }) });
+    expect(row(4).className).toContain("connected-grid-active");
+    expect(row(2).className).toContain("connected-grid-completed");
+  });
+
+  it("names the target with no ref when the run was frozen before refs existed", () => {
+    // `EnginePhase.ref` is optional and a run frozen before it existed has
+    // none, which `targetSplitDisplay` reports as `sub: null`. The third
+    // line then states the target and stops, rather than trailing a
+    // separator with nothing after it.
+    const refless: Fixture = {
+      ...FILLING_LOW,
+      phases: FILLING_LOW.phases.map((phase, i) => {
+        if (i !== 1) return phase;
+        const { ref: _ref, ...rest } = phase;
+        return rest;
+      }),
+    };
+    renderGrid({}, refless);
+    expect(row(2).textContent).toContain("REMAINING · TARGET 2:06.0");
+    expect(row(2).textContent).not.toContain("6K");
+  });
+
+  it("A COMPLETED ROW WITH NO ACTUAL SAYS NOTHING IT CANNOT BACK", () => {
+    // MISSED rows are NOT BUILT (descoped with auto-reconnect, design spec
+    // C5 / handoff open question 2). A row the machine never reported an
+    // actual for reads as dashes, and carries no second treatment.
+    renderGrid({ frame: frame({ intervalIndex: 2 }), actuals: [] });
+    for (const n of [1, 2]) {
+      expect(row(n).className).toContain("connected-grid-completed");
+      expect(row(n).className).not.toContain("missed");
+      const empty = cells(row(n));
+      expect(empty.time).toBe("—");
+      expect(empty.meters).toBe("—");
+      expect(empty.pace).toBe("—");
+    }
+    expect(document.body.textContent).not.toContain("MISSED");
+  });
+
+  it("files an actual whose own index is unknown against NO row", () => {
+    // `IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
+    // `null` AS INTERVAL 0."
+    renderGrid({
+      frame: frame({ intervalIndex: 2 }),
+      actuals: [{ ...actualFor(0, FILLING_LOW.program), index: null }],
+    });
+    expect(cells(row(1)).meters).toBe("—");
+  });
+});
+
+describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
+  it("gives upcoming rows a DASHED border and completed rows a solid one", () => {
+    const upcoming = /\.connected-grid-upcoming\s*\{([^}]*)\}/.exec(
+      DECLARATIONS,
+    );
+    const completed = /\.connected-grid-completed\s*\{([^}]*)\}/.exec(
+      DECLARATIONS,
+    );
+    expect(upcoming).not.toBeNull();
+    expect(completed).not.toBeNull();
+    expect(upcoming![1]).toContain("1px dashed var(--rule-3)");
+    expect(completed![1]).toContain("1px solid var(--rule-2)");
+  });
+
+  it("keeps upcoming VALUES at --ink-3, never the AA-failing --ink-5", () => {
+    // The handoff names `--ink-5` for this treatment and its own standing
+    // law forbids it in the same breath ("no small mono label lighter than
+    // `--ink-3`"): `--ink-5` measures 2.48:1 on `--page`, `--ink-3`
+    // 6.68:1. The dash is what says "not yet"; the colour only has to be
+    // readable.
+    const rule =
+      /\.connected-grid-upcoming\s+\.connected-grid-line1,\s*\.connected-grid-upcoming\s+\.connected-grid-line2\s*\{([^}]*)\}/.exec(
+        DECLARATIONS,
+      );
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toContain("var(--ink-3)");
+    expect(rule![1]).not.toContain("--ink-5");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Distance intervals
+// ---------------------------------------------------------------------------
+
+describe("distance intervals (handoff §3's distance rules)", () => {
+  it("a PENDING distance row shows `—` in TIME and its meters in METERS", () => {
+    renderGrid();
+    const pending = cells(row(3));
+    expect(pending.time).toBe("—");
+    expect(pending.meters).toBe("2000");
+  });
+
+  it("a PENDING time row shows its duration in TIME and `—` in METERS", () => {
+    // The mirror rule, on the fixture whose upcoming rows are time-based.
+    renderGrid({ frame: frame({ intervalIndex: 2 }) }, SPLIT_FRONT);
+    const pending = cells(row(4));
+    expect(pending.time).toBe("3:00");
+    expect(pending.meters).toBe("—");
+  });
+
+  it("counts METERS down on an active distance interval, and time on a time one", () => {
+    const distance = renderGrid({
+      frame: frame({ intervalRemaining: { kind: "distance", value: 1200 } }),
+    });
+    // Row 2 of Filling Low is a 2000 m rep: meters count down, and the
+    // dimension that is NOT programmed carries no fabricated number.
+    expect(cells(row(2)).meters).toBe("1200");
+    expect(cells(row(2)).time).toBe("—");
+    expect(
+      row(2).querySelector(".connected-grid-meters.connected-grid-countdown"),
+    ).not.toBeNull();
+    distance.unmount();
+
+    renderGrid({
+      frame: frame({
+        intervalIndex: 0,
+        intervalRemaining: { kind: "time", value: 41 },
+      }),
+    });
+    expect(cells(row(1)).time).toBe("0:41");
+    expect(cells(row(1)).meters).toBe("—");
+    expect(
+      row(1).querySelector(".connected-grid-time.connected-grid-countdown"),
+    ).not.toBeNull();
+  });
+
+  it("names the distance rows IN WORDS under the grid, never a glyph", () => {
+    const many = renderGrid();
+    expect(
+      screen.getByText("ROWS 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
+    ).toBeInTheDocument();
+    many.unmount();
+
+    // The handoff's own one-row sentence, on the fixture that has one.
+    const one = renderGrid({}, SPLIT_FRONT);
+    expect(
+      screen.getByText("ROW 2 IS AN 8000 M PIECE · METERS COUNT DOWN"),
+    ).toBeInTheDocument();
+    one.unmount();
+
+    // Twenty-four row numbers is not a caption. It counts instead.
+    renderGrid({}, SEA_SMOKE);
+    expect(
+      screen.getByText("24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN"),
+    ).toBeInTheDocument();
+  });
+
+  it("dashes an upcoming row that carries no target of its own", () => {
+    // A warm-up compiles to `targetSplit: null, displaySpm: null` (the H8
+    // rule: the compiler never programs an estimate as a hard target), and
+    // an upcoming row must show that as the house dash rather than
+    // inventing a number. Reachable only when such an interval sits AFTER
+    // the active one, which no seeded workout does — every library workout
+    // opens with its warm-up — so the program is reassembled here from
+    // three REAL compiled intervals rather than hand-written ones.
+    const reordered: Fixture = {
+      ...SPLIT_FRONT,
+      program: {
+        intervals: [
+          SEA_SMOKE.program.intervals[1]!,
+          SPLIT_FRONT.program.intervals[2]!,
+          SPLIT_FRONT.program.intervals[0]!,
+        ],
+      },
+    };
+    expect(reordered.program.intervals[2]!.targetSplit).toBeNull();
+    expect(reordered.program.intervals[2]!.displaySpm).toBeNull();
+
+    renderGrid({ frame: frame({ intervalIndex: 1 }) }, reordered);
+    expect(row(3).className).toContain("connected-grid-upcoming");
+    const bare = cells(row(3));
+    expect(bare.pace).toBe("—");
+    expect(bare.spm).toBe("—");
+    // ...and the one distance row now reads with the indefinite article the
+    // handoff's own sentence uses.
+    expect(
+      screen.getByText("ROW 1 IS A 500 M PIECE · METERS COUNT DOWN"),
+    ).toBeInTheDocument();
+  });
+
+  it("says AN before a distance a rower speaks with a leading vowel", () => {
+    // `buildGridModel` direct, because the single-distance-row caption is
+    // otherwise reachable only through a workout that has exactly one — and
+    // the grammar rule needs four of them. The interval is a REAL compiled
+    // one with its `value` moved; every other field is the compiler's.
+    const base = SEA_SMOKE.program.intervals[1]!;
+    const captionFor = (meters: number): string | null =>
+      buildGridModel({
+        intervals: [{ ...base, value: meters }],
+        actuals: [],
+        activeIndex: 0,
+        remaining: null,
+        livePace: NO_READING,
+        liveRate: NO_READING,
+        liveHr: NO_READING,
+        targetSplitMain: "2:12.0",
+        targetSplitRef: "6K +4",
+        hasTargetSplit: true,
+      }).caption;
+
+    // Eight, in any magnitude.
+    expect(captionFor(800)).toContain("IS AN 800 M PIECE");
+    expect(captionFor(8000)).toContain("IS AN 8000 M PIECE");
+    // The two four-digit distances a rower says in hundreds.
+    expect(captionFor(1100)).toContain("IS AN 1100 M PIECE");
+    expect(captionFor(1800)).toContain("IS AN 1800 M PIECE");
+    // ...and the neighbours that do not.
+    expect(captionFor(500)).toContain("IS A 500 M PIECE");
+    expect(captionFor(1500)).toContain("IS A 1500 M PIECE");
+    expect(captionFor(1000)).toContain("IS A 1000 M PIECE");
+    // A leading 1 alone is not the rule — three digits are spoken plainly.
+    expect(captionFor(180)).toContain("IS A 180 M PIECE");
+  });
+
+  it("says nothing at all when there is no distance interval to explain", () => {
+    // An empty caption is a claim; no caption is the truth. Built by
+    // narrowing a real fixture to its time intervals, so the program is
+    // still a compiler's output.
+    const timeOnly: Fixture = {
+      ...SPLIT_FRONT,
+      program: {
+        intervals: SPLIT_FRONT.program.intervals.filter(
+          (i) => i.kind === "time",
+        ),
+      },
+    };
+    renderGrid({}, timeOnly);
+    expect(document.querySelector(".connected-grid-caption")).toBeNull();
+    expect(document.body.textContent).not.toContain("COUNT DOWN");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE ACCENT CENSUS
+// ---------------------------------------------------------------------------
+
+/** Every class `index.css` PAINTS with `var(--accent)`, read out of the
+ *  stylesheet itself rather than listed here — so a rule added tomorrow
+ *  joins the census without this test being edited.
+ *
+ *  `DECLARATIONS` is already comment-free (this file's own prose says
+ *  "--accent" a dozen times, and index.css's says it more). Only the
+ *  RIGHTMOST class of each comma-separated selector
+ *  is collected, because that is the element the declaration actually
+ *  lands on: `.connected-grid-line1 > .connected-grid-countdown` paints the
+ *  countdown, not the line. And only `connected-*` classes are collected —
+ *  the panes render no other class of their own, and the reused
+ *  phone-timer components' own accent surfaces are covered by the
+ *  neutralising-override test below. */
+function accentClassesFromCss(): string[] {
+  const found = new Set<string>();
+  for (const [, selector, body] of DECLARATIONS.matchAll(
+    /([^{}]*)\{([^{}]*)\}/g,
+  )) {
+    if (!body!.includes("var(--accent)")) continue;
+    for (const part of selector!.split(",")) {
+      const classes = [...part.matchAll(/\.([\w-]+)/g)].map((m) => m[1]!);
+      const last = classes.at(-1);
+      if (last !== undefined && last.startsWith("connected-")) found.add(last);
+    }
+  }
+  return [...found];
+}
+
+describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => {
+  it("finds the accent-bearing classes in the stylesheet, not in this test", () => {
+    const classes = accentClassesFromCss();
+    // The grid's countdown, plus the paused block's `END` outline (handoff
+    // §4, and it belongs to the shell's footer, not to a pane).
+    expect(classes).toContain("connected-grid-countdown");
+    expect(classes.toSorted()).toStrictEqual([
+      "connected-grid-countdown",
+      "connected-paused-end",
+      "connected-paused-end-armed",
+    ]);
+  });
+
+  it("panes A and B carry NONE of them, and pane C carries exactly one", () => {
+    const selector = accentClassesFromCss()
+      .map((c) => `.${c}`)
+      .join(",");
+    const paneAccents = (pane: "timer" | "live" | "grid"): Element[] => {
+      localStorage.setItem(LAST_PANE_KEY, pane);
+      render(
+        <ConnectedSurface
+          phases={FILLING_LOW.phases}
+          program={FILLING_LOW.program}
+          session={session({ actuals: [actualFor(0, FILLING_LOW.program)] })}
+          onEnded={vi.fn()}
+        />,
+      );
+      const found = Array.from(
+        document
+          .querySelector(".connected-surface-body")!
+          .querySelectorAll(selector),
+      );
+      cleanupRender();
+      return found;
+    };
+
+    // Task 6 proved these two have none. This re-proves it from the
+    // STYLESHEET's own accent set rather than from a class name typed here,
+    // so a rule added later is caught without this test changing.
+    expect(paneAccents("timer")).toHaveLength(0);
+    expect(paneAccents("live")).toHaveLength(0);
+
+    const accented = paneAccents("grid");
+    expect(accented).toHaveLength(1);
+    // And it is the ACTIVE ROW'S COUNTDOWN, not something else that
+    // happened to pick up the class.
+    const only = accented[0]!;
+    expect(only.className).toContain("connected-grid-countdown");
+    expect(only.closest(".connected-grid-row")!.className).toContain(
+      "connected-grid-active",
+    );
+    expect(only.textContent).toBe("1200");
+  });
+
+  it("no upcoming or completed row can reach the accent class", () => {
+    renderGrid({
+      frame: frame({ intervalIndex: 2 }),
+      actuals: [actualFor(0, FILLING_LOW.program)],
+    });
+    for (const n of [1, 2, 4]) {
+      expect(row(n).querySelector(".connected-grid-countdown")).toBeNull();
+    }
+    expect(row(3).querySelector(".connected-grid-countdown")).not.toBeNull();
+  });
+
+  it("the reused phone-timer components are still repainted ink here", () => {
+    // The census above only looks at `.connected-*` classes, which is only
+    // honest while `.timer-dot-past` and the ruler's fill stay overridden
+    // inside `.connected-pane` (task 6's own two rules). Without this,
+    // deleting those rules would put accent back on two panes and the
+    // census would not notice.
+    for (const selector of [
+      /\.connected-pane\s+\.timer-dot-past\s*\{([^}]*)\}/,
+      /\.connected-pane\s+\.timer-dot-current\s*\{([^}]*)\}/,
+      /\.connected-pane\s+\.timer-total-bar\s+span\s*\{([^}]*)\}/,
+    ]) {
+      const rule = selector.exec(DECLARATIONS);
+      expect(rule).not.toBeNull();
+      expect(rule![1]).not.toContain("--accent");
+    }
+  });
+
+  it("the countdown's accent is a COLOUR on a duration, at 22/26px", () => {
+    const portrait =
+      /\.connected-grid-line1\s*>\s*\.connected-grid-countdown\s*\{([^}]*)\}/.exec(
+        DECLARATIONS,
+      );
+    expect(portrait).not.toBeNull();
+    expect(portrait![1]).toContain("color: var(--accent)");
+    expect(portrait![1]).toContain("font-size: 22px");
+    // Landscape steps it to 26px inside the orientation query.
+    expect(DECLARATIONS).toMatch(
+      /\.connected-pane-grid\s+\.connected-grid-line1\s*>\s*\.connected-grid-countdown\s*\{[^}]*font-size:\s*26px/,
+    );
+  });
+});
+
+/** `render` twice in one test leaves two trees mounted; this drops them
+ *  all so the next query in the same test sees one surface. */
+function cleanupRender(): void {
+  document.body.innerHTML = "";
+}
+
+// ---------------------------------------------------------------------------
+// The one judgement path — pane C joins the count
+// ---------------------------------------------------------------------------
+
+/** Every judged cell on whatever is on screen. Panes A and B put
+ *  `timer-card-actual-{judgement}` on cards and a hero; pane C puts it on
+ *  its actual `/500M` and `SPM` cells, and NOWHERE else. */
+function judgedCells(): { text: string; judgement: string }[] {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>('[class*="timer-card-actual-"]'),
+  ).map((el) => ({
+    text: el.textContent ?? "",
+    judgement: /timer-card-actual-(\w+)/.exec(el.className)?.[1] ?? "none",
+  }));
+}
+
+describe("judged cells: pane C goes through the ONE helper", () => {
+  it("judges the completed rows' /500M and SPM, and NOTHING programmed", () => {
+    renderGrid({
+      frame: frame({ intervalIndex: 2 }),
+      actuals: [
+        actualFor(0, FILLING_LOW.program),
+        actualFor(1, FILLING_LOW.program),
+      ],
+    });
+    // Two completed rows x 2 judged cells + the active row's 2 = SIX. The
+    // two upcoming rows contribute NONE: a programmed value is not an
+    // actual and structurally cannot carry a verdict.
+    expect(judgedCells()).toHaveLength(6);
+    expect(
+      row(4).querySelectorAll('[class*="timer-card-actual-"]'),
+    ).toHaveLength(0);
+
+    // Row 2's actual was rowed 6 s/500m faster than asked -> ochre "over"
+    // (the effort direction, `domain/judge.ts`'s rule), and one stroke
+    // under the programmed rate -> teal "under".
+    expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
+      "timer-card-actual-over",
+    );
+    expect(row(2).querySelector(".connected-grid-spm")!.className).toContain(
+      "timer-card-actual-under",
+    );
+  });
+
+  it("the WHOLE SURFACE's judged-cell count, pane by pane", () => {
+    // The number the mutation round moves: pane A 3 (NOW/RATE/METERS),
+    // pane B 4 (hero/rate/HR/meters), pane C 4 on this frame (one completed
+    // row's two cells plus the active row's two) — ELEVEN in total. Break
+    // `judgeActual` and every one of them lands on the same wrong verdict
+    // at once, which is the property this file is here to keep.
+    const counts: Record<string, number> = {};
+    for (const pane of ["timer", "live", "grid"] as const) {
+      localStorage.setItem(LAST_PANE_KEY, pane);
+      render(
+        <ConnectedSurface
+          phases={FILLING_LOW.phases}
+          program={FILLING_LOW.program}
+          session={session({ actuals: [actualFor(0, FILLING_LOW.program)] })}
+          onEnded={vi.fn()}
+        />,
+      );
+      counts[pane] = judgedCells().length;
+      cleanupRender();
+    }
+    expect(counts).toStrictEqual({ timer: 3, live: 4, grid: 4 });
+  });
+
+  // THE STALE OVERRIDE, SCOPED (task-7 review, M2). Staleness is a property
+  // of the FEED, so it reaches the live-fed cells and stops there. The two
+  // pins below are deliberately a pair: together they say what one
+  // "everything greys" assertion could not, which is WHERE the greying ends.
+  function renderDisconnectedMidSession() {
+    return renderGrid({
+      phase: "disconnected",
+      // Numbers that would otherwise scream a verdict, on a link we cannot
+      // vouch for.
+      frame: frame({ intervalIndex: 2, currentSplit: 60, spm: 60 }),
+      actuals: [
+        actualFor(0, FILLING_LOW.program),
+        actualFor(1, FILLING_LOW.program),
+      ],
+    });
+  }
+
+  it("greys the ACTIVE row's live cells — a reading we cannot vouch for", () => {
+    renderDisconnectedMidSession();
+    expect(row(3).className).toContain("connected-grid-active");
+    for (const cls of ["pace", "spm"]) {
+      expect(
+        row(3).querySelector(`.connected-grid-${cls}`)!.className,
+      ).toContain("timer-card-actual-stale");
+    }
+  });
+
+  it("LEAVES COMPLETED ROWS THEIR VERDICTS: history is not a reading", () => {
+    // `disconnected` is TERMINAL in 7B (spec C5 descoped auto-reconnect), so
+    // greying these would erase every judgement the rower had earned, for
+    // good, on the one pane whose job is to show what they have done. A
+    // closed `IntervalActual` was never `NOW`; the link's death cannot
+    // retract it.
+    renderDisconnectedMidSession();
+    // Row 2 is the first 2000 m rep, rowed 6 s/500m fast and a stroke under
+    // the rate: ochre and teal, and they stay ochre and teal.
+    expect(row(2).className).toContain("connected-grid-completed");
+    expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
+      "timer-card-actual-over",
+    );
+    expect(row(2).querySelector(".connected-grid-spm")!.className).toContain(
+      "timer-card-actual-under",
+    );
+    // Row 1 is the warm-up — no programmed target, so `within` either way.
+    // What matters is that it is not GREY: it has nothing to be stale about.
+    for (const cls of ["pace", "spm"]) {
+      expect(
+        row(1).querySelector(`.connected-grid-${cls}`)!.className,
+      ).not.toContain("timer-card-actual-stale");
+    }
+    // Six judged cells still, and exactly two of them are stale — the active
+    // row's, and only the active row's.
+    const cells = judgedCells();
+    expect(cells).toHaveLength(6);
+    expect(cells.filter((c) => c.judgement === "stale")).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scroll containment — the ONE landscape scroll (DEVIATIONS row 2)
+// ---------------------------------------------------------------------------
+
+describe("contained scroll: only the rows move", () => {
+  it("puts the header, the caption and End OUTSIDE the scroller", () => {
+    renderGrid({}, SEA_SMOKE);
+    const pane = document.querySelector(".connected-pane-grid")!;
+    const scroller = pane.querySelector(".connected-grid-rows")!;
+    // Every row is inside it...
+    expect(scroller.children).toHaveLength(25);
+    // ...and none of the three pinned things is.
+    expect(scroller.querySelector(".connected-grid-head")).toBeNull();
+    expect(scroller.querySelector(".connected-grid-caption")).toBeNull();
+    expect(pane.querySelector(".connected-end")).toBeNull();
+    // End is the SHELL's, one level up, so it cannot scroll with the rows
+    // even by accident.
+    expect(
+      document.querySelector(".connected-surface-footer .connected-end"),
+    ).not.toBeNull();
+  });
+
+  it("index.css scrolls the rows and nothing else", () => {
+    // READS DECLARATIONS, NOT PROSE (task-7 review, M1). This assertion
+    // previously matched against the raw source, so the rule's own comment —
+    // which argues about `flex: 1` and `min-height: 0` in words — satisfied
+    // it whether or not either declaration existed. It also asserted
+    // `flex: 1`, a value the stylesheet deliberately REJECTS.
+    const scroller = /\.connected-grid-rows\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    expect(scroller).not.toBeNull();
+    expect(scroller![1]).toContain("overflow-y: auto");
+    expect(scroller![1]).toContain("min-height: 0");
+    // `0 1 auto`, not `1` — the hug-then-shrink behaviour the caption's
+    // position depends on. Asserting the value the code rejected was the
+    // other half of M1.
+    expect(scroller![1]).toContain("flex: 0 1 auto");
+    expect(scroller![1]).not.toMatch(/flex:\s*1;/);
+
+    const head = /\.connected-grid-head\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    const caption = /\.connected-grid-caption\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    expect(head![1]).toContain("flex: none");
+    expect(caption![1]).toContain("flex: none");
+  });
+
+  it("SCROLLS THE ACTIVE ROW INTO VIEW, and again when the machine moves on", () => {
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView");
+    const view = renderGrid({ frame: frame({ intervalIndex: 8 }) }, SEA_SMOKE);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.instances[0]).toBe(row(9));
+    expect(row(9).className).toContain("connected-grid-active");
+
+    view.rerender(
+      <ConnectedSurface
+        phases={SEA_SMOKE.phases}
+        program={SEA_SMOKE.program}
+        session={session({ frame: frame({ intervalIndex: 12 }) })}
+        onEnded={vi.fn()}
+      />,
+    );
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy.mock.instances[1]).toBe(row(13));
+    expect(row(13).className).toContain("connected-grid-active");
+  });
+
+  it("does NOT re-scroll on a frame that leaves the active interval alone", () => {
+    // A status tick arrives ~2x a second. Scrolling on every one of them
+    // would fight a rower who has scrolled ahead to look at row 20.
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView");
+    const view = renderGrid({ frame: frame({ intervalIndex: 8 }) }, SEA_SMOKE);
+    expect(spy).toHaveBeenCalledTimes(1);
+    view.rerender(
+      <ConnectedSurface
+        phases={SEA_SMOKE.phases}
+        program={SEA_SMOKE.program}
+        session={session({
+          frame: frame({ intervalIndex: 8, elapsedSeconds: 900 }),
+        })}
+        onEnded={vi.fn()}
+      />,
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the surface's own vertical panning available to the browser", () => {
+    // `touch-action: pan-y` on the surface is what lets the rows scroll at
+    // all while the horizontal swipe stays ours (handoff §3's 60px pager
+    // gesture).
+    const rule = /\.connected-surface\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    expect(rule![1]).toContain("touch-action: pan-y");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Landscape: one line, six columns, the handoff's own weights
+// ---------------------------------------------------------------------------
+
+describe("landscape: one line, six columns (handoff §3)", () => {
+  it("folds both line wrappers into one row with `display: contents`", () => {
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
+    );
+    expect(landscape).toMatch(
+      /\.connected-grid-line1,\s*\n\s*\.connected-grid-line2,[\s\S]{0,200}?display:\s*contents/,
+    );
+  });
+
+  it("carries the handoff's exact flex weights", () => {
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
+    );
+    const weights: [string, string][] = [
+      ["connected-grid-num", "width: 26px"],
+      ["connected-grid-time", "flex: 1.1"],
+      ["connected-grid-rest", "flex: 0.9"],
+    ];
+    for (const [cls, declaration] of weights) {
+      const rule = new RegExp(
+        `\\.connected-pane-grid\\s+\\.${cls}\\s*\\{([^}]*)\\}`,
+      ).exec(landscape);
+      expect(rule).not.toBeNull();
+      expect(rule![1]).toContain(declaration);
+    }
+    // METERS/`/500M` at 1 and SPM/HR at 0.7, declared as pairs.
+    expect(landscape).toMatch(
+      /\.connected-pane-grid\s+\.connected-grid-meters,\s*\n\s*\.connected-pane-grid\s+\.connected-grid-pace\s*\{[^}]*flex:\s*1;/,
+    );
+    expect(landscape).toMatch(
+      /\.connected-pane-grid\s+\.connected-grid-spm,\s*\n\s*\.connected-pane-grid\s+\.connected-grid-hr\s*\{[^}]*flex:\s*0\.7;/,
+    );
+  });
+
+  it("stays a COLUMN and keeps its scroll where the other panes become rows", () => {
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
+    );
+    const rule = /\.connected-pane-grid\s*\{([^}]*)\}/.exec(landscape);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toContain("flex-direction: column");
+  });
+
+  it("puts the six headings back for the one-line row", () => {
+    // Portrait hides the SPM/HR/REST headings because the rows label those
+    // cells inline; landscape needs them, and needs the inline labels gone.
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
+    );
+    expect(landscape).toMatch(
+      /\.connected-grid-inline-label\s*\{[^}]*display:\s*none/,
+    );
+    expect(DECLARATIONS).toMatch(
+      /\.connected-grid-head\s+\.connected-grid-line2\s*\{[^}]*display:\s*none/,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The fake-driven walk: real hook, real driver, real (simulated) PM5
+// ---------------------------------------------------------------------------
+
+describe("the grid, fake-driven", () => {
+  it("draws a completed row from an actual that came off the wire", async () => {
+    localStorage.setItem(LAST_PANE_KEY, "grid");
+    const warmup = FILLING_LOW.program.intervals[0]!;
+    const fake = createFakeTransport({
+      program: FILLING_LOW.program,
+      deviceName: DEVICE,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          // WORKOUTSTATE_INTERVALWORKTIME. FOUR, not three: three is
+          // WORKOUTSTATE_INTERVALREST (`domain/monitor/pm5/parse.ts`), and
+          // a `3` here puts the machine in a REST the script never meant —
+          // which is exactly what this walk caught in the task-6 test's own
+          // copy of it (its comment said INTERVALWORKTIME over a 3).
+          workoutState: 4,
+          elapsedSeconds: 240,
+          distanceMeters: 1100,
+          spm: 20,
+          currentSplit: 130,
+          heartRateBpm: 142,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "status",
+          workoutState: 4,
+          elapsedSeconds: warmup.value,
+          distanceMeters: 2384,
+          spm: 20,
+          currentSplit: 125.8,
+          heartRateBpm: 142,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: warmup.value,
+            distanceMeters: 2384,
+            avgSplit: 125.8,
+            avgSpm: 18,
+            avgHeartRateBpm: 142,
+          },
+          cumulativeElapsedSeconds: warmup.value,
+          cumulativeDistanceMeters: 2384,
+        },
+        {
+          atMs: 300,
+          kind: "status",
+          workoutState: 4,
+          elapsedSeconds: warmup.value + 60,
+          distanceMeters: 2384 + 240,
+          spm: 21,
+          currentSplit: 117.8,
+          heartRateBpm: 164,
+          programIntervalIndex: 1,
+        },
+      ],
+    });
+
+    render(
+      <ConnectedInterstitial
+        program={FILLING_LOW.program}
+        phases={FILLING_LOW.phases}
+        identity={FILLING_LOW.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => fake,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+
+    for (let i = 0; i < 40; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
+    await screen.findByText("Ready when you pull");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show me the numbers" }),
+    );
+    // Past the first status, the boundary, and the status that follows it.
+    for (let i = 0; i < 8; i += 1) {
+      await act(async () => {
+        fake.tick(50);
+        await Promise.resolve();
+      });
+    }
+
+    // The grid is on screen, on the pane the rower last used.
+    expect(document.querySelector(".connected-pane-grid")).not.toBeNull();
+
+    // Row 1 is COMPLETED and carries numbers the machine reported, decoded
+    // by the real codec: 8:00 / 2384 m / 2:05.8 / 18 spm / 142 bpm — the
+    // handoff mockup's own first row, arrived at honestly.
+    expect(row(1).className).toContain("connected-grid-completed");
+    expect(cells(row(1))).toStrictEqual({
+      num: "1",
+      time: "8:00",
+      meters: "2384",
+      pace: "2:05.8",
+      spm: "18",
+      hr: "142",
+      rest: "—",
+    });
+
+    // Row 2 is the one being rowed, and its countdown is the programmed
+    // dimension — 2000 m less what the machine says has been covered.
+    expect(row(2).className).toContain("connected-grid-active");
+    expect(
+      row(2).querySelector(".connected-grid-meters.connected-grid-countdown")
+        ?.textContent,
+    ).toBe("1760");
+    expect(cells(row(2)).pace).toBe("1:57.8");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tab order (the task-6 review's L4 trap, checked on the first pane that
+// could have made it live)
+// ---------------------------------------------------------------------------
+
+describe("tab order through pane C", () => {
+  it("declares no `order` for this pane, so DOM order IS reading order", () => {
+    // Panes A and B trade DOM order for `order` in portrait, and `order`
+    // moves paint without moving the tab sequence. Pane C introduces the
+    // surface's first scrolling region; if it had inherited that trade, a
+    // focusable inside it would be reached out of sequence.
+    expect(DECLARATIONS).not.toMatch(
+      /\.connected-pane-grid[^{]*\{[^}]*\border:/,
+    );
+    const portrait = DECLARATIONS.slice(
+      DECLARATIONS.indexOf("@media (orientation: portrait)"),
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
+    );
+    expect(portrait).not.toContain("connected-grid");
+    expect(portrait).not.toContain("connected-pane-grid");
+  });
+
+  it("has EXACTLY ONE focusable thing of its own: the named scroller", () => {
+    // This test used to assert ZERO, and passed only because jsdom
+    // implements none of Chromium's keyboard-focusable-scrollers behaviour
+    // (task-7 review, M3 — measured in a real browser). The scroller was
+    // already the surface's first tab stop, as an unnamed `<div>`. It is now
+    // declared, so both engines agree and iOS Safari — which supplies no
+    // implicit focus at all — gets the same behaviour.
+    renderGrid({}, SEA_SMOKE);
+    const pane = document.querySelector(".connected-pane-grid")!;
+    const focusable = Array.from(
+      pane.querySelectorAll("button, a, input, select, textarea, [tabindex]"),
+    );
+    expect(focusable).toHaveLength(1);
+    expect(focusable[0]).toBe(pane.querySelector(".connected-grid-rows"));
+    // Named, and not by its contents: a screen reader landing on a scroll
+    // region needs to be told what it is holding.
+    expect(focusable[0]).toHaveAttribute("aria-label", "Interval grid");
+    expect(focusable[0]).toHaveAttribute("role", "group");
+    // Not a row, not a cell — the rows themselves stay static text.
+    for (const el of pane.querySelectorAll(".connected-grid-row")) {
+      expect(el.hasAttribute("tabindex")).toBe(false);
+    }
+  });
+
+  it("tabs the grid, then End, then the three pager targets", async () => {
+    // THE REAL BROWSER ORDER (task-7 review, M3 measured it as
+    // `scroller → End → Timer → Live → Grid`), and now jsdom's too, because
+    // the `tabindex` is explicit rather than implied by a scroll container.
+    // It is also the READING order: the grid is above End on the screen in
+    // both orientations. The DOM was deliberately NOT reordered to put End
+    // first — see the task-7 report; doing so would have introduced exactly
+    // the paint-vs-sequence divergence the shell's own L4 note warns about.
+    renderGrid();
+    const order: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      await userEvent.tab();
+      order.push(
+        (document.activeElement as HTMLElement).getAttribute("aria-label") ??
+          document.activeElement!.textContent!,
+      );
+    }
+    expect(order).toStrictEqual([
+      "Interval grid",
+      "End session",
+      "Timer pane",
+      "Live pane",
+      "Grid pane",
+    ]);
+  });
+});
+
+describe("the grid never grows a control of its own", () => {
+  it("keeps End as the surface's only button outside the pager", () => {
+    renderGrid();
+    const buttons = screen
+      .getAllByRole("button")
+      .map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    expect(buttons).toStrictEqual([
+      "End session",
+      "Timer pane",
+      "Live pane",
+      "Grid pane",
+    ]);
+    expect(document.querySelector(".button-l1")).toBeNull();
+  });
+
+  it("does not swallow the swipe: the pager still reaches pane B", () => {
+    renderGrid();
+    const surface = document.querySelector(".connected-surface")!;
+    fireEvent.touchStart(surface, { touches: [{ clientX: 300 }] });
+    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 400 }] });
+    expect(screen.getByRole("button", { name: "Live pane" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+});

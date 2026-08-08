@@ -82,6 +82,17 @@ a value where they agree).
   changed** — a stale rationale is a defect here, and comment sweeps have
   cost a fix round in each of the last two phases. This includes doc files:
   `docs/design/DEVIATIONS.md` documents current state, not history.
+- **The `docker compose` e2e/screenshots stack is SHARED across sessions**
+  (one Postgres volume, one `web`/`api` pair, keyed by container name, not
+  per-worktree). A browser gate failing with duplicate workout fixtures
+  (`.workout-row` resolving to 2+ elements for a title your OWN test just
+  imported) or against a bundle that doesn't match your latest source is
+  someone else's leftover state, not necessarily your own defect: run
+  `docker compose -f compose.yml -f compose.e2e.yml down -v` from the repo
+  root (not `app/`) and retry the SAME gate once before spending time
+  investigating a phantom regression. `down -v` also clears the OTHER
+  session's fixtures — acceptable, since the stack is meant to be
+  reboot-safe, but say so in your report if you had to reach for it.
 
 ## Report contract
 
@@ -91,3 +102,12 @@ files you touched, each self-mutation with its fail-then-pass evidence, the
 commit SHA(s), and anything that contradicted your brief. Your final message
 back is ONLY: status (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED),
 commit SHA(s), a one-line test summary, gate results, and concerns.
+
+## Test invocation (a trap that has bitten three agents)
+
+NEVER run bare `vitest run` / `pnpm vitest run`: Node 26's experimental
+webStorage global collides with jsdom's `localStorage` and ~445 client
+tests fail with `localStorage.clear()` errors that look like a real
+regression. Always `pnpm test` / `pnpm test:coverage` (their scripts set
+`NODE_OPTIONS=--no-experimental-webstorage`), or export that flag
+yourself if you must invoke vitest directly.

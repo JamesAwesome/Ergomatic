@@ -176,6 +176,13 @@ export interface FakeStatusEvent {
   currentSplit: number;
   heartRateBpm: number | null;
   programIntervalIndex: number;
+  /** 0x0031 byte 9, the machine's own Inactive/Active declaration
+   *  (2026-08-08 walk 3: the coasting-flywheel finding). Defaults to
+   *  ACTIVE whenever `workoutState` maps to "rowing" — the machine a
+   *  mid-piece timeline models has a rower pulling — and INACTIVE
+   *  otherwise. A timeline modelling the coast (meters accruing on a
+   *  piece the PM5 does not consider started) sets 0 explicitly. */
+  rowingState?: number;
 }
 
 /** One interval-boundary event: the completed interval's actuals, matching
@@ -369,9 +376,15 @@ export interface FakeScript {
 
 export interface FakeControls {
   /** Advances the fake's internal virtual clock by `ms` and delivers every
-   *  scripted event now due — ALSO flushes a pending WAITTOBEGIN bundle
-   *  first, if `program()`'s last frame has acked since the previous call
-   *  (fix-round 1, F1). That armed delivery used to happen SYNCHRONOUSLY
+   *  scripted event now due — ALSO reports the WAITTOBEGIN bundle first,
+   *  for as long as the machine is holding an armed program (fix-round 1,
+   *  F1; fix wave F-CRIT made that a LEVEL rather than a one-shot, because
+   *  a real PM5 reports `armed` on every one of its ~2 Hz status ticks
+   *  while armed — a one-shot could be, and routinely was, consumed by an
+   *  unrelated pump before `driver.ts`'s `verifyArmed()` registered. The
+   *  level drops the moment the SCRIPT delivers a status of its own, or a
+   *  new programming sequence begins). That armed delivery used to happen
+   *  SYNCHRONOUSLY
    *  inside the programming write itself; a reviewer found that this made
    *  every fake-driven test take driver.ts's IMMEDIATE-check fast path in
    *  `verifyArmed()`, so the tick-driven WAIT it exists to exercise (the
@@ -457,8 +470,10 @@ export interface FakeControls {
    * of waiting for the next `tick()` — the escape hatch for a test that
    * genuinely needs the OLD synchronous timing (matching a real PM's own
    * near-instant response) rather than exercising `program()`'s
-   * tick-driven wait. A no-op if no armed delivery is currently pending
-   * (nothing was withheld, or it was already flushed). Most tests should
+   * tick-driven wait. A no-op if the machine is not currently holding an
+   * armed program. Fix wave F-CRIT: this READS the armed level, it does
+   * not consume it — calling it twice reports twice, and a later `tick()`
+   * still reports too, exactly as the wire would. Most tests should
    * prefer a real `tick()` call — see `tick()`'s own doc comment for why
    * this fake no longer delivers armed synchronously inside the write.
    */
@@ -483,6 +498,53 @@ export interface FakeControls {
    *  tests that want to assert the fake's own internal bookkeeping directly,
    *  without going through the driver at all. */
   loadedIntervals(): number | null;
+  /**
+   * Task 8 — the timing-realism knob task-5's re-review parked (MEDIUM-9,
+   * LOW-8): every `connect()`/`write()` call from now on settles after a
+   * real `ms`-millisecond `setTimeout`, instead of same-microtask, the way
+   * every other test in this repo (and every OTHER method on this fake)
+   * still does. `0` (the default before this is ever called) restores
+   * instant settlement.
+   *
+   * **NOT the session timeline's clock** — this file's own header still
+   * holds ("no timers, no wall clock anywhere in this file" — `tick()`'s
+   * own doc comment): `delayWrites` never advances `virtualClock`, never
+   * delivers a scripted event, and the SYNCHRONOUS side effect of a call
+   * (the bytes get validated, an ack gets queued to `notify()`) still
+   * happens the instant the call is made — only the PROMISE this fake
+   * hands back to its caller is deferred. A real radio's `write()`/
+   * `connect()` resolving is a statement about the LOCAL Bluetooth stack
+   * ("the OS confirms this went out"), never about when the remote side's
+   * notification arrives; delaying only the promise, not the notify, keeps
+   * that same honest separation rather than inventing a fake round-trip
+   * that then has to be un-invented for every other test that doesn't ask
+   * for one.
+   *
+   * Exists for two named regressions that only reproduce under REAL
+   * latency, both parked here rather than fixed with a one-off hand-rolled
+   * delayed stub transport (task-7 review's own recurring finding: a
+   * bespoke fixture proves the fixture, not the class of bug):
+   * - the double-physical-terminate race between `cancel()`'s own
+   *   `driver.terminate()` and an interleaved unmount `teardown()` — see
+   *   `useMonitorSession.test.ts`'s own pin;
+   * - `ConnectedInterstitial.tsx`'s deviceName-gated (not phase-gated)
+   *   dispatch of `program()` — see that file's own regression test.
+   */
+  delayWrites(ms: number): void;
+  /**
+   * The number of characteristics this fake currently has at least one
+   * live `subscribe()` callback on, summed across every characteristic —
+   * i.e. `Array.from(notifyCbs.values()).reduce((n, set) => n + set.size, 0)`.
+   * Task 8: a house-wide gap this phase's own reviews kept re-finding by
+   * hand (task-4's review counted wire fires "under M1" to prove a
+   * double-subscribe never happened) — this makes that count a first-class
+   * assertion instead of an instrumented one-off. `0` for a fake nothing
+   * has ever subscribed to, and again `0` once every `unsubscribe()`
+   * this fake handed out has been called — never negative, and never
+   * double-counts the SAME callback subscribed to the SAME characteristic
+   * twice (`Set`, not an array).
+   */
+  subscriptionCount(): number;
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -561,7 +623,8 @@ function statusBundle(
       distanceMeters: e.distanceMeters,
       intervalType: isDistance ? 1 : 0,
       workoutState: e.workoutState,
-      rowingState: 0,
+      rowingState:
+        e.rowingState ?? (toMonitorState(e.workoutState) === "rowing" ? 1 : 0),
       strokeState: 0,
       totalWorkDistanceMeters: e.distanceMeters,
       // 0x0031's STRUCTURE fields — `workoutType` plus the interval-0
@@ -780,16 +843,49 @@ export function createFakeTransport(
   // fake's own state machine would ever clear it back to sending acks.
   let timeoutInjected = false;
   // Fix-round 1, F1: set the instant the programming sequence's LAST frame
-  // acks (`onProgrammingFrameComplete`), flushed by the NEXT `tick()` call
-  // (or `deliverArmedNow()`) rather than delivered synchronously — see
-  // `tick()`'s own doc comment for why.
-  let armedBundlePending = false;
+  // acks (`onProgrammingFrameComplete`), delivered by the NEXT `tick()` call
+  // (or `deliverArmedNow()`) rather than synchronously — see `tick()`'s own
+  // doc comment for why.
+  //
+  // Phase 7B fix wave, F-CRIT: this is a **LEVEL, not an edge**. It stays
+  // true for as long as the machine is actually holding an armed program,
+  // so EVERY tick in that window re-reports the WAITTOBEGIN bundle — which
+  // is what a real PM5 does: it notifies 0x0031 at the configured sample
+  // rate (`buildSampleRateConfig()`) and reports `armed` on every one of
+  // those ~2 Hz ticks while armed, not once. Modelling it as a one-shot
+  // made the fake's armed status STEALABLE: any tick that landed between
+  // the last frame's synchronous ack and `driver.ts`'s `verifyArmed()`
+  // registering its listener consumed the one-and-only notification, and
+  // `program()` then ran its whole verify budget out against a silent
+  // machine. `transports/index.ts`'s `autoTicking` pump (100 ms) lands in
+  // exactly that gap whenever a write is delayed longer than a tick, which
+  // made `e2e/connected.spec.ts` (`delayWrites(120)`) fail deterministically
+  // rather than occasionally. The driver's verify pulse is already
+  // level-triggered (`driver.ts` reads the CURRENT decoded state per tick),
+  // so the defect was the fake's model of the wire, not the driver's
+  // reading of it — see `clearArmedLevel()` for the two places the level
+  // drops.
+  let armedLevel = false;
+  // Fix-round 1, F1's ORDERING half, kept separate from the level above:
+  // the FIRST armed report after an accept goes out ahead of anything the
+  // script has due on that same tick, so a timeline's own opening entry is
+  // never delivered "ahead of" the session arming. Every report after that
+  // one is a plain repeat and YIELDS to a due scripted event instead, so a
+  // REPEAT never doubles up a tick that already carries a reading — a real
+  // PM issues exactly one status per pulse, and a script event IS the
+  // machine's reading for the pulse it lands on. The first post-accept
+  // tick is the one deliberate exception: the ordering rule puts the armed
+  // report AND the script's due reading on that tick, armed first (the
+  // F1-ordering pin holds exactly that pair).
+  let armedFirstReportPending = false;
   // Fix-3 Task 5: `FakeScript.lagStructureOneTick`'s live, consumable copy —
   // armed by `onProgrammingFrameComplete` on the accept that lands next,
   // consumed by `structureForTick()` the very next time ANY status is
-  // delivered (which `flushArmedIfPending` guarantees is the WAITTOBEGIN
+  // delivered (which `deliverArmedIfHeld` guarantees is the WAITTOBEGIN
   // bundle this same accept produces, since nothing else can call
-  // `deliverStatus`/`deliverArmedBundle` in between).
+  // `deliverStatus`/`deliverArmedBundle` in between — and since the armed
+  // level now repeats, the tick AFTER that one already carries the true
+  // structure, which is what the lag is a lag against).
   let structureLagPending = false;
   // What this machine's 0x0031 structure fields most recently told the wire
   // — `structureForTick()`'s only reader, and the value `lagStructureOneTick`
@@ -842,6 +938,23 @@ export function createFakeTransport(
   let linkDown = false;
   let disconnectCb: ((reason: string) => void) | null = null;
   const notifyCbs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+  // `FakeControls.delayWrites`'s live value — `0` (instant, same-microtask
+  // settlement) until a test opts in. Read by `settleWrite` below, the one
+  // place `connect()`/`write()` decide how long their own returned promise
+  // takes to resolve; see that method's own doc comment for why the
+  // synchronous processing inside `write()` is never itself delayed.
+  let writeDelayMs = 0;
+
+  /** Resolves after `writeDelayMs` real milliseconds — `0` (the default)
+   *  resolves on the microtask queue, byte-identical to every call site's
+   *  behaviour before this knob existed, so no existing test's timing
+   *  changes unless it opts in. */
+  function settleWrite<T>(value: T): Promise<T> {
+    if (writeDelayMs === 0) return Promise.resolve(value);
+    return new Promise((resolve) =>
+      setTimeout(() => resolve(value), writeDelayMs),
+    );
+  }
 
   // Cached "current known state" — used by `completeReconnect()` to flush
   // whatever the script has advanced to (possibly skipped ahead while
@@ -945,14 +1058,50 @@ export function createFakeTransport(
     setLatestStatus(zeroedStatus(WORKOUTSTATE_WAITTOBEGIN));
   }
 
-  /** Fix-round 1, F1: the single place `armedBundlePending` is consumed —
-   *  called from `tick()` (the normal path) and `deliverArmedNow()` (the
-   *  synchronous escape hatch). A no-op when nothing is pending, so both
-   *  callers can invoke it unconditionally. */
-  function flushArmedIfPending(): void {
-    if (!armedBundlePending) return;
-    armedBundlePending = false;
+  /** Fix-round 1, F1 / fix wave F-CRIT: the single place the armed LEVEL is
+   *  put on the wire — called from `tick()` (the normal path, at most once
+   *  per tick for as long as the level is held) and `deliverArmedNow()` (the
+   *  synchronous escape hatch). A no-op while the level is low, so both
+   *  callers can invoke it unconditionally. Reading it does NOT consume the
+   *  level — only `clearArmedLevel()` drops that, from the two places the
+   *  machine genuinely stops holding an armed program. It DOES spend the
+   *  F1 edge (`armedFirstReportPending`), which is only about ORDERING: the
+   *  first armed report must precede any due scripted event, later ones
+   *  must not double up with one. */
+  function deliverArmedIfHeld(): void {
+    armedFirstReportPending = false;
+    if (!armedLevel) return;
+    // Same rule `deliverOrCache` applies to a scripted status: the PM goes
+    // on holding the arm while the phone's radio is down, but nothing
+    // reaches the phone. The cached reading is still updated, so
+    // `completeReconnect()` flushes "still armed" as the machine's next
+    // status frame — which is exactly what a real reconnect onto an armed,
+    // un-pulled machine sees. (Before the level fix this path notified
+    // straight through `linkDown`, because the one-shot was almost always
+    // already spent by the time any test disconnected.)
+    if (linkDown) {
+      setLatestStatus(zeroedStatus(WORKOUTSTATE_WAITTOBEGIN));
+      return;
+    }
     deliverArmedBundle();
+  }
+
+  /** The armed level drops when — and only when — the machine stops holding
+   *  the program it armed. Two callers, matching the two ways that happens:
+   *
+   *  - `beginProgrammingSequence()` — a NEW sequence is arriving (behind
+   *    `program()`'s prepare, or behind an explicit `terminate()`), so
+   *    whatever was armed is on its way out. This keeps `driver.ts`'s F1
+   *    pins honest: no armed reading can be emitted between the start of a
+   *    send and its accept, so a STALE armed observation still cannot
+   *    satisfy `verifyArmed`.
+   *  - `deliverOrCache()`'s status branch — the SCRIPT (or the machine's own
+   *    terminate auto-cycle) has moved the machine on to some other state.
+   *    Cleared even while `linkDown`, because the PM's state machine does
+   *    not pause for the phone's radio. */
+  function clearArmedLevel(): void {
+    armedLevel = false;
+    armedFirstReportPending = false;
   }
 
   /** The slave-state nibble every ack carries (`pm5/response.ts` bits 0-3).
@@ -1075,7 +1224,7 @@ export function createFakeTransport(
    *
    * `latestStatus` CAN be null here (an untouched fake, or a terminate that
    * lands after `phase` became `"armed"` but before fix-round 1's F1
-   * withheld armed bundle has been flushed): the fallback below is the
+   * withheld armed bundle has reached the wire even once): the fallback below is the
    * state the machine is in at that moment — armed, nothing rowed — not a
    * defensive guess.
    */
@@ -1188,6 +1337,11 @@ export function createFakeTransport(
     programChunkCursor = 0;
     programFrameCursor = 0;
     sawRunningDuringProgramming = false;
+    // Fix wave F-CRIT: the armed level belongs here for the same reason
+    // `sawRunningDuringProgramming` does — this is the ONE place a fresh
+    // sequence starts, by either route, and a machine about to be
+    // reprogrammed is no longer holding what it armed before.
+    clearArmedLevel();
   }
 
   /** The clear step's own chunk assertion (plan Task 2) — reuses
@@ -1340,7 +1494,7 @@ export function createFakeTransport(
       armedEmpty = sawRunningDuringProgramming;
       loadedIntervalCount = armedEmpty ? 0 : script.program.intervals.length;
       // Fix-3 Task 5: this accept's own WAITTOBEGIN bundle (the very next
-      // status this machine delivers, `armedBundlePending` below) lags on
+      // status this machine delivers, `armedLevel` below) lags on
       // the PRIOR structure for one tick if the script asked for it —
       // `FakeScript.lagStructureOneTick`'s own doc comment has the
       // hardware citation. One-shot per accept, same as the script fields
@@ -1366,8 +1520,11 @@ export function createFakeTransport(
       latestBoundary = null;
       // Fix-round 1, F1: withheld until a subsequent `tick()` (or
       // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
-      // this is no longer synchronous with the ack itself.
-      armedBundlePending = true;
+      // this is no longer synchronous with the ack itself. Fix wave
+      // F-CRIT: and re-reported on every otherwise-silent tick from then
+      // on, until the level drops (`clearArmedLevel`).
+      armedLevel = true;
+      armedFirstReportPending = true;
     }
   }
 
@@ -1416,6 +1573,12 @@ export function createFakeTransport(
 
   function deliverOrCache(event: FakeTimelineEvent): void {
     if (event.kind === "status") {
+      // Fix wave F-CRIT: the script (or the machine's own terminate
+      // auto-cycle) has said what state the machine is in now, so the
+      // fake stops re-reporting the armed level of its own accord —
+      // whatever this event says supersedes it, including a WAITTOBEGIN
+      // event, which a script is free to keep driving itself.
+      clearArmedLevel();
       setLatestStatus(event);
       if (!linkDown) deliverStatus(event);
     } else {
@@ -1460,112 +1623,34 @@ export function createFakeTransport(
       ]);
     },
     connect(): Promise<void> {
-      return Promise.resolve();
+      // Also gated on `delayWrites` (its own doc comment: "every
+      // `connect()`/`write()` call") — the deviceName-gated dispatch race
+      // this knob exists to reproduce is specifically about `connect()`
+      // resolving slower than one microtask, before `useMonitorSession.ts`
+      // sets `deviceName`.
+      return settleWrite(undefined);
     },
-    // `async` deliberately, even though nothing inside ever awaits
+    // `async` deliberately, even though `processWrite` below never awaits
     // anything: `assertProgrammingChunk`/`assertArmedChunk` THROW
     // synchronously on a byte mismatch (this is the "asserts, not
     // accepts" behaviour design spec §4 requires), and only an `async`
     // function automatically turns a synchronous throw into a REJECTED
     // promise — `Transport.write` is typed `Promise<void>`, and a caller
     // doing `await t.write(...)` must see a rejection, not an uncaught
-    // synchronous exception escaping the `await` expression itself.
+    // synchronous exception escaping the `await` expression itself. A
+    // rejection is never delayed by `delayWrites` (`processWrite` throwing
+    // is what SKIPS the `settleWrite` call below) — only a SUCCESSFUL write
+    // is; see `FakeControls.delayWrites`'s own doc comment for why that
+    // asymmetry is fine for the two regressions this knob exists to
+    // reproduce (both need a slow ACCEPT, neither a slow reject).
     async write(characteristicId: string, bytes: Uint8Array): Promise<void> {
-      // D6 (interface-notes.md §18's "also fixed live" list): while the
-      // link is down every handle a transport is holding is dead, and a
-      // write on one throws — Chrome's own wording reproduced verbatim
-      // below, because that string IS the observation. Checked before the
-      // sample-rate early-return: an invalidated handle does not care which
-      // characteristic it points at. See `injectDisconnect`'s doc comment
-      // for why the fake having none of this hid the session's worst bug.
-      if (linkDown) {
-        throw new Error(
-          `fake transport: InvalidStateError: Characteristic ${characteristicId} is no longer valid. Remember to retrieve the characteristic again after reconnecting.`,
-        );
-      }
-      if (characteristicId === SAMPLE_RATE_UUID) {
-        return;
-      }
-      if (characteristicId !== RECEIVE_CHARACTERISTIC_UUID) {
-        throw new Error(
-          `fake transport: unexpected write target ${characteristicId}`,
-        );
-      }
-      // Task 3's `sendGetErrorType` one-off write — checked BEFORE the
-      // phase-based assertions below, since it can legitimately arrive
-      // mid-"programming" (right after a reject) and is not the next
-      // expected programming/clearing/armed chunk.
-      //
-      // ABSORBED AND ACKED, not scripted — Task 6's own choice, stated
-      // plainly. The reply is an ordinary `"ok"` ack echoing the single
-      // opcode that was asked for (`0xC8`), carrying this fake's normal
-      // toggle and slave state. Nothing about its CONTENT is scriptable,
-      // because nothing about it is known: no GET command has ever been
-      // sent to this hardware, the pull wrapper itself is an unresolved
-      // conflict between the two source documents, and the driver logs the
-      // reply as raw hex with no claimed meaning (interface-notes.md §17
-      // item 14, `buildGetErrorType`'s own doc comment). A scriptable
-      // payload here would be inventing the answer to the exact question
-      // the merge-gate row exists to ask. It DOES go through `sendAck`, so
-      // it consumes a toggle step like every other frame the PM emits —
-      // that much is frame-counter mechanics, not error semantics. Does not
-      // touch `phase` or any cursor: this write is orthogonal to the
-      // clearing/programming/armed state machine.
-      if (bytesEqual(bytes, getErrorTypeFrame)) {
-        // `0xC8` = `CSAFE_PM_GET_ERRORTYPE`, the one opcode
-        // `buildGetErrorType()` sends — the same inline literal Task 3 put
-        // here, unchanged. `echoedCommandIds` deliberately does not decode
-        // the `0x1A` pull wrapper this frame uses (its own doc comment), so
-        // there is nothing to derive it from.
-        sendAck("ok", [0xc8]);
-        return;
-      }
-      // A terminate frame arriving where the next PROGRAMMING frame would
-      // go is legal and common (Task 6): it is the prepare step of the next
-      // `program()` after a previous one was refused or after a terminate
-      // re-opened the machine, and it is the app's own `terminate()` called
-      // twice. The machine parses whatever frame it is handed — only this
-      // fake's expected-byte bookkeeping needs telling which sequence the
-      // chunk belongs to. No frame-position guard: `terminateChunks[0]`
-      // carries a start flag and bytes no programming chunk ever matches,
-      // and `pm5/framer.ts`'s own resynchronization rule says a start flag
-      // arriving mid-frame DISCARDS the incomplete frame — so recognising a
-      // terminate whenever its first chunk shows up is what the reassembler
-      // itself would do. (An earlier version gated this on a
-      // frame-boundary check that no test could discriminate — review
-      // LOW-3 — and that a mid-frame terminate would have got wrong.)
-      if (phase === "programming" && bytesEqual(bytes, terminateChunks[0]!)) {
-        phase = "clearing";
-        clearChunkCursor = 0;
-      }
-      if (phase === "clearing") {
-        assertClearingChunk(bytes);
-      } else if (phase === "programming") {
-        assertProgrammingChunk(bytes);
-      } else {
-        assertArmedChunk(bytes);
-      }
-
-      // `incoming` (`pm5/framer.ts`'s `reassemble()`) detects "a complete
-      // frame has now arrived" — real start/stop-flag boundary detection,
-      // not a second byte comparison; every chunk was already asserted
-      // correct one at a time above. Since Task 6 the REASSEMBLED FRAME
-      // itself is used as well, but only as the source of the opcode echo
-      // each handler puts in its ack (`pm5/response.ts`'s
-      // `echoedCommandIds`) — never as a byte check. Per the drain
-      // contract, keep pushing empty chunks until it returns null.
-      let complete = incoming.push(bytes);
-      while (complete) {
-        if (phase === "clearing") {
-          onClearingFrameComplete(complete);
-        } else if (phase === "programming") {
-          onProgrammingFrameComplete(complete);
-        } else {
-          onArmedFrameComplete(complete);
-        }
-        complete = incoming.push(new Uint8Array(0));
-      }
+      processWrite(characteristicId, bytes);
+      return settleWrite(undefined);
     },
+    // Everything `write()` used to do inline, unchanged — split out only so
+    // `delayWrites`'s `settleWrite` wrapper has a single call site to sit
+    // around, rather than needing to be threaded onto every one of this
+    // function's several early `return`s.
     subscribe(
       characteristicId: string,
       cb: (bytes: Uint8Array) => void,
@@ -1590,19 +1675,30 @@ export function createFakeTransport(
 
     tick(ms: number): void {
       virtualClock += ms;
-      // Fix-round 1, F1: flush a pending armed delivery BEFORE any due
+      // Fix-round 1, F1: the FIRST armed report goes out BEFORE any due
       // scripted event, so a script's own first timeline entry is never
       // delivered "ahead of" the session actually arming.
-      flushArmedIfPending();
+      const first = armedFirstReportPending;
+      if (first) deliverArmedIfHeld();
       // Then one step of the machine's own reaction to a prepare step
       // (Task 3) — ahead of the script's timeline for the same reason: the
       // machine finishes reacting to what it was just sent before the
       // session the script describes carries on.
       advanceAutoCycle();
       runDueEvents();
+      // Fix wave F-CRIT: armed is a LEVEL. If neither the auto-cycle nor
+      // the script said anything this tick (either would have dropped the
+      // level, `clearArmedLevel`), the machine repeats what it is still
+      // holding — the ~2 Hz "armed" pulse real hardware emits, and the
+      // reason a real PM5 can never lose this reading to a badly-timed
+      // pump. Skipped on the tick that already reported it above, so a
+      // REPEAT never doubles up a tick that already carries a reading (the
+      // first post-accept tick deliberately carries two — see the
+      // `armedFirstReportPending` comment).
+      if (!first) deliverArmedIfHeld();
     },
     deliverArmedNow(): void {
-      flushArmedIfPending();
+      deliverArmedIfHeld();
     },
     loadedIntervals(): number | null {
       return loadedIntervalCount;
@@ -1635,5 +1731,113 @@ export function createFakeTransport(
       if (latestBoundary) deliverBoundary(latestBoundary);
       if (latestStatus) deliverStatus(latestStatus);
     },
+    delayWrites(ms: number): void {
+      writeDelayMs = ms;
+    },
+    subscriptionCount(): number {
+      let total = 0;
+      for (const set of notifyCbs.values()) total += set.size;
+      return total;
+    },
   };
+
+  /** See `write()`'s own comment for why this is split out. Synchronous;
+   *  throws on a byte mismatch or an unexpected write target, exactly as
+   *  this logic did inline before `delayWrites` existed. */
+  function processWrite(characteristicId: string, bytes: Uint8Array): void {
+    // D6 (interface-notes.md §18's "also fixed live" list): while the
+    // link is down every handle a transport is holding is dead, and a
+    // write on one throws — Chrome's own wording reproduced verbatim
+    // below, because that string IS the observation. Checked before the
+    // sample-rate early-return: an invalidated handle does not care which
+    // characteristic it points at. See `injectDisconnect`'s doc comment
+    // for why the fake having none of this hid the session's worst bug.
+    if (linkDown) {
+      throw new Error(
+        `fake transport: InvalidStateError: Characteristic ${characteristicId} is no longer valid. Remember to retrieve the characteristic again after reconnecting.`,
+      );
+    }
+    if (characteristicId === SAMPLE_RATE_UUID) {
+      return;
+    }
+    if (characteristicId !== RECEIVE_CHARACTERISTIC_UUID) {
+      throw new Error(
+        `fake transport: unexpected write target ${characteristicId}`,
+      );
+    }
+    // Task 3's `sendGetErrorType` one-off write — checked BEFORE the
+    // phase-based assertions below, since it can legitimately arrive
+    // mid-"programming" (right after a reject) and is not the next
+    // expected programming/clearing/armed chunk.
+    //
+    // ABSORBED AND ACKED, not scripted — Task 6's own choice, stated
+    // plainly. The reply is an ordinary `"ok"` ack echoing the single
+    // opcode that was asked for (`0xC8`), carrying this fake's normal
+    // toggle and slave state. Nothing about its CONTENT is scriptable,
+    // because nothing about it is known: no GET command has ever been
+    // sent to this hardware, the pull wrapper itself is an unresolved
+    // conflict between the two source documents, and the driver logs the
+    // reply as raw hex with no claimed meaning (interface-notes.md §17
+    // item 14, `buildGetErrorType`'s own doc comment). A scriptable
+    // payload here would be inventing the answer to the exact question
+    // the merge-gate row exists to ask. It DOES go through `sendAck`, so
+    // it consumes a toggle step like every other frame the PM emits —
+    // that much is frame-counter mechanics, not error semantics. Does not
+    // touch `phase` or any cursor: this write is orthogonal to the
+    // clearing/programming/armed state machine.
+    if (bytesEqual(bytes, getErrorTypeFrame)) {
+      // `0xC8` = `CSAFE_PM_GET_ERRORTYPE`, the one opcode
+      // `buildGetErrorType()` sends — the same inline literal Task 3 put
+      // here, unchanged. `echoedCommandIds` deliberately does not decode
+      // the `0x1A` pull wrapper this frame uses (its own doc comment), so
+      // there is nothing to derive it from.
+      sendAck("ok", [0xc8]);
+      return;
+    }
+    // A terminate frame arriving where the next PROGRAMMING frame would
+    // go is legal and common (Task 6): it is the prepare step of the next
+    // `program()` after a previous one was refused or after a terminate
+    // re-opened the machine, and it is the app's own `terminate()` called
+    // twice. The machine parses whatever frame it is handed — only this
+    // fake's expected-byte bookkeeping needs telling which sequence the
+    // chunk belongs to. No frame-position guard: `terminateChunks[0]`
+    // carries a start flag and bytes no programming chunk ever matches,
+    // and `pm5/framer.ts`'s own resynchronization rule says a start flag
+    // arriving mid-frame DISCARDS the incomplete frame — so recognising a
+    // terminate whenever its first chunk shows up is what the reassembler
+    // itself would do. (An earlier version gated this on a
+    // frame-boundary check that no test could discriminate — review
+    // LOW-3 — and that a mid-frame terminate would have got wrong.)
+    if (phase === "programming" && bytesEqual(bytes, terminateChunks[0]!)) {
+      phase = "clearing";
+      clearChunkCursor = 0;
+    }
+    if (phase === "clearing") {
+      assertClearingChunk(bytes);
+    } else if (phase === "programming") {
+      assertProgrammingChunk(bytes);
+    } else {
+      assertArmedChunk(bytes);
+    }
+
+    // `incoming` (`pm5/framer.ts`'s `reassemble()`) detects "a complete
+    // frame has now arrived" — real start/stop-flag boundary detection,
+    // not a second byte comparison; every chunk was already asserted
+    // correct one at a time above. Since Task 6 the REASSEMBLED FRAME
+    // itself is used as well, but only as the source of the opcode echo
+    // each handler puts in its ack (`pm5/response.ts`'s
+    // `echoedCommandIds`) — never as a byte check. Per the drain
+    // contract, keep pushing empty chunks until it returns null.
+    let complete = incoming.push(bytes);
+    while (complete) {
+      if (phase === "clearing") {
+        onClearingFrameComplete(complete);
+      } else if (phase === "programming") {
+        onProgrammingFrameComplete(complete);
+      } else {
+        onArmedFrameComplete(complete);
+      }
+      complete = incoming.push(new Uint8Array(0));
+    }
+  }
 }

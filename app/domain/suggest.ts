@@ -134,7 +134,7 @@ function buildReason(
 ): string {
   const timeChecked = !!prefs.durations?.length && !prefs.durationsUnknown;
   if (pickOverride) {
-    return `YOUR PICK — last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+    return `YOUR PICK: last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   if (fellBack) {
     const parts = ["difficulty"];
@@ -146,7 +146,7 @@ function buildReason(
     // null-when-off, same honesty rule as painLevels above.
     if (prefs.lastDone) parts.push("recency");
     if (prefs.source) parts.push("source");
-    return `Nothing fit your ${parts.join("/")} filters — closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+    return `Nothing fit your ${parts.join("/")} filters. Closest match, last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   return `Least recently done (${recencyPhrase(picked.lastDoneDaysAgo)}).`;
 }
@@ -245,7 +245,7 @@ export function suggestFreestyle(
   if (sorted.length === 0) {
     return {
       recommendationId: null,
-      reason: "Your library is empty — add a workout to get suggestions.",
+      reason: "Your library is empty. Add a workout to get suggestions.",
       poolIds: [],
       fellBack: false,
     };

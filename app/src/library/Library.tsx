@@ -299,7 +299,7 @@ export default function Library() {
           <p>No workouts match these filters.</p>
           {filters.source === "custom" && (
             <p>
-              No custom workouts yet —{" "}
+              No custom workouts yet:{" "}
               <Link
                 to="/library/new"
                 state={{ from: "/library" }}

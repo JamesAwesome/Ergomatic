@@ -15,7 +15,9 @@ import {
   clearMonitorRun,
   createMonitorRun,
   recordActual,
+  completeMonitorRun,
   anyLiveSession,
+  connectGuardStage,
   MONITOR_RUN_KEY,
   type MonitorRun,
 } from "./monitorRun";
@@ -419,6 +421,71 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
   });
 });
 
+describe("completeMonitorRun: the completion writer (7B Task 4's own first caller)", () => {
+  beforeEach(() => localStorage.clear());
+
+  const finishedAt = new Date("2026-08-05T12:41:00.000Z");
+
+  it("stamps completedAt and how it ended, and persists the result", () => {
+    const run = { ...freshMonitorRun(), actuals: [actual1] };
+    saveMonitorRun(run);
+
+    const done = completeMonitorRun(run, { terminated: false }, finishedAt);
+
+    expect(done.completedAt).toBe(finishedAt.toISOString());
+    // An honest WORKOUTEND: 7C reads this to say "logged 4 of 4" rather
+    // than "abandoned at 1".
+    expect(done.terminated).toBe(false);
+    expect(done.actuals).toStrictEqual([actual1]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(done));
+    // A new record, the caller's own copy untouched (`recordActual`'s
+    // idiom).
+    expect(run.completedAt).toBeNull();
+  });
+
+  it("records a TERMINATE as terminated — the same close, a different story", () => {
+    const run = freshMonitorRun();
+
+    const done = completeMonitorRun(run, { terminated: true }, finishedAt);
+
+    expect(done).toMatchObject({
+      completedAt: finishedAt.toISOString(),
+      terminated: true,
+    });
+  });
+
+  it("an already-closed run is returned UNCHANGED — a second terminal event never re-stamps it", () => {
+    // The race this guard exists for: End closes the record, its own
+    // terminate() makes the erg report `terminated`, and that event comes
+    // straight back. Without the guard the record would carry the LATER
+    // time and flip `terminated` after the fact.
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: finishedAt.toISOString(),
+      terminated: true,
+    };
+    saveMonitorRun(closed);
+    const later = new Date("2026-08-05T12:45:00.000Z");
+
+    const after = completeMonitorRun(closed, { terminated: false }, later);
+
+    expect(after).toBe(closed);
+    expect(after.completedAt).toBe(finishedAt.toISOString());
+    expect(after.terminated).toBe(true);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
+  });
+
+  it("a closed record refuses later actuals — completeMonitorRun is what turns the guard on", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+
+    const done = completeMonitorRun(run, { terminated: false }, finishedAt);
+
+    expect(recordActual(done, actual1)).toBe(done);
+    expect(loadMonitorRun()?.actuals).toStrictEqual([]);
+  });
+});
+
 describe("anyLiveSession: the coexistence truth table", () => {
   beforeEach(() => localStorage.clear());
 
@@ -473,5 +540,88 @@ describe("anyLiveSession: the coexistence truth table", () => {
     expect(cases).toHaveLength(9);
     const keys = new Set(cases.map((c) => `${c.sessionRun}/${c.monitorRun}`));
     expect(keys.size).toBe(9);
+  });
+});
+
+// Phase 7B Task 2, spec §3. The predicate half of the Connect guard; the
+// staged confirm it feeds is ConnectAction.test.tsx's.
+describe("connectGuardStage: the Connect door's lock", () => {
+  beforeEach(() => localStorage.clear());
+
+  const finishedAt = new Date("2026-08-05T13:00:00.000Z").toISOString();
+
+  it("nothing on record: null — Connect proceeds with no ceremony", () => {
+    expect(connectGuardStage()).toBeNull();
+  });
+
+  it("a finished-but-unlogged SessionRun: 'unlogged' — the F5 record", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a live SessionRun: 'in-progress' — destroyed just as completely, lesser loss", () => {
+    saveRun(fakeSessionRun(null));
+    expect(connectGuardStage()).toBe("in-progress");
+  });
+
+  // Task 5 review, HIGH-1: `createMonitorRun`'s own `saveMonitorRun` call
+  // OVERWRITES `MONITOR_RUN_KEY` unconditionally (this file's own doc
+  // comment on `createMonitorRun`: "deliberately NOT idempotent-checked
+  // against an existing live `MonitorRun`") — a finished-but-unlogged
+  // `MonitorRun` (7C's prefill input) is exactly as real a record as the
+  // `SessionRun` case above, and `WorkoutDetail.handleRowInstead` (Task 5)
+  // ALSO clears it unconditionally. The guard reads it now.
+  it("a finished-but-unlogged MonitorRun (no SessionRun on record): 'unlogged' — 7C's prefill input", () => {
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("a live MonitorRun (no SessionRun on record): 'in-progress' — the erg is mid-piece right now", () => {
+    saveMonitorRun(freshMonitorRun());
+    expect(connectGuardStage()).toBe("in-progress");
+  });
+
+  it("a SessionRun on record wins over a MonitorRun — same descending-severity order handleStart already uses", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    saveMonitorRun(freshMonitorRun());
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("both records finished-but-unlogged: staged ONCE, not twice — a single ConnectGuardStage value, the SessionRun's own sentence", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("garbage in RUN_KEY falls through to the MonitorRun check (loadRun's own Resilience #5)", () => {
+    localStorage.setItem(RUN_KEY, "{{ not json");
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("garbage in both keys: null — nothing at risk", () => {
+    localStorage.setItem(RUN_KEY, "{{ not json");
+    expect(connectGuardStage()).toBeNull();
+  });
+
+  // THE MUTATION TARGET, stated as an assertion rather than left to a
+  // comment: for the exact record this guard exists to protect,
+  // `anyLiveSession()` answers "none". Re-routing `connectGuardStage`
+  // through it — the tempting "unify the guards" refactor ROADMAP M-1
+  // forbids — would make the two agree here, and this test would die
+  // alongside the protection.
+  it("DISAGREES with anyLiveSession() on the unlogged SessionRun — that disagreement IS the guard", () => {
+    saveRun(fakeSessionRun(finishedAt));
+
+    expect(anyLiveSession()).toBe("none");
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("still disagrees when BOTH records are stale — anyLiveSession()'s 'both-stale' row is still a discard for Connect", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+
+    expect(anyLiveSession()).toBe("none");
+    expect(connectGuardStage()).toBe("unlogged");
   });
 });

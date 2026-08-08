@@ -47,6 +47,7 @@ import { createEventLog } from "./eventLog";
 import {
   computeIntervalRemaining,
   createPm5Driver,
+  ProgramBusyError,
   ProgramRejectionError,
 } from "./driver";
 import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
@@ -454,13 +455,29 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 describe("createPm5Driver: capabilities", () => {
-  it("reports fixed PM5 capabilities", () => {
+  it("reports fixed PM5 capabilities, falling back to the 'PM5' placeholder when no device name was given", () => {
     const { driver } = harness({ program: MINIMAL_PROGRAM });
     expect(driver.capabilities).toStrictEqual({
       canProgram: true,
       hasStrokeRate: true,
       reportsIntervals: true,
       deviceName: "PM5",
+    });
+  });
+
+  // The realistic fixture (briefing: "at least one test per client task
+  // starts from a real library workout"): Sea Fret, the same compiled
+  // program `seaFretProgram()` builds for the busy-error tests below.
+  it("carries the picked device's own name (options.deviceName) in capabilities — never the placeholder — when one was provided (today: always reports the 'PM5' placeholder, ignoring any name given)", () => {
+    const { driver } = harness(
+      { program: seaFretProgram() },
+      { deviceName: "PM5 432331249" },
+    );
+    expect(driver.capabilities).toStrictEqual({
+      canProgram: true,
+      hasStrokeRate: true,
+      reportsIntervals: true,
+      deviceName: "PM5 432331249",
     });
   });
 });
@@ -1766,6 +1783,189 @@ describe("createPm5Driver: NAK during programming", () => {
     // No GetErrorType send for a garbled frame — only a GENUINE "nak"
     // fires one (`sendSequence`'s own `fetchErrorTypeOnNak` gate).
     expect(log.entries().some((e) => e.kind === "error-type")).toBe(false);
+  });
+});
+
+describe("createPm5Driver: ProgramBusyError — program() is single-flight (ROADMAP: fix-3 Task 2's Probe C stranding)", () => {
+  const programFrame0ChunkCount =
+    buildProgrammingSequence(MINIMAL_PROGRAM)[0]!.length;
+
+  /** RECEIVE-characteristic writes only — the unit both `acceptPrepare`
+   *  and `acceptProgrammingFrame0` wait on, so their own `receiveWritesSoFar`
+   *  argument must be counted the same way, never mixed with
+   *  `transport.writes.length` (which also counts the sample-rate write). */
+  function receiveWriteCount(transport: ReturnType<typeof stubTransport>) {
+    return transport.writes.filter(
+      (w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID,
+    ).length;
+  }
+
+  /** Drives the prepare step of a `program()` call to completion — an
+   *  "ok" ack, then a wait for the full prepare frame's chunk(s) to have
+   *  actually left the wire. Every test below needs this exact prefix
+   *  before it may safely dispatch a SECOND `program()` call or inspect
+   *  write counts around one. `receiveWritesSoFar` is `receiveWriteCount`
+   *  immediately before THIS call's own prepare chunk began (`0` for a
+   *  transport's very first `program()` call) — a retry after an earlier
+   *  rejection is not the transport's first prepare, so it must pass its
+   *  own current watermark rather than reusing a bare `prepareChunkCount`
+   *  against the whole transport's accumulated history. */
+  async function acceptPrepare(
+    transport: ReturnType<typeof stubTransport>,
+    receiveWritesSoFar: number,
+  ): Promise<void> {
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await waitUntil(
+      () =>
+        receiveWriteCount(transport) > receiveWritesSoFar + prepareChunkCount,
+    );
+  }
+
+  /** Drives frame 0 of the real programming send to completion — an "ok"
+   *  ack, then a wait for ALL of frame 0's chunks (not merely the first
+   *  one) to have actually left the wire, since `sendSequence` writes
+   *  every chunk of a frame before it ever awaits that frame's single
+   *  ack. `receiveWritesSoFar` is `receiveWriteCount` immediately before
+   *  this frame's own chunks began (so this helper works identically for a
+   *  program's first send and a later retry after a rejection). */
+  async function acceptProgrammingFrame0(
+    transport: ReturnType<typeof stubTransport>,
+    receiveWritesSoFar: number,
+  ): Promise<void> {
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await waitUntil(
+      () =>
+        receiveWriteCount(transport) >
+        receiveWritesSoFar + programFrame0ChunkCount,
+    );
+  }
+
+  it("a concurrent program() rejects ProgramBusyError immediately, with the write count UNCHANGED (today: both proceed and the first strands — Probe C's stranding)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const first = driver.program(MINIMAL_PROGRAM);
+    await acceptPrepare(transport, 0); // genuine wire traffic belonging to the FIRST call
+    const receiveWritesAfterPrepare = receiveWriteCount(transport);
+
+    const writesBefore = transport.writes.length;
+    await expect(driver.program(MINIMAL_PROGRAM)).rejects.toBeInstanceOf(
+      ProgramBusyError,
+    );
+    // ZERO wire traffic from the busy call — not "no NEW frame started",
+    // literally no write of any kind (any UUID, hence the TOTAL count here,
+    // not `receiveWriteCount` alone).
+    expect(transport.writes.length).toBe(writesBefore);
+
+    // Drive the first call to its own real "armed" outcome so it doesn't
+    // dangle across tests.
+    await acceptProgrammingFrame0(transport, receiveWritesAfterPrepare);
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await expect(first).resolves.toBeUndefined();
+  });
+
+  it("the first program()'s outcome is unaffected by the rejected second — it still resolves on its own merits", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    const first = driver.program(MINIMAL_PROGRAM);
+    await acceptPrepare(transport, 0);
+    const receiveWritesAfterPrepare = receiveWriteCount(transport);
+
+    await expect(driver.program(MINIMAL_PROGRAM)).rejects.toBeInstanceOf(
+      ProgramBusyError,
+    );
+
+    // The first call proceeds exactly as if the second had never happened.
+    await acceptProgrammingFrame0(transport, receiveWritesAfterPrepare);
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await first;
+    expect(events).toContainEqual({ kind: "armed" });
+  });
+
+  it("the in-flight flag clears after a failure — a third program() call after a typed rejection succeeds normally (mutation target: clearing only on resolve)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    // Call 1: settles with a genuine NAK on the real programming send.
+    const first = driver.program(MINIMAL_PROGRAM);
+    await acceptPrepare(transport, 0);
+    const receiveWritesAfterPrepare = receiveWriteCount(transport);
+
+    // Call 2: dispatched while call 1 is still in flight — busy, zero
+    // wire traffic of its own.
+    const writesBeforeBusy = transport.writes.length;
+    await expect(driver.program(MINIMAL_PROGRAM)).rejects.toBeInstanceOf(
+      ProgramBusyError,
+    );
+    expect(transport.writes.length).toBe(writesBeforeBusy);
+
+    // A GENUINE reject on call 1's real send — `(status & 0x30) === 0x10`
+    // (response.ts §19.1) — which fires the documented GetErrorType
+    // follow-up (Task 3) that must be answered before call 1 settles.
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    await waitUntil(
+      () =>
+        receiveWriteCount(transport) >
+        receiveWritesAfterPrepare + programFrame0ChunkCount,
+    );
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({
+        frameStatus: "ok",
+        slaveState: "error",
+        commandIds: [0xc8],
+      }),
+    ); // GetErrorType reply
+    await expect(first).rejects.toBeInstanceOf(ProgramRejectionError);
+
+    // Call 3: dispatched AFTER call 1's REJECTION (never a resolve) — the
+    // in-flight flag must have cleared on that failure too, or this call
+    // throws ProgramBusyError forever.
+    const receiveWritesBeforeThird = receiveWriteCount(transport);
+    const third = driver.program(MINIMAL_PROGRAM);
+    await acceptPrepare(transport, receiveWritesBeforeThird);
+    const receiveWritesAfterThirdPrepare = receiveWriteCount(transport);
+    await acceptProgrammingFrame0(transport, receiveWritesAfterThirdPrepare);
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await expect(third).resolves.toBeUndefined();
+  });
+
+  it("the busy error's own message never attributes the refusal to the PM5 (NOT a ProgramRejectionReason — that union stays machine-statements-only)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+
+    const first = driver.program(MINIMAL_PROGRAM);
+    await acceptPrepare(transport, 0);
+    const receiveWritesAfterPrepare = receiveWriteCount(transport);
+
+    await expect(driver.program(MINIMAL_PROGRAM)).rejects.toSatisfy(
+      (err: unknown) => {
+        expect(err).toBeInstanceOf(ProgramBusyError);
+        expect((err as Error).message).not.toContain("PM5");
+        expect((err as Error).name).toBe("ProgramBusyError");
+        return true;
+      },
+    );
+
+    await acceptProgrammingFrame0(transport, receiveWritesAfterPrepare);
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    await first;
   });
 });
 
@@ -4773,7 +4973,8 @@ describe("createPm5Driver: the log records frame STATE CHANGES, not every frame"
     expect(
       log
         .entries()
-        .find((e) => e.kind === "frame" && e.detail.includes("rowing"))?.detail,
+        .find((e) => e.kind === "frame" && e.detail.includes("state=rowing"))
+        ?.detail,
     ).toContain("state=rowing");
   });
 });

@@ -242,10 +242,20 @@ const BISECT_PAIR_VALUE_REST: WorkoutProgram = {
  */
 let settleDisabled = false;
 
-function driverOptions(): Parameters<typeof createPm5Driver>[2] {
+/**
+ * Phase 7B Task 1: `deviceName` is the picked device's own advertised name
+ * (`found.name` from `transport.scan()`, the connect handler below) —
+ * threaded through so `capabilities.deviceName`/`MonitorRun.deviceName`
+ * carry the real erg's name rather than the driver's placeholder fallback.
+ * Takes a parameter (rather than closing over a module-level variable) so
+ * the settle toggle above and the device name stay independent knobs.
+ */
+function driverOptions(
+  deviceName: string,
+): Parameters<typeof createPm5Driver>[2] {
   return settleDisabled
-    ? { verifyTicks: VERIFY_TICKS, prepareSettleTicks: 0 }
-    : { verifyTicks: VERIFY_TICKS };
+    ? { verifyTicks: VERIFY_TICKS, prepareSettleTicks: 0, deviceName }
+    : { verifyTicks: VERIFY_TICKS, deviceName };
 }
 
 /** The one phrasing of "which mode is this", used by the toggle, by the
@@ -342,7 +352,7 @@ onClick("connect", async () => {
   out(`scan(): found ${found.name} (${found.id})`);
   await transport.connect(found.id);
   out("connect(): ok");
-  driver = createPm5Driver(transport, log, driverOptions());
+  driver = createPm5Driver(transport, log, driverOptions(found.name));
   // The mode this driver was actually BUILT with — the entry every dump
   // carries, distinct from the "requested" one `setSettle` writes.
   log.record("settle-mode", `${settleModeLine()} (active for this driver)`);

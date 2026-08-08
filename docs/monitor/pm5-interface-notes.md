@@ -1931,7 +1931,192 @@ CONFIRMED 0-based by a worked example (§12), unlike the read-side fields in
 item 3 above; coalescing is resolved and proven in CI (§16), not a laptop
 question at all.
 
+### The Task 8 connected-flow verification row (prepared, NOT yet run)
+
+Phase 7B Task 8 built the real Connect → interstitial → surface walk (the
+`ConnectedInterstitial`/`ConnectedSurface` screens, `useMonitorSession.ts`)
+against `fake.ts` and CI's own browser gates exclusively — every
+observation below is a documented-behavior or reviewed-code inference, same
+disclaimer §17's own opening paragraph carries for the rest of this
+runsheet. Two items this task's own code explicitly ships BEHIND that
+uncertainty, named in the source rather than pretended away.
+
+**Setup (both items — the PRODUCT APP; §17's shared Setup above, which
+points at `pm5-lab.html`, does NOT apply to this row — the lab can never
+render the connected surface).** Desktop Chromium only:
+`navigator.bluetooth` is undefined on the Capacitor build, so
+`resolveDefaultTransport()` returns `null` there. (1) Node 26 first —
+`export PATH="$HOME/.local/share/nvm/v26.5.0/bin:$PATH"` (the machine
+defaults to 25) — then `pnpm dev` from `app/` — the repo root has no
+`dev` script — and open the printed URL in Chromium (a plain dev serve
+talks to the REAL PM5: the fake engages only when a test fixture has
+planted `window.__pm5FakeScript__`, never on its own); (2) sign in; (3) Library → open the workout DETAIL of a real
+multi-interval workout (two or more TIMED work intervals with rest); (4)
+the button is **Connect** — one word (`ConnectAction.tsx`), not "Connect
+PM5"; if a confirm panel has replaced it (a prior unlogged or live
+session), resolve the confirm FIRST — timing starts only at a clean
+Connect press. **Run item 21 FIRST**: it needs the session's cold first
+pairing; item 20 then reuses the established pair. Instruments: item 20's
+tick counts come from the Connection log sheet on the connected surface
+(COPY LOG once, paste into §18); the log is sequence-ordered and
+deliberately clockless (DEVIATIONS' diagnostics-sheet row), so item 21's
+DURATIONS come from a phone stopwatch or a screen recording of the
+interstitial checklist, never from the log.
+
+20. **STATUS: ANSWERED — 2026-08-08, hardware walks 1-2 (§18's
+    2026-08-08 entry). The four-field premise was WRONG and the
+    derivation is corrected in code.** Walk 1 (recording `test-20.mp4`):
+    a stopped rower on a properly armed TIMED interval freezes only
+    THREE fields — meters (pinned at 30), split (4:16.1), rate (68) —
+    while the interval clock RUNS (LEFT IN INTERVAL counted 4:38 → 3:47)
+    and the heart rate moves the whole hold (85 → 63, the exclusion
+    theory confirmed). With `elapsedSeconds` in the freeze key the key
+    never repeats on real hardware, so PAUSED could never fire; session
+    3's frozen-elapsed stretch was an artifact of its structurally EMPTY
+    arm (§19.13), exactly the caveat this item existed to test. The key
+    is now `distanceMeters`/`currentSplit`/`spm` with a
+    `distanceMeters > 0` guard replacing elapsed as the no-rest-boundary
+    clearer, and walk 2 (`pause-worked.mp4`) CONFIRMED the corrected
+    derivation firing on a real program. Still unread (any later
+    full-log capture closes them): the exact tick count from the last
+    stroke to the flip (the recordings sample at 1 fps), and a
+    distance-interval stop (only WATCHED on a timed one; the clock runs
+    on distance intervals too, so the same behavior is expected).
+    The original sequence, kept executable for that re-run. Sequence
+    (pair already established by item 21; the Setup workout is the
+    program — `TWO_TIME_PROGRAM` is a lab constant and does not exist
+    here): (1) from the workout detail press Connect and walk the
+    interstitial to READY, then "Show me the numbers"; (2) row the first
+    work interval normally; (3) mid-interval, STOP rowing completely —
+    hands off the handle, touch nothing on the PM5; (4) read whether the
+    surface renders `PAUSED · PULL TO RESUME` (confirming meters, split,
+    and rate hold identically — the CLOCK KEEPS RUNNING through a real
+    stop, so a moving countdown is expected, not a failure), and roughly
+    how many seconds after the last stroke it appears (the derivation
+    needs four consecutive identical three-metric frames);
+    (5) with the HR belt on, record whether the heart-rate cell keeps
+    moving through the hold (the field the derivation deliberately
+    excludes, on the theory that it is the one that keeps moving when the
+    rower stops — `PAUSED_FRAME_HOLD`'s own doc comment); (6) start rowing
+    again — the paused chrome should clear on the first changed frame;
+    (7) capture the log: mid-row, triple-tap a pager-rail button and
+    COPY LOG; or after the row ends, from the SAME TAB's console,
+    `copy(sessionStorage.getItem("ergomatic:last-rowed-log"))` — teardown
+    stashes every session's trace on the way out (the rowed-only key
+    survives later never-rowed attempts), because the ended frame
+    navigates away before the sheet can be reached. Paste into §18 —
+    step 4's tick count is read from the entries (`frame` entries carry
+    state, elapsed, distance, `rowingActive`, and spm since walk 3). A
+    genuine finding either way, not a pass/fail gate.
+21. **STATUS: OPEN — `transports/index.ts`'s own `AUTO_TICK_MS`/
+    `e2e/connected.spec.ts`'s `delayWritesMs` doc comments, added by Task
+    8.** The fake's real-time auto-tick (100ms) and this task's e2e/
+    screenshots fixtures' artificial write-latency knob (120-200ms per
+    write, `FakeControls.delayWrites`) are both round numbers chosen for
+    OBSERVABILITY in a browser-driven test, not measured against a real
+    PM5's own pairing/programming latency — no laptop session has ever
+    timed how long a real `requestDevice()` → GATT connect → multi-frame
+    program send actually takes end to end. Expected: unknown — this task
+    shipped these constants explicitly UNMEASURED, choosing "comfortably
+    observable" over "hardware-accurate" for a fake nothing downstream
+    trusts as a timing oracle. Sequence (run FIRST, on the session's cold
+    pair): (1) with the PM5 awake on its main menu, press Connect — a
+    CLEAN press, any confirm panel resolved beforehand; (2) the OS device
+    picker opens — this IS `requestDevice()`, and time spent choosing is
+    the operator's own, not a measured span: measurement starts the moment
+    the PM5 is picked; (3) with the stopwatch or a screen recording of the
+    interstitial checklist, time three spans — pick to the PAIRING line
+    marking done (state 4's real duration), PAIRING-done to PROGRAMMING
+    starting, and PROGRAMMING's own duration to READY for the known
+    interval count; (4) record whether any of the three is anywhere near
+    an order of magnitude off from this task's own 100-200ms range (a
+    real PM5 running slower would mean the interstitial
+    copy overlapping the actual send, a UX question, not a correctness
+    one — nothing in `useMonitorSession.ts`'s own state machine assumes a
+    particular latency).
+
 ## 18. Laptop session observations (results destination for §17)
+
+### 2026-08-08 session (PM5 432331249) — HARDWARE WALKS 1-3 (the PR #59 verification row, IN PROGRESS)
+
+The first product-app walks — Connect from a workout detail against the
+compose stack's production build, not the lab page. Three walks so far;
+every finding below shipped as a fix on `phase-7b-connected` the same
+day (commits `86963ff..`). Capture instruments grew mid-session: walk 1
+is a 1 fps screen recording (`test-20.mp4`), walk 2 the same
+(`pause-worked.mp4`), walk 3 the first wire log (the diagnostics sheet
+mid-session, then the sessionStorage stash).
+
+**Walk 1 (`test-20.mp4`, 111 s):**
+
+- The interstitial walk was CLEAN on real hardware: scan dismissed →
+  "No monitor was picked" → re-pair → programming with the correct
+  structural readback → ready. The 0x81 accept, the prepare's leading
+  terminate, and the two-interval arm all behaved.
+- **Item 20 ANSWERED** (see the item): the interval clock runs while a
+  stopped rower sits still; meters/split/rate freeze; HR moves. PAUSED
+  as shipped (four-field key) could never fire; corrected to the
+  three-field key + `distance > 0` guard.
+- The pace validation refused the workout outright — `2:14.5`-style
+  splits, i.e. most baseline-derived targets. M-9's check had copied
+  duration's whole-second contract onto a field whose wire unit is
+  0.01 s (§12's own worked example). Corrected
+  (`representableCentiseconds`); NOTE: a half-second pace value (e.g.
+  raw `13450`) has still never been sent to a real PM5 — every workout
+  programmed since carried whole-second targets. One row with a `.5`
+  target settles it silently.
+- READY auto-advanced without a tap (chased through two wrong gate
+  fixes; resolved in walk 3).
+- RATE read 57-68 at barely-moving stroke work — consistent with the
+  PM5's instantaneous per-stroke rate (60 ÷ stroke period) and with the
+  rate HOLDING its last value through a stop (walk 1 froze at 68), but
+  unverified: no capture carries raw 0x0032 yet. Watch it at normal
+  pace; if still absurd, log a raw 0x0032 sample.
+
+**Walk 2 (`pause-worked.mp4`, 41 s):**
+
+- **PAUSED CONFIRMED on a real program** — the corrected derivation
+  fired mid-interval and cleared on resume. The operator missed the
+  sunken-grey presentation entirely; the band is now ink-inverted
+  (DEVIATIONS row).
+- READY still skipped: TOTAL LEFT read 1:52 with 0 meters and rate 0 —
+  the PM5 RUNS THE WORKOUT CLOCK at "row to begin", killing the
+  elapsed-based gate v2.
+
+**Walk 3 (the first wire logs):**
+
+- A mid-session reprogram flipped READY on
+  `state=rowing elapsed=0.78 distance=1.2` — real meters banked by a
+  flywheel still coasting from the previous piece, on a workout the
+  PM5's own glass did not consider started ("the pm5 knew i didnt start
+  the interval"). 0x0031 byte 9 (Rowing State, 0=Inactive 1=Active —
+  §10's table, parsed since 7A, never consumed) is where the machine
+  says so; `MonitorFrame.rowingActive` now carries it and the
+  ready→live/record-open gate requires it alongside flywheel evidence.
+  **UNOBSERVED PREMISE, the next row's first reading:** that byte has
+  never been captured on a first-pull frame — the gate's correctness on
+  real hardware rests on it, and `frame` log entries now record it.
+- The NEXT stash (17 entries, ending at `armed`) showed NO rowing frame
+  ever reached the driver during a skip — the skip was never the hook's
+  gate: `ConnectedInterstitial`'s own `READY_DWELL_MS` (handoff §2's
+  "Ready dwell 1.2 s") auto-advanced past the ready screen on a
+  setTimeout. Removed as an operator ruling (DEVIATIONS row); ready now
+  holds until the button or the first pull, and the connected flow runs
+  on no wall clock at all.
+- The structural readback's healthy lag-tick was WITNESSED mid-session:
+  first sighting `durationRaw=0`, one tick later the true
+  `durationRaw=100`, then armed — fix-3's detector behaving exactly as
+  designed over a real radio.
+- The ended hand-off frame navigates away on first render, which killed
+  every early attempt to copy the log post-row; teardown now stashes
+  `ergomatic:last-monitor-log` (every exit) and
+  `ergomatic:last-rowed-log` (record-opening sessions only) into
+  sessionStorage.
+
+**Readings still owed by the next row(s):** `rowingActive` on the
+first-pull frame; item 21's three timing spans; the PAUSED tick count
+from a full log; RATE at normal pace; one `.5` pace target accepted by
+the machine.
 
 ### 2026-08-05 session (PM5 432331249) — LAPTOP SESSION 1
 
@@ -2598,6 +2783,23 @@ separate hardware actions:**
   whether the resulting arm comes back real or empty — the settle's own gate
   does not wait in this case today, by design, and no hardware reading
   confirms that is safe.
+
+### [pending] Task 8 connected-flow verification (results destination for §17 items 20-21)
+
+**Not yet run — this session's Observed fields are deliberately blank,**
+same discipline as every other pending scaffold in this section. Results
+land here once a James-operated laptop/device session runs §17's items 20
+and 21 against the real interstitial/surface screens (not the fake).
+
+- **Item 20 (PAUSED on a properly-armed workout).** Observed:
+  _(blank — not yet run)_. Ticks-to-freeze, if any:
+  _(blank)_. Heart rate behavior during the hold:
+  _(blank)_.
+- **Item 21 (real pairing/programming latency).** Observed
+  `requestDevice()`→`connect()` duration: _(blank)_. Observed
+  `connect()`→first-programming-write gap: _(blank)_. Observed full
+  programming-send duration (record interval count alongside it):
+  _(blank)_.
 
 ## 19. Idiosyncrasies, and whether they were ours
 
