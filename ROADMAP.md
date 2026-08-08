@@ -1295,7 +1295,8 @@ it — the screens 7A's domain was built to sit underneath.
 **Design:** returned to design for the connected surface's own handoff,
 reconciled against 7A's shipped types before this phase starts.
 
-- [x] "Connect PM5" affordance — shipped as `WorkoutDetail`'s `ConnectAction`
+- [x] "Connect PM5" affordance (the plan's name; the shipped button reads
+      `Connect`, one word) — shipped as `WorkoutDetail`'s `ConnectAction`
       button (not literally "on Confirm targets," the plan's own original
       wording — the handoff moved it to the workout DETAIL screen instead,
       ahead of Confirm, `ConnectedInterstitial.tsx`'s own header), gated on
@@ -1327,11 +1328,14 @@ reconciled against 7A's shipped types before this phase starts.
       adding a NEW guard, ask "does this care about unlogged specifically,
       or just live-vs-not" before picking which of the two patterns to
       follow.
-- [x] The reverse cross-clear direction: `buildRun`/`saveRun`
-      (`session/run.ts`) clears an existing live `MonitorRun` the same way
-      `createMonitorRun` already clears a `SessionRun` — 7A shipped only
-      its own half (`src/monitor/monitorRun.ts`'s own header comment names
-      this as a documented 7B obligation)
+- [x] The reverse cross-clear direction: an existing live `MonitorRun` is
+      cleared the same way `createMonitorRun` already clears a `SessionRun`
+      — 7A shipped only its own half (`src/monitor/monitorRun.ts`'s own
+      header comment named this as a documented 7B obligation). Shipped in
+      `WorkoutDetail.tsx`'s `startSession` (behind the Replace confirm),
+      NOT in the spec-named `buildRun`/`saveRun` home — `session/run.ts`'s
+      `saveRun` comment carries the three reasons, and the DEVIATIONS
+      table's reverse-cross-clear row (task-2 review M-1) records the move
 - [ ] **The James laptop-vs-real-PM5 session named above has now run
       TWICE** (laptop session 1, plus a same-day diagnosis row; laptop
       session 2, 2026-08-06, both under the OLD whole-byte status parse —
@@ -1456,7 +1460,18 @@ reconciled against 7A's shipped types before this phase starts.
       adapter layer (`src/platform.ts`/`src/adapters/`), not this hook.
       Both — reconnect-by-identity and the platform-conditional default —
       are the same "wire the adapter layer into the default transport"
-      follow-on, scoped out of 7B/Task 8 on purpose.
+      follow-on, scoped out of 7B/Task 8 on purpose. The full item, per the
+      7B plan's Task 8 close-out, is FIVE pieces, not two: (1) Capacitor
+      id-keyed reconnect; (2) DRIVER RE-SUBSCRIBE — `createPm5Driver`
+      subscribes once at construction, so a transport that silently regains
+      its link still needs the driver to re-attach its notification
+      handler; (3) a `Transport.scan()` background variant that can watch
+      for a known PM5 without the OS picker; (4) `DiscoveredMonitor.rssi`,
+      so a future picker/auto-connect can rank by signal; (5) MISSED-rows
+      inheritance — the handoff §4 `— · MISSED` treatment exists only to
+      catch what a reconnect BACKFILL fails to fill, so it lands with
+      reconnect or not at all (today's descope: the DEVIATIONS MISSED-rows
+      row and `surfaceModel.ts`'s completed-row dashes).
 
 **Exit:** On a real PM5: distance steps auto-advance, live pace shows
 against target, and Connect degrades silently to manual on disconnect.

@@ -1939,7 +1939,26 @@ against `fake.ts` and CI's own browser gates exclusively — every
 observation below is a documented-behavior or reviewed-code inference, same
 disclaimer §17's own opening paragraph carries for the rest of this
 runsheet. Two items this task's own code explicitly ships BEHIND that
-uncertainty, named in the source rather than pretended away:
+uncertainty, named in the source rather than pretended away.
+
+**Setup (both items — the PRODUCT APP; §17's shared Setup above, which
+points at `pm5-lab.html`, does NOT apply to this row — the lab can never
+render the connected surface).** Desktop Chromium only:
+`navigator.bluetooth` is undefined on the Capacitor build, so
+`resolveDefaultTransport()` returns `null` there. (1) `pnpm dev` from
+`app/` — the repo root has no `dev` script — and open the printed URL in
+Chromium; (2) sign in; (3) Library → open the workout DETAIL of a real
+multi-interval workout (two or more TIMED work intervals with rest); (4)
+the button is **Connect** — one word (`ConnectAction.tsx`), not "Connect
+PM5"; if a confirm panel has replaced it (a prior unlogged or live
+session), resolve the confirm FIRST — timing starts only at a clean
+Connect press. **Run item 21 FIRST**: it needs the session's cold first
+pairing; item 20 then reuses the established pair. Instruments: item 20's
+tick counts come from the Connection log sheet on the connected surface
+(COPY LOG once, paste into §18); the log is sequence-ordered and
+deliberately clockless (DEVIATIONS' diagnostics-sheet row), so item 21's
+DURATIONS come from a phone stopwatch or a screen recording of the
+interstitial checklist, never from the log.
 
 20. **STATUS: OPEN — `useMonitorSession.ts`'s own `PAUSED_FRAME_HOLD`
     doc comment, carried forward by Task 8.** The paused derivation (four
@@ -1951,15 +1970,23 @@ uncertainty, named in the source rather than pretended away:
     genuinely stopped rower mid-piece on a PROPERLY ARMED, non-empty
     workout freezes the same four fields the same way has never been
     observed. Expected: unknown — this is exactly the caveat
-    `PAUSED_FRAME_HOLD`'s own doc comment names as unresolved. Observed:
-    program a real multi-interval workout (`TWO_TIME_PROGRAM` or
-    equivalent), row into it, then STOP ROWING mid-interval without
-    terminating — read whether the connected surface renders `PAUSED ·
-    PULL TO RESUME` (confirming the four fields hold identically), and if
-    so, after how many status ticks; separately record whether heart rate
-    keeps moving through the hold (the field the derivation deliberately
-    excludes on the theory that it is the one that keeps moving when the
-    rower stops, `PAUSED_FRAME_HOLD`'s own doc comment) — a genuine finding
+    `PAUSED_FRAME_HOLD`'s own doc comment names as unresolved. Sequence
+    (pair already established by item 21; the Setup workout is the
+    program — `TWO_TIME_PROGRAM` is a lab constant and does not exist
+    here): (1) from the workout detail press Connect and walk the
+    interstitial to READY, then "Show me the numbers"; (2) row the first
+    work interval normally; (3) mid-interval, STOP rowing completely —
+    hands off the handle, touch nothing on the PM5; (4) read whether the
+    surface renders `PAUSED · PULL TO RESUME` (confirming the four fields
+    hold identically), and roughly how many seconds after the last stroke
+    it appears (the derivation needs four consecutive identical frames);
+    (5) with the HR belt on, record whether the heart-rate cell keeps
+    moving through the hold (the field the derivation deliberately
+    excludes, on the theory that it is the one that keeps moving when the
+    rower stops — `PAUSED_FRAME_HOLD`'s own doc comment); (6) start rowing
+    again — the paused chrome should clear on the first changed frame;
+    (7) open the Connection log sheet, COPY LOG once, paste into §18 —
+    step 4's tick count is read from the copied entries. A genuine finding
     either way, not a pass/fail gate.
 21. **STATUS: OPEN — `transports/index.ts`'s own `AUTO_TICK_MS`/
     `e2e/connected.spec.ts`'s `delayWritesMs` doc comments, added by Task
@@ -1972,12 +1999,16 @@ uncertainty, named in the source rather than pretended away:
     program send actually takes end to end. Expected: unknown — this task
     shipped these constants explicitly UNMEASURED, choosing "comfortably
     observable" over "hardware-accurate" for a fake nothing downstream
-    trusts as a timing oracle. Observed: from a cold Connect press on a
-    real PM5 (Web Bluetooth, not the fake), time three intervals
-    separately with a stopwatch — `requestDevice()`-to-`connect()`
-    resolving (state 4's own duration), `connect()`-to-first-programming-
-    write, and the full programming send's own duration for a known
-    interval count — and record whether any of the three is anywhere near
+    trusts as a timing oracle. Sequence (run FIRST, on the session's cold
+    pair): (1) with the PM5 awake on its main menu, press Connect — a
+    CLEAN press, any confirm panel resolved beforehand; (2) the OS device
+    picker opens — this IS `requestDevice()`, and time spent choosing is
+    the operator's own, not a measured span: measurement starts the moment
+    the PM5 is picked; (3) with the stopwatch or a screen recording of the
+    interstitial checklist, time three spans — pick to the PAIRING line
+    marking done (state 4's real duration), PAIRING-done to PROGRAMMING
+    starting, and PROGRAMMING's own duration to READY for the known
+    interval count; (4) record whether any of the three is anywhere near
     an order of magnitude off from this task's own 100-200ms range (a
     real PM5 running slower would mean `READY_DWELL_MS`/interstitial
     copy overlapping the actual send, a UX question, not a correctness
