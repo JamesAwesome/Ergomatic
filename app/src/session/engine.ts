@@ -30,6 +30,13 @@ export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
  *  deep-equal records (byte-stable), since nothing here reads the clock or
  *  storage.
  *
+ *  Phase 6I: `baselines` is `Baselines | null` — `phases()` (domain/
+ *  expand.ts) already accepts the union and is the ONE place that decides
+ *  what null means: no `targetSplit`/no estimate for an effort work phase,
+ *  a loud throw for a split-ref one. Callers here must gate on
+ *  `needsBaselines()` first, exactly like every other coupled call site
+ *  (domain/needsBaselines.ts's own header comment names them).
+ *
  *  `originalIndex` attribution is a lookup, not a reimplementation:
  *  `phases()` itself stamps every `Phase` with `originalStepIndex` — the
  *  index into the array PASSED to it, i.e. `effective`'s own position
@@ -48,7 +55,7 @@ export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
  *  the session without also touching `SessionDraft`. */
 export function buildRun(
   draft: SessionDraft,
-  baselines: Baselines,
+  baselines: Baselines | null,
   now: Date,
 ): SessionRun {
   const effective = effectiveSteps(draft);

@@ -171,6 +171,23 @@ describe("draftMinutes", () => {
     expect(draftMinutes(d, null)).toBeNull();
   });
 
+  // Phase 6I: `draftMinutes` was ALREADY null-tolerant for an effort-only
+  // workout before this task — it returns null the moment ANY "w" step is
+  // present and baselines are null, with no branch distinguishing effort
+  // from split refs (an estimate is genuinely impossible either way; the
+  // onboarding CARD's fixed nominal copy, not this function, is what
+  // covers "never a bare dash" for the two designated workouts — Task 5).
+  // Pinned here against a REAL effort-only library fixture (Fork
+  // Lightning, needsBaselines() false) specifically because Task 2 is what
+  // makes this path actually REACHABLE in production (the Confirm footer
+  // used to block START before a rower's draft could ever render here with
+  // null baselines) — no production code changed in this file for Task 2,
+  // only this covering test.
+  it("returns null for a REAL effort-only library workout too (Fork Lightning) — no different from any other work step without baselines", () => {
+    const d = buildDraft(draftInputFor("Fork Lightning", "id-fork-null"));
+    expect(draftMinutes(d, null)).toBeNull();
+  });
+
   it("still computes minutes without baselines when no work step is present", () => {
     const d: SessionDraft = {
       v: 1,

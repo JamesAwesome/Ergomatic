@@ -9,6 +9,7 @@ import {
   compileProgram,
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
+import { needsBaselines } from "../../domain/needsBaselines.js";
 import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
@@ -230,7 +231,10 @@ function WorkoutDetailView({
      *  resolutions of the same workout. */
     phases: EnginePhase[];
     identity: RunIdentity;
-    baselines: Baselines;
+    // Phase 6I: `Baselines | null` — an effort-only workout can Connect
+    // with no baselines set; `ConnectedInterstitial`'s own prop type
+    // widened the same way, and omits its "2K … · 6K …" line when null.
+    baselines: Baselines | null;
     nudgedCount: number;
   } | null>(null);
   // Lazy read-once, refreshed explicitly when the interstitial hands
@@ -380,7 +384,17 @@ function WorkoutDetailView({
   // or a driver connection at all.
   function handleConnectProceed() {
     setConnectError(null);
-    if (baselines === null) {
+    // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the SAME
+    // predicate every other coupled guard site shares — nudging never
+    // changes whether a ref is effort or split (only a split ref's `off`
+    // moves), so checking the RAW `workout.steps` here is equivalent to
+    // checking the nudged draft's own effective steps. An effort-only
+    // workout (the two designated onboarding workouts, and every shipped
+    // effort-only AN sprint) needs no target to program — `compileProgram`
+    // already resolves an effort phase with no `targetSplit` (Task 1's own
+    // comment fix, domain/monitor/program.ts) — so Connect proceeds with
+    // `baselines` passed through AS-IS (possibly null) to `buildRun` below.
+    if (baselines === null && needsBaselines(workout.steps)) {
       // No screen exists yet to nudge/resolve a target without baselines
       // (Connect has no Confirm step to defer to, unlike Start) — the same
       // "no target" fact "Log it after"'s footer already states, worded
@@ -593,15 +607,20 @@ function WorkoutDetailView({
           onProceed={handleConnectProceed}
         />
         {connectError && <p className="baseline-error">{connectError}</p>}
-        {/* Task 3 (the manual door): gated on baselines with the exact same
-            "no target" idiom Start's own footer uses at ConfirmTargets.tsx
-            (`baselines ? <button> : <span className="step-row-no-target">`)
-            — `buildManualLogSteps` (LogSession.tsx's manual door) takes a
-            concrete `Baselines`, never a nullable one, so there is nothing
-            honest to resolve a split against without them. A plain `Link`
+        {/* Task 3 (the manual door), Phase 6I amendment: gated on the SAME
+            `needsBaselines` predicate every other coupled guard site
+            shares, not bare `baselines` — an effort-only workout has
+            nothing to resolve against baselines at all. A plain `Link`
             (not a `navigate()` button): this is a one-way hand-off to a new
-            route, the same idiom `OwnerActions`' own Edit link below uses. */}
-        {baselines ? (
+            route, the same idiom `OwnerActions`' own Edit link below uses.
+            KNOWN GAP (flagged in Task 2's own report, not fixed here — out
+            of this task's file list and the phase's own "don't touch the
+            Log screen" collision note): `LogSession.tsx`'s `ManualDoorLog`
+            still gates on bare `baselines === null` unconditionally, so an
+            effort-only workout opened here still hits its OWN "no target"
+            block one screen later — same final message, one extra
+            navigation, not a data-loss or crash risk. */}
+        {baselines !== null || !needsBaselines(workout.steps) ? (
           <Link
             to={`/library/${workout.id}/log`}
             state={{ from }}

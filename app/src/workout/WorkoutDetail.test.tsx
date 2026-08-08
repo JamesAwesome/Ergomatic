@@ -104,6 +104,32 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
   lastDoneDaysAgo: null,
 };
 
+// Phase 6I: an effort-only workout matching the shape Task 3 seeds for the
+// two designated onboarding workouts (domain/onboarding.ts) — a warm-up
+// plus ONE distance work step at an effort ref, nothing else (no "test"/
+// reps step, so `compileProgram` — exercised by the Connect describe block
+// below — has no OTHER reason to refuse it; this fixture's whole point is
+// isolating the baselines predicate). `needsBaselines()` reads false.
+const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
+  id: "w-effort",
+  title: "Effort Only Row",
+  type: "O2",
+  difficulty: "easy",
+  pain: 2,
+  steps: [
+    { k: "wu", minutes: 10 },
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { effort: "min" },
+    },
+  ],
+  isGlobal: true,
+  lastDoneDaysAgo: null,
+};
+
+const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
+
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 // A completed-but-unlogged run record for `draft` — the exact shape
@@ -360,7 +386,11 @@ describe("WorkoutDetail", () => {
     expect(await screen.findByText("LOG SCREEN")).toBeInTheDocument();
   });
 
-  it("Task 3 (the manual door): replaces Log it after with the no-target/Set baselines idiom when baselines are unset", async () => {
+  // Phase 6I amendment: this test's fixture (the default WORKOUT) has a
+  // split-ref work step — `needsBaselines()` reads true, so the gate below
+  // still fires exactly as before this task. The sibling test right after
+  // this one pins the OTHER branch the predicate now opens.
+  it("Task 3 (the manual door): replaces Log it after with the no-target/Set baselines idiom when baselines are unset (split-ref workout)", async () => {
     mockHooks({ k2Seconds: null, k6Seconds: null });
     await renderDetail();
 
@@ -380,6 +410,23 @@ describe("WorkoutDetail", () => {
     expect(noTargets.length).toBeGreaterThan(1);
   });
 
+  // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the single
+  // predicate every coupled guard site shares — an effort-only workout's
+  // "Log it after" link is no longer replaced by the no-target idiom just
+  // because baselines happen to be unset, since there's nothing for it to
+  // resolve against baselines at all.
+  it("keeps Log it after as a real link for an effort-only workout even with baselines unset", async () => {
+    mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT]);
+    await renderDetail("/library/w-effort");
+
+    const logItAfter = screen.getByRole("link", { name: "Log it after" });
+    expect(logItAfter).toHaveAttribute("href", "/library/w-effort/log");
+    // The step row's own "no target" never appears either — an effort ref
+    // shows its effort word, unconditionally (StepRow's own established
+    // rule, unaffected by this task).
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
+  });
+
   it("Start builds and saves the session draft, then navigates to /session/confirm", async () => {
     mockHooks(BASELINES);
     await renderDetailWithConfirmRoute("/library/w1");
@@ -394,6 +441,40 @@ describe("WorkoutDetail", () => {
     expect(draft!.type).toBe("AT");
     expect(draft!.steps).toStrictEqual(WORKOUT.steps);
     expect(draft!.startedAt).toBeNull();
+  });
+
+  // Phase 6I finding (report, not a code change here): WorkoutDetail's own
+  // Start button has NEVER been gated on baselines at all — it always
+  // builds a draft and navigates to Confirm unconditionally, split-ref or
+  // effort-only, baselines set or not; ConfirmTargets.tsx's own footer
+  // (`isStartBlocked`, this task's other change) is the ONE place that
+  // actually blocks the split-ref case. This test pins that this behavior
+  // is UNCHANGED by this task for an effort-only workout — Start still
+  // reaches Confirm, which (per the ConfirmTargets tests) now lets it
+  // through instead of blocking.
+  it("Start is unconditional regardless of baselines — an effort-only workout with baselines unset still reaches /session/confirm", async () => {
+    mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT]);
+    await renderDetailWithConfirmRoute("/library/w-effort");
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    const draft = loadDraft();
+    expect(draft).not.toBeNull();
+    expect(draft!.workoutId).toBe("w-effort");
+  });
+
+  // The split-ref regression companion: unchanged since before this task
+  // (WorkoutDetail's own Start was always unconditional), but pinned here
+  // explicitly so the pair together documents the FULL picture — Start
+  // itself never distinguishes the two cases; ConfirmTargets does.
+  it("Start is unconditional for a split-ref workout too — reaches /session/confirm even with baselines unset (Confirm is what blocks it, not this screen)", async () => {
+    mockHooks(NO_BASELINES);
+    await renderDetailWithConfirmRoute("/library/w1");
+
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
   });
 
   it("deep-copies the workout's steps into the draft — mutating one never touches the other", async () => {
@@ -1265,6 +1346,34 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
+  });
+
+  // Phase 6I: an effort-only workout needs no target to program at all
+  // (`compileProgram` already resolves an effort phase with no
+  // `targetSplit`, Task 1's own comment fix to domain/monitor/program.ts)
+  // — Connect proceeds straight to the interstitial with NO baselines
+  // error, unlike WORKOUT's split-ref case just above. jsdom has no
+  // `navigator.bluetooth`, so the interstitial's own REAL (unmocked)
+  // `useMonitorSession` deterministically fails `transport-missing` the
+  // instant it mounts — that message showing up (not the baselines error)
+  // is what proves the interstitial actually mounted, i.e. that Connect's
+  // own guard let this workout through.
+  it("effort-only workout, baselines unset: Connect proceeds to the interstitial with NO baselines error", async () => {
+    mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT]);
+    await renderDetail("/library/w-effort");
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      await screen.findByText("This device has no Bluetooth transport.", {
+        selector: ".connected-serif-line",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Set your baselines first. Connect needs a target to program.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   // WORKOUT's own "test" step (an open-ended all-out, no fixed time or

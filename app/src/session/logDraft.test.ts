@@ -376,6 +376,76 @@ describe("buildLogSteps", () => {
     ]);
   });
 
+  // Phase 6I: the 5G drop rule's own amendment. Dust Storm (AN) is a REAL,
+  // shipped effort-only library workout (6x100m all out, `ref: {effort:
+  // "max"}`, needsBaselines() false) — run with NULL baselines, exactly the
+  // production shape Task 2's guard loosening actually reaches. Before this
+  // task, `run.actuals[i]`'s measured stopwatch reading was dropped for
+  // EVERY effort phase unconditionally (wrapped in `if (!isEffort)`); now a
+  // genuine measurement survives regardless of `isEffort` — only the
+  // ASSUMED case (nothing recorded, "held the target") stays effort-gated,
+  // since there's no `targetSplit` to assume held.
+  it("Phase 6I: an effort DISTANCE phase's MEASURED stopwatch actual survives into the log under null baselines — targetSplit stays omitted (no target to compare it against)", () => {
+    const w = library("Dust Storm");
+    const draft = buildDraft({
+      id: "id-dust-storm",
+      title: w.title,
+      type: w.type as WorkoutType,
+      steps: w.steps,
+    });
+    const built = buildRun(draft, null, NOW);
+    // Elapsed 52s on the 100m piece -> splitSeconds = (52/100)*500 = 260.0.
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: new Date(NOW.getTime() + 52 * 1000).toISOString(),
+      actuals: {
+        1: { elapsedSeconds: 52, splitSeconds: 260, actualSource: "stopwatch" },
+      },
+    };
+    expect(run.phases[1]).toMatchObject({
+      type: "work",
+      targetKind: "effort",
+      meters: 100,
+    });
+    expect(run.phases[1]!.targetSplit).toBeUndefined();
+
+    const steps = buildLogSteps(run, draft);
+    expect(steps[0]).toStrictEqual({
+      label: "100 m @ MAX",
+      actualSplit: 260,
+      actualSource: "stopwatch",
+      spm: 32,
+      meters: 100,
+      // No `targetSplit` key at all — `validateLogStepEntry` already
+      // accepts this exact paired-actual-without-target shape (the 6C
+      // amendment).
+    });
+  });
+
+  it("an effort DISTANCE phase with NO recorded actual still logs nothing at all — a discarded suspect split, effort or split-ref alike", () => {
+    const w = library("Dust Storm");
+    const draft = buildDraft({
+      id: "id-dust-storm-discarded",
+      title: w.title,
+      type: w.type as WorkoutType,
+      steps: w.steps,
+    });
+    const built = buildRun(draft, null, NOW);
+    const run: SessionRun = {
+      ...built,
+      index: built.phases.length,
+      completedAt: NOW.toISOString(),
+      actuals: {},
+    };
+    const steps = buildLogSteps(run, draft);
+    expect(steps[0]).toStrictEqual({
+      label: "100 m @ MAX",
+      spm: 32,
+      meters: 100,
+    });
+  });
+
   it("Filling Low: wu and the auto-inserted rest phases never become LogSteps, even inside a reps-marker block; kept and discarded actuals interleave correctly by position", () => {
     // wu(8') + reps(3) x [w{2000m @ 6k+4, spm 22, rest 3'}] -> 1 + 3*(work+
     // rest) = 7 phases; work at 1,3,5. draft's real ref {base:"6k",

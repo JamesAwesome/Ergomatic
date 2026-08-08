@@ -3,7 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type { Step, WorkoutType } from "../../domain/types.js";
+import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
   loadDraft,
@@ -13,7 +13,11 @@ import {
 } from "./draft";
 import { buildRun, type EnginePhase } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
-import { isSuspectActual, totalSessionSeconds } from "./Timer";
+import {
+  hasRemainingEstimate,
+  isSuspectActual,
+  totalSessionSeconds,
+} from "./Timer";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
@@ -89,12 +93,38 @@ function testKindDraft(): SessionDraft {
 function buildAndSaveRun(
   draft: SessionDraft,
   now = FIXED_NOW,
-  baselines = BASELINES,
+  baselines: Baselines | null = BASELINES,
 ): SessionRun {
   saveDraft(startDraft(draft));
   const run = buildRun(draft, baselines, now);
   saveRun(run);
   return run;
+}
+
+// Phase 6I: the shape Task 3 seeds as the two designated onboarding
+// workouts (domain/onboarding.ts) — a bare warm-up plus ONE distance work
+// step at an effort ref, nothing after it (no reps, no embedded rest).
+// Hand-built because the seed doesn't exist yet — this is the one shape in
+// the whole app where a distance work phase is ALSO the run's own final
+// phase, which is what actually exercises `hasRemainingEstimate`'s false
+// branch: no real shipped effort-only workout (Dust Storm, Heat
+// Lightning, …) has this shape, since every one of them embeds a rest
+// phase after every occurrence including the last (see the real-fixture
+// regression test below).
+function onboardingShapedDraft(): SessionDraft {
+  return buildDraft({
+    id: "id-onboarding-shaped",
+    title: "First 6k",
+    type: "O2",
+    steps: [
+      { k: "wu", minutes: 10 },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 6000 },
+        ref: { effort: "min" },
+      },
+    ],
+  });
 }
 
 // Re-seeds `run` at a given phase index as if it had just started at
@@ -226,6 +256,39 @@ describe("totalSessionSeconds", () => {
     expect(totalSessionSeconds({ phases: [] } as unknown as SessionRun)).toBe(
       0,
     );
+  });
+});
+
+describe("hasRemainingEstimate — Phase 6I's shared gate for TOTAL LEFT + the phase bar", () => {
+  const priceable = phase({ type: "warmup", seconds: 300, label: "Easy" });
+  // An effort work phase with null-baselines: no targetSplit, no seconds,
+  // no meters priced — exactly what `phases()` (domain/expand.ts) produces
+  // for a distance-duration effort step under null baselines.
+  const unpriceable = phase({
+    type: "work",
+    targetKind: "effort",
+    meters: 6000,
+    label: "EASY",
+  });
+
+  it("is true when the CURRENT phase itself has an estimate", () => {
+    expect(hasRemainingEstimate([priceable, unpriceable], 0)).toBe(true);
+  });
+
+  it("is true when the current phase has none but a LATER phase does", () => {
+    expect(hasRemainingEstimate([unpriceable, priceable], 0)).toBe(true);
+  });
+
+  it("is false when every phase from fromIndex onward is unpriceable", () => {
+    expect(hasRemainingEstimate([priceable, unpriceable], 1)).toBe(false);
+  });
+
+  it("is true for a lone priceable phase (mutation guard: an off-by-one on the loop bound would read this as false)", () => {
+    expect(hasRemainingEstimate([priceable], 0)).toBe(true);
+  });
+
+  it("is false for an empty phase list", () => {
+    expect(hasRemainingEstimate([], 0)).toBe(false);
   });
 });
 
@@ -428,28 +491,23 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     });
   });
 
-  it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'rate free', count-UP, empty phase bar, standard controls", async () => {
+  it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'rate free', count-UP, standard controls, NO phase bar or TOTAL LEFT row", async () => {
     mockKeepAwake();
     const run = buildAndSaveRun(testKindDraft());
     runAtIndex(run, 1);
     await renderTimer();
 
     expect(screen.getByText("STEP 2 OF 2 · TEST")).toBeInTheDocument();
-    // Both the big numeral (elapsed) AND TOTAL LEFT read "0:00" here (a
-    // "test" phase has no `seconds`/`meters` for `phaseSeconds` to price,
-    // per engine.ts's own `totalRemainingSeconds` doc — it contributes
-    // nothing), so this scopes to the numeral specifically rather than
-    // colliding on the duplicate text.
+    // The big numeral still counts up normally (elapsed, no fixed duration
+    // to count DOWN from).
     expect(document.querySelector(".timer-time")).toHaveTextContent("0:00");
-    expect(document.querySelector(".timer-total-value")).toHaveTextContent(
-      "0:00",
-    );
-    // The phase bar stays empty — nothing to divide an open-ended phase's
-    // elapsed time by.
-    expect(
-      (document.querySelector(".timer-phase-bar span") as HTMLElement).style
-        .width,
-    ).toBe("0%");
+    // Phase 6I: this phase (a "test" step) has no seconds/meters for
+    // `phaseSeconds` to price, AND it's the LAST phase in this fixture —
+    // `hasRemainingEstimate` reads false, so BOTH the phase progress bar
+    // and the TOTAL LEFT row are absent entirely, never a frozen "0:00"/0%
+    // (the pre-Phase-6I behavior this test used to pin).
+    expect(document.querySelector(".timer-total")).not.toBeInTheDocument();
+    expect(document.querySelector(".timer-phase-bar")).not.toBeInTheDocument();
     expect(screen.getByText("All out")).toBeInTheDocument();
     expect(screen.getByText("rate free")).toBeInTheDocument();
     expect(screen.getByText("FINISH")).toBeInTheDocument();
@@ -461,6 +519,90 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       screen.queryByRole("button", { name: "NEXT →" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  // Phase 6I: at the WARM-UP (phase 0) of the same fixture, the test phase
+  // ahead has no estimate but that doesn't matter yet — nothing here reads
+  // "remaining" per-phase, only whether ANYTHING from the current index
+  // onward prices. The warm-up itself has a real duration, so both rows
+  // still render normally here (this test would fail under a "whole
+  // session" reading of the gate, which the module header's own comment
+  // explains is deliberately NOT what this checks).
+  it("still shows TOTAL LEFT and the phase bar during the warm-up, even though the test phase ahead of it has no estimate", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(testKindDraft());
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    expect(screen.getByText("STEP 1 OF 2 · WARM-UP")).toBeInTheDocument();
+    expect(document.querySelector(".timer-total")).toBeInTheDocument();
+    expect(document.querySelector(".timer-phase-bar")).toBeInTheDocument();
+  });
+});
+
+describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT + phase bar hidden, never frozen)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  it("shows TOTAL LEFT and the phase bar during the warm-up of a null-baselines onboarding-shaped session", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(onboardingShapedDraft(), FIXED_NOW, null);
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    expect(screen.getByText("STEP 1 OF 2 · WARM-UP")).toBeInTheDocument();
+    expect(document.querySelector(".timer-total")).toBeInTheDocument();
+    expect(document.querySelector(".timer-phase-bar")).toBeInTheDocument();
+  });
+
+  it("hides TOTAL LEFT and the phase bar entirely once the null-baselines session reaches its un-priceable effort-distance piece — never a frozen 0:00/0%", async () => {
+    mockKeepAwake();
+    const run = buildAndSaveRun(onboardingShapedDraft(), FIXED_NOW, null);
+    runAtIndex(run, 1);
+    await renderTimer();
+
+    // The distance step's own meters fold into the STEP line (Timer.tsx's
+    // own `stepLineText`), unaffected by this task.
+    expect(screen.getByText("STEP 2 OF 2 · WORK · 6000M")).toBeInTheDocument();
+    // The effort word only — {effort:"min"} -> "EASY" (domain/pace.ts) —
+    // never a numeric target, the 5G rule, unaffected by this task.
+    expect(screen.getByText("EASY")).toBeInTheDocument();
+    expect(document.querySelector(".timer-total")).not.toBeInTheDocument();
+    expect(document.querySelector(".timer-phase-bar")).not.toBeInTheDocument();
+    // The distance stopwatch still counts up normally — only the TOTAL/bar
+    // rows are gone, not the phase's own numeral.
+    expect(document.querySelector(".timer-time")).toHaveTextContent("0:00");
+  });
+
+  // Realistic-fixture guard (recurring failure #3): the real, SHIPPED
+  // effort-only AN sprint workouts this guard loosening also opens up to
+  // null baselines (Task 1's own review finding) never actually hit the
+  // hidden branch, because every one of them embeds a rest phase after
+  // EVERY occurrence, including the last — there is always a real,
+  // priceable phase ahead until the run's true final phase, which is
+  // itself a rest. Pinned here so nothing about this task's own domain
+  // guard-loosening silently degrades an EXISTING library workout's timer
+  // display.
+  it("still shows TOTAL LEFT and the phase bar throughout a real shipped effort-only library workout (Dust Storm) under null baselines", async () => {
+    mockKeepAwake();
+    const dustStorm = library("Dust Storm");
+    const draft = buildDraft({
+      id: "id-dust-storm",
+      title: dustStorm.title,
+      type: dustStorm.type as WorkoutType,
+      steps: dustStorm.steps,
+    });
+    const run = buildAndSaveRun(draft, FIXED_NOW, null);
+    // Phases: [0 warmup, 1 work, 2 rest, 3 work, 4 rest, ... last=rest] —
+    // index 1 is the FIRST work (effort-distance) occurrence, immediately
+    // followed by a real, priceable rest phase.
+    runAtIndex(run, 1);
+    await renderTimer();
+
+    expect(document.querySelector(".timer-total")).toBeInTheDocument();
+    expect(document.querySelector(".timer-phase-bar")).toBeInTheDocument();
   });
 });
 

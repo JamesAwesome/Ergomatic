@@ -38,6 +38,25 @@ function hoarfrostDraft(id = "id-hoarfrost"): SessionDraft {
   });
 }
 
+// Phase 6I: a REAL, shipped effort-only library workout (needsBaselines()
+// reads false — Task 1's own review finding: this pre-existing AN sprint
+// content, not just the future onboarding pair, is what the guard
+// loosening opens up) — the realistic fixture the repo convention
+// requires, matching ConfirmTargets.test.tsx's own choice for the
+// identical predicate.
+function heatLightningDraft(id = "id-heat-lightning"): SessionDraft {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Heat Lightning");
+  if (!w) throw new Error("missing library fixture: Heat Lightning");
+  return buildDraft({
+    id,
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+}
+
+const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
+
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const READY_PREFS = {
   difficulties: [] as never[],
@@ -168,14 +187,68 @@ describe("Countdown", () => {
     expect(loadRun()).not.toBeNull();
   });
 
+  // Phase 6I: `needsBaselines()` (domain/needsBaselines.ts) is the SAME
+  // predicate ConfirmTargets.tsx's own footer uses — an effort-only draft
+  // (a REAL shipped library workout, Heat Lightning) must build and save a
+  // real run and proceed to "GET ON THE HANDLE," never bounce to Confirm,
+  // even though `resolvedBaselines` is null.
+  //
+  // Regression pin for the redirect loop the brief warns about: this
+  // screen has TWO gates that must share the exact same predicate — the
+  // build effect's own early-return AND the render's redirect. Getting
+  // either one wrong in isolation reproduces a real bug class: gate only
+  // the redirect (leave the build effect blocking on bare
+  // `resolvedBaselines === null`) and this test's `loadRun()` assertion
+  // fails (no run record ever gets written, even though nothing visibly
+  // redirects); gate only the build effect (leave the render redirecting
+  // unconditionally) and this test's "GET ON THE HANDLE" assertion fails
+  // instead (a run WOULD be written, but the rower never sees it — bounced
+  // straight back to Confirm, which would send them right back here,
+  // building a SECOND run, forever). Both assertions together are what
+  // actually catches a one-sided fix.
+  it("builds and saves a run for an effort-only workout with null baselines, and proceeds to GET ON THE HANDLE (no redirect loop)", async () => {
+    saveDraft(heatLightningDraft());
+    mockAdapters({
+      baselinesState: { state: "ready", baselines: NO_BASELINES },
+    });
+    await renderCountdown();
+
+    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+    expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
+    const run = loadRun();
+    expect(run).not.toBeNull();
+    // Heat Lightning's first phase is its own warm-up, "Easy" — the effort
+    // work phase itself is proven separately below.
+    expect(screen.getByText("Easy")).toBeInTheDocument();
+  });
+
+  it("an effort-only workout's built run carries no targetSplit on its effort work phase, and its label is the effort word (never a numeric estimate)", async () => {
+    saveDraft(heatLightningDraft());
+    mockAdapters({
+      baselinesState: { state: "ready", baselines: NO_BASELINES },
+    });
+    await renderCountdown();
+    await screen.findByText("GET ON THE HANDLE");
+
+    const run = loadRun()!;
+    const workPhase = run.phases.find((p) => p.type === "work")!;
+    expect(workPhase).toBeDefined();
+    expect(workPhase.targetKind).toBe("effort");
+    expect(workPhase.targetSplit).toBeUndefined();
+    expect(workPhase.label).toBe("ALL OUT");
+  });
+
   // Phase 6B Task 3 superseded the old `{0,0}` fallback (Task 2's own review
   // flagged it): ConfirmTargets.tsx now blocks START whenever baselines are
-  // unset, so the only way to reach Countdown with `resolvedBaselines ===
-  // null` is a direct/deep navigation that skipped Confirm's own guard.
-  // Rather than build a run against a dummy pair, Countdown bounces back to
-  // Confirm — the same place a rower trying to START without baselines
-  // lands anyway.
-  it("redirects to /session/confirm without building a run when baselines are ready but unset", async () => {
+  // unset AND the draft needs one (Phase 6I narrowed "whenever" to that
+  // condition), so the only way to reach Countdown with `resolvedBaselines
+  // === null` for a SPLIT-REF draft is a direct/deep navigation that
+  // skipped Confirm's own guard. Rather than build a run against a dummy
+  // pair, Countdown bounces back to Confirm — the same place a rower
+  // trying to START without baselines lands anyway. Regression pin: this
+  // must stay true even though the identical predicate now lets an
+  // effort-only draft (the test above) through.
+  it("still redirects to /session/confirm without building a run for a SPLIT-REF workout when baselines are ready but unset", async () => {
     saveDraft(hoarfrostDraft());
     mockAdapters({
       baselinesState: {
