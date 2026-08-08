@@ -1945,9 +1945,12 @@ uncertainty, named in the source rather than pretended away.
 points at `pm5-lab.html`, does NOT apply to this row — the lab can never
 render the connected surface).** Desktop Chromium only:
 `navigator.bluetooth` is undefined on the Capacitor build, so
-`resolveDefaultTransport()` returns `null` there. (1) `pnpm dev` from
-`app/` — the repo root has no `dev` script — and open the printed URL in
-Chromium; (2) sign in; (3) Library → open the workout DETAIL of a real
+`resolveDefaultTransport()` returns `null` there. (1) Node 26 first —
+`export PATH="$HOME/.local/share/nvm/v26.5.0/bin:$PATH"` (the machine
+defaults to 25) — then `pnpm dev` from `app/` — the repo root has no
+`dev` script — and open the printed URL in Chromium (a plain dev serve
+talks to the REAL PM5: the fake engages only when a test fixture has
+planted `window.__pm5FakeScript__`, never on its own); (2) sign in; (3) Library → open the workout DETAIL of a real
 multi-interval workout (two or more TIMED work intervals with rest); (4)
 the button is **Connect** — one word (`ConnectAction.tsx`), not "Connect
 PM5"; if a confirm panel has replaced it (a prior unlogged or live
