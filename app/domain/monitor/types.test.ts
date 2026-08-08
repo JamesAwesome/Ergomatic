@@ -38,6 +38,8 @@ describe("MonitorFrame", () => {
     const frame: MonitorFrame = {
       elapsedSeconds: 12.3,
       distanceMeters: 45.6,
+      sessionElapsedSeconds: 12.3,
+      sessionDistanceMeters: 45.6,
       currentSplit: 105,
       spm: 24,
       heartRateBpm: null,
@@ -72,6 +74,8 @@ describe("MonitorEvent", () => {
         frame: {
           elapsedSeconds: 0,
           distanceMeters: 0,
+          sessionElapsedSeconds: 0,
+          sessionDistanceMeters: 0,
           currentSplit: null,
           spm: null,
           rowingActive: false,

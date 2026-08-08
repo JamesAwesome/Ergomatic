@@ -6483,3 +6483,167 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     expect(structureEntries(log)).toBe(1); // the near-miss, seen and survived
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 7B — the session accumulator (hardware walk 4, 2026-08-08,
+// interface-notes.md §18). 0x0031's Elapsed Time and Distance are
+// PER-INTERVAL: a 2x100m produced `state=resting elapsed=37.81
+// distance=101.8` and then `state=rowing elapsed=0 distance=0.7`. Every
+// consumer that wanted a session total was reading a field that falls back
+// to the floor mid-piece.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulate across 0x0031's per-interval resets (walk 4)", () => {
+  /** Brings `seen.as1`/`seen.as2` up so that the general-status
+   *  notifications below actually produce frames. Content is irrelevant to
+   *  the accumulator — zero-filled payloads of the documented lengths, the
+   *  same shortcut the 'seen' gating tests above take. */
+  function primeSiblings(transport: ReturnType<typeof stubTransport>): void {
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+  }
+
+  function framesFrom(events: MonitorEvent[]): MonitorFrame[] {
+    return events.flatMap((e) => (e.kind === "frame" ? [e.frame] : []));
+  }
+
+  /** Walk 4's own trace, state word by state word and value by value: the
+   *  arm, one early rowing tick, the end of interval 1's rest, the RESET
+   *  into interval 2, that interval's own rest, and the finish. Each
+   *  interval's count spans its work plus its trailing rest, which is why
+   *  the two banked readings are 37.81/101.8 and 33.07/109.7. */
+  const WALK_4: { state: number; elapsed: number; distance: number }[] = [
+    { state: WORKOUTSTATE_WAITTOBEGIN, elapsed: 0, distance: 0 },
+    { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 1.23, distance: 3.5 },
+    { state: WORKOUTSTATE_INTERVALREST, elapsed: 37.81, distance: 101.8 },
+    { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 0, distance: 0.7 },
+    { state: WORKOUTSTATE_INTERVALREST, elapsed: 29.44, distance: 101 },
+    { state: WORKOUTSTATE_WORKOUTEND, elapsed: 33.07, distance: 109.7 },
+  ];
+
+  function replayWalk4(): MonitorFrame[] {
+    const transport = stubTransport();
+    const driver = createPm5Driver(transport, createEventLog());
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    primeSiblings(transport);
+    for (const tick of WALK_4) {
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        generalStatusIn(tick.state, tick.elapsed, tick.distance),
+      );
+    }
+    return framesFrom(events);
+  }
+
+  it("emits the raw per-interval pair unchanged — the reset is real and stays visible", () => {
+    const frames = replayWalk4();
+
+    expect(frames).toHaveLength(WALK_4.length);
+    expect(frames.map((f) => f.elapsedSeconds)).toStrictEqual(
+      WALK_4.map((t) => t.elapsed),
+    );
+    expect(frames.map((f) => f.distanceMeters)).toStrictEqual(
+      WALK_4.map((t) => t.distance),
+    );
+  });
+
+  it("the session pair is MONOTONE NON-DECREASING across every frame", () => {
+    const frames = replayWalk4();
+
+    for (let i = 1; i < frames.length; i += 1) {
+      expect(frames[i]!.sessionElapsedSeconds).toBeGreaterThanOrEqual(
+        frames[i - 1]!.sessionElapsedSeconds,
+      );
+      expect(frames[i]!.sessionDistanceMeters).toBeGreaterThanOrEqual(
+        frames[i - 1]!.sessionDistanceMeters,
+      );
+    }
+  });
+
+  it("ends at interval 1's banked reading plus interval 2's own", () => {
+    const last = replayWalk4().at(-1)!;
+
+    // 37.81 + 33.07 and 101.8 + 109.7 — the two intervals' final readings,
+    // added. `toBeCloseTo` only because summing two decimals in binary
+    // floating point lands a few ulps off the decimal literal.
+    expect(last.sessionElapsedSeconds).toBeCloseTo(37.81 + 33.07, 9);
+    expect(last.sessionDistanceMeters).toBeCloseTo(101.8 + 109.7, 9);
+  });
+
+  it("folds ONLY the pre-reset frame — the frame after a reset carries its own reading on top", () => {
+    const frames = replayWalk4();
+
+    // Frame 3 is the reset frame (`elapsed=0 distance=0.7`): interval 1's
+    // whole 37.81/101.8 is banked, and this frame's own 0/0.7 sits on it.
+    expect(frames[3]!.sessionElapsedSeconds).toBeCloseTo(37.81, 9);
+    expect(frames[3]!.sessionDistanceMeters).toBeCloseTo(101.8 + 0.7, 9);
+  });
+
+  it("the interval countdown is NOT touched — it still reads the raw per-interval pair", () => {
+    // Walk 4 proved `intervalRemaining` correct as it stood, so nothing in
+    // this task may re-source it. With no program armed there is nothing to
+    // count down against, which is exactly what it must keep reporting.
+    expect(replayWalk4().every((f) => f.intervalRemaining === null)).toBe(true);
+  });
+
+  it("a BACKWARDS-NOISE tick does not fold — the capture's own worst case is -0.57 s", () => {
+    const transport = stubTransport();
+    const driver = createPm5Driver(transport, createEventLog());
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    primeSiblings(transport);
+
+    // `pm5-session3-final.log:4632-4633` — the largest backwards elapsed
+    // tick anywhere in the record. Distance moves forward across it, which
+    // is what makes a spurious fold obvious: folding would add the previous
+    // frame's 40.2 m on top of this frame's own.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 20.5, 40.2),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 19.93, 40.5),
+    );
+
+    const frames = framesFrom(events);
+    expect(frames[1]!.elapsedSeconds).toBe(19.93); // the noise is real
+    expect(frames[1]!.sessionElapsedSeconds).toBe(19.93);
+    expect(frames[1]!.sessionDistanceMeters).toBe(40.5);
+  });
+
+  it("a new program() resets the accumulator — the next run starts from zero", async () => {
+    const transport = stubTransport();
+    const driver = createPm5Driver(transport, createEventLog());
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    primeSiblings(transport);
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    // One reset inside run 1, so it genuinely banks an offset...
+    for (const tick of [
+      { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 20, distance: 50 },
+      { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 0, distance: 1 },
+      { state: WORKOUTSTATE_WORKOUTEND, elapsed: 25, distance: 60 },
+    ]) {
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        generalStatusIn(tick.state, tick.elapsed, tick.distance),
+      );
+    }
+    expect(framesFrom(events).at(-1)!.sessionElapsedSeconds).toBe(45);
+    expect(framesFrom(events).at(-1)!.sessionDistanceMeters).toBe(110);
+
+    // ...and run 2 must not inherit a metre or a second of it.
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 5, 10),
+    );
+
+    const last = framesFrom(events).at(-1)!;
+    expect(last.sessionElapsedSeconds).toBe(5);
+    expect(last.sessionDistanceMeters).toBe(10);
+  });
+});

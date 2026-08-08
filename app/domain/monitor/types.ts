@@ -30,6 +30,32 @@ export interface MonitorCapabilities {
 export interface MonitorFrame {
   elapsedSeconds: number;
   distanceMeters: number;
+  // ^ 0x0031's OWN Elapsed Time / Distance, exactly as the machine reports
+  //   them — and they are PER-INTERVAL, not session-cumulative. Hardware
+  //   walk 4 (2026-08-08, `docs/monitor/pm5-interface-notes.md` §18) settled
+  //   it on a 2x100m: `state=resting elapsed=37.81 distance=101.8` was
+  //   followed immediately by `state=rowing elapsed=0 distance=0.7` — BOTH
+  //   fields reset together at each new work interval, and each interval's
+  //   count spans its own work plus its trailing rest. Anything that wants
+  //   "how far into THIS interval" reads these; anything that wants a
+  //   whole-session total reads the pair below instead.
+  sessionElapsedSeconds: number;
+  sessionDistanceMeters: number;
+  // ^ The whole-session running totals the pair above only LOOKED like
+  //   before walk 4 — accumulated by `src/monitor/driver.ts`, which folds
+  //   each interval's last pre-reset reading into a running offset (see
+  //   that file's own accumulator for the exact rule and its honest
+  //   undercount caveat). A DISPLAY ESTIMATE, never a record: the fold can
+  //   miss up to one status tick (~0.5 s / ~1 m) per interval boundary,
+  //   because it can only bank the last reading it actually SAW. The
+  //   RECORD's per-interval actuals come from 0x0037/0x0038
+  //   (`IntervalActual`) and are not derived from these at all.
+  //
+  //   Same caveat as `intervalIndex` below: a `MonitorFrame` built directly
+  //   by `pm5/parse.ts`'s `toMonitorFrame` has no history to accumulate
+  //   from, so these simply equal `elapsedSeconds`/`distanceMeters` there.
+  //   Only a frame that has passed through `src/monitor/driver.ts` carries
+  //   real accumulation.
   currentSplit: number | null;
   spm: number | null;
   heartRateBpm: number | null; // null = no belt data THIS frame

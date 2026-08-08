@@ -566,6 +566,18 @@ const DEFAULT_PREPARE_SETTLE_TICKS = 10;
  *  diverge independently if a future finding ever needs them to. */
 const DEFAULT_ERROR_TYPE_TICKS = 3;
 
+/** How far 0x0031's Elapsed Time must fall between two consecutive frames
+ *  before the session accumulator treats it as a per-interval RESET rather
+ *  than noise (walk 4 — see the `session` accumulator's own doc comment).
+ *  Two seconds, chosen against the record from both sides: the largest
+ *  BACKWARDS tick anywhere in the capture is -0.57 s
+ *  (`docs/monitor/sessions/pm5-session3-final.log:4632-4633`), and the
+ *  smallest genuine reset drops the clock by the whole interval that just
+ *  ended (walk 4's own were 37.81 s and 29.44 s). Nothing observed lives
+ *  between those two populations, and this sits roughly 3.5x above the
+ *  noise floor and an order of magnitude below the smallest real reset. */
+const SESSION_RESET_ELAPSED_DROP = 2;
+
 export function createPm5Driver(
   t: Transport,
   log: MonitorEventLog,
@@ -664,6 +676,44 @@ export function createPm5Driver(
   // exact shape instead of catching it).
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
+  /**
+   * THE SESSION ACCUMULATOR (Phase 7B, hardware walk 4 — interface-notes.md
+   * §18, 2026-08-08). 0x0031's Elapsed Time and Distance are PER-INTERVAL,
+   * not session-cumulative: a 2x100m produced `state=resting elapsed=37.81
+   * distance=101.8` and then, one frame later, `state=rowing elapsed=0
+   * distance=0.7` — both fields reset TOGETHER at each new work interval,
+   * and each interval's count spans its own work plus its trailing rest.
+   * Every consumer that wanted a whole-session total was reading a value
+   * that falls back to zero mid-piece: TOTAL LEFT went 1:30 -> 1:11 and
+   * then ROSE to 1:38 at interval 2, and the METERS card fell 109 -> 50.
+   *
+   * `prev` is the previous RAW frame's `(elapsedSeconds, distanceMeters)`;
+   * `offsetElapsed`/`offsetDistance` are everything banked from intervals
+   * already finished. A reset is detected on ELAPSED alone, and only when
+   * it drops by MORE than `SESSION_RESET_ELAPSED_DROP` seconds — the
+   * capture's own backwards noise maxes out at -0.57 s
+   * (`docs/monitor/sessions/pm5-session3-final.log:4632-4633`), so a 2 s
+   * threshold sits an order of magnitude clear of it while any genuine
+   * boundary drops the clock by the whole interval's length.
+   *
+   * **HONEST CAVEAT — a display estimate, not a record.** The fold banks
+   * the last pre-reset frame this driver actually SAW, which at the
+   * observed ~2 Hz cadence can be up to one status tick short of the
+   * interval's true final reading: roughly 0.5 s and ~1 m may be
+   * undercounted per boundary. That is acceptable for the two things these
+   * fields feed (a countdown and a meters card) and unacceptable for a
+   * record — which is why the RECORD does not use them at all: an
+   * interval's real actuals come from 0x0037/0x0038 (`toIntervalActual`),
+   * untouched by this.
+   *
+   * Reset with the rest of the per-program state when `program()` opens a
+   * new run (beside `boundaryHalves`, below).
+   */
+  let session = {
+    offsetElapsed: 0,
+    offsetDistance: 0,
+    prev: null as { elapsedSeconds: number; distanceMeters: number } | null,
+  };
   /**
    * Task 1 (fix-3, interface-notes.md §17 item 12): the machine's own idea
    * of the ARMED workout's shape — `workoutType`/`workoutDurationRaw`/
@@ -1190,10 +1240,31 @@ export function createPm5Driver(
       base.state,
       programLength,
     );
+    // THE SESSION FOLD (walk 4 — see `session`'s own doc comment). Done
+    // BEFORE the frame is finished so the emitted frame already carries the
+    // accumulated pair, and deliberately AFTER `computeRemainingForFrame`'s
+    // inputs are untouched: `intervalRemaining` reads the RAW per-interval
+    // pair against 0x0033's own last-split reference and walk 4 proved that
+    // countdown correct exactly as it stands.
+    if (
+      session.prev !== null &&
+      session.prev.elapsedSeconds - base.elapsedSeconds >
+        SESSION_RESET_ELAPSED_DROP
+    ) {
+      session.offsetElapsed += session.prev.elapsedSeconds;
+      session.offsetDistance += session.prev.distanceMeters;
+    }
+    session.prev = {
+      elapsedSeconds: base.elapsedSeconds,
+      distanceMeters: base.distanceMeters,
+    };
+
     const frameWithIndex: MonitorFrame = { ...base, intervalIndex };
     const frame: MonitorFrame = {
       ...frameWithIndex,
       intervalRemaining: computeRemainingForFrame(frameWithIndex),
+      sessionElapsedSeconds: session.offsetElapsed + base.elapsedSeconds,
+      sessionDistanceMeters: session.offsetDistance + base.distanceMeters,
     };
     // Raw tracking for the OLD (fix-round MED-2) raw-vs-raw comparison —
     // see `lastRawFrameIntervalIndex`'s own doc comment for why this stays
@@ -2491,6 +2562,14 @@ export function createPm5Driver(
         }
         boundaryHalves.split = null;
         boundaryHalves.asSplit = null;
+        // The session accumulator is per-RUN state for the same reason a
+        // pending boundary half is (walk 4 — `session`'s own doc comment):
+        // a new program's totals start at zero, and the outgoing run's
+        // banked offsets must not be carried into it. `prev` goes with
+        // them — the first frame of the new run would otherwise be measured
+        // against the last frame of the old one and fold its whole elapsed
+        // in as a phantom interval.
+        session = { offsetElapsed: 0, offsetDistance: 0, prev: null };
         activeRun = { program: p, closed: false, actuals: 0 };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });
