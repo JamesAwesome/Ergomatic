@@ -276,16 +276,15 @@ export const PAIN_WORDS: readonly string[] = [
 // One-word (well, one-phrase) summary per WorkoutType, mirroring PAIN_WORDS
 // above — the classification card's TYPE group shows this opposite its
 // label the same way EXPECTED PAIN shows its level word. James's mid-run
-// addition to this phase (see .superpowers/sdd/.../progress.md); words are
-// his suggestion, reviewable/vetoable at the PR, but centralized here
-// (rather than inlined in ClassificationCard.tsx) so a future wording pass
-// has one place to edit, same rationale as PAIN_WORDS.
-export const TYPE_WORDS: Record<WorkoutType, string> = {
-  AN: "SPEED WORK",
-  O2: "LOW & SLOW",
-  AT: "COMFORTABLY HARD",
-  TR: "HARD INTERVALS",
-};
+// addition to Phase 5G; words are his suggestion, reviewable/vetoable at the
+// PR, but centralized (rather than inlined in ClassificationCard.tsx) so a
+// future wording pass has one place to edit, same rationale as PAIN_WORDS.
+//
+// Extracted to `src/components/typeWords.ts` (2026-08-08 round) once Today's
+// plan line needed the identical word for its own effective type — re-
+// exported here unchanged so this file's own existing consumer
+// (ClassificationCard.tsx) doesn't need to change its import.
+export { TYPE_WORDS } from "../components/typeWords";
 
 /** Appends an EMPTY work step and returns its id so the caller can open it for
  *  editing immediately — the accordion always opens a freshly added step.

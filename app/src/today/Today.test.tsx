@@ -1244,7 +1244,7 @@ describe("Today (type-swap chips)", () => {
   it("hides the type-swap chips in freestyle mode but keeps the FILTER sheet available", async () => {
     mockReady({ plan: FREESTYLE_PLAN });
     await renderToday();
-    for (const type of ["AN", "O2", "AT", "TR"] as const) {
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
       expect(
         screen.queryByRole("button", { name: type }),
       ).not.toBeInTheDocument();
@@ -1256,6 +1256,18 @@ describe("Today (type-swap chips)", () => {
     expect(
       within(painGroup).getByRole("button", { name: "1" }),
     ).toBeInTheDocument();
+  });
+
+  // James's 2026-08-08 ordering decision: every left-to-right type row reads
+  // O2 · AT · TR · AN app-wide (the pyramid's base-first order), not the
+  // AN-first order this row used before.
+  it("renders the type-swap chips left-to-right as O2, AT, TR, AN", async () => {
+    mockReady();
+    const { container } = await renderToday();
+    const labels = Array.from(
+      container.querySelectorAll(".today-type-chips .chip"),
+    ).map((el) => el.textContent);
+    expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
   });
 
   it("swapping the type chip changes the pool and the plan line shows PRESCRIBED → SWAPPED", async () => {
@@ -1421,6 +1433,70 @@ describe("Today (type-swap chips)", () => {
     // crashing or keeping the stale AT id.
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
     expect(screen.queryByText(/YOUR PICK/)).not.toBeInTheDocument();
+  });
+});
+
+// James's request (2026-08-08): a descriptor word beneath the type-swap
+// chips, like Builder's ClassificationCard's own TYPE_WORDS — reference
+// tests below mirror ClassificationCard.test.tsx's own "shows %s's summary
+// word" coverage, but sourced from the EFFECTIVE type (`swapType ??
+// effectivePrescribed`), not a controlled `type` prop.
+describe("Today (type descriptor word)", () => {
+  it("shows the plan's prescribed type's word with no swap (AT -> COMFORTABLY HARD)", async () => {
+    mockReady();
+    await renderToday();
+    expect(screen.getByText("COMFORTABLY HARD")).toBeInTheDocument();
+  });
+
+  it("tracks a swap to the effective type's own word (-> O2 -> LOW & SLOW)", async () => {
+    mockReady();
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+    expect(screen.queryByText("COMFORTABLY HARD")).not.toBeInTheDocument();
+    expect(screen.getByText("LOW & SLOW")).toBeInTheDocument();
+  });
+
+  it("reverts to the prescribed type's word once un-swapped", async () => {
+    mockReady();
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+    expect(screen.getByText("LOW & SLOW")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "AT" }));
+
+    expect(screen.queryByText("LOW & SLOW")).not.toBeInTheDocument();
+    expect(screen.getByText("COMFORTABLY HARD")).toBeInTheDocument();
+  });
+
+  it("on a TEST day, shows TR's word by default (HARD INTERVALS) since TR is the effective type", async () => {
+    mockReady({ plan: PLAN_TEST });
+    await renderToday();
+    expect(screen.getByText("HARD INTERVALS")).toBeInTheDocument();
+  });
+
+  it("does not render in freestyle mode — there are no type-swap chips to reinforce", async () => {
+    mockReady({ plan: FREESTYLE_PLAN });
+    await renderToday();
+    for (const word of [
+      "LOW & SLOW",
+      "COMFORTABLY HARD",
+      "HARD INTERVALS",
+      "SPEED WORK",
+    ]) {
+      expect(screen.queryByText(word)).not.toBeInTheDocument();
+    }
+  });
+
+  // The chips already convey the selected type to assistive tech via each
+  // TodayChip's own `aria-pressed` — this word is purely presentational
+  // reinforcement of that same state, so it's hidden from the accessibility
+  // tree rather than announced a second time.
+  it("is aria-hidden — the chips' own aria-pressed already conveys the selection", async () => {
+    mockReady();
+    await renderToday();
+    const word = screen.getByText("COMFORTABLY HARD");
+    const row = word.closest(".today-type-word-row");
+    expect(row).toHaveAttribute("aria-hidden", "true");
   });
 });
 

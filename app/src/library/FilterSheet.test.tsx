@@ -35,7 +35,7 @@ describe("FilterSheet", () => {
     for (const label of ["TYPE", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
-    for (const type of ["AN", "O2", "AT", "TR"]) {
+    for (const type of ["O2", "AT", "TR", "AN"]) {
       expect(
         within(dialog).getByRole("button", { name: type }),
       ).toBeInTheDocument();
@@ -62,6 +62,20 @@ describe("FilterSheet", () => {
     expect(
       within(dialog).getByRole("button", { name: "CUSTOM" }),
     ).toBeInTheDocument();
+  });
+
+  // James's 2026-08-08 ordering decision: every left-to-right type row reads
+  // O2 · AT · TR · AN app-wide (the pyramid's base-first order), not the
+  // AN-first order this sheet used before. Real DOM order, not just
+  // presence — a naive existence-only loop over the four labels can't tell
+  // this apart from the old order.
+  it("renders the TYPE cells left-to-right as O2, AT, TR, AN", () => {
+    renderSheet();
+    const typeGroup = screen.getByRole("group", { name: "TYPE" });
+    const labels = within(typeGroup)
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+    expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
   });
 
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {

@@ -2,14 +2,16 @@ import type { Difficulty, WorkoutType } from "../../domain/types.js";
 import { PAIN_WORDS, TYPE_WORDS } from "./builderState";
 import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 
-// Chip order per docs/design/README.md §Screens -> "2. Library" (AN before
-// O2 — not alphabetical), matching src/library/FilterSheet.tsx's TYPE cells
-// and Builder.tsx's own (pre-redesign) TYPE_CHIPS.
+// Chip order per docs/design/README.md §Screens -> "2. Library" (amended
+// 2026-08-08: James's ordering decision — every left-to-right type row reads
+// O2 · AT · TR · AN app-wide, the pyramid's base-first order), matching
+// src/library/FilterSheet.tsx's TYPE cells and Today.tsx's own type-swap
+// chips.
 const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
-  { type: "AN", label: "AN" },
   { type: "O2", label: "O2" },
   { type: "AT", label: "AT" },
   { type: "TR", label: "TR" },
+  { type: "AN", label: "AN" },
 ];
 
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept

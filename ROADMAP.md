@@ -1551,6 +1551,15 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-08) — type rows unified to O2 · AT · TR · AN (the
+  pyramid's base-first order) across Today's type-swap chips, the Library
+  filter sheet's TYPE cells, and Builder's classification card, with the
+  design README amended to match; Today's plan line also gains the
+  currently-effective type's descriptor word (`TYPE_WORDS`, extracted from
+  `builderState.ts` to a shared `src/components/typeWords.ts`), the same
+  "LOW & SLOW"/"COMFORTABLY HARD"/"HARD INTERVALS"/"SPEED WORK" phrasing the
+  classification card has shown since Phase 5G.
+
 - **PR #TBD** (2026-08-08, round 4 on the same bug, architectural) — round
   3's `holdScrollTop` rAF hold-loop (below) also lost on real iOS, in both
   browsers, on fresh bundles — the third window-scroll fix in a row to fail

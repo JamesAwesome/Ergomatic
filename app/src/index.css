@@ -851,6 +851,29 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
+  /* Word row (below) now owns the section's bottom margin instead of this
+     row, so the two together read as one unit rather than stacking two
+     16px gaps. */
+  margin-bottom: 4px;
+}
+
+/* The effective type's descriptor word (James's request, 2026-08-08 round)
+   — same reserved-line-box fix as `.classification-type-label-row`
+   (index.css, above), even though a type is ALWAYS selected here (a plan is
+   active whenever this renders) and the word therefore never toggles in and
+   out the way it would if it could. Kept for parity with that established
+   pattern, not because this row can actually shift height in practice. */
+.today-type-word-row {
+  min-height: 18px;
+  margin: 0 0 16px;
+}
+
+.today-type-word {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
 }
 
 /* Classification card (Task 4, docs/design/builder-redesign/README.md §3):
