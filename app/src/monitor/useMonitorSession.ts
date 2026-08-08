@@ -666,7 +666,7 @@ export function useMonitorSession(
    *  reached by every OTHER way off the interstitial: a tab-bar tap, the
    *  back gesture, an iOS process kill. Before this fix those exits left
    *  the PM5 armed holding a workout nobody was going to row — DEVIATIONS
-   *  row 57's own documented harm ("the rower find[s] someone else's
+   *  row 64's own documented harm ("the rower find[s] someone else's
    *  intervals waiting on the monitor"), reachable from everywhere except
    *  the one button that happened to call `cancel()`. Fire-and-forget
    *  either way: nothing above this can act on a failed hang-up, and a
@@ -712,6 +712,12 @@ export function useMonitorSession(
   );
 
   const connect = useCallback(async (): Promise<void> => {
+    // Since cancel() claims driverRef SYNCHRONOUSLY before its awaits (the
+    // MEDIUM-9 deadlock fix), this guard no longer covers an in-flight
+    // cancel: driverRef is already null while cancel's terminate is still
+    // on the wire. Unreachable today only because onExit() unmounts the
+    // interstitial synchronously — nothing can press Connect mid-cancel.
+    // If cancel ever stops unmounting, this guard needs a cancellingRef.
     if (connectingRef.current || driverRef.current !== null) return;
     connectingRef.current = true;
     update({ phase: "picking", error: null });

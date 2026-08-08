@@ -127,11 +127,10 @@ function status(
  *  (the double-fire pin's assertion), how many subscriptions are
  *  outstanding, and whether the hook hung up on unmount.
  *
- *  **The fake exposes no subscription introspection of its own** (the task
- *  brief says it does; it does not — `notifyCbs` is private and there is no
- *  accessor), so the counting lives here instead. Reported as a brief
- *  correction rather than by widening the fake's public surface for one
- *  test. */
+ *  The fake has since grown its own `subscriptionCount()` accessor (Task 8,
+ *  for the parked-pin work), but this spy predates it and stays: it also
+ *  counts wire writes, disconnects, and scans — none of which the fake
+ *  exposes — and it wraps ANY transport, not only the fake. */
 function spyTransport(inner: Transport & FakeControls): Transport &
   FakeControls & {
     wireWrites: number;
@@ -1470,7 +1469,7 @@ describe("useMonitorSession: teardown", () => {
 
   // Task 5 review, Probe D: before this fix, unmounting while ARMED
   // (programming/ready) hung up the radio with no terminate at all, leaving
-  // the PM5 holding a workout nobody was going to row — DEVIATIONS row 57's
+  // the PM5 holding a workout nobody was going to row — DEVIATIONS row 64's
   // own documented harm, reachable from every exit except a Cancel press.
   it("unmount while armed (ready) terminates BEFORE hanging up — the erg is not left with an orphan workout", async () => {
     const { result, fake, transport, unmount } = harness({

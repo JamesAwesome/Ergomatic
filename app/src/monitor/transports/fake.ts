@@ -862,10 +862,13 @@ export function createFakeTransport(
   // the FIRST armed report after an accept goes out ahead of anything the
   // script has due on that same tick, so a timeline's own opening entry is
   // never delivered "ahead of" the session arming. Every report after that
-  // one is a plain repeat and YIELDS to a due scripted event instead, so
-  // the fake never puts two 0x0031 readings on one tick — a real PM issues
-  // exactly one status per pulse, and a script event IS the machine's
-  // reading for the pulse it lands on.
+  // one is a plain repeat and YIELDS to a due scripted event instead, so a
+  // REPEAT never doubles up a tick that already carries a reading — a real
+  // PM issues exactly one status per pulse, and a script event IS the
+  // machine's reading for the pulse it lands on. The first post-accept
+  // tick is the one deliberate exception: the ordering rule puts the armed
+  // report AND the script's due reading on that tick, armed first (the
+  // F1-ordering pin holds exactly that pair).
   let armedFirstReportPending = false;
   // Fix-3 Task 5: `FakeScript.lagStructureOneTick`'s live, consumable copy —
   // armed by `onProgrammingFrameComplete` on the accept that lands next,
@@ -1680,8 +1683,10 @@ export function createFakeTransport(
       // level, `clearArmedLevel`), the machine repeats what it is still
       // holding — the ~2 Hz "armed" pulse real hardware emits, and the
       // reason a real PM5 can never lose this reading to a badly-timed
-      // pump. Skipped on the tick that already reported it above, so one
-      // tick is never two 0x0031 readings.
+      // pump. Skipped on the tick that already reported it above, so a
+      // REPEAT never doubles up a tick that already carries a reading (the
+      // first post-accept tick deliberately carries two — see the
+      // `armedFirstReportPending` comment).
       if (!first) deliverArmedIfHeld();
     },
     deliverArmedNow(): void {
