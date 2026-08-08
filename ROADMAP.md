@@ -1516,7 +1516,16 @@ monitor-measured splits.
 **Goal:** The suggestion engine and session flow honor per-user preferences.
 
 - [ ] Suggest-workouts-at difficulty chips + time-available cap, live "N of M match" readout, feeding Today and clearing `todayPick`
-- [ ] Default warm-up length + "override library warm-ups" (staged)
+- [ ] **Warm-ups leave the workouts and become a setting** (James,
+      2026-08-08, superseding the earlier "override library warm-ups"
+      line): the library's own warmup steps are DROPPED; a rower who
+      wants one sets it once in preferences — duration as TIME or
+      METERS, plus an OPTIONAL trailing rest — and the session flow
+      prepends it. Follow-on in the same phase, after the drop:
+      recompute the library's time-range percentages (the 15'/30'/45'
+      distribution shifts once every workout loses its warmup) and
+      decide whether a workout regen is needed to rebalance
+      (`patterns.json` is regen-ready per the Phase 6 generation work)
 - [ ] Pre-workout countdown length 0–60 s (staged)
 - [ ] Pace tolerance (0–3 s) and accent color as real settings
 - [ ] All preferences persisted per-user

@@ -293,9 +293,19 @@ export interface SurfaceModel {
  *  its last value rather than reporting zero, and the handoff is explicit
  *  that a paused `NOW` reads `—` with the caption `NOT ROWING` ("there is no
  *  current pace when nobody is pulling"). Suppressing it HERE, once, is why
- *  no pane has to know about the paused case. */
+ *  no pane has to know about the paused case.
+ *
+ *  A ZERO split is the same statement from the other direction (7B
+ *  iteration, 2026-08-08): before the first pull — and in rests and
+ *  boundary frames — the PM reports Current Pace 0, and hardware walk 2
+ *  showed the hero judging that 0 against the target: `0:00.0` painted
+ *  OCHRE at a rower who had not taken a stroke. A 0.00 s/500m pace is not
+ *  a reading; it maps to the same `null` the paused case takes, so the
+ *  hero renders the dash in ink and judgement colours appear only once a
+ *  real split exists. */
 function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
-  return status === "paused" ? null : frame.currentSplit;
+  if (status === "paused") return null;
+  return frame.currentSplit === 0 ? null : frame.currentSplit;
 }
 
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
