@@ -1365,7 +1365,66 @@ for (const name of CONNECTED_STATES) {
     // quoted in.
     await page.setViewportSize({ width: 844, height: 390 });
     await showConnectedFixture(page, name);
+    if (name === "connected-log-sheet") {
+      // THE FOUR `.connected-surface .filter-sheet*` RULES, PINNED (task-7
+      // review, L2b). They are the only thing standing between the log list
+      // and the 35px — one and a half lines — it got at `.filter-sheet`'s
+      // shipped defaults on this frame. Nothing in a unit test can see them:
+      // the standard modal refactor (portalling `SheetShell` to
+      // `document.body`) silently deletes all four by removing the
+      // `.connected-surface` ancestor, and every other gate stays green. So
+      // the measurement lives here, beside the five-row one, for the same
+      // reason.
+      const visible = await page.evaluate(() => {
+        const list = document.querySelector(".connected-log-list")!;
+        const box = list.getBoundingClientRect();
+        return Array.from(list.children).filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+        }).length;
+      });
+      expect(visible).toBeGreaterThanOrEqual(5);
+      // Both controls are on the frame, and both clear the 44px floor.
+      for (const label of ["COPY LOG", "Close"]) {
+        const box = await page
+          .locator(".filter-sheet button", { hasText: label })
+          .boundingBox();
+        expect(box, label).not.toBeNull();
+        expect(box!.height, label).toBeGreaterThanOrEqual(44);
+        expect(box!.y + box!.height).toBeLessThanOrEqual(390);
+      }
+    }
     if (name === "connected-pane-grid-long") {
+      // THE REAL TAB ORDER, measured in the browser (task-7 review, M3).
+      // Chromium makes a scroll container keyboard-focusable when it has no
+      // focusable children, so this pane's scroller was ALREADY the
+      // surface's first tab stop before it carried a `tabindex` — as an
+      // unnamed `<div>`, invisible to a jsdom pin. It is declared now, so
+      // the two engines agree and iOS Safari (which supplies no implicit
+      // focus) behaves the same. This is also the reading order: the grid
+      // sits above End on screen.
+      const tabOrder = await page.evaluate(() => {
+        const stops: string[] = [];
+        const focusables = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            "[tabindex], button, a[href], input, select, textarea",
+          ),
+        ).filter((el) => el.tabIndex >= 0);
+        for (const el of focusables) {
+          stops.push(
+            el.getAttribute("aria-label") ??
+              (el.textContent ?? "").trim().slice(0, 20),
+          );
+        }
+        return stops;
+      });
+      expect(tabOrder.slice(0, 5)).toStrictEqual([
+        "Interval grid",
+        "End session",
+        "Timer pane",
+        "Live pane",
+        "Grid pane",
+      ]);
       // Handoff §3's own number for pane C's contained scroll: "five fit at
       // 390px". Asserted in the BROWSER, because it is a measurement — the
       // row height, the header, the caption and End all have to land inside

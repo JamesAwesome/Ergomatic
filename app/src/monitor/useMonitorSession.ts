@@ -486,11 +486,17 @@ export function useMonitorSession(
   const driverRef = useRef<MonitorDriver | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   /** The log this session's driver is writing into, kept so `exportLog()`
-   *  can read it. Deliberately NOT cleared by `teardown` OR by `cancel()`:
-   *  the sheet is still openable on the `ended`/`disconnected` frames, and
-   *  the trace of an attempt that just failed — or that the rower just
-   *  cancelled out of — is the one a bug report most needs. The next
-   *  `connect()` replaces it. */
+   *  can read it. Deliberately NOT cleared by `teardown` OR by `cancel()`.
+   *
+   *  The reason, corrected (task-7 review, L1 — this comment used to name
+   *  the `ended` frame too, and `ended` cannot reach the sheet): the
+   *  diagnostics sheet is opened by triple-tapping a PAGER TARGET, and
+   *  `ConnectedSurface` returns its ended hand-off frame BEFORE the pager
+   *  renders at all. `disconnected` is the frame that can, and it is the one
+   *  that matters — the link is gone, the rower is looking for why, and the
+   *  trace of the session that just lost its monitor is what a bug report
+   *  needs. A `cancel()`-ed attempt keeps its trace for the same reason. The
+   *  next `connect()` replaces it. */
   const logRef = useRef<MonitorEventLog | null>(null);
   /** THIS SESSION'S OWN RECORD — opened at `live`, closed exactly once.
    *  The single source of truth for "is a run of ours open?"; nothing here

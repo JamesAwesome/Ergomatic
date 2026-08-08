@@ -24,6 +24,7 @@ import {
   compileProgram,
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
+import { WORKOUTSTATE_INTERVALWORKTIME } from "../../domain/monitor/pm5/parse.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -869,13 +870,15 @@ describe("the connected walk, fake-driven", () => {
         {
           atMs: 100,
           kind: "status",
-          // WORKOUTSTATE_INTERVALWORKTIME. Task 7 corrected this from `3`,
-          // which this comment already named wrongly: three is
-          // WORKOUTSTATE_INTERVALREST (`domain/monitor/pm5/parse.ts`), so
-          // the machine this walk described was resting, not rowing. The
-          // assertion below survived it only because interval 1's phase is
-          // the warm-up and nothing follows it that is a rest.
-          workoutState: 4,
+          // THE CONSTANT, not its ordinal (task-7 review, L4). This was a
+          // literal `3` under a comment naming INTERVALWORKTIME — and three
+          // is INTERVALREST. The old assertions survived the lie because
+          // interval 1's phase is the warm-up with no rest phase after it,
+          // so `phaseIndexForInterval`'s two branches resolved to the same
+          // place. Naming the constant makes the slip impossible to retype,
+          // and the status-word assertion below makes it impossible to
+          // reintroduce silently.
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
           elapsedSeconds: 20,
           distanceMeters: 70,
           spm: 21,
@@ -940,5 +943,13 @@ describe("the connected walk, fake-driven", () => {
     // interval 1 of Filling Low's 4 is its 8:00 warm-up, which is why the
     // kind word is WARM-UP and not WORK.
     expect(screen.getByText("1 OF 4 · WARM-UP")).toBeInTheDocument();
+
+    // THE PIN FOR THE ORDINAL ABOVE (task-7 review, L4). Pane A carries the
+    // status word, and it is the one thing on this surface that reads the
+    // machine's `state` directly: put `WORKOUTSTATE_INTERVALREST` back in
+    // the script and this says RESTING.
+    await userEvent.click(screen.getByRole("button", { name: "Timer pane" }));
+    expect(screen.getByText("ROWING")).toBeInTheDocument();
+    expect(screen.queryByText("RESTING")).not.toBeInTheDocument();
   });
 });

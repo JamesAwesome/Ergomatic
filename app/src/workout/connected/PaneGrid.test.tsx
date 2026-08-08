@@ -38,6 +38,15 @@ import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
 import ConnectedInterstitial from "../ConnectedInterstitial";
 import ConnectedSurface, { LAST_PANE_KEY } from "../ConnectedSurface";
+import { buildGridModel, DASH, type JudgedValue } from "./surfaceModel";
+
+/** The active row's live cells when the machine has said nothing — enough
+ *  for a caption-grammar test, which never looks at them. */
+const NO_READING: JudgedValue = {
+  display: DASH,
+  judgement: "within",
+  absent: true,
+};
 
 /** `index.css`'s path on disk — the same jsdom-quirk-avoiding string
  *  surgery `ConnectedSurface.test.tsx` documents. Vitest mocks every `.css`
@@ -49,7 +58,25 @@ function indexCssPath(): string {
     .replace(/workout\/connected\/[^/]+\.test\.tsx$/, "index.css");
 }
 
-const CSS = readFileSync(indexCssPath(), "utf-8");
+/**
+ * `index.css` WITH EVERY COMMENT STRIPPED, and the only view of the
+ * stylesheet this file has. Nothing here can read prose, because the prose
+ * is gone before the first assertion runs.
+ *
+ * The task-7 review found why this matters (M1), and it is the same defect
+ * `562ef55` fixed one commit before this pane existed: a rule-body regex
+ * captures the block's own doc comment, so a comment that happens to say
+ * `min-height: 0` in prose satisfies `toContain("min-height: 0")` after the
+ * DECLARATION has been deleted. The scroll guard below shipped green through
+ * every gate — unit AND browser — with `min-height: 0` gone, because its own
+ * comment said the words. Stripping once, at the source, is what makes every
+ * assertion in this file read code; a per-assertion strip is a thing the
+ * next test to be added forgets.
+ */
+const DECLARATIONS = readFileSync(indexCssPath(), "utf-8").replace(
+  /\/\*[\s\S]*?\*\//g,
+  "",
+);
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
@@ -326,8 +353,12 @@ describe("row states (handoff §3's three treatments)", () => {
 
 describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
   it("gives upcoming rows a DASHED border and completed rows a solid one", () => {
-    const upcoming = /\.connected-grid-upcoming\s*\{([^}]*)\}/.exec(CSS);
-    const completed = /\.connected-grid-completed\s*\{([^}]*)\}/.exec(CSS);
+    const upcoming = /\.connected-grid-upcoming\s*\{([^}]*)\}/.exec(
+      DECLARATIONS,
+    );
+    const completed = /\.connected-grid-completed\s*\{([^}]*)\}/.exec(
+      DECLARATIONS,
+    );
     expect(upcoming).not.toBeNull();
     expect(completed).not.toBeNull();
     expect(upcoming![1]).toContain("1px dashed var(--rule-3)");
@@ -342,7 +373,7 @@ describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
     // readable.
     const rule =
       /\.connected-grid-upcoming\s+\.connected-grid-line1,\s*\.connected-grid-upcoming\s+\.connected-grid-line2\s*\{([^}]*)\}/.exec(
-        CSS,
+        DECLARATIONS,
       );
     expect(rule).not.toBeNull();
     expect(rule![1]).toContain("var(--ink-3)");
@@ -450,6 +481,40 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     ).toBeInTheDocument();
   });
 
+  it("says AN before a distance a rower speaks with a leading vowel", () => {
+    // `buildGridModel` direct, because the single-distance-row caption is
+    // otherwise reachable only through a workout that has exactly one — and
+    // the grammar rule needs four of them. The interval is a REAL compiled
+    // one with its `value` moved; every other field is the compiler's.
+    const base = SEA_SMOKE.program.intervals[1]!;
+    const captionFor = (meters: number): string | null =>
+      buildGridModel({
+        intervals: [{ ...base, value: meters }],
+        actuals: [],
+        activeIndex: 0,
+        remaining: null,
+        livePace: NO_READING,
+        liveRate: NO_READING,
+        liveHr: NO_READING,
+        targetSplitMain: "2:12.0",
+        targetSplitRef: "6K +4",
+        hasTargetSplit: true,
+      }).caption;
+
+    // Eight, in any magnitude.
+    expect(captionFor(800)).toContain("IS AN 800 M PIECE");
+    expect(captionFor(8000)).toContain("IS AN 8000 M PIECE");
+    // The two four-digit distances a rower says in hundreds.
+    expect(captionFor(1100)).toContain("IS AN 1100 M PIECE");
+    expect(captionFor(1800)).toContain("IS AN 1800 M PIECE");
+    // ...and the neighbours that do not.
+    expect(captionFor(500)).toContain("IS A 500 M PIECE");
+    expect(captionFor(1500)).toContain("IS A 1500 M PIECE");
+    expect(captionFor(1000)).toContain("IS A 1000 M PIECE");
+    // A leading 1 alone is not the rule — three digits are spoken plainly.
+    expect(captionFor(180)).toContain("IS A 180 M PIECE");
+  });
+
   it("says nothing at all when there is no distance interval to explain", () => {
     // An empty caption is a claim; no caption is the truth. Built by
     // narrowing a real fixture to its time intervals, so the program is
@@ -476,8 +541,9 @@ describe("distance intervals (handoff §3's distance rules)", () => {
  *  stylesheet itself rather than listed here — so a rule added tomorrow
  *  joins the census without this test being edited.
  *
- *  Comments are stripped first (this file's own prose says "--accent" a
- *  dozen times). Only the RIGHTMOST class of each comma-separated selector
+ *  `DECLARATIONS` is already comment-free (this file's own prose says
+ *  "--accent" a dozen times, and index.css's says it more). Only the
+ *  RIGHTMOST class of each comma-separated selector
  *  is collected, because that is the element the declaration actually
  *  lands on: `.connected-grid-line1 > .connected-grid-countdown` paints the
  *  countdown, not the line. And only `connected-*` classes are collected —
@@ -485,9 +551,8 @@ describe("distance intervals (handoff §3's distance rules)", () => {
  *  phone-timer components' own accent surfaces are covered by the
  *  neutralising-override test below. */
 function accentClassesFromCss(): string[] {
-  const sansComments = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
   const found = new Set<string>();
-  for (const [, selector, body] of sansComments.matchAll(
+  for (const [, selector, body] of DECLARATIONS.matchAll(
     /([^{}]*)\{([^{}]*)\}/g,
   )) {
     if (!body!.includes("var(--accent)")) continue;
@@ -576,7 +641,7 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
       /\.connected-pane\s+\.timer-dot-current\s*\{([^}]*)\}/,
       /\.connected-pane\s+\.timer-total-bar\s+span\s*\{([^}]*)\}/,
     ]) {
-      const rule = selector.exec(CSS);
+      const rule = selector.exec(DECLARATIONS);
       expect(rule).not.toBeNull();
       expect(rule![1]).not.toContain("--accent");
     }
@@ -585,13 +650,13 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
   it("the countdown's accent is a COLOUR on a duration, at 22/26px", () => {
     const portrait =
       /\.connected-grid-line1\s*>\s*\.connected-grid-countdown\s*\{([^}]*)\}/.exec(
-        CSS,
+        DECLARATIONS,
       );
     expect(portrait).not.toBeNull();
     expect(portrait![1]).toContain("color: var(--accent)");
     expect(portrait![1]).toContain("font-size: 22px");
     // Landscape steps it to 26px inside the orientation query.
-    expect(CSS).toMatch(
+    expect(DECLARATIONS).toMatch(
       /\.connected-pane-grid\s+\.connected-grid-line1\s*>\s*\.connected-grid-countdown\s*\{[^}]*font-size:\s*26px/,
     );
   });
@@ -670,20 +735,61 @@ describe("judged cells: pane C goes through the ONE helper", () => {
     expect(counts).toStrictEqual({ timer: 3, live: 4, grid: 4 });
   });
 
-  it("THE STALE OVERRIDE REACHES THE GRID TOO", () => {
-    renderGrid({
+  // THE STALE OVERRIDE, SCOPED (task-7 review, M2). Staleness is a property
+  // of the FEED, so it reaches the live-fed cells and stops there. The two
+  // pins below are deliberately a pair: together they say what one
+  // "everything greys" assertion could not, which is WHERE the greying ends.
+  function renderDisconnectedMidSession() {
+    return renderGrid({
       phase: "disconnected",
+      // Numbers that would otherwise scream a verdict, on a link we cannot
+      // vouch for.
       frame: frame({ intervalIndex: 2, currentSplit: 60, spm: 60 }),
       actuals: [
         actualFor(0, FILLING_LOW.program),
         actualFor(1, FILLING_LOW.program),
       ],
     });
+  }
+
+  it("greys the ACTIVE row's live cells — a reading we cannot vouch for", () => {
+    renderDisconnectedMidSession();
+    expect(row(3).className).toContain("connected-grid-active");
+    for (const cls of ["pace", "spm"]) {
+      expect(
+        row(3).querySelector(`.connected-grid-${cls}`)!.className,
+      ).toContain("timer-card-actual-stale");
+    }
+  });
+
+  it("LEAVES COMPLETED ROWS THEIR VERDICTS: history is not a reading", () => {
+    // `disconnected` is TERMINAL in 7B (spec C5 descoped auto-reconnect), so
+    // greying these would erase every judgement the rower had earned, for
+    // good, on the one pane whose job is to show what they have done. A
+    // closed `IntervalActual` was never `NOW`; the link's death cannot
+    // retract it.
+    renderDisconnectedMidSession();
+    // Row 2 is the first 2000 m rep, rowed 6 s/500m fast and a stroke under
+    // the rate: ochre and teal, and they stay ochre and teal.
+    expect(row(2).className).toContain("connected-grid-completed");
+    expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
+      "timer-card-actual-over",
+    );
+    expect(row(2).querySelector(".connected-grid-spm")!.className).toContain(
+      "timer-card-actual-under",
+    );
+    // Row 1 is the warm-up — no programmed target, so `within` either way.
+    // What matters is that it is not GREY: it has nothing to be stale about.
+    for (const cls of ["pace", "spm"]) {
+      expect(
+        row(1).querySelector(`.connected-grid-${cls}`)!.className,
+      ).not.toContain("timer-card-actual-stale");
+    }
+    // Six judged cells still, and exactly two of them are stale — the active
+    // row's, and only the active row's.
     const cells = judgedCells();
     expect(cells).toHaveLength(6);
-    for (const cell of cells) expect(cell.judgement).toBe("stale");
-    expect(document.querySelector(".timer-card-actual-over")).toBeNull();
-    expect(document.querySelector(".timer-card-actual-under")).toBeNull();
+    expect(cells.filter((c) => c.judgement === "stale")).toHaveLength(2);
   });
 });
 
@@ -710,16 +816,23 @@ describe("contained scroll: only the rows move", () => {
   });
 
   it("index.css scrolls the rows and nothing else", () => {
-    const scroller = /\.connected-grid-rows\s*\{([^}]*)\}/.exec(CSS);
+    // READS DECLARATIONS, NOT PROSE (task-7 review, M1). This assertion
+    // previously matched against the raw source, so the rule's own comment —
+    // which argues about `flex: 1` and `min-height: 0` in words — satisfied
+    // it whether or not either declaration existed. It also asserted
+    // `flex: 1`, a value the stylesheet deliberately REJECTS.
+    const scroller = /\.connected-grid-rows\s*\{([^}]*)\}/.exec(DECLARATIONS);
     expect(scroller).not.toBeNull();
     expect(scroller![1]).toContain("overflow-y: auto");
-    // `min-height: 0` is what actually lets a flex child shrink below its
-    // content — without it the pane grows instead and the surface scrolls.
     expect(scroller![1]).toContain("min-height: 0");
-    expect(scroller![1]).toContain("flex: 1");
+    // `0 1 auto`, not `1` — the hug-then-shrink behaviour the caption's
+    // position depends on. Asserting the value the code rejected was the
+    // other half of M1.
+    expect(scroller![1]).toContain("flex: 0 1 auto");
+    expect(scroller![1]).not.toMatch(/flex:\s*1;/);
 
-    const head = /\.connected-grid-head\s*\{([^}]*)\}/.exec(CSS);
-    const caption = /\.connected-grid-caption\s*\{([^}]*)\}/.exec(CSS);
+    const head = /\.connected-grid-head\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    const caption = /\.connected-grid-caption\s*\{([^}]*)\}/.exec(DECLARATIONS);
     expect(head![1]).toContain("flex: none");
     expect(caption![1]).toContain("flex: none");
   });
@@ -767,7 +880,7 @@ describe("contained scroll: only the rows move", () => {
     // `touch-action: pan-y` on the surface is what lets the rows scroll at
     // all while the horizontal swipe stays ours (handoff §3's 60px pager
     // gesture).
-    const rule = /\.connected-surface\s*\{([^}]*)\}/.exec(CSS);
+    const rule = /\.connected-surface\s*\{([^}]*)\}/.exec(DECLARATIONS);
     expect(rule![1]).toContain("touch-action: pan-y");
   });
 });
@@ -778,8 +891,8 @@ describe("contained scroll: only the rows move", () => {
 
 describe("landscape: one line, six columns (handoff §3)", () => {
   it("folds both line wrappers into one row with `display: contents`", () => {
-    const landscape = CSS.slice(
-      CSS.lastIndexOf("@media (orientation: landscape)"),
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
     );
     expect(landscape).toMatch(
       /\.connected-grid-line1,\s*\n\s*\.connected-grid-line2,[\s\S]{0,200}?display:\s*contents/,
@@ -787,8 +900,8 @@ describe("landscape: one line, six columns (handoff §3)", () => {
   });
 
   it("carries the handoff's exact flex weights", () => {
-    const landscape = CSS.slice(
-      CSS.lastIndexOf("@media (orientation: landscape)"),
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
     );
     const weights: [string, string][] = [
       ["connected-grid-num", "width: 26px"],
@@ -812,8 +925,8 @@ describe("landscape: one line, six columns (handoff §3)", () => {
   });
 
   it("stays a COLUMN and keeps its scroll where the other panes become rows", () => {
-    const landscape = CSS.slice(
-      CSS.lastIndexOf("@media (orientation: landscape)"),
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
     );
     const rule = /\.connected-pane-grid\s*\{([^}]*)\}/.exec(landscape);
     expect(rule).not.toBeNull();
@@ -823,13 +936,13 @@ describe("landscape: one line, six columns (handoff §3)", () => {
   it("puts the six headings back for the one-line row", () => {
     // Portrait hides the SPM/HR/REST headings because the rows label those
     // cells inline; landscape needs them, and needs the inline labels gone.
-    const landscape = CSS.slice(
-      CSS.lastIndexOf("@media (orientation: landscape)"),
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
     );
     expect(landscape).toMatch(
       /\.connected-grid-inline-label\s*\{[^}]*display:\s*none/,
     );
-    expect(CSS).toMatch(
+    expect(DECLARATIONS).toMatch(
       /\.connected-grid-head\s+\.connected-grid-line2\s*\{[^}]*display:\s*none/,
     );
   });
@@ -978,27 +1091,52 @@ describe("tab order through pane C", () => {
     // moves paint without moving the tab sequence. Pane C introduces the
     // surface's first scrolling region; if it had inherited that trade, a
     // focusable inside it would be reached out of sequence.
-    expect(CSS).not.toMatch(/\.connected-pane-grid[^{]*\{[^}]*\border:/);
-    const portrait = CSS.slice(
-      CSS.indexOf("@media (orientation: portrait)"),
-      CSS.lastIndexOf("@media (orientation: landscape)"),
+    expect(DECLARATIONS).not.toMatch(
+      /\.connected-pane-grid[^{]*\{[^}]*\border:/,
+    );
+    const portrait = DECLARATIONS.slice(
+      DECLARATIONS.indexOf("@media (orientation: portrait)"),
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
     );
     expect(portrait).not.toContain("connected-grid");
     expect(portrait).not.toContain("connected-pane-grid");
   });
 
-  it("puts nothing focusable inside the pane at all", () => {
+  it("has EXACTLY ONE focusable thing of its own: the named scroller", () => {
+    // This test used to assert ZERO, and passed only because jsdom
+    // implements none of Chromium's keyboard-focusable-scrollers behaviour
+    // (task-7 review, M3 — measured in a real browser). The scroller was
+    // already the surface's first tab stop, as an unnamed `<div>`. It is now
+    // declared, so both engines agree and iOS Safari — which supplies no
+    // implicit focus at all — gets the same behaviour.
     renderGrid({}, SEA_SMOKE);
     const pane = document.querySelector(".connected-pane-grid")!;
-    expect(
+    const focusable = Array.from(
       pane.querySelectorAll("button, a, input, select, textarea, [tabindex]"),
-    ).toHaveLength(0);
+    );
+    expect(focusable).toHaveLength(1);
+    expect(focusable[0]).toBe(pane.querySelector(".connected-grid-rows"));
+    // Named, and not by its contents: a screen reader landing on a scroll
+    // region needs to be told what it is holding.
+    expect(focusable[0]).toHaveAttribute("aria-label", "Interval grid");
+    expect(focusable[0]).toHaveAttribute("role", "group");
+    // Not a row, not a cell — the rows themselves stay static text.
+    for (const el of pane.querySelectorAll(".connected-grid-row")) {
+      expect(el.hasAttribute("tabindex")).toBe(false);
+    }
   });
 
-  it("tabs End then the three pager targets, in that order", async () => {
+  it("tabs the grid, then End, then the three pager targets", async () => {
+    // THE REAL BROWSER ORDER (task-7 review, M3 measured it as
+    // `scroller → End → Timer → Live → Grid`), and now jsdom's too, because
+    // the `tabindex` is explicit rather than implied by a scroll container.
+    // It is also the READING order: the grid is above End on the screen in
+    // both orientations. The DOM was deliberately NOT reordered to put End
+    // first — see the task-7 report; doing so would have introduced exactly
+    // the paint-vs-sequence divergence the shell's own L4 note warns about.
     renderGrid();
     const order: string[] = [];
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < 5; i += 1) {
       await userEvent.tab();
       order.push(
         (document.activeElement as HTMLElement).getAttribute("aria-label") ??
@@ -1006,6 +1144,7 @@ describe("tab order through pane C", () => {
       );
     }
     expect(order).toStrictEqual([
+      "Interval grid",
       "End session",
       "Timer pane",
       "Live pane",

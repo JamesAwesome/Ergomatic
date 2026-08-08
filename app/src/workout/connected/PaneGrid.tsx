@@ -23,13 +23,29 @@
 // this pane entirely. Only `.connected-grid-rows` scrolls, and the active
 // row is scrolled into view whenever the machine moves on.
 //
-// TAB ORDER (task-6 review's L4 trap, checked for this pane): the portrait
-// `order` declarations that make DOM order diverge from reading order are
-// scoped to `.connected-pane-timer` and `.connected-pane-live`. This pane
-// declares NO `order` anywhere — its DOM sequence is its reading sequence
-// in both orientations — and it contains no focusable element at all: the
-// rows are static text, and the scroller is reached by touch or by the
-// browser's own keyboard scrolling. So the trap is not live here.
+// TAB ORDER (task-6 review's L4 trap, and the task-7 review's M3 — this
+// comment used to be wrong, in a way only a browser could show).
+//
+// The claim it made was "this pane contains no focusable element at all".
+// That is true in jsdom and FALSE in Chromium: a scroll container with no
+// focusable children is keyboard-focusable by default there, so
+// `.connected-grid-rows` was already the surface's first tab stop — as an
+// unnamed `<div>`. It is now focusable ON PURPOSE and NAMED: `tabIndex={0}`
+// plus `role="group"` and an accessible name. Keyboard operability of a
+// scrollable region is WCAG 2.1.1's requirement, not an accident to
+// suppress, and iOS Safari — the real target — does NOT supply it
+// implicitly, so declaring it is also the only way the two engines agree.
+// (It is what axe's `scrollable-region-focusable` will look for when Task
+// 8's browser sweep reaches this pane.)
+//
+// The L4 trap itself is still not live, for the reason it always was: the
+// portrait `order` declarations that make DOM order diverge from reading
+// order are scoped to `.connected-pane-timer` and `.connected-pane-live`,
+// and this pane declares NO `order` anywhere. Its DOM sequence IS its
+// reading sequence in both orientations, so the scroller is tabbed to
+// exactly where it is seen — above End, which sits below the grid in the
+// shell's footer. Pinned in jsdom AND in a real browser; see the task-7
+// report for why the DOM was NOT reordered to put End first.
 
 import { useEffect, useRef } from "react";
 import ConnectionLine from "./ConnectionLine";
@@ -85,7 +101,15 @@ export default function PaneGrid({ model }: { model: SurfaceModel }) {
           <span className="connected-grid-rest">REST</span>
         </div>
       </div>
-      <div className="connected-grid-rows">
+      {/* Focusable and named on purpose — see this file's TAB ORDER note.
+          `role="group"` rather than `region`: this is a scrollable list
+          inside a pane, not a landmark of the surface. */}
+      <div
+        className="connected-grid-rows"
+        tabIndex={0}
+        role="group"
+        aria-label="Interval grid"
+      >
         {model.grid.rows.map((row) => (
           <Row
             key={row.index}
