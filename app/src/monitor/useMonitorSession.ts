@@ -551,15 +551,22 @@ export function useMonitorSession(
       //   1:52 with 0 meters and rate 0, and the elapsed-or-distance
       //   version of this gate skipped READY all over again).
       // What only a real pull produces is FLYWHEEL evidence: banked
-      // distance or a registered stroke rate. This is also where the run
-      // opens: the record exists once the rower is actually rowing,
-      // never at `armed` — a programmed-then-abandoned workout leaves no
-      // record behind, and `createMonitorRun`'s `clearRun()` (which
-      // destroys a phone session) fires only once this session is
-      // genuinely underway.
+      // distance or a registered stroke rate. And walk 3 added the
+      // machine's own word: a COASTING flywheel banks meters on a piece
+      // the PM5 itself does not consider started ("the pm5 knew i didnt
+      // start the interval") — 0x0031's Rowing State byte is where it
+      // says so, and `rowingActive` is that byte. All three legs are
+      // required: the workout-state ordinal (rowing-mapped), the
+      // machine's own Active declaration, and flywheel evidence. This is
+      // also where the run opens: the record exists once the rower is
+      // actually rowing, never at `armed` — a programmed-then-abandoned
+      // workout leaves no record behind, and `createMonitorRun`'s
+      // `clearRun()` (which destroys a phone session) fires only once
+      // this session is genuinely underway.
       if (
         phase === "ready" &&
         frame.state === "rowing" &&
+        frame.rowingActive &&
         (frame.distanceMeters > 0 || (frame.spm ?? 0) > 0)
       ) {
         const identity = identityRef.current;

@@ -633,6 +633,46 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     expect(loadMonitorRun()).not.toBeNull();
   });
 
+  it("the COASTING flywheel holds ready — meters accrue, but 0x0031's own Rowing State byte says Inactive (walk 3: 'the pm5 knew i didnt start the interval')", async () => {
+    // The mid-session reprogram capture, verbatim shape: one tick after
+    // armed, `state=rowing elapsed=0.78 distance=1.2` — real meters,
+    // banked by a wheel still spinning from the previous piece, on a
+    // workout the PM5's own glass did not consider started. Flywheel
+    // evidence alone is not enough; the machine's Active declaration is
+    // the third required leg.
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, {
+          elapsedSeconds: 0.78,
+          distanceMeters: 1.2,
+          spm: 0,
+          currentSplit: 0,
+          rowingState: 0,
+        }),
+        status(200, {
+          elapsedSeconds: 1.5,
+          distanceMeters: 3.4,
+          spm: 18,
+          rowingState: 1,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    tick(fake, 100);
+    // Meters on the wire, Inactive on the machine's own byte: the coast.
+    expect(result.current.phase).toBe("ready");
+    expect(loadMonitorRun()).toBeNull();
+
+    tick(fake, 100);
+    // Active + a stroke: the rower, not the wheel.
+    expect(result.current.phase).toBe("live");
+    expect(loadMonitorRun()).not.toBeNull();
+  });
+
   it("picking -> pairing -> programming -> ready -> live -> ended, with the record written the whole way", async () => {
     const { result, fake } = harness({
       program: LIBRARY.program,
@@ -1709,6 +1749,7 @@ function frame(over: Partial<MonitorFrame>): MonitorFrame {
     intervalIndex: 0,
     intervalRemaining: null,
     state: "rowing",
+    rowingActive: true,
     ...over,
   };
 }

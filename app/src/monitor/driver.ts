@@ -1226,9 +1226,12 @@ export function createPm5Driver(
     const stateChanged = frame.state !== lastLoggedFrameState;
     if (stateChanged) {
       lastLoggedFrameState = frame.state;
+      // rowingActive and spm ride along since walk 3 (2026-08-08): the
+      // ready-gate postmortem needed exactly these two on the flip frame
+      // and the capture did not carry them.
       log.record(
         "frame",
-        `state=${frame.state} elapsed=${frame.elapsedSeconds} distance=${frame.distanceMeters}`,
+        `state=${frame.state} elapsed=${frame.elapsedSeconds} distance=${frame.distanceMeters} rowingActive=${frame.rowingActive} spm=${frame.spm}`,
       );
     }
     emit({ kind: "frame", frame });

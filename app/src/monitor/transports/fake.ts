@@ -176,6 +176,13 @@ export interface FakeStatusEvent {
   currentSplit: number;
   heartRateBpm: number | null;
   programIntervalIndex: number;
+  /** 0x0031 byte 9, the machine's own Inactive/Active declaration
+   *  (2026-08-08 walk 3: the coasting-flywheel finding). Defaults to
+   *  ACTIVE whenever `workoutState` maps to "rowing" — the machine a
+   *  mid-piece timeline models has a rower pulling — and INACTIVE
+   *  otherwise. A timeline modelling the coast (meters accruing on a
+   *  piece the PM5 does not consider started) sets 0 explicitly. */
+  rowingState?: number;
 }
 
 /** One interval-boundary event: the completed interval's actuals, matching
@@ -616,7 +623,8 @@ function statusBundle(
       distanceMeters: e.distanceMeters,
       intervalType: isDistance ? 1 : 0,
       workoutState: e.workoutState,
-      rowingState: 0,
+      rowingState:
+        e.rowingState ?? (toMonitorState(e.workoutState) === "rowing" ? 1 : 0),
       strokeState: 0,
       totalWorkDistanceMeters: e.distanceMeters,
       // 0x0031's STRUCTURE fields — `workoutType` plus the interval-0
