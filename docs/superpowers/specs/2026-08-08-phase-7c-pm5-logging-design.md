@@ -1,180 +1,223 @@
 # Phase 7C — PM5 logging (design)
 
-**Date:** 2026-08-08 · **Authority:** ROADMAP §Phase 7C; the `MonitorRun`
-record Phase 7B writes (`app/src/monitor/monitorRun.ts`); the 6C log
-split (`logDraft.ts` builders + `LogSession.tsx` as the one save path).
-**Product rulings (James, 2026-08-08):** partials log what the erg saw;
-PM5 splits are read-only on the form; HR is stored, not shown; the seam
-must not foreclose a future Concept2 Logbook sync.
+**Date:** 2026-08-08, adversarially revised same day (23 findings, 4
+blocking — `2026-08-08-phase-7c-adversarial-review.md`; every B/M
+finding is resolved in the section that owned it).
+**Authority:** ROADMAP §Phase 7C; the `MonitorRun` record
+(`app/src/monitor/monitorRun.ts`); the 6C log split (`logDraft.ts`
+builders + `LogSession.tsx`); the walk-4 hardware record (§18
+2026-08-08). **Product rulings (James):** partials log what the erg
+saw; PM5 splits read-only; HR stored not shown; DB-lean seam for a
+future Concept2 Logbook sync (verbatim step fields, no sidecar).
 
 ## 1. Goal and shape
 
 A session fully driven by a connected PM5 saves a log indistinguishable
 in shape from a phone-timer session, with real monitor-measured splits
-(`actualSource: "pm5"` — the third member `ActualSource` has typed since
-6C and nothing has ever produced). One save path: the existing
-`LogSession` form, prefilled by a new monitor-side builder, mirroring
-the manual builder exactly the way ROADMAP's own bullet frames it.
+(`actualSource: "pm5"` — typed since 6C, admitted by the server since
+6C (`data.ts` `ACTUAL_SOURCES`), produced by nothing until now). One
+save path: `LogSession`, with an explicit monitor MODE fed by a new
+builder.
 
-NON-GOALS: no Concept2 Logbook sync (only its raw material — §5); no HR
-UI anywhere; no changes to the phone-timer path's builders or payloads;
-no reconnect/backfill (7B's descope stands).
+NON-GOALS: no Concept2 sync (only its raw material, §5); no HR UI; no
+changes to the phone-timer builders or payloads; no logging for
+ANONYMOUS runs (`workoutId: null` — no library door exists to log them
+through; their records still clear through the existing connect/start
+guards, and a ROADMAP line records the gap).
 
-## 2. The builder: `buildMonitorLogSteps`
+## 2. The log seed (B1/B2's resolution, new)
 
-New builder in `logDraft.ts` beside `buildLogSteps`/`buildManualLogSteps`,
-same `LogStep[]` output:
+`buildMonitorLogSteps` cannot derive labels or warmup-ness from
+`MonitorRun` today: `ProgramInterval` carries no `originalIndex`, the
+run stores no phases, and the connect path persists no draft
+(adversarial B1). So the run learns, at creation, the ONE small thing
+the log needs:
 
-`buildMonitorLogSteps(run: MonitorRun, phases: EnginePhase[]): LogStep[]`
+```ts
+// MonitorRun (v bumps 1 -> 2; a v1 record loads as today and simply
+// never qualifies for the monitor mode):
+logSeed?: {
+  // Aligned 1:1 with program.intervals, BUILT FROM THE SAME PHASES the
+  // program was compiled from, at the same moment:
+  steps: { label: string; kind: "warmup" | "work" }[];
+  // The PACES LOCKED panel's values, captured at connect (the manual
+  // path recovers them from step targetSplits; the monitor mode cannot
+  // — adversarial scope note):
+  paces: { k2?: number; k6?: number };
+}
+```
 
-Per program interval, matched to its authored step via the program's own
-order (the program was compiled FROM these phases; `originalIndex` is the
-carried key):
+Built by a new `logDraft.ts` helper `buildLogSeed(phases, baselines)`
+on the workout detail (which holds phases and baselines at Connect —
+`ConnectedInterstitial`'s own props), threaded through
+`RunIdentity` → `program()` → `createMonitorRun`. A few strings per
+run in localStorage; nothing new on the wire.
 
-| LogStep field | Source | Notes |
+## 3. The builder: `buildMonitorLogSteps(run: MonitorRun): LogStep[]`
+
+Walks `run.program.intervals` beside `run.logSeed.steps` (same length
+by construction; a length mismatch or missing seed disqualifies the
+record from the monitor mode entirely — fall through to manual, never
+guess).
+
+**Warmup intervals produce NO step** — the manual path has never
+emitted warmup rows (`logDraft.ts` skips `wu`; adversarial B2), and
+shape-parity governs. A warmup's measured actual appears nowhere in
+steps; its time is still inside the session's wall-clock duration.
+**Rest rows: none** — the manual builder emits none (adversarial M4).
+
+Per WORK interval, one `LogStep`:
+
+| field | source | notes |
 |---|---|---|
-| `label` | the authored step, house format | identical to the manual builder's text |
-| `targetSplit` | `ProgramInterval.targetSplit` | the FROZEN compile-time target, null for effort/warmup |
-| `actualSplit` | `IntervalActual.avgSplit` | verbatim seconds, no display rounding |
-| `actualSource` | `"pm5"` | only when a matched actual exists |
+| `label` | `logSeed.steps[i].label` | the authored step text, frozen at connect |
+| `targetSplit` | `ProgramInterval.targetSplit ?? undefined` | the frozen compile-time target |
+| `seconds`/`meters` | `ProgramInterval.value` by `kind` | the authored duration |
+| `actualSplit` | `IntervalActual.avgSplit`, only if `> 0` | stored unrounded; `0` means the wire had no reading |
+| `actualSource` | `"pm5"` | present iff the interval HAS a matched actual (see pairing note) |
 | `spm` | `IntervalActual.avgSpm` | |
-| `meters` / `seconds` | the authored duration | unchanged from the manual builder |
-| `avgHr` | `IntervalActual.avgHeartRateBpm` | NEW optional `LogStep` field; written only by this builder ("store it, show nothing") |
-| `actualSeconds` | `IntervalActual.elapsedSeconds` | NEW optional field, pm5-only: the interval's own MEASURED work time, verbatim (the manual path never has one) |
-| `actualMeters` | `IntervalActual.distanceMeters` | NEW optional field, pm5-only: the interval's own MEASURED distance, verbatim |
+| `avgHr` | `IntervalActual.avgHeartRateBpm` | NEW optional field; omitted when null OR outside 20-254 (never rejects a save — adversarial m2) |
+| `actualSeconds` | `IntervalActual.elapsedSeconds` | NEW, pm5-only, `>= 0` |
+| `actualMeters` | `IntervalActual.distanceMeters` | NEW, pm5-only, `>= 0` |
 
-**The three honest gaps, all rendered as NO actual** (no `actualSplit`,
-no `actualSource`, never `"assumed"`):
+**Pairing rule, loosened for pm5 only** (adversarial B3): the manual
+contract pairs `actualSplit` with `actualSource`. A pm5 step carries
+`actualSource: "pm5"` whenever a matched actual exists, even if
+`avgSplit` was unusable — the verbatim fields are still measurements.
+`logDraft.ts`'s pairing comment and the server rule both learn this.
 
-1. **Never reached** — the run ended (either side) before this interval:
-   partials log what the erg saw.
-2. **Lost boundary** — `run.actuals` shorter than the program with no
-   entry for this index (the D4 class the record's own header documents).
-3. **Unmatched index** — an actual with `index: null` (the D3 case)
-   matches NO step and is DROPPED from the log entirely: it cannot be
-   attributed to an interval, so no sync could ever submit it either;
-   its diagnostic life is the wire log's, not the database's. Matching
-   is by `IntervalActual.index` against the program interval's
-   position — never by array position (the record's own comment,
-   verbatim constraint).
+**Matching** is by `IntervalActual.index` (already OUR normalized
+0-based program index — the driver's `toProgramIndex`, D3) against the
+program interval's position. The honest gaps all render as NO actual
+(never `"assumed"`): never-reached (partials ruling), lost boundary
+(D4), and `index: null` actuals are DROPPED (unattributable;
+unsyncable; their diagnostic life is the wire log's). `MonitorRun`'s
+header comment and the DEVIATIONS table each gain a line for the drop
+(adversarial m10: the record's comment currently implies 7C would
+surface them).
 
-Rest rows render from the program's folded `restSeconds`, house format,
-no actuals — identical to the manual builder's rest treatment.
+**Unit caveat, carried in code**: `IntervalActual.elapsedSeconds` maps
+from 0x0037's Split/Interval Time under §10's documented scale; whether
+that field is WORK time or work-plus-rest has never been read against a
+stopwatch (adversarial m1). Stored under the documented meaning; §17
+gains an open item; if hardware later says work-plus-rest, the seam
+field is re-derived then (subtract `restSeconds`), in the builder, not
+in storage.
 
-Effort-target intervals (`targetSplit: null` on the wire) still get
-their PM5 actual: the machine measured a split even when the app set no
-target; the row shows the actual with no target, exactly what the
-connected surface's own grid did live.
+**Effort-target intervals** keep their measured actual with no target —
+a departure from 5G's effort semantics that gets its own DEVIATIONS row
+(adversarial m6).
 
-## 3. The screen: one form, a monitor branch
+## 4. The screen: an explicit monitor mode
 
-`LogSession` (route `/library/:id/log`, where every connected session
-already lands) engages the monitor branch when ALL of:
-`loadMonitorRun()` returns a record, `completedAt !== null`, and
-`workoutId` matches the route's workout. Any miss falls through to
-today's manual form untouched (the existing workoutId-mismatch residual
-test becomes load-bearing and is extended, not replaced).
+`handleConnectedEnded` navigates to `/library/:id/log?from=monitor`.
+The MONITOR MODE engages only when ALL hold (adversarial M2 — the same
+route is also the manual "Log it after" door, which must never be
+hijacked by a stale record):
 
-In the monitor branch:
+1. the `from=monitor` flag is present,
+2. `loadMonitorRun()` returns a record with `completedAt !== null`,
+3. its `workoutId` matches the route's workout,
+4. `logSeed` exists and aligns with the program (§3).
 
-- Steps come from `buildMonitorLogSteps`; rows with a PM5 actual are
-  READ-ONLY (ruling 2) — rendered as values, not inputs, with the same
-  visual weight the manual rows have so the form does not read as
-  broken. Rows with no actual show the dash placeholder.
-- One caption line in the diagnostics vocabulary, under the step list:
-  `FROM <deviceName> · N OF M INTERVALS MEASURED` (mono, `--ink-3`,
-  no em-dash anywhere in any new copy — house rule). When N = M the
-  count reads `ALL M INTERVALS MEASURED`.
-- Date and duration come from the run: `formatLogDate(completedAt)`,
-  duration from `startedAt → completedAt` wall span, both replacing the
-  manual path's estimates. Totals (meters) sum the actuals' verbatim
-  `distanceMeters`.
-- Pain and held-targets stay exactly as they are: editable, required,
-  the reason this form exists.
-- A `terminated` run gets no special chrome beyond what the gaps already
-  say (ruling 1's "the early end is visible in the missing actuals").
+Any miss falls through to today's manual form untouched. The flag
+without the record (a reload after save, a stale URL) also falls
+through — the flag is an intent, the record is the evidence, both are
+required.
 
-## 4. Record lifecycle
+In monitor mode:
 
-- **Save** (success only): `clearMonitorRun()`. This also retires the
-  standing annoyance where a saved session still triggers Connect/Start
-  confirm panels (walks 2-4).
-- **Discard without logging**: `clearMonitorRun()` too — the existing
-  discard control, same confirm it has today.
-- Nothing else writes or clears the record; 7B's guards and the
-  unlogged-run staged confirms behave exactly as before for a record
-  that has not reached one of those two doors.
+- The step list renders from `buildMonitorLogSteps`. TODAY'S step list
+  has no inputs at all — actuals render behind an
+  `actualSource === "stopwatch"` gate (`LogSession.tsx`, adversarial
+  M3); that gate widens to `"stopwatch" | "pm5"` and the pm5 rows are
+  text like every other row. No new read-only treatment is needed; the
+  form was already read-only (the earlier "same visual weight" framing
+  was designing against a form that didn't exist).
+- PACES LOCKED renders from `logSeed.paces` (the manual recovery path
+  cannot run here).
+- One caption line, mono `--ink-3`, no em-dash:
+  `FROM <deviceName> · N OF M INTERVALS MEASURED` (`ALL M ...` when
+  complete). M counts WORK intervals only.
+- Date and duration from the run's `startedAt`/`completedAt` stamps.
+  (No totals surface exists on this screen; nothing is added —
+  adversarial M5.)
+- Pain and held-targets: editable, required, unchanged.
+- A DISCARD control: the manual door has none (`discardSlot` is null
+  there — adversarial M1), so the monitor mode supplies its own staged
+  discard in the session door's idiom, whose fire clears the
+  MonitorRun and navigates back to the detail. It is monitor-mode-only;
+  the manual door stays storage-free and DEVIATIONS row 41's
+  justification is AMENDED to name this mode as the exception
+  (adversarial M7).
 
-## 5. The Concept2 seam: verbatim fields, no sidecar
+## 5. Record lifecycle
 
-(Revised at spec review, James: "I wouldn't want it long term if it's
-only needed for concept 2 logbook, I wanna be mindful of how much we
-put in the db.")
-
-A Concept2 Logbook submission needs, per interval: time, distance,
-split, stroke rate, heart rate. The display steps already carry three
-(`actualSplit`, `spm`, `avgHr`); §2 adds the other two as verbatim
-pm5-only step fields (`actualSeconds`, `actualMeters`). The session
-itself carries ONE new optional string, `deviceName`, as provenance.
-Total database cost: two or three numbers per PM5 step and one string
-per PM5 session, inside the existing steps JSON — no sidecar, no full
-record, nothing retained that only a sync would read.
-
-Seam rules:
-
-- The future sync's predicate is `actualSource === "pm5"` on a step;
-  its payload is assembled from the step fields alone.
-- Nothing display-rounds the verbatim fields: `actualSplit`,
-  `actualSeconds`, `actualMeters` are stored exactly as
-  `IntervalActual` carried them; only RENDERING formats them.
-- Anything richer the driver ever learns to capture (drag factor,
-  stroke data) is added as another verbatim step field WHEN a consumer
-  exists — never hoarded in advance.
-- Dropped, deliberately: orphaned `index: null` actuals (unsyncable,
-  diagnostic-grade — the wire log is their home), arrival order, and a
-  stored `terminated` flag (a partial session is already visible as
-  steps with no actual).
+- **Save** (success only): `clearMonitorRun()` — also retiring the
+  stale confirm panels between walks.
+- **The monitor-mode discard** (§4): `clearMonitorRun()`.
+- **Leaving any other way** (BackLink, tab bar, reload — adversarial
+  m5): the record persists, exactly as today, and the existing
+  unlogged-run staged confirms remain its safety net. No new
+  destruction paths.
+- A phone `SessionRun` coexisting changes nothing: the monitor mode
+  reads and clears only its own record (the M-2 coexistence contract;
+  adversarial m11 noted, behavior unchanged).
 
 ## 6. Server
 
-`POST /api/logs` (`server/routes/data.ts`) validation grows, additively:
-`actualSource` admits `"pm5"`; steps admit optional `avgHr` (an integer
-in 30-250, the belt-plausible band; anything else rejects the payload),
-`actualSeconds` (positive number), and `actualMeters` (positive
-number); the payload admits an optional `deviceName` string (length
-1-64). Stored in the logs' existing JSON persistence — no migration for
-existing rows; absent fields stay absent. Reads return whatever was
-stored (the existing behavior for unknown-to-the-UI fields).
+`POST /api/logs` (`data.ts`) — `"pm5"` is ALREADY an admitted source
+(adversarial M6); what actually changes:
+
+- Steps admit optional `avgHr` (integer 20-254), `actualSeconds`
+  (number `>= 0`), `actualMeters` (number `>= 0`) — each independently
+  optional; `avgHr` never arrives out-of-band because the CLIENT omits
+  it (§3), and the server band still rejects a hand-crafted liar.
+- The pm5 pairing exception (§3): `actualSource: "pm5"` is valid
+  without `actualSplit`; the existing paired-unit rule stays for
+  `"stopwatch"`/`"assumed"`.
+- The split band (today 30-600) and spm band (10-60) get a pm5-only
+  widening: split `> 0 and <= 6000`, spm `0-99` — walk-4 hardware
+  produced avgSpm 66 and splits past 600 on light rowing (adversarial
+  B3); the manual bands do not move (a stopwatch 66 spm still rejects).
+- The payload admits optional `deviceName` (string, 1-64 chars) —
+  stored in a NEW NULLABLE COLUMN on the logs table via a drizzle
+  migration (adversarial B4: `steps` is an array; the earlier "no
+  migration" claim was impossible). Existing rows read back null;
+  nothing backfills.
+- The existing 200-step ceiling stands and is now stated (adversarial
+  m9).
 
 ## 7. Testing
 
-- The builder is tested against WALK 4's real record shape (2×100 m,
-  both actuals present, machine numbering already normalized) and its
-  mutations: a lost boundary (delete one actual), a null index (dropped
-  entirely, absent from steps), an early End (trailing steps bare),
-  an effort-target interval (actual without target).
-- Spec-derivation rule (the [[spec-blind-tests]] lesson): the builder's
-  reviewer walks one concrete example from THIS table — walk 4's
-  interval 0 (`avgSplit` from the wire) — through to the rendered row,
-  not through the test file's own vocabulary.
-- Screen tests: monitor branch engages/falls through on each §3
-  condition; read-only rows expose no inputs (a11y: they are text, not
-  disabled controls); save payload carries `pm5` sources, `avgHr`, the
-  verbatim `actualSeconds`/`actualMeters`, and `deviceName`; save and
-  discard each clear the record exactly once.
-- Server: accepts the grown payload; rejects an out-of-band `avgHr` and
-  a non-positive verbatim field; round-trips everything stored.
-- e2e: the existing connected walk extends through Save with a
-  seeded-workout assertion on the stored log's sources (the walk already
-  ends on this form) — plus the screenshot pair for the prefilled form,
-  portrait and landscape.
+- Builder tests against WALK 4's record VALUES, in the repo as a
+  fixture literal (adversarial m7): a 2×100 m distance program with
+  rest, actuals for indexes 0 and 1 carrying the §18 entry's numbers;
+  then the mutations — lost boundary, `index: null` dropped, early End
+  (bare trailing steps), effort-with-actual, avgSplit 0 (source
+  present, split absent), avgHr out-of-band (field omitted),
+  missing/misaligned `logSeed` (mode disqualified).
+- Spec-derivation rule ([[spec-blind-tests]]): the reviewer walks walk
+  4's interval 0 from the wire numbers to the rendered row through THIS
+  table, not the test file's vocabulary.
+- Screen: each §4 condition engages/falls through independently
+  (including flag-without-record and record-without-flag — the hijack
+  case); the widened render gate shows pm5 splits; save posts `pm5`
+  sources + verbatim fields + `deviceName`; save and the monitor
+  discard each clear the record exactly once; the manual door with a
+  stale record behaves byte-for-byte as today.
+- Server: the pm5 pairing exception; the pm5-band widening admits
+  walk-4's 66 spm while the manual bands reject it; the migration
+  round-trips `deviceName` null and set.
+- e2e: the connected walk extends through Save (the walk already ends
+  on this form) asserting the stored log's sources; screenshots of the
+  monitor-mode form, portrait + landscape.
 
 ## 8. Exit
 
-A session fully driven by a connected PM5 saves a log whose steps carry
-real monitor splits (`actualSource: "pm5"`), whose partial honesty
-matches ruling 1, whose record lifecycle closes at save/discard, and
-whose PM5 steps carry the verbatim wire numbers (split, work time,
-distance, stroke rate, heart rate) a Concept2 Logbook sync could be
-assembled from without touching 7C's code again — at a database cost of
-a few numbers per step and one provenance string per session.
+A session fully driven by a connected PM5 saves a log whose work steps
+carry real monitor splits (`actualSource: "pm5"`) plus the verbatim
+wire numbers (split, work time, distance, stroke rate, heart rate) a
+Concept2 Logbook sync could be assembled from without touching 7C
+again; partials read honestly; the record's life ends at save or the
+monitor discard; the manual door is bit-identical to today.
