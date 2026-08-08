@@ -179,7 +179,7 @@ describe("compileProgram: rest folding (H7)", () => {
       // can show verbatim; "" would have passed every one of these 19
       // assertions before this fix.
       message:
-        "This workout starts with rest before any work — the PM5 has no way to program a rest before the first interval.",
+        "This workout starts with rest before any work. The PM5 has no way to program a rest before the first interval.",
       phaseIndex: 0,
     });
   });
@@ -367,7 +367,7 @@ describe("compileProgram: too-many-intervals (Table 19, max 50)", () => {
     expect(compileProgram(phases)).toStrictEqual({
       code: "too-many-intervals",
       message:
-        "This workout has more than 50 intervals — the PM5 supports at most 50.",
+        "This workout has more than 50 intervals. The PM5 supports at most 50.",
       phaseIndex: 50,
     });
   });
@@ -401,7 +401,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message:
-        "An open-ended (all-out/test) interval has no fixed time or distance — the PM5 requires one to program a workout.",
+        "An open-ended (all-out/test) interval has no fixed time or distance. The PM5 requires one to program a workout.",
       phaseIndex: 0,
     });
   });
@@ -419,7 +419,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message:
-        "An interval of 20.5s isn't a whole second — the PM5 can't program it.",
+        "An interval of 20.5s isn't a whole second. The PM5 can't program it.",
       phaseIndex: 0,
     });
   });
@@ -508,7 +508,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message:
-        "A rest of 0.000001s isn't a whole second — the PM5 can't program it.",
+        "A rest of 0.000001s isn't a whole second. The PM5 can't program it.",
       phaseIndex: 1,
     });
   });
@@ -527,7 +527,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message:
-        "An interval of 20.999998s isn't a whole second — the PM5 can't program it.",
+        "An interval of 20.999998s isn't a whole second. The PM5 can't program it.",
       phaseIndex: 0,
     });
   });
@@ -545,7 +545,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message:
-        "An interval of 500.5m isn't a whole meter — the PM5 can't program it.",
+        "An interval of 500.5m isn't a whole meter. The PM5 can't program it.",
       phaseIndex: 0,
     });
   });
@@ -582,7 +582,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message:
-        "A rest of 60.5s isn't a whole second — the PM5 can't program it.",
+        "A rest of 60.5s isn't a whole second. The PM5 can't program it.",
       phaseIndex: 1,
     });
   });
@@ -637,7 +637,7 @@ describe("compileProgram: negative rest is guarded (Table 19's :00 minimum, Task
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: "A rest of -60s is negative — the PM5's minimum rest is :00.",
+      message: "A rest of -60s is negative. The PM5's minimum rest is :00.",
       phaseIndex: 1,
     });
   });
@@ -667,7 +667,7 @@ describe("compileProgram: negative rest is guarded (Table 19's :00 minimum, Task
     ];
     expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
-      message: "A rest of -30s is negative — the PM5's minimum rest is :00.",
+      message: "A rest of -30s is negative. The PM5's minimum rest is :00.",
       phaseIndex: 2,
     });
   });
@@ -730,7 +730,12 @@ describe("compileProgram: targetSplit representability (M-9, final-review)", () 
   // duration/rest, which only ever carry whole seconds by construction —
   // this is the one path that reaches this compiler with a fractional
   // number in `targetSplit`.
-  it("a fractional targetSplit (a real 2k+1.5-style offset) is unrepresentable, never silently truncated onto the wire", () => {
+  it("a half-second targetSplit (a real 2k+1.5-style offset) is representable: pace's wire unit is 0.01s (§12's worked example), not whole seconds", () => {
+    // The PR #59 hardware-walk regression: M-9 as first shipped copied
+    // duration's whole-second contract onto pace and refused 2:14.5-style
+    // splits, which baseline-derived targets produce for MOST of the
+    // library. SET_TARGETPACETIME is 0.01 sec/lsb, so 106.5 s is the
+    // integer 10650 on the wire.
     const phases: CompiledPhase[] = [
       {
         type: "work",
@@ -741,14 +746,37 @@ describe("compileProgram: targetSplit representability (M-9, final-review)", () 
       },
     ];
     expect(compileProgram(phases)).toStrictEqual({
+      intervals: [
+        {
+          kind: "time",
+          value: 120,
+          targetSplit: 106.5,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    });
+  });
+
+  it("a genuinely sub-hundredth targetSplit is unrepresentable, never silently truncated onto the wire", () => {
+    const phases: CompiledPhase[] = [
+      {
+        type: "work",
+        targetKind: "split",
+        targetSplit: 106.505,
+        seconds: 120,
+        originalIndex: 0,
+      },
+    ];
+    expect(compileProgram(phases)).toStrictEqual({
       code: "unrepresentable-value",
       message:
-        "A target pace of 106.5s/500m isn't a whole second — the PM5 can't program it.",
+        "A target pace of 106.505s/500m isn't representable in hundredths of a second. The PM5 programs pace in 0.01s steps.",
       phaseIndex: 0,
     });
   });
 
-  it("float noise on targetSplit within tolerance still rounds (uses the same representableSeconds as value/restSeconds)", () => {
+  it("float noise on targetSplit within tolerance still rounds (representableCentiseconds keeps representableSeconds's SECONDS-measured epsilon)", () => {
     const phases: CompiledPhase[] = [
       {
         type: "work",

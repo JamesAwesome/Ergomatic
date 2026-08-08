@@ -116,7 +116,7 @@ export class Pm5EncodeError extends Error {
 function assertEncodable(value: number, maxValue: number): void {
   if (!Number.isInteger(value) || value < 0 || value > maxValue) {
     throw new Pm5EncodeError(
-      `pm5/commands: ${value} cannot be encoded onto the wire — must be an integer between 0 and ${maxValue}`,
+      `pm5/commands: ${value} cannot be encoded onto the wire. Must be an integer between 0 and ${maxValue}`,
     );
   }
 }
@@ -181,11 +181,25 @@ function buildIntervalBlock(
   bytes.push(SET_RESTDURATION, 0x02, ...be16(interval.restSeconds));
 
   const paceSeconds = interval.targetSplit ?? NO_TARGET_PACE_SECONDS;
-  bytes.push(
-    SET_TARGETPACETIME,
-    0x04,
-    ...be32(paceSeconds * TARGET_PACE_SCALE),
-  );
+  // program.ts (`representableCentiseconds`) guarantees the split is
+  // hundredth-representable before it reaches this encoder; the round here
+  // kills only float noise in the scaling itself (e.g.
+  // `134.51 * 100 === 13450.999…98`), never information — without it,
+  // `be32`'s integer guard would throw on noise the value never contained.
+  // The guard below keeps M-9's defense-in-depth half: a caller that
+  // BYPASSED compileProgram with a genuinely sub-hundredth split (more
+  // than noise away from a whole centisecond — the same seconds-measured
+  // 1e-6 tolerance as program.ts's `WHOLE_SECOND_EPSILON`, ×100 because
+  // the comparison happens on the scaled value) still throws typed,
+  // never silently truncates.
+  const scaledPace = paceSeconds * TARGET_PACE_SCALE;
+  const paceCentis = Math.round(scaledPace);
+  if (Math.abs(scaledPace - paceCentis) >= 1e-4) {
+    throw new Pm5EncodeError(
+      `pm5/commands: target pace ${paceSeconds}s/500m is not representable in the wire's 0.01s units`,
+    );
+  }
+  bytes.push(SET_TARGETPACETIME, 0x04, ...be32(paceCentis));
 
   bytes.push(CONFIGURE_WORKOUT, 0x01, PROGRAMMING_MODE_ENABLE);
 
