@@ -55,8 +55,18 @@ const DEVICE_NAME = "PM5 432331249";
 // reasoning as `identity` itself). This suite's subject is the hook's state
 // machine, not seed content, so one placeholder object fills every identity
 // fixture below via a spread, rather than a bespoke seed per test.
+// DELIBERATELY NON-EMPTY (not `{ steps: [], paces: {} }`): the hook's own
+// `identityRef`/`ANONYMOUS_RUN` fallback (`useMonitorSession.ts`) uses an
+// EMPTY seed for its "never actually read" placeholder, and an empty
+// `TEST_SEED` here would be structurally indistinguishable from that
+// fallback silently winning instead of the real `identity.logSeed` being
+// threaded through — a mutation that swapped one for the other passed
+// every test in this file until this fixture grew real content.
 const TEST_SEED: { logSeed: LogSeed } = {
-  logSeed: { steps: [], paces: {} },
+  logSeed: {
+    steps: [{ label: "8:00 warm-up", kind: "warmup" }],
+    paces: { k6: 120 },
+  },
 };
 
 /** The realistic fixture the repo convention requires (a real seeded

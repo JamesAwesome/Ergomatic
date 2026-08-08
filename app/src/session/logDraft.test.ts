@@ -753,6 +753,15 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     expect(seed.paces).toStrictEqual({ k6: BASELINES.k6Seconds });
   });
 
+  it("the symmetric F1 case: a 2k-only workout captures k2 and OMITS k6 entirely (not just present-but-undefined)", () => {
+    // Cross Sea: four sequential distance steps at 2k+4/2k+2/2k+0/2k-2 —
+    // every work step references "2k", none reference "6k".
+    const { run } = runFor("Cross Sea");
+    const seed = buildLogSeed(run.phases, BASELINES);
+    expect(seed.paces).toStrictEqual({ k2: BASELINES.k2Seconds });
+    expect(Object.keys(seed.paces)).toStrictEqual(["k2"]);
+  });
+
   it("captures BOTH paces when a workout references both bases", () => {
     const draft = buildDraft({
       id: "id-both-bases",
