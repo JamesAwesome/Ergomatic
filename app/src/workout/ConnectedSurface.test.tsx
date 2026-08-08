@@ -189,6 +189,21 @@ describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)",
 });
 
 describe("swipe is the real navigation, 60px (handoff §3)", () => {
+  // The constant itself, not just behaviour relative to it: every other
+  // test in this block reads `SWIPE_THRESHOLD_PX`, so a changed threshold
+  // would move them all in lockstep and none of them would notice.
+  it("is 60px, the handoff's own number", () => {
+    expect(SWIPE_THRESHOLD_PX).toBe(60);
+  });
+
+  it("moves the pane at a literal 60px drag and not at 59", () => {
+    renderSurface();
+    swipe(59);
+    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    swipe(60);
+    expect(railButton("Timer")).toHaveAttribute("aria-current", "page");
+  });
+
   it("does nothing below the threshold", () => {
     expect(paneAfterSwipe("live", -(SWIPE_THRESHOLD_PX - 1))).toBe("live");
     expect(paneAfterSwipe("live", SWIPE_THRESHOLD_PX - 1)).toBe("live");
@@ -745,15 +760,18 @@ describe("ended: the surface hands off and unmounts", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("SESSION ENDED")).toBeInTheDocument();
 
-    // A re-render on the same ended phase must not fire it a second time —
-    // the caller is navigating, and a double navigation would land the
-    // rower somewhere they never asked for.
+    // A re-render on the same ended phase must not fire it a second time.
+    // The callback identity is deliberately FRESH here, because that is what
+    // production does: `WorkoutDetail`'s `handleConnectedEnded` is a new
+    // function on every render of that screen, so the effect's dependency
+    // list changes on every parent re-render and the once-guard is the only
+    // thing standing between the rower and a double navigation.
     rerender(
       <ConnectedSurface
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={s}
-        onEnded={onEnded}
+        onEnded={() => onEnded()}
       />,
     );
     expect(onEnded).toHaveBeenCalledTimes(1);
