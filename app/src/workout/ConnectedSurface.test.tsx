@@ -544,7 +544,15 @@ describe("index.css: the connected surface hides the shell's tab bar", () => {
     // the dead space DEVIATIONS row 58 exists to close, inverted (task-6
     // review, Concern 3's adjudication).
     expect(css).not.toContain(":has(.connected-interstitial)");
-    expect(css).toMatch(/\.connected-interstitial\s*\{[^}]*var\(--tap\)/);
+    // Anchor to the DECLARATION, not the block: the block opens with a doc
+    // comment that itself says "var(--tap)", so a block-scoped match stays
+    // green after Task 8 removes the real height term but leaves the
+    // prose — the likeliest half to miss (task-6 re-review, L6). Stripping
+    // comments makes prose invisible to the assertion.
+    const cssSansComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(cssSansComments).toMatch(
+      /\.connected-interstitial\s*\{[^}]*height:\s*calc\([^;}]*var\(--tap\)/,
+    );
   });
 });
 
