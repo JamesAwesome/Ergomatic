@@ -352,6 +352,13 @@ export interface FreezeRun {
  *  compare because `currentSplit`/`spm` are `number | null` and `null` is
  *  a value here like any other. */
 function freezeKey(frame: MonitorFrame): string {
+  // INTERVAL-SCOPED ON PURPOSE — `distanceMeters`, never
+  // `sessionDistanceMeters` (added Phase 7B for TOTAL LEFT and the METERS
+  // card). The whole no-rest-boundary defence in `PAUSED_FRAME_HOLD`'s
+  // comment rests on 0x0031's per-interval RESET: every boundary frame reads
+  // `d 0`, which is what `nextFreezeRun`'s `> 0` guard clears the false
+  // positive with. The accumulated field never returns to 0 mid-session, so
+  // swapping it in here would silently re-open that defect.
   return `${frame.distanceMeters}|${frame.currentSplit}|${frame.spm}`;
 }
 
@@ -653,7 +660,12 @@ export function useMonitorSession(
       // still pinned would satisfy an spm leg with zero flywheel evidence
       // for THIS piece — the same class of bug walk 3 found through the
       // other leg. Distance has the reset semantics this gate wants, and
-      // every real first-rowing frame in the record carries it.
+      // every real first-rowing frame in the record carries it. That is
+      // also why this stays `frame.distanceMeters` and NOT Phase 7B's
+      // accumulated `sessionDistanceMeters`: the accumulated field never
+      // returns to zero once a session has banked meters, so it would let a
+      // frame through on the PREVIOUS piece's distance. INTERVAL-scoped on
+      // purpose, exactly like `freezeKey`.
       //
       // This is also where the run opens: the record exists once the rower
       // is actually rowing, never at `armed` — a programmed-then-abandoned

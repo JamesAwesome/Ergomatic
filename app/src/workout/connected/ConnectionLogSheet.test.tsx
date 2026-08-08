@@ -57,10 +57,17 @@ function fillingLow(): { program: WorkoutProgram; phases: EnginePhase[] } {
 
 const FIXTURE = fillingLow();
 
+/** The session pair mirrors the raw pair unless a case overrides it — see
+ *  `surfaceModel.test.ts`'s own copy of this factory for the full walk-4
+ *  reasoning. The sheet's `SESSION m:ss` caption reads the session clock,
+ *  so the re-mirror after the spread is load-bearing here: without it a
+ *  case setting `elapsedSeconds` would assert against the default. */
 function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
-  return {
+  const f: MonitorFrame = {
     elapsedSeconds: 348,
     distanceMeters: 1400,
+    sessionElapsedSeconds: 348,
+    sessionDistanceMeters: 1400,
     currentSplit: 124,
     spm: 21,
     heartRateBpm: 164,
@@ -69,6 +76,11 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     state: "rowing",
     rowingActive: true,
     ...overrides,
+  };
+  return {
+    ...f,
+    sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
+    sessionDistanceMeters: overrides.sessionDistanceMeters ?? f.distanceMeters,
   };
 }
 

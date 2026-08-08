@@ -103,9 +103,14 @@ const WORK_PHASE = (() => {
 /** Interval 1 is the first 2000 m work interval (interval 0 is the
  *  warm-up), so a frame with `intervalIndex: 1` sits on `WORK_PHASE`. */
 function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
-  return {
+  // The session pair mirrors the raw pair unless a case overrides it — see
+  // `connected/surfaceModel.test.ts`'s own copy of this factory for the
+  // full walk-4 reasoning.
+  const f: MonitorFrame = {
     elapsedSeconds: 600,
     distanceMeters: 2400,
+    sessionElapsedSeconds: 600,
+    sessionDistanceMeters: 2400,
     currentSplit: WORK_PHASE.targetSplit!,
     spm: WORK_PHASE.spm ?? 22,
     heartRateBpm: 164,
@@ -114,6 +119,11 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     state: "rowing",
     rowingActive: true,
     ...overrides,
+  };
+  return {
+    ...f,
+    sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
+    sessionDistanceMeters: overrides.sessionDistanceMeters ?? f.distanceMeters,
   };
 }
 

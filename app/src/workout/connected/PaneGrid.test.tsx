@@ -123,10 +123,15 @@ function kindsOf(f: Fixture): ("time" | "distance")[] {
   return f.program.intervals.map((i) => i.kind);
 }
 
+/** The session pair mirrors the raw pair unless a case overrides it — see
+ *  `surfaceModel.test.ts`'s own copy of this factory for the full walk-4
+ *  reasoning. */
 function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
-  return {
+  const f: MonitorFrame = {
     elapsedSeconds: 828,
     distanceMeters: 800,
+    sessionElapsedSeconds: 828,
+    sessionDistanceMeters: 800,
     currentSplit: 117.8,
     spm: 21,
     heartRateBpm: 164,
@@ -135,6 +140,11 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     state: "rowing",
     rowingActive: true,
     ...overrides,
+  };
+  return {
+    ...f,
+    sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
+    sessionDistanceMeters: overrides.sessionDistanceMeters ?? f.distanceMeters,
   };
 }
 

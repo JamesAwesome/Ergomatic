@@ -155,6 +155,8 @@ export function phaseIndexForInterval(
 const NO_FRAME: MonitorFrame = {
   elapsedSeconds: 0,
   distanceMeters: 0,
+  sessionElapsedSeconds: 0,
+  sessionDistanceMeters: 0,
   currentSplit: null,
   spm: null,
   heartRateBpm: null,
@@ -337,13 +339,19 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     stale,
     format: (v) => String(Math.round(v)),
   });
-  // The machine's own whole-workout distance (0x0031's Distance field). NOT
-  // per-interval meters: `MonitorFrame` carries no such field, and the
-  // mockup's `THIS INTERVAL` caption would be a claim the seam cannot back
-  // (see the task-6 report's deviation note).
+  // The whole-SESSION distance — `sessionDistanceMeters`, the driver's
+  // accumulated total, NOT 0x0031's own `distanceMeters`. This comment used
+  // to call the raw field "the machine's own whole-workout distance"; walk 4
+  // (interface-notes.md §18, 2026-08-08) showed that premise is false —
+  // 0x0031's Distance RESETS at every work interval, and this card was seen
+  // falling 109 -> 50 at the 2x100m's second interval because of it.
+  // Still not per-interval meters (the mockup's `THIS INTERVAL` caption
+  // remains a claim the seam cannot back — see the task-6 report's deviation
+  // note); the `TOTAL` caption below is now literally true rather than
+  // accidentally so.
   const meters = judgedValue({
     kind: "meters",
-    actual: frame.distanceMeters,
+    actual: frame.sessionDistanceMeters,
     target: null,
     stale,
     format: (v) => String(Math.round(v)),
@@ -365,7 +373,16 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     : { main: DASH, sub: null };
 
   const totalSeconds = totalSessionSecondsOf(phases);
-  const totalLeftSeconds = Math.max(0, totalSeconds - frame.elapsedSeconds);
+  // `sessionElapsedSeconds`, never `frame.elapsedSeconds`: 0x0031's own
+  // clock RESETS at every work interval (walk 4, interface-notes.md §18), so
+  // subtracting it counted the current interval only — TOTAL LEFT was
+  // recorded falling 1:30 -> 1:11 and then RISING to 1:38 as interval 2
+  // started. The driver's accumulated total is monotone across those resets,
+  // which is the only thing that makes this subtraction a countdown.
+  const totalLeftSeconds = Math.max(
+    0,
+    totalSeconds - frame.sessionElapsedSeconds,
+  );
 
   const remaining = frame.intervalRemaining;
   const distanceInterval = remaining?.kind === "distance";
@@ -390,7 +407,10 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     totalSeconds,
     totalLeftSeconds,
     totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
-    elapsedDisplay: fmtDuration(frame.elapsedSeconds / 60),
+    // The log sheet captions this `SESSION m:ss` and PaneLive shows it as
+    // the piece's running clock — both mean the whole session, so it reads
+    // the accumulated pair for the same walk-4 reason TOTAL LEFT does.
+    elapsedDisplay: fmtDuration(frame.sessionElapsedSeconds / 60),
     intervalClockLabel: distanceInterval ? "METERS LEFT" : "LEFT IN INTERVAL",
     intervalClockValue: intervalClockValueFor(remaining),
     intervalProgressPct: intervalProgressPctFor(phase, remaining),
@@ -442,12 +462,17 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
  * dash. The programmed dimension counts DOWN and comes from
  * `MonitorFrame.intervalRemaining` (the driver computes it). The OTHER
  * dimension — meters accrued on a time interval, time accrued on a distance
- * one — has no field anywhere on the seam: `MonitorFrame`'s
- * `elapsedSeconds`/`distanceMeters` are the SESSION's cumulative totals
- * (0x0031), not this interval's, and subtracting completed intervals from
- * them would silently fold every rest bout into the answer. The mockup
- * draws `198` there; we draw `—`. Recorded in DEVIATIONS, same reasoning as
- * task 6's `TOTAL`-not-`THIS INTERVAL` row.
+ * one — has no honest field anywhere on the seam. `MonitorFrame`'s
+ * `sessionElapsedSeconds`/`sessionDistanceMeters` are the session's
+ * cumulative totals, and subtracting completed intervals from them would
+ * silently fold every rest bout into the answer. 0x0031's own
+ * `elapsedSeconds`/`distanceMeters` ARE per-interval (walk 4,
+ * interface-notes.md §18 — an earlier version of this comment called them
+ * session-cumulative, which the walk disproved), but they span the
+ * interval's work AND its trailing rest as one count, so they answer a
+ * different question than "meters accrued rowing this interval" too. The
+ * mockup draws `198` there; we draw `—`. Recorded in DEVIATIONS, same
+ * reasoning as task 6's `TOTAL`-not-`THIS INTERVAL` row.
  */
 export function buildGridModel(args: {
   intervals: ProgramInterval[];

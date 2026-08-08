@@ -50,10 +50,19 @@ function libraryFixture(title: string) {
 
 const FIXTURE = libraryFixture("Filling Low");
 
+/** The session pair MIRRORS the raw pair unless a case overrides it
+ *  outright. 0x0031's `elapsedSeconds`/`distanceMeters` are PER-INTERVAL
+ *  (walk 4, interface-notes.md §18); the driver accumulates the session
+ *  totals on top, and for a fixture that never crosses a reset the two are
+ *  simply equal. The re-mirror after the spread is what makes that true: a
+ *  case overriding only `elapsedSeconds` would otherwise keep the DEFAULT
+ *  session clock and quietly assert nothing about the value it set. */
 function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
-  return {
+  const f: MonitorFrame = {
     elapsedSeconds: 600,
     distanceMeters: 2400,
+    sessionElapsedSeconds: 600,
+    sessionDistanceMeters: 2400,
     currentSplit: 120,
     spm: 22,
     heartRateBpm: 164,
@@ -62,6 +71,11 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     state: "rowing",
     rowingActive: true,
     ...overrides,
+  };
+  return {
+    ...f,
+    sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
+    sessionDistanceMeters: overrides.sessionDistanceMeters ?? f.distanceMeters,
   };
 }
 
@@ -368,6 +382,83 @@ describe("live", () => {
       phaseIndexForInterval(FIXTURE.phases, 1, false),
     );
     expect(m.upNext).not.toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Walk 4 (2026-08-08, interface-notes.md §18): 0x0031's clock and distance
+// RESET at every work interval. Both of these panes read the accumulated
+// session pair now; these are the two failures the walk actually recorded.
+// ---------------------------------------------------------------------------
+
+describe("the session pair across a work-interval reset (walk 4)", () => {
+  /** The recorded shape, frame for frame: the last `resting` frame of
+   *  interval 1 (`elapsed=37.81 distance=101.8`), the first `rowing` frame of
+   *  interval 2 with 0x0031's own pair back at the floor
+   *  (`elapsed=0 distance=0.7`), and one frame further in. The driver's
+   *  accumulated pair climbs straight through the reset the raw pair takes. */
+  const ACROSS_THE_RESET = [
+    frame({
+      state: "resting",
+      elapsedSeconds: 37.81,
+      distanceMeters: 101.8,
+      sessionElapsedSeconds: 37.81,
+      sessionDistanceMeters: 101.8,
+    }),
+    frame({
+      state: "rowing",
+      elapsedSeconds: 0,
+      distanceMeters: 0.7,
+      sessionElapsedSeconds: 37.81,
+      sessionDistanceMeters: 102.5,
+    }),
+    frame({
+      state: "rowing",
+      elapsedSeconds: 1.2,
+      distanceMeters: 3.1,
+      sessionElapsedSeconds: 39.01,
+      sessionDistanceMeters: 104.9,
+    }),
+  ];
+
+  it("TOTAL LEFT never rises across the reset (the recorded 1:11 -> 1:38 bug)", () => {
+    const lefts = ACROSS_THE_RESET.map(
+      (f) => model({ frame: f }).totalLeftSeconds,
+    );
+    const total = model({ frame: ACROSS_THE_RESET[0]! }).totalSeconds;
+
+    // Exact, not merely monotone: the middle frame is the one the recording
+    // caught jumping BACKWARDS to a nearly-full countdown, because the raw
+    // clock it used to read had just returned to 0.
+    expect(lefts).toStrictEqual([total - 37.81, total - 37.81, total - 39.01]);
+    expect(lefts[1]).toBeLessThan(total);
+  });
+
+  it("the METERS card shows the accumulated total, not the reset interval's 1 m", () => {
+    const displays = ACROSS_THE_RESET.map(
+      (f) => model({ frame: f }).meters.display,
+    );
+
+    // 102.5 is deliberately a half-way value: `Math.round` gives 103 where a
+    // floor would give 102, so this pins the rounding as well as the source.
+    expect(displays).toStrictEqual(["102", "103", "105"]);
+    // What the bug looked like on the erg: the raw field would have rendered
+    // `Math.round(0.7)` here and the card fell 109 -> 50 for real.
+    expect(displays[1]).not.toBe("1");
+    expect(model({ frame: ACROSS_THE_RESET[1]! }).metersCaption).toBe("TOTAL");
+  });
+
+  it("the SESSION caption's clock keeps running through the reset too", () => {
+    const shown = ACROSS_THE_RESET.map(
+      (f) => model({ frame: f }).elapsedDisplay,
+    );
+
+    // The log sheet captions this `SESSION m:ss`; a reset frame reading 0:00
+    // mid-piece is the same defect wearing a different label.
+    expect(shown[1]).toBe(shown[0]);
+    expect(shown[1]).not.toBe(
+      model({ frame: frame({ elapsedSeconds: 0 }) }).elapsedDisplay,
+    );
   });
 });
 
