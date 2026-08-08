@@ -10,9 +10,16 @@
 //   mutation pass). Re-deriving `structure-mismatch`'s exact hardware race
 //   here (a machine caught rowing at the instant `program()` dispatches,
 //   `driver.test.ts:5707`'s own multi-tick setup) would test the DRIVER a
-//   second time, not this screen's rendering — a hand-built
-//   `ConnectedError` fixture with a realistic `raw` triple pins the
-//   RENDER, which is what this file owns.
+//   second time, not this screen's rendering — a hand-built `ConnectedError`
+//   fixture pins the RENDER, which is what this file owns. Its `detail`/
+//   `raw` strings are copied VERBATIM from production, though (task-5
+//   review, MEDIUM-6): `detail` is `ProgramRejectionError.message`
+//   (`driver.ts`'s `REJECTION_VERBS["structure-mismatch"]`, `atFrame: -1`),
+//   `raw` is `hexTrace`, one of `settleVerifyFailure`'s own
+//   `structure-mismatch` detail strings built from
+//   `describeStructureMismatch` (`driver.ts:1781-1786`) — not an invented
+//   shape, so the render pin is honest about what a rower would actually
+//   see.
 // - **The interstitial walk** (`describe("the interstitial walk,
 //   fake-driven")`) does NOT mock the hook: `useMonitorSession` is real,
 //   wired to `transports/fake.ts`'s CSAFE-correct simulator — the same
@@ -220,14 +227,23 @@ describe("state 4: pairing", () => {
     expect(screen.getByText(DEVICE_NAME)).toBeInTheDocument();
     expect(screen.getByText("Connecting")).toBeInTheDocument();
     expect(screen.getByText("FOUND")).toBeInTheDocument();
-    expect(screen.getByText("CONNECTED")).toBeInTheDocument();
+    // LOW-5, task-5 review: present tense while it's the CURRENT line —
+    // "CONNECTING", not the past-tense "CONNECTED" the canonical triple
+    // otherwise uses (that reading applies once state 5 marks it done).
+    expect(
+      screen.getByText("CONNECTING", {
+        selector: ".connected-checklist-current",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText("SENDING THE WORKOUT")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
   it("falls back to a generic status label before the device name is known", () => {
     renderInterstitial({ phase: "pairing", deviceName: null });
-    expect(screen.getByText("CONNECTING")).toBeInTheDocument();
+    expect(
+      screen.getByText("CONNECTING", { selector: ".connected-status-label" }),
+    ).toBeInTheDocument();
   });
 
   it("Cancel calls session.cancel() and hands back to the caller", async () => {
@@ -259,7 +275,7 @@ describe("state 5: programming", () => {
     expect(
       screen.getByText(`${FIXTURE.program.intervals.length} INTERVALS`),
     ).toBeInTheDocument();
-    expect(screen.getByText("K2 1:52.0 · K6 2:02.0")).toBeInTheDocument();
+    expect(screen.getByText("2K 1:52.0 · 6K 2:02.0")).toBeInTheDocument();
     expect(screen.getByText("3 NUDGED")).toBeInTheDocument();
   });
 
@@ -269,6 +285,35 @@ describe("state 5: programming", () => {
       deviceName: DEVICE_NAME,
     });
     expect(container.textContent).not.toMatch(/INTERVAL\s+\d+\s+OF\s+\d+/i);
+  });
+
+  it("a single-interval program reads '1 INTERVAL', singular (LOW-6)", () => {
+    const one: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 120,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    mockUseMonitorSession.mockReturnValue(
+      session({ phase: "programming", deviceName: DEVICE_NAME }),
+    );
+    render(
+      <ConnectedInterstitial
+        program={one}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("1 INTERVAL")).toBeInTheDocument();
+    expect(screen.queryByText("1 INTERVALS")).not.toBeInTheDocument();
   });
 
   it("status label reads '<device> · CONNECTED'", () => {
@@ -288,14 +333,26 @@ describe("state 5: programming", () => {
 
 describe("state 6: failed — every ConnectedError rendered", () => {
   it("a MACHINE reason (structure-mismatch) gets the generic serif line and the DETAIL panel carries the observed-vs-expected triple", () => {
+    // Task-5 review, MEDIUM-6: the real shape, not a hand-invented one —
+    // `detail` is `ProgramRejectionError.message` (`driver.ts`'s
+    // `REJECTION_VERBS["structure-mismatch"]`, `atFrame: -1` since this is
+    // a verify-phase rejection, never a send-phase one); `raw` is
+    // `hexTrace`, one of `settleVerifyFailure`'s two `structure-mismatch`
+    // detail strings (`driver.ts:1691-1692`), itself built from
+    // `describeStructureMismatch` (`driver.ts:1781-1786`)'s own
+    // observed-vs-expected phrasing.
     const triple =
-      "observed 0 intervals, interval 0 duration 0 vs expected 4 intervals, interval 0 duration 480";
+      "3 consecutive armed tick(s) reporting the same wrong structure — " +
+      "observed workoutType=1 durationRaw=0 durationType=128; " +
+      "expected workoutType=0 durationRaw=480 durationType=0 " +
+      "(the sent program's interval 0)";
     renderInterstitial({
       phase: "failed",
       deviceName: DEVICE_NAME,
       error: connectedError({
         reason: "structure-mismatch",
-        detail: 'PM5 reported "armed" while holding a different workout',
+        detail:
+          'PM5 reported "armed" while holding a different workout than the one just sent',
         raw: triple,
       }),
     });
@@ -375,6 +432,28 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       }),
     });
     expect(serifText()).toBe("No monitor was picked.");
+  });
+
+  // MEDIUM-7, task-5 review: `disconnected` IS one of the eight
+  // `ProgramRejectionReason` values (a real machine-reported rejection
+  // reason), but it means the LINK died mid-conversation, not that the PM5
+  // looked at the workout and refused it — the generic "The monitor
+  // wouldn't take it" + "End whatever is showing on the monitor" copy would
+  // be actively wrong (there is nothing to end; the link is gone).
+  it("disconnected reads its own detail, not the generic machine-refusal copy", () => {
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({
+        reason: "disconnected",
+        detail: "PM5 disconnected before completing",
+      }),
+    });
+    expect(serifText()).toBe("PM5 disconnected before completing");
+    expect(
+      screen.queryByText(
+        "End whatever is showing on the monitor, then try again.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   // The named inherited obligation: link-failed must NOT read like
@@ -533,9 +612,14 @@ describe("state 7: ready", () => {
     expect(screen.getByText(`${DEVICE_NAME} · PROGRAMMED`)).toBeInTheDocument();
   });
 
-  it("falls back to a bare ' · PROGRAMMED' if deviceName is somehow still null", () => {
+  // LOW-2, task-5 review: the old fallback produced a bare leading-space
+  // " · PROGRAMMED" when `deviceName` was null (unreachable in practice —
+  // `ready` never arrives without a device — but a defensive fallback
+  // should still read cleanly if it's ever hit).
+  it("falls back to a clean 'PROGRAMMED' with no leading separator if deviceName is somehow still null", () => {
     renderInterstitial({ phase: "ready", deviceName: null });
-    expect(screen.getByText("· PROGRAMMED")).toBeInTheDocument();
+    expect(screen.getByText("PROGRAMMED")).toBeInTheDocument();
+    expect(screen.queryByText(/^\s*·/)).not.toBeInTheDocument();
   });
 
   it("'Show me the numbers' is the screen's one L1 and skips straight to the phase gate", async () => {
@@ -547,8 +631,32 @@ describe("state 7: ready", () => {
 
     expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
     expect(
-      screen.getByText("CONNECTED — the live surface is Task 6's."),
+      screen.getByText("CONNECTED. The live surface is Task 6's."),
     ).toBeInTheDocument();
+  });
+
+  // HIGH-2, task-5 review: the handoff's §2, verbatim — "Cancel is present
+  // in every state, always last." State 7 shipped without it; this is the
+  // regression pin.
+  it("Cancel is present and last (handoff §2: 'present in every state, always last')", () => {
+    renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toStrictEqual([
+      "Show me the numbers",
+      "Cancel",
+    ]);
+  });
+
+  it("Cancel calls session.cancel() (the ready-phase terminate, DEVIATIONS row 57) and hands back to the caller", async () => {
+    const { session: s, onExit } = renderInterstitial({
+      phase: "ready",
+      deviceName: DEVICE_NAME,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledTimes(1);
   });
 
   it("auto-advances to the phase gate after 1.2s with no press (fake timers — the one sanctioned timer)", () => {
@@ -567,7 +675,7 @@ describe("state 7: ready", () => {
       });
       expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
       expect(
-        screen.getByText("CONNECTED — the live surface is Task 6's."),
+        screen.getByText("CONNECTED. The live surface is Task 6's."),
       ).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -585,7 +693,7 @@ describe("the phase gate — Task 6's seam", () => {
     (phase) => {
       renderInterstitial({ phase, deviceName: DEVICE_NAME });
       expect(
-        screen.getByText("CONNECTED — the live surface is Task 6's."),
+        screen.getByText("CONNECTED. The live surface is Task 6's."),
       ).toBeInTheDocument();
     },
   );
@@ -654,7 +762,7 @@ describe("the interstitial walk, fake-driven", () => {
     );
 
     expect(
-      screen.getByText("CONNECTED — the live surface is Task 6's."),
+      screen.getByText("CONNECTED. The live surface is Task 6's."),
     ).toBeInTheDocument();
   });
 

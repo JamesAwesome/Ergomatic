@@ -63,11 +63,20 @@ function liveSessionRun(): SessionRun {
 }
 
 /**
- * EXACTLY what Task 5 wires behind Connect, reduced to its one destructive
- * step: the flow ends in `createMonitorRun`, whose `clearRun()` is
- * unconditional. Passing THIS as `onProceed` is what makes the tests below
- * a data-loss proof rather than a "was the callback called" assertion — the
- * SessionRun really is gone afterwards, from real localStorage.
+ * NOT what Task 5 actually wires behind Connect (task-5 review, MEDIUM-1 —
+ * this comment used to claim it was, and it was already wrong by the time
+ * that claim was written: Task 5's real `onProceed`,
+ * `WorkoutDetail.handleConnectProceed`, compiles a program and sets React
+ * state — it hands off to `ConnectedInterstitial`, which only reaches
+ * `createMonitorRun` indirectly, at the FIRST REAL ROWING FRAME
+ * (`useMonitorSession.ts`), not synchronously on this press). What this
+ * DOES model, faithfully, is the one thing this file's own tests are
+ * about: the destructive step `createMonitorRun`'s `clearRun()` performs,
+ * reduced to a single call so the guard can be proven against a REAL
+ * localStorage round trip rather than a "was the callback called"
+ * assertion. Task 5's own proof that its real wiring defers this
+ * destruction lives in `WorkoutDetail.test.tsx` and `e2e/session.spec.ts`,
+ * not here.
  */
 function connectAsTaskFiveWill(): void {
   const w = libraryWorkout("Filling Low");

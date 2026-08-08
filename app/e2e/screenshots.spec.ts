@@ -1162,4 +1162,97 @@ test("news-reader", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "news-reader.png"),
   });
+
+// -- Phase 7B Task 5: the connected interstitial (task-5 review, HIGH-3) ---
+//
+// `pnpm screenshots` was not run for this screen when it first shipped — a
+// brand-new full-screen route is the strongest possible trigger for the
+// briefing's own gate table, and running it here is what would have caught
+// the 151px landscape overflow (Cancel and "Row on the phone timer instead"
+// starting 132px behind the fixed tab bar) the review measured directly.
+//
+// Only the FAILED state is captured for real, in both orientations — states
+// 4/5/7 (pairing/programming/ready) are deliberately NOT driven through a
+// real `navigator.bluetooth.requestDevice()` call here: this environment's
+// real Chromium exposes the Web Bluetooth API even headless, and with no
+// adapter and no way to render/dismiss a chooser, `requestDevice()` HANGS
+// rather than rejecting (the identical hazard `session.spec.ts`'s own
+// "Connect anyway" comment documents, LOW-1). `failed` (via
+// `transport-missing`) is reached by removing `navigator.bluetooth` itself
+// BEFORE the app loads — no picker is ever opened, so there is nothing to
+// hang on, and it is the one state HIGH-3's own measurement named by number.
+// All four built states share the exact same `.connected-interstitial`/
+// `.connected-interstitial-body` layout classes the fix applies to, and are
+// otherwise pixel-verified structurally by `ConnectedInterstitial.test.tsx`'s
+// 52 passing DOM assertions — this capture is the one real-browser check
+// the CSS fix (the `var(--tap)` term, the centred body) actually holds up
+// under real fonts and the real fixed tab bar, not a substitute for driving
+// every state.
+async function stubNoBluetooth(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, "bluetooth", {
+      value: undefined,
+      configurable: true,
+    });
+  });
+}
+
+async function openConnectedFailedState(
+  page: Page,
+  title: string,
+  email: string,
+): Promise<void> {
+  await stubNoBluetooth(page);
+  await signInViaBackdoor(page, {
+    email,
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // A single 100m distance work step — the PM5's own minimum distance
+  // interval, so `compileProgram` succeeds and Connect actually reaches the
+  // interstitial rather than staying on the button with an inline
+  // CompileError (the "test"/open-ended step the handoff's own reference
+  // fixtures elsewhere in this file are not compilable for the monitor).
+  await importBulk(page, [`${title} | AN | easy | 1`, "w 100m max"].join("\n"));
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.locator(".connected-serif-line", {
+      hasText: "This device has no Bluetooth transport.",
+    }),
+  ).toBeVisible();
+}
+
+test("connected-interstitial-failed", async ({ page }) => {
+  const title = "Screenshot Connected Failed Workout";
+  await openConnectedFailedState(
+    page,
+    title,
+    "screenshots-connected-failed@e2e.test",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-interstitial-failed.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-interstitial-failed-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Failed Landscape Workout";
+  await openConnectedFailedState(
+    page,
+    title,
+    "screenshots-connected-failed-landscape@e2e.test",
+  );
+  // The phase's own landscape-first reference frame (same as
+  // "timer-landscape"/"session-complete-landscape" above) — the orientation
+  // HIGH-3's own 151px overflow measurement was taken in.
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(
+      SCREENSHOTS_DIR,
+      "connected-interstitial-failed-landscape.png",
+    ),
+  });
+  await cleanupByTitle(page, title);
 });

@@ -641,16 +641,38 @@ export function useMonitorSession(
 
   /** Drops the driver and the radio. Listener FIRST, so a disconnect
    *  callback fired by our own `disconnect()` can never reach a component
-   *  that is on its way out. */
-  const teardown = useCallback((): void => {
+   *  that is on its way out.
+   *
+   *  **Task 5 review fix round — terminates first when the erg is armed and
+   *  nobody has terminated it yet.** `cancel()` below already does this
+   *  explicitly before calling `teardown()` (and passes `alreadyTerminated:
+   *  true` so this function does not repeat it) — but `teardown` is ALSO
+   *  the unmount cleanup (`useEffect(() => teardown, [teardown])` below),
+   *  reached by every OTHER way off the interstitial: a tab-bar tap, the
+   *  back gesture, an iOS process kill. Before this fix those exits left
+   *  the PM5 armed holding a workout nobody was going to row — DEVIATIONS
+   *  row 57's own documented harm ("the rower find[s] someone else's
+   *  intervals waiting on the monitor"), reachable from everywhere except
+   *  the one button that happened to call `cancel()`. Fire-and-forget
+   *  either way: nothing above this can act on a failed hang-up, and a
+   *  rejected promise escaping an unmount cleanup is an unhandled
+   *  rejection. `terminate()` runs to completion (or failure) BEFORE
+   *  `disconnect()` fires — sending a terminate over a link that is
+   *  already hung up would never reach the erg at all. */
+  const teardown = useCallback((alreadyTerminated = false): void => {
     unsubscribeRef.current?.();
     unsubscribeRef.current = null;
     const driver = driverRef.current;
     driverRef.current = null;
-    // Fire-and-forget: nothing above this can act on a failed hang-up, and
-    // a rejected promise escaping an unmount cleanup is an unhandled
-    // rejection.
-    if (driver) bestEffort(driver.disconnect());
+    if (driver === null) return;
+    const phase = stateRef.current.phase;
+    if (!alreadyTerminated && (phase === "programming" || phase === "ready")) {
+      bestEffort(
+        driver.terminate().finally(() => bestEffort(driver.disconnect())),
+      );
+      return;
+    }
+    bestEffort(driver.disconnect());
   }, []);
 
   const fail = useCallback(
@@ -801,7 +823,9 @@ export function useMonitorSession(
     // open until `live`). The handoff's "nothing lost" is amended in
     // DEVIATIONS accordingly: nothing OF OURS is lost, and the erg is left
     // terminated rather than armed with an orphan.
-    if (driver !== null && (phase === "programming" || phase === "ready")) {
+    const armed =
+      driver !== null && (phase === "programming" || phase === "ready");
+    if (armed) {
       try {
         await driver.terminate();
       } catch {
@@ -809,7 +833,11 @@ export function useMonitorSession(
         // is still in flight and this terminate interleaves with it.
       }
     }
-    teardown();
+    // `alreadyTerminated: armed` — `teardown` would otherwise repeat the
+    // SAME terminate a second time (the phase hasn't changed yet; `update`
+    // below is what moves it), which is harmless on real hardware but is
+    // not what "best-effort" is supposed to mean here.
+    teardown(armed);
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
     runRef.current = null;

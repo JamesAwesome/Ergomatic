@@ -1333,6 +1333,83 @@ describe("useMonitorSession: teardown", () => {
     // change that adds one is visible rather than silent.
     expect(transport.subscriptions).toBe(subscriptionsWhileLive);
   });
+
+  // Task 5 review, Probe D: before this fix, unmounting while ARMED
+  // (programming/ready) hung up the radio with no terminate at all, leaving
+  // the PM5 holding a workout nobody was going to row — DEVIATIONS row 57's
+  // own documented harm, reachable from every exit except a Cancel press.
+  it("unmount while armed (ready) terminates BEFORE hanging up — the erg is not left with an orphan workout", async () => {
+    const { result, fake, transport, unmount } = harness({
+      program: TWO_INTERVALS,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+    const writesAtReady = transport.wireWrites;
+
+    unmount();
+    await act(async () => {
+      await flush();
+    });
+
+    expect(transport.wireWrites).toBeGreaterThan(writesAtReady);
+    expect(transport.disconnects).toBe(1);
+  });
+
+  it("unmount while programming (before armed) also terminates first", async () => {
+    const { result, fake, transport, unmount } = harness({
+      program: TWO_INTERVALS,
+    });
+    await connect(result);
+    let settled = false;
+    void result.current.program(TWO_INTERVALS, TWO_IDENTITY).finally(() => {
+      settled = true;
+    });
+    await act(async () => {
+      await flush();
+    });
+    expect(result.current.phase).toBe("programming");
+    const writesWhileProgramming = transport.wireWrites;
+
+    unmount();
+    await act(async () => {
+      await flush();
+    });
+
+    expect(transport.wireWrites).toBeGreaterThan(writesWhileProgramming);
+    expect(transport.disconnects).toBe(1);
+    // Drains the in-flight program() so it doesn't leak a rejection into a
+    // later test — the driver is already torn down, so this settles one way
+    // or another rather than hanging.
+    if (!settled) {
+      fake.tick(0);
+      await flush();
+    }
+  });
+
+  // Live/paused/ended are UNCHANGED by this fix — End (not an unmount) owns
+  // closing the record once rowing has started, and `teardown`'s new
+  // terminate-first branch is gated on phase === "programming" | "ready"
+  // specifically so it never fires once a run is actually open.
+  it("unmount while live sends NO terminate — the SAME behaviour as before this fix", async () => {
+    const { result, fake, transport, unmount } = harness({
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    const writesWhileLive = transport.wireWrites;
+
+    unmount();
+    await act(async () => {
+      await flush();
+    });
+
+    expect(transport.wireWrites).toBe(writesWhileLive);
+    expect(transport.disconnects).toBe(1);
+  });
 });
 
 describe("useMonitorSession: coexistence with a phone SessionRun (Task 2's M-2)", () => {
