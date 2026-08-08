@@ -4199,10 +4199,18 @@ section:not(.news-pinned) .news-row:last-of-type {
    these two screens scroll in their OWN element instead of the window.
    Three window-scroll fixes in a row lost to real iOS WebKit's touch
    machinery (single scrollTo, restoration=manual + pre-paint timing, a
-   rAF hold-loop) — an overlay scroller can't lose that fight because a
-   freshly mounted element STARTS at 0 and the window never moves at all,
-   which also hands News its BACK position back for free. Fixed instead of
-   flowing inside `.app-shell`, so `.app-shell`'s own tab-bar-aware bottom
+   rAF hold-loop) — an overlay scroller can't lose that fight the same way,
+   because a freshly mounted element STARTS at 0: nothing to scroll to,
+   nothing for iOS to restore. Round 4 originally expected this to also
+   hand News its BACK position back for free (the window "never moving") —
+   turned out FALSE, verified on the real stack: `position: fixed` removes
+   this element from `.app-shell`'s document flow entirely, so
+   `document.body`'s scroll height collapses to just the app-shell's own
+   padding the moment this mounts, and the browser clamps `window.scrollY`
+   to 0 as an automatic consequence — the same clamp `Library.tsx`'s own
+   scroll-memory comment describes for a shorter list. BACK still lands
+   News at the top, unchanged from the #56 tradeoff (ROADMAP). Fixed instead
+   of flowing inside `.app-shell`, so `.app-shell`'s own tab-bar-aware bottom
    padding never reaches this element — `padding-bottom` below supplies the
    same `calc(var(--tap) + env(safe-area-inset-bottom, 0px))` directly,
    overriding `.screen`'s flat 20px so the last paragraph still clears the

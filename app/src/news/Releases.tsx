@@ -10,11 +10,15 @@ import { releaseDate } from "./newsDates";
 export default function Releases() {
   return (
     // Round 4 (architectural): scrolls in its own element — see
-    // .overlay-screen's comment in index.css for why. `tabIndex={-1}` is the
-    // keyboard focus stop axe's scrollable-region-focusable rule wants on a
-    // scroll region (Plan.tsx's 84-row sequence hit this in Phase 6A). No
-    // `key` here — unlike Reader, this screen has no in-place navigation.
-    <main className="screen releases-screen overlay-screen" tabIndex={-1}>
+    // .overlay-screen's comment in index.css for why. `tabIndex={0}`
+    // matches Plan.tsx's 84-row sequence (Phase 6A, commit a3e5ee6): it
+    // puts the scroll region itself in the tab order so a keyboard user can
+    // Tab to it and scroll with arrow/Page keys — genuinely useful here,
+    // not required by axe's scrollable-region-focusable rule, which this
+    // screen would already satisfy via BackLink, its own focusable
+    // descendant (`focusable-content`), tabIndex or not. No `key` here —
+    // unlike Reader, this screen has no in-place navigation.
+    <main className="screen releases-screen overlay-screen" tabIndex={0}>
       <BackLink fallback="/news" />
       <h1 className="screen-title">Release notes</h1>
       {RELEASE_NOTES.map((release) => (

@@ -208,16 +208,16 @@ describe("Reader", () => {
   // Round 4 (architectural): the reader scrolls in its own overlay element
   // instead of the window (see .overlay-screen, index.css) — a freshly
   // mounted scroller starts at scrollTop 0 by construction, so there is no
-  // scrollTo call to spy on any more. `tabIndex={-1}` is the keyboard focus
-  // stop axe's scrollable-region-focusable rule wants on a scroll region
-  // (same idiom Plan.tsx's 84-row sequence used, Phase 6A).
-  it("the root carries the overlay-screen class and a tabIndex=-1 focus stop", () => {
+  // scrollTo call to spy on any more. `tabIndex={0}` matches Plan.tsx's
+  // 84-row sequence (Phase 6A): it puts the scroll region in the tab order
+  // so a keyboard user can Tab to it and scroll with arrow/Page keys.
+  it("the root carries the overlay-screen class and is keyboard-tabbable (tabIndex 0)", () => {
     mockUseArticleReads.mockReturnValue(readyState([]));
     const { container } = renderReader("/news/baselines");
 
     const root = container.querySelector("main");
     expect(root).toHaveClass("overlay-screen");
-    expect((root as HTMLElement).tabIndex).toBe(-1);
+    expect((root as HTMLElement).tabIndex).toBe(0);
   });
 
   it("NEXT navigation remounts the root: a fresh scroller for the new article, not the same DOM node reused mid-scroll", async () => {

@@ -46,13 +46,17 @@ export default function Reader() {
     // Round 4 (architectural): scrolls in its own element — see
     // .overlay-screen's comment in index.css for why. `key={article.slug}`
     // forces a fresh DOM node (fresh scroller, position 0) on every NEXT
-    // navigation instead of reusing this one mid-scroll; `tabIndex={-1}` is
-    // the keyboard focus stop axe's scrollable-region-focusable rule wants
-    // on a scroll region (Plan.tsx's 84-row sequence hit this in Phase 6A).
+    // navigation instead of reusing this one mid-scroll. `tabIndex={0}`
+    // matches Plan.tsx's 84-row sequence (Phase 6A, commit a3e5ee6): it
+    // puts the scroll region itself in the tab order so a keyboard user can
+    // Tab to it and scroll with arrow/Page keys — genuinely useful here,
+    // not required by axe's scrollable-region-focusable rule, which this
+    // screen would already satisfy via BackLink, its own focusable
+    // descendant (`focusable-content`), tabIndex or not.
     <main
       className="screen reader-screen overlay-screen"
       key={article.slug}
-      tabIndex={-1}
+      tabIndex={0}
     >
       <BackLink fallback="/news" />
       <p className="reader-meta">

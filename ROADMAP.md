@@ -1486,10 +1486,14 @@ next phase. One line per round, newest first.
   scroll to, nothing for iOS to restore. `Reader.tsx`'s root also gains
   `key={article.slug}` so the NEXT footer's in-place navigation remounts a
   fresh scroller rather than reusing one that's mid-scroll; both screens'
-  roots gain `tabIndex={-1}`, the same keyboard-focus-stop idiom Plan.tsx's
-  84-row sequence used for axe's `scrollable-region-focusable` rule (Phase
-  6A) — verified still unnecessary-but-harmless here, since both screens
-  already carry a focusable `BackLink` descendant regardless. Round 3's
+  roots gain `tabIndex={0}`, matching Plan.tsx's 84-row sequence (Phase 6A,
+  commit a3e5ee6) exactly — it puts the scroll region itself in the tab
+  order so a keyboard user can Tab to it and scroll with arrow/Page keys.
+  Not required by axe's `scrollable-region-focusable` rule here either way:
+  both screens already carry a focusable `BackLink` descendant, which
+  satisfies the rule's `focusable-content` check regardless of the root's
+  own tabIndex — verified by reading axe-core's own rule source, not
+  assumed. Round 3's
   `holdScrollTop` helper and its test are deleted outright (grepped clean
   across `src/`/`e2e/`). **Correction to this round's own original premise:**
   the architecture does NOT restore News's BACK scroll position the way the
