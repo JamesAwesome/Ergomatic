@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import BackLink from "../shell/BackLink";
 import { RELEASE_NOTES } from "./content/releaseNotes";
 import { releaseDate } from "./newsDates";
@@ -12,8 +12,10 @@ export default function Releases() {
   // Item 1 (2026-08-07 device report): opened from a scrolled News feed,
   // this screen used to keep that scroll position too. This screen only
   // ever mounts once per visit (no in-place slug navigation like Reader
-  // has), so `[]` deps are enough.
-  useEffect(() => {
+  // has), so `[]` deps are enough. useLayoutEffect for the same reason as
+  // Reader's (see its comment): scroll before paint, ahead of iOS Safari's
+  // own late scroll pass.
+  useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 

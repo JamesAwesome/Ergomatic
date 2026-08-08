@@ -1471,6 +1471,22 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-07, follow-up to the News polish round below) — the
+  reader's scroll-to-top actually holds on iOS Safari: PR #55's
+  `useEffect`-timed `window.scrollTo(0, 0)` ran and landed (proven with
+  instrumented desktop-WebKit + iPhone-emulation runs) but on the real
+  device Safari's own browser-layer scroll pass re-scrolled the reader
+  ~150px down afterwards (James's 2026-08-07 screen recording; frames
+  8–11 show it parked mis-scrolled until a manual swipe). Fix targets the
+  layer that misbehaved: `history.scrollRestoration = "manual"` claimed at
+  App mount (every scroll-sensitive screen already self-manages — reader/
+  releases jump to top, Library restores its own position), plus the two
+  news scroll effects move to `useLayoutEffect` (before paint, ahead of any
+  late browser pass; `Library.tsx`'s own precedent). Known tradeoff, noted
+  deliberately: BACK from an article now lands News at the top on iOS
+  (Safari's auto-restore used to cover that) — the feed is ~1.15 screens
+  today, so this costs one small flick; if the shelf grows, News gets the
+  Library's own scroll-memory pattern rather than browser restoration.
 - **PR #TBD** (2026-08-07) — News polish: the reader and release notes
   scroll to the top on open instead of keeping the feed's scroll position;
   "heart rate monitor" replaces "heart rate strap" throughout; a prose pass

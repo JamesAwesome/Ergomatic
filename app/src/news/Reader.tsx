@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import BackLink from "../shell/BackLink";
 import { useArticleReads } from "../api/useArticleReads";
@@ -20,8 +20,13 @@ export default function Reader() {
   // used to keep the window's scroll position, opening cut off mid-page.
   // Keyed on the slug (not just mount) because the NEXT footer navigates
   // within this same mounted component — a fresh push into a new article
-  // needs its own scroll-to-top, not just the first one.
-  useEffect(() => {
+  // needs its own scroll-to-top, not just the first one. useLayoutEffect,
+  // not useEffect (same-day iOS follow-up, Library.tsx's own precedent):
+  // post-paint scrolling both flashes one mis-scrolled frame and lines up
+  // behind iOS Safari's own late scroll pass — before-paint runs first and
+  // wins. App.tsx's scrollRestoration opt-out removes the competitor
+  // entirely; this ordering is the belt to that braces.
+  useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, [article?.slug]);
 
