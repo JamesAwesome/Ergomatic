@@ -407,8 +407,9 @@ const NO_FREEZE: FreezeRun = { key: "", frames: 0 };
  *
  * Five CONSECUTIVE frames of STRICTLY INCREASING distance in a rowing state
  * is the shape a coast cannot hold and a rower cannot fail. A decelerating
- * flywheel breaks strict increase as soon as the wheel stalls (0.01 m
- * resolution, ~2.5 s of streak at the observed 2 Hz cadence), while an
+ * flywheel breaks strict increase as soon as the wheel stalls (0.1 m/lsb
+ * resolution — `parse.ts` divides the raw field by 10 — ~2.5 s of streak
+ * at the observed 2 Hz cadence), while an
  * actually-rowing athlete banks meters on every frame of it. The instant
  * path below is UNCHANGED — a machine that says Active still promotes on
  * the very first frame, and this counter never runs on that path.
@@ -975,6 +976,11 @@ export function useMonitorSession(
       // `ProgramBusyError` — a correct backstop, but one that renders a
       // FAILURE for a rower who did nothing wrong.
       if (stateRef.current.phase === "programming") return;
+      // A fresh program is a fresh arm: a streak built by frames from the
+      // PREVIOUS armed state must not carry into this one (re-review
+      // NEW-2 — latent today, since no UI path re-programs from ready,
+      // but one line closes it for whoever adds that path).
+      rowingStreakRef.current = null;
       const driver = driverRef.current;
       if (driver === null) {
         fail({
