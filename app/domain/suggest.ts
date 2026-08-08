@@ -134,7 +134,7 @@ function buildReason(
 ): string {
   const timeChecked = !!prefs.durations?.length && !prefs.durationsUnknown;
   if (pickOverride) {
-    return `YOUR PICK · last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
+    return `YOUR PICK: last done ${recencyPhrase(picked.lastDoneDaysAgo)}.`;
   }
   if (fellBack) {
     const parts = ["difficulty"];

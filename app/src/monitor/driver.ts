@@ -264,7 +264,7 @@ export class ProgramBusyError extends Error {
 
   constructor() {
     super(
-      "program() is already in flight on this driver — a second call must wait for the first to settle (resolve or reject) before it may be dispatched",
+      "program() is already in flight on this driver. A second call must wait for the first to settle (resolve or reject) before it may be dispatched",
     );
   }
 }
