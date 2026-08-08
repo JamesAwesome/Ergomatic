@@ -201,19 +201,35 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
       heartRateBpm: 140,
       programIntervalIndex: 1,
     },
-    // THE FREEZE — many consecutive IDENTICAL frames while the machine
-    // reads `rowing` (`PAUSED_FRAME_HOLD`, `useMonitorSession.ts`), the
-    // exact shape the paused derivation requires (only four are NEEDED to
-    // trip it; this holds for several REAL seconds on purpose, so `PAUSED`
-    // stays observable through this file's own real-time pane-navigation
-    // sequence — clicking through three rail targets and three swipes,
-    // every one a real round trip — rather than a window narrow enough for
-    // that sequence alone to blow past it before the assertion ever runs).
-    ...FREEZE_OFFSETS.map((offset) => ({
+    // THE FREEZE — many consecutive frames while the machine reads `rowing`
+    // in which DISTANCE, SPLIT and RATE hold identical values and the
+    // WORKOUT CLOCK KEEPS RUNNING (`PAUSED_FRAME_HOLD`, `useMonitorSession.
+    // ts`), the exact shape the paused derivation requires (only four are
+    // NEEDED to trip it; this holds for several REAL seconds on purpose, so
+    // `PAUSED` stays observable through this file's own real-time
+    // pane-navigation sequence — clicking through three rail targets and
+    // three swipes, every one a real round trip — rather than a window
+    // narrow enough for that sequence alone to blow past it before the
+    // assertion ever runs).
+    //
+    // `elapsedSeconds` ADVANCES frame to frame on purpose (erg-day review,
+    // MEDIUM-4). The whole hardware finding behind the three-metric key is
+    // that a real PM5 runs the clock through a stop — the earlier fixture
+    // froze elapsed alongside the other three, which meant a revert to the
+    // superseded four-metric key would have left this walk GREEN. With the
+    // clock running, the browser gate proves the finding end to end: a key
+    // that includes elapsed can never repeat here, and PAUSED never fires.
+    ...FREEZE_OFFSETS.map((offset, i) => ({
       atMs: t + 900 + offset,
       kind: "status" as const,
+      // One whole second of machine clock per frame — the same compressed
+      // time scale the story's earlier frames already use (5s of clock per
+      // 300ms tick), and whole seconds because `elapsedDisplay` renders at
+      // second resolution: a sub-second advance would move the FRAME
+      // without moving the STRIP, and the assertion below reads the strip.
+      // 20 -> 39 across the 20 frames.
+      elapsedSeconds: 20 + i,
       workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-      elapsedSeconds: 20,
       distanceMeters: 140,
       spm: 24,
       currentSplit: 110,
@@ -226,7 +242,9 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
       atMs: t + 900 + FREEZE_OFFSETS[FREEZE_OFFSETS.length - 1]! + 700,
       kind: "status",
       workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-      elapsedSeconds: 25,
+      // Past the last freeze frame's own 39 — the clock never goes
+      // backwards here just because the fixture stopped pinning it.
+      elapsedSeconds: 45,
       distanceMeters: 165,
       spm: 25,
       currentSplit: 106,
@@ -452,15 +470,17 @@ async function walkToReady(
 
   // State 7 — ready. The dwell auto-advance is GONE (2026-08-08 operator
   // ruling, walks 2-3): this screen holds until the button or the first
-  // pull. The conditional click below survives from the dwell era and is
-  // now simply the button press every walk makes.
+  // pull. The press below is UNCONDITIONAL on purpose (erg-day review,
+  // MEDIUM-5): with no dwell the button is always present at `ready`, so a
+  // `isVisible()` guard could only ever be false if the dwell regression
+  // came back — and then the walk would silently skip the click and still
+  // pass. Asserting it is the one place CI can catch that.
   await expect(readyLine).toBeVisible({ timeout: 15_000 });
   const showNumbers = page.getByRole("button", {
     name: "Show me the numbers",
   });
-  if (await showNumbers.isVisible().catch(() => false)) {
-    await showNumbers.click();
-  }
+  await expect(showNumbers).toBeVisible();
+  await showNumbers.click();
 }
 
 /** The walk from the ready dwell through paused, resumed, End, and the log
@@ -490,23 +510,30 @@ async function walkSurfaceToLog(page: Page, title: string): Promise<void> {
   );
 
   // PAUSED — the freeze in `buildStoryEvents()` above lands here. The
-  // footer swaps End for the paused block; the four metrics (elapsed/
-  // distance/split/spm) hold the SAME reading the whole time, which is the
-  // entire point of the derivation (`PAUSED_FRAME_HOLD`'s own doc comment).
-  // Driven by `pumpUntilPaused` (this file's own header on why an ordinary
+  // footer swaps End for the paused block; the THREE keyed metrics
+  // (distance/split/rate) hold the SAME reading the whole time while the
+  // machine's clock keeps running, which is the entire point of the
+  // derivation (`PAUSED_FRAME_HOLD`'s own doc comment). Driven by
+  // `pumpUntilPaused` (this file's own header on why an ordinary
   // `expect(...).toBeVisible()` cannot be trusted to catch it).
   await pumpUntilPaused(page);
   await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
-  const pausedElapsed = await page
-    .locator(".connected-strip-value")
-    .first()
-    .textContent();
-  // Reads the same frozen value across two checks a beat apart — proof
-  // this is a HOLD, not a coincidence of timing.
-  await page.waitForTimeout(300);
-  await expect(page.locator(".connected-strip-value").first()).toHaveText(
-    pausedElapsed ?? "",
-  );
+  const metersValue = page
+    .locator(".timer-card", { hasText: "METERS" })
+    .locator(".timer-card-value");
+  const pausedMeters = await metersValue.textContent();
+  const elapsedStrip = page.locator(".connected-strip-value").first();
+  const pausedElapsed = await elapsedStrip.textContent();
+  // Reads the same frozen METERS across two checks a beat apart — proof
+  // this is a HOLD, not a coincidence of timing. ELAPSED is deliberately
+  // NOT part of that check: it is the one metric the fixture keeps moving
+  // through the freeze, exactly as a real PM5 does.
+  await page.waitForTimeout(700);
+  await expect(metersValue).toHaveText(pausedMeters ?? "");
+  await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
+  // ...and the clock really did move while PAUSED held (erg-day review,
+  // MEDIUM-4: without this the four-metric key would still pass here).
+  expect(await elapsedStrip.textContent()).not.toBe(pausedElapsed);
 
   // RESUMED — the changed frame in `buildStoryEvents()` clears the freeze
   // (700ms of clearance past the freeze's own last tick).
