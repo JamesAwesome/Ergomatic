@@ -871,23 +871,27 @@ describe("the interstitial walk, fake-driven", () => {
     );
     expect(screen.queryByText("No monitor is connected.")).toBeNull();
 
-    // NO `tick()`/`deliverArmedNow()` calls in this wait — a genuine Task 8
-    // finding (`driver.ts`'s `verifyArmed` is edge-triggered, and
-    // `fake.ts`'s own post-arm bundle is a ONE-SHOT flush, `flushArmedIfPending`'s
-    // own doc comment): calling either DURING this window risks flushing the
-    // one-and-only "armed" notification before `program()`'s own
-    // `verifyArmed()` call has even registered to listen for it (it
-    // registers only once `sendSequence()`'s full multi-frame send —
-    // several REAL `delayWrites(50)` writes, now genuinely 50ms apart each
-    // since the write() fix — has completely resolved), which would hang
-    // this test's `program()` call forever with no rejection or timeout to
-    // catch it. Real wall-clock time alone, no ticking, is what lets
-    // `write()`'s own delayed promises resolve; 1200ms is comfortably past
-    // this fixture's own worst-case multi-frame send.
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    await act(async () => {
-      fake.deliverArmedNow();
-    });
+    // Pumped THROUGHOUT, straight through the window Task 8 had to tiptoe
+    // around. Task 8 shipped this tail as "wait 1200ms in pure real time
+    // with zero flush calls, then `deliverArmedNow()` exactly once",
+    // because `fake.ts`'s post-arm bundle was then a ONE-SHOT: a `tick()`
+    // landing between the last frame's synchronous ack and `verifyArmed()`
+    // registering consumed the one-and-only "armed" notification, and
+    // `program()` hung forever. The fix wave closed that at the fake —
+    // armed is a LEVEL now (`fake.ts`'s `armedLevel`), re-reported on every
+    // otherwise-silent tick exactly as a real PM5 does, so no pump can
+    // steal it. This is therefore back to the natural form every other
+    // fake-driven test in this file uses. The real `setTimeout` inside the
+    // loop is not a workaround: `delayWrites(50)` resolves on real timers,
+    // so real time has to elapse for the multi-frame send to complete at
+    // all; 60 × 25ms is comfortably past this fixture's own worst case.
+    for (let i = 0; i < 60; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
     await screen.findByText("Ready when you pull", {}, { timeout: 5000 });
     expect(screen.queryByText("No monitor is connected.")).toBeNull();
   }, 15_000);

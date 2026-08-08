@@ -466,6 +466,65 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     );
   });
 
+  it("the armed reading is a LEVEL, not a one-shot: a tick that lands before anyone subscribes does NOT consume it (fix wave F-CRIT)", async () => {
+    // The exact race `e2e/connected.spec.ts` hit 100% of the time.
+    // `transports/index.ts`'s `autoTicking` pump (100ms) fires while
+    // `program()` is still suspended on a `delayWrites(120)` write, i.e.
+    // AFTER the last frame's synchronous ack but BEFORE `driver.ts`'s
+    // `verifyArmed()` has registered its listener. With a one-shot flush
+    // that tick swallowed the only "armed" notification the fake would
+    // ever send, and `verifyArmed` ran its whole 20-tick budget against a
+    // silent machine. A level cannot be swallowed.
+    const fake = createFakeTransport({ program: PROGRAM });
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    // The unrelated pump, landing in the gap — nobody is listening yet.
+    fake.tick(0);
+    // NOW the listener registers, exactly as `verifyArmed()` does.
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.tick(0);
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+  });
+
+  it("the armed level DROPS the moment a new programming sequence begins — a stale arm can never be re-reported into the next send (fix wave F-CRIT, driver.ts's F1 pins)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    await programIt(fake, PROGRAM);
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    // A SECOND program lands over the first. Its prepare step is where the
+    // next sequence begins (`beginProgrammingSequence`), so from that byte
+    // on the machine reports nothing armed until the new sequence accepts —
+    // the single TERMINATE status below is the prepare's own documented
+    // reaction (`onArmedFrameComplete`), and no tick after it repeats an
+    // arm the machine is no longer holding.
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_TERMINATE,
+    ]);
+    // …and the arm comes back the moment the new sequence accepts.
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_TERMINATE,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+  });
+
   it("a distance-kind program's status bundle carries intervalType=1", async () => {
     const fake = createFakeTransport({
       program: DISTANCE_PROGRAM,
@@ -554,13 +613,34 @@ describe("createFakeTransport: write() target validation", () => {
 describe("createFakeTransport: tick-driven timeline", () => {
   const events = TIMELINE_EVENTS;
 
-  it("delivers nothing before a scheduled event's atMs is reached", async () => {
+  it("delivers no SCHEDULED event before its atMs is reached — the ticks in between carry the armed LEVEL, repeated (fix wave F-CRIT)", async () => {
     const fake = createFakeTransport({ program: PROGRAM, events });
     await programIt(fake, PROGRAM);
     const generals: Uint8Array[] = [];
     fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
-    fake.tick(500);
-    expect(generals).toHaveLength(0);
+    // Three ticks, none of them reaching the first scheduled event at
+    // 1000ms. Nothing from the SCRIPT goes out — but the machine is
+    // holding an un-pulled program and says so on every one of them, which
+    // is what a real PM5 does at its configured sample rate. Modelling
+    // this as a single edge is what let an unrelated pump consume the
+    // one-and-only "armed" reading before `driver.ts`'s `verifyArmed()`
+    // registered (`fake.ts`'s `armedLevel`).
+    fake.tick(300);
+    fake.tick(300);
+    fake.tick(300);
+    expect(generals).toHaveLength(3);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
+    // …and the scripted event at 1000ms REPLACES the repeat on the tick it
+    // becomes due — one 0x0031 reading per tick, never two.
+    fake.tick(300);
+    expect(generals).toHaveLength(4);
+    expect(decodeGeneral(generals[3]!).workoutState).toBe(
+      WORKOUTSTATE_INTERVALWORKTIME,
+    );
   });
 
   it("delivers a due status event exactly once its atMs is reached", async () => {
