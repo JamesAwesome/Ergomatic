@@ -97,7 +97,7 @@ export function phaseSeconds(
   return null;
 }
 
-export function phases(steps: Step[], baselines: Baselines): Phase[] {
+export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
   const idx = steps.findIndex((s) => s.k === "reps");
   const marker =
     idx === -1 ? null : (steps[idx] as Extract<Step, { k: "reps" }>);
@@ -148,16 +148,29 @@ export function phases(steps: Step[], baselines: Baselines): Phase[] {
       case "w": {
         let base: Phase;
         if (isEffortRef(s.ref)) {
+          // Phase 6I: with null baselines this is `null` (no number to
+          // resolve to — the timer only ever shows the effort word for
+          // these), so `targetSplit` ends up `undefined`, matching its
+          // already-optional type. No crash, no fake number.
+          const targetSplit = estimationSplit(baselines, s.ref) ?? undefined;
           base = {
             type: "work",
             targetKind: "effort",
-            targetSplit: estimationSplit(baselines, s.ref),
+            targetSplit,
             spm: s.spm,
             label: effortWord(s.ref.effort),
             set,
             originalStepIndex,
           };
         } else {
+          // A split-ref work step has nothing to resolve without
+          // baselines — reaching here with null is a programmer error;
+          // callers must gate on `needsBaselines()` first (Phase 6I).
+          if (baselines === null) {
+            throw new Error(
+              "phases: a split-ref work step needs baselines — callers must gate on needsBaselines() first",
+            );
+          }
           const split = resolveSplit(baselines, s.ref);
           base = {
             type: "work",
@@ -188,10 +201,29 @@ export function phases(steps: Step[], baselines: Baselines): Phase[] {
   return out;
 }
 
+// Phase 6I: overloaded rather than a plain `Baselines | null` parameter so
+// every EXISTING caller (all of which pass a concrete `Baselines`) keeps
+// its exact inferred `{ minutes, estimated }` return type — none of them
+// need a null check added. Only a caller that itself holds a nullable
+// baselines value (Task 2's session-flow call sites) sees the `| null`
+// return. With null baselines, this always returns null rather than a
+// partial sum: `phases(steps, null)` can still leave some phases
+// unpriceable (an effort distance step has no targetSplit, so
+// `phaseSeconds` can't estimate it) and silently summing only the
+// priceable phases would produce a real-looking but wrong total — the
+// exact "never a bare dash, never a wrong number" house rule this feature
+// exists to honor. Callers that want a nominal duration without baselines
+// use fixed copy instead (`onboarding.ts`'s `ONBOARDING_DURATION_COPY`).
 export function estimateMinutes(
   steps: Step[],
   baselines: Baselines,
-): { minutes: number; estimated: boolean } {
+): { minutes: number; estimated: boolean };
+export function estimateMinutes(steps: Step[], baselines: null): null;
+export function estimateMinutes(
+  steps: Step[],
+  baselines: Baselines | null,
+): { minutes: number; estimated: boolean } | null {
+  if (baselines === null) return null;
   let seconds = 0;
   let estimated = false;
   for (const p of phases(steps, baselines)) {

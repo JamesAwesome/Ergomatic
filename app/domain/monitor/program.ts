@@ -41,10 +41,12 @@ export interface CompiledPhase {
    *  only. */
   meters?: number;
   /** The phase's resolved split target, seconds per 500m — set on every
-   *  "split" work phase AND on every "effort" work phase (an "effort" phase
-   *  resolves to a real number too, `domain/pace.ts`'s `estimationSplit` —
-   *  it is NOT left undefined). `targetKind` is what tells them apart; see
-   *  its own comment. */
+   *  "split" work phase, and on an "effort" work phase too WHEN baselines
+   *  were available to estimate one (`domain/pace.ts`'s `estimationSplit`).
+   *  Phase 6I: with null baselines (the no-baseline onboarding workouts,
+   *  `domain/needsBaselines.ts`) an "effort" phase has NO targetSplit at
+   *  all — `targetKind`, never `targetSplit === undefined`, is what tells
+   *  the two work-phase kinds apart; see its own comment. */
   targetSplit?: number;
   /** Discriminates a work phase's target: "split" is a real, user-chosen
    *  pace; "effort" is a display estimate for "ALL OUT"/"EASY" — the
@@ -80,10 +82,15 @@ export interface ProgramInterval {
   /** Frozen at confirm; null = no hard target (an effort phase, or a
    *  warmup/test interval with nothing to aim for). See `compileProgram`'s
    *  `targetKind` handling — this is null for BOTH "no ref at all" (warmup)
-   *  AND "targetKind === effort" (a real number the phone estimated for
-   *  display, not a pace to program), which is exactly the H8 fix: reading
-   *  `targetSplit === undefined` on the input would miss the second case,
-   *  since an effort phase's `targetSplit` is a real number.
+   *  AND "targetKind === effort" (when baselines were available, a real
+   *  number the phone estimated for display, not a pace to program), which
+   *  is exactly the H8 fix: reading `targetSplit === undefined` on the
+   *  input would have missed the second case back when an effort phase's
+   *  `targetSplit` was always a real number. Phase 6I: with null baselines
+   *  an effort phase's input `targetSplit` IS `undefined` too now, but the
+   *  `targetKind === "effort"` check already short-circuits before that
+   *  matters — the discriminant was always `targetKind`, never presence of
+   *  `targetSplit`.
    */
   targetSplit: number | null;
   /** DISPLAY-ONLY: no wire consumer exists (no per-interval rate command in
@@ -250,13 +257,17 @@ function representableCentiseconds(raw: number): number | null {
  *
  * **Effort vs. split targets** (H8): a "split" work phase's `targetSplit`
  * is a real, user-chosen pace and is programmed as-is. An "effort" work
- * phase's `targetSplit` is ALSO a real number on the input (an ESTIMATE,
- * `domain/pace.ts`'s `estimationSplit`, used for the phone's own display
- * only) — programming that estimate as a hard target would turn every
- * "ALL OUT"/"EASY" step into a fabricated pace target. The discriminant is
- * `targetKind === "effort"`, never `targetSplit === undefined` (the effort
- * phase's `targetSplit` is defined); this function always checks
- * `targetKind` first.
+ * phase's `targetSplit`, when baselines were available, is ALSO a real
+ * number on the input (an ESTIMATE, `domain/pace.ts`'s `estimationSplit`,
+ * used for the phone's own display only) — programming that estimate as a
+ * hard target would turn every "ALL OUT"/"EASY" step into a fabricated
+ * pace target. The discriminant is `targetKind === "effort"`, NEVER
+ * `targetSplit === undefined` — this function always checks `targetKind`
+ * first. (Phase 6I: with null baselines, `domain/expand.ts`'s `phases()`
+ * omits an effort phase's `targetSplit` entirely, so the "never" above is
+ * no longer just defensive — an effort phase's input `targetSplit` really
+ * can be undefined now, and this function must keep working exactly the
+ * same either way.)
  *
  * **The "test" (open-ended all-out) phase** (verified against
  * `domain/expand.ts`'s `phases()`, case `"test"`, against the design spec's
@@ -423,9 +434,12 @@ export function compileProgram(
     }
 
     // H8: the discriminant is targetKind, never targetSplit === undefined
-    // — an "effort" phase's targetSplit IS a real number (a display
-    // estimate), and programming it as a hard target would turn every
-    // "ALL OUT"/"EASY" step into a fabricated pace.
+    // — an "effort" phase's targetSplit, when baselines were available, IS
+    // a real number (a display estimate), and programming it as a hard
+    // target would turn every "ALL OUT"/"EASY" step into a fabricated
+    // pace. Phase 6I: with null baselines an effort phase's targetSplit is
+    // genuinely undefined (`domain/expand.ts`'s `phases()` omits it), so
+    // this check's `||` below is load-bearing, not just defensive.
     //
     // M-9 (final-review, whole-branch) as CORRECTED after PR #59's first
     // hardware walk: a "split" phase's targetSplit gets a representability

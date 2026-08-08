@@ -126,4 +126,20 @@ describe("effort refs", () => {
       "resolveSplit requires a split ref",
     );
   });
+
+  // Phase 6I Task 1: with null baselines, an effort ref has no number to
+  // resolve to (the timer only ever shows the effort WORD for these — the
+  // 5G rule); a split ref has nothing to resolve at all and reaching this
+  // function with one is a programmer error, not a runtime fallback.
+  describe("estimationSplit with null baselines (Phase 6I: no-baseline onboarding)", () => {
+    it("returns null for an effort ref instead of a number", () => {
+      expect(estimationSplit(null, { effort: "max" })).toBeNull();
+      expect(estimationSplit(null, { effort: "min" })).toBeNull();
+    });
+    it("throws for a split ref — callers must gate on needsBaselines() first", () => {
+      expect(() => estimationSplit(null, { base: "6k", off: 0 })).toThrow(
+        /baselines/i,
+      );
+    });
+  });
 });
