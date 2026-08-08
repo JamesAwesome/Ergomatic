@@ -1845,3 +1845,104 @@ describe("useMonitorSession: paused, end to end", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// exportLog — the diagnostics sheet's one read-only window (Task 7)
+// ---------------------------------------------------------------------------
+
+describe("useMonitorSession: exportLog", () => {
+  it("reads `[]` before a connect has ever built a log", () => {
+    const { result } = renderHook(() => useMonitorSession());
+    // No null branch for a caller to get wrong — the honest empty value is
+    // the same shape an empty log exports.
+    expect(result.current.exportLog()).toBe("[]");
+  });
+
+  it("returns the LIVE driver's own trace, byte-identical to the log's", async () => {
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+
+    expect(log.entries().length).toBeGreaterThan(0);
+    // The SAME STRING the log produces, not a re-serialization of it: the
+    // sheet's `COPY LOG` copies whatever this returns, verbatim.
+    expect(result.current.exportLog()).toBe(log.exportLog());
+  });
+
+  it("is a WINDOW, not a subscription: two reads see two different logs", async () => {
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+      events: [
+        status(100, { elapsedSeconds: 20, distanceMeters: 70 }),
+        status(200, { elapsedSeconds: 40, distanceMeters: 140 }),
+      ],
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    const first = result.current.exportLog();
+    expect(first).toBe(log.exportLog());
+
+    // Nothing was pushed and nothing was cached: a SECOND read simply sees
+    // whatever the log holds now, which is exactly what "the sheet reads on
+    // open" means and why re-opening it shows more.
+    log.record("probe", "one more entry, after the first read");
+    const second = result.current.exportLog();
+    expect(second).not.toBe(first);
+    expect(second).toBe(log.exportLog());
+    expect(second).toContain("one more entry, after the first read");
+  });
+
+  it("survives the session it belongs to: the trace outlives the teardown", async () => {
+    // The sheet is openable on the ended and disconnected frames, and a
+    // trace of the attempt that just failed is the one a bug report needs.
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    await act(async () => {
+      await result.current.endSession();
+    });
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.exportLog()).toBe(log.exportLog());
+    expect(result.current.exportLog()).not.toBe("[]");
+  });
+});

@@ -126,6 +126,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    exportLog: vi.fn().mockReturnValue("[]"),
     ...overrides,
   };
 }
@@ -286,13 +287,16 @@ describe("the pager is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
     expect(within(pager).getAllByRole("button")).toHaveLength(3);
   });
 
-  it("reaches pane C's slot, which is Task 7's to fill", async () => {
+  it("reaches pane C, the grid (Task 7 filled the slot)", async () => {
     renderSurface();
     await userEvent.click(railButton("Grid"));
     expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
+    expect(document.querySelector(".connected-pane-grid")).not.toBeNull();
+    // The placeholder this replaced is gone for good — a stale rule left
+    // behind is what makes a dead class look load-bearing.
     expect(
       document.querySelector(".connected-pane-grid-placeholder"),
-    ).not.toBeNull();
+    ).toBeNull();
   });
 });
 
@@ -865,8 +869,13 @@ describe("the connected walk, fake-driven", () => {
         {
           atMs: 100,
           kind: "status",
-          // WORKOUTSTATE_INTERVALWORKTIME
-          workoutState: 3,
+          // WORKOUTSTATE_INTERVALWORKTIME. Task 7 corrected this from `3`,
+          // which this comment already named wrongly: three is
+          // WORKOUTSTATE_INTERVALREST (`domain/monitor/pm5/parse.ts`), so
+          // the machine this walk described was resting, not rowing. The
+          // assertion below survived it only because interval 1's phase is
+          // the warm-up and nothing follows it that is a rest.
+          workoutState: 4,
           elapsedSeconds: 20,
           distanceMeters: 70,
           spm: 21,

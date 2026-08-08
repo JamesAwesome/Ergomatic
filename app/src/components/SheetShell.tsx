@@ -29,7 +29,18 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
  * never learned why. Wiring the id straight onto `aria-describedby` (not
  * `aria-live`, which would announce every draft toggle as the rower taps
  * through cells) restores that — TodayFilterSheet.tsx is the one caller
- * that passes it. */
+ * that passes it.
+ *
+ * `primary` is OPTIONAL (Phase 7B Task 7). Both filter sheets have a
+ * level-1 commit and pass one; the connected-mode diagnostics sheet
+ * (`workout/connected/ConnectionLogSheet.tsx`) has none — the connected
+ * handoff §5 gives it a level-3 `COPY LOG` over a level-2 `Close`, and the
+ * house's one-L1-per-screen rule means a shell that always emitted a
+ * `.button-l1` would have handed that sheet a second primary it does not
+ * want. Omitting the prop renders no button at all; the caller's own
+ * buttons in `children` are still the focus trap's `focusableElements()`,
+ * since that reads every `<button>` in the dialog rather than a list this
+ * component keeps. */
 export function SheetShell({
   open,
   titleId,
@@ -42,7 +53,7 @@ export function SheetShell({
   titleId: string;
   onDismiss: () => void;
   opener: RefObject<HTMLElement | null>;
-  primary: {
+  primary?: {
     label: string;
     disabled: boolean;
     onPress: () => void;
@@ -117,15 +128,17 @@ export function SheetShell({
         onClick={(e) => e.stopPropagation()}
       >
         {children}
-        <button
-          type="button"
-          className="button-l1"
-          disabled={primary.disabled}
-          aria-describedby={primary.describedBy}
-          onClick={primary.onPress}
-        >
-          {primary.label}
-        </button>
+        {primary !== undefined && (
+          <button
+            type="button"
+            className="button-l1"
+            disabled={primary.disabled}
+            aria-describedby={primary.describedBy}
+            onClick={primary.onPress}
+          >
+            {primary.label}
+          </button>
+        )}
       </div>
     </div>
   );

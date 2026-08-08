@@ -1342,7 +1342,12 @@ const CONNECTED_STATES = [
   "connected-pane-live-nohr",
   "connected-paused",
   "connected-disconnected",
+  // Task 7: pane C mid-session (one row of each state), the 25-interval
+  // case that forces the contained scroll (DEVIATIONS row 2), and the
+  // diagnostics sheet the triple-tap opens over it.
   "connected-pane-grid",
+  "connected-pane-grid-long",
+  "connected-log-sheet",
   "connected-ended",
 ] as const;
 
@@ -1360,6 +1365,32 @@ for (const name of CONNECTED_STATES) {
     // quoted in.
     await page.setViewportSize({ width: 844, height: 390 });
     await showConnectedFixture(page, name);
+    if (name === "connected-pane-grid-long") {
+      // Handoff §3's own number for pane C's contained scroll: "five fit at
+      // 390px". Asserted in the BROWSER, because it is a measurement — the
+      // row height, the header, the caption and End all have to land inside
+      // 390px of real layout for it to be true, and jsdom computes none of
+      // them. The first run of this pane fitted four (the column headings
+      // were rendering at the row type size, and the rows were 4px too
+      // tall); the CSS carries the arithmetic that fixed it.
+      const visible = await page.evaluate(() => {
+        const scroller = document.querySelector(".connected-grid-rows")!;
+        const box = scroller.getBoundingClientRect();
+        return Array.from(scroller.children).filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+        }).length;
+      });
+      expect(visible).toBeGreaterThanOrEqual(5);
+      // ...and the pane itself never scrolls: only the rows do (DEVIATIONS
+      // row 2). The document is exactly the viewport.
+      const overflow = await page.evaluate(
+        () =>
+          document.documentElement.scrollHeight -
+          document.documentElement.clientHeight,
+      );
+      expect(overflow).toBe(0);
+    }
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, `${name}-landscape.png`),
     });

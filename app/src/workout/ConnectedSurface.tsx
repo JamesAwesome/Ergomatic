@@ -5,10 +5,10 @@
 // never torn down and rebuilt at the handoff (this file calls no driver, no
 // transport and no `monitorRun` function; the plan's layering rule).
 //
-// PANE C IS TASK 7'S. The pager reaches it and the shell renders its slot,
-// but what is inside that slot today is a placeholder naming the boundary.
-// Nothing else in this file knows the difference — pane C arrives as one
-// more entry in `PANE_ORDER`'s render switch.
+// Task 7 filled pane C's slot (`connected/PaneGrid.tsx`) and hung the
+// diagnostics sheet off the pager (handoff §5) — the two things this file
+// gained are the grid's entry in the render switch and `useTripleTap`
+// below. Everything else here is Task 6's and unchanged.
 //
 // THE MOUNT QUESTION (inherited from Task 4, decided here): **the surface
 // UNMOUNTS at `ended`, and the hook's existing unmount teardown owns the
@@ -34,7 +34,9 @@ import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import type { EnginePhase } from "../session/engine";
+import ConnectionLogSheet from "./connected/ConnectionLogSheet";
 import PagerRail, { PANES, type PaneId } from "./connected/PagerRail";
+import PaneGrid from "./connected/PaneGrid";
 import PaneLive from "./connected/PaneLive";
 import PaneTimer from "./connected/PaneTimer";
 import { buildSurfaceModel } from "./connected/surfaceModel";
@@ -131,6 +133,50 @@ function useStagedEnd(): {
   return { armed, arm, disarm };
 }
 
+/** How long a tap stays "part of the same gesture" (handoff §5's "three
+ *  deliberate taps"). Not a long-press timer — there is nothing to hold and
+ *  nothing to trip while steadying the phone; this is the gap BETWEEN taps,
+ *  and it only ever cancels an accidental double, never fires anything on
+ *  its own. 600ms is the same order as a platform double-click threshold,
+ *  slow enough for a gloved thumb and far too fast to reach by tapping
+ *  through panes. */
+export const TRIPLE_TAP_WINDOW_MS = 600;
+
+/** Handoff §5's diagnostics gesture: three taps on the SAME pager target,
+ *  each within `TRIPLE_TAP_WINDOW_MS` of the last. Two taps do nothing (the
+ *  pin the mutation round exists for) — and tapping a DIFFERENT target
+ *  restarts the count at one, because that is a rower navigating, not a
+ *  rower asking for the log. */
+function useTripleTap(onTriple: () => void): (pane: PaneId) => void {
+  const count = useRef(0);
+  const lastPane = useRef<PaneId | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    };
+  }, []);
+
+  return function tap(pane: PaneId): void {
+    clearTimeout(timer.current ?? undefined);
+    count.current = lastPane.current === pane ? count.current + 1 : 1;
+    lastPane.current = pane;
+    if (count.current >= 3) {
+      count.current = 0;
+      lastPane.current = null;
+      timer.current = null;
+      onTriple();
+      return;
+    }
+    timer.current = setTimeout(() => {
+      count.current = 0;
+      lastPane.current = null;
+      timer.current = null;
+    }, TRIPLE_TAP_WINDOW_MS);
+  };
+}
+
 export interface ConnectedSurfaceProps {
   /** The workout's own frozen phases (`buildRun`'s output) — the phone's
    *  half of the story: what each target MEANS and where this interval sits
@@ -156,6 +202,12 @@ export default function ConnectedSurface({
   const [pane, setPane] = useState<PaneId>(() => loadLastPane());
   const touchStartX = useRef<number | null>(null);
   const end = useStagedEnd();
+  const [logOpen, setLogOpen] = useState(false);
+  /** The pager target the third tap landed on — SheetShell restores focus
+   *  to whatever opened it, and for this sheet that is a button the rail
+   *  owns, not one this component renders. */
+  const logOpener = useRef<HTMLElement | null>(null);
+  const registerTap = useTripleTap(() => setLogOpen(true));
 
   // Fires once per ending, whichever side ended it. `endedBy` is already
   // whatever the truth was ("machine" when the PM finished or was stopped
@@ -173,6 +225,17 @@ export default function ConnectedSurface({
     saveLastPane(next);
   }
 
+  /** A rail press does BOTH things, always: it selects the pane (the rail
+   *  is "confirmation and a fallback" for the swipe) and it counts towards
+   *  the diagnostics gesture. Three presses on the grid target therefore
+   *  land on the grid AND open the log — the sheet is a modal over
+   *  whichever pane the rower was heading for. */
+  function handleRailPress(next: PaneId, target: HTMLElement): void {
+    logOpener.current = target;
+    choosePane(next);
+    registerTap(next);
+  }
+
   function handleTouchStart(event: React.TouchEvent<HTMLElement>): void {
     touchStartX.current = event.touches[0]?.clientX ?? null;
   }
@@ -184,6 +247,9 @@ export default function ConnectedSurface({
     const endX = event.changedTouches[0]?.clientX;
     if (endX === undefined) return;
     const next = paneAfterSwipe(pane, endX - start);
+    // A swipe is NOT a tap: the gesture that opens diagnostics is three
+    // deliberate presses on one 56px target, and a rower flicking between
+    // panes must never fall into it.
     if (next !== pane) choosePane(next);
   }
 
@@ -202,6 +268,7 @@ export default function ConnectedSurface({
     phase: session.phase,
     frame: session.frame,
     deviceName: session.deviceName,
+    actuals: session.actuals,
   });
 
   if (session.phase === "ended") {
@@ -230,17 +297,7 @@ export default function ConnectedSurface({
       <div className="connected-surface-body">
         {pane === "timer" && <PaneTimer model={model} />}
         {pane === "live" && <PaneLive model={model} />}
-        {pane === "grid" && (
-          // TASK 7's. The slot exists so the pager can reach it and so the
-          // shell's own layout is the real one; the grid, its row states and
-          // the diagnostics sheet arrive in that task.
-          <div className="connected-pane connected-pane-grid-placeholder">
-            <p className="connected-status-label">GRID</p>
-            <p className="connected-body-line">
-              The interval grid arrives with the next drop.
-            </p>
-          </div>
-        )}
+        {pane === "grid" && <PaneGrid model={model} />}
       </div>
       {/* The paused block and End occupy the SAME 52px slot (handoff §4:
           "Same height, so nothing above shifts"). The height lives on this
@@ -264,7 +321,16 @@ export default function ConnectedSurface({
           </button>
         )}
       </div>
-      <PagerRail active={pane} onSelect={choosePane} />
+      <PagerRail active={pane} onSelect={handleRailPress} />
+      {logOpen && (
+        <ConnectionLogSheet
+          deviceCaption={model.deviceCaption}
+          elapsedDisplay={model.elapsedDisplay}
+          readLog={session.exportLog}
+          opener={logOpener}
+          onClose={() => setLogOpen(false)}
+        />
+      )}
     </main>
   );
 }

@@ -8,8 +8,11 @@
 //     on every pane — pane A's NOW/RATE/METERS cards, pane B's hero, rate,
 //     HR and meters cards — is a `JudgedValue` produced by that one helper
 //     (handoff §3: "One helper decides the colour; no pane implements its
-//     own judgement"). Pane C (Task 7) inherits the same rule by building
-//     its cells from `judgedValue` too.
+//     own judgement"). Pane C's grid (Task 7) inherits the same rule: every
+//     ACTUAL cell in `buildGridModel` below is a `judgedValue` too, and its
+//     PROGRAMMED cells are plain strings that structurally cannot carry a
+//     verdict (`GridValue.judged` is `null` for them) — "programmed values
+//     are never tinted; only what actually happened gets judged".
 //  2. **Stale beats everything.** `judgeActual`'s own precedence already
 //     returns `"stale"` ahead of any comparison; `staleFor` below is the
 //     single place that decides WHEN a reading is stale (the disconnected
@@ -21,8 +24,14 @@
 import { fmtDuration } from "../../../domain/duration.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { judgeActual, type Judgement } from "../../../domain/judge.js";
-import type { WorkoutProgram } from "../../../domain/monitor/program.js";
-import type { MonitorFrame } from "../../../domain/monitor/types.js";
+import type {
+  ProgramInterval,
+  WorkoutProgram,
+} from "../../../domain/monitor/program.js";
+import type {
+  IntervalActual,
+  MonitorFrame,
+} from "../../../domain/monitor/types.js";
 import type { ConnectedPhase } from "../../monitor/useMonitorSession";
 import type { EnginePhase } from "../../session/engine";
 import {
@@ -160,6 +169,54 @@ export interface SurfaceModelInput {
   phase: ConnectedPhase;
   frame: MonitorFrame | null;
   deviceName: string | null;
+  /** Everything the machine has reported finishing, straight off the hook.
+   *  Pane C's completed rows are built from these and from nothing else —
+   *  an interval with no actual on record shows dashes rather than a
+   *  re-derived number (see `buildGridModel`). */
+  actuals: IntervalActual[];
+}
+
+// --- Pane C's grid (handoff §3, "Pane C — the grid") ---------------------
+
+export type GridRowState = "completed" | "active" | "upcoming";
+
+/** One judged-or-programmed grid cell. `judged` is non-null ONLY when the
+ *  cell holds a machine ACTUAL; a programmed target is a plain string and
+ *  can therefore never pick up a tint, no matter what a pane does with it
+ *  (handoff §3: "Programmed values are never tinted — only what actually
+ *  happened gets judged"). */
+export interface GridValue {
+  display: string;
+  judged: JudgedValue | null;
+}
+
+export interface GridRow {
+  /** 0-based program index. The rendered `#` is this plus one. */
+  index: number;
+  state: GridRowState;
+  time: string;
+  meters: string;
+  /** Which cell is the ACTIVE row's countdown — the programmed dimension
+   *  (handoff §3: "the programmed dimension is the one that counts down and
+   *  the one that wears accent"). `null` on every other row, and it is the
+   *  only place `--accent` appears anywhere on the three panes. */
+  countdown: "time" | "meters" | null;
+  pace: GridValue;
+  spm: GridValue;
+  hr: string;
+  rest: string;
+  /** The active row's third line, `REMAINING · TARGET 2:00.0 · 6K −2`.
+   *  `null` on every other row. */
+  remainingLine: string | null;
+}
+
+export interface GridModel {
+  rows: GridRow[];
+  activeIndex: number;
+  /** The handoff's own words-not-glyphs caption naming which rows count
+   *  METERS down, or `null` when the session has no distance interval and
+   *  therefore nothing to explain. */
+  caption: string | null;
 }
 
 export interface SurfaceModel {
@@ -189,6 +246,10 @@ export interface SurfaceModel {
   thenNext: string | null;
   totalSeconds: number;
   totalLeftSeconds: number;
+  /** `44:12`, the same figure `TimerRuler` prints — pane C has no room for
+   *  the ruler and carries it as the header line's trailing caption
+   *  instead. */
+  totalLeftDisplay: string;
   elapsedDisplay: string;
   /** `LEFT IN INTERVAL` on a time interval, `METERS LEFT` on a distance one
    *  (handoff §3: "On a distance interval the second slot becomes METERS
@@ -220,6 +281,9 @@ export interface SurfaceModel {
    *  phase whose estimate `compileProgram` deliberately never programmed,
    *  or a legacy run frozen before `ref` existed). */
   targetSplitCaption: string;
+  /** Pane C. Built here, not in the pane, so its actual cells go through
+   *  the same `judgedValue` path every other pane's do. */
+  grid: GridModel;
 }
 
 /** `frame.currentSplit` is meaningless when nobody is pulling: the PM holds
@@ -324,6 +388,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     thenNext: thenNextTextAt(phases, phaseIndex),
     totalSeconds,
     totalLeftSeconds,
+    totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
     elapsedDisplay: fmtDuration(frame.elapsedSeconds / 60),
     intervalClockLabel: distanceInterval ? "METERS LEFT" : "LEFT IN INTERVAL",
     intervalClockValue: intervalClockValueFor(remaining),
@@ -341,7 +406,227 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     hrAbsent: hr.absent,
     targetSplit,
     targetSplitCaption: targetSplit.sub ?? "NO SPLIT TARGET",
+    grid: buildGridModel({
+      intervals: program.intervals,
+      actuals: input.actuals,
+      activeIndex: intervalIndex,
+      remaining,
+      stale,
+      // The live cells the ACTIVE row shares with panes A and B — the same
+      // objects, so a rower swiping from B to C cannot find the split
+      // judged one way on one pane and another way on the next.
+      livePace: pace,
+      liveRate: rate,
+      liveHr: hr,
+      targetSplitMain: targetSplit.main,
+      targetSplitRef: targetSplit.sub,
+      hasTargetSplit: targetSplitSeconds !== null,
+    }),
   };
+}
+
+/**
+ * Pane C's rows, in the program's own order (handoff §3's three row states).
+ *
+ * **THREE STATES, NOT FOUR.** A row's state is decided by POSITION against
+ * the machine's current interval, never by whether an actual happens to
+ * exist for it: `MISSED` is not built. The handoff's own missed-row
+ * treatment was only ever needed for the reconnect backfill (its open
+ * question 2 — "if not, those rows need a `— · MISSED` treatment and I'll
+ * design it"), and design spec C5 descopes auto-reconnect entirely, which
+ * takes the backfill and the rows it would have failed to fill with it. So
+ * a completed row with no actual on record shows dashes, and says nothing
+ * it cannot back.
+ *
+ * WHAT THE ACTIVE ROW CANNOT SAY, and why one of its two big cells is a
+ * dash. The programmed dimension counts DOWN and comes from
+ * `MonitorFrame.intervalRemaining` (the driver computes it). The OTHER
+ * dimension — meters accrued on a time interval, time accrued on a distance
+ * one — has no field anywhere on the seam: `MonitorFrame`'s
+ * `elapsedSeconds`/`distanceMeters` are the SESSION's cumulative totals
+ * (0x0031), not this interval's, and subtracting completed intervals from
+ * them would silently fold every rest bout into the answer. The mockup
+ * draws `198` there; we draw `—`. Recorded in DEVIATIONS, same reasoning as
+ * task 6's `TOTAL`-not-`THIS INTERVAL` row.
+ */
+export function buildGridModel(args: {
+  intervals: ProgramInterval[];
+  actuals: IntervalActual[];
+  activeIndex: number;
+  remaining: MonitorFrame["intervalRemaining"];
+  stale: boolean;
+  livePace: JudgedValue;
+  liveRate: JudgedValue;
+  liveHr: JudgedValue;
+  targetSplitMain: string;
+  targetSplitRef: string | null;
+  hasTargetSplit: boolean;
+}): GridModel {
+  const { intervals, activeIndex, remaining, stale } = args;
+  // An actual whose own `index` is `null` belongs to no interval we can
+  // name (`IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
+  // `null` AS INTERVAL 0"), so it files against no row rather than against
+  // the first one.
+  const byIndex = new Map<number, IntervalActual>();
+  for (const actual of args.actuals) {
+    if (actual.index !== null) byIndex.set(actual.index, actual);
+  }
+
+  const rows = intervals.map((interval, index): GridRow => {
+    const rest =
+      interval.restSeconds > 0 ? fmtDuration(interval.restSeconds / 60) : DASH;
+    if (index === activeIndex) {
+      const countdown = countdownDisplayFor(interval, remaining);
+      return {
+        index,
+        state: "active",
+        time: interval.kind === "time" ? countdown : DASH,
+        meters: interval.kind === "distance" ? countdown : DASH,
+        countdown: interval.kind === "time" ? "time" : "meters",
+        pace: { display: args.livePace.display, judged: args.livePace },
+        spm: { display: args.liveRate.display, judged: args.liveRate },
+        hr: args.liveHr.display,
+        rest,
+        remainingLine: remainingLineFor(
+          args.hasTargetSplit,
+          args.targetSplitMain,
+          args.targetSplitRef,
+        ),
+      };
+    }
+    if (index < activeIndex) {
+      const actual = byIndex.get(index);
+      const pace = judgedValue({
+        kind: "pace",
+        actual: actual?.avgSplit ?? null,
+        target: interval.targetSplit,
+        stale,
+        format: fmtSplit,
+      });
+      const spm = judgedValue({
+        kind: "spm",
+        actual: actual?.avgSpm ?? null,
+        target: interval.displaySpm,
+        stale,
+        format: (v) => String(Math.round(v)),
+      });
+      return {
+        index,
+        state: "completed",
+        time:
+          actual === undefined ? DASH : fmtDuration(actual.elapsedSeconds / 60),
+        meters:
+          actual === undefined
+            ? DASH
+            : String(Math.round(actual.distanceMeters)),
+        countdown: null,
+        pace: { display: pace.display, judged: pace },
+        spm: { display: spm.display, judged: spm },
+        hr:
+          actual?.avgHeartRateBpm === undefined ||
+          actual.avgHeartRateBpm === null
+            ? DASH
+            : String(Math.round(actual.avgHeartRateBpm)),
+        rest,
+        remainingLine: null,
+      };
+    }
+    // Upcoming: the PROGRAMMED values, every one of them a plain string.
+    // "A pending distance row shows `—` in the time cell and its meters in
+    // the meters cell" (handoff §3) — and the mirror for a time interval,
+    // which the same sentence implies and the mockup's rows 4 and 6 draw.
+    return {
+      index,
+      state: "upcoming",
+      time: interval.kind === "time" ? fmtDuration(interval.value / 60) : DASH,
+      meters: interval.kind === "distance" ? String(interval.value) : DASH,
+      countdown: null,
+      pace: {
+        display:
+          interval.targetSplit === null ? DASH : fmtSplit(interval.targetSplit),
+        judged: null,
+      },
+      spm: {
+        display:
+          interval.displaySpm === null ? DASH : String(interval.displaySpm),
+        judged: null,
+      },
+      hr: DASH,
+      rest,
+      remainingLine: null,
+    };
+  });
+
+  return { rows, activeIndex, caption: distanceCaptionFor(intervals) };
+}
+
+/** The active interval's countdown, in its own programmed dimension. Falls
+ *  back to the PROGRAMMED value when the machine has not reported a
+ *  remaining figure yet (the instant before the first frame) or when the
+ *  frame's own dimension disagrees with the program's — showing the full
+ *  interval is honest there; inventing a number from the other dimension
+ *  would not be. */
+function countdownDisplayFor(
+  interval: ProgramInterval,
+  remaining: MonitorFrame["intervalRemaining"],
+): string {
+  const value =
+    remaining !== null && remaining.kind === interval.kind
+      ? remaining.value
+      : interval.value;
+  return interval.kind === "distance"
+    ? String(Math.round(value))
+    : fmtDuration(value / 60);
+}
+
+/** The active row's third line (handoff §3: `REMAINING · TARGET 2:00.0 ·
+ *  6K −2`). The word REMAINING is what names the accent cell above it, so
+ *  it is present even on an interval with no split target at all — a
+ *  warm-up still counts something down. */
+function remainingLineFor(
+  hasTargetSplit: boolean,
+  main: string,
+  ref: string | null,
+): string {
+  if (!hasTargetSplit) return "REMAINING · NO SPLIT TARGET";
+  const parts = ["REMAINING", `TARGET ${main}`];
+  if (ref !== null) parts.push(ref);
+  return parts.join(" · ");
+}
+
+/** Handoff §3: "A mono caption under the grid names it in words — `ROW 5 IS
+ *  A 500 M PIECE · METERS COUNT DOWN` — rather than inventing a glyph."
+ *
+ *  The handoff writes the ONE-distance-row case. A real library workout has
+ *  three (Filling Low) or twenty-four (Sea Smoke), so the sentence
+ *  generalises: a short uniform set is listed by number, and anything
+ *  longer or ragged is counted rather than enumerated, because a caption
+ *  that lists twenty-four row numbers is not a caption. No distance
+ *  interval at all -> no caption, not an empty one. */
+function distanceCaptionFor(intervals: ProgramInterval[]): string | null {
+  const rows = intervals
+    .map((interval, i) => ({ interval, number: i + 1 }))
+    .filter((r) => r.interval.kind === "distance");
+  if (rows.length === 0) return null;
+  const tail = "METERS COUNT DOWN";
+  const first = rows[0]!;
+  if (rows.length === 1) {
+    const m = first.interval.value;
+    return `ROW ${first.number} IS ${articleFor(m)} ${m} M PIECE · ${tail}`;
+  }
+  const uniform = rows.every((r) => r.interval.value === first.interval.value);
+  if (uniform && rows.length <= 4) {
+    const list = rows.map((r) => r.number).join(", ");
+    return `ROWS ${list} ARE ${first.interval.value} M PIECES · ${tail}`;
+  }
+  return `${rows.length} ROWS ARE DISTANCE PIECES · ${tail}`;
+}
+
+/** `AN 800 M PIECE`, `A 500 M PIECE`. Eight is the only leading digit whose
+ *  spoken form starts with a vowel, and these captions are read aloud by a
+ *  screen reader as often as they are scanned. */
+function articleFor(meters: number): string {
+  return String(meters).startsWith("8") ? "AN" : "A";
 }
 
 /** `1:57.8` -> `["1:57", ".8"]`. `fmtSplit` always emits exactly one decimal

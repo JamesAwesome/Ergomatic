@@ -71,6 +71,7 @@ function model(over: Partial<SurfaceModelInput> = {}) {
     phase: "live",
     frame: frame(),
     deviceName: DEVICE,
+    actuals: [],
     ...over,
   });
 }
@@ -476,6 +477,7 @@ describe("degenerate inputs", () => {
       phase: "live",
       frame: frame(),
       deviceName: DEVICE,
+      actuals: [],
     });
     expect(m.targetSplit.main).toBe("—");
     expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
