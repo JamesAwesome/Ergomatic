@@ -1989,9 +1989,11 @@ interstitial checklist, never from the log.
     interstitial to READY, then "Show me the numbers"; (2) row the first
     work interval normally; (3) mid-interval, STOP rowing completely —
     hands off the handle, touch nothing on the PM5; (4) read whether the
-    surface renders `PAUSED · PULL TO RESUME` (confirming the four fields
-    hold identically), and roughly how many seconds after the last stroke
-    it appears (the derivation needs four consecutive identical frames);
+    surface renders `PAUSED · PULL TO RESUME` (confirming meters, split,
+    and rate hold identically — the CLOCK KEEPS RUNNING through a real
+    stop, so a moving countdown is expected, not a failure), and roughly
+    how many seconds after the last stroke it appears (the derivation
+    needs four consecutive identical three-metric frames);
     (5) with the HR belt on, record whether the heart-rate cell keeps
     moving through the hold (the field the derivation deliberately
     excludes, on the theory that it is the one that keeps moving when the
