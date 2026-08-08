@@ -39,7 +39,7 @@ import type { Transport } from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { buildDraft } from "../session/draft";
-import { buildRun } from "../session/engine";
+import { buildRun, type EnginePhase } from "../session/engine";
 import { createFakeTransport } from "../monitor/transports/fake";
 import {
   useMonitorSession,
@@ -70,7 +70,11 @@ const DEVICE_NAME = "PM5 432331249";
  *  library workout through the real assembly (`buildDraft` -> `buildRun`
  *  -> `compileProgram`), not a hand-built minimum. "Filling Low" compiles
  *  to 4 intervals: an 8:00 warmup (no rest) then 3 x 2000 m / 3:00 rest. */
-function fillingLow(): { program: WorkoutProgram; identity: RunIdentity } {
+function fillingLow(): {
+  program: WorkoutProgram;
+  phases: EnginePhase[];
+  identity: RunIdentity;
+} {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
   if (!w) throw new Error("missing library fixture: Filling Low");
   const draft = buildDraft({
@@ -79,12 +83,14 @@ function fillingLow(): { program: WorkoutProgram; identity: RunIdentity } {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const compiled = compileProgram(buildRun(draft, baselines, t0).phases);
+  const phases = buildRun(draft, baselines, t0).phases;
+  const compiled = compileProgram(phases);
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }
   return {
     program: compiled,
+    phases,
     identity: { workoutId: "filling-low", title: w.title },
   };
 }
@@ -112,6 +118,7 @@ function renderInterstitial(
   props: Partial<{
     onExit: () => void;
     onRowInstead: () => void;
+    onEnded: () => void;
     nudgedCount: number;
   }> = {},
 ) {
@@ -119,17 +126,20 @@ function renderInterstitial(
   mockUseMonitorSession.mockReturnValue(current);
   const onExit = props.onExit ?? vi.fn();
   const onRowInstead = props.onRowInstead ?? vi.fn();
+  const onEnded = props.onEnded ?? vi.fn();
   const view = render(
     <ConnectedInterstitial
       program={FIXTURE.program}
+      phases={FIXTURE.phases}
       identity={FIXTURE.identity}
       baselines={baselines}
       nudgedCount={props.nudgedCount ?? 0}
       onExit={onExit}
       onRowInstead={onRowInstead}
+      onEnded={onEnded}
     />,
   );
-  return { ...view, session: current, onExit, onRowInstead };
+  return { ...view, session: current, onExit, onRowInstead, onEnded };
 }
 
 function connectedError(
@@ -305,11 +315,13 @@ describe("state 5: programming", () => {
     render(
       <ConnectedInterstitial
         program={one}
+        phases={FIXTURE.phases}
         identity={FIXTURE.identity}
         baselines={baselines}
         nudgedCount={0}
         onExit={vi.fn()}
         onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
       />,
     );
     expect(screen.getByText("1 INTERVAL")).toBeInTheDocument();
@@ -630,8 +642,10 @@ describe("state 7: ready", () => {
     await userEvent.click(skip);
 
     expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
+    // Past the gate: the connected surface, not the interstitial (Task 6
+    // replaced Task 5's one-line placeholder here).
     expect(
-      screen.getByText("CONNECTED. The live surface is Task 6's."),
+      screen.getByRole("navigation", { name: "Connected panes" }),
     ).toBeInTheDocument();
   });
 
@@ -675,7 +689,7 @@ describe("state 7: ready", () => {
       });
       expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
       expect(
-        screen.getByText("CONNECTED. The live surface is Task 6's."),
+        screen.getByRole("navigation", { name: "Connected panes" }),
       ).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -687,16 +701,32 @@ describe("state 7: ready", () => {
 // The phase gate (Task 5's seam choice) — live/paused/disconnected/ended
 // ---------------------------------------------------------------------------
 
-describe("the phase gate — Task 6's seam", () => {
-  it.each(["live", "paused", "disconnected", "ended"] as const)(
-    "phase %s renders the one-line placeholder, not a crash or a blank screen",
+describe("the phase gate — the connected surface (Task 6)", () => {
+  it.each(["live", "paused", "disconnected"] as const)(
+    "phase %s hands off to the three-pane surface",
     (phase) => {
       renderInterstitial({ phase, deviceName: DEVICE_NAME });
       expect(
-        screen.getByText("CONNECTED. The live surface is Task 6's."),
+        screen.getByRole("navigation", { name: "Connected panes" }),
       ).toBeInTheDocument();
     },
   );
+
+  // `ended` is the one phase past the gate that is NOT a pane: the surface
+  // renders its hand-off frame and fires `onEnded`, whose caller navigates
+  // (ConnectedSurface.tsx's mount decision).
+  it("phase ended renders the hand-off frame and calls onEnded once", () => {
+    const onEnded = vi.fn();
+    renderInterstitial(
+      { phase: "ended", deviceName: DEVICE_NAME },
+      { onEnded },
+    );
+    expect(screen.getByText("SESSION ENDED")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Connected panes" }),
+    ).not.toBeInTheDocument();
+    expect(onEnded).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -724,11 +754,13 @@ describe("the interstitial walk, fake-driven", () => {
     render(
       <ConnectedInterstitial
         program={FIXTURE.program}
+        phases={FIXTURE.phases}
         identity={FIXTURE.identity}
         baselines={baselines}
         nudgedCount={0}
         onExit={vi.fn()}
         onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
         deps={{
           createTransport: () => fake,
           now: () => t0,
@@ -761,9 +793,17 @@ describe("the interstitial walk, fake-driven", () => {
       screen.getByRole("button", { name: "Show me the numbers" }),
     );
 
+    // The real surface, on the real hook, past the real gate: pane B
+    // (the first-connected-session landing pane) with the real device's
+    // own advertised name in its connection line.
     expect(
-      screen.getByText("CONNECTED. The live surface is Task 6's."),
+      screen.getByRole("navigation", { name: "Connected panes" }),
     ).toBeInTheDocument();
+    expect(screen.getByText(DEVICE_NAME)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Live pane" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   it("no Bluetooth transport on this platform: a real transport-missing failure, no fake required", async () => {
@@ -776,11 +816,13 @@ describe("the interstitial walk, fake-driven", () => {
     render(
       <ConnectedInterstitial
         program={FIXTURE.program}
+        phases={FIXTURE.phases}
         identity={FIXTURE.identity}
         baselines={baselines}
         nudgedCount={0}
         onExit={vi.fn()}
         onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
         deps={{ createTransport: () => null, now: () => t0 }}
       />,
     );
@@ -811,11 +853,13 @@ describe("the interstitial walk, fake-driven", () => {
     render(
       <ConnectedInterstitial
         program={FIXTURE.program}
+        phases={FIXTURE.phases}
         identity={FIXTURE.identity}
         baselines={baselines}
         nudgedCount={0}
         onExit={vi.fn()}
         onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
         deps={{ createTransport: () => emptyPicker, now: () => t0 }}
       />,
     );

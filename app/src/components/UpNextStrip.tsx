@@ -1,6 +1,6 @@
 /** The UP NEXT panel (`.timer-upnext`), extracted verbatim from
- *  `session/Timer.tsx`'s own inline JSX (Phase 7B Task 3) so the future
- *  connected panes (Tasks 6/7) can render the identical strip. Neutral
+ *  `session/Timer.tsx`'s own inline JSX (Phase 7B Task 3) so the connected
+ *  panes can render the identical strip. Both A and B do (Task 6). Neutral
  *  value props: `upNextText`/`thenNextText` (Timer.tsx's own text builders,
  *  reading `SessionRun`) stay exactly where they are — this component only
  *  ever sees their already-computed OUTPUT strings, never a run.
@@ -12,7 +12,8 @@
  *  === null` renders the value slot empty rather than omitting it: the
  *  phone timer never actually passes `null` (`upNextText` always returns a
  *  string, "FINISH" included), so this branch is here only for future
- *  callers (a connected pane before its first live phase resolves, say) —
+ *  callers (the connected panes always pass a string too — `upNextTextAt`
+ *  has the same "FINISH past the last phase" contract) —
  *  it must not silently print the literal string `"null"` if one ever
  *  does. */
 export interface UpNextStripProps {

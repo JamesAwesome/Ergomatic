@@ -128,7 +128,20 @@ export function phaseProgressPct(phase: EnginePhase, elapsed: number): number {
  *  of its formula. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function totalSessionSeconds(run: SessionRun): number {
-  return run.phases.reduce((sum, p) => sum + (phaseSeconds(p) ?? 0), 0);
+  return totalSessionSecondsOf(run.phases);
+}
+
+/** The same sum over a bare phase list. The connected surface (7B Task 6)
+ *  never has a `SessionRun`: a monitor session's phases come from
+ *  `buildRun`'s output on the workout detail and are handed to the panes as
+ *  a plain array, with the CURRENT index arriving from the machine
+ *  (`MonitorFrame.intervalIndex`) rather than from a stored record. Each of
+ *  the three run-shaped readers here therefore grew an index-based twin
+ *  rather than a second copy of its arithmetic — the run-shaped functions
+ *  delegate, so there is still exactly one implementation of each rule. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function totalSessionSecondsOf(phases: EnginePhase[]): number {
+  return phases.reduce((sum, p) => sum + (phaseSeconds(p) ?? 0), 0);
 }
 
 /** "KIND · label", except when the phase's own resolved `label` IS its kind
@@ -160,7 +173,13 @@ function phaseAnnouncement(phase: EnginePhase): string {
  *  prototype phrase built from data this app doesn't have. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function upNextText(run: SessionRun): string {
-  const next = run.phases[run.index + 1];
+  return upNextTextAt(run.phases, run.index);
+}
+
+/** `upNextText`'s index-based twin — see `totalSessionSecondsOf`. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function upNextTextAt(phases: EnginePhase[], index: number): string {
+  const next = phases[index + 1];
   if (next === undefined) return "FINISH";
   return phaseAnnouncement(next);
 }
@@ -175,9 +194,18 @@ export function upNextText(run: SessionRun): string {
  *  phase" contract one phase further out. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function thenNextText(run: SessionRun): string | null {
-  const next = run.phases[run.index + 1];
+  return thenNextTextAt(run.phases, run.index);
+}
+
+/** `thenNextText`'s index-based twin — see `totalSessionSecondsOf`. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function thenNextTextAt(
+  phases: EnginePhase[],
+  index: number,
+): string | null {
+  const next = phases[index + 1];
   if (next === undefined) return null;
-  const afterNext = run.phases[run.index + 2];
+  const afterNext = phases[index + 2];
   if (afterNext === undefined) return "FINISH";
   return phaseAnnouncement(afterNext);
 }

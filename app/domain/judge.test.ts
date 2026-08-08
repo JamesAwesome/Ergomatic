@@ -15,7 +15,11 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
     ).toBe("within");
   });
 
-  it("is 'under' one second past the tolerance below target", () => {
+  // A SMALLER split is a FASTER boat, so a number below the target is
+  // MORE effort than asked — `"over"`, the ochre state (7B Task 6; the
+  // handoff's own table and its `1:57.8` vs `TARGET 2:00.0` mockup, drawn
+  // ochre). This is the direction Task 3 had numerically inverted.
+  it("is 'over' one second FASTER than the tolerance allows (a smaller split)", () => {
     expect(
       judgeActual({
         kind: "pace",
@@ -23,7 +27,7 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
         target,
         stale: false,
       }),
-    ).toBe("under");
+    ).toBe("over");
   });
 
   it("is 'within' exactly AT the tolerance above target — the boundary itself is not a deviation", () => {
@@ -37,7 +41,7 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
     ).toBe("within");
   });
 
-  it("is 'over' one second past the tolerance above target", () => {
+  it("is 'under' one second SLOWER than the tolerance allows (a bigger split)", () => {
     expect(
       judgeActual({
         kind: "pace",
@@ -45,7 +49,27 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
         target,
         stale: false,
       }),
-    ).toBe("over");
+    ).toBe("under");
+  });
+
+  // The two kinds do NOT share a direction, which is the whole reason the
+  // rule lives in this one function: the same arithmetic sign means
+  // opposite things for a split and for a stroke rate.
+  it("rate and pace disagree on direction for the same sign of error", () => {
+    const faster = judgeActual({
+      kind: "pace",
+      actual: target - 10,
+      target,
+      stale: false,
+    });
+    const slowerRate = judgeActual({
+      kind: "spm",
+      actual: 12,
+      target: 22,
+      stale: false,
+    });
+    expect(faster).toBe("over");
+    expect(slowerRate).toBe("under");
   });
 
   it("is 'within' when actual exactly equals target", () => {

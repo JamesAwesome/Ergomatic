@@ -25,6 +25,8 @@ import {
   type MonitorSessionDeps,
   type RunIdentity,
 } from "../monitor/useMonitorSession";
+import type { EnginePhase } from "../session/engine";
+import ConnectedSurface from "./ConnectedSurface";
 
 /** localStorage key for the `LAST USED · <name>` caption (handoff §1) — a
  *  plain string, not a versioned record: there is nothing here to migrate,
@@ -111,6 +113,16 @@ function ChecklistLine({
 
 export interface ConnectedInterstitialProps {
   program: WorkoutProgram;
+  /** The SAME phase list `program` was compiled from (`buildRun`'s output on
+   *  the workout detail). The interstitial itself never reads it — it is
+   *  the connected surface's half of the story past the phase gate below
+   *  (what each target means, and where this interval sits in the session),
+   *  and `WorkoutProgram` cannot supply it: the compiled wire IR carries no
+   *  pace ref, no label and no rest phase of its own. Threaded through this
+   *  screen rather than re-derived below it, for the same reason
+   *  `baselines`/`identity` already are: this is the last seam where the
+   *  workout's own data still lives. */
+  phases: EnginePhase[];
   identity: RunIdentity;
   baselines: Baselines;
   /** How many of the workout's targets were nudged before Connect was
@@ -125,6 +137,11 @@ export interface ConnectedInterstitialProps {
   /** State 6's "Row on the phone timer instead": hands off to the existing
    *  Start path with the SAME targets this screen was about to send. */
   onRowInstead: () => void;
+  /** The session ended (End pressed, or the machine got there first) —
+   *  route to the post-session flow. The caller navigating is what unmounts
+   *  this screen, and therefore the hook, and therefore hangs up the radio;
+   *  see `ConnectedSurface.tsx`'s header for that decision in full. */
+  onEnded: () => void;
   /** Test-only injection point (`useMonitorSession`'s own `deps`
    *  parameter). Production callers omit this — see the file's header
    *  note on why a production `createTransport` is NOT threaded through
@@ -134,11 +151,13 @@ export interface ConnectedInterstitialProps {
 
 export default function ConnectedInterstitial({
   program,
+  phases,
   identity,
   baselines,
   nudgedCount,
   onExit,
   onRowInstead,
+  onEnded,
   deps,
 }: ConnectedInterstitialProps) {
   const session = useMonitorSession(deps);
@@ -425,21 +444,19 @@ export default function ConnectedInterstitial({
     );
   }
 
-  // SEAM COMMENT (Task 5's own choice, for Task 6 to replace): every phase
-  // from here on — "ready" past its dwell, "live", "paused",
-  // "disconnected", "ended" — is Task 6/7's three-pane surface. This one
-  // line is the whole of Task 5's "phase gate": the SAME `useMonitorSession`
-  // instance this file already owns keeps running underneath it (nothing
-  // unmounts, nothing reconnects), so Task 6 only has to replace this
-  // return with the real surface, reading `session` exactly as this file
-  // does above.
-  //
-  // No em-dash (task-5 review, MEDIUM-3): this string renders in production
-  // for any rower who connects and starts rowing before Task 6 ships, so it
-  // follows the same copy rule the rest of this file's in-frame strings do.
+  // THE PHASE GATE (Task 5's seam, filled by Task 6). Every phase from here
+  // on — "ready" past its dwell, "live", "paused", "disconnected", "ended"
+  // — is the three-pane connected surface. The SAME `useMonitorSession`
+  // instance this file owns keeps running underneath it: nothing unmounts
+  // and nothing reconnects at the handoff, which is why `session` is handed
+  // down as a value rather than the surface calling the hook a second time
+  // (two hooks would mean two drivers and two records).
   return (
-    <main className="screen connected-interstitial">
-      <p className="mono-status">CONNECTED. The live surface is Task 6's.</p>
-    </main>
+    <ConnectedSurface
+      phases={phases}
+      program={program}
+      session={session}
+      onEnded={onEnded}
+    />
   );
 }

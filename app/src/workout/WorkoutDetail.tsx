@@ -19,7 +19,7 @@ import {
   withNudge,
   type SessionDraft,
 } from "../session/draft";
-import { buildRun } from "../session/engine";
+import { buildRun, type EnginePhase } from "../session/engine";
 import { clearRun, loadRun } from "../session/run";
 import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
 import ConnectAction from "../monitor/ConnectAction";
@@ -221,6 +221,13 @@ function WorkoutDetailView({
   // seam above that hook where the workout's OWN data still lives.
   const [connecting, setConnecting] = useState<{
     program: WorkoutProgram;
+    /** The phases `program` was compiled FROM, carried alongside it: the
+     *  connected panes past the interstitial need the pace ref, the label
+     *  and the rest phases, none of which survive compilation into the wire
+     *  IR. Same object, one `buildRun` call — never re-expanded downstream,
+     *  so the panes and the machine can never be looking at two different
+     *  resolutions of the same workout. */
+    phases: EnginePhase[];
     identity: RunIdentity;
     baselines: Baselines;
     nudgedCount: number;
@@ -392,6 +399,7 @@ function WorkoutDetailView({
     const nudgedCount = Object.values(nudges).filter((v) => v !== 0).length;
     setConnecting({
       program: compiled,
+      phases: run.phases,
       identity: { workoutId: workout.id, title: workout.title },
       baselines,
       nudgedCount,
@@ -426,15 +434,30 @@ function WorkoutDetailView({
     }
   }
 
+  // The connected session is over (End, or the machine finished it). Route
+  // to the EXISTING post-session flow: this workout's own log screen, the
+  // same door the library's "Log it after" opens. The record the surface
+  // just closed is a `MonitorRun`, not a `SessionRun`, so `/session/log`
+  // (which reads the phone timer's record) would find nothing — 7C is the
+  // task that prefills this screen from the monitor's actuals. Navigating
+  // is also what unmounts the interstitial and hangs up the radio; see
+  // `ConnectedSurface.tsx`'s header.
+  function handleConnectedEnded() {
+    setConnecting(null);
+    navigate(`/library/${workout.id}/log`);
+  }
+
   if (connecting !== null) {
     return (
       <ConnectedInterstitial
         program={connecting.program}
+        phases={connecting.phases}
         identity={connecting.identity}
         baselines={connecting.baselines}
         nudgedCount={connecting.nudgedCount}
         onExit={handleInterstitialExit}
         onRowInstead={handleRowInstead}
+        onEnded={handleConnectedEnded}
       />
     );
   }

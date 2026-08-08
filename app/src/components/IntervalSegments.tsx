@@ -1,7 +1,9 @@
 /** The phase-dot strip (`.timer-dots`), extracted verbatim from
- *  `session/Timer.tsx`'s own inline JSX (Phase 7B Task 3) so the future
- *  connected panes (Tasks 6/7) can render the identical strip without
- *  reaching into the phone timer's file. Neutral value props — this
+ *  `session/Timer.tsx`'s own inline JSX (Phase 7B Task 3) so the connected
+ *  panes can render the identical strip without reaching into the phone
+ *  timer's file. Both panes A and B now do (Task 6): the handoff requires
+ *  them to show the SAME strip, "so swiping between the two panes never
+ *  costs the rower their place in the session". Neutral value props — this
  *  component knows nothing about `EnginePhase`/`SessionRun`; the phone
  *  timer still owns deriving `total`/`current` from its own run, exactly as
  *  it did inline before this extraction.

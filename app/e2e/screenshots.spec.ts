@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
@@ -1256,3 +1257,85 @@ test("connected-interstitial-failed-landscape", async ({ page }) => {
   });
   await cleanupByTitle(page, title);
 });
+
+// --- Phase 7B Task 6: the connected surface, both orientations -------------
+//
+// The panes cannot be REACHED in this stack: they only render once a monitor
+// is programmed and rowing, the DEV-gated fake-transport injection seam is
+// Task 8's (`src/monitor/transports/index.ts`), the stack serves a
+// PRODUCTION bundle where such a seam cannot fire, and a real
+// `requestDevice()` hangs here rather than rejecting (the note above
+// `stubNoBluetooth`).
+//
+// So the markup comes from `src/workout/ConnectedSurface.screens.test.tsx`,
+// which renders the REAL component tree on the REAL "Filling Low" library
+// fixture and writes each state to `e2e/fixtures/`, kept honest by
+// `toMatchFileSnapshot` (the fixture cannot drift from the component without
+// that test failing). This spec loads the real app — so the real `index.css`
+// cascade and the real self-hosted fonts are live — and swaps the fixture
+// into the page.
+//
+// What that buys: real LAYOUT, at both reference frames, which is exactly
+// what would have caught the 151px landscape overflow Task 5 shipped. What
+// it does not buy: proof that a live monitor's numbers reach these nodes —
+// `ConnectedSurface.test.tsx`'s fake-driven walk covers that in jsdom, and
+// Task 8's `connected.spec.ts` covers it in a browser once the seam exists.
+const CONNECTED_FIXTURES = path.resolve(process.cwd(), "e2e/fixtures");
+
+/** Loads the app (for its stylesheet and fonts), then replaces the document
+ *  body with one fixture inside the same `.app-shell` wrapper the real
+ *  routes render into. No sign-in: nothing here talks to the API. */
+async function showConnectedFixture(page: Page, name: string): Promise<void> {
+  const html = readFileSync(path.join(CONNECTED_FIXTURES, `${name}.html`), {
+    encoding: "utf-8",
+  });
+  await page.goto("/", { waitUntil: "load" });
+  // The app's own stylesheet has to be APPLIED before the swap, or the
+  // capture is unstyled markup. `networkidle` never settles on this stack
+  // (the signed-out page holds a connection open), so this waits on the
+  // observable fact instead: `--page` resolving means tokens.css is live.
+  await page.waitForFunction(
+    () =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--page")
+        .trim() !== "",
+  );
+  await page.evaluate((markup) => {
+    document.body.innerHTML = `<div class="app-shell">${markup}</div>`;
+  }, html);
+  await expect(page.locator(".connected-surface")).toBeVisible();
+  // The fonts are self-hosted (@fontsource) and already requested by the
+  // app's own first paint; this makes the wait explicit so a capture can
+  // never land on a fallback face.
+  await page.evaluate(() => document.fonts.ready);
+}
+
+const CONNECTED_STATES = [
+  "connected-pane-timer",
+  "connected-pane-live",
+  "connected-pane-live-nohr",
+  "connected-paused",
+  "connected-disconnected",
+  "connected-pane-grid",
+  "connected-ended",
+] as const;
+
+for (const name of CONNECTED_STATES) {
+  test(name, async ({ page }) => {
+    await showConnectedFixture(page, name);
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `${name}.png`),
+    });
+  });
+
+  test(`${name}-landscape`, async ({ page }) => {
+    // The phase's own landscape-first reference frame (handoff §3's
+    // 844×390), the frame every pane spec's landscape column sizes are
+    // quoted in.
+    await page.setViewportSize({ width: 844, height: 390 });
+    await showConnectedFixture(page, name);
+    await page.screenshot({
+      path: path.join(SCREENSHOTS_DIR, `${name}-landscape.png`),
+    });
+  });
+}
