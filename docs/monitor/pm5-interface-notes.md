@@ -2013,7 +2013,7 @@ interstitial checklist, never from the log.
     starting, and PROGRAMMING's own duration to READY for the known
     interval count; (4) record whether any of the three is anywhere near
     an order of magnitude off from this task's own 100-200ms range (a
-    real PM5 running slower would mean `READY_DWELL_MS`/interstitial
+    real PM5 running slower would mean the interstitial
     copy overlapping the actual send, a UX question, not a correctness
     one — nothing in `useMonitorSession.ts`'s own state machine assumes a
     particular latency).

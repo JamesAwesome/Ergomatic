@@ -48,7 +48,6 @@ import {
   type RunIdentity,
 } from "../monitor/useMonitorSession";
 import ConnectedInterstitial, {
-  READY_DWELL_MS,
   loadLastDevice,
   saveLastDevice,
 } from "./ConnectedInterstitial";
@@ -612,7 +611,7 @@ describe("Try again — inert unless phase === 'failed'", () => {
 });
 
 // ---------------------------------------------------------------------------
-// State 7: ready — the 1.2s dwell, and the skip
+// State 7: ready — waits for the rower, no timer
 // ---------------------------------------------------------------------------
 
 describe("state 7: ready", () => {
@@ -674,27 +673,53 @@ describe("state 7: ready", () => {
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
-  it("auto-advances to the phase gate after 1.2s with no press (fake timers — the one sanctioned timer)", () => {
+  it("NEVER auto-advances: ready holds through any amount of wall time until the rower acts (the dwell is gone — walks 2-3's thrice-reported bug)", () => {
     vi.useFakeTimers();
     try {
       renderInterstitial({ phase: "ready", deviceName: DEVICE_NAME });
       expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
 
+      // The handoff's 1.2s, then a full minute for good measure: still here.
       act(() => {
-        vi.advanceTimersByTime(READY_DWELL_MS - 1);
+        vi.advanceTimersByTime(60_000);
       });
       expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
-
-      act(() => {
-        vi.advanceTimersByTime(1);
-      });
-      expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
       expect(
-        screen.getByRole("navigation", { name: "Connected panes" }),
-      ).toBeInTheDocument();
+        screen.queryByRole("navigation", { name: "Connected panes" }),
+      ).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("the first pull advances it without any press: phase leaving 'ready' is the machine's own way past this screen", () => {
+    const first = renderInterstitial({
+      phase: "ready",
+      deviceName: DEVICE_NAME,
+    });
+    expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+
+    // The hook's phase flips to live (the first true pull); same mount.
+    mockUseMonitorSession.mockReturnValue(
+      session({ phase: "live", deviceName: DEVICE_NAME }),
+    );
+    first.rerender(
+      <ConnectedInterstitial
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={first.onExit}
+        onRowInstead={first.onRowInstead}
+        onEnded={first.onEnded}
+      />,
+    );
+
+    expect(screen.queryByText("Ready when you pull")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Connected panes" }),
+    ).toBeInTheDocument();
   });
 });
 
