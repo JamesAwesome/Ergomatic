@@ -88,9 +88,9 @@ export function judgedValue(args: {
 
 /** WHEN a reading is stale, in one place. Only the lost link makes a number
  *  unvouchable: a paused erg is still talking to us, it just isn't moving
- *  (`useMonitorSession`'s own paused derivation is "four metrics unchanged
- *  across N frames", not "no frames"), so paused values are held and greyed
- *  by their own treatment, not judged `"stale"`. */
+ *  (`useMonitorSession`'s own paused derivation is "distance/split/rate
+ *  unchanged across N frames", not "no frames"), so paused values are held
+ *  and greyed by their own treatment, not judged `"stale"`. */
 export function staleFor(status: SurfaceStatus): boolean {
   return status === "disconnected";
 }
