@@ -819,6 +819,34 @@ describe("useMonitorSession: ending", () => {
     const entries = JSON.parse(stashed!) as { seq: number; kind: string }[];
     expect(entries.length).toBeGreaterThan(0);
     expect(entries.some((e) => e.kind === "write")).toBe(true);
+    // This session OPENED A RECORD, so it also keeps the rowed-only copy —
+    // the one a later never-rowed attempt (a failed pairing, a
+    // connect-then-cancel) cannot clobber.
+    expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(stashed);
+  });
+
+  it("a session that never rowed does NOT touch the rowed-only stash", async () => {
+    sessionStorage.setItem(
+      "ergomatic:last-rowed-log",
+      "THE ROW I MEANT TO COPY",
+    );
+    const { result, fake, unmount } = harness({
+      program: TWO_INTERVALS,
+      events: timeline,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    // Armed, never pulled: cancel and leave.
+    await act(async () => {
+      await result.current.cancel();
+    });
+    unmount();
+
+    // The general key holds the attempt's trace; the rowed key is intact.
+    expect(sessionStorage.getItem("ergomatic:last-monitor-log")).not.toBeNull();
+    expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(
+      "THE ROW I MEANT TO COPY",
+    );
   });
 
   it("End is idempotent against the terminal event its own terminate() provokes", async () => {

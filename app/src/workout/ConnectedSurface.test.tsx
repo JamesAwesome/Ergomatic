@@ -949,8 +949,9 @@ describe("the connected walk, fake-driven", () => {
     }
     await screen.findByText("Ready when you pull");
 
-    // Skip the 1.2 s dwell rather than waiting it out, then let the
-    // machine's own first status tick land.
+    // Press past the ready screen (no dwell exists anymore — it holds
+    // until the rower acts), then let the machine's own first status
+    // tick land.
     await userEvent.click(
       screen.getByRole("button", { name: "Show me the numbers" }),
     );

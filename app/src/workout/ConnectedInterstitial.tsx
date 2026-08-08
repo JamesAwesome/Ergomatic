@@ -54,13 +54,6 @@ export function loadLastDevice(): string | null {
   }
 }
 
-/** Handoff §2: "Ready dwell 1.2 s." The ONE sanctioned timer in this phase
- *  (this file's own header note, and `useMonitorSession.ts`'s "NO WALL
- *  CLOCK ANYWHERE" applies to the DRIVER conversation, not this screen's
- *  own auto-advance) — it drives no session state, only which of OUR two
- *  screens (ready vs. the phase-gate below) is currently on top. */
-export const READY_DWELL_MS = 1200;
-
 /** Every reason that is NOT the machine actively refusing a workout — the
  *  five that are OURS (about the phone/radio side, never the PM5's own
  *  vocabulary — `ConnectedError`'s own doc comment in
@@ -161,7 +154,16 @@ export default function ConnectedInterstitial({
   deps,
 }: ConnectedInterstitialProps) {
   const session = useMonitorSession(deps);
-  const [dwellDone, setDwellDone] = useState(false);
+  // Handoff §2 wrote "Ready dwell 1.2 s" — an auto-advance past this
+  // screen. REMOVED, deliberately (2026-08-08, hardware walks 2-3: the
+  // operator reported the skip as a bug three separate times before the
+  // timer was even suspected — the ready screen exists to be READ at the
+  // erg, and 1.2s is one breath). The only ways forward are the rower's
+  // own: the button below, or the first real pull flipping the phase to
+  // `live` (the machine's side of the same promise). With the timer gone,
+  // NOTHING in the connected flow runs on a wall clock. DEVIATIONS row
+  // records the ruling.
+  const [numbersRequested, setNumbersRequested] = useState(false);
   // Guards a double-press race on Try Again: two pointer events landing in
   // the same tick both read the SAME pre-update `session.phase` (React
   // batches the state write `connect()`'s synchronous phase flip makes),
@@ -214,18 +216,6 @@ export default function ConnectedInterstitial({
   useEffect(() => {
     if (session.deviceName !== null) saveLastDevice(session.deviceName);
   }, [session.deviceName]);
-
-  // Handoff §2: "Ready dwell 1.2 s." No reset branch is needed for phases
-  // other than "ready": the render logic below only consults `dwellDone`
-  // while `session.phase === "ready"` itself, so once the phase moves on
-  // (to the phase gate below) `dwellDone`'s stale `true` is simply never
-  // read again — and nothing in the hook's state machine ever moves phase
-  // BACKWARDS into "ready" a second time within one interstitial mount.
-  useEffect(() => {
-    if (session.phase !== "ready") return;
-    const id = setTimeout(() => setDwellDone(true), READY_DWELL_MS);
-    return () => clearTimeout(id);
-  }, [session.phase]);
 
   const canRetry = session.phase === "failed";
 
@@ -409,7 +399,7 @@ export default function ConnectedInterstitial({
     );
   }
 
-  if (session.phase === "ready" && !dwellDone) {
+  if (session.phase === "ready" && !numbersRequested) {
     return (
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">
@@ -427,7 +417,7 @@ export default function ConnectedInterstitial({
           <button
             type="button"
             className="button-l1"
-            onClick={() => setDwellDone(true)}
+            onClick={() => setNumbersRequested(true)}
           >
             Show me the numbers
           </button>
@@ -445,7 +435,8 @@ export default function ConnectedInterstitial({
   }
 
   // THE PHASE GATE (Task 5's seam, filled by Task 6). Every phase from here
-  // on — "ready" past its dwell, "live", "paused", "disconnected", "ended"
+  // on — "ready" once the rower asked for the numbers, "live", "paused",
+  // "disconnected", "ended"
   // — is the three-pane connected surface. The SAME `useMonitorSession`
   // instance this file owns keeps running underneath it: nothing unmounts
   // and nothing reconnects at the handoff, which is why `session` is handed

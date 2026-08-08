@@ -450,10 +450,10 @@ async function walkToReady(
     page.locator(".connected-panel-line", { hasText: "5 INTERVALS" }),
   ).toBeVisible();
 
-  // State 7 — ready. `READY_DWELL_MS` (1.2s) means this can auto-advance
-  // on its own; the button is clicked promptly, but its absence (already
-  // past the dwell) is not a failure — the surface is where either path
-  // lands.
+  // State 7 — ready. The dwell auto-advance is GONE (2026-08-08 operator
+  // ruling, walks 2-3): this screen holds until the button or the first
+  // pull. The conditional click below survives from the dwell era and is
+  // now simply the button press every walk makes.
   await expect(readyLine).toBeVisible({ timeout: 15_000 });
   const showNumbers = page.getByRole("button", {
     name: "Show me the numbers",

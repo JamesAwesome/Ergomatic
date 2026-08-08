@@ -3717,12 +3717,11 @@ const CONNECTED_DELAY_WRITES_MS = 200;
  *  a state rather than pass through it. `delayWrites` gates `connect()`
  *  and every individual 20-byte chunk, so this is also how long the
  *  PAIRING screen holds (one `connect()`), while PROGRAMMING holds for the
- *  whole five-interval chunk count times this. READY is the state this
- *  number cannot buy time for — it holds for `READY_DWELL_MS` (1.2s) and
- *  then becomes the surface, whatever the transport does — which is why
- *  every one of the three tests below asserts its state is STILL on screen
- *  after its sweep. Without that assertion an over-slow axe run would
- *  silently sweep the NEXT screen and report a pass. */
+ *  whole five-interval chunk count times this. READY needs no budget at
+ *  all since the dwell's removal (2026-08-08 operator ruling): it holds
+ *  until the rower acts. Each test below still asserts its state is STILL
+ *  on screen after its sweep — without that assertion an over-slow axe
+ *  run would silently sweep the NEXT screen and report a pass. */
 const INTERSTITIAL_DELAY_WRITES_MS = 1200;
 
 async function injectConnectedFake(
@@ -3825,7 +3824,7 @@ async function pumpUntilText(
   }
 }
 
-/** Walks past the ready dwell onto the three-pane surface. */
+/** Presses past the ready screen onto the three-pane surface. */
 async function walkToSurface(page: Page): Promise<void> {
   await expect(
     page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
@@ -3889,9 +3888,9 @@ test.describe("connected screens (fake-driven)", () => {
     });
     await expect(ready).toBeVisible({ timeout: 60_000 });
     await sweep(page);
-    // `READY_DWELL_MS` is 1.2s and this screen auto-advances at the end of
-    // it. The sweep measures at well under a third of that budget, but the
-    // assertion is what makes that a fact rather than an assumption.
+    // Since the dwell's removal this screen holds until the rower acts,
+    // so this assertion can no longer lose a race — it stays because it is
+    // what proves the sweep measured THIS screen and not the next one.
     await expect(ready).toBeVisible({ timeout: 1000 });
     await cleanupAllConnected(page, title);
   });

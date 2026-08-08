@@ -304,6 +304,18 @@ export interface MonitorSessionDeps {
  * the same discipline holds for the three that remain: split and spm can
  * genuinely wobble DOWN between frames.)
  *
+ * PAUSED DELIBERATELY IGNORES `rowingActive` — the asymmetry is load-
+ * bearing, do not "unify" it with the ready gate. The ready gate demands
+ * the machine's Active byte because it fires ONCE, into a state that
+ * opens the record; this counter runs continuously against frames whose
+ * Rowing State behavior during a mid-piece stop has NEVER been observed
+ * (walk 2 validated the three-metric freeze on hardware; the byte was not
+ * in the capture). If rowingState flips Inactive while a stopped rower's
+ * frames still read `state: "rowing"`, keying on it here would be a
+ * second unobserved-byte gamble on a predicate that already works.
+ * Revisit only with a capture that shows the byte through a full
+ * stop-and-resume.
+ *
  * CAVEATS still carried:
  * - **§17 item 20 is ANSWERED** (the 2026-08-08 recording, above): the
  *   clock runs, the other three freeze, HR moves. What remains unread is
@@ -741,7 +753,17 @@ export function useMonitorSession(
       const log = logRef.current;
       if (log !== null) {
         try {
-          sessionStorage.setItem("ergomatic:last-monitor-log", log.exportLog());
+          const exported = log.exportLog();
+          sessionStorage.setItem("ergomatic:last-monitor-log", exported);
+          // A later attempt that never rowed (a failed pairing, a
+          // connect-then-cancel) overwrites the key above — which is the
+          // capture instrument eating the very capture it exists for
+          // (2026-08-08 antagonistic review, finding 4). Sessions that
+          // OPENED A RECORD keep their own copy under a key only another
+          // rowed session can touch.
+          if (runRef.current !== null) {
+            sessionStorage.setItem("ergomatic:last-rowed-log", exported);
+          }
         } catch {
           // Quota or privacy mode: diagnostics never break a teardown.
         }
