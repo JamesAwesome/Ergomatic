@@ -2,6 +2,7 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { commentStrippedSource } from "../test/cssView";
 import { SheetShell } from "./SheetShell";
 
 /** A minimal composed sheet: one visible-labelled title (the `titleId`
@@ -175,13 +176,12 @@ describe("SheetShell", () => {
       // strips `index.css` (task-7 review, M1): this file's own prose says
       // `button-l3` twice, and a sweep that reads prose is a sweep that
       // passes for a sheet whose buttons were deleted. Caught by mutating
-      // exactly that.
-      const code = (text: string): string =>
-        text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-
+      // exactly that. `commentStrippedSource` (Task 8, `../test/cssView`)
+      // is the house extraction of this exact idiom — this was one of the
+      // three hand-rolled copies it replaces.
       const callers = Object.entries(sources)
         .filter(([file]) => !file.includes(".test."))
-        .map(([file, text]) => [file, code(text)] as const)
+        .map(([file, text]) => [file, commentStrippedSource(text)] as const)
         .filter(([, text]) => text.includes("<SheetShell"));
 
       // Three today: Library's FilterSheet, Today's FilterSheet, and the

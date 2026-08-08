@@ -1,6 +1,5 @@
 import { fmtSplit } from "../../domain/format.js";
 import { refLabel } from "../../domain/pace.js";
-import type { Judgement } from "../../domain/judge.js";
 import type { EnginePhase } from "./engine";
 
 /** TARGET SPLIT card content: `main` is the mono-30px accent value, `sub`
@@ -70,76 +69,32 @@ export function rateDisplay(phase: EnginePhase): {
   return { main: "rate free", caption: null };
 }
 
-/** The phone timer's own rendering (unlabelled — the only variant that
- *  existed before Phase 7B Task 3) vs. the connected panes'. The
- *  `"default"` branch below is BYTE-IDENTICAL to what this component
- *  rendered before that task (pinned by `TimerTargets.test.tsx`'s own
- *  regression test, lifted from the pre-task commit) — every
- *  `variant === "connected"` branch is additive JSX gated behind a
- *  condition that's `false` by default.
- *
- *  **`"connected"` STILL HAS NO CONSUMER, and Task 6 is why.** This
- *  variant puts the live actual INSIDE the target card. The handoff's
- *  pane A is explicit that the actual is a SEPARATE card of the same
- *  geometry beside it — "distinguished by its label (`NOW · /500M` vs
- *  `TARGET SPLIT`)" — laid out `[NOW][TARGET SPLIT]` then
- *  `[RATE][METERS]`. The handoff is the visual authority, so
- *  `src/workout/connected/PaneTimer.tsx` renders those four cards itself
- *  and imports only `targetSplitDisplay`/`rateDisplay` from this file.
- *  The variant's CSS hooks (`timer-card-actual-{judgement}`) ARE in use;
- *  this JSX is not. Left standing rather than deleted mid-phase (it is
- *  another task's reviewed work) and flagged in the task-6 report — a
- *  reviewer's call, not an implementer's. */
-export type TimerTargetsVariant = "default" | "connected";
-
-/** A live actual value ready to drop into the connected variant's judged-
- *  actual slot: a caller (reading a real PM5 `MonitorFrame` through
- *  `domain/judge.ts`'s `judgeActual`) supplies both
- *  the already-formatted display string (this component never touches raw
- *  PM5-shaped numbers) and the verdict, which becomes a `timer-card-actual-
- *  {judgement}` class hook for that future consumer's own styling pass. */
-export interface JudgedActual {
-  display: string;
-  judgement: Judgement;
-}
-
-export default function TimerTargets({
-  phase,
-  variant = "default",
-  paceActual = null,
-  rateActual = null,
-}: {
-  phase: EnginePhase;
-  variant?: TimerTargetsVariant;
-  paceActual?: JudgedActual | null;
-  rateActual?: JudgedActual | null;
-}) {
+/** The phone timer's own rendering — the ONLY rendering this component has
+ *  had since Task 8 retired `variant="connected"` (task-6 review ruling:
+ *  Task 7 built pane A/C's judged cells as ROWS, directly in
+ *  `PaneTimer.tsx`/`PaneGrid.tsx`, never by consuming this component's own
+ *  JSX — the handoff's pane A puts the live actual in a SEPARATE card of the
+ *  same geometry beside the target, "distinguished by its label (`NOW ·
+ *  /500M` vs `TARGET SPLIT`)", not inside the target card the way the
+ *  retired variant drew it. `targetSplitDisplay`/`rateDisplay` below are
+ *  still the shared derivation both this component and `PaneTimer.tsx` call;
+ *  only the JSX branch (and its now-orphaned `JudgedActual` prop pair) is
+ *  gone. The CSS hooks the retired variant exercised
+ *  (`timer-card-actual-{judgement}`, `timer-card-static`) are UNCHANGED and
+ *  stay declared in `index.css` — `PaneTimer.tsx` renders those class names
+ *  itself today. */
+export default function TimerTargets({ phase }: { phase: EnginePhase }) {
   const target = targetSplitDisplay(phase);
   const rate = rateDisplay(phase);
-  const connected = variant === "connected";
   return (
     <div className="timer-cards">
       <div className="timer-card">
         <span className="timer-card-label">TARGET SPLIT</span>
-        <span
-          className={
-            connected
-              ? "timer-card-value"
-              : "timer-card-value timer-card-value-accent"
-          }
-        >
+        <span className="timer-card-value timer-card-value-accent">
           {target.main}
         </span>
         {target.sub !== null && (
           <span className="timer-card-caption">{target.sub}</span>
-        )}
-        {connected && <span className="timer-card-static">LIVE PACE</span>}
-        {connected && paceActual !== null && (
-          <span
-            className={`timer-card-actual timer-card-actual-${paceActual.judgement}`}
-          >
-            {paceActual.display}
-          </span>
         )}
       </div>
       <div className="timer-card">
@@ -147,14 +102,6 @@ export default function TimerTargets({
         <span className="timer-card-value">{rate.main}</span>
         {rate.caption !== null && (
           <span className="timer-card-caption">{rate.caption}</span>
-        )}
-        {connected && <span className="timer-card-static">LIVE RATE</span>}
-        {connected && rateActual !== null && (
-          <span
-            className={`timer-card-actual timer-card-actual-${rateActual.judgement}`}
-          >
-            {rateActual.display}
-          </span>
         )}
       </div>
     </div>

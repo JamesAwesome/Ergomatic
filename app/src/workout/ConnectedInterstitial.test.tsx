@@ -807,6 +807,98 @@ describe("the interstitial walk, fake-driven", () => {
     );
   });
 
+  // Task 5's OWN self-found race (this file's header names it in spirit; the
+  // fix lives in `ConnectedInterstitial.tsx`'s `programmedForDeviceRef`
+  // comment): `connect()` sets `phase: "pairing"` BEFORE `transport.connect
+  // (...)` even starts, and only sets `deviceName` once that resolves. A
+  // phase-only edge trigger would dispatch `program()` the instant `phase`
+  // becomes `"pairing"`, which on a transport slower than a same-microtask
+  // fake reaches `program()`'s own `driver === null` guard and renders a
+  // FALSE "No monitor is connected." while pairing is still genuinely in
+  // flight. Task 5's own report: "no e2e/organic client-level regression
+  // test existed for it" — `delayWrites` (Task 8) is what makes a same-file,
+  // same-fixture fake slow enough to reproduce the shape organically,
+  // instead of a bespoke one-off delayed `Transport` stub.
+  it("connect() slower than a same-microtask fake: program() waits for a real deviceName, never dispatching against a null driver", async () => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    const fake = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE_NAME,
+    });
+    // Real latency on connect()/write() from the very first call — the
+    // shape a real radio has and this fake never did before Task 8.
+    fake.delayWrites(50);
+
+    render(
+      <ConnectedInterstitial
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => fake,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+
+    // "Connecting" renders while `transport.connect()`'s own promise is
+    // still pending (real 50ms, not yet elapsed) — deviceName is still
+    // null. This is exactly the window the OLD phase-only effect would
+    // have dispatched `program()` into.
+    await screen.findByText("Connecting");
+    expect(screen.queryByText("No monitor is connected.")).toBeNull();
+
+    // Real time elapses (RTL's own `findBy*` polls with REAL timers, which
+    // is what actually lets `delayWrites`'s `setTimeout` resolve) —
+    // `connect()` settles, `deviceName` is set, and program() dispatches
+    // for real, reaching "Sending the workout" with no false failure ever
+    // having rendered along the way.
+    await screen.findByText(
+      (_, el) => el?.className === "connected-status-label",
+      {},
+      { timeout: 2000 },
+    );
+    expect(screen.queryByText("No monitor is connected.")).toBeNull();
+
+    // NO `tick()`/`deliverArmedNow()` calls in this wait — a genuine Task 8
+    // finding (`driver.ts`'s `verifyArmed` is edge-triggered, and
+    // `fake.ts`'s own post-arm bundle is a ONE-SHOT flush, `flushArmedIfPending`'s
+    // own doc comment): calling either DURING this window risks flushing the
+    // one-and-only "armed" notification before `program()`'s own
+    // `verifyArmed()` call has even registered to listen for it (it
+    // registers only once `sendSequence()`'s full multi-frame send —
+    // several REAL `delayWrites(50)` writes, now genuinely 50ms apart each
+    // since the write() fix — has completely resolved), which would hang
+    // this test's `program()` call forever with no rejection or timeout to
+    // catch it. Real wall-clock time alone, no ticking, is what lets
+    // `write()`'s own delayed promises resolve; 1200ms is comfortably past
+    // this fixture's own worst-case multi-frame send.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await act(async () => {
+      fake.deliverArmedNow();
+    });
+    await screen.findByText("Ready when you pull", {}, { timeout: 5000 });
+    expect(screen.queryByText("No monitor is connected.")).toBeNull();
+  }, 15_000);
+  // A REAL per-write delay (Task 8's own `delayWrites` fix — `write()` now
+  // genuinely honors it, where it previously silently ignored it and only
+  // `connect()` did) means this 4-interval program's full sequence takes
+  // real wall-clock seconds, not milliseconds — comfortably past vitest's
+  // own 5000ms DEFAULT per-test timeout, which is a budget for the TEST
+  // RUNNER and has nothing to do with `delayWrites`'s own 50ms; the `15_000`
+  // above is this test's OWN explicit override for that separate budget.
+
   it("no Bluetooth transport on this platform: a real transport-missing failure, no fake required", async () => {
     vi.doUnmock("../monitor/useMonitorSession");
     const real = await vi.importActual<

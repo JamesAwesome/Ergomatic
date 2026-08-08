@@ -1931,6 +1931,59 @@ CONFIRMED 0-based by a worked example (§12), unlike the read-side fields in
 item 3 above; coalescing is resolved and proven in CI (§16), not a laptop
 question at all.
 
+### The Task 8 connected-flow verification row (prepared, NOT yet run)
+
+Phase 7B Task 8 built the real Connect → interstitial → surface walk (the
+`ConnectedInterstitial`/`ConnectedSurface` screens, `useMonitorSession.ts`)
+against `fake.ts` and CI's own browser gates exclusively — every
+observation below is a documented-behavior or reviewed-code inference, same
+disclaimer §17's own opening paragraph carries for the rest of this
+runsheet. Two items this task's own code explicitly ships BEHIND that
+uncertainty, named in the source rather than pretended away:
+
+20. **STATUS: OPEN — `useMonitorSession.ts`'s own `PAUSED_FRAME_HOLD`
+    doc comment, carried forward by Task 8.** The paused derivation (four
+    consecutive identical frames — `elapsedSeconds`/`distanceMeters`/
+    `currentSplit`/`spm` — while `state === "rowing"`) is built entirely
+    from session 3's 216-frame frozen stretch, which that session's own
+    record shows was captured during a STRUCTURALLY EMPTY arm (§19.13) — a
+    machine holding a workout with no interval structure at all. Whether a
+    genuinely stopped rower mid-piece on a PROPERLY ARMED, non-empty
+    workout freezes the same four fields the same way has never been
+    observed. Expected: unknown — this is exactly the caveat
+    `PAUSED_FRAME_HOLD`'s own doc comment names as unresolved. Observed:
+    program a real multi-interval workout (`TWO_TIME_PROGRAM` or
+    equivalent), row into it, then STOP ROWING mid-interval without
+    terminating — read whether the connected surface renders `PAUSED ·
+    PULL TO RESUME` (confirming the four fields hold identically), and if
+    so, after how many status ticks; separately record whether heart rate
+    keeps moving through the hold (the field the derivation deliberately
+    excludes on the theory that it is the one that keeps moving when the
+    rower stops, `PAUSED_FRAME_HOLD`'s own doc comment) — a genuine finding
+    either way, not a pass/fail gate.
+21. **STATUS: OPEN — `transports/index.ts`'s own `AUTO_TICK_MS`/
+    `e2e/connected.spec.ts`'s `delayWritesMs` doc comments, added by Task
+    8.** The fake's real-time auto-tick (100ms) and this task's e2e/
+    screenshots fixtures' artificial write-latency knob (120-200ms per
+    write, `FakeControls.delayWrites`) are both round numbers chosen for
+    OBSERVABILITY in a browser-driven test, not measured against a real
+    PM5's own pairing/programming latency — no laptop session has ever
+    timed how long a real `requestDevice()` → GATT connect → multi-frame
+    program send actually takes end to end. Expected: unknown — this task
+    shipped these constants explicitly UNMEASURED, choosing "comfortably
+    observable" over "hardware-accurate" for a fake nothing downstream
+    trusts as a timing oracle. Observed: from a cold Connect press on a
+    real PM5 (Web Bluetooth, not the fake), time three intervals
+    separately with a stopwatch — `requestDevice()`-to-`connect()`
+    resolving (state 4's own duration), `connect()`-to-first-programming-
+    write, and the full programming send's own duration for a known
+    interval count — and record whether any of the three is anywhere near
+    an order of magnitude off from this task's own 100-200ms range (a
+    real PM5 running slower would mean `READY_DWELL_MS`/interstitial
+    copy overlapping the actual send, a UX question, not a correctness
+    one — nothing in `useMonitorSession.ts`'s own state machine assumes a
+    particular latency).
+
 ## 18. Laptop session observations (results destination for §17)
 
 ### 2026-08-05 session (PM5 432331249) — LAPTOP SESSION 1
@@ -2598,6 +2651,23 @@ separate hardware actions:**
   whether the resulting arm comes back real or empty — the settle's own gate
   does not wait in this case today, by design, and no hardware reading
   confirms that is safe.
+
+### [pending] Task 8 connected-flow verification (results destination for §17 items 20-21)
+
+**Not yet run — this session's Observed fields are deliberately blank,**
+same discipline as every other pending scaffold in this section. Results
+land here once a James-operated laptop/device session runs §17's items 20
+and 21 against the real interstitial/surface screens (not the fake).
+
+- **Item 20 (PAUSED on a properly-armed workout).** Observed:
+  _(blank — not yet run)_. Ticks-to-freeze, if any:
+  _(blank)_. Heart rate behavior during the hold:
+  _(blank)_.
+- **Item 21 (real pairing/programming latency).** Observed
+  `requestDevice()`→`connect()` duration: _(blank)_. Observed
+  `connect()`→first-programming-write gap: _(blank)_. Observed full
+  programming-send duration (record interval count alongside it):
+  _(blank)_.
 
 ## 19. Idiosyncrasies, and whether they were ours
 

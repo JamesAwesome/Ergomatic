@@ -15,8 +15,25 @@
 # BaselineEditor's "Apply baselines") 403s as "bad origin" against the real
 # stack, even though the exact same request works in prod. Found via Task 9's
 # e2e coverage of the You -> baseline -> detail-target flow.
+#
+# Phase 7B Task 8: also arms the CLIENT-side monitor fake-injection seam,
+# the same shape as the backdoor above but on the `web` build instead of
+# the `api` runtime — DISCOVERED this task, correcting the brief's own
+# assumption: `web`'s image is a `vite build` output (the Dockerfile's
+# single `build` stage, shared byte-for-byte with a real deploy — see
+# `Dockerfile`'s own comment), so `import.meta.env.DEV` is `false` in EVERY
+# build this repo ever produces, e2e included; gating the seam on `DEV`
+# alone would have made `e2e/connected.spec.ts` undrivable against this
+# exact stack. `VITE_ENABLE_FAKE_MONITOR` is a build ARG, not a runtime
+# env var (Vite bakes `import.meta.env.*` in at build time), which is why
+# it lives under `build.args` rather than `environment` like the api
+# service's own override above.
 services:
   api:
     environment:
       TEST_AUTH_SECRET: ${TEST_AUTH_SECRET:?TEST_AUTH_SECRET is required for the e2e override}
       SITE_URL: http://127.0.0.1:${APP_PORT:-8081}
+  web:
+    build:
+      args:
+        VITE_ENABLE_FAKE_MONITOR: "1"

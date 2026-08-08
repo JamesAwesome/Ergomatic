@@ -4436,21 +4436,24 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* Full screen, "borrowing Countdown's geometry" (handoff §2) — a sheet was
    rejected. Task-5 review, HIGH-3: `/library/:id` (this screen's own route)
-   is NOT on `AppRoutes.tsx`'s `HIDDEN_TABBAR_PREFIXES`, unlike Countdown —
-   the tab bar stays on screen and `.app-shell`'s own
-   `padding-bottom: calc(var(--tap) + safe-area-bottom)` (this file, above)
-   reserves that space regardless, on EVERY orientation this screen renders
-   in (Countdown only needed the same `var(--tap)` correction in landscape,
-   because its OWN tab bar is genuinely hidden and portrait had slack to
-   spare — see the F3 comment on `.countdown-screen` above). Measured
-   (task-5 review): before this fix, 18px of dead scroll in every state and
-   orientation, and 151px of landscape overflow on `failed` with Cancel and
-   the phone-timer escape starting 132px behind the fixed tab bar. Kept as
-   a documented deviation (DEVIATIONS, added this fix round) rather than
-   adding this route to `HIDDEN_TABBAR_PREFIXES`, which would need the tab
-   bar's visibility to depend on component state (`connecting !== null`),
-   not just the route path — a bigger change than this fix round's own
-   scope. */
+   is NOT on `AppRoutes.tsx`'s `HIDDEN_TABBAR_PREFIXES`, unlike Countdown, so
+   the fix that round shipped subtracted `var(--tap)` from this screen's own
+   `height` instead — a WORKAROUND for the tab bar staying on screen, not a
+   removal of it. Task 8 (task-6 review's own carry: ".connected-interstitial
+   could close its own deviation with the same one-liner... a reviewer's
+   call, not an implementer's") replaces that workaround with the SAME
+   `:has()` mechanism `.connected-surface` uses below: the shell hides its
+   bar and drops the padding it reserves for it whenever the interstitial is
+   on screen, and this rule's own `height` calc drops the now-unnecessary
+   `- var(--tap)` term in the SAME commit — `ConnectedSurface.test.tsx`'s own
+   guard-rail pins both halves together, because shipping either alone
+   reproduces exactly the dead-space/overflow defect the ORIGINAL fix-round
+   fix existed to close (hide the bar without reclaiming its height, or
+   reclaim the height while a real tab bar is still painted underneath).
+   Measured before this task's fix (task-5 review, the workaround this
+   replaces): 18px of dead scroll in every state and orientation, and 151px
+   of landscape overflow on `failed` with Cancel and the phone-timer escape
+   starting 132px behind the fixed tab bar. */
 .connected-interstitial {
   display: flex;
   flex-direction: column;
@@ -4461,13 +4464,16 @@ section:not(.news-pinned) .news-row:last-of-type {
      the failed state's DETAIL panel does — the whole PAGE scrolled instead
      of the intended internal one, and the action stack (Cancel, "Row on
      the phone timer instead") landed off-frame in landscape regardless of
-     the `var(--tap)` fix above. A fixed `height` caps this flex column at
-     the frame itself, which is what makes `.connected-interstitial-body`'s
-     own `flex: 1; min-height: 0; overflow-y: auto` actually engage instead
-     of never being asked to shrink. */
+     the tab-bar fix. A fixed `height` caps this flex column at the frame
+     itself, which is what makes `.connected-interstitial-body`'s own
+     `flex: 1; min-height: 0; overflow-y: auto` actually engage instead of
+     never being asked to shrink. No `- var(--tap)` term (Task 8): the tab
+     bar this screen used to reserve room for is now HIDDEN by the
+     `:has()` rule below, the same way `.connected-surface`'s own height
+     never carried the term at all. */
   height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-      26px - var(--tap)
+      26px
   );
 }
 
@@ -4648,45 +4654,47 @@ section:not(.news-pinned) .news-row:last-of-type {
       against `--surface` and 6.30:1 against `--surface-sunken`. All clear
       the house's 4.5:1 floor.
 
-   Height: the same formula the interstitial uses, and for the same
-   reason — this surface renders from the `/library/:id` route, where the
-   fixed tab bar is still on screen and `.app-shell` still reserves
-   `var(--tap)` beneath it (DEVIATIONS carries that as a known deviation
-   for the whole connected flow, not something this task introduced). A
-   fixed `height` rather than a `min-height` so the body's own
+   Height: no `- var(--tap)` term — the tab bar this surface renders
+   underneath (`/library/:id` still shows it by ROUTE) is HIDDEN by the
+   `:has()` rule below, so nothing needs subtracting for it. A fixed
+   `height` rather than a `min-height` so the body's own
    `flex: 1; min-height: 0` actually engages and the pane, not the page,
    is what runs out of room. */
 /* THE TAB BAR HAS NO BUSINESS ON A ROWING SURFACE, and reclaiming its
    44px is what makes the landscape frame fit at all. `AppRoutes.tsx` hides
-   the bar by ROUTE PREFIX, and this surface has no route of its own — it
-   renders inside `/library/:id` on component state — which is exactly why
-   the task-5 review left the interstitial's own tab bar standing as a
-   documented deviation ("a bigger change than this fix round's scope").
+   the bar by ROUTE PREFIX, and neither the surface nor the interstitial has
+   a route of its own — both render inside `/library/:id` on component
+   state, which is exactly why a route-prefix fix can't reach either one.
 
    `:has()` closes it with no plumbing at all: the shell hides its bar and
-   drops the padding it reserves for it whenever a connected surface is the
-   thing being rendered. Measured on the 844x390 landscape frame BEFORE this
-   rule: 320px of usable height, into which pane A's TOTAL LEFT, its quarter
-   ruler and its UP NEXT strip did not fit and were clipped away entirely by
-   `.connected-pane`'s own `overflow: hidden` — caught by this task's first
-   `pnpm screenshots` run, the identical class of defect (and the identical
-   frame) as task-5's 151px overflow. After: 364px, and every element the
-   handoff specifies is on screen.
+   drops the padding it reserves for it whenever EITHER of the two connected
+   screens is the thing being rendered — `.connected-surface` from Task 6,
+   `.connected-interstitial` added by Task 8 (task-6 review's own carry:
+   "could close its own deviation with the same one-liner... a reviewer's
+   call, not an implementer's" — this is that call, made). Measured on the
+   844x390 landscape frame BEFORE the surface's own rule: 320px of usable
+   height, into which pane A's TOTAL LEFT, its quarter ruler and its UP NEXT
+   strip did not fit and were clipped away entirely by `.connected-pane`'s
+   own `overflow: hidden` — caught by task-6's first `pnpm screenshots` run,
+   the identical class of defect (and the identical frame) as task-5's
+   151px overflow on the interstitial's OWN `failed` state, which this same
+   selector addition now also closes, in the same commit as the height
+   term's own removal above — landing either half alone re-creates the
+   dead-space/overflow pair one way or the other, which is exactly what
+   `ConnectedSurface.test.tsx`'s own guard-rail test pins against. After:
+   364px, and every element the handoff specifies is on screen.
 
    `:has()` is Baseline-available in every engine this app ships to (iOS
    Safari 15.4+, the Capacitor WKWebView, and Chromium 105+ for James's
    laptop path). A browser without it degrades to the OLD behaviour — a
-   visible tab bar and a tighter frame — not to a broken one.
-
-   The interstitial (`.connected-interstitial`) could close its own
-   deviation with the same one-liner. Deliberately NOT done here: those are
-   another task's reviewed screenshots, and changing them is a reviewer's
-   call. Flagged in the task-6 report. */
-.app-shell:has(.connected-surface) {
+   visible tab bar and a tighter frame — not to a broken one. */
+.app-shell:has(.connected-surface),
+.app-shell:has(.connected-interstitial) {
   padding-bottom: 0;
 }
 
-.app-shell:has(.connected-surface) .tabbar {
+.app-shell:has(.connected-surface) .tabbar,
+.app-shell:has(.connected-interstitial) .tabbar {
   display: none;
 }
 

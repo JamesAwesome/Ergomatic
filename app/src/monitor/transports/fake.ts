@@ -483,6 +483,53 @@ export interface FakeControls {
    *  tests that want to assert the fake's own internal bookkeeping directly,
    *  without going through the driver at all. */
   loadedIntervals(): number | null;
+  /**
+   * Task 8 — the timing-realism knob task-5's re-review parked (MEDIUM-9,
+   * LOW-8): every `connect()`/`write()` call from now on settles after a
+   * real `ms`-millisecond `setTimeout`, instead of same-microtask, the way
+   * every other test in this repo (and every OTHER method on this fake)
+   * still does. `0` (the default before this is ever called) restores
+   * instant settlement.
+   *
+   * **NOT the session timeline's clock** — this file's own header still
+   * holds ("no timers, no wall clock anywhere in this file" — `tick()`'s
+   * own doc comment): `delayWrites` never advances `virtualClock`, never
+   * delivers a scripted event, and the SYNCHRONOUS side effect of a call
+   * (the bytes get validated, an ack gets queued to `notify()`) still
+   * happens the instant the call is made — only the PROMISE this fake
+   * hands back to its caller is deferred. A real radio's `write()`/
+   * `connect()` resolving is a statement about the LOCAL Bluetooth stack
+   * ("the OS confirms this went out"), never about when the remote side's
+   * notification arrives; delaying only the promise, not the notify, keeps
+   * that same honest separation rather than inventing a fake round-trip
+   * that then has to be un-invented for every other test that doesn't ask
+   * for one.
+   *
+   * Exists for two named regressions that only reproduce under REAL
+   * latency, both parked here rather than fixed with a one-off hand-rolled
+   * delayed stub transport (task-7 review's own recurring finding: a
+   * bespoke fixture proves the fixture, not the class of bug):
+   * - the double-physical-terminate race between `cancel()`'s own
+   *   `driver.terminate()` and an interleaved unmount `teardown()` — see
+   *   `useMonitorSession.test.ts`'s own pin;
+   * - `ConnectedInterstitial.tsx`'s deviceName-gated (not phase-gated)
+   *   dispatch of `program()` — see that file's own regression test.
+   */
+  delayWrites(ms: number): void;
+  /**
+   * The number of characteristics this fake currently has at least one
+   * live `subscribe()` callback on, summed across every characteristic —
+   * i.e. `Array.from(notifyCbs.values()).reduce((n, set) => n + set.size, 0)`.
+   * Task 8: a house-wide gap this phase's own reviews kept re-finding by
+   * hand (task-4's review counted wire fires "under M1" to prove a
+   * double-subscribe never happened) — this makes that count a first-class
+   * assertion instead of an instrumented one-off. `0` for a fake nothing
+   * has ever subscribed to, and again `0` once every `unsubscribe()`
+   * this fake handed out has been called — never negative, and never
+   * double-counts the SAME callback subscribed to the SAME characteristic
+   * twice (`Set`, not an array).
+   */
+  subscriptionCount(): number;
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -842,6 +889,23 @@ export function createFakeTransport(
   let linkDown = false;
   let disconnectCb: ((reason: string) => void) | null = null;
   const notifyCbs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+  // `FakeControls.delayWrites`'s live value — `0` (instant, same-microtask
+  // settlement) until a test opts in. Read by `settleWrite` below, the one
+  // place `connect()`/`write()` decide how long their own returned promise
+  // takes to resolve; see that method's own doc comment for why the
+  // synchronous processing inside `write()` is never itself delayed.
+  let writeDelayMs = 0;
+
+  /** Resolves after `writeDelayMs` real milliseconds — `0` (the default)
+   *  resolves on the microtask queue, byte-identical to every call site's
+   *  behaviour before this knob existed, so no existing test's timing
+   *  changes unless it opts in. */
+  function settleWrite<T>(value: T): Promise<T> {
+    if (writeDelayMs === 0) return Promise.resolve(value);
+    return new Promise((resolve) =>
+      setTimeout(() => resolve(value), writeDelayMs),
+    );
+  }
 
   // Cached "current known state" — used by `completeReconnect()` to flush
   // whatever the script has advanced to (possibly skipped ahead while
@@ -1460,112 +1524,34 @@ export function createFakeTransport(
       ]);
     },
     connect(): Promise<void> {
-      return Promise.resolve();
+      // Also gated on `delayWrites` (its own doc comment: "every
+      // `connect()`/`write()` call") — the deviceName-gated dispatch race
+      // this knob exists to reproduce is specifically about `connect()`
+      // resolving slower than one microtask, before `useMonitorSession.ts`
+      // sets `deviceName`.
+      return settleWrite(undefined);
     },
-    // `async` deliberately, even though nothing inside ever awaits
+    // `async` deliberately, even though `processWrite` below never awaits
     // anything: `assertProgrammingChunk`/`assertArmedChunk` THROW
     // synchronously on a byte mismatch (this is the "asserts, not
     // accepts" behaviour design spec §4 requires), and only an `async`
     // function automatically turns a synchronous throw into a REJECTED
     // promise — `Transport.write` is typed `Promise<void>`, and a caller
     // doing `await t.write(...)` must see a rejection, not an uncaught
-    // synchronous exception escaping the `await` expression itself.
+    // synchronous exception escaping the `await` expression itself. A
+    // rejection is never delayed by `delayWrites` (`processWrite` throwing
+    // is what SKIPS the `settleWrite` call below) — only a SUCCESSFUL write
+    // is; see `FakeControls.delayWrites`'s own doc comment for why that
+    // asymmetry is fine for the two regressions this knob exists to
+    // reproduce (both need a slow ACCEPT, neither a slow reject).
     async write(characteristicId: string, bytes: Uint8Array): Promise<void> {
-      // D6 (interface-notes.md §18's "also fixed live" list): while the
-      // link is down every handle a transport is holding is dead, and a
-      // write on one throws — Chrome's own wording reproduced verbatim
-      // below, because that string IS the observation. Checked before the
-      // sample-rate early-return: an invalidated handle does not care which
-      // characteristic it points at. See `injectDisconnect`'s doc comment
-      // for why the fake having none of this hid the session's worst bug.
-      if (linkDown) {
-        throw new Error(
-          `fake transport: InvalidStateError: Characteristic ${characteristicId} is no longer valid. Remember to retrieve the characteristic again after reconnecting.`,
-        );
-      }
-      if (characteristicId === SAMPLE_RATE_UUID) {
-        return;
-      }
-      if (characteristicId !== RECEIVE_CHARACTERISTIC_UUID) {
-        throw new Error(
-          `fake transport: unexpected write target ${characteristicId}`,
-        );
-      }
-      // Task 3's `sendGetErrorType` one-off write — checked BEFORE the
-      // phase-based assertions below, since it can legitimately arrive
-      // mid-"programming" (right after a reject) and is not the next
-      // expected programming/clearing/armed chunk.
-      //
-      // ABSORBED AND ACKED, not scripted — Task 6's own choice, stated
-      // plainly. The reply is an ordinary `"ok"` ack echoing the single
-      // opcode that was asked for (`0xC8`), carrying this fake's normal
-      // toggle and slave state. Nothing about its CONTENT is scriptable,
-      // because nothing about it is known: no GET command has ever been
-      // sent to this hardware, the pull wrapper itself is an unresolved
-      // conflict between the two source documents, and the driver logs the
-      // reply as raw hex with no claimed meaning (interface-notes.md §17
-      // item 14, `buildGetErrorType`'s own doc comment). A scriptable
-      // payload here would be inventing the answer to the exact question
-      // the merge-gate row exists to ask. It DOES go through `sendAck`, so
-      // it consumes a toggle step like every other frame the PM emits —
-      // that much is frame-counter mechanics, not error semantics. Does not
-      // touch `phase` or any cursor: this write is orthogonal to the
-      // clearing/programming/armed state machine.
-      if (bytesEqual(bytes, getErrorTypeFrame)) {
-        // `0xC8` = `CSAFE_PM_GET_ERRORTYPE`, the one opcode
-        // `buildGetErrorType()` sends — the same inline literal Task 3 put
-        // here, unchanged. `echoedCommandIds` deliberately does not decode
-        // the `0x1A` pull wrapper this frame uses (its own doc comment), so
-        // there is nothing to derive it from.
-        sendAck("ok", [0xc8]);
-        return;
-      }
-      // A terminate frame arriving where the next PROGRAMMING frame would
-      // go is legal and common (Task 6): it is the prepare step of the next
-      // `program()` after a previous one was refused or after a terminate
-      // re-opened the machine, and it is the app's own `terminate()` called
-      // twice. The machine parses whatever frame it is handed — only this
-      // fake's expected-byte bookkeeping needs telling which sequence the
-      // chunk belongs to. No frame-position guard: `terminateChunks[0]`
-      // carries a start flag and bytes no programming chunk ever matches,
-      // and `pm5/framer.ts`'s own resynchronization rule says a start flag
-      // arriving mid-frame DISCARDS the incomplete frame — so recognising a
-      // terminate whenever its first chunk shows up is what the reassembler
-      // itself would do. (An earlier version gated this on a
-      // frame-boundary check that no test could discriminate — review
-      // LOW-3 — and that a mid-frame terminate would have got wrong.)
-      if (phase === "programming" && bytesEqual(bytes, terminateChunks[0]!)) {
-        phase = "clearing";
-        clearChunkCursor = 0;
-      }
-      if (phase === "clearing") {
-        assertClearingChunk(bytes);
-      } else if (phase === "programming") {
-        assertProgrammingChunk(bytes);
-      } else {
-        assertArmedChunk(bytes);
-      }
-
-      // `incoming` (`pm5/framer.ts`'s `reassemble()`) detects "a complete
-      // frame has now arrived" — real start/stop-flag boundary detection,
-      // not a second byte comparison; every chunk was already asserted
-      // correct one at a time above. Since Task 6 the REASSEMBLED FRAME
-      // itself is used as well, but only as the source of the opcode echo
-      // each handler puts in its ack (`pm5/response.ts`'s
-      // `echoedCommandIds`) — never as a byte check. Per the drain
-      // contract, keep pushing empty chunks until it returns null.
-      let complete = incoming.push(bytes);
-      while (complete) {
-        if (phase === "clearing") {
-          onClearingFrameComplete(complete);
-        } else if (phase === "programming") {
-          onProgrammingFrameComplete(complete);
-        } else {
-          onArmedFrameComplete(complete);
-        }
-        complete = incoming.push(new Uint8Array(0));
-      }
+      processWrite(characteristicId, bytes);
+      return settleWrite(undefined);
     },
+    // Everything `write()` used to do inline, unchanged — split out only so
+    // `delayWrites`'s `settleWrite` wrapper has a single call site to sit
+    // around, rather than needing to be threaded onto every one of this
+    // function's several early `return`s.
     subscribe(
       characteristicId: string,
       cb: (bytes: Uint8Array) => void,
@@ -1635,5 +1621,113 @@ export function createFakeTransport(
       if (latestBoundary) deliverBoundary(latestBoundary);
       if (latestStatus) deliverStatus(latestStatus);
     },
+    delayWrites(ms: number): void {
+      writeDelayMs = ms;
+    },
+    subscriptionCount(): number {
+      let total = 0;
+      for (const set of notifyCbs.values()) total += set.size;
+      return total;
+    },
   };
+
+  /** See `write()`'s own comment for why this is split out. Synchronous;
+   *  throws on a byte mismatch or an unexpected write target, exactly as
+   *  this logic did inline before `delayWrites` existed. */
+  function processWrite(characteristicId: string, bytes: Uint8Array): void {
+    // D6 (interface-notes.md §18's "also fixed live" list): while the
+    // link is down every handle a transport is holding is dead, and a
+    // write on one throws — Chrome's own wording reproduced verbatim
+    // below, because that string IS the observation. Checked before the
+    // sample-rate early-return: an invalidated handle does not care which
+    // characteristic it points at. See `injectDisconnect`'s doc comment
+    // for why the fake having none of this hid the session's worst bug.
+    if (linkDown) {
+      throw new Error(
+        `fake transport: InvalidStateError: Characteristic ${characteristicId} is no longer valid. Remember to retrieve the characteristic again after reconnecting.`,
+      );
+    }
+    if (characteristicId === SAMPLE_RATE_UUID) {
+      return;
+    }
+    if (characteristicId !== RECEIVE_CHARACTERISTIC_UUID) {
+      throw new Error(
+        `fake transport: unexpected write target ${characteristicId}`,
+      );
+    }
+    // Task 3's `sendGetErrorType` one-off write — checked BEFORE the
+    // phase-based assertions below, since it can legitimately arrive
+    // mid-"programming" (right after a reject) and is not the next
+    // expected programming/clearing/armed chunk.
+    //
+    // ABSORBED AND ACKED, not scripted — Task 6's own choice, stated
+    // plainly. The reply is an ordinary `"ok"` ack echoing the single
+    // opcode that was asked for (`0xC8`), carrying this fake's normal
+    // toggle and slave state. Nothing about its CONTENT is scriptable,
+    // because nothing about it is known: no GET command has ever been
+    // sent to this hardware, the pull wrapper itself is an unresolved
+    // conflict between the two source documents, and the driver logs the
+    // reply as raw hex with no claimed meaning (interface-notes.md §17
+    // item 14, `buildGetErrorType`'s own doc comment). A scriptable
+    // payload here would be inventing the answer to the exact question
+    // the merge-gate row exists to ask. It DOES go through `sendAck`, so
+    // it consumes a toggle step like every other frame the PM emits —
+    // that much is frame-counter mechanics, not error semantics. Does not
+    // touch `phase` or any cursor: this write is orthogonal to the
+    // clearing/programming/armed state machine.
+    if (bytesEqual(bytes, getErrorTypeFrame)) {
+      // `0xC8` = `CSAFE_PM_GET_ERRORTYPE`, the one opcode
+      // `buildGetErrorType()` sends — the same inline literal Task 3 put
+      // here, unchanged. `echoedCommandIds` deliberately does not decode
+      // the `0x1A` pull wrapper this frame uses (its own doc comment), so
+      // there is nothing to derive it from.
+      sendAck("ok", [0xc8]);
+      return;
+    }
+    // A terminate frame arriving where the next PROGRAMMING frame would
+    // go is legal and common (Task 6): it is the prepare step of the next
+    // `program()` after a previous one was refused or after a terminate
+    // re-opened the machine, and it is the app's own `terminate()` called
+    // twice. The machine parses whatever frame it is handed — only this
+    // fake's expected-byte bookkeeping needs telling which sequence the
+    // chunk belongs to. No frame-position guard: `terminateChunks[0]`
+    // carries a start flag and bytes no programming chunk ever matches,
+    // and `pm5/framer.ts`'s own resynchronization rule says a start flag
+    // arriving mid-frame DISCARDS the incomplete frame — so recognising a
+    // terminate whenever its first chunk shows up is what the reassembler
+    // itself would do. (An earlier version gated this on a
+    // frame-boundary check that no test could discriminate — review
+    // LOW-3 — and that a mid-frame terminate would have got wrong.)
+    if (phase === "programming" && bytesEqual(bytes, terminateChunks[0]!)) {
+      phase = "clearing";
+      clearChunkCursor = 0;
+    }
+    if (phase === "clearing") {
+      assertClearingChunk(bytes);
+    } else if (phase === "programming") {
+      assertProgrammingChunk(bytes);
+    } else {
+      assertArmedChunk(bytes);
+    }
+
+    // `incoming` (`pm5/framer.ts`'s `reassemble()`) detects "a complete
+    // frame has now arrived" — real start/stop-flag boundary detection,
+    // not a second byte comparison; every chunk was already asserted
+    // correct one at a time above. Since Task 6 the REASSEMBLED FRAME
+    // itself is used as well, but only as the source of the opcode echo
+    // each handler puts in its ack (`pm5/response.ts`'s
+    // `echoedCommandIds`) — never as a byte check. Per the drain
+    // contract, keep pushing empty chunks until it returns null.
+    let complete = incoming.push(bytes);
+    while (complete) {
+      if (phase === "clearing") {
+        onClearingFrameComplete(complete);
+      } else if (phase === "programming") {
+        onProgrammingFrameComplete(complete);
+      } else {
+        onArmedFrameComplete(complete);
+      }
+      complete = incoming.push(new Uint8Array(0));
+    }
+  }
 }

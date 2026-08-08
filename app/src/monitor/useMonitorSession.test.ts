@@ -1117,6 +1117,58 @@ describe("useMonitorSession: cancel", () => {
     expect(result.current.phase).toBe("live");
     expect(loadMonitorRun()?.completedAt).toBeNull();
   });
+
+  // Task 5 re-review, MEDIUM-9 (PARKED — "idempotent-safe, no user harm;
+  // needs a wire-level once pin"), landed here now that `delayWrites` exists
+  // to make the race real rather than hand-waved: `ConnectedInterstitial
+  // .tsx`'s own `handleCancel` does `void session.cancel(); onExit();` —
+  // fire-and-forget, immediately followed by a synchronous `setConnecting
+  // (null)` that unmounts this hook while `cancel()`'s own promise is still
+  // in flight.
+  //
+  // WHAT THIS PIN ACTUALLY FOUND (debugged with a temporary instrumented
+  // run, not left in): even with `delayWrites(50)` making `driver
+  // .terminate()`'s own PROMISE take 50 real ms, the SYNCHRONOUS side effect
+  // of dispatching that single-chunk terminate frame — `fake.ts`'s own
+  // `onArmedFrameComplete`, which echoes the ack AND delivers a
+  // `WORKOUTSTATE_TERMINATE` status tick, both inline, before `write()`
+  // returns anything — reaches the hook's `handleEvent` and moves `phase`
+  // to `"ended"` on the SAME synchronous call that dispatches the write, well
+  // before `cancel()`'s own `await` ever suspends. So by the time the
+  // interleaved `unmount()` actually runs `teardown()`, `phase` already
+  // reads `"ended"`, not `"ready"` — `teardown`'s own phase check
+  // (`"programming" | "ready"`) closes the door on its own, independent of
+  // the `alreadyTerminated` flag `cancel()` hasn't even gotten around to
+  // passing yet. The guard holds for a REASON slightly different from the
+  // one MEDIUM-9 pictured (the machine's own honest echo beats the clock,
+  // not a flag beating a flag) — confirmed genuine, not vacuous, by
+  // temporarily forcing `teardown`'s branch to fire unconditionally: the
+  // count below jumps to 2 immediately (restored after verifying).
+  it("cancel() racing an interleaved unmount sends at most ONE physical terminate on the wire, even under realistic write latency", async () => {
+    const { result, fake, transport, unmount } = harness({
+      program: TWO_INTERVALS,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+    // Real latency from here on.
+    fake.delayWrites(50);
+    const writesAtReady = transport.wireWrites;
+
+    // Fire-and-forget, exactly like `ConnectedInterstitial.tsx`'s own
+    // `handleCancel` — NOT awaited before the unmount that follows it.
+    const cancelling = result.current.cancel();
+    unmount();
+
+    await act(async () => {
+      await cancelling;
+      fake.tick(0);
+      await flush();
+    });
+
+    expect(transport.wireWrites - writesAtReady).toBe(1);
+    expect(transport.disconnects).toBe(1);
+  });
 });
 
 describe("useMonitorSession: the seams and their defaults", () => {

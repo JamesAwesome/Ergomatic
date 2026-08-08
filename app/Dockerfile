@@ -9,6 +9,20 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
+# Phase 7B Task 8: the e2e/screenshots compose override (compose.e2e.yml)
+# passes this build arg so `vite build` inlines `import.meta.env
+# .VITE_ENABLE_FAKE_MONITOR` as `"1"` — the ONLY thing that makes
+# `src/monitor/transports/index.ts`'s fake-injection seam reachable in a
+# build produced by THIS Dockerfile, since `compose.e2e.yml` overrides no
+# other part of the `web` service and `import.meta.env.DEV` is `false` in
+# every build this file ever produces (`vite build`, always — there is no
+# `vite dev` path here). A REAL deploy (`scripts/deploy.sh`'s `docker
+# compose up`, `compose.yml` alone, no override) never sets this arg, so it
+# defaults to empty and the seam's dynamic `import("./fake")` stays
+# provably dead code — `scripts/dist-grep.sh` is what proves that, not this
+# comment.
+ARG VITE_ENABLE_FAKE_MONITOR=""
+ENV VITE_ENABLE_FAKE_MONITOR=$VITE_ENABLE_FAKE_MONITOR
 RUN pnpm build
 
 # ---- api: Express, JSON-only, ships zero client assets ----

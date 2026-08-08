@@ -37,6 +37,7 @@ import type {
 import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
+import { commentStrippedSource } from "../test/cssView";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
   DEFAULT_PANE,
@@ -518,46 +519,65 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
  *  computes away, and that these captures are taken against a DOM the device
  *  produces — is `e2e/screenshots.spec.ts`'s own `.tabbar` node and its
  *  `toBeHidden()` assertion (task-6 review, M1: both halves were unguarded,
- *  and deleting the two rules broke nothing). */
-describe("index.css: the connected surface hides the shell's tab bar", () => {
-  const css = readFileSync(indexCssPath(), "utf-8");
+ *  and deleting the two rules broke nothing).
+ *
+ *  Task 8 converted `.connected-interstitial` to the SAME `:has()`
+ *  mechanism this surface already used, in one commit with removing the
+ *  interstitial's own `- var(--tap)` height term (task-6 review's own
+ *  carry) — this describe block is REWRITTEN, not merely extended, to pin
+ *  the POST-conversion pair: the two class names now share ONE selector
+ *  list on each shell rule, and `.connected-interstitial`'s height no
+ *  longer subtracts the tab bar's height at all. `commentStrippedSource`
+ *  (`../test/cssView`) is load-bearing on the third assertion below — this
+ *  file's own PRE-conversion version of this test named the exact trap it
+ *  closes (task-6 re-review, L6): the block's own doc comment says the
+ *  words "var(--tap)" in prose even in the FIXED file (see this file's own
+ *  height-rule comment), so a naive `.toContain("var(--tap)")` over raw
+ *  source can't tell a real term from a sentence describing its absence. */
+describe("index.css: both connected screens hide the shell's tab bar (the post-:has()-conversion pair)", () => {
+  const css = commentStrippedSource(readFileSync(indexCssPath(), "utf-8"));
 
-  it("hides the bar itself whenever a connected surface is on screen", () => {
+  it("hides the bar whenever EITHER connected screen is on screen, in one rule", () => {
     const rule =
-      /\.app-shell:has\(\.connected-surface\)\s+\.tabbar\s*\{([^}]*)\}/.exec(
+      /\.app-shell:has\(\.connected-surface\)\s+\.tabbar,\s*\.app-shell:has\(\.connected-interstitial\)\s+\.tabbar\s*\{([^}]*)\}/.exec(
         css,
       );
     expect(rule).not.toBeNull();
     expect(rule![1]).toContain("display: none");
   });
 
-  it("reclaims the 44px the shell reserves for it", () => {
+  it("reclaims the 44px the shell reserves for it, for EITHER connected screen", () => {
     // `.app-shell`'s unconditional `padding-bottom: calc(var(--tap) + ...)`
     // is what left 320px of usable height at 844x390 — enough to clip pane
     // A's ruler and UP NEXT away entirely. Hiding the bar without dropping
     // the padding fixes nothing.
-    const rule = /\.app-shell:has\(\.connected-surface\)\s*\{([^}]*)\}/.exec(
-      css,
-    );
+    const rule =
+      /\.app-shell:has\(\.connected-surface\),\s*\.app-shell:has\(\.connected-interstitial\)\s*\{([^}]*)\}/.exec(
+        css,
+      );
     expect(rule).not.toBeNull();
     expect(rule![1]).toContain("padding-bottom: 0");
   });
 
-  it("does NOT reach the interstitial, which is Task 8's to convert", () => {
-    // Extending the selector without also removing
-    // `.connected-interstitial`'s own `- var(--tap)` height term re-creates
-    // the dead space DEVIATIONS row 58 exists to close, inverted (task-6
-    // review, Concern 3's adjudication).
-    expect(css).not.toContain(":has(.connected-interstitial)");
-    // Anchor to the DECLARATION, not the block: the block opens with a doc
-    // comment that itself says "var(--tap)", so a block-scoped match stays
-    // green after Task 8 removes the real height term but leaves the
-    // prose — the likeliest half to miss (task-6 re-review, L6). Stripping
-    // comments makes prose invisible to the assertion.
-    const cssSansComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    expect(cssSansComments).toMatch(
-      /\.connected-interstitial\s*\{[^}]*height:\s*calc\([^;}]*var\(--tap\)/,
-    );
+  // THE PAIRED EDIT (task-6 review's carry, landed by Task 8). Doing either
+  // half alone re-creates a real defect, in opposite directions: the
+  // selector reaching the interstitial with the height term LEFT IN
+  // re-creates the dead 44px of scroll the term used to cover for (now
+  // double-reserved: once by the removed padding, once by the still-present
+  // subtraction); the height term REMOVED with the selector NOT extended
+  // uncovers the 151px landscape overflow the term existed to prevent,
+  // against a tab bar that's still on screen. Both halves are asserted here
+  // together so a revert of either one fails this ONE test, not two
+  // separately-skippable ones.
+  it("THE PAIRED EDIT: the selector reaches the interstitial AND its height term is gone — never one without the other", () => {
+    const selectorRule =
+      /\.app-shell:has\(\.connected-surface\),\s*\.app-shell:has\(\.connected-interstitial\)\s*\{([^}]*)\}/.exec(
+        css,
+      );
+    expect(selectorRule).not.toBeNull();
+    const heightRule = /\.connected-interstitial\s*\{([^}]*)\}/.exec(css);
+    expect(heightRule).not.toBeNull();
+    expect(heightRule![1]).not.toContain("var(--tap)");
   });
 });
 

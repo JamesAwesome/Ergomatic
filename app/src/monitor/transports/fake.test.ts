@@ -1831,3 +1831,122 @@ describe("createFakeTransport: fix-3 Task 5 — 0x0031 carries structure, indepe
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task 8: the timing-realism knobs (task-5 re-review, MEDIUM-9/LOW-8)
+// ---------------------------------------------------------------------------
+
+describe("createFakeTransport: delayWrites — the promise, not the wire, is what's delayed", () => {
+  it("defaults to instant (same-microtask) settlement, unchanged from before this knob existed", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    let settled = false;
+    void fake.connect("fake-pm5").then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+  });
+
+  it("connect() does not resolve until the configured delay elapses", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeTransport({ program: PROGRAM });
+      fake.delayWrites(500);
+      let settled = false;
+      void fake.connect("fake-pm5").then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(499);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("write() does not resolve until the configured delay elapses, but still processes the frame (acks, cursor advances) SYNCHRONOUSLY at call time", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = createFakeTransport({ program: PROGRAM });
+      fake.delayWrites(300);
+      const acks: Uint8Array[] = [];
+      fake.subscribe(TRANSMIT_CHARACTERISTIC_UUID, (b) => acks.push(b));
+      let settled = false;
+      void fake
+        .write(RECEIVE_CHARACTERISTIC_UUID, buildTerminate()[0]![0]!)
+        .then(() => {
+          settled = true;
+        });
+      // The ack for a clearing-phase frame only fires once the WHOLE frame
+      // has reassembled (`onClearingFrameComplete`) — `buildTerminate()`'s
+      // single chunk is the whole frame, so this one write is enough to
+      // prove the point: the ack lands before any real time has passed at
+      // all, independent of `delayWrites`.
+      expect(acks.length).toBeGreaterThan(0);
+      // Flushed WITHOUT advancing the fake clock — proves `settled` reads
+      // `false` because of the CONFIGURED DELAY, not merely because the
+      // `.then()` callback above has not had a turn yet (a same-microtask
+      // `write()` resolution — the actual bug this pin caught: `write()`'s
+      // own implementation called `Promise.resolve()` directly rather than
+      // `settleWrite()`, so this exact assertion PASSED anyway with ZERO
+      // real delay, for a reason having nothing to do with `delayWrites` —
+      // flushing every pending microtask first, with the clock held still,
+      // is what actually tells the two apart. `advanceTimersByTimeAsync(0)`,
+      // not a bare `await Promise.resolve()`: vitest's own fake-timer
+      // microtask flush needs its OWN async tick loop to drain an
+      // `async function`'s implicit Promise-wrapping hops — a couple of
+      // bare `await Promise.resolve()`s measured directly here were not
+      // enough to surface the mutation this pin exists to catch.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a rejected write() (a genuine byte mismatch) is NOT delayed — only a successful settlement is", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    fake.delayWrites(10_000);
+    await expect(
+      fake.write(RECEIVE_CHARACTERISTIC_UUID, Uint8Array.from([0xff])),
+    ).rejects.toThrow();
+  });
+});
+
+describe("createFakeTransport: subscriptionCount", () => {
+  it("starts at zero", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    expect(fake.subscriptionCount()).toBe(0);
+  });
+
+  it("counts one per live subscribe() call, summed across characteristics, and drops back to zero once every unsubscribe fires", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const unsubA = fake.subscribe(GENERAL_STATUS_UUID, () => undefined);
+    expect(fake.subscriptionCount()).toBe(1);
+    const unsubB = fake.subscribe(ADDITIONAL_STATUS_1_UUID, () => undefined);
+    expect(fake.subscriptionCount()).toBe(2);
+    // A SECOND callback on the SAME characteristic is a distinct
+    // subscription (a `Set`, not a single slot) — `driver.ts` itself never
+    // double-subscribes one characteristic, but this method's own contract
+    // (its doc comment) is general, not driver-specific.
+    const unsubC = fake.subscribe(GENERAL_STATUS_UUID, () => undefined);
+    expect(fake.subscriptionCount()).toBe(3);
+    unsubA();
+    expect(fake.subscriptionCount()).toBe(2);
+    unsubB();
+    unsubC();
+    expect(fake.subscriptionCount()).toBe(0);
+  });
+
+  it("calling the SAME unsubscribe function twice never goes negative", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const unsub = fake.subscribe(GENERAL_STATUS_UUID, () => undefined);
+    unsub();
+    unsub();
+    expect(fake.subscriptionCount()).toBe(0);
+  });
+});

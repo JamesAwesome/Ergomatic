@@ -171,14 +171,15 @@ describe("TimerTargets (component)", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  // BYTE-IDENTICAL REGRESSION PIN (Phase 7B Task 3). Lifted from THIS
-  // component's own pre-task render (HEAD at the start of this task, before
-  // the `variant` prop existed) by rendering the real `Timer` component
+  // BYTE-IDENTICAL REGRESSION PIN (Phase 7B Task 3, updated Task 8). Lifted
+  // from THIS component's own pre-Task-3 render (HEAD before the now-retired
+  // `variant` prop ever existed) by rendering the real `Timer` component
   // against a distance work phase (split-ref "2k", no spm) and reading
   // `document.querySelector(".timer-cards")!.outerHTML` — the exact string
-  // below, unedited. Proves `variant` omitted (and `variant="default"`
-  // explicitly) both still produce the identical DOM this component always
-  // rendered.
+  // below, unedited. Task 8 retired `variant` entirely (task-6 review
+  // ruling: it shipped with no consumer and never gained one — Task 7 built
+  // rows, not this component's cards); this component takes only `phase`
+  // now, so there is exactly one render to pin rather than two.
   const pinnedPhase = phase({
     type: "work",
     targetKind: "split",
@@ -189,79 +190,9 @@ describe("TimerTargets (component)", () => {
   const PINNED_DEFAULT_HTML =
     '<div class="timer-cards"><div class="timer-card"><span class="timer-card-label">TARGET SPLIT</span><span class="timer-card-value timer-card-value-accent">1:40.0</span><span class="timer-card-caption">2K</span></div><div class="timer-card"><span class="timer-card-label">RATE</span><span class="timer-card-value">rate free</span></div></div>';
 
-  it("variant omitted renders byte-identical to the pre-Task-3 markup", () => {
+  it("renders byte-identical to the pre-Task-3 markup", () => {
     const { container } = render(<TimerTargets phase={pinnedPhase} />);
     expect(container.innerHTML).toBe(PINNED_DEFAULT_HTML);
-  });
-
-  it("variant='default' explicitly renders the identical byte-identical markup", () => {
-    const { container } = render(
-      <TimerTargets phase={pinnedPhase} variant="default" />,
-    );
-    expect(container.innerHTML).toBe(PINNED_DEFAULT_HTML);
-  });
-});
-
-describe("TimerTargets: variant='connected'", () => {
-  const splitPhase = phase({
-    type: "work",
-    targetKind: "split",
-    targetSplit: 136,
-    ref: { base: "6k", off: 16 },
-    label: "2:16.0",
-    spm: 22,
-  });
-
-  it("ink targets: the TARGET SPLIT value drops the accent class the default variant carries", () => {
-    render(<TimerTargets phase={splitPhase} variant="connected" />);
-    const value = screen.getByText("2:16.0");
-    expect(value.className).toBe("timer-card-value");
-    expect(value.className).not.toContain("timer-card-value-accent");
-  });
-
-  it("static third line: both cards render an unconditional caption the default variant never shows", () => {
-    render(<TimerTargets phase={splitPhase} variant="connected" />);
-    expect(screen.getByText("LIVE PACE")).toBeInTheDocument();
-    expect(screen.getByText("LIVE RATE")).toBeInTheDocument();
-  });
-
-  it("with no judged actual supplied, the actual slot is absent entirely (not an empty element)", () => {
-    const { container } = render(
-      <TimerTargets phase={splitPhase} variant="connected" />,
-    );
-    expect(container.querySelector(".timer-card-actual")).toBeNull();
-  });
-
-  it("judged-actual slot: renders the caller's display string with a judgement-keyed class, per card independently", () => {
-    render(
-      <TimerTargets
-        phase={splitPhase}
-        variant="connected"
-        paceActual={{ display: "2:19.4", judgement: "over" }}
-        rateActual={{ display: "18", judgement: "stale" }}
-      />,
-    );
-    const paceActualEl = screen.getByText("2:19.4");
-    expect(paceActualEl.className).toBe(
-      "timer-card-actual timer-card-actual-over",
-    );
-    const rateActualEl = screen.getByText("18", {
-      selector: ".timer-card-actual",
-    });
-    expect(rateActualEl.className).toBe(
-      "timer-card-actual timer-card-actual-stale",
-    );
-  });
-
-  it("the default variant never renders any connected-only element (static line or actual slot), even if actuals are passed", () => {
-    const { container } = render(
-      <TimerTargets
-        phase={splitPhase}
-        paceActual={{ display: "2:19.4", judgement: "over" }}
-      />,
-    );
-    expect(container.querySelector(".timer-card-static")).toBeNull();
-    expect(container.querySelector(".timer-card-actual")).toBeNull();
   });
 });
 
@@ -277,8 +208,14 @@ describe("TimerTargets: variant='connected'", () => {
 // mocks every `.css` import — including `?raw`/`?inline` suffixed ones,
 // verified empirically — to an empty string), pinning the resolved
 // custom-property structurally rather than "we looked and it seemed
-// right." No route renders the connected variant yet for a real
-// browser-level contrast check; this is the honest ceiling until one does.
+// right." Task 8: `TimerTargets`'s own `variant="connected"` JSX (and the
+// class hooks the removed describe block above used to exercise through
+// it) is RETIRED — Task 7 built pane C/A's judged cells as rows in
+// `PaneTimer.tsx`/`PaneGrid.tsx` directly, never through this component —
+// but `.timer-card-actual-{judgement}` itself is very much live, rendered
+// today by `PaneTimer.tsx` on the real `/library/:id` connected surface;
+// this test's own CSS-source-reading approach remains the honest ceiling
+// for a token jsdom cannot compute.
 describe("index.css: .timer-card-actual-stale resolves to the AA-passing token (review HIGH-1)", () => {
   it("uses var(--ink-3), never the AA-failing var(--ink-5) this task originally shipped", () => {
     // Plain string surgery on `import.meta.url`, not the global `URL`
