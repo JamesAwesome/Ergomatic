@@ -40,6 +40,8 @@ carried key):
 | `spm` | `IntervalActual.avgSpm` | |
 | `meters` / `seconds` | the authored duration | unchanged from the manual builder |
 | `avgHr` | `IntervalActual.avgHeartRateBpm` | NEW optional `LogStep` field; written only by this builder ("store it, show nothing") |
+| `actualSeconds` | `IntervalActual.elapsedSeconds` | NEW optional field, pm5-only: the interval's own MEASURED work time, verbatim (the manual path never has one) |
+| `actualMeters` | `IntervalActual.distanceMeters` | NEW optional field, pm5-only: the interval's own MEASURED distance, verbatim |
 
 **The three honest gaps, all rendered as NO actual** (no `actualSplit`,
 no `actualSource`, never `"assumed"`):
@@ -49,10 +51,12 @@ no `actualSource`, never `"assumed"`):
 2. **Lost boundary** — `run.actuals` shorter than the program with no
    entry for this index (the D4 class the record's own header documents).
 3. **Unmatched index** — an actual with `index: null` (the D3 case)
-   matches NO step; it is EXCLUDED from steps but PRESERVED in the
-   sidecar (§5). Matching is by `IntervalActual.index` against the
-   program interval's position — never by array position (the record's
-   own comment, verbatim constraint).
+   matches NO step and is DROPPED from the log entirely: it cannot be
+   attributed to an interval, so no sync could ever submit it either;
+   its diagnostic life is the wire log's, not the database's. Matching
+   is by `IntervalActual.index` against the program interval's
+   position — never by array position (the record's own comment,
+   verbatim constraint).
 
 Rest rows render from the program's folded `restSeconds`, house format,
 no actuals — identical to the manual builder's rest treatment.
@@ -101,55 +105,53 @@ In the monitor branch:
   unlogged-run staged confirms behave exactly as before for a record
   that has not reached one of those two doors.
 
-## 5. The Concept2 seam: the verbatim sidecar
+## 5. The Concept2 seam: verbatim fields, no sidecar
 
-The display mapping in §2 is deliberately lossy (labels, gaps, folded
-rests). A future Concept2 Logbook sync needs what the WIRE said, so the
-saved log carries it, untouched:
+(Revised at spec review, James: "I wouldn't want it long term if it's
+only needed for concept 2 logbook, I wanna be mindful of how much we
+put in the db.")
 
-```ts
-// On the logged session (optional, additive):
-monitor?: {
-  deviceName: string;
-  terminated: boolean;
-  startedAt: string;   // ISO, the run's own stamps
-  completedAt: string;
-  // IntervalActual[], VERBATIM from MonitorRun.actuals — including
-  // index:null entries excluded from the display steps, in arrival
-  // order. Nothing rounded, nothing re-derived, nothing dropped.
-  intervals: IntervalActual[];
-}
-```
+A Concept2 Logbook submission needs, per interval: time, distance,
+split, stroke rate, heart rate. The display steps already carry three
+(`actualSplit`, `spm`, `avgHr`); §2 adds the other two as verbatim
+pm5-only step fields (`actualSeconds`, `actualMeters`). The session
+itself carries ONE new optional string, `deviceName`, as provenance.
+Total database cost: two or three numbers per PM5 step and one string
+per PM5 session, inside the existing steps JSON — no sidecar, no full
+record, nothing retained that only a sync would read.
 
-Rules that make the seam safe to build on later:
+Seam rules:
 
-- The sidecar is written ONLY by the monitor branch's save; manual saves
-  never carry it. Its presence is the future sync's "this session has
-  machine data" predicate.
-- `IntervalActual`'s shape is the seam contract: any future field the
-  driver learns to capture (drag factor, stroke data) is added THERE and
-  flows through without this phase's code changing.
-- No consumer in this phase reads the sidecar back. It is write-only
-  until a sync phase exists (ROADMAP gets a one-line pointer under a
-  future-phases note, not a new phase entry).
+- The future sync's predicate is `actualSource === "pm5"` on a step;
+  its payload is assembled from the step fields alone.
+- Nothing display-rounds the verbatim fields: `actualSplit`,
+  `actualSeconds`, `actualMeters` are stored exactly as
+  `IntervalActual` carried them; only RENDERING formats them.
+- Anything richer the driver ever learns to capture (drag factor,
+  stroke data) is added as another verbatim step field WHEN a consumer
+  exists — never hoarded in advance.
+- Dropped, deliberately: orphaned `index: null` actuals (unsyncable,
+  diagnostic-grade — the wire log is their home), arrival order, and a
+  stored `terminated` flag (a partial session is already visible as
+  steps with no actual).
 
 ## 6. Server
 
 `POST /api/logs` (`server/routes/data.ts`) validation grows, additively:
-`actualSource` admits `"pm5"`; steps admit optional `avgHr` (integer,
-sane HR bounds); the payload admits the optional `monitor` sidecar
-(shape-validated: ISO strings, `intervals` entries matching
-`IntervalActual`'s fields, `index` number-or-null). Stored as the logs'
-existing JSON persistence — no migration for existing rows; absent
-fields stay absent. Reads return whatever was stored (the existing
-behavior for unknown-to-the-UI fields).
+`actualSource` admits `"pm5"`; steps admit optional `avgHr` (an integer
+in 30-250, the belt-plausible band; anything else rejects the payload),
+`actualSeconds` (positive number), and `actualMeters` (positive
+number); the payload admits an optional `deviceName` string (length
+1-64). Stored in the logs' existing JSON persistence — no migration for
+existing rows; absent fields stay absent. Reads return whatever was
+stored (the existing behavior for unknown-to-the-UI fields).
 
 ## 7. Testing
 
 - The builder is tested against WALK 4's real record shape (2×100 m,
   both actuals present, machine numbering already normalized) and its
-  mutations: a lost boundary (delete one actual), a null index (moved to
-  the sidecar, absent from steps), an early End (trailing steps bare),
+  mutations: a lost boundary (delete one actual), a null index (dropped
+  entirely, absent from steps), an early End (trailing steps bare),
   an effort-target interval (actual without target).
 - Spec-derivation rule (the [[spec-blind-tests]] lesson): the builder's
   reviewer walks one concrete example from THIS table — walk 4's
@@ -158,9 +160,10 @@ behavior for unknown-to-the-UI fields).
 - Screen tests: monitor branch engages/falls through on each §3
   condition; read-only rows expose no inputs (a11y: they are text, not
   disabled controls); save payload carries `pm5` sources, `avgHr`, the
-  sidecar; save and discard each clear the record exactly once.
-- Server: accepts the grown payload; rejects a malformed sidecar;
-  round-trips it.
+  verbatim `actualSeconds`/`actualMeters`, and `deviceName`; save and
+  discard each clear the record exactly once.
+- Server: accepts the grown payload; rejects an out-of-band `avgHr` and
+  a non-positive verbatim field; round-trips everything stored.
 - e2e: the existing connected walk extends through Save with a
   seeded-workout assertion on the stored log's sources (the walk already
   ends on this form) — plus the screenshot pair for the prefilled form,
@@ -171,5 +174,7 @@ behavior for unknown-to-the-UI fields).
 A session fully driven by a connected PM5 saves a log whose steps carry
 real monitor splits (`actualSource: "pm5"`), whose partial honesty
 matches ruling 1, whose record lifecycle closes at save/discard, and
-whose stored sidecar contains the verbatim wire actuals a Concept2
-Logbook sync could be built from without touching 7C's code again.
+whose PM5 steps carry the verbatim wire numbers (split, work time,
+distance, stroke rate, heart rate) a Concept2 Logbook sync could be
+assembled from without touching 7C's code again — at a database cost of
+a few numbers per step and one provenance string per session.
