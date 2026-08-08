@@ -914,45 +914,53 @@ function compileOrThrow(
   return result;
 }
 
-// WALK4_ACTUALS: IntervalActual[] is pinned SYNTHESIZED, NOT decoded from a
-// captured wire log — read this comment before touching the fixture.
+// WALK4_ACTUALS: IntervalActual[] — FIX ROUND 1 (post-initial-report): index
+// 1 is now a REAL wire decode; index 0 stays synthesized, and both are
+// labeled below so neither is mistaken for the other.
 //
 // The task brief that named this fixture ("freeze the walk-4 fixture from
 // the wire itself") instructed decoding walk 4's raw 0x0037/0x0038 pair for
 // an interval boundary ("the pasted log's seq 24/25 hex") out of
-// `docs/monitor/pm5-interface-notes.md` §18's 2026-08-08 entry (the walk-4
-// paragraphs) through `parseSplitIntervalData`/`toIntervalActual`.
-// **THAT HEX DOES NOT EXIST IN THE REPO.** §18's 2026-08-08 "HARDWARE WALKS
-// 1-4" section (interface-notes.md:2052-2165) records walk 4's own 2x100 m
-// shape and its 0x0031 FRAME readings only ("state=resting elapsed=37.81
-// distance=101.8" etc, interface-notes.md:2136-2145) — never an
-// `intervalComplete` (0x0037/0x0038) capture, raw or decoded, for this
-// session. The adversarial review independently found and named the
-// identical gap
-// (`docs/superpowers/specs/2026-08-08-phase-7c-adversarial-review.md`, m7:
-// "§7's headline fixture does not exist in the repo ... Walk 4's actual
-// values are not on record"), pointing a future test at
-// `pm5-session3-final.log.gz` instead — but that is a DIFFERENT session
-// (2026-08-06) with a DIFFERENT program shape (2x1:00 TIME, no rest), so its
-// own real hex (interface-notes.md:2529-2539) doesn't fit a "2x100 m
-// distance, 30s rest" fixture either. This is a BRIEF-VS-REPO discrepancy
-// (the agent briefing's own "say so instead of working around it silently"
-// rule), not a quietly-papered-over gap — flagged in the task report too.
+// `docs/monitor/pm5-interface-notes.md` §18's 2026-08-08 entry through
+// `parseSplitIntervalData`/`toIntervalActual`. At the time this fixture was
+// first written, THAT HEX DID NOT EXIST IN THE REPO (flagged in the task-2
+// report; independently confirmed by the adversarial review's m7 finding),
+// so both entries were hand-picked and illustrative. James has since
+// committed the missing hex into the record (`b402faf`, "docs: walk 4's
+// boundary bytes enter the record, verbatim from the stash") — §18's walk-4
+// entry now opens with the raw pair for INTERVAL 2 (the operator's pasted
+// wire log, seq 24-25), plus a note that interval 1's pair was never
+// captured raw (only its normalized `interval-complete` line survives from
+// that session, since `notify` logging didn't exist yet when it fired).
 //
-// With neither the fixture's own raw hex nor a shape-matching substitute on
-// record, both entries below are hand-picked, illustrative `IntervalActual`
-// values rather than a wire decode — there is no real capture left to run
-// through `parseSplitIntervalData`/`toIntervalActual`, so no throwaway
-// decode test was written for this fixture (encoding synthetic bytes only
-// to decode them back to the same synthetic numbers would verify nothing).
-// `elapsedSeconds`/`distanceMeters` are chosen close to walk 4's own
-// genuinely-recorded FRAME numbers (each interval's own resting-state
-// reading just before its reset: ~100 m over ~30-38 s); `avgSpm` uses walk
-// 4's own recorded RATE readings verbatim ("RATE read sane too (25, then
-// 24)", interface-notes.md:2133-2135); `avgSplit`/`avgHeartRateBpm` are
-// invented but wire-plausible, existing only to give the "verbatim mapping"
-// test below something real to carry through end to end.
+// DECODED (index 1 below — "interval 2" in the log's own 1-based/machine
+// framing): the raw hex —
+//   0x0037  eb 0c 00 49 04 00 23 01 00 64 00 00 1e 00 09 00 01 02
+//   0x0038  eb 0c 00 19 6b 67 af 05 05 00 b3 02 6c 0d 72 00 65 02 00
+// — run through `parseSplitIntervalData`/`parseAdditionalSplitIntervalData`
+// then `toIntervalActual` (a throwaway test, `domain/monitor/pm5/
+// __walk4throwaway.test.ts`, written, run, and deleted for this fix round)
+// printed `splitIntervalNumber: 2` (the RAW machine value — `toIntervalActual`
+// passes it through unnormalized) and `{ elapsedSeconds: 29.1,
+// distanceMeters: 100, avgSplit: 145.5, avgSpm: 25, avgHeartRateBpm: 107 }`.
+// The walk-4 log's own line reads "interval-complete index=1 (machine
+// reported 2)" — reconciled here by running the SAME normalization the
+// driver applies at that boundary, `toActualIndex(machineIndex: 2,
+// machineState: "resting", programLength: 2)`
+// (`domain/monitor/pm5/intervalIndex.ts`): `candidate = 2 - 1 = 1`, in
+// range, so `1` — matching the log line exactly. `index: 1` below is that
+// normalized value, not the raw `2`.
+//
+// SYNTHESIZED (index 0 below, unchanged from the original report): §18 says
+// interval 1's own pair was never captured raw, so there is nothing to
+// decode for it — it remains a hand-picked, illustrative `IntervalActual`,
+// `elapsedSeconds`/`distanceMeters` chosen close to walk 4's own
+// genuinely-recorded FRAME numbers, `avgSpm` from walk 4's own recorded RATE
+// reading ("25, then 24", interface-notes.md:2133-2135), `avgSplit`/
+// `avgHeartRateBpm` invented but wire-plausible.
 const WALK4_ACTUALS: IntervalActual[] = [
+  // SYNTHESIZED — see comment above; interval 1's raw pair was never
+  // captured.
   {
     index: 0,
     elapsedSeconds: 37.8,
@@ -961,13 +969,16 @@ const WALK4_ACTUALS: IntervalActual[] = [
     avgSpm: 25,
     avgHeartRateBpm: 132,
   },
+  // DECODED — see comment above; verbatim from §18's real 0x0037/0x0038
+  // pair (b402faf) through parse.ts's own functions, index normalized via
+  // toActualIndex(2, "resting", 2) = 1.
   {
     index: 1,
-    elapsedSeconds: 29.4,
-    distanceMeters: 101,
+    elapsedSeconds: 29.1,
+    distanceMeters: 100,
     avgSplit: 145.5,
-    avgSpm: 24,
-    avgHeartRateBpm: 128,
+    avgSpm: 25,
+    avgHeartRateBpm: 107,
   },
 ];
 
