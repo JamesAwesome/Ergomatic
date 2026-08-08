@@ -1278,7 +1278,15 @@ inclusivity).
 ## Phase 7B — PM5 connected surface
 
 **Status:** Done (2026-08-08, Tasks 1-8, Task 8 close-out this entry) — the
-core exit criterion below is met; this section's own bullets were never
+core exit criterion below is met **against the fake transport**; the
+**hardware exit is PENDING**, and it is §17 items 20-21, which nobody has
+run. Everything claimed in this section is fake-driven:
+`e2e/connected.spec.ts` walks connect → pairing → programming → ready →
+the surface → paused → resumed → End → the log screen in a real browser,
+in both orientations, through the real component chain — but through
+`createFakeTransport()`, never a radio. No PM5 has been connected to this
+build. (Whole-branch review H3: this line previously asserted the exit
+criterion below was simply met.) This section's own bullets were never
 checked off as Tasks 1-7 landed them, so this update reconciles the
 checklist against shipped reality in one pass rather than pretending the
 phase is still "Not started."
@@ -1451,8 +1459,12 @@ reconciled against 7A's shipped types before this phase starts.
       follow-on, scoped out of 7B/Task 8 on purpose.
 
 **Exit:** On a real PM5: distance steps auto-advance, live pace shows
-against target, and "Connect PM5" degrades silently to manual on
-disconnect.
+against target, and Connect degrades silently to manual on disconnect.
+**NOT MET — pending.** The fake-transport analogue of all three is met and
+gated in CI (`e2e/connected.spec.ts`, both orientations); the hardware run
+is §17 items 20-21 and has not happened. (The button is one word,
+`Connect` — `ConnectAction.tsx` — not "Connect PM5"; the label above is
+corrected to match what ships.)
 
 ## Phase 7C — PM5 logging
 

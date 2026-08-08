@@ -1173,23 +1173,38 @@ test("news-reader", async ({ page }) => {
 // the 151px landscape overflow (Cancel and "Row on the phone timer instead"
 // starting 132px behind the fixed tab bar) the review measured directly.
 //
-// Only the FAILED state is captured for real, in both orientations — states
-// 4/5/7 (pairing/programming/ready) are deliberately NOT driven through a
-// real `navigator.bluetooth.requestDevice()` call here: this environment's
-// real Chromium exposes the Web Bluetooth API even headless, and with no
-// adapter and no way to render/dismiss a chooser, `requestDevice()` HANGS
-// rather than rejecting (the identical hazard `session.spec.ts`'s own
-// "Connect anyway" comment documents, LOW-1). `failed` (via
-// `transport-missing`) is reached by removing `navigator.bluetooth` itself
-// BEFORE the app loads — no picker is ever opened, so there is nothing to
-// hang on, and it is the one state HIGH-3's own measurement named by number.
-// All four built states share the exact same `.connected-interstitial`/
-// `.connected-interstitial-body` layout classes the fix applies to, and are
-// otherwise pixel-verified structurally by `ConnectedInterstitial.test.tsx`'s
-// 52 passing DOM assertions — this capture is the one real-browser check
-// the CSS fix (the `var(--tap)` term, the centred body) actually holds up
-// under real fonts and the real fixed tab bar, not a substitute for driving
-// every state.
+// The FAILED state is reached by removing `navigator.bluetooth` itself
+// BEFORE the app loads — never through a real
+// `navigator.bluetooth.requestDevice()` call: this environment's real
+// Chromium exposes the Web Bluetooth API even headless, and with no adapter
+// and no way to render/dismiss a chooser, `requestDevice()` HANGS rather
+// than rejecting (the identical hazard `session.spec.ts`'s own "Connect
+// anyway" comment documents, LOW-1). With `navigator.bluetooth` gone no
+// picker is ever opened, so there is nothing to hang on, and `failed` is
+// the one state HIGH-3's own measurement named by number.
+//
+// **Corrected by the fix wave (review H4).** This block used to go on to
+// say that states 4/5/7 (pairing/programming/ready) were "deliberately NOT
+// driven", that this capture was "the one real-browser check the CSS fix
+// (the `var(--tap)` term, the centred body) actually holds up under real
+// fonts and the real fixed tab bar", and that
+// `ConnectedInterstitial.test.tsx` had 52 DOM assertions. All three were
+// superseded by Task 8 in the SAME commit that left them standing:
+//
+// - Six more captures live ~90 lines below — pairing, programming and
+//   ready, both orientations, driven for real through the fake seam.
+// - Task 8 DELETED the `var(--tap)` term (`index.css`: "No `- var(--tap)`
+//   term (Task 8)").
+// - Task 8's `:has()` conversion HIDES the tab bar on this exact screen
+//   (`index.css`'s `.app-shell:has(.connected-interstitial)` rule), so this
+//   capture is not a check on the tab bar's presence at all.
+// - `ConnectedInterstitial.test.tsx` has 35 `it(` blocks and 80 `expect(`
+//   calls, not 52 assertions.
+//
+// What is still true: all four built states share the same
+// `.connected-interstitial`/`.connected-interstitial-body` layout classes,
+// and this file's connected captures are the real-browser check that the
+// interstitial's height and centring hold up under real fonts.
 async function stubNoBluetooth(page: Page): Promise<void> {
   await page.addInitScript(() => {
     Object.defineProperty(window.navigator, "bluetooth", {
