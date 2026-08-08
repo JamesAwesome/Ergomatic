@@ -71,18 +71,30 @@ export function rateDisplay(phase: EnginePhase): {
 }
 
 /** The phone timer's own rendering (unlabelled — the only variant that
- *  existed before Phase 7B Task 3) vs. the connected panes' (Tasks 6/7,
- *  neither task exists yet — this variant has no consumer today). The
+ *  existed before Phase 7B Task 3) vs. the connected panes'. The
  *  `"default"` branch below is BYTE-IDENTICAL to what this component
- *  rendered before this task (pinned by `TimerTargets.test.tsx`'s own
+ *  rendered before that task (pinned by `TimerTargets.test.tsx`'s own
  *  regression test, lifted from the pre-task commit) — every
  *  `variant === "connected"` branch is additive JSX gated behind a
- *  condition that's `false` by default. */
+ *  condition that's `false` by default.
+ *
+ *  **`"connected"` STILL HAS NO CONSUMER, and Task 6 is why.** This
+ *  variant puts the live actual INSIDE the target card. The handoff's
+ *  pane A is explicit that the actual is a SEPARATE card of the same
+ *  geometry beside it — "distinguished by its label (`NOW · /500M` vs
+ *  `TARGET SPLIT`)" — laid out `[NOW][TARGET SPLIT]` then
+ *  `[RATE][METERS]`. The handoff is the visual authority, so
+ *  `src/workout/connected/PaneTimer.tsx` renders those four cards itself
+ *  and imports only `targetSplitDisplay`/`rateDisplay` from this file.
+ *  The variant's CSS hooks (`timer-card-actual-{judgement}`) ARE in use;
+ *  this JSX is not. Left standing rather than deleted mid-phase (it is
+ *  another task's reviewed work) and flagged in the task-6 report — a
+ *  reviewer's call, not an implementer's. */
 export type TimerTargetsVariant = "default" | "connected";
 
 /** A live actual value ready to drop into the connected variant's judged-
- *  actual slot: the caller (a future Task 6/7 consumer, reading a real PM5
- *  `MonitorFrame` through `domain/judge.ts`'s `judgeActual`) supplies both
+ *  actual slot: a caller (reading a real PM5 `MonitorFrame` through
+ *  `domain/judge.ts`'s `judgeActual`) supplies both
  *  the already-formatted display string (this component never touches raw
  *  PM5-shaped numbers) and the verdict, which becomes a `timer-card-actual-
  *  {judgement}` class hook for that future consumer's own styling pass. */

@@ -3284,24 +3284,26 @@ button:disabled {
   color: var(--ink-3);
 }
 
-/* Connected-variant-only (Phase 7B Task 3): `TimerTargets`'s
-   `variant="connected"` branch — no consumer exists yet (Tasks 6/7). The
-   judgement-keyed classes below (`timer-card-actual-under/-within/-over/
-   -stale`, from `domain/judge.ts`'s own `Judgement` union) are structural
-   hooks; `-under`/`-over` are left with no colour override here on
-   purpose — NOT because a colour is unreviewed (task-3 review, corrected:
-   this was never an `--accent` question), but because the connected-panes
-   handoff's own teal/ochre for those two states are ALREADY the existing
+/* The judgement-keyed classes below (`timer-card-actual-under/-within/
+   -over/-stale`, from `domain/judge.ts`'s own `Judgement` union) are the
+   tint hooks Task 3 declared and Task 6 filled in. Every connected pane's
+   live actual wears exactly one of them, assigned by ONE code path
+   (`src/workout/connected/surfaceModel.ts`'s `judgedValue`, the only
+   caller of `judgeActual` in `src/`).
+
+   The colours are the handoff's teal/ochre, which are ALREADY the existing
    `--type-o2`/`--type-at` tokens (handoff §3, sanctioned for this second,
    non-type meaning by DEVIATIONS row 3 — the same reuse `TypeBadge.tsx`'s
-   `TYPE_COLOR_VAR` pattern already establishes for a value->token lookup).
-   That two-line addition (`.timer-card-actual-under { color:
-   var(--type-o2); }` / `-over { color: var(--type-at); }`, both AA-pass
-   against `--surface`: 6.65:1 / 5.54:1) belongs to Task 6's own pane CSS,
-   applied onto these hooks, not invented here ahead of that task existing.
-   `-stale` DOES get its real colour now (below), since the handoff pins it
-   independently of the teal/ochre pair and task-3 review HIGH-1 caught
-   this file shipping the wrong token for it. */
+   `TYPE_COLOR_VAR` pattern establishes for a value->token lookup). Neither
+   is `--accent`: on these panes the target is the neutral ink reference
+   and accent appears nowhere (DEVIATIONS row 0).
+
+   Measured against `--surface` (#fffdf7): `--type-o2` 6.65:1,
+   `--type-at` 5.54:1, `--ink-3` 7.44:1 (and 6.30:1 against
+   `--surface-sunken`, the fill a stale card moves to). All clear the
+   house's 4.5:1 floor. `-within` deliberately declares nothing: within
+   tolerance IS plain `--ink`, and a rule restating that would be one more
+   place for the neutral case to drift. */
 .timer-card-static {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -3321,6 +3323,14 @@ button:disabled {
    the same two backgrounds — both pass comfortably. Pinned structurally
    (not just by eye) in TimerTargets.test.tsx, which reads this exact rule
    out of this file's own source text. */
+.timer-card-actual-under {
+  color: var(--type-o2);
+}
+
+.timer-card-actual-over {
+  color: var(--type-at);
+}
+
 .timer-card-actual-stale {
   color: var(--ink-3);
 }
@@ -4613,4 +4623,921 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 .connected-detail-raw {
   color: var(--ink-3);
+}
+
+/* ---------------------------------------------------------------------
+   The connected surface (Phase 7B Task 6, handoff §§3-4: the three panes,
+   the labelled pager, and the mid-session states).
+
+   Two rules govern every colour below and are worth stating once:
+
+   1. TARGETS ARE INK (DEVIATIONS row 0, the phase's own supersession).
+      `--accent` appears NOWHERE in this block. On these panes accent's
+      only remaining job is pane C's active-interval countdown (Task 7);
+      a target sitting inches from a tinted actual has to be the neutral
+      reference, or the rower is reading three judgement colours.
+   2. THE ACTUAL CARRIES THE JUDGEMENT, and only on the value.
+      `.timer-card-actual-under/-over` (declared with the other
+      `timer-card-*` rules above, Task 3) resolve to `--type-o2` teal and
+      `--type-at` ochre — DEVIATIONS row 3's sanctioned second meaning for
+      two existing type tokens. Measured against `--surface` (#fffdf7):
+      teal 6.65:1, ochre 5.54:1; `--ink-3` (the stale/absent grey) 7.44:1
+      against `--surface` and 6.30:1 against `--surface-sunken`. All clear
+      the house's 4.5:1 floor.
+
+   Height: the same formula the interstitial uses, and for the same
+   reason — this surface renders from the `/library/:id` route, where the
+   fixed tab bar is still on screen and `.app-shell` still reserves
+   `var(--tap)` beneath it (DEVIATIONS carries that as a known deviation
+   for the whole connected flow, not something this task introduced). A
+   fixed `height` rather than a `min-height` so the body's own
+   `flex: 1; min-height: 0` actually engages and the pane, not the page,
+   is what runs out of room. */
+/* THE TAB BAR HAS NO BUSINESS ON A ROWING SURFACE, and reclaiming its
+   44px is what makes the landscape frame fit at all. `AppRoutes.tsx` hides
+   the bar by ROUTE PREFIX, and this surface has no route of its own — it
+   renders inside `/library/:id` on component state — which is exactly why
+   the task-5 review left the interstitial's own tab bar standing as a
+   documented deviation ("a bigger change than this fix round's scope").
+
+   `:has()` closes it with no plumbing at all: the shell hides its bar and
+   drops the padding it reserves for it whenever a connected surface is the
+   thing being rendered. Measured on the 844x390 landscape frame BEFORE this
+   rule: 320px of usable height, into which pane A's TOTAL LEFT, its quarter
+   ruler and its UP NEXT strip did not fit and were clipped away entirely by
+   `.connected-pane`'s own `overflow: hidden` — caught by this task's first
+   `pnpm screenshots` run, the identical class of defect (and the identical
+   frame) as task-5's 151px overflow. After: 364px, and every element the
+   handoff specifies is on screen.
+
+   `:has()` is Baseline-available in every engine this app ships to (iOS
+   Safari 15.4+, the Capacitor WKWebView, and Chromium 105+ for James's
+   laptop path). A browser without it degrades to the OLD behaviour — a
+   visible tab bar and a tighter frame — not to a broken one.
+
+   The interstitial (`.connected-interstitial`) could close its own
+   deviation with the same one-liner. Deliberately NOT done here: those are
+   another task's reviewed screenshots, and changing them is a reviewer's
+   call. Flagged in the task-6 report. */
+.app-shell:has(.connected-surface) {
+  padding-bottom: 0;
+}
+
+.app-shell:has(.connected-surface) .tabbar {
+  display: none;
+}
+
+.connected-surface {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
+      26px
+  );
+  /* Horizontal swipe is the primary navigation (handoff §3, 60px
+     threshold) — the browser must not claim the gesture for its own
+     back-navigation or overscroll first. Vertical panning stays with the
+     browser: nothing on panes A or B scrolls, but pane C's rows will. */
+  touch-action: pan-y;
+}
+
+.connected-surface-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* Panes A and B "are two fixed columns; nothing in them can grow"
+   (handoff §3) — `overflow: hidden` is the structural statement of that,
+   not a scrollbar suppressor. Pane C is the one sanctioned exception
+   (DEVIATIONS row 2) and brings its own contained scroll in Task 7. */
+.connected-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* The mockup's own portrait frames run edge to edge; top-packing left a
+     dead band above End on a real 844px phone (first screenshots run).
+     Distributing is the same answer `.timer-screen`'s landscape query
+     already reached for the same symptom. */
+  justify-content: space-between;
+  /* `clip` with a margin, not plain `hidden`: `TimerRuler`'s last tick
+     label is `transform: translateX(50%)` — centred on a mark that sits on
+     the pane's own right edge — so it legitimately hangs 8px outside the
+     box, and a hard clip ate the `′` off `42′` (visible in the first
+     screenshots run; the phone timer never noticed because `.timer-screen`
+     clips nothing). The `hidden` line stays first as the fallback for an
+     engine without `overflow: clip`, which loses the prime mark and nothing
+     else. Nothing else overflows: the layout probe measures every pane in
+     both orientations. */
+  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 12px;
+}
+
+/* ACCENT APPEARS NOWHERE ON THESE PANES (rule 1 at the top of this block).
+   The phone timer's own segment strip paints COMPLETED segments
+   `--accent`, and `IntervalSegments` is reused here verbatim, so the class
+   arrives with the component — these two rules are what keep it off the
+   surface. The three tones are the mockup's own bar: completed ink,
+   current mid, upcoming rule. */
+.connected-pane .timer-dot-past {
+  background: var(--ink);
+}
+
+.connected-pane .timer-dot-current {
+  background: var(--ink-4);
+}
+
+/* Same reason: `TimerRuler`'s own TOTAL LEFT bar fills `--accent` on the
+   phone timer, and the component is reused verbatim. On this surface the
+   progress fill is ink, like the interval bar above it. */
+.connected-pane .timer-total-bar span {
+  background: var(--ink);
+}
+
+/* The connection indicator (handoff §3): 8px filled square + the device's
+   real advertised name. Hollow square once the link is gone. */
+.connected-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connected-line-mark {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  background: var(--ink);
+}
+
+.connected-line-mark-hollow {
+  background: transparent;
+  border: 1px solid var(--ink);
+}
+
+.connected-line-device {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+.connected-line-trailing {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+.connected-phase-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.connected-phase-label {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+/* INK, not the phone timer's accent RUNNING — DEVIATIONS row 1. */
+.connected-status-word {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+.connected-interval-clock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The mockup's pane A shows a bare `0:41` with no label, because every
+   frame it draws is a TIME interval. A distance interval's countdown is a
+   raw meter count — `1200` under nothing at all — so the slot is labelled,
+   the same two words pane B's own second slot uses. Static per interval;
+   it never re-words mid-interval. */
+.connected-clock-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+.connected-clock-value {
+  font-family: var(--font-mono);
+  font-size: 96px;
+  font-weight: 500;
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+  color: var(--ink);
+}
+
+/* Handoff §4: paused "greys but holds its last value". Same grey the
+   stale treatment uses — both mean "this number is not being updated". */
+.connected-clock-value-held {
+  color: var(--ink-3);
+}
+
+.connected-interval-bar {
+  height: 6px;
+  background: var(--rule-2);
+  display: block;
+}
+
+.connected-interval-bar span {
+  height: 6px;
+  background: var(--ink);
+  display: block;
+}
+
+/* Pane A's two card rows and pane B's three-card row. Its own class, NOT
+   `.timer-cards`: that class carries explicit `grid-column`/`grid-row`
+   placement in the phone timer's landscape query (which is not scoped to
+   `.timer-screen`), so reusing it here would drop these rows into the
+   phone timer's grid slots. The card CHILDREN are still `.timer-card`, so
+   the two surfaces share one card language. */
+.connected-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.connected-cards-triple {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Pane B's three equal cards carry the handoff's 40px value (pane A keeps
+   the phone timer's 30px). Tighter padding so three cards still fit the
+   390px frame without the numeral wrapping. */
+.connected-cards-triple .timer-card {
+  padding: 11px;
+}
+
+.connected-cards-triple .timer-card-value {
+  font-size: 40px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+/* Handoff §4: a stale card "moves to the sunken fill". */
+.connected-card-stale {
+  background: var(--surface-sunken);
+}
+
+/* The app's established "nothing here yet" idiom (handoff §4's no-HR
+   treatment). The card never leaves its slot; only the border and the
+   value change, and they change back with no announcement the moment a
+   reading appears. */
+.connected-card-absent {
+  border-style: dashed;
+  border-color: var(--rule-3);
+}
+
+/* "There is nothing to report right now", as distinct from "nothing is
+   connected" above: the sunken fill the handoff's own paused frame draws
+   the NOW card with, and no dashes in the border. */
+.connected-card-idle {
+  background: var(--surface-sunken);
+}
+
+.connected-value-absent {
+  color: var(--ink-3);
+}
+
+/* --- Pane B ------------------------------------------------------- */
+
+.connected-hero {
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid var(--ink);
+  padding-top: 10px;
+}
+
+.connected-hero-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+/* NO `color` DECLARATION, deliberately. The hero is a judged actual and
+   wears `timer-card-actual-{judgement}` alongside this class; those rules
+   are declared EARLIER in this file, so a `color: var(--ink)` here would
+   win on source order and silently paint every verdict plain ink. Caught by
+   the first screenshots run: pane A's NOW card was correctly ochre while
+   pane B's hero, judged identically by the same helper, was not. Ink is the
+   inherited default, so the within case is unaffected. */
+.connected-hero-value {
+  font-family: var(--font-mono);
+  font-size: 96px;
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.05em;
+}
+
+/* "The eye should land on the seconds, not the decimal" (handoff §3). */
+.connected-hero-tenths {
+  font-size: 52px;
+}
+
+.connected-hero-target {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.connected-hero-target-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+/* Ink. The handoff's own pane-B line says "accent value"; superseded by
+   its own §3 ruling that the target is ink in connected mode, and by the
+   phase spec (DEVIATIONS row 0). */
+.connected-hero-target-value {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.connected-hero-target-ref {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.connected-second {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+}
+
+.connected-second-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+.connected-second-value {
+  font-family: var(--font-mono);
+  font-size: 72px;
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+}
+
+.connected-strip {
+  display: flex;
+  border-top: 1px solid var(--ink);
+  padding-top: 12px;
+}
+
+.connected-strip-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.connected-strip-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.connected-strip-value {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--ink);
+}
+
+/* --- Pane C's slot (Task 7 fills it) ------------------------------- */
+
+.connected-pane-grid-placeholder {
+  justify-content: center;
+  gap: 8px;
+}
+
+/* --- The lost-link banner (handoff §4, spec C5's lose-and-degrade) --- */
+
+.connected-lost {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: none;
+  background: var(--surface-sunken);
+  border-top: 2px solid var(--ink);
+  padding: 12px;
+}
+
+.connected-lost-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.connected-lost-body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+/* The banner takes a block out of a frame that had none spare, so the two
+   biggest numerals step down while it is up. A stale reading is the one
+   that least needs to be legible from the doorway — it is not current, and
+   it is already greyed. Measured: without this, pane B ran 22px past the
+   bottom of a 390x844 frame. */
+.connected-surface:has(.connected-lost) .connected-hero-value {
+  font-size: 76px;
+}
+
+.connected-surface:has(.connected-lost) .connected-hero-tenths {
+  font-size: 42px;
+}
+
+.connected-surface:has(.connected-lost) .connected-second-value,
+.connected-surface:has(.connected-lost) .connected-clock-value {
+  font-size: 60px;
+}
+
+/* The ended hand-off frame is not a pane and has no pager: it keeps the
+   plain centred column in BOTH orientations. Without this it inherited the
+   landscape pane grid's second 56px track and its 36px serif line
+   overflowed the frame horizontally (measured: 861px of content in an
+   844px viewport). */
+.connected-surface-ended {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* --- The footer: End, or the paused block in End's exact place ------ */
+
+/* The 52px lives HERE, on the slot, not on either occupant — which is
+   what makes handoff §4's "Same height, so nothing above shifts"
+   structural rather than two numbers maintained by hand. */
+.connected-surface-footer {
+  flex: none;
+  height: 52px;
+  display: flex;
+}
+
+.connected-end {
+  min-height: 52px;
+  height: 52px;
+}
+
+/* Armed reads as INK, never accent: accent appears nowhere on this
+   surface (rule 1 at the top of this block), and L3 already establishes
+   solid ink as the "this press acts" fill that cannot be mistaken for a
+   screen's L1. */
+.connected-end-armed {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
+}
+
+.connected-end-armed:hover {
+  background: var(--ink-2);
+  border-color: var(--ink-2);
+}
+
+.connected-paused {
+  flex: 1;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius);
+  padding: 0 12px;
+}
+
+.connected-paused-label {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+/* 64×44, accent-OUTLINED (handoff §4) — the L4 destructive vocabulary at
+   the one size this slot allows. The single place accent survives on
+   panes A and B, and it is a border, not a value. */
+.connected-paused-end {
+  width: 64px;
+  height: 44px;
+  min-height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.connected-paused-end-armed {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-color);
+}
+
+/* --- The labelled pager (handoff §3, DEVIATIONS row 4) -------------- */
+
+/* Portrait: a 56px band at the bottom, three equal thirds (130×56 each on
+   a 390px frame — `flex: 1` is what makes that exact at 390 and still
+   correct on any other width), 9px square + mono 10px label. */
+.connected-pager {
+  flex: none;
+  display: flex;
+  height: 56px;
+  border-top: 1px solid var(--rule);
+}
+
+.connected-pager-target {
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.connected-pager-mark {
+  width: 9px;
+  height: 9px;
+  display: block;
+  background: var(--rule-3);
+}
+
+.connected-pager-target-active .connected-pager-mark {
+  background: var(--ink);
+}
+
+.connected-pager-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.connected-pager-target-active .connected-pager-label {
+  color: var(--ink);
+}
+
+/* Both label sets ship in every orientation (PagerRail.tsx's header says
+   why); the media queries below choose which one is drawn. Portrait gets
+   the long form. */
+.connected-pager-label-short {
+  display: none;
+}
+
+/* --- The two columns ------------------------------------------------ */
+
+/* PORTRAIT: the wrappers disappear. `display: contents` promotes their
+   children to direct flex items of `.connected-pane`, and `order` puts them
+   back into the handoff's portrait sequence — so one markup serves both
+   orientations and nothing re-mounts on rotation. LANDSCAPE (below) turns
+   the same wrappers into two INDEPENDENT flex columns, which is what a
+   shared CSS grid could not do: pane A's 128px numeral was forcing the row
+   pane B's card rows lived in, and the first screenshots run at 844x390
+   showed TOTAL LEFT, the quarter ruler and UP NEXT clipped away entirely. */
+.connected-col {
+  display: contents;
+}
+
+@media (orientation: portrait) {
+  .connected-pane-timer .connected-line {
+    order: 1;
+  }
+
+  .connected-pane-timer .timer-dots {
+    order: 2;
+  }
+
+  .connected-pane-timer .connected-phase-line {
+    order: 3;
+  }
+
+  .connected-pane-timer .connected-interval-clock {
+    order: 4;
+  }
+
+  .connected-pane-timer .connected-cards-primary {
+    order: 5;
+  }
+
+  .connected-pane-timer .connected-cards-secondary {
+    order: 6;
+  }
+
+  .connected-pane-timer .timer-upnext {
+    order: 7;
+  }
+
+  .connected-pane-timer .timer-total {
+    order: 8;
+  }
+
+  .connected-pane-live .connected-line {
+    order: 1;
+  }
+
+  .connected-pane-live .timer-dots {
+    order: 2;
+  }
+
+  .connected-pane-live .connected-hero {
+    order: 3;
+  }
+
+  .connected-pane-live .connected-second {
+    order: 4;
+  }
+
+  .connected-pane-live .connected-cards-triple {
+    order: 5;
+  }
+
+  .connected-pane-live .timer-upnext {
+    order: 6;
+  }
+
+  .connected-pane-live .connected-strip {
+    order: 7;
+  }
+
+  .connected-pane-live .timer-total {
+    order: 8;
+  }
+}
+
+/* --- Landscape ------------------------------------------------------ */
+
+@media (orientation: landscape) {
+  /* The pager becomes a 56px rail on the RIGHT edge (handoff §3: "mount
+     cradles crop bottom-centre"). The rest of the surface keeps its
+     column. */
+  .connected-surface {
+    display: grid;
+    grid-template-columns: 1fr 56px;
+    grid-template-rows: auto 1fr auto;
+    column-gap: 12px;
+    row-gap: 8px;
+    /* Same override, same reason, as `.timer-screen`'s own landscape rule:
+       the global 480px cap is sized for a portrait column and would leave
+       each of two columns under 220px on the 844px reference frame. */
+    max-width: 800px;
+  }
+
+  /* One line in landscape: 390px of height cannot spare the two-line
+     block, and the banner's whole job is to be noticed, not to be tall. */
+  .connected-lost {
+    grid-column: 1;
+    grid-row: 1;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
+    padding: 6px 12px;
+  }
+
+  .connected-surface.connected-surface-ended {
+    display: flex;
+    max-width: 480px;
+  }
+
+  /* The last 6px, measured: with the banner up, pane B's readout column ran
+     244px into a 238px slot. Tighter cards rather than a smaller number —
+     these three are already at the size the handoff asks for. */
+  .connected-surface:has(.connected-lost) .connected-cards-triple .timer-card {
+    padding: 6px 8px;
+  }
+
+  .connected-surface-body {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+  }
+
+  .connected-surface-footer {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .connected-pager {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    height: auto;
+    width: 56px;
+    border-top: none;
+    border-left: 1px solid var(--rule);
+  }
+
+  /* 56x56 targets (handoff §3), abbreviated labels. */
+  .connected-pager-target {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    gap: 4px;
+  }
+
+  .connected-pager-label-long {
+    display: none;
+  }
+
+  .connected-pager-label-short {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  /* Two columns, each sizing itself. */
+  .connected-pane {
+    flex-direction: row;
+    gap: 16px;
+    justify-content: flex-start;
+  }
+
+  /* THE PHONE TIMER'S LANDSCAPE QUERY IS NOT SCOPED TO ITS OWN SCREEN.
+     `.timer-dots`, `.timer-upnext` and `.timer-total` each get an explicit
+     `grid-column`/`grid-row` there — and `.timer-dots` gets
+     `align-self: center` — so the three components the connected panes
+     reuse verbatim arrive carrying the phone timer's grid placement into a
+     layout that is not a grid. `align-self: center` was the visible one:
+     the segment strip collapsed from the column's full 330px to 18px of
+     content width (measured by this task's layout probe at 844x390, after
+     it survived a whole screenshots round looking merely "thin"). Reset all
+     four properties, at higher specificity so this wins wherever both
+     apply. */
+  .connected-pane .timer-dots,
+  .connected-pane .timer-upnext,
+  .connected-pane .timer-total {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: stretch;
+  }
+
+  .connected-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .connected-col-clock,
+  .connected-col-hero {
+    flex: 1;
+  }
+
+  /* "The right column is a full-height stack: header and segment bar
+     pinned top, UP NEXT pinned bottom, and the two card rows share the
+     space between them" (handoff §3). */
+  .connected-col-cards,
+  .connected-col-readouts {
+    flex: 1.05;
+    justify-content: space-between;
+  }
+
+  .connected-col-cards .connected-cards {
+    flex: 1;
+  }
+
+  .connected-col-cards .timer-card {
+    justify-content: center;
+    padding: 8px 10px;
+  }
+
+  /* 844x390 is 454px shorter than the portrait frame and every element the
+     handoff names has to fit without scrolling (panes A and B "cannot
+     grow"). These are the measured trims that make that true — see the
+     task-6 report's landscape measurement table. */
+  .connected-pane .timer-upnext {
+    padding: 9px 12px;
+  }
+
+  /* Pane A's numeral takes the same landscape step the phone timer's own
+     does. It fits because this column no longer shares a row height with
+     the cards beside it. */
+  /* 112px, not the phone timer's landscape 128px: this column is 330px
+     wide on the 844px frame and a five-character readout (`12:00`, or a
+     five-digit meters countdown) measures 336px at 128px of Plex Mono.
+     Measured, not eyeballed — see the task-6 report. */
+  .connected-pane-timer .connected-clock-value {
+    font-size: 112px;
+    line-height: 0.86;
+  }
+
+  .connected-pane-timer .connected-interval-clock {
+    justify-content: center;
+    flex: 1;
+  }
+
+  .connected-col-cards .timer-card-value {
+    font-size: 34px;
+    line-height: 1;
+  }
+
+  /* Handoff §3 asks for 150px/72px here. 128px/62px is what fits once the
+     session-context block the same section makes mandatory — "the same
+     total-left bar and quarter-ruler as pane A ... on every pane" — is in
+     this column too; at 150px the ruler was pushed 31px off the bottom of
+     the frame. The handoff states the REASON for the size as a measurement,
+     not the size itself ("the hero digit height is ~74px in landscape,
+     roughly 2.4x ErgZone's pace numeral in the same frame"), and 128px
+     clears it: a Plex Mono digit at 128px caps around 92px. Recorded in the
+     task-6 report. */
+  .connected-pane-live .connected-hero-value {
+    font-size: 116px;
+    line-height: 0.86;
+    letter-spacing: -0.06em;
+  }
+
+  .connected-pane-live .connected-hero-tenths {
+    font-size: 56px;
+  }
+
+  .connected-pane-live .connected-hero {
+    padding-top: 6px;
+  }
+
+  /* When the lost-link banner is on screen it takes a row of its own out of
+     an already tight frame, so the hero steps down again rather than
+     pushing the ruler off the bottom. A stale number is the one that least
+     needs to be legible from the doorway — it is not current. */
+  .connected-surface:has(.connected-lost)
+    .connected-pane-live
+    .connected-hero-value {
+    font-size: 88px;
+  }
+
+  .connected-surface:has(.connected-lost)
+    .connected-pane-live
+    .connected-hero-tenths {
+    font-size: 44px;
+  }
+
+  .connected-surface:has(.connected-lost)
+    .connected-pane-timer
+    .connected-clock-value {
+    font-size: 88px;
+  }
+
+  .connected-pane-live .connected-second-value {
+    font-size: 56px;
+  }
+
+  /* The ELAPSED strip is portrait-only. It is the least load-bearing thing
+     on the pane (the machine's elapsed clock, which the erg itself shows a
+     metre away), and dropping it in landscape is what keeps UP NEXT and the
+     three cards on screen at 390px of height. */
+  .connected-pane-live .connected-strip {
+    display: none;
+  }
+
+  /* Three equal cards at 44px in landscape (handoff §3's "40px / 44px"). */
+  .connected-pane-live .connected-cards-triple .timer-card-value {
+    font-size: 44px;
+  }
 }

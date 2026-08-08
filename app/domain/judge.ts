@@ -1,7 +1,10 @@
 /** Actual-vs-target judgement for the connected panes' live comparison
- *  (Phase 7B Task 3: presentational extraction + this one domain helper —
- *  Tasks 6/7 are the actual consumers, wiring a real PM5 `MonitorFrame`
- *  through this function; nothing in `src/` calls it yet).
+ *  (Phase 7B Task 3: presentational extraction + this one domain helper).
+ *  ONE caller in `src/`, deliberately and permanently:
+ *  `src/workout/connected/surfaceModel.ts`'s `judgedValue`, which every
+ *  judged cell on every pane is built by (handoff §3: "One helper decides
+ *  the colour; no pane implements its own judgement"). A second caller
+ *  appearing in `src/` is the drift this arrangement exists to prevent.
  *
  *  This is NOT `toleranceRange()` come back. That function — along with its
  *  whole client-side reading chain (`domain/expand.ts`'s `phases()` own
@@ -33,7 +36,7 @@ export type Judgement = "under" | "within" | "over" | "stale";
  *  judge yet. `"hr"`/`"meters"` are in the `kind` union below because
  *  `domain/monitor/types.ts`'s `MonitorFrame` already carries
  *  `heartRateBpm`/`distanceMeters` alongside `spm`/`currentSplit` — the
- *  same seam Tasks 6/7 will read all four off of — but no tolerance
+ *  same seam the connected panes read all four off of — but no tolerance
  *  constant for either is pinned by this task's brief (only
  *  `PACE_TOLERANCE_SECONDS`/`SPM_TOLERANCE` are "the constants"). Task-3
  *  review, Adjudication 1: this is the only honest answer today, not a
@@ -80,8 +83,32 @@ function toleranceFor(kind: "pace" | "spm" | "hr" | "meters"): number | null {
  *  4. Otherwise, `|actual - target| <= tolerance` is `"within"` (the
  *     boundary itself is not a deviation, the same "boundary itself is not
  *     suspect" convention `src/session/Timer.tsx`'s own `isSuspectActual`
- *     uses); past it, `"under"` if `actual` is below `target`, `"over"` if
- *     above. */
+ *     uses); past it, `"under"` or `"over"` — see the direction rule below,
+ *     which is NOT the same for both judged kinds.
+ *
+ *  **`"under"`/`"over"` MEAN UNDER/OVER THE EFFORT ASKED FOR, not below/
+ *  above the number** (7B Task 6, correcting Task 3's original purely
+ *  numeric rule). The connected-mode handoff's own table is explicit, and
+ *  its mockup demonstrates it: `1:57.8` against a `TARGET 2:00.0` is drawn
+ *  in OCHRE, the `"over"` colour.
+ *
+ *  | State | Handoff's own words |
+ *  |---|---|
+ *  | `"under"` | "Under the target (split SLOWER than asked, rate below)" |
+ *  | `"over"`  | "Over the target (split FASTER than asked, rate above)"  |
+ *
+ *  For `"spm"` that is the plain numeric reading: a higher rate is more
+ *  effort. For `"pace"` it is the INVERSE, because a split is
+ *  seconds-per-500m — a SMALLER number is a faster boat. Judging pace
+ *  numerically painted every rower who was beating their target in the
+ *  "you are behind" colour, and every rower falling behind in the "you are
+ *  ahead" one; caught by the first `pnpm screenshots` run of the connected
+ *  panes, which is the only place the two colours had ever been rendered
+ *  against a real target.
+ *
+ *  This lives HERE, in the one helper, rather than in the pane that
+ *  noticed — the whole point of `judgeActual` is that no consumer forms its
+ *  own opinion about a direction. */
 export function judgeActual(args: {
   kind: "pace" | "spm" | "hr" | "meters";
   actual: number | null;
@@ -95,5 +122,7 @@ export function judgeActual(args: {
   if (tolerance === null) return "within";
   const diff = actual - target;
   if (Math.abs(diff) <= tolerance) return "within";
-  return diff < 0 ? "under" : "over";
+  // A smaller split is MORE effort; a smaller rate is LESS.
+  const harderThanAsked = kind === "pace" ? diff < 0 : diff > 0;
+  return harderThanAsked ? "over" : "under";
 }
