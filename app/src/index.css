@@ -5435,13 +5435,18 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-color: var(--ink-2);
 }
 
+/* INVERTED, deliberately (2026-08-08, hardware walk 2: the operator missed
+   the sunken-grey version entirely). Ink field, paper text: the loudest
+   signal the surface's own vocabulary allows without touching accent, and
+   the geometry is unchanged — same 52px, same slot, nothing above
+   shifts. */
 .connected-paused {
   flex: 1;
   height: 52px;
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--surface-sunken);
+  background: var(--ink);
   border-radius: var(--radius);
   padding: 0 12px;
 }
@@ -5449,10 +5454,10 @@ section:not(.news-pinned) .news-row:last-of-type {
 .connected-paused-label {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.14em;
-  color: var(--ink);
+  color: var(--surface);
 }
 
 /* 64×44, accent-OUTLINED (handoff §4) — the L4 destructive vocabulary at
