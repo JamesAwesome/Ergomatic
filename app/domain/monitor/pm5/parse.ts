@@ -408,10 +408,20 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
 
 /**
  * `RawPm5Status` -> `IntervalActual`, sourced from the 0x0037/0x0038 pair's
- * per-interval fields (not the cumulative session totals also present in
- * `RawPm5Status`): `elapsedSeconds`/`distanceMeters` are THIS interval's own
- * duration/distance (`Split/Interval Time`/`Split/Interval Distance`), not
- * the session-cumulative `Elapsed Time`/`Distance` fields. `avgHeartRateBpm`
+ * own `Split/Interval Time`/`Split/Interval Distance` fields, never from
+ * 0x0031's `Elapsed Time`/`Distance` (the pair that becomes
+ * `MonitorFrame.elapsedSeconds`/`distanceMeters`). The two are DIFFERENT
+ * characteristics reporting the same interval, and this function reads the
+ * completed-split pair on purpose — 0x0031 is a live running reading and
+ * carries no per-split average at all.
+ *
+ * Note on 0x0031, since this is the comment a reader auditing
+ * `useMonitorSession`'s `distanceMeters > 0` boundary guard tends to land
+ * on: 0x0031's Distance is NOT session-cumulative across intervals. An
+ * earlier draft of this comment said it was; the record disproves it. At
+ * the no-rest boundary in `docs/monitor/sessions/pm5-session3-final.log`
+ * lines 2835-2837, `distanceMeters` goes `74.4 -> 0` and counts up again,
+ * exactly as the guard assumes. `avgHeartRateBpm`
  * reads the WORK heartrate, not the rest heartrate — `ProgramInterval`
  * bundles an interval's trailing rest into itself the same way this
  * characteristic pairs a work value with a sibling rest value, and
