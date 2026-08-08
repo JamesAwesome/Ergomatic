@@ -8,6 +8,7 @@ import {
 import type { IntervalActual } from "../../domain/monitor/types.js";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
+import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, RUN_KEY, type SessionRun } from "../session/run";
 import {
   saveMonitorRun,
@@ -30,6 +31,17 @@ import {
 // hand-built minimum WorkoutProgram.
 const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 const t0 = new Date("2026-08-05T12:00:00.000Z");
+
+// 7C Task 1: `createMonitorRun`'s `logSeed` arg is REQUIRED (this file's own
+// `createMonitorRun` describe block explains why, mirroring `RunIdentity`'s
+// identical requirement in `useMonitorSession.ts`). This suite's own tests
+// are about the RECORD's mechanics (cross-clear, versioning, actual
+// accumulation), not about seed CONTENT, so one placeholder constant fills
+// every call site rather than a bespoke seed per test.
+const TEST_SEED: LogSeed = {
+  steps: [{ label: "8:00 warm-up", kind: "warmup" }],
+  paces: {},
+};
 
 function fillingLowProgram(): WorkoutProgram {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
@@ -128,11 +140,16 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
   });
 
+  // 7C Task 1: this test used `v: 2` as its "unknown version" fixture before
+  // this task made `v: 2` a real, loadable version (the `logSeed` bump) —
+  // `v: 3` now plays that role instead, so the test still proves what its
+  // name says rather than accidentally asserting the opposite of the new
+  // behavior.
   it("returns null and clears the key for an unknown version, leaving a SessionRun (a separate key) untouched", () => {
     const run = freshMonitorRun();
     const sessionRun = fakeSessionRun(null);
     saveRun(sessionRun);
-    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, v: 2 }));
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, v: 3 }));
 
     expect(loadMonitorRun()).toBeNull();
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
@@ -169,6 +186,79 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
       MONITOR_RUN_KEY,
       JSON.stringify({ ...run, workoutId: 5 }),
     );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+
+  // 7C Task 1 (spec §2: "a v1 record loads as today"). A hand-built v1 JSON
+  // string, not `freshMonitorRun()` run through `JSON.stringify` — the
+  // point is proving a record written by CODE THAT PREDATES `logSeed`
+  // (never having `v: 2` in scope, never having the key at all, not just
+  // "the field happens to be absent from an object built by today's code")
+  // still loads clean.
+  it("loads a v1 record with no logSeed field at all — no throw, no migration, simply no seed", () => {
+    const v1Json = JSON.stringify({
+      v: 1,
+      workoutId: "fl-workout-id",
+      title: "Filling Low",
+      program: {
+        intervals: [
+          {
+            kind: "time",
+            value: 480,
+            targetSplit: null,
+            displaySpm: null,
+            restSeconds: 0,
+          },
+        ],
+      },
+      actuals: [],
+      deviceName: "PM5 12345",
+      startedAt: t0.toISOString(),
+      completedAt: null,
+      terminated: false,
+    });
+    localStorage.setItem(MONITOR_RUN_KEY, v1Json);
+
+    const loaded = loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.v).toBe(1);
+    expect(loaded!.logSeed).toBeUndefined();
+    expect(loaded).toStrictEqual(JSON.parse(v1Json));
+  });
+
+  it("round-trips a v2 record carrying a logSeed byte-identical", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), v: 2, logSeed: TEST_SEED };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.logSeed).toStrictEqual(TEST_SEED);
+  });
+
+  it("returns null for v:2 with logSeed as the wrong shape (a string, not an object)", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, v: 2, logSeed: "nope" }),
+    );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+
+  it("returns null for v:2 with logSeed.steps as the wrong shape (an object, not an array)", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, v: 2, logSeed: { steps: {}, paces: {} } }),
+    );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+
+  it("returns null for an unrecognized v (3) — same discard as any other unknown version", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify({ ...run, v: 3 }));
     expect(loadMonitorRun()).toBeNull();
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
   });
@@ -286,7 +376,7 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
 describe("createMonitorRun", () => {
   beforeEach(() => localStorage.clear());
 
-  it("builds a fresh, persisted MonitorRun stamped from its arguments and `now`", () => {
+  it("builds a fresh, persisted MonitorRun stamped from its arguments and `now`, and always v: 2 (7C spec §2)", () => {
     const program = fillingLowProgram();
     const created = createMonitorRun(
       {
@@ -294,14 +384,16 @@ describe("createMonitorRun", () => {
         title: "Filling Low",
         program,
         deviceName: "PM5 98765",
+        logSeed: TEST_SEED,
       },
       t0,
     );
     expect(created).toStrictEqual({
-      v: 1,
+      v: 2,
       workoutId: "fl-workout-id",
       title: "Filling Low",
       program,
+      logSeed: TEST_SEED,
       actuals: [],
       deviceName: "PM5 98765",
       startedAt: t0.toISOString(),
@@ -321,6 +413,7 @@ describe("createMonitorRun", () => {
         title: "Filling Low",
         program: fillingLowProgram(),
         deviceName: "PM5",
+        logSeed: TEST_SEED,
       },
       t0,
     );
@@ -338,6 +431,7 @@ describe("createMonitorRun", () => {
         title: "Filling Low",
         program: fillingLowProgram(),
         deviceName: "PM5",
+        logSeed: TEST_SEED,
       },
       t0,
     );
@@ -354,6 +448,7 @@ describe("createMonitorRun", () => {
           title: "Filling Low",
           program: fillingLowProgram(),
           deviceName: "PM5",
+          logSeed: TEST_SEED,
         },
         t0,
       ),

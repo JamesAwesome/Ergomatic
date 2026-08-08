@@ -6,7 +6,7 @@ import {
   refLabel,
   resolveSplit,
 } from "../../domain/pace.js";
-import type { Baselines, PaceRef, Step } from "../../domain/types.js";
+import type { Baselines, PaceRef, SplitRef, Step } from "../../domain/types.js";
 import type { EnginePhase } from "./engine";
 import type { SessionDraft } from "./draft";
 import type { SessionRun } from "./run";
@@ -413,6 +413,131 @@ export function buildManualLogSteps(
     out.push(logStep);
   }
   return out;
+}
+
+/** `MonitorRun`'s frozen log identity, captured once at Connect (7C spec
+ *  §2, the adversarial review's B1): `buildMonitorLogSteps` (a later task)
+ *  cannot derive a label or warmup-ness from `MonitorRun` alone —
+ *  `ProgramInterval` (`domain/monitor/program.ts`) carries no label and no
+ *  warmup/work discriminant, and the connect path persists no
+ *  `SessionDraft` for it to recover either from (7B's Connect flow compiles
+ *  straight from the library workout, never through a confirm screen that
+ *  would leave one behind). So the run learns the one small thing the log
+ *  needs, at the moment it still has it. `steps` is built from the SAME
+ *  `EnginePhase[]` the `WorkoutProgram` was compiled from (`WorkoutDetail.
+ *  tsx`'s `handleConnectProceed`, the seed's one call site), walked in the
+ *  same order `compileProgram` walks to build `ProgramInterval[]` — both
+ *  skip exactly the "rest" phases (`compileProgram` folds each into the
+ *  PRECEDING interval's `restSeconds` rather than emitting an interval of
+ *  its own), so `seed.steps[i]` and `program.intervals[i]` name the SAME
+ *  interval for every `i` — a later task's whole alignment contract. */
+export interface LogSeed {
+  steps: { label: string; kind: "warmup" | "work" }[];
+  /** The PACES LOCKED panel's values (README.md §7's "PACES LOCKED AT 2K
+   *  1:52.0 · 6K 2:02.0"), captured HERE because the monitor door has no
+   *  draft to recover them from later the way `LogSession.tsx`'s own
+   *  `lockedBaseline` does for a phone-timer session. Same "F1" rule as
+   *  that file's `manualLockedBaseline`: a base no step in this workout
+   *  references at all is omitted, never fabricated from a baseline this
+   *  workout never used. */
+  paces: { k2?: number; k6?: number };
+}
+
+/** Builds a `MonitorRun`'s `logSeed`. Every non-rest phase produces exactly
+ *  one seed step, in phase order (`kind: "warmup"` only for a `"warmup"`
+ *  phase; every other non-rest phase — "work" and, defensively, "test" —
+ *  seeds `"work"`).
+ *
+ *  Labels reuse this module's OWN `durationText`/`refPaceLabel` helpers —
+ *  the SAME ones `buildManualLogSteps` composes its labels from — so a work
+ *  step's seed label is byte-identical to what the manual door would have
+ *  shown for the same authored step (this task's load-bearing requirement:
+ *  a later task's builder renders these labels straight through, and a
+ *  drifted label would break that alignment silently). There is no
+ *  `SessionDraft` on the connect path (unlike the phone-timer door), so
+ *  this always takes the FALLBACK shape `buildLogSteps` uses when its own
+ *  draft lookup misses: an effort phase's chip recovers through
+ *  `effortFromWord`, a split phase's chip composes straight from
+ *  `phase.ref`. `phase.ref` is already the EFFECTIVE, nudge-folded ref
+ *  (`engine.ts`'s `buildRun` resolves every phase from the draft's
+ *  `effectiveSteps`, which folds a preview nudge into `ref.off` before
+ *  `domain/expand.ts`'s `phases()` ever runs) — so there is no separate
+ *  nudge fold to apply here the way `buildLogSteps`'s preferred (draft
+ *  lookup) branch needs one.
+ *
+ *  A warmup phase gets a seed step too, even though `buildManualLogSteps`
+ *  has no warmup case of its own to match (the manual door has never
+ *  logged a warmup row) — the seed still needs one entry per non-rest phase
+ *  so it stays the same length as `program.intervals` (this task's own
+ *  alignment contract). Its label is never rendered by the log screen's
+ *  step list (a later task's builder skips warmup intervals entirely,
+ *  matching the manual door); it only has to be a real string.
+ *
+ *  A "test" phase (open-ended, no fixed time/distance) cannot actually
+ *  reach this function in production — `compileProgram` refuses to compile
+ *  one at all (`unrepresentable-value`), and `WorkoutDetail.tsx`'s
+ *  `handleConnectProceed` bails out on a `CompileError` before ever calling
+ *  this — but is handled defensively (the phase's own frozen label
+ *  verbatim, no duration prefix — nothing to format, since a test phase has
+ *  neither `seconds` nor `meters`) rather than left to throw if that
+ *  compiler rule is ever loosened.
+ *
+ *  `paces`: walks every split-ref work phase's `phase.ref.base` (an effort
+ *  phase has no `ref` at all — the 5G rule, `domain/expand.ts`'s "case w")
+ *  and records CURRENT `baselines` under whichever base(s) were actually
+ *  referenced — the same F1 rule `manualLockedBaseline` (`LogSession.tsx`)
+ *  already established for the manual door. */
+export function buildLogSeed(
+  phases: EnginePhase[],
+  baselines: Baselines,
+): LogSeed {
+  const steps: LogSeed["steps"] = [];
+  const paces: LogSeed["paces"] = {};
+  for (const phase of phases) {
+    if (phase.type === "rest") continue;
+    if (phase.type === "warmup") {
+      steps.push({ label: `${durationText(phase)} warm-up`, kind: "warmup" });
+      continue;
+    }
+    if (phase.type === "test") {
+      // Defensive only — see this function's own doc comment: `phase` has
+      // no `seconds`/`meters` to run through `durationText`, and there is
+      // no real caller today that can reach this branch at all.
+      steps.push({ label: phase.label, kind: "work" });
+      continue;
+    }
+    const isEffort = phase.targetKind === "effort";
+    let label: string;
+    if (isEffort) {
+      label = refPaceLabel(durationText(phase), {
+        effort: effortFromWord(phase.label as "ALL OUT" | "EASY"),
+      });
+    } else if (phase.ref !== undefined) {
+      label = refPaceLabel(durationText(phase), phase.ref);
+      // `phase.ref` is always a SplitRef here, never an EffortRef: an
+      // "effort" targetKind phase never sets `ref` at all
+      // (`domain/expand.ts`'s "case w" only sets it in the split branch),
+      // and the `isEffort` branch above already handled the effort case.
+      // The cast documents that construction guarantee rather than
+      // re-checking it at runtime — this file's own `!` convention
+      // (`durationText`'s header comment) for a fact the domain layer
+      // enforces upstream, not a possibility this function needs to guard.
+      const splitRef = phase.ref as SplitRef;
+      if (splitRef.base === "2k") {
+        paces.k2 = baselines.k2Seconds;
+      } else {
+        paces.k6 = baselines.k6Seconds;
+      }
+    } else {
+      // LEGACY-shaped defensive fallback, matching `buildLogSteps`' own
+      // last resort: no ref to reconstruct a chip from at all. Shouldn't
+      // happen for a phase built through `buildRun` (a "split" targetKind
+      // phase always carries `ref` — `domain/expand.ts`'s "case w").
+      label = `${durationText(phase)} @ ${phase.label}`;
+    }
+    steps.push({ label, kind: "work" });
+  }
+  return { steps, paces };
 }
 
 // Mirrors Today.tsx's own (private, unexported) `formatLogDate` byte for

@@ -22,6 +22,7 @@ import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
+import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
 import { loadMonitorRun } from "./monitorRun";
@@ -49,6 +50,15 @@ const baselines: Baselines = { k2Seconds: 100, k6Seconds: 120 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE_NAME = "PM5 432331249";
 
+// 7C Task 1: `RunIdentity.logSeed` is REQUIRED now (this file's own
+// `RunIdentity` doc comment explains why — the same silent-failure
+// reasoning as `identity` itself). This suite's subject is the hook's state
+// machine, not seed content, so one placeholder object fills every identity
+// fixture below via a spread, rather than a bespoke seed per test.
+const TEST_SEED: { logSeed: LogSeed } = {
+  logSeed: { steps: [], paces: {} },
+};
+
 /** The realistic fixture the repo convention requires (a real seeded
  *  library workout through the real assembly — `buildDraft` -> `buildRun`
  *  -> `compileProgram`), not a hand-built minimum. "Filling Low" compiles
@@ -75,6 +85,7 @@ const LIBRARY = fillingLow();
 const LIBRARY_IDENTITY: RunIdentity = {
   workoutId: LIBRARY.id,
   title: LIBRARY.title,
+  ...TEST_SEED,
 };
 
 /** A two-interval program for the tests whose subject is the hook's own
@@ -99,7 +110,11 @@ const TWO_INTERVALS: WorkoutProgram = {
   ],
 };
 
-const TWO_IDENTITY: RunIdentity = { workoutId: "two", title: "Two Intervals" };
+const TWO_IDENTITY: RunIdentity = {
+  workoutId: "two",
+  title: "Two Intervals",
+  ...TEST_SEED,
+};
 
 function status(
   atMs: number,
@@ -887,6 +902,11 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
       terminated: false,
     });
     expect(opened?.program.intervals).toHaveLength(4);
+    // 7C Task 1: `identity.logSeed` (the caller's `RunIdentity`) is threaded
+    // straight through onto the record `createMonitorRun` writes — not
+    // dropped, not re-derived from the program.
+    expect(opened?.v).toBe(2);
+    expect(opened?.logSeed).toStrictEqual(LIBRARY_IDENTITY.logSeed);
 
     for (let i = 0; i < 8; i += 1) tick(fake, 100);
 
@@ -1592,7 +1612,7 @@ describe("useMonitorSession: the seams and their defaults", () => {
     await act(async () => {
       let settled = false;
       const pending = result.current
-        .program(TWO_INTERVALS, { workoutId: null, title: "" })
+        .program(TWO_INTERVALS, { workoutId: null, title: "", ...TEST_SEED })
         .finally(() => {
           settled = true;
         });

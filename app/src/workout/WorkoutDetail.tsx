@@ -20,6 +20,7 @@ import {
   type SessionDraft,
 } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
+import { buildLogSeed } from "../session/logDraft";
 import { clearRun, loadRun } from "../session/run";
 import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
 import ConnectAction from "../monitor/ConnectAction";
@@ -397,10 +398,16 @@ function WorkoutDetailView({
       return;
     }
     const nudgedCount = Object.values(nudges).filter((v) => v !== 0).length;
+    // 7C Task 1: the log seed, built from the SAME `run.phases` `compiled`
+    // was just built from, at this same moment — the one point the connect
+    // path ever has an `EnginePhase[]` to hand (`session/logDraft.ts`'s own
+    // `buildLogSeed` doc comment: the connect path persists no draft for a
+    // later screen to recover labels/warmup-ness from instead).
+    const logSeed = buildLogSeed(run.phases, baselines);
     setConnecting({
       program: compiled,
       phases: run.phases,
-      identity: { workoutId: workout.id, title: workout.title },
+      identity: { workoutId: workout.id, title: workout.title, logSeed },
       baselines,
       nudgedCount,
     });

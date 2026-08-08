@@ -6,9 +6,15 @@ import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
+import type { LogSeed } from "../session/logDraft";
 import { saveRun, loadRun, type SessionRun } from "../session/run";
 import { createMonitorRun, loadMonitorRun } from "./monitorRun";
 import ConnectAction from "./ConnectAction";
+
+// 7C Task 1: `createMonitorRun`'s `logSeed` arg is required now. This
+// file's subject is the Connect guard's destructive step, not seed
+// content, so one placeholder fills the one call site below.
+const TEST_SEED: LogSeed = { steps: [], paces: {} };
 
 // Realistic fixtures, per the repo convention monitorRun.test.ts's own
 // header states: BOTH sides of this test start from a real seeded library
@@ -96,6 +102,7 @@ function connectAsTaskFiveWill(): void {
       title: w.title,
       program: compiled,
       deviceName: "PM5 430123456",
+      logSeed: TEST_SEED,
     },
     t0,
   );
