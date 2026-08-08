@@ -1282,9 +1282,28 @@ test("connected-interstitial-failed-landscape", async ({ page }) => {
 // Task 8's `connected.spec.ts` covers it in a browser once the seam exists.
 const CONNECTED_FIXTURES = path.resolve(process.cwd(), "e2e/fixtures");
 
+/** The real shell's own tab bar, reproduced structurally (`shell/TabBar.tsx`
+ *  renders `<nav class="tabbar">` with five `.tab` links, as a SIBLING of the
+ *  routed screen inside `.app-shell`). It is here because
+ *  `.app-shell:has(.connected-surface)` hides it and drops the 44px
+ *  `.app-shell` reserves for it — 44px of landscape height the panes cannot
+ *  do without — and a wrapper with no bar in it photographs a DOM the device
+ *  never produces, exercising neither half of that rule (task-6 review, M1).
+ *  With the rule in place these captures are byte-identical to the ones taken
+ *  before this node existed; with it deleted, the bar appears in all fourteen
+ *  and the frame shrinks. */
+const TAB_BAR_MARKUP = `<nav class="tabbar" aria-label="Main">
+  <a class="tab tab-active" href="#">TODAY</a>
+  <a class="tab" href="#">LIBRARY</a>
+  <a class="tab" href="#">PLAN</a>
+  <a class="tab" href="#">TREND</a>
+  <a class="tab" href="#">YOU</a>
+</nav>`;
+
 /** Loads the app (for its stylesheet and fonts), then replaces the document
  *  body with one fixture inside the same `.app-shell` wrapper the real
- *  routes render into. No sign-in: nothing here talks to the API. */
+ *  routes render into — tab bar included. No sign-in: nothing here talks to
+ *  the API. */
 async function showConnectedFixture(page: Page, name: string): Promise<void> {
   const html = readFileSync(path.join(CONNECTED_FIXTURES, `${name}.html`), {
     encoding: "utf-8",
@@ -1300,10 +1319,17 @@ async function showConnectedFixture(page: Page, name: string): Promise<void> {
         .getPropertyValue("--page")
         .trim() !== "",
   );
-  await page.evaluate((markup) => {
-    document.body.innerHTML = `<div class="app-shell">${markup}</div>`;
-  }, html);
+  await page.evaluate(
+    ({ markup, tabBar }) => {
+      document.body.innerHTML = `<div class="app-shell">${markup}${tabBar}</div>`;
+    },
+    { markup: html, tabBar: TAB_BAR_MARKUP },
+  );
   await expect(page.locator(".connected-surface")).toBeVisible();
+  // The other half of the same rule, asserted rather than assumed: with a
+  // connected surface on screen the shell's bar is gone. Without this the
+  // node above would just be decoration a deleted rule could ignore.
+  await expect(page.locator(".tabbar")).toBeHidden();
   // The fonts are self-hosted (@fontsource) and already requested by the
   // app's own first paint; this makes the wait explicit so a capture can
   // never land on a fallback face.

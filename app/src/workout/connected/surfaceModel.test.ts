@@ -299,6 +299,55 @@ describe("live", () => {
     expect(m.intervalClockValue).toBe("0:41");
   });
 
+  // Pinned directly, not only through the screen fixture (task-6 review, L3):
+  // inverting the fill died in the HTML snapshot alone, which is a real kill
+  // with an unreadable error message.
+  it("fills the interval bar by what is BEHIND the rower, in the interval's own dimension", () => {
+    const meters = FIXTURE.phases[1]!.meters!;
+    expect(meters).toBe(2000);
+    expect(
+      model({
+        frame: frame({
+          intervalRemaining: { kind: "distance", value: meters * 0.75 },
+        }),
+      }).intervalProgressPct,
+    ).toBe(25);
+    expect(
+      model({
+        frame: frame({
+          intervalRemaining: { kind: "distance", value: 0 },
+        }),
+      }).intervalProgressPct,
+    ).toBe(100);
+    // A time interval counts TIME, against the phase's own seconds.
+    const warmupSeconds = FIXTURE.phases[0]!.seconds!;
+    expect(
+      model({
+        frame: frame({
+          intervalIndex: 0,
+          intervalRemaining: { kind: "time", value: warmupSeconds / 4 },
+        }),
+      }).intervalProgressPct,
+    ).toBe(75);
+  });
+
+  it("never reports negative or past-100 progress, whatever the machine says", () => {
+    expect(
+      model({
+        frame: frame({
+          intervalRemaining: { kind: "distance", value: 99_999 },
+        }),
+      }).intervalProgressPct,
+    ).toBe(0);
+    expect(
+      model({
+        frame: frame({
+          intervalRemaining: { kind: "distance", value: -500 },
+        }),
+      }).intervalProgressPct,
+    ).toBe(100);
+  });
+
   it("prices TOTAL LEFT off the workout's own phases, not the machine's guess", () => {
     const m = model({ frame: frame({ elapsedSeconds: 600 }) });
     expect(m.totalSeconds).toBeGreaterThan(0);

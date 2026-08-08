@@ -45,6 +45,19 @@ import ConnectedSurface, {
   paneAfterSwipe,
 } from "./ConnectedSurface";
 
+/** `index.css`'s path on disk. Plain string surgery on `import.meta.url`,
+ *  not the global `URL` constructor: this project's jsdom environment
+ *  resolves `new URL("../index.css", import.meta.url)` against
+ *  `http://localhost:3000/` instead of the given `file://` base — a jsdom
+ *  quirk `TimerTargets.test.tsx` documented first. Reading the source text is
+ *  necessary because Vitest mocks every `.css` import to an empty string for
+ *  this project, so there is no rule for `getComputedStyle` to see. */
+function indexCssPath(): string {
+  return import.meta.url
+    .replace(/^file:\/\//, "")
+    .replace(/workout\/[^/]+\.test\.tsx$/, "index.css");
+}
+
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
@@ -473,10 +486,7 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
   });
 
   it("index.css paints the two verdicts with the handoff's own tokens", () => {
-    const cssPath = import.meta.url
-      .replace(/^file:\/\//, "")
-      .replace(/workout\/[^/]+\.test\.tsx$/, "index.css");
-    const css = readFileSync(cssPath, "utf-8");
+    const css = readFileSync(indexCssPath(), "utf-8");
     const under = /\.timer-card-actual-under\s*\{([^}]*)\}/.exec(css);
     const over = /\.timer-card-actual-over\s*\{([^}]*)\}/.exec(css);
     expect(under).not.toBeNull();
@@ -487,6 +497,54 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     // else in the app, and on these panes the target is ink.
     expect(under![1]).not.toContain("--accent");
     expect(over![1]).not.toContain("--accent");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The tab bar the surface hides
+// ---------------------------------------------------------------------------
+
+/** jsdom loads no stylesheet for this project (Vitest mocks every `.css`
+ *  import to an empty string — `node-fs-raw.d.ts` records the empirical
+ *  check), so a `getComputedStyle` assertion here would pass against any CSS
+ *  at all. This reads the rule out of `index.css`'s own source text, the same
+ *  idiom `TimerTargets.test.tsx` uses for the stale token and the paused
+ *  block uses for its 52px. The BROWSER-side half — that the bar actually
+ *  computes away, and that these captures are taken against a DOM the device
+ *  produces — is `e2e/screenshots.spec.ts`'s own `.tabbar` node and its
+ *  `toBeHidden()` assertion (task-6 review, M1: both halves were unguarded,
+ *  and deleting the two rules broke nothing). */
+describe("index.css: the connected surface hides the shell's tab bar", () => {
+  const css = readFileSync(indexCssPath(), "utf-8");
+
+  it("hides the bar itself whenever a connected surface is on screen", () => {
+    const rule =
+      /\.app-shell:has\(\.connected-surface\)\s+\.tabbar\s*\{([^}]*)\}/.exec(
+        css,
+      );
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toContain("display: none");
+  });
+
+  it("reclaims the 44px the shell reserves for it", () => {
+    // `.app-shell`'s unconditional `padding-bottom: calc(var(--tap) + ...)`
+    // is what left 320px of usable height at 844x390 — enough to clip pane
+    // A's ruler and UP NEXT away entirely. Hiding the bar without dropping
+    // the padding fixes nothing.
+    const rule = /\.app-shell:has\(\.connected-surface\)\s*\{([^}]*)\}/.exec(
+      css,
+    );
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toContain("padding-bottom: 0");
+  });
+
+  it("does NOT reach the interstitial, which is Task 8's to convert", () => {
+    // Extending the selector without also removing
+    // `.connected-interstitial`'s own `- var(--tap)` height term re-creates
+    // the dead space DEVIATIONS row 58 exists to close, inverted (task-6
+    // review, Concern 3's adjudication).
+    expect(css).not.toContain(":has(.connected-interstitial)");
+    expect(css).toMatch(/\.connected-interstitial\s*\{[^}]*var\(--tap\)/);
   });
 });
 
@@ -533,10 +591,7 @@ describe("paused (handoff §4)", () => {
   });
 
   it("index.css pins that slot, and both occupants, at 52px", () => {
-    const cssPath = import.meta.url
-      .replace(/^file:\/\//, "")
-      .replace(/workout\/[^/]+\.test\.tsx$/, "index.css");
-    const css = readFileSync(cssPath, "utf-8");
+    const css = readFileSync(indexCssPath(), "utf-8");
     const footer = /\.connected-surface-footer\s*\{([^}]*)\}/.exec(css);
     const paused = /\.connected-paused\s*\{([^}]*)\}/.exec(css);
     const endButton = /\.connected-end\s*\{([^}]*)\}/.exec(css);
