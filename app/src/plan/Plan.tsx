@@ -13,8 +13,8 @@ const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 // Both name their reference distance (owner report, 2026-08-01: head said
 // "long-course" while sprint said "2k" — the pair should read in parallel).
 const PLAN_BLURBS: Record<PlanKey, string> = {
-  sprint: "2k prep — an O2 base with speed sharpened on top.",
-  head: "6k prep — the biggest aerobic engine wins.",
+  sprint: "2k prep: an O2 base with speed sharpened on top.",
+  head: "6k prep: the biggest aerobic engine wins.",
 };
 
 // TypeBadge (src/components/TypeBadge.tsx) only maps WorkoutType, not the
@@ -215,7 +215,7 @@ function PlanView({
       {pending === "reset" && (
         <div className="baseline-confirm">
           <p className="baseline-confirm-line">
-            This resets your progress — session 1 becomes today.
+            This resets your progress. Session 1 becomes today.
           </p>
           {error && <p className="baseline-error">{error}</p>}
           <div className="baseline-actions">
@@ -242,7 +242,7 @@ function PlanView({
       {pending === "switch" && (
         <div className="baseline-confirm">
           <p className="baseline-confirm-line">
-            Switching to {otherPreset.title} resets your progress — session 1
+            Switching to {otherPreset.title} resets your progress. Session 1
             becomes today.
           </p>
           {error && <p className="baseline-error">{error}</p>}

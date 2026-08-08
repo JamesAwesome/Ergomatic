@@ -133,7 +133,7 @@ describe("ConnectAction: the guard", () => {
     expect(loadMonitorRun()).not.toBeNull();
     expect(
       screen.queryByText(
-        "You have an unlogged session — connecting discards it.",
+        "You have an unlogged session. Connecting discards it.",
       ),
     ).not.toBeInTheDocument();
   });
@@ -148,7 +148,7 @@ describe("ConnectAction: the guard", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session — connecting discards it.",
+          "You have an unlogged session. Connecting discards it.",
         ),
       ).toBeInTheDocument();
       // Not merely "still present" — byte-identical, and no monitor run
@@ -172,7 +172,7 @@ describe("ConnectAction: the guard", () => {
       expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
       expect(
         screen.queryByText(
-          "You have an unlogged session — connecting discards it.",
+          "You have an unlogged session. Connecting discards it.",
         ),
       ).not.toBeInTheDocument();
       expect(loadRun()).toStrictEqual(runA);
@@ -204,11 +204,11 @@ describe("ConnectAction: the guard", () => {
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
       expect(
-        screen.getByText("A session is in progress — replace it?"),
+        screen.getByText("A session is in progress. Replace it?"),
       ).toBeInTheDocument();
       expect(
         screen.queryByText(
-          "You have an unlogged session — connecting discards it.",
+          "You have an unlogged session. Connecting discards it.",
         ),
       ).not.toBeInTheDocument();
       expect(loadRun()).toStrictEqual(live);
@@ -277,9 +277,7 @@ describe("ConnectAction: the guard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(
-      screen.getByText(
-        "You have an unlogged session — connecting discards it.",
-      ),
+      screen.getByText("You have an unlogged session. Connecting discards it."),
     ).toBeInTheDocument();
     expect(loadRun()).not.toBeNull();
     expect(loadMonitorRun()).toBeNull();

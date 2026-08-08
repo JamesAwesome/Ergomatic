@@ -649,7 +649,7 @@ test.describe("Today enhancements: the swap x outside-plan composition seam", ()
     await expect(toggle).toContainText("SESSION 1 OF 84");
     await toggle.click();
     await expect(
-      page.getByRole("button", { name: "OUTSIDE THE PLAN — won't advance" }),
+      page.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
     ).toHaveAttribute("aria-pressed", "true");
 
     await page.getByRole("button", { name: "HELD" }).click();

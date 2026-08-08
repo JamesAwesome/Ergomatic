@@ -73,8 +73,8 @@ export default function ConnectAction({
       <div className="baseline-confirm">
         <p className="baseline-confirm-line">
           {stage === "unlogged"
-            ? "You have an unlogged session — connecting discards it."
-            : "A session is in progress — replace it?"}
+            ? "You have an unlogged session. Connecting discards it."
+            : "A session is in progress. Replace it?"}
         </p>
         <div className="baseline-actions">
           <button

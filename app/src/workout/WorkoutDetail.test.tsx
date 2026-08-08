@@ -446,7 +446,7 @@ describe("WorkoutDetail", () => {
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
     expect(
-      screen.getByText("A session is in progress — replace it?"),
+      screen.getByText("A session is in progress. Replace it?"),
     ).toBeInTheDocument();
     // The first press must not have touched storage at all.
     expect(loadDraft()).toStrictEqual(inProgress);
@@ -470,7 +470,7 @@ describe("WorkoutDetail", () => {
 
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
     expect(
-      screen.queryByText("A session is in progress — replace it?"),
+      screen.queryByText("A session is in progress. Replace it?"),
     ).not.toBeInTheDocument();
     expect(loadDraft()).toStrictEqual(inProgress);
   });
@@ -516,7 +516,7 @@ describe("WorkoutDetail", () => {
 
     expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
     expect(
-      screen.queryByText("A session is in progress — replace it?"),
+      screen.queryByText("A session is in progress. Replace it?"),
     ).not.toBeInTheDocument();
   });
 
@@ -558,11 +558,11 @@ describe("WorkoutDetail", () => {
 
       expect(
         screen.getByText(
-          "You have an unlogged session — starting a new one discards it.",
+          "You have an unlogged session. Starting a new one discards it.",
         ),
       ).toBeInTheDocument();
       expect(
-        screen.queryByText("A session is in progress — replace it?"),
+        screen.queryByText("A session is in progress. Replace it?"),
       ).not.toBeInTheDocument();
       // The first press must not have touched storage at all.
       expect(loadDraft()).toStrictEqual(draftA);
@@ -663,7 +663,7 @@ describe("WorkoutDetail", () => {
       expect(loadMonitorRun()).toStrictEqual(connected);
       expect(
         screen.getByText(
-          "You have an unlogged session — starting a new one discards it.",
+          "You have an unlogged session. Starting a new one discards it.",
         ),
       ).toBeInTheDocument();
       expect(loadDraft()).toBeNull();
@@ -709,11 +709,11 @@ describe("WorkoutDetail", () => {
       await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
       expect(
-        screen.getByText("A session is in progress — replace it?"),
+        screen.getByText("A session is in progress. Replace it?"),
       ).toBeInTheDocument();
       expect(
         screen.queryByText(
-          "You have an unlogged session — starting a new one discards it.",
+          "You have an unlogged session. Starting a new one discards it.",
         ),
       ).not.toBeInTheDocument();
       expect(loadMonitorRun()).toStrictEqual(live);
@@ -758,7 +758,7 @@ describe("WorkoutDetail", () => {
       await userEvent.click(screen.getByRole("button", { name: "Start" }));
       expect(
         screen.getByText(
-          "You have an unlogged session — starting a new one discards it.",
+          "You have an unlogged session. Starting a new one discards it.",
         ),
       ).toBeInTheDocument();
 
@@ -964,7 +964,7 @@ describe("WorkoutDetail", () => {
 
     expect(
       screen.getByText(
-        "Your logged sessions are kept — they keep their own copy of the title and type.",
+        "Your logged sessions are kept. They keep their own copy of the title and type.",
       ),
     ).toBeInTheDocument();
   });
@@ -1261,7 +1261,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
     expect(
       await screen.findByText(
-        "Set your baselines first — Connect needs a target to program.",
+        "Set your baselines first. Connect needs a target to program.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
@@ -1279,7 +1279,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
     expect(
       await screen.findByText(
-        "An open-ended (all-out/test) interval has no fixed time or distance — the PM5 requires one to program a workout.",
+        "An open-ended (all-out/test) interval has no fixed time or distance. The PM5 requires one to program a workout.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
@@ -1462,7 +1462,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       expect(loadMonitorRun()).toStrictEqual(connected);
       expect(
         screen.getByText(
-          "You have an unlogged session — connecting discards it.",
+          "You have an unlogged session. Connecting discards it.",
         ),
       ).toBeInTheDocument();
       expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
@@ -1517,7 +1517,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
       expect(
-        screen.getByText("A session is in progress — replace it?"),
+        screen.getByText("A session is in progress. Replace it?"),
       ).toBeInTheDocument();
     });
   });

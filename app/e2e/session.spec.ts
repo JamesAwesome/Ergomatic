@@ -871,7 +871,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await toggle.click();
     const toggledOff = page.getByRole("button", {
-      name: "OUTSIDE THE PLAN — won't advance",
+      name: "OUTSIDE THE PLAN · won't advance",
     });
     await expect(toggledOff).toHaveAttribute("aria-pressed", "true");
 
@@ -1078,7 +1078,7 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
     // Warned, not walked past — and still on the detail screen.
     await expect(
       page.getByText(
-        "You have an unlogged session — starting a new one discards it.",
+        "You have an unlogged session. Starting a new one discards it.",
       ),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
@@ -1124,11 +1124,11 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
     await page.getByRole("button", { name: "Start" }).click();
 
     await expect(
-      page.getByText("A session is in progress — replace it?"),
+      page.getByText("A session is in progress. Replace it?"),
     ).toBeVisible();
     await expect(
       page.getByText(
-        "You have an unlogged session — starting a new one discards it.",
+        "You have an unlogged session. Starting a new one discards it.",
       ),
     ).toHaveCount(0);
     expect(await monitorRunRaw(page)).toBe(before);
@@ -1208,7 +1208,7 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
     await page.getByRole("button", { name: "Connect", exact: true }).click();
 
     await expect(
-      page.getByText("You have an unlogged session — connecting discards it."),
+      page.getByText("You have an unlogged session. Connecting discards it."),
     ).toBeVisible();
     // Not walked past — the Connect trigger itself is gone, the panel
     // replaced it, and NOTHING has been written to the monitor side yet.
