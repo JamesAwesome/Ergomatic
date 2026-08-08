@@ -79,10 +79,17 @@ export function rateDisplay(phase: EnginePhase): {
  *  retired variant drew it. `targetSplitDisplay`/`rateDisplay` below are
  *  still the shared derivation both this component and `PaneTimer.tsx` call;
  *  only the JSX branch (and its now-orphaned `JudgedActual` prop pair) is
- *  gone. The CSS hooks the retired variant exercised
- *  (`timer-card-actual-{judgement}`, `timer-card-static`) are UNCHANGED and
- *  stay declared in `index.css` — `PaneTimer.tsx` renders those class names
- *  itself today. */
+ *  gone.
+ *
+ *  Of the CSS hooks the retired variant exercised, only the
+ *  judgement-keyed one survives: `timer-card-actual-{judgement}` is
+ *  declared in `index.css` and rendered today by
+ *  `connected/JudgedCard.tsx`, `connected/PaneLive.tsx` and
+ *  `connected/PaneGrid.tsx` — NOT by `PaneTimer.tsx`, which is what this
+ *  comment used to claim (review H5; `PaneTimer.tsx`'s own header already
+ *  said the right thing, so the two contradicted each other).
+ *  `.timer-card-static` and the bare `.timer-card-actual` had no renderer
+ *  left at all and were deleted from `index.css` by the same fix wave. */
 export default function TimerTargets({ phase }: { phase: EnginePhase }) {
   const target = targetSplitDisplay(phase);
   const rate = rateDisplay(phase);

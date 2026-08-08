@@ -3303,18 +3303,16 @@ button:disabled {
    `--surface-sunken`, the fill a stale card moves to). All clear the
    house's 4.5:1 floor. `-within` deliberately declares nothing: within
    tolerance IS plain `--ink`, and a rule restating that would be one more
-   place for the neutral case to drift. */
-.timer-card-static {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
+   place for the neutral case to drift.
 
-.timer-card-actual {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color: var(--ink-2);
-}
+   Fix wave (review H5/N3): `.timer-card-static` and the bare
+   `.timer-card-actual` used to sit between this comment and the rules it
+   describes. Both were rendered ONLY by `TimerTargets`' `variant="connected"`
+   JSX, which Task 8 deleted; a grep across `src`/`e2e`/`domain` found zero
+   renderers for either. Removed rather than kept "in case" — the shipped
+   renderers of the judgement-keyed hook are `connected/JudgedCard.tsx`,
+   `connected/PaneLive.tsx` and `connected/PaneGrid.tsx`, and they use the
+   `-under`/`-over`/`-stale` suffixed classes only. */
 
 /* Handoff: "every stale value greys to --ink-3" — task-3 review HIGH-1:
    this shipped as `--ink-5` (2.76:1 against --surface, FAILS the house's
@@ -3322,7 +3320,9 @@ button:disabled {
    stale card moves to, worse). `--ink-3` measures 7.44:1 / 6.30:1 against
    the same two backgrounds — both pass comfortably. Pinned structurally
    (not just by eye) in TimerTargets.test.tsx, which reads this exact rule
-   out of this file's own source text. */
+   out of this file's own source text. The rule it describes is
+   `.timer-card-actual-stale`, third below — this comment used to sit
+   immediately above `-under`, which is not it (review N3). */
 .timer-card-actual-under {
   color: var(--type-o2);
 }
