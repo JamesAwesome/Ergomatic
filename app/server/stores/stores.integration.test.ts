@@ -559,6 +559,28 @@ describe("domain stores against real Postgres", () => {
       expect(list[0]).toMatchObject({ id, workoutTitle: "Frozen title" });
     });
 
+    // Phase 7C Task 3 (spec §6): deviceName lives in a real column
+    // (`db/schema.ts`'s `sessionLogs.deviceName`), not inside the `steps`
+    // jsonb blob — this proves the real INSERT/SELECT round trip through
+    // Postgres itself, which `routes/data.test.ts`'s fake-store-backed
+    // tests can't: a route-level regression that stops passing `deviceName`
+    // to `stores.logs.create` at all would still pass those (the fake store
+    // just spreads whatever `LogInput` it's given), but only the real
+    // column proves the migration actually wired the value through.
+    it("round-trips deviceName through a real column: set and absent-stays-null", async () => {
+      const logs = createLogsStore(db);
+      const withDevice = await logs.create(
+        userA,
+        logInput({ deviceName: "PM5 432331249 Row" }),
+      );
+      const withoutDevice = await logs.create(userA, logInput());
+
+      const list = await logs.list(userA, 10);
+      const found = (id: string) => list.find((row) => row.id === id)!;
+      expect(found(withDevice.id).deviceName).toBe("PM5 432331249 Row");
+      expect(found(withoutDevice.id).deviceName).toBeNull();
+    });
+
     it("create increments an existing plan_state.done_n", async () => {
       const logs = createLogsStore(db);
       const planState = createPlanStateStore(db);
