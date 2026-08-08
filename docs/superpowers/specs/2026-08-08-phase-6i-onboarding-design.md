@@ -49,13 +49,17 @@ plan time under the standing content discipline, James reviews in the PR:
   was missing.
 - **`connect-the-monitor`** — "Connect the monitor, and it drives the
   piece" (~3 min): what connecting a PM5 does (the app programs the whole
-  workout into the monitor; live pace/rate against targets; the tinted
-  numbers — absorbing the deferred "Reading the tinted numbers" article),
-  what it needs (a PM5, Bluetooth), and that manual mode always remains.
-  **The plan must have its author read 7B's shipped UI first**
-  (`src/monitor/ConnectAction.tsx`, `ConnectedInterstitial.tsx`, the
-  timer's connected states) so every claim matches what actually shipped —
-  never the handoff's speculation.
+  workout into the monitor; live pace and stroke rate against targets;
+  auto-advance), what it needs (a PM5, Bluetooth), and that manual mode
+  always remains. **No "tinted numbers" claim** — the mock's tinting line
+  was fabricated WHAT'S-NEW copy and nothing shipped tints (verified by
+  grep); the deferred tinted-numbers article stays deferred until such a
+  feature exists. **The implementer fact-checks every sentence against
+  7B's shipped UI** (`src/monitor/ConnectAction.tsx`, the timer's
+  connected surface) and flags drift in the report rather than editing
+  the prose silently. The Connect guard loosening (Mechanics, below)
+  must land in the same phase, or this article's step-4 promise is a lie
+  for the very rower it targets.
 
 ## START HERE on Today (screen 2b)
 
@@ -71,31 +75,71 @@ plan time under the standing content discipline, James reviews in the PR:
 
 ## The no-baseline card (screen 2b)
 
-- Replaces the normal suggestion card while **both** baselines are null
-  (handoff open question #3 resolved: any one baseline set returns Today
-  to real suggestions — the library resolves against whichever exists
-  per-workout, and the nudge toward testing the other distance belongs to
-  content, not a blocking card).
+- Replaces the normal suggestion card while **either** baseline is null
+  (corrected by the antagonistic pass: the app-wide convention is that a
+  partial pair is null everywhere — `domain/types.ts:31`, six client
+  files — so "one set returns real suggestions" would strand the rower at
+  dash-durations and a still-blocking Confirm). With both null the card
+  defaults to the 6k with `2K INSTEAD`; with exactly one null it offers
+  only the missing distance (`SETS YOUR 2K BASELINE`, no toggle). Both
+  set → real suggestions return. Handoff open question #3 is thereby
+  answered: yes, a rower who set one sees the other.
 - Card: `SUGGESTED · SETS YOUR BASELINE` label, the designated workout's
   title + estimated duration, a dashed chip `6K BASELINE · NOT SET · ROW
   IT HOW IT FEELS`, `START` (the app's one level-1 button — this card is
   on Today, where START lives), and `2K INSTEAD` as a secondary that swaps
   the card to the 2k variant (and back: `6K INSTEAD`).
-- **Mechanics:** two designated global seed workouts (titles fixed
-  constants, e.g. "First 6k" / "First 2k" — final titles at plan time):
-  single distance work step (6000m / 2000m) at an **effort ref** —
-  `{effort:"min"}` for the 6k ("EASY"), `{effort:"max"}` for the 2k ("ALL
-  OUT") — because effort refs resolve **without baselines** (5G), so the
-  existing Confirm → Countdown → Timer → Log flow runs them unmodified,
-  and the distance step's stopwatch actual gives the average split. The
-  6B "baselines required to START" guard must except effort-only
-  workouts (a targeted loosening: a workout none of whose steps needs a
-  baseline may start without one — domain-adjacent, tested hard).
+- **Mechanics (corrected by the 2026-08-08 antagonistic pass — the
+  original "effort refs resolve without baselines, flow runs unmodified"
+  claim was FALSE against `pace.ts:73`/`expand.ts:150`/`engine.ts:49`):**
+  two designated global seed workouts (titles fixed constants, e.g.
+  "First 6k" / "First 2k"): single distance work step (6000m / 2000m) at
+  an effort ref (`{effort:"min"}` / `{effort:"max"}`). Running them
+  without baselines is a REAL domain change this phase owns:
+  - `phases()`/`buildRun` (and `estimateMinutes` where it feeds them)
+    accept `Baselines | null`; with null, an effort phase carries NO
+    `targetSplit` (the field is already optional and the timer already
+    renders effort words, never the number) and NO duration estimate.
+  - One domain predicate — `needsBaselines(steps)`: true unless every
+    work step is an effort ref — consumed by EVERY coupled guard site:
+    Confirm's footer guard, **Countdown's own null-baselines redirect and
+    its `buildRun` call** (missing either produces a redirect loop / a
+    timer with no run record), WorkoutDetail's Connect guard (so step 4's
+    article isn't a lie — `compileProgram` already handles effort phases),
+    and the manual-log door's no-target gate.
+  - Timer display with no estimates: TOTAL LEFT and the phase progress
+    bar are hidden for a session where no phase has an estimate (never a
+    frozen `0:00`/0% bar); the suspect-actual check stays disabled
+    (already meters-gated).
+  - The distance step's stopwatch actual **survives into the saved log**:
+    the 5G drop rule is amended for measured actuals — an effort distance
+    phase logs `actualSplit`/`actualSource:'stopwatch'` when the engine
+    measured one (assumed actuals stay dropped). `validateLogStepEntry`
+    already accepts paired actuals without a `targetSplit` (the 6C
+    amendment). `your-first-row` points at the log as where the number
+    lives.
+- The card's duration is fixed nominal copy (`ABOUT 25 MIN` / `ABOUT 8
+  MIN`, constants beside the titles) — `estimateMinutes` cannot run
+  without baselines and the house rule is never a bare dash.
+- The card's START carries WorkoutDetail's full start-guard flow
+  (unlogged-run staged confirm, live-MonitorRun confirm, draft build +
+  cross-clears) — extracted into a shared helper, not duplicated and not
+  skipped; a bare navigate-and-start would reintroduce the F5 data-loss
+  class.
 - After logging, baseline entry is **manual** (You → baseline editor), and
   `your-first-row` says so explicitly. Auto-capture from the log is a
   recorded follow-on, not this phase.
-- Freestyle/plan modes both show the card when baselines are absent (a
-  plan's prescribed type is moot until paces resolve).
+- **Plan mode:** the card shows, and the plan-line apparatus (session
+  line, type-swap chips, FILTER/SHUFFLE header) is hidden while it does —
+  there is no suggestion to filter or swap. The designated workouts' Log
+  screen defaults the plan toggle to **outside the plan** (still visible,
+  still changeable): a baseline test must not silently consume plan
+  session 1.
+- **The designated workouts are invisible outside onboarding:** excluded
+  from the suggestion pools (client `suggest`/`suggestFreestyle` inputs
+  AND the server's `/api/today`) and from the Library list, by title
+  constants in one shared place; their detail routes stay reachable (the
+  card links there). A veteran must never be SUGGESTED "First 2k".
 
 ## Learning the app on You (screen 2e, design §7)
 
@@ -106,10 +150,16 @@ plan time under the standing content discipline, James reviews in the PR:
   shown, rows link to the same targets), and two controls:
   - **PUT IT BACK ON TODAY** — clears the dismissed flag (disabled/absent
     when not dismissed), keeps read state.
-  - **MARK ALL FOUR UNREAD** — staged confirm (destructive-ish, matches
-    the app's tap-again idiom), deletes the four step slugs from
-    `article_reads` so the block starts at step one. Per the mock's own
-    caption: the first restores, the second also clears.
+  - **MARK ALL FOUR UNREAD** — staged confirm (tap-again idiom), deletes
+    the four step slugs from `article_reads` AND clears the dismissed
+    flag (the mock's caption: the second control "also clears... so it
+    starts from step one" — a reset that leaves the block hidden resets
+    nothing visible). Cross-surface consequence, accepted and pinned in a
+    test: un-reading `baselines`/`picking-a-workout` un-greys them in
+    News and raises its unread count — the mock's "clears what you have
+    read" means exactly that.
+  - Status line per the mock when dismissed: `DISMISSED ON TODAY · STILL
+    PINNED IN NEWS`.
 - The News **Start-here pinned row** (design §3): appears only while
   dismissed — `Start here, in four steps` + `N OF 4 READ · DISMISSED ON
   TODAY` — and opens `/you/learning`. Lives in News.tsx as a special
@@ -122,10 +172,23 @@ plan time under the standing content discipline, James reviews in the PR:
   migration + `PUT /api/prefs` accepts it (same validation style as its
   siblings).
 - `DELETE /api/article-reads/:slug` → 204, idempotent, same slug-shape
-  validation as PUT — MARK ALL FOUR UNREAD issues four deletes.
-  (Read-state deletion is new but harmless: it only ever un-greys rows.)
-- Two new global library workouts via the existing seed converge (title
-  inserts are additive; the converge handles deploy/rollback cleanly).
+  validation as PUT — MARK ALL FOUR UNREAD issues four deletes. The full
+  store stack comes with it per the contract-test rule: `unmarkRead` on
+  the real store AND the fake, contract-suite cases (incl. per-user
+  isolation), and an isolation-test row — enumerated in the plan, not
+  inherited silently.
+- New-article side effect, accepted: publishing the two step articles
+  bumps every existing user's News unread count by 2 (ordinary
+  publishing semantics) and enters them into `nextUnreadSlug` walks.
+- Two new global library workouts via a **designated onboarding seed
+  list** concatenated into the converge input (antagonistic-pass F4: they
+  cannot live in `LIBRARY_WORKOUTS` — `library.test.ts` hard-pins exactly
+  300, the per-type/band quota grid, spm-present-and-even, and
+  difficulty ordering, all of which a single-step no-spm effort workout
+  violates). The onboarding list gets its own tiny gate (2 rows, effort
+  refs, distance steps, fixed titles) and is exempt from the 300-grid.
+  Rollback note: a rollback deploy converges them away; their log rows
+  survive as snapshots via `ON DELETE SET NULL`.
 
 ## Folded 6H close-out minors
 
@@ -144,6 +207,18 @@ story, per the standing queue).
 6J's Trend charts; auto-capture of baselines from a logged first row
 (recorded follow-on); any other You settings rows; the stroke-rate
 article; monitor/7C surfaces beyond the article's prose.
+
+## Implementer landmines (from the antagonistic pass)
+
+- `todayGuard.pin.test.ts` pins Today.tsx's stale-draft-discard effect
+  byte-for-byte via `?raw` — touching that block, even reformatting,
+  fails the pin; edit around it or amend the pin deliberately.
+- `/you/learning` registers inside the same `user && onSignedOut`
+  conditional as `/you` (or the prod-shaped config wildcards it to
+  /today); its BackLink needs `fallback="/you"`.
+- The folded minor #2 (making `StoresUnderTest.articleReads` required)
+  and the new `unmarkRead` contract cases land in the same file — one
+  task, not two racing edits.
 
 ## Collision posture
 
