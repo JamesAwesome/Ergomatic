@@ -13,6 +13,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildLogSeed } from "../session/logDraft";
 import type { ConnectedInterstitialProps } from "./ConnectedInterstitial";
 
 const navigate = vi.fn();
@@ -25,6 +26,16 @@ vi.mock("react-router-dom", async () => {
   return { ...actual, useNavigate: () => navigate };
 });
 
+// 7C Task 1: the ONE production call site of `buildLogSeed`
+// (`WorkoutDetail.tsx`'s `handleConnectProceed`) has no dedicated test
+// anywhere else — `ConnectedInterstitial.test.tsx`/`ConnectedSurface.
+// test.tsx`/`useMonitorSession.test.ts` all build their own `identity`
+// fixture directly, bypassing this screen's own wiring entirely. Captured
+// here (this file already mocks the component to intercept its props for
+// the ended/exit callbacks) so the seam has SOME regression coverage: see
+// "the log seed WorkoutDetail builds" below.
+let capturedProps: ConnectedInterstitialProps | null = null;
+
 // The stub exposes the two callbacks as buttons so a test can fire either
 // without a monitor. It renders nothing else — the interstitial's own
 // rendering is `ConnectedInterstitial.test.tsx`'s subject.
@@ -34,16 +45,20 @@ vi.mock("./ConnectedInterstitial", async () => {
   >("./ConnectedInterstitial");
   return {
     ...actual,
-    default: ({ onEnded, onExit }: ConnectedInterstitialProps) => (
-      <div>
-        <button type="button" onClick={onEnded}>
-          FIRE ENDED
-        </button>
-        <button type="button" onClick={onExit}>
-          FIRE EXIT
-        </button>
-      </div>
-    ),
+    default: (props: ConnectedInterstitialProps) => {
+      capturedProps = props;
+      const { onEnded, onExit } = props;
+      return (
+        <div>
+          <button type="button" onClick={onEnded}>
+            FIRE ENDED
+          </button>
+          <button type="button" onClick={onExit}>
+            FIRE EXIT
+          </button>
+        </div>
+      );
+    },
   };
 });
 
@@ -101,6 +116,32 @@ async function openConnect(): Promise<void> {
 beforeEach(() => {
   localStorage.clear();
   navigate.mockClear();
+  capturedProps = null;
+});
+
+describe("the log seed WorkoutDetail builds (7C Task 1)", () => {
+  it("identity.logSeed is buildLogSeed(phases, baselines) for the SAME phases/baselines the interstitial itself receives, not a stale or empty stand-in", async () => {
+    renderDetail();
+    await openConnect();
+
+    expect(capturedProps).not.toBeNull();
+    const { phases, baselines, identity } = capturedProps!;
+    // Self-consistency: whatever `WorkoutDetail` actually passed as
+    // `phases`/`baselines` must be the SAME pair `identity.logSeed` was
+    // built from — this fails if the wiring ever passes an empty phase
+    // list, a swapped baselines object, or drops the call entirely.
+    expect(identity.logSeed).toStrictEqual(buildLogSeed(phases, baselines));
+    // And a concrete value, not just self-consistency against a
+    // vacuously-empty result: Filling Low compiles to a warmup + one
+    // 6k+4 distance work step (this file's own WORKOUT fixture).
+    expect(identity.logSeed.steps).toStrictEqual([
+      { label: "8:00 warm-up", kind: "warmup" },
+      { label: "2000 m @ 6k +4", kind: "work" },
+    ]);
+    expect(identity.logSeed.paces).toStrictEqual({ k6: 122 });
+    expect(identity.workoutId).toBe(WORKOUT.id);
+    expect(identity.title).toBe(WORKOUT.title);
+  });
 });
 
 describe("a connected session that ends", () => {
