@@ -1,5 +1,6 @@
 import { fmtDuration } from "../../domain/duration.js";
 import { liveSteps } from "../../domain/expand.js";
+import type { IntervalActual } from "../../domain/monitor/types.js";
 import {
   effortFromWord,
   isEffortRef,
@@ -10,6 +11,7 @@ import type { Baselines, PaceRef, SplitRef, Step } from "../../domain/types.js";
 import type { EnginePhase } from "./engine";
 import type { SessionDraft } from "./draft";
 import type { SessionRun } from "./run";
+import type { MonitorRun } from "../monitor/monitorRun.js";
 
 /** The two "log a session" doors (Phase 6C spec, "Doors" decision): a
  *  completed timer session (`buildLogSteps`, from the frozen `SessionRun`)
@@ -127,7 +129,13 @@ export type ActualSource = "assumed" | "stopwatch" | "pm5";
 /** This module's own `LogStep` — now the SAME shape as `server/stores/
  *  logs.ts`'s `LogStep` (Task 1.5 amendment, module header): `targetSplit`
  *  optional, `actualSplit`/`actualSource` a paired unit, both omitted
- *  together for an effort phase (5G rule). */
+ *  together for an effort phase (5G rule). **PM5 PAIRING EXCEPTION (7C spec
+ *  §3, adversarial B3):** that pairing is loosened for a monitor-sourced
+ *  step only — `buildMonitorLogSteps` (below) can set `actualSource: "pm5"`
+ *  with `actualSplit` absent (an unusable `avgSplit` reading), because the
+ *  three fields below are still real measurements even when the split
+ *  itself wasn't. The phone-timer/manual builders above never produce this
+ *  shape; only the monitor door does. */
 export interface LogStep {
   label: string;
   targetSplit?: number;
@@ -136,6 +144,33 @@ export interface LogStep {
   spm?: number;
   meters?: number;
   seconds?: number;
+  /** The interval's measured average heart rate, pm5-only (7C spec §3),
+   *  verbatim from `IntervalActual.avgHeartRateBpm`. PM5 PAIRING EXCEPTION
+   *  (interface header above): present whenever the interval has a matched
+   *  actual, independent of whether `actualSplit`/`actualSource` themselves
+   *  are present. Omitted only when the reading itself is `null` OR falls
+   *  outside `MONITOR_HR_MIN`..`MONITOR_HR_MAX` (20-254 bpm) — an
+   *  out-of-band monitor number drops its own field, it never rejects the
+   *  rower's log (adversarial m2). Stored, never rendered on the Log screen
+   *  (spec's own "HR stored not shown" product ruling). */
+  avgHr?: number;
+  /** The interval's measured elapsed time, pm5-only, verbatim from
+   *  `IntervalActual.elapsedSeconds` (>= 0) — same PM5 PAIRING EXCEPTION as
+   *  `avgHr` above: present whenever a matched actual exists, regardless of
+   *  `actualSplit`. **UNIT CAVEAT** (spec §3, adversarial m1): this maps
+   *  from 0x0037's Split/Interval Time under `pm5-interface-notes.md` §10's
+   *  documented scale, and whether that wire field measures WORK time alone
+   *  or work-plus-its-trailing-rest has never been read against a
+   *  stopwatch on real hardware. Stored here under the DOCUMENTED meaning
+   *  (work time); §17 carries the open item (filed by Task 5) — if a later
+   *  hardware reading says work-plus-rest instead, the fix is a
+   *  re-derivation in THIS builder (subtract the interval's own
+   *  `restSeconds`), never a storage-shape change. */
+  actualSeconds?: number;
+  /** The interval's measured distance, pm5-only, verbatim from
+   *  `IntervalActual.distanceMeters` (>= 0, whole meters) — same PM5
+   *  PAIRING EXCEPTION as `actualSeconds` above. */
+  actualMeters?: number;
 }
 
 // Shared by both builders: the step-text idiom's duration half. A work
@@ -538,6 +573,122 @@ export function buildLogSeed(
     steps.push({ label, kind: "work" });
   }
   return { steps, paces };
+}
+
+/** Thrown by `buildMonitorLogSteps` (below) when a `MonitorRun`'s `logSeed`
+ *  is missing or its length doesn't line up with `program.intervals` (7C
+ *  spec §3: "a length mismatch or missing seed disqualifies the record
+ *  from the monitor mode entirely — fall through to manual, never guess").
+ *  A plain `Error` subclass, not a crash: the screen task (Task 4) catches
+ *  this as mode disqualification, the same way a malformed record is
+ *  handled everywhere else in this file (`buildLogSeed`'s own defensive
+ *  branches) — a rower's log door must never brick on a record shape this
+ *  module didn't anticipate. */
+export class MonitorLogSeedError extends Error {}
+
+/** The valid `avgHr` band (7C spec §3, adversarial m2): a reading outside
+ *  this range drops the `avgHr` field, it never rejects the step or the
+ *  save. Exported so the Log screen (Task 4) and this module's own tests
+ *  read the identical bounds — never a second copy of "20" and "254". */
+export const MONITOR_HR_MIN = 20;
+export const MONITOR_HR_MAX = 254;
+
+/** Builds the Log screen's monitor-mode step list straight from a completed
+ *  `MonitorRun` — the PM5-driven twin of `buildLogSteps` above, and the
+ *  builder the 7C spec's §3 table describes field-by-field. Cannot derive a
+ *  label or warmup-ness from `MonitorRun` alone (`ProgramInterval` carries
+ *  neither) — that is exactly what `run.logSeed` (`buildLogSeed`'s own
+ *  output, frozen at Connect) exists to supply; see this file's `LogSeed`
+ *  doc comment for the alignment contract between `logSeed.steps` and
+ *  `program.intervals`.
+ *
+ *  **Alignment / disqualification** (§3): `logSeed` missing, or
+ *  `logSeed.steps.length !== program.intervals.length`, throws
+ *  `MonitorLogSeedError` rather than guessing a partial mapping — the
+ *  screen's job, not this function's, is to fall through to the manual
+ *  door when that happens.
+ *
+ *  **Warmup intervals produce NO step** (§3, adversarial B2): shape parity
+ *  with the manual door, which has never emitted a warmup row. A warmup's
+ *  own program-interval position is still consumed while walking the two
+ *  parallel arrays (so later intervals keep their correct position), but no
+ *  `LogStep` is pushed for it, and any actual matched to that position
+ *  (§3's matching rule, next) never surfaces. Rest never gets its own
+ *  interval at all — `compileProgram` folds every rest phase into the
+ *  interval before it (`domain/monitor/program.ts`'s own rest-folding
+ *  comment) — so there is no separate rest case here to skip.
+ *
+ *  **Matching** (§3): by `IntervalActual.index` (already OUR normalized
+ *  0-based program index) against the program interval's position — a
+ *  `Map` built once from `run.actuals`, skipping every actual whose
+ *  `index` is `null` (§3: "unattributable; unsyncable" — a consumer must
+ *  never read `null` as interval 0, `domain/monitor/types.ts`'s own
+ *  `IntervalActual.index` doc comment). An interval with no matching actual
+ *  in the map — never reached (partials ruling), a lost boundary whose
+ *  pair never both arrived, or simply not yet rowed — gets NO actual and
+ *  NO source at all, never `"assumed"`: unlike the phone-timer builder
+ *  above, there is no "held the target" inference for a monitor session,
+ *  because the PM5, not this app's clock, is the only witness to whether
+ *  the interval ran.
+ *
+ *  **Per work interval** (§3's table): `label` from `logSeed.steps[i]`
+ *  verbatim; `targetSplit` from `ProgramInterval.targetSplit` (`null` for
+ *  an effort interval or a target-less one — omitted, never a fabricated
+ *  number; **effort intervals still get every measured field below**, a
+ *  deliberate departure from the 5G rule the phone-timer builders follow,
+ *  §3's own "no target" note); `meters`/`seconds` from
+ *  `ProgramInterval.value` by `kind`. When a matched actual exists:
+ *  `actualSource: "pm5"` unconditionally (the **pm5 pairing exception**,
+ *  `LogStep`'s own doc comment above) — `actualSplit` only when
+ *  `avgSplit` is a number `> 0` (`0` means the wire had no reading, §3);
+ *  `spm`/`avgHr`/`actualSeconds`/`actualMeters` straight from the actual
+ *  (`avgHr` additionally banded to `MONITOR_HR_MIN..MONITOR_HR_MAX`,
+ *  `LogStep.avgHr`'s own doc comment). */
+export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
+  const seed = run.logSeed;
+  if (
+    seed === undefined ||
+    seed.steps.length !== run.program.intervals.length
+  ) {
+    throw new MonitorLogSeedError(
+      "This monitor run has no log seed matching its program; it cannot be logged as a monitor session.",
+    );
+  }
+  const actualByIndex = new Map<number, IntervalActual>();
+  for (const actual of run.actuals) {
+    if (actual.index !== null) actualByIndex.set(actual.index, actual);
+  }
+  const out: LogStep[] = [];
+  run.program.intervals.forEach((interval, i) => {
+    const seedStep = seed.steps[i]!;
+    if (seedStep.kind === "warmup") return;
+    const step: LogStep = { label: seedStep.label };
+    if (interval.targetSplit !== null) step.targetSplit = interval.targetSplit;
+    if (interval.kind === "time") {
+      step.seconds = interval.value;
+    } else {
+      step.meters = interval.value;
+    }
+    const actual = actualByIndex.get(i);
+    if (actual !== undefined) {
+      step.actualSource = "pm5";
+      if (actual.avgSplit !== null && actual.avgSplit > 0) {
+        step.actualSplit = actual.avgSplit;
+      }
+      if (actual.avgSpm !== null) step.spm = actual.avgSpm;
+      if (
+        actual.avgHeartRateBpm !== null &&
+        actual.avgHeartRateBpm >= MONITOR_HR_MIN &&
+        actual.avgHeartRateBpm <= MONITOR_HR_MAX
+      ) {
+        step.avgHr = actual.avgHeartRateBpm;
+      }
+      step.actualSeconds = actual.elapsedSeconds;
+      step.actualMeters = actual.distanceMeters;
+    }
+    out.push(step);
+  });
+  return out;
 }
 
 // Mirrors Today.tsx's own (private, unexported) `formatLogDate` byte for
