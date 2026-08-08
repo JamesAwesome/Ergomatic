@@ -106,9 +106,14 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
  *  handoff's own mockup shows `1:57.8` against a `2:00.0` target so the
  *  ochre "over" state is what the picture actually shows. */
 function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
-  return {
+  // The session pair mirrors the raw pair unless a case overrides it — see
+  // `connected/surfaceModel.test.ts`'s own copy of this factory for the
+  // full walk-4 reasoning.
+  const f: MonitorFrame = {
     elapsedSeconds: 828,
     distanceMeters: 800,
+    sessionElapsedSeconds: 828,
+    sessionDistanceMeters: 800,
     currentSplit: 117.8,
     spm: 21,
     heartRateBpm: 164,
@@ -117,6 +122,11 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     state: "rowing",
     rowingActive: true,
     ...overrides,
+  };
+  return {
+    ...f,
+    sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
+    sessionDistanceMeters: overrides.sessionDistanceMeters ?? f.distanceMeters,
   };
 }
 

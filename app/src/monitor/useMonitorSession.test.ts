@@ -1948,9 +1948,17 @@ describe("useMonitorSession: coexistence with a phone SessionRun (Task 2's M-2)"
  *  too, which are not part of the three keyed metrics and are irrelevant
  *  here. */
 function frame(over: Partial<MonitorFrame>): MonitorFrame {
-  return {
+  // The session pair mirrors the raw pair unless a case overrides it — and
+  // it is irrelevant to everything in this block on purpose: the paused
+  // derivation and the ready gate are both INTERVAL-scoped (see
+  // `freezeKey`'s and the gate's own comments in `useMonitorSession.ts`),
+  // so these recorded fixtures deliberately never exercise the accumulated
+  // pair.
+  const f: MonitorFrame = {
     elapsedSeconds: 0,
     distanceMeters: 0,
+    sessionElapsedSeconds: 0,
+    sessionDistanceMeters: 0,
     currentSplit: null,
     spm: null,
     heartRateBpm: null,
@@ -1959,6 +1967,11 @@ function frame(over: Partial<MonitorFrame>): MonitorFrame {
     state: "rowing",
     rowingActive: true,
     ...over,
+  };
+  return {
+    ...f,
+    sessionElapsedSeconds: over.sessionElapsedSeconds ?? f.elapsedSeconds,
+    sessionDistanceMeters: over.sessionDistanceMeters ?? f.distanceMeters,
   };
 }
 
