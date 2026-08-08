@@ -44,6 +44,14 @@ describe("App", () => {
     });
   });
 
+  it("claims scroll restoration from the browser on mount (device report: iOS Safari re-scrolled the reader after our scroll-to-top)", async () => {
+    window.history.scrollRestoration = "auto";
+    mockMe(200, { user: { id: "u1", email: "a@x.com", name: "Ada Rower" } });
+    render(<App />);
+    await screen.findByRole("link", { name: "TODAY" });
+    expect(window.history.scrollRestoration).toBe("manual");
+  });
+
   it("surfaces a retry notice from ?error=signin_failed", async () => {
     window.history.replaceState(null, "", "/?error=signin_failed");
     mockMe(401);
