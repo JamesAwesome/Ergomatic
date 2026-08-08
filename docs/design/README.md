@@ -249,8 +249,11 @@ Purpose: open the app, see what to row, start or log it.
 
 ### 2. Library
 - Title "Library" + "+ NEW" (accent mono) → builder. "11 OF 375 ENTERED".
-- **Filter chips**, all 44px tall, wrap, 6px gap: ALL · AN · O2 · AT · TR ·
-  <30′ · 30–45′ · 45–60′ · 60′+ · PAIN ≤5 · RECENT · NOT RECENT.
+- **Filter chips**, all 44px tall, wrap, 6px gap: ALL · O2 · AT · TR · AN ·
+  <30′ · 30–45′ · 45–60′ · 60′+ · PAIN ≤5 · RECENT · NOT RECENT. (James,
+  2026-08-08: type rows read O2 · AT · TR · AN app-wide, the pyramid's
+  base-first order — supersedes this section's earlier AN-first mockup
+  order.)
   Type chips are single-select **and toggle off**; duration chips are **multi-select
   (union)**; RECENT (`lastDone < 21`) and NOT RECENT (`>= 21`) are mutually exclusive;
   ALL clears everything. Active = accent background, cream label; inactive = transparent,
@@ -345,7 +348,8 @@ in the type colors with counts.
 - **TEST HISTORY**: date · distance · split · delta rows.
 
 ### 11. New workout (builder) — one screen
-No. + Title · **TYPE** AN/O2/AT/TR (44px, active = type color) · **DIFFICULTY**
+No. + Title · **TYPE** O2/AT/TR/AN (44px, active = type color; James,
+2026-08-08: base-first order, app-wide) · **DIFFICULTY**
 INTRO/MODERATE/ADVANCED · **EXPECTED PAIN** 1–10 picker · column header
 "SET · DUR · PACE REF · SPM · REST · SPLIT" · rows of 44px fields
 (dur 48px, pace ref 64px accent text, spm 40px, rest 44px) with a 44px **SET** cell

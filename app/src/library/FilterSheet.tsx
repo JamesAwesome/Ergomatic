@@ -15,13 +15,16 @@ import {
   type Filters,
 } from "./filters";
 
-// Chip order per docs/design/README.md §Screens → "2. Library" (AN before O2
-// — not alphabetical), carried over from the retired FilterChips.tsx.
+// Chip order per docs/design/README.md §Screens → "2. Library" (amended
+// 2026-08-08: James's ordering decision — every left-to-right type row reads
+// O2 · AT · TR · AN app-wide, the pyramid's base-first order, superseding
+// this sheet's earlier AN-first order carried over from the retired
+// FilterChips.tsx).
 const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
-  { type: "AN", label: "AN" },
   { type: "O2", label: "O2" },
   { type: "AT", label: "AT" },
   { type: "TR", label: "TR" },
+  { type: "AN", label: "AN" },
 ];
 
 const PAIN_LEVELS = [1, 2, 3, 4, 5];

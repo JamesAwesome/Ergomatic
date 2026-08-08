@@ -61,6 +61,17 @@ describe("ClassificationCard", () => {
       expect(onTypeChange).toHaveBeenCalledWith("TR");
     });
 
+    // James's 2026-08-08 ordering decision: every left-to-right type row
+    // reads O2 · AT · TR · AN app-wide (the pyramid's base-first order), not
+    // the AN-first order this card used before.
+    it("renders the TYPE chips left-to-right as O2, AT, TR, AN", () => {
+      const { container } = setup();
+      const labels = Array.from(
+        container.querySelectorAll(".classification-chip-type"),
+      ).map((el) => el.textContent);
+      expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
+    });
+
     // TYPE always has a selection (unlike PAIN, which starts at null), so
     // the summary word is present from the very first render — there's no
     // "nothing selected yet" state to assert here, only that it tracks the
@@ -103,7 +114,7 @@ describe("ClassificationCard", () => {
       const word = screen.getByText("COMFORTABLY HARD");
       expect(word.tagName).toBe("P");
       expect(word).not.toHaveAttribute("tabindex");
-      for (const label of ["AN", "O2", "AT", "TR"]) {
+      for (const label of ["O2", "AT", "TR", "AN"]) {
         expect(
           screen.getByRole("button", { name: label }),
         ).not.toHaveAccessibleName("COMFORTABLY HARD");
@@ -202,7 +213,7 @@ describe("ClassificationCard", () => {
 
   it("gives every chip in every group the 44px hit-target class", () => {
     setup({ pain: 1 });
-    const labels = ["AN", "O2", "AT", "TR", "EASY", "MEDIUM", "HARD"];
+    const labels = ["O2", "AT", "TR", "AN", "EASY", "MEDIUM", "HARD"];
     for (const label of labels) {
       expect(screen.getByRole("button", { name: label })).toHaveClass(
         "classification-chip",

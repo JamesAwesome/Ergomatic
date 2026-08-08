@@ -33,11 +33,13 @@ import {
 import TodayFilterSheet, { type TodayFilterDraft } from "./TodayFilterSheet";
 import TypeBadge from "../components/TypeBadge";
 import { TokenRow } from "../components/TokenRow";
+import { TYPE_WORDS } from "../components/typeWords";
 
-// Chip order per the task brief — AN before O2, matching Library's own
-// FilterSheet.tsx TYPE cells (docs/design/README.md §Screens → "2. Library":
-// not alphabetical).
-const TYPE_CHIPS: WorkoutType[] = ["AN", "O2", "AT", "TR"];
+// Chip order: O2, AT, TR, AN — the pyramid's base-first order, matching
+// Library's own FilterSheet.tsx and Builder's ClassificationCard.tsx TYPE
+// cells (docs/design/README.md §Screens → "2. Library", amended 2026-08-08:
+// James's ordering decision unifies every left-to-right type row app-wide).
+const TYPE_CHIPS: WorkoutType[] = ["O2", "AT", "TR", "AN"];
 
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept
 // local rather than shared with ClassificationCard.tsx's own identical map:
@@ -596,6 +598,16 @@ function TodayView({
       },
   );
 
+  // The type the chips (and now the descriptor word below them) actually
+  // treat as selected: a swap if one is set, else whatever's effectively
+  // prescribed today (TR standing in on a TEST day) — the exact expression
+  // each TodayChip's own `active` prop already used inline, pulled out once
+  // so the new word row reads off the identical value rather than a second
+  // copy of the same ternary. Null only in freestyle (no plan, no chips, no
+  // word to show).
+  const effectiveType: WorkoutType | null =
+    overrides.swapType ?? effectivePrescribed;
+
   // Every chip handler below funnels through this: update the visible
   // state AND persist in the same call, so no chip tap is ever lost to a
   // reload/remount before its effect would otherwise flush.
@@ -806,12 +818,29 @@ function TodayView({
               <TodayChip
                 key={type}
                 label={type}
-                active={(overrides.swapType ?? effectivePrescribed) === type}
+                active={effectiveType === type}
                 onClick={() => handleTypeChip(type)}
                 typeColorVar={TYPE_COLOR_VAR[type]}
               />
             ))}
           </div>
+          {/* The effective type's descriptor word (James's request,
+              2026-08-08 round), reusing the classification card's own word
+              idiom (ClassificationCard.tsx/.classification-type-word —
+              mono, --ink-2, 11px) and its reserved-line-box fix
+              (.classification-type-label-row's min-height pattern) so a
+              rerender can never nudge anything below it — moot here in
+              practice since `effectiveType` is never null whenever this
+              branch renders (a plan is active), but kept for the same
+              belt-and-suspenders reason ClassificationCard.tsx's own
+              comment gives. `aria-hidden`: purely presentational
+              reinforcement of what each chip's own `aria-pressed` already
+              conveys to assistive tech, not a second announcement of it. */}
+          {effectiveType !== null && (
+            <div className="today-type-word-row" aria-hidden="true">
+              <p className="today-type-word">{TYPE_WORDS[effectiveType]}</p>
+            </div>
+          )}
         </>
       ) : (
         <div className="today-plan-line today-plan-line-freestyle">
