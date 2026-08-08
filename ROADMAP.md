@@ -1551,6 +1551,15 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-08) — e2e retries actually retry: two red main
+  runs traced to fixture non-idempotency, not code — the stack's users are
+  find-or-create by email and its volume persists, so a mid-test failure
+  (or killed run) stranded an imported fixed-title workout and the CI
+  retry (or the next local run) re-imported it into a strict-mode
+  duplicate. `signInViaBackdoor` now suffixes every email with a
+  per-process `RUN_ID` (idempotent for specs that already embed one), the
+  connected walks carry unique titles, and `library.spec`'s one-shot
+  scroll read became a poll. 244/244 twice back to back locally.
 - **PR #TBD** (2026-08-08) — type rows unified to O2 · AT · TR · AN (the
   pyramid's base-first order) across Today's type-swap chips, the Library
   filter sheet's TYPE cells, and Builder's classification card, with the

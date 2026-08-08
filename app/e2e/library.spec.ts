@@ -232,8 +232,14 @@ test.describe("scroll restoration (bugfix round: back-nav + scroll)", () => {
     // anything against this narrowed set of rows.
     const lastRow = rows.nth(filteredCount - 1);
     await lastRow.scrollIntoViewIfNeeded();
+    // Poll, don't read-once: under CI load the scroll settles a beat after
+    // scrollIntoViewIfNeeded resolves, and a same-tick read caught a
+    // mid-flight scrollY (red main run, 2026-08-08). The settled value is
+    // what the restore assertion below compares against.
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(200);
     const scrolledY = await page.evaluate(() => window.scrollY);
-    expect(scrolledY).toBeGreaterThan(200);
     const title = await lastRow.locator(".workout-row-title").innerText();
     await lastRow.click();
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { RUN_ID, signInViaBackdoor } from "./helpers";
 
 // Phase 6H Task 7: the News tab proven against the real stack — the one
 // thing no client test can give is the cross-reload proof that a read
@@ -18,7 +18,6 @@ import { signInViaBackdoor } from "./helpers";
 // prior run left in the database — the "fresh user" half of the brief's
 // own suggested fix, not the "assert deltas" half, since the brief's own
 // literal assertions ("4 UNREAD", "3 UNREAD") are absolute counts.
-const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const WORKOUT_TYPES_TITLE =
   "The four workout types, and how hard each should feel";

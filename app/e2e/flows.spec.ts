@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { RUN_ID, signInViaBackdoor } from "./helpers";
 
 test.describe("health", () => {
   test("returns ok/db/version JSON", async ({ request }) => {
@@ -36,8 +36,11 @@ test.describe("backdoor sign-in", () => {
   test("signs in, renders the shell + You card, then signs back out", async ({
     page,
   }) => {
+    // Built with RUN_ID up front (the helper suffixes any email without
+    // one) because the You-card assertion below needs the FINAL address.
+    const email = `flows-${RUN_ID}@e2e.test`;
     await signInViaBackdoor(page, {
-      email: "flows@e2e.test",
+      email,
       name: "Flows Tester",
     });
     // AppRoutes redirects "/" -> "/today" (Phase 6A Task 2; was "/library"
@@ -48,7 +51,7 @@ test.describe("backdoor sign-in", () => {
     await expect(page.getByRole("link", { name: "YOU" })).toBeVisible();
 
     await page.getByRole("link", { name: "YOU" }).click();
-    await expect(page.getByText("flows@e2e.test")).toBeVisible();
+    await expect(page.getByText(email)).toBeVisible();
 
     await page.getByRole("button", { name: /sign out/i }).click();
     await expect(
