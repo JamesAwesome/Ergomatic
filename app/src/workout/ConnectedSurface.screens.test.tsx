@@ -29,13 +29,16 @@
 // and Task 8's `connected.spec.ts` does it in a browser once the seam
 // exists.
 
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   compileProgram,
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
-import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type {
+  IntervalActual,
+  MonitorFrame,
+} from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type {
@@ -51,11 +54,14 @@ const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
 
-function fillingLow(): { program: WorkoutProgram; phases: EnginePhase[] } {
-  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
-  if (!w) throw new Error("missing library fixture: Filling Low");
+function libraryFixture(title: string): {
+  program: WorkoutProgram;
+  phases: EnginePhase[];
+} {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
   const draft = buildDraft({
-    id: "filling-low",
+    id: title.toLowerCase().replace(/ /g, "-"),
     title: w.title,
     type: w.type as WorkoutType,
     steps: w.steps,
@@ -68,7 +74,33 @@ function fillingLow(): { program: WorkoutProgram; phases: EnginePhase[] } {
   return { program, phases };
 }
 
-const FIXTURE = fillingLow();
+const FIXTURE = libraryFixture("Filling Low");
+
+/** Pane C's own second fixture: 25 intervals (6:00 warm-up then 24 x 500 m),
+ *  the handoff's own worked example of the case that forces the scroll —
+ *  "25 intervals cannot be compressed into 390px honestly" (DEVIATIONS row
+ *  2). Filling Low's four rows would photograph the pane without ever
+ *  exercising the thing the row is about. */
+const LONG_FIXTURE = libraryFixture("Sea Smoke");
+
+/** What the machine reported for an interval that is already behind the
+ *  rower. Built from the PROGRAM's own numbers, not typed-in ones: the
+ *  actual is the target's distance rowed a touch fast, which is the state
+ *  the handoff's mockup draws (ochre) on its completed rows. */
+function actualFor(index: number, program: WorkoutProgram): IntervalActual {
+  const interval = program.intervals[index]!;
+  const split = interval.targetSplit ?? 132;
+  const meters = interval.kind === "distance" ? interval.value : 2384;
+  return {
+    index,
+    elapsedSeconds:
+      interval.kind === "time" ? interval.value : (meters / 500) * split,
+    distanceMeters: meters,
+    avgSplit: split - 6,
+    avgSpm: (interval.displaySpm ?? 20) - 4,
+    avgHeartRateBpm: 158 + index,
+  };
+}
 
 /** Mid-way through the first 2000 m rep, going a little too hard: the
  *  handoff's own mockup shows `1:57.8` against a `2:00.0` target so the
@@ -87,81 +119,149 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   };
 }
 
-function capture(
-  pane: PaneId,
-  phase: ConnectedPhase,
-  frameOverrides: Partial<MonitorFrame> = {},
-  endedBy: MonitorSession["endedBy"] = null,
-): string {
+/** A trace with one of every entry shape the driver actually records — a
+ *  hex write, a state transition, an ack, a rejection — so the sheet's
+ *  capture shows the list doing its real job rather than three tidy lines.
+ *  Serialized here exactly the way `eventLog.ts` does it. */
+const LOG_JSON = JSON.stringify(
+  [
+    ["notify-first", "0x0031 (19B)"],
+    ["write", "f1 76 1a 01 00 f2"],
+    ["armed", "programmed 4 interval(s)"],
+    ["state", "armed -> rowing"],
+    ["interval-complete", "index 0 (480.0s / 2384m)"],
+    ["divergence", "0x0033 index 5 outside program length 4"],
+    ["transport-error", "sample rate write failed: InvalidStateError"],
+  ].map(([kind, detail], seq) => ({ seq, kind, detail })),
+);
+
+interface CaptureOptions {
+  phase?: ConnectedPhase;
+  frame?: Partial<MonitorFrame>;
+  endedBy?: MonitorSession["endedBy"];
+  actuals?: IntervalActual[];
+  fixture?: { program: WorkoutProgram; phases: EnginePhase[] };
+  /** Runs against the mounted surface before the markup is read — the
+   *  diagnostics sheet has no prop of its own, it is opened by the same
+   *  triple-tap a rower uses. */
+  before?: () => void;
+}
+
+function capture(pane: PaneId, options: CaptureOptions = {}): string {
+  const fixture = options.fixture ?? FIXTURE;
   localStorage.clear();
   localStorage.setItem(LAST_PANE_KEY, pane);
   const session: MonitorSession = {
-    phase,
+    phase: options.phase ?? "live",
     error: null,
     deviceName: DEVICE,
-    frame: liveFrame(frameOverrides),
-    actuals: [],
-    endedBy,
+    frame: liveFrame(options.frame),
+    actuals: options.actuals ?? [],
+    endedBy: options.endedBy ?? null,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    exportLog: vi.fn().mockReturnValue(LOG_JSON),
   };
   const view = render(
     <ConnectedSurface
-      phases={FIXTURE.phases}
-      program={FIXTURE.program}
+      phases={fixture.phases}
+      program={fixture.program}
       session={session}
       onEnded={vi.fn()}
     />,
   );
+  options.before?.();
   const html = document.querySelector("main.connected-surface")!.outerHTML;
   view.unmount();
   return html;
 }
 
+/** The rower's own gesture, not a prop: three deliberate presses on one
+ *  pager target (handoff §5). */
+function tripleTapGrid(): void {
+  const target = screen.getByRole("button", { name: "Grid pane" });
+  fireEvent.click(target);
+  fireEvent.click(target);
+  fireEvent.click(target);
+}
+
 describe("screen fixtures for pnpm screenshots", () => {
   it("pane A, rowing", async () => {
-    await expect(capture("timer", "live")).toMatchFileSnapshot(
+    await expect(capture("timer")).toMatchFileSnapshot(
       "../../e2e/fixtures/connected-pane-timer.html",
     );
   });
 
   it("pane B, rowing", async () => {
-    await expect(capture("live", "live")).toMatchFileSnapshot(
+    await expect(capture("live")).toMatchFileSnapshot(
       "../../e2e/fixtures/connected-pane-live.html",
     );
   });
 
   it("pane B, no HR monitor", async () => {
     await expect(
-      capture("live", "live", { heartRateBpm: null }),
+      capture("live", { frame: { heartRateBpm: null } }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-nohr.html");
   });
 
   it("pane A, erg paused", async () => {
     await expect(
-      capture("timer", "paused", {
-        intervalRemaining: { kind: "time", value: 41 },
+      capture("timer", {
+        phase: "paused",
+        frame: { intervalRemaining: { kind: "time", value: 41 } },
       }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-paused.html");
   });
 
   it("pane B, connection lost", async () => {
-    await expect(capture("live", "disconnected")).toMatchFileSnapshot(
-      "../../e2e/fixtures/connected-disconnected.html",
-    );
+    await expect(
+      capture("live", { phase: "disconnected" }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-disconnected.html");
   });
 
-  it("pane C's slot, until Task 7 fills it", async () => {
-    await expect(capture("grid", "live")).toMatchFileSnapshot(
-      "../../e2e/fixtures/connected-pane-grid.html",
-    );
+  // --- Task 7 ------------------------------------------------------------
+
+  /** Mid-session on Filling Low: interval 1 (the warm-up) behind, interval
+   *  2 (the first 2000 m rep) running, two more to come — one of each of
+   *  the handoff's three row states in one frame. */
+  it("pane C, the grid mid-session", async () => {
+    await expect(
+      capture("grid", { actuals: [actualFor(0, FIXTURE.program)] }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-grid.html");
+  });
+
+  /** The scroll case, and the only one that can show it: 25 intervals, the
+   *  active row eight deep. Header and caption pinned, five rows visible at
+   *  390px of landscape height, the rest below the fold. */
+  it("pane C, twenty-five intervals", async () => {
+    await expect(
+      capture("grid", {
+        fixture: LONG_FIXTURE,
+        frame: {
+          intervalIndex: 8,
+          intervalRemaining: { kind: "distance", value: 312 },
+        },
+        actuals: Array.from({ length: 8 }, (_, i) =>
+          actualFor(i, LONG_FIXTURE.program),
+        ),
+      }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-grid-long.html");
+  });
+
+  it("the diagnostics sheet, triple-tapped open", async () => {
+    await expect(
+      capture("grid", {
+        actuals: [actualFor(0, FIXTURE.program)],
+        before: tripleTapGrid,
+      }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-log-sheet.html");
   });
 
   it("the hand-off frame at ended", async () => {
-    await expect(capture("live", "ended", {}, "user")).toMatchFileSnapshot(
-      "../../e2e/fixtures/connected-ended.html",
-    );
+    await expect(
+      capture("live", { phase: "ended", endedBy: "user" }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-ended.html");
   });
 });

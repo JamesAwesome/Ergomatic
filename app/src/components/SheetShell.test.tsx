@@ -121,4 +121,51 @@ describe("SheetShell", () => {
     await userEvent.tab();
     expect(middle).toHaveFocus();
   });
+  // --- The optional primary (Phase 7B Task 7) ---------------------------
+
+  describe("without a primary", () => {
+    /** The connected-mode diagnostics sheet's shape: a level-3 commit and a
+     *  level-2 dismiss, and NO level 1 — the house allows one L1 per screen
+     *  and this sheet's actions are neither. */
+    function renderPrimaryless() {
+      const opener = createRef<HTMLElement | null>();
+      return render(
+        <SheetShell
+          open
+          titleId="test-sheet-title"
+          onDismiss={vi.fn()}
+          opener={opener}
+        >
+          <h2 id="test-sheet-title">Test sheet</h2>
+          <button type="button" className="button-l3">
+            Act
+          </button>
+          <button type="button" className="button-l2">
+            Close
+          </button>
+        </SheetShell>,
+      );
+    }
+
+    it("renders no level-1 button of its own", () => {
+      renderPrimaryless();
+      expect(screen.getByRole("dialog").querySelector(".button-l1")).toBeNull();
+      expect(
+        screen.getAllByRole("button").map((b) => b.textContent),
+      ).toStrictEqual(["Act", "Close"]);
+    });
+
+    it("still traps focus, across the CALLER's own buttons", async () => {
+      renderPrimaryless();
+      const act = screen.getByRole("button", { name: "Act" });
+      const close = screen.getByRole("button", { name: "Close" });
+      expect(act).toHaveFocus();
+
+      await userEvent.tab({ shift: true });
+      expect(close).toHaveFocus();
+
+      await userEvent.tab();
+      expect(act).toHaveFocus();
+    });
+  });
 });

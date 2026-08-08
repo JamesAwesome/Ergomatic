@@ -192,6 +192,26 @@ export interface MonitorSession {
   endSession(): Promise<void>;
   /** Cancel's machine semantics per state (spec §2's M3 ruling). */
   cancel(): Promise<void>;
+  /**
+   * THE ONE READ-ONLY WINDOW ONTO THE DRIVER'S EVENT LOG (Task 7's
+   * diagnostics sheet, handoff §5 — added here because Task 4 exposed the
+   * log only as an INJECTION point, `MonitorSessionDeps.createLog`, and a
+   * screen may not reach past this hook for a driver, a transport or a
+   * log).
+   *
+   * A WINDOW, NOT A SOURCE: this returns `MonitorEventLog.exportLog()`'s
+   * JSON string at the instant it is called, and there is no subscription
+   * to add — the log has no `subscribe` and design spec §5 says it does not
+   * get one. The sheet reads once, on open, and what it draws is that
+   * snapshot until it is re-opened. It is deliberately the EXPORT string
+   * rather than the `entries()` array: `COPY LOG` copies exactly the bytes
+   * the sheet was built from, so there is one string and no second
+   * serialization to disagree with the first.
+   *
+   * `"[]"` before a `connect()` has ever built a log — the same shape an
+   * empty log exports, so no caller needs a null branch.
+   */
+  exportLog(): string;
 }
 
 /**
@@ -465,6 +485,13 @@ export function useMonitorSession(
 
   const driverRef = useRef<MonitorDriver | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  /** The log this session's driver is writing into, kept so `exportLog()`
+   *  can read it. Deliberately NOT cleared by `teardown` OR by `cancel()`:
+   *  the sheet is still openable on the `ended`/`disconnected` frames, and
+   *  the trace of an attempt that just failed — or that the rower just
+   *  cancelled out of — is the one a bug report most needs. The next
+   *  `connect()` replaces it. */
+  const logRef = useRef<MonitorEventLog | null>(null);
   /** THIS SESSION'S OWN RECORD — opened at `live`, closed exactly once.
    *  The single source of truth for "is a run of ours open?"; nothing here
    *  re-derives that from global storage (see the header note on M-2). */
@@ -709,6 +736,7 @@ export function useMonitorSession(
       update({ phase: "pairing" });
       await transport.connect(device.id);
       const log = (depsRef.current.createLog ?? createEventLog)();
+      logRef.current = log;
       const driver = createPm5Driver(transport, log, {
         ...depsRef.current.driverOptions,
         deviceName: device.name,
@@ -844,6 +872,13 @@ export function useMonitorSession(
     update(INITIAL_STATE);
   }, [teardown, update]);
 
+  /** See `MonitorSession.exportLog`. Reads the ref at call time — stable
+   *  identity, so a component can hold it across renders without the sheet
+   *  re-reading a log it deliberately snapshots once. */
+  const exportLog = useCallback((): string => {
+    return logRef.current?.exportLog() ?? "[]";
+  }, []);
+
   // Teardown on unmount: the listener goes, the radio goes, no driver is
   // left holding a subscription to a component that no longer exists. The
   // effect body runs once (no deps) and `teardown` reads only refs.
@@ -860,5 +895,6 @@ export function useMonitorSession(
     program,
     endSession,
     cancel,
+    exportLog,
   };
 }

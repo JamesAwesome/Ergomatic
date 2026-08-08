@@ -109,6 +109,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(undefined),
+    exportLog: vi.fn().mockReturnValue("[]"),
     ...overrides,
   };
 }

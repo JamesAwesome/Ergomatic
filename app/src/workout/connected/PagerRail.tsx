@@ -30,7 +30,11 @@ const LABELS: Record<PaneId, { long: string; short: string; spoken: string }> =
 
 export interface PagerRailProps {
   active: PaneId;
-  onSelect: (pane: PaneId) => void;
+  /** `target` is the button that was pressed. The shell needs it for two
+   *  things the rail itself has no opinion about: counting the deliberate
+   *  taps that open the diagnostics sheet (handoff §5), and giving that
+   *  sheet the element to hand focus back to when it closes. */
+  onSelect: (pane: PaneId, target: HTMLElement) => void;
 }
 
 export default function PagerRail({ active, onSelect }: PagerRailProps) {
@@ -51,7 +55,7 @@ export default function PagerRail({ active, onSelect }: PagerRailProps) {
           // pane is showing.
           aria-current={pane === active ? "page" : undefined}
           aria-label={LABELS[pane].spoken}
-          onClick={() => onSelect(pane)}
+          onClick={(event) => onSelect(pane, event.currentTarget)}
         >
           <span className="connected-pager-mark" aria-hidden="true" />
           <span
