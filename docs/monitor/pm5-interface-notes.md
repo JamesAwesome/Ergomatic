@@ -451,6 +451,18 @@ not assumed silently.
 | 17     | Workout Duration Type (enum: 0=Time, 0x40=Calories, 0x60=Watt-Min, 0x80=Distance — same encoding as `CSAFE_PM_SET_WORKOUTDURATION`'s identifier byte, §11) | —                                                                                                                                                                                                                                                                                   |
 | 18     | Drag Factor                                                                                                                                                | whole units                                                                                                                                                                                                                                                                         |
 
+**Elapsed Time and Distance are PER-INTERVAL, not session-cumulative**
+(hardware walk 4, §18's 2026-08-08 entry — the doc says nothing either
+way, and the scales above are all it ever claimed). On a 2x100m both
+fields reset TOGETHER at each new work interval
+(`state=resting elapsed=37.81 distance=101.8` -> `state=rowing elapsed=0
+distance=0.7`), and each interval's count spans its own work plus its
+trailing rest. Consumers that want a whole-session total read
+`MonitorFrame.sessionElapsedSeconds`/`sessionDistanceMeters`, which
+`src/monitor/driver.ts` accumulates across these resets; consumers that
+want "how far into THIS interval" read these two fields directly (against
+0x0033's Last Split Time/Distance, offsets 14-19 below).
+
 **0x0032 — C2 rowing additional status 1 (17 bytes, BLE doc p.14):**
 
 | Offset | Field                   | Scale                                                               |
@@ -2037,15 +2049,16 @@ interstitial checklist, never from the log.
 
 ## 18. Laptop session observations (results destination for §17)
 
-### 2026-08-08 session (PM5 432331249) — HARDWARE WALKS 1-3 (the PR #59 verification row, IN PROGRESS)
+### 2026-08-08 session (PM5 432331249) — HARDWARE WALKS 1-4 (the PR #59 verification row, IN PROGRESS)
 
 The first product-app walks — Connect from a workout detail against the
-compose stack's production build, not the lab page. Three walks so far;
+compose stack's production build, not the lab page. Four walks so far;
 every finding below shipped as a fix on `phase-7b-connected` the same
 day (commits `86963ff..`). Capture instruments grew mid-session: walk 1
 is a 1 fps screen recording (`test-20.mp4`), walk 2 the same
 (`pause-worked.mp4`), walk 3 the first wire log (the diagnostics sheet
-mid-session, then the sessionStorage stash).
+mid-session, then the sessionStorage stash), walk 4 a wire log read
+alongside a recording of the panes' own numbers.
 
 **Walk 1 (`test-20.mp4`, 111 s):**
 
@@ -2113,10 +2126,42 @@ mid-session, then the sessionStorage stash).
   `ergomatic:last-rowed-log` (record-opening sessions only) into
   sessionStorage.
 
-**Readings still owed by the next row(s):** `rowingActive` on the
-first-pull frame; item 21's three timing spans; the PAUSED tick count
-from a full log; RATE at normal pace; one `.5` pace target accepted by
-the machine.
+**Walk 4 (2026-08-08, a 2x100m):**
+
+- **`rowingActive` READ TRUE ON THE FIRST PULL** — the unobserved
+  premise walk 3 flagged is now observed. The ready gate promoted on
+  the INSTANT path; the five-frame distance fallback never ran. RATE
+  read sane too (25, then 24), which reads walk 1's "57-68" as a
+  barely-moving-stroke artifact rather than a decode fault.
+- **0x0031's Elapsed Time AND Distance ARE PER-INTERVAL, not
+  session-cumulative — found and FIXED here.** The frame log carries
+  the pair: `state=resting elapsed=37.81 distance=101.8` followed
+  immediately by `state=rowing elapsed=0 distance=0.7`, then
+  `state=resting elapsed=29.44 distance=101` and
+  `state=finished elapsed=33.07 distance=109.7`. Both fields reset
+  TOGETHER at each new work interval, and each interval's count spans
+  its own work plus its trailing rest. Two consumers had assumed
+  session-cumulative and both broke on camera: TOTAL LEFT fell
+  1:30 -> 1:11 and then ROSE to 1:38 at interval 2, and the METERS card
+  fell 109 -> 50. The fix is a driver-side accumulator (`driver.ts`'s
+  `session`) that folds each interval's last pre-reset reading into a
+  running offset and emits `MonitorFrame.sessionElapsedSeconds`/
+  `sessionDistanceMeters`; TOTAL LEFT, the METERS card and the log
+  sheet's `SESSION m:ss` caption all read the accumulated pair now. The
+  accumulator is a DISPLAY ESTIMATE: it can only bank the last reading
+  it actually SAW, so up to one status tick (~0.5 s / ~1 m) per
+  boundary may be undercounted. The RECORD is untouched — per-interval
+  actuals come from 0x0037/0x0038. `intervalRemaining` is untouched
+  too: walk 4 showed the interval countdown correct as it stood, and it
+  reads the raw per-interval pair against 0x0033's own last-split
+  reference on purpose. The two INTERVAL-scoped consumers in
+  `useMonitorSession.ts` (the paused freeze key's `distanceMeters > 0`
+  guard and the ready gate) keep reading the raw pair, and both now say
+  in a comment that they depend on the reset.
+
+**Readings still owed by the next row(s):** item 21's three timing
+spans; the PAUSED tick count from a full log; RATE at normal pace on a
+sustained piece; one `.5` pace target accepted by the machine.
 
 ### 2026-08-05 session (PM5 432331249) — LAPTOP SESSION 1
 
