@@ -1471,6 +1471,22 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-07/08, round 3 on the same bug) — the single-shot
+  `window.scrollTo(0, 0)` from the round below (pre-paint, plus
+  `scrollRestoration = "manual"` claimed) still lost on real iOS WebKit —
+  and lost in BOTH iOS browsers, not just Safari, ruling out a
+  browser-chrome-specific cause. Instrumented desktop-WebKit and
+  iPhone-emulated runs never showed a second scroll pass; the mechanism is
+  triangulated by elimination, not directly observed, because no harness on
+  this machine can inject a real touch gesture. This round adds a shared
+  `holdScrollTop` helper (`src/shell/holdScrollTop.ts`): set the top, then
+  hold it at rAF cadence for ~30 frames (~500ms), re-asserting whenever
+  something else moves `scrollY`, aborting instantly on `touchstart`/
+  `wheel`/`keydown` so it never fights a rower's own scroll. Reader and
+  Releases both adopt it in place of their bare `scrollTo` calls. If this
+  round still fails on device, the recorded next step is architectural: the
+  reader becomes its own scroll container, which also restores News's BACK
+  position for free (currently sacrificed — see the round below).
 - **PR #TBD** (2026-08-07, follow-up to the News polish round below) — the
   reader's scroll-to-top actually holds on iOS Safari: PR #55's
   `useEffect`-timed `window.scrollTo(0, 0)` ran and landed (proven with
