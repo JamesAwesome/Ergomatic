@@ -3,15 +3,23 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
+import { compileProgram } from "../../domain/monitor/program.js";
+import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import type { IntervalActual } from "../../domain/monitor/types.js";
 import { buildDraft, withNudge } from "./draft";
 import type { SessionDraft } from "./draft";
 import { buildRun } from "./engine";
 import type { SessionRun } from "./run";
+import type { MonitorRun } from "../monitor/monitorRun.js";
 import {
   buildLogSeed,
   buildLogSteps,
   buildManualLogSteps,
+  buildMonitorLogSteps,
   logTotals,
+  MonitorLogSeedError,
+  MONITOR_HR_MIN,
+  MONITOR_HR_MAX,
 } from "./logDraft";
 
 // Realistic fixtures throughout (repo convention, CLAUDE.md's own recurring
@@ -887,6 +895,458 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
       ],
       paces: {},
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildMonitorLogSteps (7C spec §3) — the monitor-run twin of buildLogSteps.
+// ---------------------------------------------------------------------------
+
+function compileOrThrow(
+  phases: Parameters<typeof compileProgram>[0],
+): WorkoutProgram {
+  const result = compileProgram(phases);
+  if ("code" in result) {
+    throw new Error(
+      `test fixture failed to compile (${result.code}): ${result.message}`,
+    );
+  }
+  return result;
+}
+
+// WALK4_ACTUALS: IntervalActual[] is pinned SYNTHESIZED, NOT decoded from a
+// captured wire log — read this comment before touching the fixture.
+//
+// The task brief that named this fixture ("freeze the walk-4 fixture from
+// the wire itself") instructed decoding walk 4's raw 0x0037/0x0038 pair for
+// an interval boundary ("the pasted log's seq 24/25 hex") out of
+// `docs/monitor/pm5-interface-notes.md` §18's 2026-08-08 entry (the walk-4
+// paragraphs) through `parseSplitIntervalData`/`toIntervalActual`.
+// **THAT HEX DOES NOT EXIST IN THE REPO.** §18's 2026-08-08 "HARDWARE WALKS
+// 1-4" section (interface-notes.md:2052-2165) records walk 4's own 2x100 m
+// shape and its 0x0031 FRAME readings only ("state=resting elapsed=37.81
+// distance=101.8" etc, interface-notes.md:2136-2145) — never an
+// `intervalComplete` (0x0037/0x0038) capture, raw or decoded, for this
+// session. The adversarial review independently found and named the
+// identical gap
+// (`docs/superpowers/specs/2026-08-08-phase-7c-adversarial-review.md`, m7:
+// "§7's headline fixture does not exist in the repo ... Walk 4's actual
+// values are not on record"), pointing a future test at
+// `pm5-session3-final.log.gz` instead — but that is a DIFFERENT session
+// (2026-08-06) with a DIFFERENT program shape (2x1:00 TIME, no rest), so its
+// own real hex (interface-notes.md:2529-2539) doesn't fit a "2x100 m
+// distance, 30s rest" fixture either. This is a BRIEF-VS-REPO discrepancy
+// (the agent briefing's own "say so instead of working around it silently"
+// rule), not a quietly-papered-over gap — flagged in the task report too.
+//
+// With neither the fixture's own raw hex nor a shape-matching substitute on
+// record, both entries below are hand-picked, illustrative `IntervalActual`
+// values rather than a wire decode — there is no real capture left to run
+// through `parseSplitIntervalData`/`toIntervalActual`, so no throwaway
+// decode test was written for this fixture (encoding synthetic bytes only
+// to decode them back to the same synthetic numbers would verify nothing).
+// `elapsedSeconds`/`distanceMeters` are chosen close to walk 4's own
+// genuinely-recorded FRAME numbers (each interval's own resting-state
+// reading just before its reset: ~100 m over ~30-38 s); `avgSpm` uses walk
+// 4's own recorded RATE readings verbatim ("RATE read sane too (25, then
+// 24)", interface-notes.md:2133-2135); `avgSplit`/`avgHeartRateBpm` are
+// invented but wire-plausible, existing only to give the "verbatim mapping"
+// test below something real to carry through end to end.
+const WALK4_ACTUALS: IntervalActual[] = [
+  {
+    index: 0,
+    elapsedSeconds: 37.8,
+    distanceMeters: 102,
+    avgSplit: 185.3,
+    avgSpm: 25,
+    avgHeartRateBpm: 132,
+  },
+  {
+    index: 1,
+    elapsedSeconds: 29.4,
+    distanceMeters: 101,
+    avgSplit: 145.5,
+    avgSpm: 24,
+    avgHeartRateBpm: 128,
+  },
+];
+
+// WALK4_RUN's own `program`/`logSeed` are NOT hand-typed — built through the
+// real buildDraft -> buildRun -> compileProgram -> buildLogSeed pipeline
+// (this file's own "realistic fixtures" convention), so this fixture proves
+// the SAME alignment contract `buildMonitorLogSteps` relies on (`LogSeed`'s
+// own doc comment: "seed.steps[i] and program.intervals[i] name the SAME
+// interval for every i") instead of merely asserting it by hand
+// construction. Shape: 2x100 m distance intervals, 30s rest, no warmup —
+// walk 4's own shape (§18, 2026-08-08).
+const WALK4_DRAFT = buildDraft({
+  id: "id-walk4",
+  title: "Walk 4",
+  type: "AT",
+  steps: [
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 100 },
+      ref: { base: "6k", off: 0 },
+      restMinutes: 0.5,
+    },
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 100 },
+      ref: { base: "6k", off: 0 },
+      restMinutes: 0.5,
+    },
+  ],
+});
+const WALK4_BUILT = buildRun(WALK4_DRAFT, BASELINES, NOW);
+const WALK4_PROGRAM = compileOrThrow(WALK4_BUILT.phases);
+const WALK4_LOG_SEED = buildLogSeed(WALK4_BUILT.phases, BASELINES);
+
+const WALK4_RUN: MonitorRun = {
+  v: 2,
+  workoutId: WALK4_DRAFT.workoutId,
+  title: WALK4_DRAFT.title,
+  program: WALK4_PROGRAM,
+  logSeed: WALK4_LOG_SEED,
+  actuals: [WALK4_ACTUALS[0]!, WALK4_ACTUALS[1]!],
+  // The real hardware's own device ID, `pm5-interface-notes.md`'s hardware
+  // sessions throughout (e.g. §18's "PM5 432331249").
+  deviceName: "PM5 432331249",
+  startedAt: NOW.toISOString(),
+  completedAt: new Date(NOW.getTime() + 2 * 60 * 1000).toISOString(),
+  terminated: false,
+};
+
+// A THREE-interval variant (WALK4_RUN only has two) so the "lost boundary"
+// and "early End" gap cases below each have an untouched interval on both
+// sides, proving the gap doesn't shift or contaminate its neighbours.
+const THREE_STEP_ACTUALS: IntervalActual[] = [
+  {
+    index: 0,
+    elapsedSeconds: 32.1,
+    distanceMeters: 101,
+    avgSplit: 160.5,
+    avgSpm: 22,
+    avgHeartRateBpm: 118,
+  },
+  {
+    index: 1,
+    elapsedSeconds: 33.4,
+    distanceMeters: 100,
+    avgSplit: 167.0,
+    avgSpm: 23,
+    avgHeartRateBpm: 121,
+  },
+  {
+    index: 2,
+    elapsedSeconds: 31.0,
+    distanceMeters: 103,
+    avgSplit: 155.0,
+    avgSpm: 24,
+    avgHeartRateBpm: 125,
+  },
+];
+const THREE_STEP_DRAFT = buildDraft({
+  id: "id-three-step",
+  title: "Three Step",
+  type: "AT",
+  steps: [
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 100 },
+      ref: { base: "6k", off: 0 },
+      restMinutes: 0.5,
+    },
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 100 },
+      ref: { base: "6k", off: 0 },
+      restMinutes: 0.5,
+    },
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 100 },
+      ref: { base: "6k", off: 0 },
+    },
+  ],
+});
+const THREE_STEP_BUILT = buildRun(THREE_STEP_DRAFT, BASELINES, NOW);
+const THREE_STEP_PROGRAM = compileOrThrow(THREE_STEP_BUILT.phases);
+const THREE_STEP_LOG_SEED = buildLogSeed(THREE_STEP_BUILT.phases, BASELINES);
+const THREE_STEP_RUN: MonitorRun = {
+  v: 2,
+  workoutId: THREE_STEP_DRAFT.workoutId,
+  title: THREE_STEP_DRAFT.title,
+  program: THREE_STEP_PROGRAM,
+  logSeed: THREE_STEP_LOG_SEED,
+  actuals: THREE_STEP_ACTUALS,
+  deviceName: "PM5 432331249",
+  startedAt: NOW.toISOString(),
+  completedAt: new Date(NOW.getTime() + 3 * 60 * 1000).toISOString(),
+  terminated: false,
+};
+
+describe("buildMonitorLogSteps (7C spec §3)", () => {
+  it("maps walk 4's interval 0: label from the seed, target from the program, actualSplit/spm/avgHr/actualSeconds/actualMeters verbatim from the actual, source pm5", () => {
+    const steps = buildMonitorLogSteps(WALK4_RUN);
+    // toStrictEqual, not the brief's own literal toEqual (repo's
+    // vitest/prefer-strict-equal lint rule) — safe here since every value
+    // below is a real, non-undefined literal, so the stricter matcher's
+    // "no undefined-valued keys" distinction never applies.
+    expect(steps[0]).toStrictEqual({
+      label: WALK4_RUN.logSeed!.steps[0]!.label,
+      targetSplit: WALK4_RUN.program.intervals[0]!.targetSplit ?? undefined,
+      meters: 100,
+      actualSplit: WALK4_ACTUALS[0]!.avgSplit,
+      actualSource: "pm5",
+      spm: WALK4_ACTUALS[0]!.avgSpm,
+      avgHr: WALK4_ACTUALS[0]!.avgHeartRateBpm ?? undefined,
+      actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
+      actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
+    });
+  });
+
+  it("a warmup interval produces NO step (manual parity, adversarial B2) and shifts nothing", () => {
+    const draft = buildDraft({
+      id: "id-walk4-warmup-variant",
+      title: "Walk 4 (warmup variant)",
+      type: "AT",
+      steps: [
+        { k: "wu", minutes: 1 },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 100 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    const program = compileOrThrow(built.phases);
+    const logSeed = buildLogSeed(built.phases, BASELINES);
+    expect(logSeed.steps.map((s) => s.kind)).toStrictEqual(["warmup", "work"]);
+    const run: MonitorRun = {
+      v: 2,
+      workoutId: draft.workoutId,
+      title: draft.title,
+      program,
+      logSeed,
+      actuals: [
+        // A boundary at the warmup's own position — even if the machine
+        // reports one, it must never surface as a step of its own.
+        {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 0,
+          avgSplit: null,
+          avgSpm: null,
+          avgHeartRateBpm: null,
+        },
+        {
+          index: 1,
+          elapsedSeconds: 37.8,
+          distanceMeters: 102,
+          avgSplit: 185.3,
+          avgSpm: 25,
+          avgHeartRateBpm: 132,
+        },
+      ],
+      deviceName: "PM5 432331249",
+      startedAt: NOW.toISOString(),
+      completedAt: NOW.toISOString(),
+      terminated: false,
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.label).toBe(logSeed.steps[1]!.label);
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[0]!.actualSeconds).toBe(37.8);
+    expect(steps[0]!.actualMeters).toBe(102);
+  });
+
+  it("a lost boundary (actuals shorter, that index absent) leaves the step with NO actual and NO source, never 'assumed'", () => {
+    const run: MonitorRun = {
+      ...THREE_STEP_RUN,
+      actuals: THREE_STEP_RUN.actuals.filter((a) => a.index !== 1),
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps).toHaveLength(3);
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[1]!.actualSource).toBeUndefined();
+    expect(steps[1]!.actualSplit).toBeUndefined();
+    expect(steps[1]!.spm).toBeUndefined();
+    expect(steps[1]!.actualSeconds).toBeUndefined();
+    expect(steps[1]!.actualMeters).toBeUndefined();
+    expect(steps[2]!.actualSource).toBe("pm5");
+  });
+
+  it("index:null actuals are dropped entirely", () => {
+    const run: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, index: null }, WALK4_ACTUALS[1]!],
+    };
+    const steps = buildMonitorLogSteps(run);
+    // Interval 0's would-be actual carried index:null — dropped, not read
+    // as "this is interval 0" (domain/monitor/types.ts's own
+    // IntervalActual.index doc comment).
+    expect(steps[0]).toStrictEqual({
+      label: WALK4_RUN.logSeed!.steps[0]!.label,
+      targetSplit: WALK4_RUN.program.intervals[0]!.targetSplit ?? undefined,
+      meters: 100,
+    });
+    expect(steps[1]!.actualSource).toBe("pm5");
+  });
+
+  it("an early End leaves trailing steps bare (partials ruling)", () => {
+    const run: MonitorRun = {
+      ...THREE_STEP_RUN,
+      actuals: THREE_STEP_RUN.actuals.filter((a) => a.index === 0),
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps).toHaveLength(3);
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[1]).toStrictEqual({
+      label: THREE_STEP_RUN.logSeed!.steps[1]!.label,
+      targetSplit:
+        THREE_STEP_RUN.program.intervals[1]!.targetSplit ?? undefined,
+      meters: 100,
+    });
+    expect(steps[2]).toStrictEqual({
+      label: THREE_STEP_RUN.logSeed!.steps[2]!.label,
+      targetSplit:
+        THREE_STEP_RUN.program.intervals[2]!.targetSplit ?? undefined,
+      meters: 100,
+    });
+  });
+
+  it("an effort interval (targetSplit null) still carries its measured actual, no target", () => {
+    // Fork Lightning's own real effort step (0:30 @ MAX) — realistic
+    // fixture convention, and the same step buildLogSteps'/buildLogSeed's
+    // own effort tests above use.
+    const effortStep = workStepFrom("Fork Lightning");
+    const draft = buildDraft({
+      id: "id-effort-actual",
+      title: "Effort Actual",
+      type: "AN",
+      steps: [effortStep],
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    const program = compileOrThrow(built.phases);
+    const logSeed = buildLogSeed(built.phases, BASELINES);
+    expect(program.intervals[0]!.targetSplit).toBeNull();
+    const run: MonitorRun = {
+      v: 2,
+      workoutId: draft.workoutId,
+      title: draft.title,
+      program,
+      logSeed,
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 30,
+          distanceMeters: 120,
+          avgSplit: 110,
+          avgSpm: 32,
+          avgHeartRateBpm: 150,
+        },
+      ],
+      deviceName: "PM5 432331249",
+      startedAt: NOW.toISOString(),
+      completedAt: NOW.toISOString(),
+      terminated: false,
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps).toHaveLength(1);
+    // Whole-object toStrictEqual (not toMatchObject +
+    // .toBeUndefined()) is deliberate: it proves `targetSplit` is truly
+    // ABSENT, not merely present-with-value-undefined — the same
+    // distinction `buildManualLogSteps`' own effort test above pins.
+    expect(steps[0]).toStrictEqual({
+      label: logSeed.steps[0]!.label,
+      actualSplit: 110,
+      actualSource: "pm5",
+      spm: 32,
+      avgHr: 150,
+      actualSeconds: 30,
+      actualMeters: 120,
+      seconds: 30,
+    });
+  });
+
+  it("avgSplit 0 keeps source pm5 and the verbatim fields but omits actualSplit (the pm5 pairing exception)", () => {
+    const run: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSplit: 0 }],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]!.actualSplit).toBeUndefined();
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[0]!.spm).toBe(WALK4_ACTUALS[0]!.avgSpm);
+    expect(steps[0]!.avgHr).toBe(WALK4_ACTUALS[0]!.avgHeartRateBpm);
+    expect(steps[0]!.actualSeconds).toBe(WALK4_ACTUALS[0]!.elapsedSeconds);
+    expect(steps[0]!.actualMeters).toBe(WALK4_ACTUALS[0]!.distanceMeters);
+  });
+
+  it("a null avgSpm omits spm (never a fabricated stroke rate), the rest of the mapping unaffected", () => {
+    const run: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: null }],
+    };
+    const steps = buildMonitorLogSteps(run);
+    // toStrictEqual (not `.spm` toBeUndefined() alone): proves the `spm` key
+    // is truly ABSENT, not present-with-value-undefined.
+    expect(steps[0]).toStrictEqual({
+      label: WALK4_RUN.logSeed!.steps[0]!.label,
+      targetSplit: WALK4_RUN.program.intervals[0]!.targetSplit ?? undefined,
+      meters: 100,
+      actualSplit: WALK4_ACTUALS[0]!.avgSplit,
+      actualSource: "pm5",
+      avgHr: WALK4_ACTUALS[0]!.avgHeartRateBpm ?? undefined,
+      actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
+      actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
+    });
+  });
+
+  it("avgHr outside 20-254 is omitted; the save never rejects for it", () => {
+    const tooLow: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgHeartRateBpm: MONITOR_HR_MIN - 1 }],
+    };
+    const tooHigh: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgHeartRateBpm: MONITOR_HR_MAX + 1 }],
+    };
+    const inBandLow: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgHeartRateBpm: MONITOR_HR_MIN }],
+    };
+    const inBandHigh: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgHeartRateBpm: MONITOR_HR_MAX }],
+    };
+    expect(buildMonitorLogSteps(tooLow)[0]!.avgHr).toBeUndefined();
+    expect(buildMonitorLogSteps(tooHigh)[0]!.avgHr).toBeUndefined();
+    expect(buildMonitorLogSteps(inBandLow)[0]!.avgHr).toBe(MONITOR_HR_MIN);
+    expect(buildMonitorLogSteps(inBandHigh)[0]!.avgHr).toBe(MONITOR_HR_MAX);
+    // Never rejects the step for it — every other verbatim field stands.
+    const step = buildMonitorLogSteps(tooLow)[0]!;
+    expect(step.actualSource).toBe("pm5");
+    expect(step.actualSplit).toBe(WALK4_ACTUALS[0]!.avgSplit);
+  });
+
+  it("a missing or misaligned logSeed throws MonitorLogSeedError (the screen catches it as mode disqualification)", () => {
+    const missingSeed: MonitorRun = { ...WALK4_RUN, logSeed: undefined };
+    expect(() => buildMonitorLogSteps(missingSeed)).toThrow(
+      MonitorLogSeedError,
+    );
+
+    const misaligned: MonitorRun = {
+      ...WALK4_RUN,
+      logSeed: {
+        ...WALK4_RUN.logSeed!,
+        steps: WALK4_RUN.logSeed!.steps.slice(0, 1),
+      },
+    };
+    expect(() => buildMonitorLogSteps(misaligned)).toThrow(MonitorLogSeedError);
   });
 });
 
