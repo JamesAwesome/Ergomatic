@@ -84,7 +84,37 @@ function isRec(v: unknown): v is Record<string, unknown> {
 // Bounds for a logged step: 30-600s/500m spans "sprinting" to "recovery
 // paddle"; spm 10..60 covers rest to a max-rate finish sprint; meters
 // mirrors validateSteps' distance-step bound; seconds caps at 4 hours.
-//
+// Named (2026-08-08, Phase 7C Task 3) alongside the pm5-only bands below so
+// the two sets read as siblings, not magic numbers vs. named constants.
+const STEP_MIN_SPLIT_SECONDS = 30;
+const STEP_MAX_SPLIT_SECONDS = 600;
+const STEP_SPM_MIN = 10;
+const STEP_SPM_MAX = 60;
+
+// Amendment (2026-08-08, Phase 7C Task 3, spec §6): a pm5-only widening for
+// actualSplit/spm. Walk-4 hardware (docs/monitor/pm5-interface-notes.md
+// §18, 2026-08-08 entry) produced avgSpm 66 and splits past 600 on light
+// rowing — real monitor readings at low load, not data-entry mistakes — and
+// the adversarial review's B3 finding is that the manual bands above reject
+// both. These bands apply ONLY when actualSource is "pm5"; the manual bands
+// are UNCHANGED for assumed/stopwatch (a stopwatch entry claiming 66 spm is
+// still a typo). Split's own lower bound is "greater than 0", not a second
+// named minimum: `buildMonitorLogSteps` only ever sets actualSplit when the
+// wire reading is itself a positive number (its own `avgSplit > 0` gate).
+const PM5_MAX_SPLIT_SECONDS = 6000;
+const PM5_SPM_MIN = 0;
+const PM5_SPM_MAX = 99;
+
+// Heart rate bound (2026-08-08, Phase 7C Task 3, spec §6): mirrors the
+// client's own `MONITOR_HR_MIN`/`MONITOR_HR_MAX` (`src/session/
+// logDraft.ts`) — the standard ANT+/BLE heart-rate profile's field range.
+// avgHr never arrives out-of-band from a well-behaved client (it drops the
+// field itself, per that module's own doc comment); this band exists to
+// reject a hand-crafted liar, not a real monitor reading, so it is NOT
+// source-scoped like the pm5 bands above.
+const HR_MIN = 20;
+const HR_MAX = 254;
+
 // Amendment (2026-08-02, Phase 6C Task 1.5): Task 1's `logDraft.ts` proved
 // this validation predates effort refs — `targetSplit` was required
 // unconditionally, but an effort step's frozen split is `estimationSplit`'s
@@ -119,6 +149,9 @@ function validateLogStepEntry(
     spm,
     meters,
     seconds,
+    avgHr,
+    actualSeconds,
+    actualMeters,
   } = raw;
 
   if (typeof label !== "string" || label.length < 1 || label.length > 80) {
@@ -126,23 +159,16 @@ function validateLogStepEntry(
   }
   if (
     targetSplit !== undefined &&
-    (typeof targetSplit !== "number" || targetSplit < 30 || targetSplit > 600)
+    (typeof targetSplit !== "number" ||
+      targetSplit < STEP_MIN_SPLIT_SECONDS ||
+      targetSplit > STEP_MAX_SPLIT_SECONDS)
   ) {
-    return { ok: false, message: at("targetSplit must be a number, 30..600") };
-  }
-  if ((actualSplit === undefined) !== (actualSource === undefined)) {
     return {
       ok: false,
       message: at(
-        "actualSplit and actualSource must both be present or both be absent",
+        `targetSplit must be a number, ${STEP_MIN_SPLIT_SECONDS}..${STEP_MAX_SPLIT_SECONDS}`,
       ),
     };
-  }
-  if (
-    actualSplit !== undefined &&
-    (typeof actualSplit !== "number" || actualSplit < 30 || actualSplit > 600)
-  ) {
-    return { ok: false, message: at("actualSplit must be a number, 30..600") };
   }
   if (
     actualSource !== undefined &&
@@ -153,11 +179,56 @@ function validateLogStepEntry(
       message: at("actualSource must be one of assumed|stopwatch|pm5"),
     };
   }
+  // PM5 PAIRING EXCEPTION (spec §3/§6, Phase 7C Task 3): actualSource "pm5"
+  // is valid without actualSplit (an unusable avgSplit reading, while the
+  // other measured fields are still real). assumed/stopwatch keep the
+  // ordinary paired-unit rule from the Task 1.5 amendment above.
+  const pm5WithoutSplit = actualSource === "pm5" && actualSplit === undefined;
   if (
-    spm !== undefined &&
-    (typeof spm !== "number" || !Number.isInteger(spm) || spm < 10 || spm > 60)
+    !pm5WithoutSplit &&
+    (actualSplit === undefined) !== (actualSource === undefined)
   ) {
-    return { ok: false, message: at("spm must be an integer, 10..60") };
+    return {
+      ok: false,
+      message: at(
+        "actualSplit and actualSource must both be present or both be absent",
+      ),
+    };
+  }
+  if (actualSplit !== undefined) {
+    const isPm5 = actualSource === "pm5";
+    const validSplit =
+      typeof actualSplit === "number" &&
+      (isPm5
+        ? actualSplit > 0 && actualSplit <= PM5_MAX_SPLIT_SECONDS
+        : actualSplit >= STEP_MIN_SPLIT_SECONDS &&
+          actualSplit <= STEP_MAX_SPLIT_SECONDS);
+    if (!validSplit) {
+      return {
+        ok: false,
+        message: at(
+          isPm5
+            ? `actualSplit must be a number, > 0 and <= ${PM5_MAX_SPLIT_SECONDS}`
+            : `actualSplit must be a number, ${STEP_MIN_SPLIT_SECONDS}..${STEP_MAX_SPLIT_SECONDS}`,
+        ),
+      };
+    }
+  }
+  if (spm !== undefined) {
+    const isPm5 = actualSource === "pm5";
+    const spmMin = isPm5 ? PM5_SPM_MIN : STEP_SPM_MIN;
+    const spmMax = isPm5 ? PM5_SPM_MAX : STEP_SPM_MAX;
+    if (
+      typeof spm !== "number" ||
+      !Number.isInteger(spm) ||
+      spm < spmMin ||
+      spm > spmMax
+    ) {
+      return {
+        ok: false,
+        message: at(`spm must be an integer, ${spmMin}..${spmMax}`),
+      };
+    }
   }
   if (
     meters !== undefined &&
@@ -174,6 +245,36 @@ function validateLogStepEntry(
   ) {
     return { ok: false, message: at("seconds must be a number, 1..14400") };
   }
+  if (
+    avgHr !== undefined &&
+    (typeof avgHr !== "number" ||
+      !Number.isInteger(avgHr) ||
+      avgHr < HR_MIN ||
+      avgHr > HR_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(`avgHr must be an integer, ${HR_MIN}..${HR_MAX}`),
+    };
+  }
+  if (
+    actualSeconds !== undefined &&
+    (typeof actualSeconds !== "number" || actualSeconds < 0)
+  ) {
+    return {
+      ok: false,
+      message: at("actualSeconds must be a number, >= 0"),
+    };
+  }
+  if (
+    actualMeters !== undefined &&
+    (typeof actualMeters !== "number" || actualMeters < 0)
+  ) {
+    return {
+      ok: false,
+      message: at("actualMeters must be a number, >= 0"),
+    };
+  }
 
   // Built from an explicit field list (never spread/cast the raw input) so
   // any extra keys the client sent are silently dropped, not persisted.
@@ -182,6 +283,9 @@ function validateLogStepEntry(
   if (actualSplit !== undefined) step.actualSplit = actualSplit;
   if (actualSource !== undefined)
     step.actualSource = actualSource as ActualSource;
+  if (avgHr !== undefined) step.avgHr = avgHr;
+  if (actualSeconds !== undefined) step.actualSeconds = actualSeconds;
+  if (actualMeters !== undefined) step.actualMeters = actualMeters;
   if (spm !== undefined) step.spm = spm;
   if (meters !== undefined) step.meters = meters;
   if (seconds !== undefined) step.seconds = seconds;
@@ -448,6 +552,19 @@ export function createDataRouter({
       badRequest(res, "advancesPlan must be a boolean", "advancesPlan");
       return;
     }
+    // Phase 7C Task 3 (spec §5/§6): session-scoped provenance, optional.
+    // Absent stores null (see stores/logs.ts's create()); present must be a
+    // non-empty string within the wire's own device-name length (bounded
+    // here, not just relied on client-side).
+    if (
+      body.deviceName !== undefined &&
+      (typeof body.deviceName !== "string" ||
+        body.deviceName.length < 1 ||
+        body.deviceName.length > 64)
+    ) {
+      badRequest(res, "deviceName must be a string, 1..64 chars", "deviceName");
+      return;
+    }
     if (!Array.isArray(body.steps) || body.steps.length === 0) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
@@ -481,6 +598,7 @@ export function createDataRouter({
       notes: (body.notes as string | null | undefined) ?? null,
       steps,
       advancesPlan: (body.advancesPlan as boolean | undefined) ?? true,
+      deviceName: (body.deviceName as string | undefined) ?? null,
     });
     res.status(201).json({ id });
   });
