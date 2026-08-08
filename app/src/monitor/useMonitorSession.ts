@@ -53,6 +53,7 @@ import {
   type ProgramRejectionReason,
 } from "./driver";
 import { createEventLog, type MonitorEventLog } from "./eventLog";
+import type { LogSeed } from "../session/logDraft";
 import {
   completeMonitorRun,
   createMonitorRun,
@@ -142,17 +143,39 @@ export interface ConnectedError {
  *  second parameter would have kept that literal true — but there will
  *  never be a caller that doesn't know its workout, and forgetting to pass
  *  one fails SILENTLY, as a blank-titled record in 7C's log prefill. A
- *  compile error is the cheaper reminder. */
+ *  compile error is the cheaper reminder.
+ *
+ *  `logSeed` (7C Task 1) joins `workoutId`/`title` here as REQUIRED for the
+ *  identical reason: `WorkoutProgram` carries no label/warmup-ness either,
+ *  the connect path persists no draft to recover them from later
+ *  (`session/logDraft.ts`'s `LogSeed` doc comment, adversarial B1), and a
+ *  caller that forgot to build one would fail SILENTLY too — a monitor run
+ *  that can never qualify for 7C's monitor-mode log, falling through to a
+ *  manual form with no signal why. The one production caller,
+ *  `WorkoutDetail.tsx`'s `handleConnectProceed`, builds it via
+ *  `buildLogSeed(run.phases, baselines)` at the same moment it compiles
+ *  `program` from those same phases. */
 export interface RunIdentity {
   workoutId: string | null;
   title: string;
+  logSeed: LogSeed;
 }
+
+/** The empty seed backing `ANONYMOUS_RUN`/`NO_IDENTITY` below — never a
+ *  real caller's value (see `NO_IDENTITY`'s own comment: that placeholder
+ *  is never read), just enough to satisfy `RunIdentity`'s now-required
+ *  `logSeed` field. */
+const EMPTY_LOG_SEED: LogSeed = { steps: [], paces: {} };
 
 /** A run with no library workout behind it (a hand-built or ad-hoc
  *  program). `workoutId: null` is a real, supported state — `MonitorRun`
  *  and `SessionRun` both type it that way — and a caller says so
  *  EXPLICITLY; this is not a default the hook falls back to. */
-const ANONYMOUS_RUN: RunIdentity = { workoutId: null, title: "" };
+const ANONYMOUS_RUN: RunIdentity = {
+  workoutId: null,
+  title: "",
+  logSeed: EMPTY_LOG_SEED,
+};
 
 /** What a run would be filed under if one could open before `program()`
  *  ever ran. None can — `live` is downstream of `ready`, which is
@@ -713,6 +736,10 @@ export function useMonitorSession(
               // delivered this very frame, so there is no "which driver?"
               // question to answer here.
               deviceName: driver.capabilities.deviceName,
+              // The frozen log identity `program()`'s caller built alongside
+              // `identity.program` (7C Task 1) — threaded straight through,
+              // never re-derived here.
+              logSeed: identity.logSeed,
             },
             nowDate(),
           );

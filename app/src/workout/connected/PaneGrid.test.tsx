@@ -36,6 +36,7 @@ import type {
 } from "../../monitor/useMonitorSession";
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
+import type { LogSeed } from "../../session/logDraft";
 import { commentStrippedSource } from "../../test/cssView";
 import ConnectedInterstitial from "../ConnectedInterstitial";
 import ConnectedSurface, { LAST_PANE_KEY } from "../ConnectedSurface";
@@ -82,6 +83,13 @@ const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
 
+// 7C Task 1: `RunIdentity.logSeed` is required now. This file's subject is
+// the grid's own rendering/judging, not seed content, so one placeholder
+// fills the fixture below via a spread.
+const TEST_SEED: { logSeed: LogSeed } = {
+  logSeed: { steps: [], paces: {} },
+};
+
 interface Fixture {
   program: WorkoutProgram;
   phases: EnginePhase[];
@@ -103,7 +111,11 @@ function libraryFixture(title: string): Fixture {
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
   }
-  return { program, phases, identity: { workoutId: id, title: w.title } };
+  return {
+    program,
+    phases,
+    identity: { workoutId: id, title: w.title, ...TEST_SEED },
+  };
 }
 
 /** 4 intervals: `time 480` warm-up, then 3 x `distance 2000` with 180 s of

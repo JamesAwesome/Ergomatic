@@ -40,6 +40,7 @@ import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
+import type { LogSeed } from "../session/logDraft";
 import { createFakeTransport } from "../monitor/transports/fake";
 import {
   useMonitorSession,
@@ -64,6 +65,13 @@ const mockUseMonitorSession = vi.mocked(useMonitorSession);
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE_NAME = "PM5 432331249";
+
+// 7C Task 1: `RunIdentity.logSeed` is required now. This file's subject is
+// the interstitial's rendering/wiring, not seed content, so one
+// placeholder fills the fixture below via a spread.
+const TEST_SEED: { logSeed: LogSeed } = {
+  logSeed: { steps: [], paces: {} },
+};
 
 /** The realistic fixture the repo convention requires — a real seeded
  *  library workout through the real assembly (`buildDraft` -> `buildRun`
@@ -90,7 +98,7 @@ function fillingLow(): {
   return {
     program: compiled,
     phases,
-    identity: { workoutId: "filling-low", title: w.title },
+    identity: { workoutId: "filling-low", title: w.title, ...TEST_SEED },
   };
 }
 

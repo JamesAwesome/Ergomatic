@@ -21,6 +21,7 @@
 
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
+import type { LogSeed } from "../session/logDraft";
 import { clearRun, loadRun } from "../session/run";
 
 export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
@@ -38,10 +39,23 @@ export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
  *  reads differently from "abandoned at interval 8", even though both set
  *  `completedAt`. */
 export interface MonitorRun {
-  v: 1;
+  // v bumps 1 -> 2 the day `logSeed` ships (7C spec §2): a v1 record
+  // (written before this task) loads as it always has — see `isMonitorRun`
+  // and `loadMonitorRun`'s own Resilience #5 discipline — it just never
+  // carries a seed, and never migrates to get one (there is nothing to
+  // build it FROM after the fact: the `EnginePhase[]` it would need is long
+  // gone by the time an old record is loaded back). Every run
+  // `createMonitorRun` creates from here on is `v: 2`.
+  v: 1 | 2;
   workoutId: string | null;
   title: string;
   program: WorkoutProgram;
+  // The run's frozen log identity (7C spec §2, `session/logDraft.ts`'s own
+  // `LogSeed` doc comment): captured once, at Connect, from the SAME
+  // `EnginePhase[]` `program` was compiled from. OPTIONAL only so a v1
+  // record (predating this field) still satisfies the type when loaded —
+  // `createMonitorRun` below always supplies one for a record it creates.
+  logSeed?: LogSeed;
   // A future 7C log screen prefilling from this array MUST handle
   // `IntervalActual.index === null` (Phase 7A-fix Task 3, D3) — it means
   // the machine's reported index couldn't be matched to any interval in
@@ -81,8 +95,14 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 function isMonitorRun(value: unknown): value is MonitorRun {
   if (!isPlainRecord(value)) return false;
   const program = value.program;
+  // `logSeed` (7C, v2): same shallow treatment as `program` above — a v1
+  // record simply omits it (undefined is fine, `loadMonitorRun`'s own
+  // "no throw, no migration" contract), and when present it only has to be
+  // shaped enough not to crash a reader that unconditionally destructures
+  // `steps`/`paces` — never a deep per-step validation.
+  const logSeed = value.logSeed;
   return (
-    value.v === 1 &&
+    (value.v === 1 || value.v === 2) &&
     (value.workoutId === null || typeof value.workoutId === "string") &&
     typeof value.title === "string" &&
     isPlainRecord(program) &&
@@ -91,7 +111,11 @@ function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.deviceName === "string" &&
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string") &&
-    typeof value.terminated === "boolean"
+    typeof value.terminated === "boolean" &&
+    (logSeed === undefined ||
+      (isPlainRecord(logSeed) &&
+        Array.isArray(logSeed.steps) &&
+        isPlainRecord(logSeed.paces)))
   );
 }
 
@@ -154,21 +178,34 @@ export function clearMonitorRun(): void {
  *  committing — `WorkoutDetail`'s `startSession`, downstream of the staged
  *  confirm its `handleStart` puts in front of it — calls `clearMonitorRun`
  *  for the mirrored reason. See `session/run.ts`'s own note on why that
- *  clear is NOT inside `saveRun` despite the spec's prose naming it. */
+ *  clear is NOT inside `saveRun` despite the spec's prose naming it.
+ *
+ *  **7C: `logSeed` is REQUIRED here**, not optional the way `MonitorRun`'s
+ *  own field is — the record's field stays optional purely to let a v1
+ *  record (predating this task) still load; this function is the ONE place
+ *  a v2 record is ever written, and its one production caller
+ *  (`useMonitorSession`'s `program` callback) always has a `RunIdentity`
+ *  whose own `logSeed` is required for the identical reason. Requiring it
+ *  here too closes the last silent-failure gap: a caller that forgot to
+ *  compute a seed would otherwise write a v2 record with none, and 7C's log
+ *  screen would fall through to the manual door with no signal why. Every
+ *  run this function builds is stamped `v: 2` unconditionally. */
 export function createMonitorRun(
   args: {
     workoutId: string | null;
     title: string;
     program: WorkoutProgram;
     deviceName: string;
+    logSeed: LogSeed;
   },
   now: Date,
 ): MonitorRun {
   const run: MonitorRun = {
-    v: 1,
+    v: 2,
     workoutId: args.workoutId,
     title: args.title,
     program: args.program,
+    logSeed: args.logSeed,
     actuals: [],
     deviceName: args.deviceName,
     startedAt: now.toISOString(),

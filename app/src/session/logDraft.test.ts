@@ -7,7 +7,12 @@ import { buildDraft, withNudge } from "./draft";
 import type { SessionDraft } from "./draft";
 import { buildRun } from "./engine";
 import type { SessionRun } from "./run";
-import { buildLogSteps, buildManualLogSteps, logTotals } from "./logDraft";
+import {
+  buildLogSeed,
+  buildLogSteps,
+  buildManualLogSteps,
+  logTotals,
+} from "./logDraft";
 
 // Realistic fixtures throughout (repo convention, CLAUDE.md's own recurring
 // failure #3): every table below is a REAL library workout from
@@ -684,6 +689,195 @@ describe("buildLogSteps", () => {
     expect(longest).toBe("3:00:00 @ 4:00.0");
     expect(longest.length).toBeLessThanOrEqual(80);
     expect(longest.length).toBe(16);
+  });
+});
+
+describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", () => {
+  it("emits one seed step per NON-REST phase, in program-interval order, with the manual builder's own label text", () => {
+    // wu(5' = 300s) + w(2' = 120s @ 6k+4, rest 1' = 60s) + w(100m @ 6k+0) —
+    // the task brief's own exact phase shape: warmup, work@time, rest,
+    // work@distance. Built through the real buildDraft -> buildRun
+    // assembly (like this file's own "Nudge Fixture" tests above), not a
+    // hand-rolled EnginePhase array.
+    const draft = buildDraft({
+      id: "id-seed-fixture",
+      title: "Seed Fixture",
+      type: "AT",
+      steps: [
+        { k: "wu", minutes: 5 },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 2 },
+          ref: { base: "6k", off: 4 },
+          restMinutes: 1,
+        },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 100 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    expect(built.phases.map((p) => p.type)).toStrictEqual([
+      "warmup",
+      "work",
+      "rest",
+      "work",
+    ]);
+    const seed = buildLogSeed(built.phases, BASELINES);
+    expect(seed.steps).toHaveLength(3); // warmup + 2 work; the rest folded
+    expect(seed.steps[0]).toStrictEqual({
+      label: expect.any(String),
+      kind: "warmup",
+    });
+    expect(seed.steps[1]!.kind).toBe("work");
+    expect(seed.steps[2]!.kind).toBe("work");
+    // Label parity (the load-bearing requirement): byte-identical to what
+    // buildManualLogSteps produces for the SAME authored steps.
+    const manualLabels = buildManualLogSteps(
+      { steps: draft.steps },
+      BASELINES,
+    ).map((s) => s.label);
+    expect(seed.steps[1]!.label).toBe(manualLabels[0]);
+    expect(seed.steps[2]!.label).toBe(manualLabels[1]);
+    expect(seed.steps[1]!.label).toBe("2:00 @ 6k +4");
+    expect(seed.steps[2]!.label).toBe("100 m @ 6k");
+  });
+
+  it("captures only the REFERENCED paces (the manual PACES LOCKED F1 rule: no step references 2k -> no k2)", () => {
+    // Filling Low: wu + 3x2000m @ 6k+4 — every work step references "6k",
+    // none reference "2k".
+    const { run } = runFor("Filling Low");
+    const seed = buildLogSeed(run.phases, BASELINES);
+    expect(seed.paces).toStrictEqual({ k6: BASELINES.k6Seconds });
+  });
+
+  it("captures BOTH paces when a workout references both bases", () => {
+    const draft = buildDraft({
+      id: "id-both-bases",
+      title: "Both Bases",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "2k", off: 0 },
+        },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    expect(buildLogSeed(built.phases, BASELINES).paces).toStrictEqual({
+      k2: BASELINES.k2Seconds,
+      k6: BASELINES.k6Seconds,
+    });
+  });
+
+  it("an all-effort workout references no base at all: paces is empty", () => {
+    // Fork Lightning: wu + 10 effort ("MAX") work phases — no split ref
+    // anywhere, so nothing to lock a base to.
+    const { run } = runFor("Fork Lightning");
+    const seed = buildLogSeed(run.phases, BASELINES);
+    expect(seed.paces).toStrictEqual({});
+    // 1 warmup + 10 effort work phases (rests folded), all kind "work"
+    // except the warmup.
+    expect(seed.steps).toHaveLength(11);
+    expect(seed.steps[0]!.kind).toBe("warmup");
+    for (const step of seed.steps.slice(1)) {
+      expect(step).toStrictEqual({ label: "0:30 @ MAX", kind: "work" });
+    }
+  });
+
+  it("a mixed split+effort+distance workout: byte-identical labels to buildManualLogSteps for every step, not just one kind", () => {
+    // Same "Mixed Kinds" idiom as buildLogSteps' own F1b test above:
+    // Hoarfrost's split TIME step, Fork Lightning's EFFORT step, Filling
+    // Low's split DISTANCE step — no single library workout mixes all
+    // three, so this is the realistic way to exercise all three at once.
+    const steps: Step[] = [
+      { k: "wu", minutes: 5 },
+      workStepFrom("Hoarfrost"),
+      workStepFrom("Fork Lightning"),
+      workStepFrom("Filling Low"),
+    ];
+    const draft = buildDraft({
+      id: "id-seed-mixed",
+      title: "Mixed Kinds",
+      type: "AT",
+      steps,
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    const seed = buildLogSeed(built.phases, BASELINES);
+    const workLabels = seed.steps
+      .filter((s) => s.kind === "work")
+      .map((s) => s.label);
+    const manualLabels = buildManualLogSteps(
+      { steps: draft.steps },
+      BASELINES,
+    ).map((s) => s.label);
+    expect(workLabels).toStrictEqual(manualLabels);
+    expect(workLabels).toStrictEqual([
+      "12:00 @ 6k +12",
+      "0:30 @ MAX",
+      "2000 m @ 6k +4",
+    ]);
+  });
+
+  it("a warmup-only-adjacent workout: the warmup's own seed label carries the real duration, house 'warm-up' idiom", () => {
+    const { run } = runFor("Filling Low");
+    const seed = buildLogSeed(run.phases, BASELINES);
+    expect(seed.steps[0]).toStrictEqual({
+      label: "8:00 warm-up",
+      kind: "warmup",
+    });
+  });
+
+  it("a 'test' phase (defensive only — compileProgram never lets one reach production) seeds a bare, un-prefixed label", () => {
+    const draft = buildDraft({
+      id: "id-seed-test-phase",
+      title: "Test Only",
+      type: "O2",
+      steps: [{ k: "test", label: "2k test" }],
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    expect(built.phases).toStrictEqual([
+      expect.objectContaining({ type: "test", label: "All out" }),
+    ]);
+    expect(buildLogSeed(built.phases, BASELINES)).toStrictEqual({
+      steps: [{ label: "All out", kind: "work" }],
+      paces: {},
+    });
+  });
+
+  // The LEGACY-shaped defensive branch (function's own doc comment: "no ref
+  // to reconstruct a chip from at all... shouldn't happen for a phase built
+  // through buildRun"). Nothing on the real connect path can produce a
+  // split-targetKind EnginePhase with no `ref` — `domain/expand.ts`'s "case
+  // w" always sets one — so this simulates the shape by deleting it, the
+  // same technique `buildLogSteps`' own "legacy pre-ref SessionRun" test
+  // above uses for the identical defensive branch.
+  it("a split-targetKind phase with no `ref` at all (shouldn't happen, but must not crash) falls back to the phase's own frozen label verbatim", () => {
+    // Calm Sea's work phase's frozen `label` is `fmtSplit(132)` = "2:12.0"
+    // (domain/expand.ts's "case w": `label: fmtSplit(split)`) — deleting
+    // `ref` leaves that as the only thing left to compose a label from.
+    const { run } = runFor("Calm Sea");
+    const legacyPhase = { ...run.phases[1]! };
+    expect(legacyPhase.type).toBe("work");
+    expect(legacyPhase.label).toBe("2:12.0");
+    delete (legacyPhase as { ref?: unknown }).ref;
+    expect(
+      buildLogSeed([run.phases[0]!, legacyPhase], BASELINES),
+    ).toStrictEqual({
+      steps: [
+        { label: expect.any(String), kind: "warmup" },
+        { label: "10000 m @ 2:12.0", kind: "work" },
+      ],
+      paces: {},
+    });
   });
 });
 
