@@ -1,6 +1,15 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { signInViaBackdoor } from "./helpers";
+import { RUN_ID, signInViaBackdoor } from "./helpers";
+
+// news.spec.ts's own idiom, imported here for the same reason it exists
+// there — and for one more this file taught the hard way: `cleanupByTitle`
+// runs only when a walk SUCCEEDS, so a mid-walk failure strands the
+// imported workout on the (find-or-create-by-email) user, and CI's retry
+// then re-imports the same title and dies on a strict-mode duplicate
+// instead of actually retrying (2026-08-08, two red main runs). Unique
+// per-process emails and titles make every attempt — retry, repeat local
+// run, concurrent worker — its own clean world.
 
 // Phase 7B Task 8 — THE CONNECTED WALK, fake-driven, in a real browser
 // against the real compose stack.
@@ -617,11 +626,11 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — portrait (39
   test("connect -> pairing -> programming -> ready -> the surface (rail + swipe) -> paused -> resumed -> End -> the log screen", async ({
     page,
   }) => {
-    const title = "Connected Walk Portrait Workout";
+    const title = `Connected Walk Portrait ${RUN_ID}`;
     await walkToReady(
       page,
       title,
-      "connected-walk-portrait@e2e.test",
+      `connected-walk-portrait-${RUN_ID}@e2e.test`,
       "PM5 918273645",
     );
     await walkSurfaceToLog(page, title);
@@ -635,11 +644,11 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
   test("the same walk, at the phase's own landscape-first reference frame", async ({
     page,
   }) => {
-    const title = "Connected Walk Landscape Workout";
+    const title = `Connected Walk Landscape ${RUN_ID}`;
     await walkToReady(
       page,
       title,
-      "connected-walk-landscape@e2e.test",
+      `connected-walk-landscape-${RUN_ID}@e2e.test`,
       "PM5 837465921",
     );
 
