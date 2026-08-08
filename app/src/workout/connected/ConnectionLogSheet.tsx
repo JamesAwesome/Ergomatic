@@ -118,7 +118,23 @@ export default function ConnectionLogSheet({
         {deviceCaption} · {entries.length} EVENT
         {entries.length === 1 ? "" : "S"} · SESSION {elapsedDisplay}
       </p>
-      <div className="connected-log-list">
+      {/* Focusable and named on purpose, exactly as `PaneGrid.tsx`'s own
+          TAB ORDER note argues for `.connected-grid-rows`: this is an
+          `overflow-y: auto` container, so Chromium already makes it a tab
+          stop implicitly while iOS Safari — the real target — does not.
+          Declaring it is the only way the two engines agree, and keyboard
+          operability of a scrollable region is WCAG 2.1.1's requirement,
+          not an accident to suppress. `role="group"` rather than `region`:
+          a list inside a sheet, not a landmark. Found by the fix wave's H2
+          sweep (axe `scrollable-region-focusable`, serious) — the first
+          real violation the connected screens' browser gate caught, which
+          is the argument for having one. */}
+      <div
+        className="connected-log-list"
+        tabIndex={0}
+        role="group"
+        aria-label="Connection log entries"
+      >
         {entries.length === 0 ? (
           <span className="connected-log-line connected-log-empty">
             NOTHING RECORDED YET
