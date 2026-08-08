@@ -1163,6 +1163,7 @@ test("news-reader", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "news-reader.png"),
   });
+});
 
 // -- Phase 7B Task 5: the connected interstitial (task-5 review, HIGH-3) ---
 //

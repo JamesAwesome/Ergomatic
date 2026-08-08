@@ -4392,6 +4392,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.08em;
   color: var(--accent);
   text-decoration: none;
+}
 
 /* -- Connect + the interstitial (Phase 7B Task 5, handoff §§1-2) --------
    Tokens only — reuses --ink/--ink-3/--surface/--surface-sunken/--rule-3/
