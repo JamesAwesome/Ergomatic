@@ -154,6 +154,9 @@ export const preferences = pgTable("preferences", {
   countdownSeconds: integer("countdown_seconds").notNull().default(10),
   paceToleranceSeconds: real("pace_tolerance_seconds").notNull().default(1),
   accentColor: text("accent_color").notNull().default("#b5341f"),
+  // Phase 6I: START HERE's own dismissal, server-side so it's recoverable
+  // from You (PUT IT BACK ON TODAY) rather than a client-local flag.
+  startHereDismissed: boolean("start_here_dismissed").notNull().default(false),
 });
 
 export const testHistory = pgTable(

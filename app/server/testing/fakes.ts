@@ -413,6 +413,12 @@ function makeFakeArticleReadsStore(): ArticleReadsStore {
       }
       slugs.add(slug);
     },
+    // Idempotent: unmarking a slug never read (or already unmarked) is a
+    // no-op, mirroring the real store's DELETE ... WHERE (matches zero rows
+    // silently).
+    async unmarkRead(userId: string, slug: string) {
+      byUser.get(userId)?.delete(slug);
+    },
   } as unknown as ArticleReadsStore;
 }
 

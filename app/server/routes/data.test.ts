@@ -1507,6 +1507,7 @@ describe("GET/PUT /api/prefs", () => {
         countdownSeconds: 5,
         paceToleranceSeconds: 2,
         accentColor: "#123456",
+        startHereDismissed: true,
       },
     );
     expect(res.status).toBe(200);
@@ -1518,7 +1519,34 @@ describe("GET/PUT /api/prefs", () => {
       countdownSeconds: 5,
       paceToleranceSeconds: 2,
       accentColor: "#123456",
+      startHereDismissed: true,
     });
+  });
+
+  it("PUT startHereDismissed round-trips true then back to false", async () => {
+    const app = appFor(makeStores());
+    const dismiss = await asA(request(app).put("/api/prefs")).send({
+      startHereDismissed: true,
+    });
+    expect(dismiss.status).toBe(200);
+    expect(dismiss.body.startHereDismissed).toBe(true);
+    const get = await asA(request(app).get("/api/prefs"));
+    expect(get.body.startHereDismissed).toBe(true);
+
+    // PUT IT BACK ON TODAY (You › Learning the app) clears it again.
+    const restore = await asA(request(app).put("/api/prefs")).send({
+      startHereDismissed: false,
+    });
+    expect(restore.status).toBe(200);
+    expect(restore.body.startHereDismissed).toBe(false);
+  });
+
+  it("rejects a non-boolean startHereDismissed with 400 + field", async () => {
+    const res = await asA(request(appFor(makeStores())).put("/api/prefs")).send(
+      { startHereDismissed: "yes" },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("startHereDismissed");
   });
 
   it("rejects an out-of-range timeCapMinutes with 400 + field", async () => {
@@ -1593,10 +1621,42 @@ describe("article reads", () => {
     }
   });
 
+  it("DELETE then GET round-trips the removal", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/article-reads/baselines"));
+    const del = await asA(request(app).delete("/api/article-reads/baselines"));
+    expect(del.status).toBe(204);
+    const res = await asA(request(app).get("/api/article-reads"));
+    expect(res.body).toStrictEqual({ slugs: [] });
+  });
+
+  it("DELETE is idempotent: a slug never read still 204s and changes nothing", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/article-reads/baselines"));
+    expect(
+      (await asA(request(app).delete("/api/article-reads/never-read"))).status,
+    ).toBe(204);
+    expect(
+      (await asA(request(app).delete("/api/article-reads/never-read"))).status,
+    ).toBe(204);
+    const res = await asA(request(app).get("/api/article-reads"));
+    expect(res.body).toStrictEqual({ slugs: ["baselines"] });
+  });
+
+  it("DELETE rejects a slug outside the safe shape with 400 + field", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).delete("/api/article-reads/UPPER"));
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("slug");
+  });
+
   it("requires a session", async () => {
     const app = appFor(makeStores());
     expect((await request(app).get("/api/article-reads")).status).toBe(401);
     expect((await request(app).put("/api/article-reads/x")).status).toBe(401);
+    expect((await request(app).delete("/api/article-reads/x")).status).toBe(
+      401,
+    );
   });
 });
 

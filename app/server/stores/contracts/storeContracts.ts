@@ -30,16 +30,7 @@ export interface StoresUnderTest {
   planState: PlanStateStore;
   preferences: PreferencesStore;
   testHistory: TestHistoryStore;
-  /**
-   * Phase 6H Task 1: optional because the fake doesn't exist yet
-   * (testing/fakes.ts gets one in Task 2, which also adds this field to
-   * contracts.fake.test.ts's `makeStores()`). Optional — rather than
-   * required — is exactly what lets that file keep compiling untouched
-   * today: the "article reads" describe block below skips itself at
-   * runtime when this is absent, so contracts.fake.test.ts stays green and
-   * starts actually exercising the cases the moment Task 2 adds the field.
-   */
-  articleReads?: ArticleReadsStore;
+  articleReads: ArticleReadsStore;
   /**
    * Registers a brand-new user and returns its id (real: inserts into
    * `users`; fake: mints and remembers an id). Every case below starts from
@@ -600,25 +591,19 @@ export function describeStoreContracts(
       });
     });
 
-    // Phase 6H Task 1: `articleReads` is optional on StoresUnderTest (see
-    // the interface above) because the fake doesn't exist until Task 2 —
-    // every `it` below guards on it and returns early when absent, so
-    // contracts.fake.test.ts runs this describe today with each case a
-    // documented no-op skip, then starts asserting for real the moment
-    // Task 2 adds the field to its `makeStores()`. Real Postgres already
-    // provides it (contracts.real.integration.test.ts), so the cases are
-    // live there now.
+    // `articleReads` is a required member of StoresUnderTest (both
+    // contracts.real.integration.test.ts and contracts.fake.test.ts's
+    // `makeStores()` provide it), so every case below runs for real
+    // against both backends — no runtime guard/skip needed.
     describe("article reads", () => {
       it("list returns [] for a user with no reads", async () => {
         const stores = await makeStores();
-        if (!stores.articleReads) return;
         const userId = await stores.makeUser();
         expect(await stores.articleReads.list(userId)).toEqual([]);
       });
 
       it("markRead then list round-trips the slug", async () => {
         const stores = await makeStores();
-        if (!stores.articleReads) return;
         const userId = await stores.makeUser();
         await stores.articleReads.markRead(userId, "workout-types");
         expect(await stores.articleReads.list(userId)).toEqual([
@@ -628,7 +613,6 @@ export function describeStoreContracts(
 
       it("markRead is idempotent: a repeated call doesn't duplicate the slug", async () => {
         const stores = await makeStores();
-        if (!stores.articleReads) return;
         const userId = await stores.makeUser();
         await stores.articleReads.markRead(userId, "baselines");
         await stores.articleReads.markRead(userId, "baselines");
@@ -637,11 +621,50 @@ export function describeStoreContracts(
 
       it("reads are scoped per user", async () => {
         const stores = await makeStores();
-        if (!stores.articleReads) return;
         const userA = await stores.makeUser();
         const userB = await stores.makeUser();
         await stores.articleReads.markRead(userA, "pain-scale");
         expect(await stores.articleReads.list(userB)).toEqual([]);
+      });
+
+      // Phase 6I: unmarkRead backs DELETE /api/article-reads/:slug and
+      // You › Learning the app's MARK ALL FOUR UNREAD.
+      it("unmarkRead then list round-trips the removal", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.articleReads.markRead(userId, "workout-types");
+        await stores.articleReads.unmarkRead(userId, "workout-types");
+        expect(await stores.articleReads.list(userId)).toEqual([]);
+      });
+
+      it("unmarkRead is idempotent: unmarking a slug never read is a no-op", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.articleReads.markRead(userId, "baselines");
+        await stores.articleReads.unmarkRead(userId, "never-read-slug");
+        expect(await stores.articleReads.list(userId)).toEqual(["baselines"]);
+      });
+
+      it("unmarkRead only removes the named slug, leaving the rest of the set intact", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.articleReads.markRead(userId, "baselines");
+        await stores.articleReads.markRead(userId, "picking-a-workout");
+        await stores.articleReads.unmarkRead(userId, "baselines");
+        expect(await stores.articleReads.list(userId)).toEqual([
+          "picking-a-workout",
+        ]);
+      });
+
+      it("unmarkRead is scoped per user: A's unmark never touches B's reads", async () => {
+        const stores = await makeStores();
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        await stores.articleReads.markRead(userA, "pain-scale");
+        await stores.articleReads.markRead(userB, "pain-scale");
+        await stores.articleReads.unmarkRead(userA, "pain-scale");
+        expect(await stores.articleReads.list(userA)).toEqual([]);
+        expect(await stores.articleReads.list(userB)).toEqual(["pain-scale"]);
       });
     });
   });

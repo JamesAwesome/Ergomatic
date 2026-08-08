@@ -11,7 +11,8 @@ import { createUserStore, type UserStore } from "../auth/users.js";
 import { createWorkoutsStore, type WorkoutsStore } from "../stores/workouts.js";
 import { createLogsStore, type LogsStore } from "../stores/logs.js";
 import { seedGlobalLibrary, SEED_LOCK_KEY } from "./seed.js";
-import { LIBRARY_WORKOUTS } from "./library/index.js";
+import { GLOBAL_LIBRARY_SEED, LIBRARY_WORKOUTS } from "./library/index.js";
+import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 
 describe("seedGlobalLibrary against real Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -66,18 +67,24 @@ describe("seedGlobalLibrary against real Postgres", () => {
     await container.stop().catch(() => {});
   });
 
-  it("seeds all LIBRARY_WORKOUTS as global (user_id null), source starter, on a fresh DB", async () => {
+  it("seeds all GLOBAL_LIBRARY_SEED as global (user_id null), source starter, on a fresh DB", async () => {
     await seedGlobalLibrary(db);
 
     const globals = await wk.listGlobals();
-    expect(globals).toHaveLength(LIBRARY_WORKOUTS.length);
-    expect(globals).toHaveLength(300);
+    expect(globals).toHaveLength(GLOBAL_LIBRARY_SEED.length);
+    expect(globals).toHaveLength(302); // 300-workout library + 2 onboarding rows
     expect(globals.every((w) => w.userId === null)).toBe(true);
     expect(globals.every((w) => w.isGlobal === true)).toBe(true);
     expect(globals.every((w) => w.source === "starter")).toBe(true);
     expect(globals.map((w) => w.sortOrder)).toStrictEqual(
-      LIBRARY_WORKOUTS.map((w) => w.sortOrder).sort((a, b) => a - b),
+      GLOBAL_LIBRARY_SEED.map((w) => w.sortOrder).sort((a, b) => a - b),
     );
+    // Phase 6I: the two designated onboarding workouts land as real global
+    // rows via the default converge input (GLOBAL_LIBRARY_SEED), not just
+    // LIBRARY_WORKOUTS — the no-baseline card looks them up by title.
+    const titles = new Set(globals.map((w) => w.title));
+    expect(titles.has(ONBOARDING_TITLES.k6)).toBe(true);
+    expect(titles.has(ONBOARDING_TITLES.k2)).toBe(true);
   });
 
   it("running seedGlobalLibrary twice from empty produces the identical set of global ids (match ⇒ no-op, no churn)", async () => {
@@ -85,7 +92,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
 
     await seedGlobalLibrary(db);
     const idsAfterFirst = (await wk.listGlobals()).map((w) => w.id).sort();
-    expect(idsAfterFirst).toHaveLength(LIBRARY_WORKOUTS.length);
+    expect(idsAfterFirst).toHaveLength(GLOBAL_LIBRARY_SEED.length);
 
     await seedGlobalLibrary(db);
     const idsAfterSecond = (await wk.listGlobals()).map((w) => w.id).sort();
@@ -108,8 +115,8 @@ describe("seedGlobalLibrary against real Postgres", () => {
 
     const listBefore = await wk.list(before.id);
     const listAfter = await wk.list(after.id);
-    expect(listBefore).toHaveLength(LIBRARY_WORKOUTS.length);
-    expect(listAfter).toHaveLength(LIBRARY_WORKOUTS.length);
+    expect(listBefore).toHaveLength(GLOBAL_LIBRARY_SEED.length);
+    expect(listAfter).toHaveLength(GLOBAL_LIBRARY_SEED.length);
     expect(listBefore.every((w) => w.isGlobal)).toBe(true);
     expect(listAfter.every((w) => w.isGlobal)).toBe(true);
   });
@@ -185,7 +192,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
     await seedGlobalLibrary(db);
 
     const globalsAfter = await wk.listGlobals();
-    expect(globalsAfter).toHaveLength(LIBRARY_WORKOUTS.length);
+    expect(globalsAfter).toHaveLength(GLOBAL_LIBRARY_SEED.length);
     const titlesAfter = new Set(globalsAfter.map((w) => w.title));
     expect(titlesAfter.has("Old Ghost")).toBe(false);
     expect(titlesAfter.has("Old Relic")).toBe(false);
@@ -245,7 +252,7 @@ describe("seedGlobalLibrary against real Postgres", () => {
       await seeding;
 
       expect(settled).toBe(true);
-      expect(await wk.countGlobals()).toBe(LIBRARY_WORKOUTS.length);
+      expect(await wk.countGlobals()).toBe(GLOBAL_LIBRARY_SEED.length);
     } finally {
       lockClient.release();
     }
@@ -340,7 +347,12 @@ describe("seedGlobalLibrary against real Postgres", () => {
     // String(<Date>) — see the idempotency test above for why.
     await seedGlobalLibrary(db);
     const stamp = (await wk.listGlobals()).map((g) => g.updatedAt.getTime());
-    await seedGlobalLibrary(db, [...LIBRARY_WORKOUTS]);
+    // The full converge input, not just LIBRARY_WORKOUTS — passing the
+    // 300-only array here would legitimately delete the two onboarding
+    // rows (title missing from the explicit arg), which is correct
+    // convergence behavior but would desync stamp/stamp2's lengths and
+    // defeat this test's actual point (no phantom writes on a no-op).
+    await seedGlobalLibrary(db, [...GLOBAL_LIBRARY_SEED]);
     const stamp2 = (await wk.listGlobals()).map((g) => g.updatedAt.getTime());
     expect(stamp2).toStrictEqual(stamp);
   });

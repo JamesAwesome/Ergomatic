@@ -767,6 +767,17 @@ export function createDataRouter({
       }
       patch.accentColor = body.accentColor;
     }
+    if (body.startHereDismissed !== undefined) {
+      if (typeof body.startHereDismissed !== "boolean") {
+        badRequest(
+          res,
+          "startHereDismissed must be a boolean",
+          "startHereDismissed",
+        );
+        return;
+      }
+      patch.startHereDismissed = body.startHereDismissed;
+    }
 
     // An empty patch (body `{}`, or all-unknown keys) must be a no-op read,
     // not a write: the real store's put() builds its upsert's `SET` clause
@@ -794,6 +805,19 @@ export function createDataRouter({
       return;
     }
     await stores.articleReads.markRead(req.user!.id, slug);
+    res.status(204).end();
+  });
+
+  // Idempotent: deleting a slug that was never read (or already deleted)
+  // still 204s — MARK ALL FOUR UNREAD (You › Learning the app) fires four
+  // of these unconditionally, partial-failure-safe by re-run.
+  router.delete("/api/article-reads/:slug", async (req, res) => {
+    const { slug } = req.params;
+    if (!SLUG_RE.test(slug)) {
+      badRequest(res, "slug must match ^[a-z0-9-]{1,64}$", "slug");
+      return;
+    }
+    await stores.articleReads.unmarkRead(req.user!.id, slug);
     res.status(204).end();
   });
 
