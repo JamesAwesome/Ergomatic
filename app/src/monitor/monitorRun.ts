@@ -391,9 +391,37 @@ export type ConnectGuardStage = "unlogged" | "in-progress" | null;
  * to be logged), which is why the two get different copy — the identical
  * severity ordering, and the identical pair of sentences, that
  * `WorkoutDetail`'s `handleStart` already applies at the other door.
- */
+ *
+ * **Task 5 review, HIGH-1 — widened to read `loadMonitorRun()` too, the
+ * moment Connect actually got mounted.** `createMonitorRun` above is not
+ * this function's only downstream hazard once a rower can press Connect
+ * for real: Task 5's own `WorkoutDetail.handleRowInstead` calls
+ * `clearMonitorRun()` unconditionally, and `createMonitorRun` itself
+ * OVERWRITES `MONITOR_RUN_KEY` via `saveMonitorRun` without ever checking
+ * for a live one already there (this file's own doc comment on
+ * `createMonitorRun`: "deliberately NOT idempotent-checked"). A
+ * finished-but-unlogged `MonitorRun` is 7C's entire prefill input — exactly
+ * the same class of record the `SessionRun` check above exists to protect,
+ * on the OTHER side of the coexistence line. `WorkoutDetail.handleStart`
+ * has read both records since Task 2 (ROADMAP M-1's own two-record
+ * widening); this function reading only one was Task 2's original scope
+ * (`ConnectAction` shipped unmounted, so the `MonitorRun` side was
+ * unreachable through it) and became a live F5-class hole the instant Task
+ * 5 mounted the button. Same descending-severity order `handleStart`
+ * already uses: the `SessionRun` check runs first (unchanged), then the
+ * `MonitorRun` check — so a rower with BOTH records stale gets staged
+ * exactly ONCE, not twice, and the `SessionRun`'s own sentence wins ties
+ * the same way `handleStart`'s ordering already resolves them. No new copy:
+ * both sentences already exist and are shared with the `SessionRun` case
+ * above. */
 export function connectGuardStage(): ConnectGuardStage {
   const run = loadRun();
-  if (run === null) return null;
-  return run.completedAt === null ? "in-progress" : "unlogged";
+  if (run !== null) {
+    return run.completedAt === null ? "in-progress" : "unlogged";
+  }
+  const monitorRun = loadMonitorRun();
+  if (monitorRun !== null) {
+    return monitorRun.completedAt === null ? "in-progress" : "unlogged";
+  }
+  return null;
 }

@@ -4407,13 +4407,16 @@ section:not(.news-pinned) .news-row:last-of-type {
    button stays genuinely tappable (unlike a real `:disabled` control,
    which is where `--ink-5` stays reserved throughout this file — the
    contrast sweep's own standing rule, this file's Countdown/Live-timer
-   comments), and the handoff's own header states the same standing law
-   ("no small mono label lighter than --ink-3") one paragraph above the
-   literal it names here. Computed contrast: --ink-3 on --surface 7.44:1,
-   the same figure already verified elsewhere in this file — clears the
-   4.5:1 AA floor comfortably; --ink-5 measured 2.48:1 the one time this
+   comments, DEVIATIONS row 35's identical precedent), and the handoff's own
+   header states the same standing law ("no small mono label lighter than
+   --ink-3") one paragraph above the literal it names here. Computed
+   contrast: --ink-3 on --surface 7.432:1, the same figure already verified
+   elsewhere in this file — clears the 4.5:1 AA floor comfortably; --ink-5
+   measures 2.754:1 on --surface (2.481:1 on --page — a DIFFERENT
+   background; this treatment never sits on --page) — the one time this
    exact literal was tried on live text before (see this file's Live-timer
-   comment block), nowhere close. */
+   comment block), nowhere close either way. DEVIATIONS row (added this fix
+   round) records the substitution itself. */
 .connect-block-dashed .button-l2 {
   border-style: dashed;
   border-color: var(--rule-3);
@@ -4421,22 +4424,68 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* Full screen, "borrowing Countdown's geometry" (handoff §2) — a sheet was
-   rejected. Unlike Countdown's own centered digit display, this screen's
-   content is a top-to-bottom read (status/serif/detail, then the bottom
-   action stack), so this only borrows the fill-the-frame sizing, not
-   Countdown's centering. */
+   rejected. Task-5 review, HIGH-3: `/library/:id` (this screen's own route)
+   is NOT on `AppRoutes.tsx`'s `HIDDEN_TABBAR_PREFIXES`, unlike Countdown —
+   the tab bar stays on screen and `.app-shell`'s own
+   `padding-bottom: calc(var(--tap) + safe-area-bottom)` (this file, above)
+   reserves that space regardless, on EVERY orientation this screen renders
+   in (Countdown only needed the same `var(--tap)` correction in landscape,
+   because its OWN tab bar is genuinely hidden and portrait had slack to
+   spare — see the F3 comment on `.countdown-screen` above). Measured
+   (task-5 review): before this fix, 18px of dead scroll in every state and
+   orientation, and 151px of landscape overflow on `failed` with Cancel and
+   the phone-timer escape starting 132px behind the fixed tab bar. Kept as
+   a documented deviation (DEVIATIONS, added this fix round) rather than
+   adding this route to `HIDDEN_TABBAR_PREFIXES`, which would need the tab
+   bar's visibility to depend on component state (`connecting !== null`),
+   not just the route path — a bigger change than this fix round's own
+   scope. */
 .connected-interstitial {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: calc(
+  /* `height`, not `min-height` (fix-round correction — the `min-height`
+     version genuinely SHIPPED once, and the DOCS/screenshots below record
+     why it wasn't enough): a min-height lets the column grow past the
+     viewport whenever its content needs more room, which is exactly what
+     the failed state's DETAIL panel does — the whole PAGE scrolled instead
+     of the intended internal one, and the action stack (Cancel, "Row on
+     the phone timer instead") landed off-frame in landscape regardless of
+     the `var(--tap)` fix above. A fixed `height` caps this flex column at
+     the frame itself, which is what makes `.connected-interstitial-body`'s
+     own `flex: 1; min-height: 0; overflow-y: auto` actually engage instead
+     of never being asked to shrink. */
+  height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-      26px
+      26px - var(--tap)
   );
 }
 
+/* MEDIUM-2 (task-5 review): every mockup state frame is status label
+   (top) / a centred middle block / the action stack (bottom) — shipped was
+   a flat column, top-packed, with up to 600px of dead space beneath a
+   short state on a tall phone. `.connected-interstitial-body` is
+   everything ABOVE the action stack; `flex: 1` gives it the room between
+   the frame's top and the stack, `justify-content: center` centres its own
+   children within that room, exactly like Countdown's centred digit
+   display one call up in this file. */
+.connected-interstitial-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  /* So a genuinely long body (the failed state's DETAIL panel with a real
+     raw trace) still scrolls internally rather than pushing the action
+     stack off-frame — the same "contained scroll" idiom pane C's own
+     handoff note already sanctions as the one exception to "never
+     scrolls". */
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .connected-interstitial-actions {
-  margin-top: auto;
+  flex-shrink: 0;
+  margin-top: 12px;
 }
 
 .connected-status-label {
@@ -4507,8 +4556,12 @@ section:not(.news-pinned) .news-row:last-of-type {
   background: var(--ink);
 }
 
+/* Filled, not hollow (LOW-4, task-5 review): the mockup's own pending
+   marker is `background:#c9c3b2` (== --rule-3) — README §2's "--rule-3
+   square" is ambiguous between a fill and a border, and the mockup
+   disambiguates it. */
 .connected-checklist-pending .connected-checklist-marker {
-  border: 1px solid var(--rule-3);
+  background: var(--rule-3);
 }
 
 .connected-panel-sunken {

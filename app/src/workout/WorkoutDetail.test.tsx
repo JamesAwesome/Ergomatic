@@ -1302,6 +1302,23 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     restore();
   });
 
+  // MEDIUM-8, task-5 review: `getAvailability()` REJECTING (a real Chromium
+  // behaviour in sandboxed/permission-policy contexts) is a different
+  // branch than the "not a function" one above — both fail open the same
+  // way, but only the second had a test.
+  it("Bluetooth API present but getAvailability() rejects: also fails open to available", async () => {
+    const restore = stubBluetooth({
+      getAvailability: () => Promise.reject(new Error("permission denied")),
+    });
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const button = await screen.findByRole("button", { name: "Connect" });
+    expect(button).not.toHaveClass("connect-block-dashed");
+    expect(screen.queryByText("BLUETOOTH IS OFF")).not.toBeInTheDocument();
+    restore();
+  });
+
   it("Row on the phone timer instead: a saveDraft failure shows the inline error instead of navigating", async () => {
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
     await renderDetailWithConfirmRoute("/library/w3");
@@ -1388,5 +1405,120 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       await screen.findByRole("button", { name: "Start" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+  });
+
+  // Task 5 review, HIGH-1 — the mirror of the "Start over a connected
+  // session's record" describe block above, now for Connect's own door.
+  // Before the fix: Start staged (Task 2's widened guard), Connect did not
+  // (`connectGuardStage()` read only `RUN_KEY`) — a rower who finished a
+  // connected session and pressed Connect on ANOTHER workout lost 7C's
+  // entire prefill input with no sentence shown.
+  describe("a finished-but-unlogged MonitorRun on record (HIGH-1)", () => {
+    function monitorRunFor(completedAt: string | null): MonitorRun {
+      const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+      if (!w) throw new Error("missing library fixture: Filling Low");
+      const t0 = new Date("2026-08-05T12:00:00.000Z");
+      const phases = buildRun(
+        buildDraft({
+          id: "fl-connected",
+          title: w.title,
+          type: w.type as WorkoutType,
+          steps: w.steps,
+        }),
+        BASELINES,
+        t0,
+      ).phases;
+      const compiled = compileProgram(phases);
+      if ("code" in compiled) {
+        throw new Error(`fixture failed to compile: ${compiled.code}`);
+      }
+      const run: MonitorRun = {
+        v: 1,
+        workoutId: "fl-connected",
+        title: w.title,
+        program: compiled,
+        actuals: [],
+        deviceName: "PM5 430123456",
+        startedAt: t0.toISOString(),
+        completedAt,
+        terminated: false,
+      };
+      return JSON.parse(JSON.stringify(run)) as MonitorRun;
+    }
+
+    const FINISHED_AT = new Date("2026-08-05T12:41:00.000Z").toISOString();
+
+    it("Connect stages the confirm too — not a straight walk into the interstitial", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      // Survival asserted FIRST — without the widening this line is what
+      // fails, and it fails saying the record is gone, not a missing
+      // string (the same discipline `handleStart`'s own sibling test uses).
+      expect(loadMonitorRun()).toStrictEqual(connected);
+      expect(
+        screen.getByText(
+          "You have an unlogged session — connecting discards it.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Connecting")).not.toBeInTheDocument();
+    });
+
+    it("Cancel preserves the connected record byte-identical", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.getByRole("button", { name: "Connect" })).toBeVisible();
+      expect(loadMonitorRun()).toStrictEqual(connected);
+    });
+
+    it("Connect anyway destroys it — deliberately, now with a warning first", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      const connected = monitorRunFor(FINISHED_AT);
+      saveMonitorRun(connected);
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Connect anyway" }),
+      );
+
+      // The compiled PERSONAL_WORKOUT program is a different one than the
+      // stale connected record's own "Filling Low" — proceeding here
+      // replaces the stale record outright once a new one opens (this
+      // screen's own compile step never touches storage itself; the
+      // destruction is `WorkoutDetail.handleRowInstead`'s `clearMonitorRun`
+      // below, reached the same way Start's own "Connect anyway" analogue
+      // reaches `startSession`'s cross-clear).
+      await screen.findByText("This device has no Bluetooth transport.", {
+        selector: ".connected-serif-line",
+      });
+      await userEvent.click(
+        screen.getByRole("button", { name: "Row on the phone timer instead" }),
+      );
+
+      expect(loadMonitorRun()).toBeNull();
+    });
+
+    it("a LIVE MonitorRun (the erg is mid-piece) stages the 'in progress' sentence instead", async () => {
+      mockHooks(BASELINES, [PERSONAL_WORKOUT]);
+      saveMonitorRun(monitorRunFor(null));
+      await renderDetail("/library/w3");
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(
+        screen.getByText("A session is in progress — replace it?"),
+      ).toBeInTheDocument();
+    });
   });
 });

@@ -1247,6 +1247,14 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
   // there and in WorkoutDetail.test.tsx's own real-hook, real-jsdom
   // "transport-missing" integration test — both deterministic, because
   // jsdom simply has no `navigator.bluetooth` to hang on.
+  //
+  // LOW-1 (task-5 review): the blast radius is WIDER than "pressing Connect
+  // anyway" — `ConnectedInterstitial`'s own mount effect calls `connect()`
+  // UNCONDITIONALLY, so ANY future e2e test that so much as reaches the
+  // interstitial's mount (not only one that presses through the staged
+  // confirm) will hang in this same real-Chromium environment. Task 8's
+  // transport seam needs to land, or a test-safe injection point needs to
+  // exist, before any e2e spec drives PAST the Connect button itself.
   test("Connect anyway is reachable and staged copy is exact — proceeding further belongs to the client-level suite (see comment above)", async ({
     page,
   }) => {

@@ -564,15 +564,42 @@ describe("connectGuardStage: the Connect door's lock", () => {
     expect(connectGuardStage()).toBe("in-progress");
   });
 
-  it("reads only the SessionRun — a MonitorRun on record is not this door's business", () => {
-    // `createMonitorRun` clears `RUN_KEY`, never `MONITOR_RUN_KEY`; a stale
-    // monitor record is what the NEW one replaces, and Connect has nothing
-    // to warn about there.
+  // Task 5 review, HIGH-1: `createMonitorRun`'s own `saveMonitorRun` call
+  // OVERWRITES `MONITOR_RUN_KEY` unconditionally (this file's own doc
+  // comment on `createMonitorRun`: "deliberately NOT idempotent-checked
+  // against an existing live `MonitorRun`") — a finished-but-unlogged
+  // `MonitorRun` (7C's prefill input) is exactly as real a record as the
+  // `SessionRun` case above, and `WorkoutDetail.handleRowInstead` (Task 5)
+  // ALSO clears it unconditionally. The guard reads it now.
+  it("a finished-but-unlogged MonitorRun (no SessionRun on record): 'unlogged' — 7C's prefill input", () => {
     saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
-    expect(connectGuardStage()).toBeNull();
+    expect(connectGuardStage()).toBe("unlogged");
   });
 
-  it("garbage in RUN_KEY reads as nothing at risk (loadRun's own Resilience #5)", () => {
+  it("a live MonitorRun (no SessionRun on record): 'in-progress' — the erg is mid-piece right now", () => {
+    saveMonitorRun(freshMonitorRun());
+    expect(connectGuardStage()).toBe("in-progress");
+  });
+
+  it("a SessionRun on record wins over a MonitorRun — same descending-severity order handleStart already uses", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    saveMonitorRun(freshMonitorRun());
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("both records finished-but-unlogged: staged ONCE, not twice — a single ConnectGuardStage value, the SessionRun's own sentence", () => {
+    saveRun(fakeSessionRun(finishedAt));
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("garbage in RUN_KEY falls through to the MonitorRun check (loadRun's own Resilience #5)", () => {
+    localStorage.setItem(RUN_KEY, "{{ not json");
+    saveMonitorRun({ ...freshMonitorRun(), completedAt: finishedAt });
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  it("garbage in both keys: null — nothing at risk", () => {
     localStorage.setItem(RUN_KEY, "{{ not json");
     expect(connectGuardStage()).toBeNull();
   });

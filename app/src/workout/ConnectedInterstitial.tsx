@@ -59,18 +59,24 @@ export function loadLastDevice(): string | null {
  *  screens (ready vs. the phase-gate below) is currently on top. */
 export const READY_DWELL_MS = 1200;
 
-/** The five reasons that are OURS — about the phone/radio side, never the
- *  PM5's own vocabulary (`ConnectedError`'s own doc comment in
- *  `useMonitorSession.ts`). Every other `reason` is one of the eight
- *  `ProgramRejectionReason` values, all MACHINE statements, and they share
- *  one serif line ("The monitor wouldn't take it") rather than six
- *  near-duplicate ones. */
-const OUR_REASONS = new Set<ConnectedError["reason"]>([
+/** Every reason that is NOT the machine actively refusing a workout — the
+ *  five that are OURS (about the phone/radio side, never the PM5's own
+ *  vocabulary — `ConnectedError`'s own doc comment in
+ *  `useMonitorSession.ts`), plus `"disconnected"` (task-5 review, MEDIUM-7):
+ *  it IS one of the eight `ProgramRejectionReason` values, but it says the
+ *  LINK died mid-conversation, not that the PM5 looked at the workout and
+ *  said no — rendering "The monitor wouldn't take it" for a link that
+ *  simply went quiet is the identical mis-attribution the task-4 review
+ *  caught for `link-failed` vs `bluetooth-off` one layer down, reintroduced
+ *  here for a different tag. The remaining seven `ProgramRejectionReason`
+ *  values are genuine machine statements and share one serif line. */
+const NOT_A_MACHINE_REFUSAL = new Set<ConnectedError["reason"]>([
   "busy",
   "bluetooth-off",
   "link-failed",
   "transport-missing",
   "scan-dismissed",
+  "disconnected",
 ]);
 
 /** `detail` is documented as copy-ready prose (`ConnectedError`'s own doc
@@ -82,7 +88,7 @@ const OUR_REASONS = new Set<ConnectedError["reason"]>([
  *  finding), so keying off `detail` inherits that distinction rather than
  *  re-deriving it. */
 function failedSerifLine(error: ConnectedError): string {
-  if (OUR_REASONS.has(error.reason)) return error.detail;
+  if (NOT_A_MACHINE_REFUSAL.has(error.reason)) return error.detail;
   return "The monitor wouldn't take it";
 }
 
@@ -143,11 +149,21 @@ export default function ConnectedInterstitial({
   // so a `phase !== "failed"` check alone cannot tell them apart — the
   // exact shape `program()`'s own double-fire pin guards, one level up.
   const retryingRef = useRef(false);
-  // Edge-triggered (not level-triggered): fires `program()` exactly once
-  // per TRANSITION into "pairing", so a Try Again retry (which re-enters
-  // "pairing" via a fresh `connect()`) fires it again too, without a
-  // persistent "already programmed" flag that would block the retry.
-  const prevPhaseRef = useRef(session.phase);
+  // Keyed on the DEVICE NAME, not merely the phase transition (self-found
+  // fix, this fix round): `connect()` sets `phase: "pairing"` BEFORE
+  // `await transport.connect(...)` even starts, and only sets `deviceName`
+  // (in the same synchronous block that builds the driver) once that await
+  // resolves. A phase-only edge trigger fires this effect the instant
+  // `phase` becomes `"pairing"` — which, on any transport slower than a
+  // same-microtask fake (i.e. anything with a REAL radio), can run BEFORE
+  // `driverRef.current` exists, so `program()` would hit its own
+  // `driver === null` guard and fail with a false "No monitor is
+  // connected." while pairing is still genuinely in flight. Gating on
+  // `deviceName` instead means this can only ever fire once the driver is
+  // known to exist. Reset to `null` whenever `deviceName` itself goes back
+  // to `null` (a fresh `connect()` cycle, including a "no device known"
+  // Try Again), so the SAME device re-pairing later fires it again.
+  const programmedForDeviceRef = useRef<string | null>(null);
 
   // Mount-once: opens the OS picker the instant this screen exists. Not
   // gated on `session.phase` — this hook's own initial phase is always
@@ -159,13 +175,19 @@ export default function ConnectedInterstitial({
   }, []);
 
   useEffect(() => {
-    const prev = prevPhaseRef.current;
-    prevPhaseRef.current = session.phase;
-    if (session.phase === "pairing" && prev !== "pairing") {
+    if (session.deviceName === null) {
+      programmedForDeviceRef.current = null;
+      return;
+    }
+    if (
+      session.phase === "pairing" &&
+      programmedForDeviceRef.current !== session.deviceName
+    ) {
+      programmedForDeviceRef.current = session.deviceName;
       void session.program(program, identity);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.phase]);
+  }, [session.phase, session.deviceName]);
 
   // Handoff §1: "After a first successful pair" — the picker's own result
   // already named the device before this fires; this just remembers it for
@@ -229,14 +251,22 @@ export default function ConnectedInterstitial({
   if (session.phase === "pairing") {
     return (
       <main className="screen connected-interstitial">
-        <p className="connected-status-label">
-          {session.deviceName ?? "CONNECTING"}
-        </p>
-        <p className="connected-serif-line">Connecting</p>
-        <div className="connected-checklist">
-          <ChecklistLine label="FOUND" state="done" />
-          <ChecklistLine label="CONNECTED" state="current" />
-          <ChecklistLine label="SENDING THE WORKOUT" state="pending" />
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">
+            {session.deviceName ?? "CONNECTING"}
+          </p>
+          <p className="connected-serif-line">Connecting</p>
+          <div className="connected-checklist">
+            <ChecklistLine label="FOUND" state="done" />
+            {/* Present tense while it's the CURRENT line (LOW-5, task-5
+                review): README's own state-4 row and the mockup's frame
+                both read "connecting", not the past-tense "CONNECTED" the
+                canonical FOUND/CONNECTED/SENDING triple otherwise uses —
+                the one line whose tense matters is the one the filled
+                square is pointing at. */}
+            <ChecklistLine label="CONNECTING" state="current" />
+            <ChecklistLine label="SENDING THE WORKOUT" state="pending" />
+          </div>
         </div>
         <div className="action-stack connected-interstitial-actions">
           <button type="button" className="button-l2" onClick={handleCancel}>
@@ -250,27 +280,40 @@ export default function ConnectedInterstitial({
   if (session.phase === "programming") {
     return (
       <main className="screen connected-interstitial">
-        <p className="connected-status-label">
-          {(session.deviceName ?? "CONNECTING") + " · CONNECTED"}
-        </p>
-        <p className="connected-serif-line">Sending the workout</p>
-        <div className="connected-checklist">
-          <ChecklistLine label="FOUND" state="done" />
-          <ChecklistLine label="CONNECTED" state="done" />
-          {/* NO interval counter (spec's I7 ruling, this task's own brief) —
-              "SENDING THE WORKOUT" carries no "INTERVAL N OF M" suffix. */}
-          <ChecklistLine label="SENDING THE WORKOUT" state="current" />
-        </div>
-        <div className="connected-panel-sunken">
-          <p className="connected-panel-title">WHAT THE MONITOR IS GETTING</p>
-          <p className="connected-panel-line">
-            {program.intervals.length} INTERVALS
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">
+            {(session.deviceName ?? "CONNECTING") + " · CONNECTED"}
           </p>
-          <p className="connected-panel-line">
-            K2 {fmtSplit(baselines.k2Seconds)} · K6{" "}
-            {fmtSplit(baselines.k6Seconds)}
-          </p>
-          <p className="connected-panel-line">{nudgedCount} NUDGED</p>
+          <p className="connected-serif-line">Sending the workout</p>
+          <div className="connected-checklist">
+            <ChecklistLine label="FOUND" state="done" />
+            <ChecklistLine label="CONNECTED" state="done" />
+            {/* NO interval counter (spec's I7 ruling, this task's own
+                brief) — "SENDING THE WORKOUT" carries no "INTERVAL N OF M"
+                suffix. */}
+            <ChecklistLine label="SENDING THE WORKOUT" state="current" />
+          </div>
+          <div className="connected-panel-sunken">
+            <p className="connected-panel-title">WHAT THE MONITOR IS GETTING</p>
+            <p className="connected-panel-line">
+              {program.intervals.length}{" "}
+              {program.intervals.length === 1 ? "INTERVAL" : "INTERVALS"}
+            </p>
+            {/* 2K/6K, not K2/K6 (task-5 review, MEDIUM-5): the house's own
+                baseline-label convention everywhere else in the app
+                (LogSession.tsx's "2K …", the builder's 2K/6K/MAX/MIN
+                toggle, the mockup's own panel). */}
+            <p className="connected-panel-line">
+              2K {fmtSplit(baselines.k2Seconds)} · 6K{" "}
+              {fmtSplit(baselines.k6Seconds)}
+            </p>
+            {/* Omitted at zero (LOW-6) — the mockup's own "3 TARGETS NUDGED
+                ON CONFIRM" phrasing has nothing to say when there weren't
+                any. */}
+            {nudgedCount > 0 && (
+              <p className="connected-panel-line">{nudgedCount} NUDGED</p>
+            )}
+          </div>
         </div>
         <div className="action-stack connected-interstitial-actions">
           <button type="button" className="button-l2" onClick={handleCancel}>
@@ -285,38 +328,48 @@ export default function ConnectedInterstitial({
     const error = session.error;
     return (
       <main className="screen connected-interstitial">
-        <p className="connected-status-label">
-          {session.deviceName ?? "CONNECT"}
-        </p>
-        {error !== null && (
-          <>
-            <p className="connected-serif-line">{failedSerifLine(error)}</p>
-            {!OUR_REASONS.has(error.reason) && (
-              <p className="connected-body-line">
-                End whatever is showing on the monitor, then try again.
-              </p>
-            )}
-            <p className="connected-reassurance">
-              YOUR WORKOUT AND NUDGES ARE KEPT
-            </p>
-            <div className="connected-detail-panel">
-              <p className="connected-detail-title">DETAIL</p>
-              <p className="connected-detail-line">
-                {error.reason.toUpperCase()}
-              </p>
-              <p className="connected-detail-line">{error.detail}</p>
-              {error.raw !== undefined && (
-                <p className="connected-detail-line connected-detail-raw">
-                  {error.raw}
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">
+            {session.deviceName ?? "CONNECT"}
+          </p>
+          {error !== null && (
+            <>
+              <p className="connected-serif-line">{failedSerifLine(error)}</p>
+              {!NOT_A_MACHINE_REFUSAL.has(error.reason) && (
+                <p className="connected-body-line">
+                  End whatever is showing on the monitor, then try again.
                 </p>
               )}
-            </div>
-          </>
-        )}
+              <p className="connected-reassurance">
+                YOUR WORKOUT AND NUDGES ARE KEPT
+              </p>
+              <div className="connected-detail-panel">
+                <p className="connected-detail-title">DETAIL</p>
+                <p className="connected-detail-line">
+                  {error.reason.toUpperCase()}
+                </p>
+                <p className="connected-detail-line">{error.detail}</p>
+                {error.raw !== undefined && (
+                  <p className="connected-detail-line connected-detail-raw">
+                    {error.raw}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
         <div className="action-stack connected-interstitial-actions">
           <button
             type="button"
             className="button-l1"
+            // Unreachable while this branch renders at all (LOW-7,
+            // task-5 review): `canRetry` is `phase === "failed"`, and this
+            // button only exists inside the `phase === "failed"` render
+            // branch, so it is always `true` here. Kept anyway, belt-and-
+            // braces, same call `useMonitorSession.ts`'s own LOW-5 makes
+            // for `armed`'s `error: null` — the real inertness guarantee is
+            // "does not render outside failed" (the tests pin that), not
+            // this attribute.
             disabled={!canRetry}
             onClick={handleTryAgain}
           >
@@ -340,13 +393,17 @@ export default function ConnectedInterstitial({
   if (session.phase === "ready" && !dwellDone) {
     return (
       <main className="screen connected-interstitial">
-        <p className="connected-status-label">
-          {(session.deviceName ?? "") + " · PROGRAMMED"}
-        </p>
-        <p className="connected-serif-line">Ready when you pull</p>
-        <p className="connected-body-line">
-          The monitor starts the clock on your first stroke.
-        </p>
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">
+            {session.deviceName !== null
+              ? `${session.deviceName} · PROGRAMMED`
+              : "PROGRAMMED"}
+          </p>
+          <p className="connected-serif-line">Ready when you pull</p>
+          <p className="connected-body-line">
+            The monitor starts the clock on your first stroke.
+          </p>
+        </div>
         <div className="action-stack connected-interstitial-actions">
           <button
             type="button"
@@ -354,6 +411,14 @@ export default function ConnectedInterstitial({
             onClick={() => setDwellDone(true)}
           >
             Show me the numbers
+          </button>
+          {/* HIGH-2 (task-5 review): the handoff's own §2, verbatim —
+              "Cancel is present in every state, always last." Its absence
+              here left the erg ARMED with no clean way back once
+              programmed; `handleCancel` already runs `useMonitorSession`'s
+              `ready`-phase terminate (DEVIATIONS row 57). */}
+          <button type="button" className="button-l2" onClick={handleCancel}>
+            Cancel
           </button>
         </div>
       </main>
@@ -368,9 +433,13 @@ export default function ConnectedInterstitial({
   // unmounts, nothing reconnects), so Task 6 only has to replace this
   // return with the real surface, reading `session` exactly as this file
   // does above.
+  //
+  // No em-dash (task-5 review, MEDIUM-3): this string renders in production
+  // for any rower who connects and starts rowing before Task 6 ships, so it
+  // follows the same copy rule the rest of this file's in-frame strings do.
   return (
     <main className="screen connected-interstitial">
-      <p className="mono-status">CONNECTED — the live surface is Task 6's.</p>
+      <p className="mono-status">CONNECTED. The live surface is Task 6's.</p>
     </main>
   );
 }
