@@ -108,6 +108,15 @@ export const sessionLogs = pgTable(
     pain: integer("pain").notNull(),
     notes: text("notes"),
     steps: jsonb("steps").notNull(),
+    // Phase 7C Task 3 (spec §5/§6): session-scoped provenance for a
+    // monitor-sourced log ("PM5 432331249 Row"), nullable — a phone-timer
+    // log has no device to name, and existing rows read back null (nothing
+    // backfills). Its own column, not folded into `steps` jsonb: the
+    // adversarial review's B4 finding is that §5 and §6 disagreed on this
+    // ("inside the existing steps JSON" vs. "no migration") — a session-
+    // level string has nowhere to live inside a per-step array, so a real
+    // migration is unavoidable.
+    deviceName: text("device_name"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),

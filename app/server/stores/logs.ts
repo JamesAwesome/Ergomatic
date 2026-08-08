@@ -15,6 +15,13 @@ export type HeldResult = "held" | "under" | "over";
 // schema.ts`, untyped — no `.$type<LogStep[]>()` binding), so this is a
 // type-level change only: the column already accepts any JSON shape,
 // including one with these keys omitted, with no migration required.
+// Amendment (2026-08-08, Phase 7C Task 3, spec §6): avgHr (integer,
+// HR_MIN..HR_MAX), actualSeconds (>= 0), and actualMeters (>= 0) are new,
+// independently optional fields — a matched pm5 actual carries all three
+// (`src/session/logDraft.ts`'s `buildMonitorLogSteps`) regardless of
+// whether `actualSplit` itself is present (the PM5 PAIRING EXCEPTION,
+// enforced in `routes/data.ts`'s `validateLogStepEntry`). Same "type-level
+// change only" note as the amendment above applies here too.
 export interface LogStep {
   label: string;
   targetSplit?: number;
@@ -23,6 +30,9 @@ export interface LogStep {
   spm?: number;
   meters?: number;
   seconds?: number;
+  avgHr?: number;
+  actualSeconds?: number;
+  actualMeters?: number;
 }
 
 export interface LogInput {
@@ -44,6 +54,11 @@ export interface LogInput {
   // below skips the plan_state upsert for it, but the log row itself is
   // always inserted either way.
   advancesPlan: boolean;
+  // Phase 7C Task 3 (spec §5/§6): session-scoped provenance, optional —
+  // absent means null (a phone-timer log has no device to name). Not part
+  // of `steps`: see `db/schema.ts`'s `sessionLogs.deviceName` doc comment
+  // for why this is its own column, not a `steps` jsonb field.
+  deviceName?: string | null;
 }
 
 export function createLogsStore(db: Db) {
@@ -90,6 +105,7 @@ export function createLogsStore(db: Db) {
             pain: input.pain,
             notes: input.notes,
             steps: input.steps,
+            deviceName: input.deviceName ?? null,
           })
           .returning({ id: sessionLogs.id });
 

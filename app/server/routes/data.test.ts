@@ -1018,6 +1018,303 @@ describe("GET/POST /api/logs", () => {
     const plan = await asA(request(app).get("/api/plan"));
     expect(plan.body).toStrictEqual({ planKey: null, doneN: 0, sequence: [] });
   });
+
+  // Phase 7C Task 3 (spec §6): the server admits what a PM5 actually
+  // measured. Walk-4 hardware (docs/monitor/pm5-interface-notes.md §18)
+  // produced avgSpm 66 and splits past 600 on light rowing — real readings,
+  // not data-entry mistakes — so `actualSource: "pm5"` gets its own,
+  // wider bands. The manual bands (assumed/stopwatch) are UNCHANGED: a
+  // stopwatch entry claiming 66 spm is still a typo.
+  describe("pm5 fields (Phase 7C Task 3)", () => {
+    // Walk-4's own decoded interval 2 (logDraft.test.ts's WALK4_ACTUALS[1],
+    // b402faf's real 0x0037/0x0038 wire decode): elapsedSeconds 29.1,
+    // distanceMeters 100, avgSplit 145.5, avgSpm 25, avgHeartRateBpm 107.
+    it("accepts a pm5 step carrying walk-4's real decoded values", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [
+          {
+            label: "Row 1",
+            actualSplit: 145.5,
+            actualSource: "pm5",
+            spm: 25,
+            avgHr: 107,
+            actualSeconds: 29.1,
+            actualMeters: 100,
+          },
+        ],
+      });
+      expect(created.status).toBe(201);
+      const list = await asA(request(app).get("/api/logs"));
+      expect(list.body[0].steps[0]).toStrictEqual({
+        label: "Row 1",
+        actualSplit: 145.5,
+        actualSource: "pm5",
+        spm: 25,
+        avgHr: 107,
+        actualSeconds: 29.1,
+        actualMeters: 100,
+      });
+    });
+
+    // Adversarial B3's own hardware capture (pm5-session3-final.log.gz,
+    // line 2836): avgSplit 405.4, avgSpm 66 — both outside the manual
+    // 30..600 / 10..60 bands but real pm5 readings.
+    it("accepts avgSpm 66 and actualSplit 882.3 when actualSource is pm5 (walk-4 reality, adversarial B3)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [
+          { label: "Row 1", actualSplit: 882.3, actualSource: "pm5", spm: 66 },
+        ],
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it("still rejects the SAME avgSpm 66 / actualSplit 882.3 when actualSource is stopwatch (manual bands unmoved)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [
+          {
+            label: "Row 1",
+            actualSplit: 882.3,
+            actualSource: "stopwatch",
+            spm: 66,
+          },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+    });
+
+    it("still rejects a stopwatch spm of 66 alone (band unmoved, split otherwise in range)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [
+          {
+            label: "Row 1",
+            actualSplit: 120,
+            actualSource: "stopwatch",
+            spm: 66,
+          },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+    });
+
+    // The pm5 pairing exception (spec §3/§6): actualSource "pm5" is valid
+    // WITHOUT actualSplit, when the split reading itself was unusable but
+    // the other measured fields are real (`buildMonitorLogSteps`'s own
+    // `avgSplit > 0` gate on the client). assumed/stopwatch keep the
+    // ordinary paired-unit rule.
+    it("accepts actualSource pm5 with no actualSplit, when actualSeconds/actualMeters are present", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [
+          {
+            label: "Row 1",
+            actualSource: "pm5",
+            actualSeconds: 30,
+            actualMeters: 100,
+          },
+        ],
+      });
+      expect(created.status).toBe(201);
+      const list = await asA(request(app).get("/api/logs"));
+      expect(list.body[0].steps[0]).toStrictEqual({
+        label: "Row 1",
+        actualSource: "pm5",
+        actualSeconds: 30,
+        actualMeters: 100,
+      });
+    });
+
+    it("still rejects actualSource stopwatch with no actualSplit (pairing rule scoped to pm5 only)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSource: "stopwatch" }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toContain("actualSplit");
+      expect(res.body.error).toContain("actualSource");
+    });
+
+    it.each([
+      ["avgHr 300 (above HR_MAX)", 300],
+      ["avgHr 19 (below HR_MIN)", 19],
+    ])("rejects %s with 400 + field steps", async (_label, avgHr) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", avgHr }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+    });
+
+    it("accepts avgHr at both boundary values, 20 and 254", async () => {
+      const app = appFor(makeStores());
+      for (const avgHr of [20, 254]) {
+        const res = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          steps: [{ label: "Row 1", avgHr }],
+        });
+        expect(res.status).toBe(201);
+      }
+    });
+
+    it("rejects actualSeconds: -1 with 400 + field steps", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSeconds: -1 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+    });
+
+    it("accepts actualSeconds: 0 and actualMeters: 0 (>= 0, not > 0)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSeconds: 0, actualMeters: 0 }],
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it("rejects actualMeters: -1 with 400 + field steps", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualMeters: -1 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+    });
+
+    // Split-band boundary: pm5's own bound is "> 0 and <= 6000", not >= 0.
+    it.each([
+      ["actualSplit 0 (not > 0)", 0],
+      ["actualSplit 6000.1 (above PM5_MAX_SPLIT_SECONDS)", 6000.1],
+    ])("rejects pm5 %s with 400 + field steps", async (_label, actualSplit) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSplit, actualSource: "pm5" }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+    });
+
+    it("accepts pm5 actualSplit at the 6000 boundary", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSplit: 6000, actualSource: "pm5" }],
+      });
+      expect(res.status).toBe(201);
+    });
+
+    // spm-band boundary: pm5's own bound is 0..99 inclusive.
+    it.each([
+      ["spm -1 (below PM5_SPM_MIN)", -1],
+      ["spm 100 (above PM5_SPM_MAX)", 100],
+    ])("rejects pm5 %s with 400 + field steps", async (_label, spm) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSplit: 120, actualSource: "pm5", spm }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+    });
+
+    it("accepts pm5 spm at both boundary values, 0 and 99", async () => {
+      const app = appFor(makeStores());
+      for (const spm of [0, 99]) {
+        const res = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          steps: [
+            { label: "Row 1", actualSplit: 120, actualSource: "pm5", spm },
+          ],
+        });
+        expect(res.status).toBe(201);
+      }
+    });
+  });
+
+  // Phase 7C Task 3 (spec §5/§6): deviceName is a body-level, session-scoped
+  // string (provenance), stored in a new nullable column — not a per-step
+  // field.
+  describe("deviceName (Phase 7C Task 3)", () => {
+    it("round-trips a deviceName on read", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        deviceName: "PM5 432331249 Row",
+      });
+      const list = await asA(request(app).get("/api/logs"));
+      expect(list.body[0].deviceName).toBe("PM5 432331249 Row");
+    });
+
+    it("stays null when deviceName is absent", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).post("/api/logs")).send(validLogBody());
+      const list = await asA(request(app).get("/api/logs"));
+      expect(list.body[0].deviceName).toBeNull();
+    });
+
+    it("rejects a 65-character deviceName with 400 + field deviceName", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        deviceName: "x".repeat(65),
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("deviceName");
+    });
+
+    it("accepts a 1-character and a 64-character deviceName", async () => {
+      const app = appFor(makeStores());
+      for (const deviceName of ["x", "x".repeat(64)]) {
+        const res = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          deviceName,
+        });
+        expect(res.status).toBe(201);
+      }
+    });
+
+    it("rejects an empty-string deviceName with 400 + field deviceName", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        deviceName: "",
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("deviceName");
+    });
+  });
 });
 
 describe("GET/PUT /api/plan", () => {
