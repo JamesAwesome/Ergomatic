@@ -478,6 +478,24 @@ describe("no HR monitor", () => {
   });
 });
 
+describe("a zero split is not a reading (7B iteration: the pre-pull ochre 0:00.0)", () => {
+  it("live with currentSplit 0 renders the dash, unjudged — never 0:00.0 painted against the target", () => {
+    // Hardware walk 2: before the first pull the PM reports Current Pace
+    // 0, and the hero judged it as FASTER than target (0 < anything) —
+    // ochre at a rower who had not taken a stroke.
+    const m = model({ phase: "live", frame: frame({ currentSplit: 0 }) });
+    expect(m.pace.display).toBe("—");
+    expect(m.pace.absent).toBe(true);
+    expect(m.pace.judgement).not.toBe("over");
+  });
+
+  it("a real split still judges exactly as before", () => {
+    const m = model({ phase: "live", frame: frame({ currentSplit: 117 }) });
+    expect(m.pace.absent).toBe(false);
+    expect(m.pace.display).not.toBe("—");
+  });
+});
+
 describe("paused", () => {
   it("has no current pace: NOW goes to `—` with NOT ROWING", () => {
     const m = model({ phase: "paused", frame: frame({ currentSplit: 117 }) });

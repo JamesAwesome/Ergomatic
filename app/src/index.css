@@ -4035,6 +4035,26 @@ button:disabled {
   margin-top: 20px;
 }
 
+/* The wire log's quiet door (7B iteration) — diagnostics vocabulary, not a
+   product control: one muted mono caption line below the actions, absent
+   entirely for the manual path. 44px tap height without LOOKING like a
+   44px control; the text is the whole affordance. */
+.log-monitor-diag {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  text-align: center;
+  cursor: pointer;
+}
+
 /* Save session — 54px per the task brief (`.button-primary`'s own default
    is 52px, e.g. `.today-resume-button`'s comment on that shared value).
    `border: none; padding: 0;` are load-bearing, not decorative: neither

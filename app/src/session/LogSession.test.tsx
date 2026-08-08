@@ -571,6 +571,41 @@ describe("LogSession: prefill from a real completed run", () => {
 // workoutId) must not be trusted for step labels, the PACES LOCKED
 // reconstruction, or the workoutType fallback — all three read `run` and
 // `draft`'s matching `workoutId` as one gate (`matchedDraft`).
+describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
+  it("absent entirely when no rowed stash exists — the manual path never sees it", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    expect(document.querySelector(".log-monitor-diag")).toBeNull();
+  });
+
+  it("with a stash: one mono line, and tapping it copies the stash byte-for-byte", async () => {
+    const stash = JSON.stringify([{ seq: 0, kind: "write", detail: "f1" }]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", stash);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+    await userEvent.click(row);
+
+    expect(writeText).toHaveBeenCalledWith(stash);
+    expect(
+      await screen.findByRole("button", { name: "MONITOR LOG · COPIED" }),
+    ).toBeInTheDocument();
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+  });
+});
+
 describe("LogSession: the ledger residual (workoutId mismatch)", () => {
   it("ignores a foreign draft — fallback labels render and the PACES LOCKED panel is omitted entirely (F1: no bare dash)", async () => {
     const { workout } = buildSessionFixture();

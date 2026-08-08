@@ -613,7 +613,47 @@ function LogScreen({
         </button>
         {discardSlot}
       </div>
+      <MonitorLogRow />
     </main>
+  );
+}
+
+/** The wire log's one UI door (7B iteration, 2026-08-08 — James: "1 but I
+ *  want it to not disrupt the product experience"). A connected session's
+ *  teardown stashes its full trace in sessionStorage
+ *  (`useMonitorSession.ts`); the ended hand-off frame navigates HERE
+ *  before the diagnostics sheet can be reached, so this screen is where
+ *  the operator has always wanted the log and never had it. Deliberately
+ *  whisper-quiet: absent entirely unless a rowed stash exists in this
+ *  tab, one mono caption line below the actions, no layout the manual
+ *  path ever sees. */
+function MonitorLogRow() {
+  const [stash] = useState<string | null>(() => {
+    try {
+      return sessionStorage.getItem("ergomatic:last-rowed-log");
+    } catch {
+      return null;
+    }
+  });
+  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  if (stash === null) return null;
+  return (
+    <button
+      type="button"
+      className="log-monitor-diag"
+      onClick={() => {
+        void navigator.clipboard
+          .writeText(stash)
+          .then(() => setCopied("copied"))
+          .catch(() => setCopied("failed"));
+      }}
+    >
+      {copied === "idle"
+        ? "MONITOR LOG · COPY"
+        : copied === "copied"
+          ? "MONITOR LOG · COPIED"
+          : "MONITOR LOG · COPY FAILED"}
+    </button>
   );
 }
 
