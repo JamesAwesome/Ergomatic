@@ -495,6 +495,61 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     ]);
   });
 
+  it("one 0x0031 reading per tick, including the tick that first reports the arm — the repeat never doubles up with the F1 first report", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    expect(generals).toHaveLength(1); // the F1 first report, not it plus a repeat
+    fake.tick(0);
+    expect(generals).toHaveLength(2);
+  });
+
+  it("the FIRST armed report precedes a scripted event that is due on the same tick — a timeline's opening entry never lands ahead of the arm (fix-round 1, F1's ordering half)", async () => {
+    // The level alone is not enough. A script whose very first entry is
+    // already due on the first tick after the accept would otherwise take
+    // that tick's single 0x0031 reading for itself, dropping the level
+    // (`deliverOrCache`) before the arm was ever reported at all — and
+    // `driver.ts`'s `verifyArmed()` would wait out its whole budget on a
+    // machine that had moved on. So the first report is unconditional and
+    // goes out FIRST; only the repeats yield.
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 0,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 5,
+          distanceMeters: 20,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+      ],
+    });
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    for (const chunk of buildTerminate()[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    for (const chunk of buildProgrammingSequence(PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0);
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+      WORKOUTSTATE_INTERVALWORKTIME,
+    ]);
+  });
+
   it("the armed level DROPS the moment a new programming sequence begins — a stale arm can never be re-reported into the next send (fix wave F-CRIT, driver.ts's F1 pins)", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
     await programIt(fake, PROGRAM);
@@ -734,6 +789,28 @@ describe("createFakeTransport: disconnect / reconnect", () => {
     fake.injectDisconnect();
     fake.tick(1000); // the 1000ms status event becomes due, but is suppressed
     expect(generals).toHaveLength(0);
+  });
+
+  it("the armed LEVEL is suppressed while disconnected too, and completeReconnect flushes 'still armed' (fix wave F-CRIT)", async () => {
+    // No timeline at all: the machine is armed and the rower has not
+    // pulled, so the only thing it has to say is the arm — which it goes on
+    // holding while the radio is down, and reports as its next status frame
+    // the moment the link is back. Same rule `deliverOrCache` applies to a
+    // scripted status; the level must not notify straight through
+    // `linkDown` just because it is generated inside the fake rather than
+    // read off a script.
+    const fake = createFakeTransport({ program: PROGRAM });
+    await programIt(fake, PROGRAM);
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.injectDisconnect();
+    fake.tick(500);
+    fake.tick(500);
+    expect(generals).toHaveLength(0);
+    fake.completeReconnect();
+    expect(generals.map((b) => decodeGeneral(b).workoutState)).toStrictEqual([
+      WORKOUTSTATE_WAITTOBEGIN,
+    ]);
   });
 
   it("completeReconnect flushes the latest cached status (re-derived, not interpolated)", async () => {
