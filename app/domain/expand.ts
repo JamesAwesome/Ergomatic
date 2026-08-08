@@ -1,4 +1,5 @@
 import { fmtSplit } from "./format.js";
+import { needsBaselines } from "./needsBaselines.js";
 import {
   effortWord,
   estimationSplit,
@@ -201,29 +202,51 @@ export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
   return out;
 }
 
-// Phase 6I: overloaded rather than a plain `Baselines | null` parameter so
-// every EXISTING caller (all of which pass a concrete `Baselines`) keeps
-// its exact inferred `{ minutes, estimated }` return type — none of them
-// need a null check added. Only a caller that itself holds a nullable
-// baselines value (Task 2's session-flow call sites) sees the `| null`
-// return. With null baselines, this always returns null rather than a
-// partial sum: `phases(steps, null)` can still leave some phases
-// unpriceable (an effort distance step has no targetSplit, so
-// `phaseSeconds` can't estimate it) and silently summing only the
-// priceable phases would produce a real-looking but wrong total — the
-// exact "never a bare dash, never a wrong number" house rule this feature
-// exists to honor. Callers that want a nominal duration without baselines
-// use fixed copy instead (`onboarding.ts`'s `ONBOARDING_DURATION_COPY`).
+// Phase 6I: overloaded exactly like `estimationSplit` (pace.ts) — a
+// concrete-`Baselines` overload first, so every EXISTING caller (all of
+// which pass one) keeps its exact non-null `{ minutes, estimated }`
+// inferred return type with no null check added, and a second overload
+// declared with the UNION TYPE `Baselines | null` (not a bare `null`
+// literal type) so a caller that itself holds a `Baselines | null`
+// VARIABLE (Task 2's session-flow call sites) resolves against it
+// directly — TS overload resolution matches a call against one of the
+// DECLARED signatures, and a `Baselines | null`-typed argument satisfies
+// neither "exactly `Baselines`" nor "exactly `null`", so the narrower
+// `baselines: null` form (2026-08-08 review fix) failed to compile for
+// exactly that shape.
+//
+// With null baselines this throws for a split-ref workout (a programmer
+// error — `phases()`/`estimationSplit` already throw for the same misuse;
+// returning null here instead would have silently masked "caller forgot
+// to gate on needsBaselines()" as "no estimate"), and returns null for an
+// effort-only workout rather than a partial sum: `phases(steps, null)`
+// can still leave some phases unpriceable (an effort distance step has no
+// targetSplit, so `phaseSeconds` can't estimate it) and silently summing
+// only the priceable phases would produce a real-looking but wrong total
+// — the exact "never a bare dash, never a wrong number" house rule this
+// feature exists to honor. Callers that want a nominal duration without
+// baselines use fixed copy instead (`onboarding.ts`'s
+// `ONBOARDING_DURATION_COPY`).
 export function estimateMinutes(
   steps: Step[],
   baselines: Baselines,
 ): { minutes: number; estimated: boolean };
-export function estimateMinutes(steps: Step[], baselines: null): null;
+export function estimateMinutes(
+  steps: Step[],
+  baselines: Baselines | null,
+): { minutes: number; estimated: boolean } | null;
 export function estimateMinutes(
   steps: Step[],
   baselines: Baselines | null,
 ): { minutes: number; estimated: boolean } | null {
-  if (baselines === null) return null;
+  if (baselines === null) {
+    if (needsBaselines(steps)) {
+      throw new Error(
+        "estimateMinutes: a split-ref work step needs baselines — callers must gate on needsBaselines() first",
+      );
+    }
+    return null;
+  }
   let seconds = 0;
   let estimated = false;
   for (const p of phases(steps, baselines)) {

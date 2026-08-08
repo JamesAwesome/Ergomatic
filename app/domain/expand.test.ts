@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { estimateMinutes, liveSteps, phases, phaseSeconds } from "./expand.js";
 import { distanceRepeats, intervalLadder } from "./fixtures.js";
-import type { Step } from "./types.js";
+import type { Baselines, Step } from "./types.js";
 
 const B = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -280,16 +280,55 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
 });
 
 describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)", () => {
-  it("returns null rather than a partial/misleading number", () => {
-    const firstSixK: Step[] = [
-      { k: "wu", minutes: 10 },
-      {
-        k: "w",
-        duration: { kind: "distance", meters: 6000 },
-        ref: { effort: "min" },
-      },
-    ];
+  const firstSixK: Step[] = [
+    { k: "wu", minutes: 10 },
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { effort: "min" },
+    },
+  ];
+  const splitRefSteps: Step[] = [
+    { k: "wu", minutes: 5 },
+    {
+      k: "w",
+      duration: { kind: "time", minutes: 5 },
+      ref: { base: "6k", off: 0 },
+    },
+  ];
+
+  it("returns null for an effort-only workout rather than a partial/misleading number", () => {
     expect(estimateMinutes(firstSixK, null)).toBeNull();
+  });
+
+  // 2026-08-08 review fix: the null branch used to short-circuit BEFORE
+  // ever looking at `steps`, so a split-ref workout under null baselines
+  // (a programmer error — the caller forgot to gate on needsBaselines())
+  // silently read as "no estimate" instead of the same loud throw
+  // `phases()`/`estimationSplit` already give that exact misuse.
+  it("throws for a split-ref workout under null baselines — the same programmer-error guard as phases()/estimationSplit", () => {
+    expect(() => estimateMinutes(splitRefSteps, null)).toThrow(/baselines/i);
+  });
+
+  // 2026-08-08 review fix: the reviewer's live tsc compile proved the old
+  // two-overload shape ("Baselines" / bare "null") rejected a caller
+  // holding a `Baselines | null`-typed VARIABLE ("No overload matches
+  // this call") — neither overload's parameter type is a superset of the
+  // union. This is a type-level assertion: the test's mere existence
+  // typechecking is half the proof; the runtime behavior on both branches
+  // (already covered above/elsewhere) is the other half.
+  it("accepts a Baselines | null-typed variable directly (type-level proof: this must typecheck)", () => {
+    function pickBaselines(useReal: boolean): Baselines | null {
+      return useReal ? { k2Seconds: 112, k6Seconds: 122 } : null;
+    }
+    const nullable: Baselines | null = pickBaselines(false);
+    expect(estimateMinutes(firstSixK, nullable)).toBeNull();
+
+    const realNullable: Baselines | null = pickBaselines(true);
+    expect(estimateMinutes(splitRefSteps, realNullable)).toStrictEqual({
+      minutes: 10, // wu 5' + w 5' — both time-based, no estimate
+      estimated: false,
+    });
   });
 });
 
