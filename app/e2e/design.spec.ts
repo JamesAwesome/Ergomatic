@@ -3829,10 +3829,12 @@ async function walkToSurface(page: Page): Promise<void> {
   await expect(
     page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
   ).toBeVisible({ timeout: 20_000 });
+  // Unconditional (erg-day review, MEDIUM-5): the ready dwell is gone, so
+  // the button is always there — a guard here could only mask the dwell
+  // regression coming back.
   const showNumbers = page.getByRole("button", { name: "Show me the numbers" });
-  if (await showNumbers.isVisible().catch(() => false)) {
-    await showNumbers.click();
-  }
+  await expect(showNumbers).toBeVisible();
+  await showNumbers.click();
   await expect(
     page.getByRole("navigation", { name: "Connected panes" }),
   ).toBeVisible();
