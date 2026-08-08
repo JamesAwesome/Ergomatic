@@ -2128,6 +2128,20 @@ alongside a recording of the panes' own numbers.
 
 **Walk 4 (2026-08-08, a 2x100m):**
 
+- **The raw 0x0037/0x0038 pair for INTERVAL 2, verbatim from the
+  operator's pasted wire log** (the diagnostics stash, seq 24-25 —
+  interval 1's pair arrived before `notify` logging existed that
+  session, so only its normalized `interval-complete` line survives):
+
+  ```
+  0x0037  eb 0c 00 49 04 00 23 01 00 64 00 00 1e 00 09 00 01 02
+  0x0038  eb 0c 00 19 6b 67 af 05 05 00 b3 02 6c 0d 72 00 65 02 00
+  ```
+
+  These are the phase's only captured boundary bytes; 7C's builder
+  fixture decodes them through `pm5/parse.ts`'s own functions rather
+  than trusting any hand transcription.
+
 - **`rowingActive` READ TRUE ON THE FIRST PULL** — the unobserved
   premise walk 3 flagged is now observed. The ready gate promoted on
   the INSTANT path; the five-frame distance fallback never ran. RATE
