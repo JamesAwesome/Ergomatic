@@ -411,7 +411,6 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       actuals: input.actuals,
       activeIndex: intervalIndex,
       remaining,
-      stale,
       // The live cells the ACTIVE row shares with panes A and B — the same
       // objects, so a rower swiping from B to C cannot find the split
       // judged one way on one pane and another way on the next.
@@ -454,7 +453,13 @@ export function buildGridModel(args: {
   actuals: IntervalActual[];
   activeIndex: number;
   remaining: MonitorFrame["intervalRemaining"];
-  stale: boolean;
+  /** THERE IS NO `stale` PARAMETER, deliberately (task-7 review, M2). The
+   *  active row's judged cells arrive already judged, as the SAME
+   *  `JudgedValue` objects panes A and B show — so the stale greying reaches
+   *  them through the one path that decided it, and no second caller here
+   *  can disagree. Completed rows hold closed records, which the stale
+   *  question does not apply to at all. Nothing in this function needs to
+   *  know. */
   livePace: JudgedValue;
   liveRate: JudgedValue;
   liveHr: JudgedValue;
@@ -462,7 +467,7 @@ export function buildGridModel(args: {
   targetSplitRef: string | null;
   hasTargetSplit: boolean;
 }): GridModel {
-  const { intervals, activeIndex, remaining, stale } = args;
+  const { intervals, activeIndex, remaining } = args;
   // An actual whose own `index` is `null` belongs to no interval we can
   // name (`IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
   // `null` AS INTERVAL 0"), so it files against no row rather than against
@@ -496,18 +501,37 @@ export function buildGridModel(args: {
     }
     if (index < activeIndex) {
       const actual = byIndex.get(index);
+      // A CLOSED ACTUAL NEVER ENTERS THE STALE QUESTION (task-7 review, M2,
+      // and the handoff read correctly). §3 defines staleness once and it is
+      // a property of the FEED — "stale data during a reconnect... a number
+      // we can't vouch for is not judged" — and §4's own next sentence gives
+      // the frame of reference away: "Hero labels change `NOW` -> `LAST`". A
+      // value that becomes LAST was NOW. A completed interval's average was
+      // never NOW: the machine reported it at the boundary, the driver filed
+      // it as an `IntervalActual`, and a dead link cannot retract it. It is
+      // the same number this grid shows after the session ends and the same
+      // number 7C's log prefills from.
+      //
+      // This matters beyond taste because spec C5 makes `disconnected`
+      // TERMINAL for the session: greying these would permanently erase every
+      // judgement the rower had earned, on the one pane whose job is to show
+      // what they have done, the moment a link dropped.
+      //
+      // `staleFor` stays "the single place that decides WHEN a reading is
+      // stale" — this is not a second opinion about when, it is a cell that
+      // holds no reading to ask about.
       const pace = judgedValue({
         kind: "pace",
         actual: actual?.avgSplit ?? null,
         target: interval.targetSplit,
-        stale,
+        stale: false,
         format: fmtSplit,
       });
       const spm = judgedValue({
         kind: "spm",
         actual: actual?.avgSpm ?? null,
         target: interval.displaySpm,
-        stale,
+        stale: false,
         format: (v) => String(Math.round(v)),
       });
       return {
@@ -622,11 +646,28 @@ function distanceCaptionFor(intervals: ProgramInterval[]): string | null {
   return `${rows.length} ROWS ARE DISTANCE PIECES · ${tail}`;
 }
 
-/** `AN 800 M PIECE`, `A 500 M PIECE`. Eight is the only leading digit whose
- *  spoken form starts with a vowel, and these captions are read aloud by a
- *  screen reader as often as they are scanned. */
+/** `AN 800 M PIECE`, `A 500 M PIECE`, `AN 1800 M PIECE`. These captions are
+ *  read aloud by a screen reader as often as they are scanned, so the
+ *  article follows the SPOKEN form.
+ *
+ *  Two cases take "an" (task-7 review, L6 — the first version claimed eight
+ *  was the only one):
+ *   - a leading 8: eight, eighty, eight hundred, eight thousand.
+ *   - a four-digit distance beginning 11 or 18, which a rower says in
+ *     hundreds: "an eleven hundred", "an eighteen hundred". 1500 is "a
+ *     fifteen hundred", so the rule is the leading PAIR, not the leading 1.
+ *
+ *  Anything else takes "a". */
 function articleFor(meters: number): string {
-  return String(meters).startsWith("8") ? "AN" : "A";
+  const digits = String(meters);
+  if (digits.startsWith("8")) return "AN";
+  if (
+    digits.length === 4 &&
+    (digits.startsWith("11") || digits.startsWith("18"))
+  ) {
+    return "AN";
+  }
+  return "A";
 }
 
 /** `1:57.8` -> `["1:57", ".8"]`. `fmtSplit` always emits exactly one decimal

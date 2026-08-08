@@ -133,10 +133,13 @@ export default function ConnectionLogSheet({
       </div>
       {/* L3, solid ink: it acts INSIDE the sheet (handoff §5). Never L1 —
           this sheet has none, which is why `SheetShell.primary` is
-          optional. */}
+          optional. `.button-l3` already carries the handoff's 48px; the
+          `.connected-log-copy` hook that restated it is gone (task-7 review,
+          L3 — a duplicate identical declaration is two places to change one
+          number, not a safeguard). */}
       <button
         type="button"
-        className="button-l3 connected-log-copy"
+        className="button-l3"
         onClick={() => void handleCopy()}
       >
         {COPY_LABEL[copy]}

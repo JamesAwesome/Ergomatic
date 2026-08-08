@@ -5102,11 +5102,20 @@ section:not(.news-pinned) .news-row:last-of-type {
 .connected-grid-rows {
   /* `0 1 auto`, not `1`: with four rows the list hugs them and the caption
      sits directly under, the way the mockup's portrait frame draws it; with
-     twenty-five it shrinks past its content (that is what `flex-shrink` and
-     `min-height: 0` buy together) and scrolls instead of growing the pane.
-     `flex: 1` left a 300px hole between the last row and the caption on a
-     short workout — measured in the first screenshots run. */
+     twenty-five it shrinks past its content and scrolls instead of growing
+     the pane. `flex: 1` left a 300px hole between the last row and the
+     caption on a short workout — measured in the first screenshots run. */
   flex: 0 1 auto;
+  /* BELT AND BRACES, AND KNOWN TO BE SO (task-7 review, M1 — measured, not
+     assumed). What actually waives the automatic minimum size here is
+     `overflow-y: auto` on the line below: a flex item whose overflow is
+     anything but `visible` has no min-content floor to begin with, so the
+     shrink works with this line deleted (verified in the served bundle —
+     scroller still 184px, document overflow still 0). It stays because the
+     waiver is a property of `overflow`, not of this element: change that
+     one declaration and the floor comes back silently. The scroll guard in
+     `PaneGrid.test.tsx` pins BOTH, reading declarations rather than this
+     comment. */
   min-height: 0;
   overflow-y: auto;
   display: flex;
@@ -5313,18 +5322,18 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.14em;
 }
 
-/* L3's own 48px, restated so the sheet's two buttons keep the handoff's
-   own 48/52 pairing even if a caller stacks them in a flex row. */
-.connected-log-copy {
-  min-height: 48px;
-}
-
 /* THE SHEET SITS ON A SURFACE WITH NO TAB BAR. `.filter-sheet-backdrop`
    reserves `var(--tap)` at the bottom for the bar it normally slides up
    from, and `.app-shell:has(.connected-surface)` has already hidden that
    bar — so on this surface those 44px are 44px of log the rower could have
    been reading. Scoped by ancestor: the Library and Today sheets are
-   untouched. */
+   untouched.
+
+   BOTH ORIENTATIONS, deliberately, and this is the one of the four
+   connected-sheet rules that is NOT inside the landscape query (task-7
+   review, L2a — the landscape block's own comment used to claim all four
+   were). The tab bar is hidden in portrait too; the reserve is just as dead
+   there. Behaviour, not prose: the portrait sheet gains 24px of list. */
 .connected-surface .filter-sheet-backdrop {
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
@@ -5972,8 +5981,11 @@ section:not(.news-pinned) .news-row:last-of-type {
      take 200 before a single log line is drawn. Measured at the shipped
      defaults: the list got 35px — one and a half lines — while 56px of
      backdrop padding and a 44px header minimum sat unused above it. These
-     four rules give the list about 150px instead. All scoped to
-     `.connected-surface`; the Library and Today sheets keep every default. */
+     THREE rules, plus the unconditional backdrop-padding rule in the base
+     block above, give the list about 150px instead. All four are scoped to
+     `.connected-surface`; the Library and Today sheets keep every default,
+     and `screenshots.spec.ts` measures the result in a browser so a portal
+     refactor that drops the ancestor fails loudly. */
   .connected-surface .filter-sheet-backdrop {
     align-items: center;
     padding-top: 12px;

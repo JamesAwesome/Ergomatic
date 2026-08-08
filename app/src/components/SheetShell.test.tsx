@@ -155,6 +155,39 @@ describe("SheetShell", () => {
       ).toStrictEqual(["Act", "Close"]);
     });
 
+    it("EVERY caller ships an action — the shell no longer guarantees one", () => {
+      // The pin the task-7 review asked for (adjudication 2). Making
+      // `primary` optional means a future sheet can render a title and no
+      // buttons at all: dismissible by backdrop and Escape, but with no
+      // visible way out and nothing to say so.
+      //
+      // A SOURCE SWEEP, via Vite's own `?raw` glob rather than a directory
+      // walk — the client tsconfig deliberately carries no `@types/node`
+      // (`src/session/node-fs-raw.d.ts` explains why), and this needs no
+      // new ambient type at all.
+      const sources = import.meta.glob("../**/*.tsx", {
+        eager: true,
+        query: "?raw",
+        import: "default",
+      }) as Record<string, string>;
+
+      const callers = Object.entries(sources).filter(
+        ([file, text]) =>
+          !file.includes(".test.") && text.includes("<SheetShell"),
+      );
+
+      // Three today: Library's FilterSheet, Today's FilterSheet, and the
+      // connected-mode ConnectionLogSheet. A fourth is exactly the thing
+      // this assertion exists to look at.
+      expect(callers.length).toBeGreaterThanOrEqual(3);
+      const actionless = callers
+        .filter(
+          ([, text]) => !/primary=\{/.test(text) && !/button-l[23]/.test(text),
+        )
+        .map(([file]) => file);
+      expect(actionless).toStrictEqual([]);
+    });
+
     it("still traps focus, across the CALLER's own buttons", async () => {
       renderPrimaryless();
       const act = screen.getByRole("button", { name: "Act" });
