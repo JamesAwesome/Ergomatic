@@ -634,6 +634,14 @@ describe("paused (handoff §4)", () => {
     expect(endButton![1]).toContain("height: 52px");
   });
 
+  it("index.css inverts the paused band: ink field, paper label (2026-08-08, the operator missed the grey one)", () => {
+    const css = readFileSync(indexCssPath(), "utf-8");
+    const paused = /\.connected-paused\s*\{([^}]*)\}/.exec(css);
+    const label = /\.connected-paused-label\s*\{([^}]*)\}/.exec(css);
+    expect(paused![1]).toContain("background: var(--ink)");
+    expect(label![1]).toContain("color: var(--surface)");
+  });
+
   it("the interval clock greys but holds its last value", () => {
     localStorage.setItem(LAST_PANE_KEY, "timer");
     renderSurface({

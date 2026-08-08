@@ -539,15 +539,19 @@ export function useMonitorSession(
   const handleFrame = useCallback(
     (frame: MonitorFrame, driver: MonitorDriver): void => {
       const phase = stateRef.current.phase;
-      // FIRST ROWING FRAME WITH PROGRESS -> live (spec §2: every
-      // transition maps to a real event or frame field). The state
-      // ordinal alone is NOT the rower's first pull: the 2026-08-08
-      // hardware recording shows a just-armed PM5 sitting at "row to
-      // begin" already reporting a rowing-mapped workout state with the
-      // clock at 0.0 and 0 meters — on the ordinal alone, READY skipped
-      // its own "Show me the numbers" tap two seconds after arming. The
-      // machine's evidence of an actual first stroke is progress:
-      // elapsed or distance above zero. This is also where the run
+      // FIRST ROWING FRAME WITH FLYWHEEL EVIDENCE -> live (spec §2:
+      // every transition maps to a real event or frame field). Two
+      // hardware recordings narrowed this, 2026-08-08:
+      // - The state ordinal alone is NOT the rower's first pull: a
+      //   just-armed PM5 at "row to begin" already reports a
+      //   rowing-mapped workout state (recording 1 — READY skipped its
+      //   own "Show me the numbers" tap two seconds after arming).
+      // - `elapsedSeconds > 0` is not the pull either: the PM5 runs the
+      //   WORKOUT CLOCK at row-to-begin (recording 2 — TOTAL LEFT read
+      //   1:52 with 0 meters and rate 0, and the elapsed-or-distance
+      //   version of this gate skipped READY all over again).
+      // What only a real pull produces is FLYWHEEL evidence: banked
+      // distance or a registered stroke rate. This is also where the run
       // opens: the record exists once the rower is actually rowing,
       // never at `armed` — a programmed-then-abandoned workout leaves no
       // record behind, and `createMonitorRun`'s `clearRun()` (which
@@ -556,7 +560,7 @@ export function useMonitorSession(
       if (
         phase === "ready" &&
         frame.state === "rowing" &&
-        (frame.elapsedSeconds > 0 || frame.distanceMeters > 0)
+        (frame.distanceMeters > 0 || (frame.spm ?? 0) > 0)
       ) {
         const identity = identityRef.current;
         runRef.current = createMonitorRun(
@@ -719,6 +723,22 @@ export function useMonitorSession(
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
     (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
+      // THE LOG SURVIVES THE SESSION (2026-08-08, hardware walk 2): the
+      // ended hand-off frame navigates away on its first render, so the
+      // in-memory trace died exactly when the operator wanted to copy it.
+      // Teardown runs on EVERY exit path — ended, cancel, disconnect, a
+      // tab-bar escape — so one stash here covers them all.
+      // sessionStorage, not localStorage: diagnostics for the tab's own
+      // lifetime, not a record. Read it back from the console:
+      //   copy(sessionStorage.getItem("ergomatic:last-monitor-log"))
+      const log = logRef.current;
+      if (log !== null) {
+        try {
+          sessionStorage.setItem("ergomatic:last-monitor-log", log.exportLog());
+        } catch {
+          // Quota or privacy mode: diagnostics never break a teardown.
+        }
+      }
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       const driver = claimed ?? driverRef.current;

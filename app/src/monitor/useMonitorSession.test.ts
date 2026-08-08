@@ -587,13 +587,13 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     ];
   }
 
-  it("a rowing-state frame with ZERO progress holds ready — the real PM5 reports a rowing-mapped state at 'row to begin' (the 2026-08-08 recording)", async () => {
-    // The regression the erg found: two seconds after arming, READY
-    // skipped its own "Show me the numbers" tap and the surface appeared
-    // with the clock at :00.0 and 0 meters — the machine's workout state
-    // ordinal maps to "rowing" before any pull. The first PULL is
-    // progress (elapsed or distance above zero), and only progress may
-    // open the record.
+  it("a rowing-state frame without FLYWHEEL evidence holds ready, even with the workout clock running — the real PM5 runs the clock at 'row to begin' (the two 2026-08-08 recordings)", async () => {
+    // The regression the erg found TWICE: first the state ordinal alone
+    // (a just-armed PM5 reports a rowing-mapped state before any pull),
+    // then elapsed (the PM5 runs the workout clock at row-to-begin:
+    // TOTAL LEFT read 1:52 with 0 meters and rate 0). Only flywheel
+    // evidence — banked distance or a registered stroke rate — is the
+    // pull, and only the pull may open the record.
     const { result, fake } = harness({
       program: TWO_INTERVALS,
       events: [
@@ -603,7 +603,14 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
           spm: 0,
           currentSplit: 0,
         }),
-        status(200, { elapsedSeconds: 0.34, distanceMeters: 1.1 }),
+        // The clock runs; the flywheel has not moved. Still not a pull.
+        status(200, {
+          elapsedSeconds: 8,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+        }),
+        status(300, { elapsedSeconds: 8.4, distanceMeters: 1.1, spm: 14 }),
       ],
     });
     await connect(result);
@@ -611,12 +618,17 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     expect(result.current.phase).toBe("ready");
 
     tick(fake, 100);
-    // Rowing state, zero progress: still READY, still no record.
+    // Rowing state, no flywheel evidence: still READY, still no record.
     expect(result.current.phase).toBe("ready");
     expect(loadMonitorRun()).toBeNull();
 
     tick(fake, 100);
-    // The first stroke's progress is what flips it.
+    // The clock advancing on its own is STILL not a pull.
+    expect(result.current.phase).toBe("ready");
+    expect(loadMonitorRun()).toBeNull();
+
+    tick(fake, 100);
+    // Banked distance and a stroke rate: the pull, at last.
     expect(result.current.phase).toBe("live");
     expect(loadMonitorRun()).not.toBeNull();
   });
@@ -743,6 +755,30 @@ describe("useMonitorSession: ending", () => {
       completedAt: t0.toISOString(),
       terminated: true,
     });
+  });
+
+  it("the wire log survives the session: teardown stashes exportLog into sessionStorage (2026-08-08, walk 2: the ended frame navigated away and the trace died with it)", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    const { result, fake, unmount } = harness({
+      program: TWO_INTERVALS,
+      events: timeline,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+    // Teardown is the unmount's; the ended frame itself has not stashed.
+    unmount();
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { seq: number; kind: string }[];
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.some((e) => e.kind === "write")).toBe(true);
   });
 
   it("End is idempotent against the terminal event its own terminate() provokes", async () => {
