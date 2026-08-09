@@ -4,15 +4,15 @@ import type { ArticleReadsState } from "../api/useArticleReads";
 
 /** The four onboarding steps (design spec §"The four steps," screen 2b).
  *  Deliberately NOT read from the News registry (`content/articles.tsx`):
- *  two of these four slugs (`your-first-row`/`connect-the-monitor`) don't
- *  exist there yet — they land in Task 6 — and this block's own copy/order
- *  is a fixed table the spec pins independently of whatever the registry
- *  says. `minutes` for the two already-published articles matches their
- *  real registry values (`baselines`: 3, `picking-a-workout`: 2) rather
- *  than the design mock's own placeholder numbers (4 MIN/2 MIN respectively
- *  — sampled, not authoritative, per the handoff's own "Not built, and
- *  fabricated" section); the two unpublished slugs use the spec's own
- *  "~N min" prose estimate until Task 6 lands the real word-count figure.
+ *  this block's own copy/order is a fixed table the spec pins independently
+ *  of whatever the registry says. `minutes` for all four now matches their
+ *  real registry values (`baselines`: 3, `picking-a-workout`: 2,
+ *  `your-first-row`: 2, `connect-the-monitor`: 2) rather than the design
+ *  mock's own placeholder numbers (4 MIN/2 MIN for the first pair — sampled,
+ *  not authoritative, per the handoff's own "Not built, and fabricated"
+ *  section) or the 6I design spec's own pre-prose "~3 min" estimate for
+ *  `connect-the-monitor` (Task 6 landed the real word count — 190 words,
+ *  ceil(190/180) = 2 — which supersedes that estimate).
  *
  *  Exported so a later screen needing the identical four rows (You ›
  *  Learning the app, Phase 6I Task 7) can import this ONE array rather than
@@ -45,7 +45,7 @@ export const START_HERE_STEPS: StartHereStep[] = [
   {
     slug: "connect-the-monitor",
     copy: "Connect the monitor and it drives the piece.",
-    minutes: 3,
+    minutes: 2,
   },
 ];
 

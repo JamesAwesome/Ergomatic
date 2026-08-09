@@ -33,7 +33,7 @@ function readyState(readSlugs: string[]): ArticleReadsState {
 }
 
 describe("News", () => {
-  it("ready with nothing read: both pins and both latest stories render, 4 UNREAD, every square unread", () => {
+  it("ready with nothing read: both pins and all four latest stories render, 6 UNREAD, every square unread", () => {
     mockUseArticleReads.mockReturnValue(readyState([]));
     const { container } = renderNews();
 
@@ -49,21 +49,25 @@ describe("News", () => {
     expect(
       screen.getByText("The pain scale, without a heart rate monitor"),
     ).toBeVisible();
+    expect(screen.getByText("Your first row")).toBeVisible();
+    expect(
+      screen.getByText("Connect the monitor, and it drives the piece"),
+    ).toBeVisible();
 
-    expect(screen.getByText("4 UNREAD")).toBeVisible();
+    expect(screen.getByText("6 UNREAD")).toBeVisible();
 
     const squares = container.querySelectorAll(".news-square");
-    expect(squares).toHaveLength(4);
+    expect(squares).toHaveLength(6);
     for (const sq of squares) {
       expect(sq).toHaveAttribute("data-read", "false");
     }
   });
 
-  it("baselines read: count drops to 3 UNREAD, only the baselines square/meta flip to read", () => {
+  it("baselines read: count drops to 5 UNREAD, only the baselines square/meta flip to read", () => {
     mockUseArticleReads.mockReturnValue(readyState(["baselines"]));
     const { container } = renderNews();
 
-    expect(screen.getByText("3 UNREAD")).toBeVisible();
+    expect(screen.getByText("5 UNREAD")).toBeVisible();
 
     const baselinesRow = screen
       .getByText("What a baseline is, and why every pace comes from one")
@@ -78,7 +82,7 @@ describe("News", () => {
     const otherSquares = [...container.querySelectorAll(".news-square")].filter(
       (sq) => sq !== baselinesRow!.querySelector(".news-square"),
     );
-    expect(otherSquares).toHaveLength(3);
+    expect(otherSquares).toHaveLength(5);
     for (const sq of otherSquares) {
       expect(sq).toHaveAttribute("data-read", "false");
     }
@@ -91,6 +95,8 @@ describe("News", () => {
         "baselines",
         "picking-a-workout",
         "pain-scale",
+        "your-first-row",
+        "connect-the-monitor",
       ]),
     );
     renderNews();

@@ -144,7 +144,13 @@ describe("Reader", () => {
 
   it("renders no NEXT footer once every other article is already read", () => {
     mockUseArticleReads.mockReturnValue(
-      readyState(["workout-types", "picking-a-workout", "pain-scale"]),
+      readyState([
+        "workout-types",
+        "picking-a-workout",
+        "pain-scale",
+        "your-first-row",
+        "connect-the-monitor",
+      ]),
     );
     renderReader("/news/baselines");
 

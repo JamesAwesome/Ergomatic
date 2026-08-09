@@ -61,10 +61,10 @@ describe("StartHere", () => {
     }
     // Real registry minutes, not the design mock's own placeholder figures
     // (4 MIN/2 MIN for these same two rows) — see StartHere.tsx's own
-    // header comment. Two rows land on each figure (baselines/connect-the-
-    // monitor both read 3; your-first-row/picking-a-workout both read 2).
-    expect(screen.getAllByText("3 MIN")).toHaveLength(2);
-    expect(screen.getAllByText("2 MIN")).toHaveLength(2);
+    // header comment. Only baselines reads 3; the other three (your-first-
+    // row, picking-a-workout, connect-the-monitor) all read 2.
+    expect(screen.getAllByText("3 MIN")).toHaveLength(1);
+    expect(screen.getAllByText("2 MIN")).toHaveLength(3);
 
     const squares = container.querySelectorAll(".starthere-square");
     expect(squares).toHaveLength(4);
