@@ -1117,6 +1117,31 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     });
   });
 
+  // Task 2's deferred minor (progress.md, task-2-report.md "Fix round 1"):
+  // the happy-path test above only ever pinned interval 0, the SYNTHESIZED
+  // entry — the phase's one genuinely hardware-DECODED value
+  // (`WALK4_ACTUALS[1]`, §18's real 0x0037/0x0038 pair through
+  // `parseSplitIntervalData`/`toIntervalActual`, b402faf) never got its own
+  // whole-object pin. This closes that gap: the full `LogStep`
+  // `buildMonitorLogSteps` builds for interval 1, read dynamically off the
+  // decoded fixture (never a hardcoded literal, so a future re-decode can't
+  // silently drift this test out of sync with the fixture it's supposed to
+  // pin).
+  it("maps walk 4's interval 1 (the DECODED §18 entry, WALK4_ACTUALS[1]) to a full LogStep, verbatim", () => {
+    const steps = buildMonitorLogSteps(WALK4_RUN);
+    expect(steps[1]).toStrictEqual({
+      label: WALK4_RUN.logSeed!.steps[1]!.label,
+      targetSplit: WALK4_RUN.program.intervals[1]!.targetSplit ?? undefined,
+      meters: 100,
+      actualSplit: WALK4_ACTUALS[1]!.avgSplit,
+      actualSource: "pm5",
+      spm: WALK4_ACTUALS[1]!.avgSpm,
+      avgHr: WALK4_ACTUALS[1]!.avgHeartRateBpm ?? undefined,
+      actualSeconds: WALK4_ACTUALS[1]!.elapsedSeconds,
+      actualMeters: WALK4_ACTUALS[1]!.distanceMeters,
+    });
+  });
+
   it("a warmup interval produces NO step (manual parity, adversarial B2) and shifts nothing", () => {
     const draft = buildDraft({
       id: "id-walk4-warmup-variant",
