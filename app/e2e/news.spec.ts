@@ -264,20 +264,22 @@ test("round 4: NEXT navigates into a freshly mounted scroller that starts at 0, 
   ).toBe(0);
 });
 
-// ui-notes round, item 1 — root cause: NEXT used to PUSH with
-// `state={{from: location.pathname}}` (the article being LEFT, not the
-// reading chain's true origin), so mid-chain the real origin was gone and
-// BACK/the tab bar's own fallback landed on NEWS instead of wherever the
-// rower actually started, and escaping took multiple backs. The fix
-// threads the ORIGINAL `location.state.from` through unchanged and
-// REPLACES on every NEXT hop, so the whole chain occupies one history
-// entry; the reader also gains a ✕ Close resolving the same origin.
-test("item 1 (ui-notes round): from Today's START HERE step 1, NEXT-chaining two articles deep, one browser BACK returns to Today — and the ✕ close does too", async ({
+// BACK-walks-the-stack round (James's 2026-08-09 recordings, both, taken
+// together): report 1 (pre-✕) — escaping N articles took N backs and the
+// origin got lost — shipped the ui-notes round's replace-collapse + ✕
+// (#66/#69): NEXT/cross-links REPLACED, so BACK and ✕ both resolved the
+// SAME collapsed origin. Report 2, same day: ← BACK from a cross-linked
+// article jumped straight to Today instead of the previous article — the
+// direct consequence of that single shared value. This round REVERSES the
+// collapse: NEXT/ArticleLink PUSH again. ← BACK and browser BACK retrace
+// the article stack one article per press, then exit to Today; ✕ still
+// exits directly to Today from any depth, unchanged from #66/#69.
+test("BACK-walks-the-stack round: from Today's START HERE step 1, NEXT-chaining two articles deep, ← BACK retraces one article at a time and only reaches Today on the THIRD press — ✕ still exits directly from any depth", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
-    email: `ui-notes-chain-${RUN_ID}@e2e.test`,
-    name: "UI Notes Chain",
+    email: `back-stack-chain-${RUN_ID}@e2e.test`,
+    name: "Back Stack Chain",
   });
   await page.goto("/today");
   await expect(page.locator(".starthere-block")).toBeVisible();
@@ -289,20 +291,38 @@ test("item 1 (ui-notes round): from Today's START HERE step 1, NEXT-chaining two
   await step1.click();
   await expect(page).toHaveURL(/\/news\/your-first-row$/);
   await expect(page.locator(".reader-body")).toBeVisible();
+  const entryArticleUrl = page.url();
 
   await page.locator(".reader-next").click();
   await expect(page.locator(".reader-body")).toBeVisible();
+  const afterFirstHopUrl = page.url();
+
   await page.locator(".reader-next").click();
   await expect(page.locator(".reader-body")).toBeVisible();
 
-  // ONE browser BACK from two hops deep must land on Today, not on the
-  // article one level up the chain — the pre-fix bug would have grown the
-  // history stack by one entry per hop with the wrong origin recorded.
-  await page.goBack();
+  // The reversal this round makes: ← BACK from two hops in must land back
+  // on the article one level up the chain, NOT jump straight to Today —
+  // the ui-notes round's own replace-collapse contract (and the pre-fix
+  // bug's multi-BACK cost, at the other extreme) both predicted a wrong
+  // answer here.
+  await page.getByRole("link", { name: /BACK/ }).click();
+  await expect(page).toHaveURL(afterFirstHopUrl);
+  await expect(page.locator(".reader-body")).toBeVisible();
+
+  // A second ← BACK reaches the ENTRY article (your-first-row) — three
+  // articles were visited (your-first-row, then two NEXT hops), so three
+  // presses are needed to fully unwind the stack, not two.
+  await page.getByRole("link", { name: /BACK/ }).click();
+  await expect(page).toHaveURL(entryArticleUrl);
+  await expect(page.locator(".reader-body")).toBeVisible();
+
+  // A THIRD ← BACK reaches Today — the stack, walked fully.
+  await page.getByRole("link", { name: /BACK/ }).click();
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator(".starthere-block")).toBeVisible();
 
-  // Re-enter the chain and prove the ✕ close from the same depth.
+  // Re-enter the chain and prove ✕ still exits directly from the same
+  // depth, unchanged from #66/#69 — only BACK's own target reversed.
   await step1.click();
   await expect(page).toHaveURL(/\/news\/your-first-row$/);
   await page.locator(".reader-next").click();
@@ -314,16 +334,16 @@ test("item 1 (ui-notes round): from Today's START HERE step 1, NEXT-chaining two
 // Crosslink round — field bug (James's 2026-08-09 recording, Chromium):
 // Today → START HERE step 3 → the picking-a-workout article → tapping the
 // IN-PROSE cross-link "pain from 1 to 5" → ✕ landed on NEWS, not Today.
-// Root cause: the two body cross-links (workoutTypes.tsx, pickingAWorkout
-// .tsx — raw react-router-dom Links added in the persona round) pushed
-// WITHOUT `replace` and WITHOUT the reading chain's origin, so the origin
-// died at the hop and Reader's BACK/✕ fell back to /news. `ArticleLink`
-// (the one door an article body may use to link to another article) fixes
-// both halves; this test walks James's own exact path and then the depth
-// lock he explicitly required — one BACK THROUGH a cross-link hop, not
-// just a NEXT hop (the sibling "ui-notes round, item 1" test above already
-// covers the NEXT-chain half of this same contract).
-test("crosslink round: an in-prose cross-link inside an article carries the reading chain's origin, same as NEXT", async ({
+// Report 2, same day, same path one level deeper: ← BACK from that
+// cross-linked article jumped straight to Today instead of back to
+// picking-a-workout — the ui-notes round's replace-collapse fixed the
+// FIRST symptom (origin lost entirely) but, by design, made BACK and ✕
+// resolve identically, which is exactly what made the second report
+// possible. `ArticleLink` (the one door an article body may use to link to
+// another article) now pushes and carries the same `{ from, origin }`
+// shape NEXT does, so BACK retraces THROUGH a cross-link hop exactly like
+// it does through a NEXT hop.
+test("BACK-walks-the-stack round: an in-prose cross-link inside an article retraces via ← BACK one hop at a time (both the in-page link and browser BACK), while ✕ still exits directly to Today", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
@@ -342,6 +362,7 @@ test("crosslink round: an in-prose cross-link inside an article carries the read
   await expect(page.locator(".reader-title")).toHaveText(
     PICKING_A_WORKOUT_TITLE,
   );
+  const pickingAWorkoutUrl = page.url();
 
   // James's exact path: the IN-PROSE cross-link, not NEXT.
   const crossLink = page
@@ -352,8 +373,31 @@ test("crosslink round: an in-prose cross-link inside an article carries the read
   await expect(page).toHaveURL(/\/news\/pain-scale$/);
   await expect(page.locator(".reader-title")).toHaveText(PAIN_SCALE_TITLE);
 
-  // The ✕ must be visible and target Today — the pre-fix bug's own /news
-  // fallback would show up here first, before a single BACK is even tried.
+  // (a) James's exact path, one level deeper than the field report: ← BACK
+  // from the cross-linked article must land back on picking-a-workout —
+  // the previous article the rower actually read — not jump to Today the
+  // way the ui-notes round's replace-collapse contract made it.
+  await page.getByRole("link", { name: /BACK/ }).click();
+  await expect(page).toHaveURL(pickingAWorkoutUrl);
+  await expect(page.locator(".reader-title")).toHaveText(
+    PICKING_A_WORKOUT_TITLE,
+  );
+
+  // ← BACK again reaches Today, the entry surface.
+  await page.getByRole("link", { name: /BACK/ }).click();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.locator(".starthere-block")).toBeVisible();
+
+  // (b) Re-enter, hop through the cross-link again, then ✕ — it still
+  // exits directly to Today, unchanged from #66/#69; only ← BACK's own
+  // target reversed.
+  await step3.click();
+  await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
+  await page
+    .locator(".reader-body")
+    .getByRole("link", { name: "pain from 1 to 5" })
+    .click();
+  await expect(page).toHaveURL(/\/news\/pain-scale$/);
   const close = page.getByRole("link", { name: "Close" });
   await expect(close).toBeVisible();
   await expect(close).toHaveAttribute("href", "/today");
@@ -361,10 +405,10 @@ test("crosslink round: an in-prose cross-link inside an article carries the read
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.locator(".starthere-block")).toBeVisible();
 
-  // The depth lock (James's explicit requirement): re-enter the chain,
-  // hop through the cross-link again, then ONE browser BACK — proving
-  // `replace` collapsed the chain THROUGH the cross-link hop itself, not
-  // merely through a NEXT hop.
+  // (c) The depth lock, browser-BACK form: re-enter, hop through the
+  // cross-link a third time, then ONE browser BACK — proving the PUSH (not
+  // the ui-notes round's `replace`) restored a real, walkable history
+  // entry for the cross-link hop itself, not just for a NEXT hop.
   await step3.click();
   await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
   await page
@@ -374,8 +418,28 @@ test("crosslink round: an in-prose cross-link inside an article carries the read
   await expect(page).toHaveURL(/\/news\/pain-scale$/);
 
   await page.goBack();
-  await expect(page).toHaveURL(/\/today$/);
-  await expect(page.locator(".starthere-block")).toBeVisible();
+  await expect(page).toHaveURL(pickingAWorkoutUrl);
+  await expect(page.locator(".reader-title")).toHaveText(
+    PICKING_A_WORKOUT_TITLE,
+  );
+
+  // (d) Origin survives a NEXT + cross-link MIX: hop through the cross-link
+  // once more from picking-a-workout, then take a NEXT hop from the
+  // cross-linked article itself — a genuinely different hop KIND than
+  // (a)-(c) above, which never left the cross-link/cross-link pattern. ✕
+  // must still resolve Today after the mix, proving `origin` (established
+  // at the cross-link hop) threads through a SUBSEQUENT NEXT hop unchanged.
+  await page
+    .locator(".reader-body")
+    .getByRole("link", { name: "pain from 1 to 5" })
+    .click();
+  await expect(page).toHaveURL(/\/news\/pain-scale$/);
+  await page.locator(".reader-next").click();
+  await expect(page.locator(".reader-body")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Close" })).toHaveAttribute(
+    "href",
+    "/today",
+  );
 });
 
 // Sanity check the titles above actually match the registry, so a future
