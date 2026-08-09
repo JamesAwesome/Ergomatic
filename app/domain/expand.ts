@@ -12,7 +12,14 @@ export interface Phase {
   type: "warmup" | "work" | "rest" | "test";
   seconds?: number; // time-based phases
   meters?: number; // distance work phases
-  targetSplit?: number; // work phases (resolved, nudge excluded — session nudges are applied by callers)
+  // Work phases (resolved, nudge excluded — session nudges are applied by
+  // callers). Also set on a DISTANCE warm-up phase, which `buildRun`
+  // (src/session/engine.ts) prices with `estimationSplit`'s easy band for
+  // exactly the same display-only reason an effort phase carries one:
+  // `phaseSeconds` below cannot price `meters` without a split. Nothing
+  // programs a warm-up's number — `domain/monitor/program.ts`'s warmup arm
+  // nulls it.
+  targetSplit?: number;
   targetKind?: "split" | "effort"; // work phases only; set on every work phase
   // The raw ref a "split" targetKind phase was resolved from — set ONLY
   // for that case (an effort phase's target is words, never a number to
