@@ -1495,6 +1495,23 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-09, "ui-notes" round) — three James device notes
+  post-v0.6.0: (1) the reader's NEXT link pushed with the wrong origin
+  (`state={{from: location.pathname}}`, the article being LEFT, not the
+  chain's true start), so mid-chain BACK fell back to NEWS and escaping
+  took multiple backs — NEXT now replaces and threads the ORIGINAL
+  `location.state.from` through unchanged, and the reader gains a 44×44 ✕
+  Close (Today's own icon-control idiom) resolving the same origin BACK
+  does; (2) the baselines editor offers to estimate whichever split is
+  unset from the one that's real (`domain/deriveBaseline.ts`,
+  `K2_K6_OFFSET_SECONDS = 7`) — an offer only, never automatic, bounded by
+  the editor's own MIN/MAX split range; found capturing this state's own
+  screenshot, the editor's "No baselines yet" prompt used to fire whenever
+  EITHER side was unset, falsely denying a real, rowed value sitting right
+  next to the new offer — narrowed to the genuinely both-unset case; (3) `yourFirstRow.tsx`'s "Prefer
+  the short test?" paragraph and `baselines.tsx`'s two-baselines paragraph
+  are rewritten to stop implying both baselines are needed with no way to
+  get there without rowing both tests.
 - **PR #TBD** (2026-08-08) — e2e retries actually retry: two red main runs
   traced to fixture non-idempotency, not code. The stack's users are
   find-or-create by email and its volume persists, so a mid-test failure

@@ -11,10 +11,22 @@ const DEFAULT_FALLBACK = "/library";
 // directly controls (query params, old bookmarks, a future native bridge),
 // so this treats it as untrusted input rather than a value this app always
 // wrote itself.
-function isSafeInAppPath(value: unknown): value is string {
+// eslint-disable-next-line react-refresh/only-export-components
+export function isSafeInAppPath(value: unknown): value is string {
   return (
     typeof value === "string" && value.startsWith("/") && !value.includes("//")
   );
+}
+
+/** The single source of truth for "where does BACK go from here" —
+ *  extracted (ui-notes round, item 1) so `Reader.tsx`'s own ✕ close control
+ *  can resolve the SAME target BACK does, from the SAME inputs, rather than
+ *  reimplementing this fallback/validation logic a second time. `BackLink`
+ *  itself is just this function plus a `<Link>`. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function resolveBackTarget(state: unknown, fallback: string): string {
+  const from = (state as { from?: unknown } | null)?.from;
+  return isSafeInAppPath(from) ? from : fallback;
 }
 
 /**
@@ -36,8 +48,7 @@ export default function BackLink({
   fallback?: string;
 } = {}) {
   const location = useLocation();
-  const from = (location.state as { from?: unknown } | null)?.from;
-  const target = isSafeInAppPath(from) ? from : fallback;
+  const target = resolveBackTarget(location.state, fallback);
   return (
     <Link to={target} className="back-link">
       ← BACK

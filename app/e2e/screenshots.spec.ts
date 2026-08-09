@@ -820,6 +820,74 @@ test("you-staged", async ({ page }) => {
   });
 });
 
+// ui-notes round, item 2 — the derivation offer, visible in neither "you"
+// (both baselines unset) nor "you-staged" (both set, mid-nudge): a fresh
+// rower who has nudged ONLY the 6k field and applied sees the ESTIMATE FROM
+// 6K offer appear under the still-empty 2k row. Task-review round (PR #66,
+// Finding 1, BLOCKER) fixed: reached here through the REAL editor flow (a
+// UI nudge + Apply), never a raw `fetch` PUT — a raw-API seed would prove
+// nothing about whether the client's own Apply can actually produce this
+// state (it couldn't, before the fix: Apply always committed both fields).
+test("you-derive-offer", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-derive-offer@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  await page.getByRole("button", { name: "6k slower" }).click();
+  await page.getByRole("button", { name: "Apply baselines" }).click();
+  await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-derive-offer.png"),
+  });
+});
+
+// Task-review round, Finding 2 (ship-risk): accepting the offer used to
+// unmount the button outright — this capture is the committed visual
+// record of the fix, the inert "ESTIMATED" status line occupying the exact
+// same reserved slot the button did, so a reviewer can see the layout
+// never collapses. Continues straight from the offer state above (same
+// account, same session) rather than a fresh sign-in — tapping ESTIMATE
+// FROM 6K is the one interaction this capture exists to show.
+test("you-derive-offer-accepted", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-derive-offer-accepted@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  await page.getByRole("button", { name: "6k slower" }).click();
+  await page.getByRole("button", { name: "Apply baselines" }).click();
+  await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
+  await page.getByText("ESTIMATED — ADJUST WITH ± BELOW").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-derive-offer-accepted.png"),
+  });
+});
+
+// Re-review round (PR #66): the CONFIRMED CSS regression's own visual
+// record — the MIRROR direction of "you-derive-offer" above. Touching only
+// 2k and applying leaves 6k server-null, so the offer (and
+// `.baseline-derive-slot`) render directly under the 6K row instead of the
+// 2K row — exactly the arrangement that broke `.baseline-row:last-of-type`
+// (fixed in index.css via `:has(~ .baseline-row)`). Reached through the
+// real UI, same discipline as the other offer captures — no raw-API seed.
+test("you-derive-offer-6k", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-derive-offer-6k@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  await page.getByRole("button", { name: "2k slower" }).click();
+  await page.getByRole("button", { name: "Apply baselines" }).click();
+  await page.getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" }).waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-derive-offer-6k.png"),
+  });
+});
+
 // Phase 6I Task 7: You › Learning the app — dismissed on Today (so the
 // status line/PUT IT BACK ON TODAY control both render, not just the
 // baseline empty state) with one of the four steps already read (a real,
@@ -1246,6 +1314,25 @@ test("news-reader", async ({ page }) => {
   });
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "news-reader.png"),
+  });
+});
+
+// ui-notes round, item 1 — a separate, unscrolled capture: news-reader.png
+// above deliberately scrolls to the pyramid figure (its own established
+// job), which scrolls the header — and this round's new ✕ close inside it
+// — out of frame entirely (recurring-failure #7: open the image and look
+// at it caught that the recaptured news-reader.png was byte-identical to
+// its pre-round version, proving the ✕ never entered that frame). This
+// capture exists solely to put ← BACK and the new ✕ on screen together.
+test("news-reader-close", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-news-reader-close@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/news/workout-types");
+  await page.locator(".reader-body").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "news-reader-close.png"),
   });
 });
 

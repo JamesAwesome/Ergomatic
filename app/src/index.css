@@ -42,7 +42,12 @@
    pill representing an active filter, not body copy, even though the pill
    itself isn't the clickable element — its nested `.filter-token-remove` is
    a real `<button>`, already covered below; this entry is only for the
-   pill's own label text. */
+   pill's own label text. `.reader-close` (ui-notes round, item 1) joins for
+   the same `<Link>`-not-`<button>` reason as `.back-link` — the reader's ✕
+   is a navigation Link styled with Today's `.today-unlogged-discard`
+   idiom, which is itself already covered below via the bare `button`
+   selector for its ORIGINAL button usage; this entry is only needed for
+   the Link usage. */
 button,
 [role="radio"],
 .chip,
@@ -50,6 +55,7 @@ button,
 span.stepper-value,
 .pace-ref-display,
 .back-link,
+.reader-close,
 .library-import,
 .library-new,
 .button-primary,
@@ -1275,7 +1281,28 @@ button:disabled {
   border-bottom: 1px solid var(--rule-2);
 }
 
-.baseline-row:last-of-type {
+/* Re-review round (PR #66): `:last-of-type` matches by TAG, not class — it
+   picks the last `<div>` among ALL sibling divs, not the last `.baseline-row`
+   specifically. That was silently correct only by accident, as long as
+   nothing else `<div>`-shaped ever followed the two rows. `.baseline-derive-
+   slot` (the derivation offer, ui-notes round) broke that accident for the
+   6k-target case ({k2Seconds: real, k6Seconds: null}, offer visible): the
+   slot is now the LAST div, `.baseline-row:last-of-type` stops matching the
+   6k row at all, and its border-bottom reappears as a stray divider sitting
+   flush against the slot below it (confirmed live by the re-reviewer). The
+   OLD dirty-state confirm block (`.baseline-confirm`, a third sibling div
+   whenever `dirty` is true) had the exact same latent flaw — just less
+   visible, since its own 12px top margin put the stray line in blank space
+   rather than flush against visible content.
+   Fixed by asking the real question directly — "is there a LATER sibling
+   that's ALSO a `.baseline-row`?" — instead of "am I the last div, of any
+   kind, in the whole card": `:has(~ .baseline-row)` uses the general
+   sibling combinator (not `+`, which would require ADJACENCY and wrongly
+   strip the 2k row's own divider whenever a slot sits directly between the
+   two rows). This also fixes the pre-existing dirty-state case for free —
+   verified in `design.spec.ts`'s own two-target sweep (2k-target AND
+   6k-target, offer visible) plus `you-derive-offer-6k.png`. */
+.baseline-row:not(:has(~ .baseline-row)) {
   border-bottom: none;
 }
 
@@ -1309,6 +1336,37 @@ button:disabled {
   line-height: 1;
   cursor: pointer;
   color: var(--ink);
+}
+
+/* ui-notes round, item 2 — the derivation OFFER. `.button-l3` already
+   carries the 44px+ tap target and the "commit-in-card" ink treatment
+   (index.css's five-level system, DEVIATIONS.md #46).
+   `.baseline-derive-slot` (task-review round, Finding 2, ship-risk) is the
+   fix for a real ghost-tap hazard: accepting the offer used to unmount the
+   button outright, collapsing this 48px+8px-margin box and sliding the row
+   below it up under a still-moving finger. The slot now RESERVES that exact
+   footprint (min-height 48px, the button's own min-height, plus the same
+   8px the button used to carry as its own margin) whenever the offer is
+   ELIGIBLE at all (`BaselineEditor.tsx`'s `deriveOffer`, independent of
+   whether it's still showing the button) — only its child swaps, between
+   the button, the inert `.baseline-derive-done` status line, or nothing. */
+.baseline-derive-slot {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  margin: 0 0 8px;
+}
+
+.baseline-derive-slot .baseline-derive {
+  width: 100%;
+}
+
+.baseline-derive-done {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
 }
 
 .baseline-confirm {
@@ -4430,6 +4488,18 @@ section:not(.news-pinned) .news-row:last-of-type {
    already established, in mono rather than sans since the content
    (baselines.tsx's own aside) is itself an exact-numbers worked example,
    not narrative prose. */
+/* ui-notes round, item 1 — BACK and the new ✕ close share this row so both
+   resolve the same `origin` at the same visual height, without either one
+   needing to know about the other's own margin. No margin of its own: the
+   original bare `.back-link` here carried none either, and `.reader-meta`
+   below already supplies the gap before the title via its own
+   margin-bottom. */
+.reader-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .reader-meta {
   margin: 0 0 8px;
   font-family: var(--font-mono);

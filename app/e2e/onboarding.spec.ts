@@ -30,12 +30,20 @@ const K2_TITLE = "First 2k";
 
 /** Partial-safe: `PUT /api/baselines` accepts either field independently
  *  (server/routes/data.ts's own per-field loop), which is exactly what
- *  "set the 6k, leave the 2k null" needs — `BaselineEditor.tsx`'s own UI
- *  can't produce that state (its one Apply button always commits both
- *  fields from its seeded draft), so this goes straight at the real route
- *  instead, the same "state setup via a genuine API call, UI budget spent
- *  on the flow actually under test" idiom every other e2e file in this
- *  repo already uses for baselines/plan/prefs. */
+ *  "set the 6k, leave the 2k null" needs. Task-review round (PR #66,
+ *  Finding 1, BLOCKER) FIXED `BaselineEditor.tsx`'s own Apply so its real
+ *  UI CAN now produce this state (it used to always commit both fields
+ *  from the seeded draft, fabricating a fake value for whichever side the
+ *  rower never touched — the comment this replaces documented that bug as
+ *  if it were a permanent constraint). This helper still goes straight at
+ *  the real route rather than the UI for THIS file's own tests, which are
+ *  about Today's/News's downstream reaction to a known baseline state, not
+ *  about proving the editor's own reachability — that proof now lives in
+ *  its own dedicated test below ("the derivation offer is reachable
+ *  through the real editor flow"), which deliberately does NOT use this
+ *  helper. Same "state setup via a genuine API call, UI budget spent on
+ *  the flow actually under test" idiom every other e2e file in this repo
+ *  already uses for baselines/plan/prefs. */
 async function setBaselines(
   page: Page,
   patch: { k2Seconds?: number; k6Seconds?: number },
@@ -261,9 +269,10 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     //    from the log just saved — the card still offers the 6k, untouched.
     await expect(page.locator(".baselinecard-title")).toHaveText(K6_TITLE);
 
-    // "set the 6k in You" (real API round trip, `BaselineEditor.tsx`'s own
-    // Apply always commits both fields at once — see `setBaselines`'
-    // own doc comment) -> the card offers ONLY the 2k now, no toggle.
+    // "set the 6k in You" (a real, partial API round trip — see
+    // `setBaselines`'s own doc comment for why this file still uses the
+    // route directly rather than the editor's UI) -> the card offers ONLY
+    // the 2k now, no toggle.
     await setBaselines(page, { k6Seconds: 122 });
     await page.reload();
     await expect(page.locator(".baselinecard-title")).toHaveText(K2_TITLE);
@@ -428,5 +437,62 @@ test.describe("Phase 6I: designated-workout exclusion", () => {
     await expect(
       page.locator(".workout-row", { hasText: K2_TITLE }),
     ).toHaveCount(0);
+  });
+});
+
+// Task-review round (PR #66, Finding 1, BLOCKER): the derivation offer's
+// own eligibility (exactly one baseline server-null) used to be
+// UNREACHABLE through the real app — `BaselineEditor.tsx`'s one Apply
+// button always committed BOTH fields from the seeded draft, so a fresh
+// rower's very first Apply fabricated a fake value for whichever side they
+// never touched. This test proves the fix end to end against the real
+// stack: touch ONLY one field through the real UI, Apply, and inspect the
+// actual PUT wire body — no raw-API seeding anywhere in this test, unlike
+// `setBaselines` above (deliberately: that helper proves nothing about
+// whether the CLIENT's own Apply logic can produce this state).
+test.describe("the derivation offer is reachable through the real editor flow (task review round, Finding 1)", () => {
+  test("touching only the 6k field and applying sends ONLY k6Seconds — 2k stays null, and the offer plus Today's own no-baseline card both still name it", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: `ui-notes-offer-reach-${RUN_ID}@e2e.test`,
+      name: "UI Notes Offer Reach",
+    });
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+
+    let putBody: unknown = null;
+    await page.route("**/api/baselines", async (route) => {
+      if (route.request().method() === "PUT") {
+        putBody = route.request().postDataJSON();
+      }
+      await route.continue();
+    });
+
+    await page.goto("/you");
+    await page.locator(".baseline-value").first().waitFor();
+    await page.getByRole("button", { name: "6k slower" }).click();
+    await page.getByRole("button", { name: "Apply baselines" }).click();
+
+    // The wire body itself — the exact assertion Finding 1 names — carries
+    // ONLY the touched field. A fabricated k2Seconds here would mean the
+    // fix didn't actually reach the network layer.
+    await expect.poll(() => putBody).not.toBeNull();
+    expect(putBody).toStrictEqual({ k6Seconds: 122.5 });
+
+    // The offer becomes visible for 2k — reachable, at last, through the
+    // real editor flow rather than a raw API seed.
+    await expect(
+      page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+    ).toBeVisible();
+
+    // And the SAME fact holds system-wide: Today's own no-baseline card (a
+    // completely separate screen/component reading the identical baselines
+    // row) still offers the 2k, not "both set."
+    await page.goto("/today");
+    await expect(page.locator(".baselinecard-title")).toHaveText(K2_TITLE);
+    await expect(page.locator(".baselinecard-chip")).toHaveText(
+      "2K BASELINE · NOT SET · ROW IT HOW IT FEELS",
+    );
   });
 });
