@@ -1485,6 +1485,218 @@ test("connected-interstitial-ready-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// --- Phase 7C Task 6: the monitor mode's Log screen form --------------------
+//
+// The monitor mode (spec §4) only ever engages once a REAL connected session
+// has ended through the fake seam — same fake-injection idiom as
+// `openConnectedInterstitial` above, extended past "ready" through a single
+// interval's boundary and a staged End, mirroring `e2e/connected.spec.ts`'s
+// own walk but WITHOUT that file's paused/resumed theatrics: this capture
+// only needs a genuinely-ended `MonitorRun` with one measured interval, not
+// a PAUSED derivation to exercise. `program`/the bulk-import text are
+// `connected.spec.ts`'s own `FIXTURE_PROGRAM` shape (five 100m distance
+// "max" intervals) — the walk's own fixture, per this task's brief.
+async function openLogMonitorForm(
+  page: Page,
+  title: string,
+  email: string,
+  deviceName: string,
+): Promise<void> {
+  await page.addInitScript(
+    ({ program, events, deviceName: name, delayWritesMs }) => {
+      window.__pm5FakeScript__ = {
+        program,
+        events,
+        deviceName: name,
+        delayWritesMs,
+      };
+    },
+    {
+      program: {
+        intervals: Array.from({ length: 5 }, () => ({
+          kind: "distance" as const,
+          value: 100,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        })),
+      },
+      // A short story: two rowing status ticks, interval 0's boundary, then
+      // a status tick advancing into interval 1 — `connected.spec.ts`'s own
+      // first four frames, verbatim (plausible avgSplit/avgSpm/
+      // avgHeartRateBpm, not placeholders). That last frame is load-bearing,
+      // not decoration: `surfaceModel.ts`'s grid only marks a row
+      // `"completed"` once `index < activeIndex` — a boundary alone leaves
+      // interval 0 rendered as still-active until a later status names
+      // interval 1 current. No freeze/resume needed here; End is pressed the
+      // moment the grid shows the completed row.
+      events: [
+        {
+          atMs: 3000,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 5,
+          distanceMeters: 30,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 3300,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 10,
+          distanceMeters: 70,
+          spm: 24,
+          currentSplit: 108,
+          heartRateBpm: 142,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 3600,
+          kind: "boundary" as const,
+          actual: {
+            index: 0,
+            elapsedSeconds: 15,
+            distanceMeters: 100,
+            avgSplit: 112,
+            avgSpm: 24,
+            avgHeartRateBpm: 141,
+          },
+          cumulativeElapsedSeconds: 15,
+          cumulativeDistanceMeters: 100,
+        },
+        {
+          atMs: 3900,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 17,
+          distanceMeters: 115,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 1,
+        },
+      ],
+      deviceName,
+      delayWritesMs: SCREENSHOT_DELAY_WRITES_MS,
+    },
+  );
+  await signInViaBackdoor(page, { email, name: "Screenshot Tester" });
+  await setBaselines(page);
+  await importBulk(
+    page,
+    [
+      `${title} | AN | easy | 1`,
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+      "w 100m max",
+    ].join("\n"),
+  );
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Show me the numbers" }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Connected panes" }),
+  ).toBeVisible();
+
+  // Interval 0's boundary has landed once the grid shows one completed row.
+  // Driven by an atomic tick-then-read loop (`connected.spec.ts`'s own
+  // `pumpUntilPaused` idiom), not a bare polled `expect`: the in-page
+  // auto-tick clock (`transports/index.ts`) can stall or lag on its own
+  // (this file's own earlier discovery, above `SCREENSHOT_DELAY_WRITES_MS`),
+  // and a `tick()` call over the DevTools protocol is not subject to that.
+  await page.getByRole("button", { name: "Grid pane" }).click();
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    const completed = await page.evaluate(() => {
+      window.__pm5FakeControls__?.tick(100);
+      return document.querySelectorAll(".connected-grid-completed").length;
+    });
+    if (completed >= 1) break;
+    if (Date.now() >= deadline) {
+      await expect(page.locator(".connected-grid-completed")).toHaveCount(1);
+      break;
+    }
+  }
+
+  // A real (wall-clock) wait, not a virtual-clock tick: `MonitorRun.
+  // startedAt`/`completedAt` are real `Date.now()` stamps taken at Connect
+  // and at End, and `monitorLogTotals` rounds their difference to the
+  // nearest minute (`LogSession.tsx`) — without this, the capture reads "0
+  // MIN" the same misleading way `log-session`'s own F1 fix (above) found
+  // and corrected for the phone-timer door. 35 real seconds rounds up to a
+  // genuine, non-zero "1 MIN".
+  await page.waitForTimeout(35_000);
+
+  // END — staged, two presses, same idiom as `connected.spec.ts`.
+  await page.getByRole("button", { name: "End session" }).click();
+  await expect(
+    page.getByRole("button", { name: "Tap again to end" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Tap again to end" }).click();
+
+  await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
+  await expect(
+    page.getByRole("heading", { name: `Log ${title}` }),
+  ).toBeVisible();
+
+  // Realistic, non-empty state (CLAUDE.md's own "no empty-state
+  // screenshots" rule), same fill idiom as `log-session`/`log-session-
+  // manual` above.
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page
+    .getByLabel("NOTES")
+    .fill("Rowed against a connected monitor for the first time.");
+}
+
+test("log-monitor", async ({ page }) => {
+  test.setTimeout(60_000); // a real 35s wall-clock wait, not this file's usual ~3s ones
+  const title = "Screenshot Log Monitor Workout";
+  await openLogMonitorForm(
+    page,
+    title,
+    "screenshots-log-monitor@e2e.test",
+    "PM5 918273645",
+  );
+  // The caption line is the visible difference from the manual door's own
+  // `log-session-manual` capture — the whole reason this gets its own shot.
+  await expect(page.locator(".log-from-monitor")).toHaveText(
+    "FROM PM5 918273645 · 1 OF 5 INTERVALS MEASURED",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-monitor.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("log-monitor-landscape", async ({ page }) => {
+  test.setTimeout(60_000); // a real 35s wall-clock wait, not this file's usual ~3s ones
+  const title = "Screenshot Log Monitor Landscape Workout";
+  await openLogMonitorForm(
+    page,
+    title,
+    "screenshots-log-monitor-landscape@e2e.test",
+    "PM5 837465921",
+  );
+  await expect(page.locator(".log-from-monitor")).toHaveText(
+    "FROM PM5 837465921 · 1 OF 5 INTERVALS MEASURED",
+  );
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-monitor-landscape.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
 // --- Phase 7B Task 6: the connected surface, both orientations -------------
 //
 // The panes cannot be REACHED in this stack: they only render once a monitor
