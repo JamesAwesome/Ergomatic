@@ -694,7 +694,18 @@ describe("totals vs. estimateMinutes agreement", () => {
     expect(Math.round(t!.total)).toBe(estimate.minutes);
   });
 
-  it("H3: agrees with estimateMinutes for a bookend + repeated tail, including a row kind that isn't itself a bookend", () => {
+  // TRANSITIONAL (2026-08-09's warmup setting, plan Task 4 -> Task 5):
+  // `estimateMinutes` stopped pricing `wu` steps when `wu` left the `Step`
+  // union (domain/expand.ts's own comment where `case "wu"` used to be),
+  // but the BUILDER still authors a `wu` row — `BOOKEND_ROW_KINDS` is
+  // `["wu"]` and nothing else, so the bookend/span behaviour these two
+  // tests exist for cannot even be expressed without one until Task 5
+  // removes the row kind. So the two sides no longer agree, and the
+  // difference is EXACTLY the wu rows' own minutes; that exact difference
+  // is what these two now pin, rather than a looser "they differ"
+  // assertion that a real bucketing bug could hide inside. Task 5 (which
+  // takes the wu row out of `builderState.ts`) deletes or rewrites both.
+  it("H3: buckets a bookend + repeated tail positionally, differing from estimateMinutes by exactly the bookend's own (no longer priced) minutes", () => {
     // [wu 10' bookend, w 5' repeated, r 2' repeated], reps 3. toSteps emits
     // [wu, reps, w, r] because the marker goes at spanStartIndex (right
     // after the bookend) and liveSteps repeats everything after it — so the
@@ -718,9 +729,14 @@ describe("totals vs. estimateMinutes agreement", () => {
 
     const t = totals(f, baselines);
     expect(t).not.toBeNull();
+    // Positional bucketing: the 10' bookend once, plus 3 x (5' + 2').
+    expect(Math.round(t!.total)).toBe(31);
+    // The domain prices only the repeated tail — 3 x 7 = 21 — because the
+    // `wu` step `toSteps` emitted above contributes nothing to
+    // `estimateMinutes` any more.
     const estimate = estimateMinutes(out.steps, baselines);
-    expect(estimate.minutes).toBe(31);
-    expect(Math.round(t!.total)).toBe(estimate.minutes);
+    expect(estimate.minutes).toBe(21);
+    expect(Math.round(t!.total) - estimate.minutes).toBe(10); // the bookend
   });
 
   // Reviewer's mutation-testing probe (M4): a mutant that buckets `totals`
@@ -731,8 +747,9 @@ describe("totals vs. estimateMinutes agreement", () => {
   // AFTER the span start is reachable in one click — this pins that exact
   // shape. Under the kind-bucketing mutant this reports 40 (the mid-span
   // `wu` treated as always-loose, regardless of where it sits); the correct
-  // positional bucketing reports 60, matching estimateMinutes.
-  it("H4/M4: agrees with estimateMinutes when a bookend row sits AFTER the span start ([w, wu, w] x3)", () => {
+  // positional bucketing reports 60. See the TRANSITIONAL note above for
+  // why `estimateMinutes` no longer reports the same number.
+  it("H4/M4: buckets a bookend row sitting AFTER the span start positionally ([w, wu, w] x3)", () => {
     const f = formWith({
       reps: 3,
       rows: [
@@ -749,10 +766,11 @@ describe("totals vs. estimateMinutes agreement", () => {
 
     const t = totals(f, baselines);
     expect(t).not.toBeNull();
-    expect(Math.round(t!.total)).toBe(60);
+    expect(Math.round(t!.total)).toBe(60); // 3 x (5' + 10' + 5')
+    // 3 x (5' + 5'): the three repeated `wu` occurrences price at nothing.
     const estimate = estimateMinutes(out.steps, baselines);
-    expect(estimate.minutes).toBe(60);
-    expect(Math.round(t!.total)).toBe(estimate.minutes);
+    expect(estimate.minutes).toBe(30);
+    expect(Math.round(t!.total) - estimate.minutes).toBe(30); // 3 x 10'
   });
 });
 

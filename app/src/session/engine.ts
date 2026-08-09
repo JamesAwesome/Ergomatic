@@ -1,5 +1,7 @@
 import { phases, phaseSeconds, type Phase } from "../../domain/expand.js";
-import type { Baselines } from "../../domain/types.js";
+import { estimationSplit } from "../../domain/pace.js";
+import type { Baselines, EffortRef } from "../../domain/types.js";
+import type { WarmupSetting } from "../api/usePreferences";
 import { effectiveSteps, type SessionDraft } from "./draft";
 import type { PhaseActual, SessionRun } from "./run";
 
@@ -17,6 +19,96 @@ import type { PhaseActual, SessionRun } from "./run";
  *  `nextDistance`/`actuals` below). */
 export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
   originalIndex: number;
+}
+
+/** The `originalIndex` every phase the WARM-UP SETTING produces carries.
+ *  Deliberately not a real index: the setting is not an authored step, so
+ *  there is no `draft.steps[i]` for a consumer to resolve back to (0 would
+ *  falsely attribute the warmup to whatever step the rower actually
+ *  authored first). Nothing dereferences it today — `logDraft.ts`'s
+ *  `buildLogSteps` returns early for any non-work/non-test phase and
+ *  `buildLogSeed` handles `type: "warmup"` before it ever reads a draft;
+ *  `LogSession.tsx`'s baseline recovery gates on `phase.type === "work"`
+ *  first — and `draft.steps[-1]` is `undefined` in the shape any future
+ *  reader would get anyway, which is the honest answer. */
+const WARMUP_ORIGINAL_INDEX = -1;
+
+/** The ref a DISTANCE warm-up's display estimate is priced from (the
+ *  warmup-setting design §4: "the plan pins the estimator: `estimationSplit`'s
+ *  own easy band against the rower's 6k baseline"). Not a target the rower
+ *  chose and never programmed anywhere — see `warmupPhases` below. */
+const WARMUP_ESTIMATE_REF: EffortRef = { effort: "min" };
+
+/** The warm-up SETTING's phases, prepended by `buildRun` below — the ONE
+ *  producer of `type: "warmup"` phases since `wu` left the `Step` union
+ *  (`domain/expand.ts`'s own comment where `case "wu"` used to be).
+ *
+ *  ORDER IS PART OF THE CONTRACT: the warm-up phase first, its optional
+ *  trailing rest second (design §4's own numbered list). A rest emitted
+ *  first would compile to `compileProgram`'s `leading-rest` error for every
+ *  session the rower runs.
+ *
+ *  PRICING A DISTANCE WARM-UP (design §4, adversarial B3): the phone prices
+ *  phases through `domain/expand.ts`'s `phaseSeconds` (:91-99), which needs
+ *  `meters` AND `targetSplit` — read that function before touching this
+ *  one. A warm-up has no pace target by ruling, so the EFFORT precedent is
+ *  ridden exactly: `phases()`'s own `case "w"` effort arm sets
+ *  `targetSplit` from `estimationSplit` (`domain/pace.ts:85-104`) purely so
+ *  the phase can be priced for display, and this sets the SAME field from
+ *  the SAME function with the easy band (`{ effort: "min" }` ->
+ *  `k6Seconds + 20`, pace.ts:103). No parallel "estimatedSplit" field
+ *  exists; there is one pricing field and this is it.
+ *
+ *  What keeps the estimate from being PROGRAMMED as a real target is
+ *  `domain/monitor/program.ts`'s warmup arm (`phase.type === "warmup"` ->
+ *  `targetSplit: null`), not the absence of the number. `targetKind` is
+ *  deliberately NOT set here: it is documented as a work-phase
+ *  discriminant ("work phases only; set on every work phase",
+ *  `domain/expand.ts`'s `Phase.targetKind`) that four other modules read,
+ *  and widening it to mean "or a warm-up" would be a much larger change
+ *  than naming the warm-up case where it is actually decided.
+ *
+ *  With NULL baselines (an effort-only workout — 6I) there is no estimate
+ *  to make: `estimationSplit` returns null, `targetSplit` stays undefined,
+ *  and `phaseSeconds` prices the phase at nothing, exactly as it already
+ *  does for an effort distance work phase in the same session. No fake
+ *  number, no throw. */
+function warmupPhases(
+  warmup: WarmupSetting | null | undefined,
+  baselines: Baselines | null,
+): EnginePhase[] {
+  if (warmup === null || warmup === undefined) return [];
+  const out: EnginePhase[] = [];
+  if (warmup.kind === "time") {
+    out.push({
+      type: "warmup",
+      seconds: warmup.minutes * 60,
+      label: "Easy",
+      originalIndex: WARMUP_ORIGINAL_INDEX,
+    });
+  } else {
+    out.push({
+      type: "warmup",
+      meters: warmup.meters,
+      targetSplit: estimationSplit(baselines, WARMUP_ESTIMATE_REF) ?? undefined,
+      label: "Easy",
+      originalIndex: WARMUP_ORIGINAL_INDEX,
+    });
+  }
+  // Truthiness, not `!== undefined` — the same check `phases()` applies to
+  // a work step's own `restMinutes` (`domain/expand.ts:188`), so a stored
+  // `restSeconds: 0` produces no phase rather than a zero-length rest the
+  // timer would flash through. Design §2 already says 0 is omitted at the
+  // setting; this makes the engine agree with that whatever it is handed.
+  if (warmup.restSeconds) {
+    out.push({
+      type: "rest",
+      seconds: warmup.restSeconds,
+      label: "Rest",
+      originalIndex: WARMUP_ORIGINAL_INDEX,
+    });
+  }
+  return out;
 }
 
 /** Builds a fresh `SessionRun` from a confirmed draft. Freezes phases from
@@ -52,23 +144,35 @@ export interface EnginePhase extends Omit<Phase, "originalStepIndex"> {
  *  `workoutId`/`title` (whole-branch review, F3a) are stamped straight from
  *  `draft` — the run's own copy, not a live reference back to it — so any
  *  screen that only has the run record (Today's resume card, F2) can name
- *  the session without also touching `SessionDraft`. */
+ *  the session without also touching `SessionDraft`.
+ *
+ *  `warmup` (2026-08-09's warmup-setting design §4) is the rower's WARM-UP
+ *  SETTING, and this function is its one and only producer: no workout
+ *  carries a warm-up step any more, so a session warms up if and only if
+ *  the preference says so. `null`/absent prepends nothing, which is the
+ *  default for everyone. See `warmupPhases` above for the phases it emits,
+ *  their order, and how a distance warm-up is priced. Every caller threads
+ *  the loaded preference; the parameter is optional only so the dozens of
+ *  existing tests that build a run without one keep meaning "no warm-up"
+ *  rather than each having to say `null`. */
 export function buildRun(
   draft: SessionDraft,
   baselines: Baselines | null,
   now: Date,
+  warmup?: WarmupSetting | null,
 ): SessionRun {
   const effective = effectiveSteps(draft);
   const rawSteps = effective.map((e) => e.step);
-  const enginePhases: EnginePhase[] = phases(rawSteps, baselines).map(
-    (phase) => {
+  const enginePhases: EnginePhase[] = [
+    ...warmupPhases(warmup, baselines),
+    ...phases(rawSteps, baselines).map((phase) => {
       const { originalStepIndex, ...rest } = phase;
       return {
         ...rest,
         originalIndex: effective[originalStepIndex]!.originalIndex,
       };
-    },
-  );
+    }),
+  ];
   const nowIso = now.toISOString();
   return {
     v: 1,

@@ -37,7 +37,6 @@ function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
     steps: [
-      { k: "wu", minutes: 4 } as unknown as Step,
       splitWork,
       {
         k: "w",
@@ -48,7 +47,14 @@ function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   });
   const started = startDraft(draft);
   saveDraft(started);
-  const built = buildRun(started, BASELINES, FIXED_NOW);
+  // A 4' warm-up SETTING (2026-08-09's design §4) rather than a `wu` step,
+  // which no workout can carry any more — this fixture's phase 0 is still
+  // a real warm-up phase, which is what the "no meters" label test below
+  // needs, and it is now produced the one way production produces one.
+  const built = buildRun(started, BASELINES, FIXED_NOW, {
+    kind: "time",
+    minutes: 4,
+  });
   const distanceIndex = built.phases.length - 1;
   // Completion is a CONSTRUCTION here, not a derivation — engine.test.ts and
   // Timer.test.tsx already own proving tick/advance walk to this state
@@ -77,9 +83,9 @@ function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   return { draft: started, run };
 }
 
-// A real-shaped two-piece workout (warm-up + TWO distance work steps,
-// TR-type race pace — the community-canon "two pieces" shape, not a
-// hand-built minimum) with a recorded actual on BOTH distance phases —
+// A real-shaped two-piece workout (TWO distance work steps, TR-type race
+// pace — the community-canon "two pieces" shape, not a hand-built
+// minimum) with a recorded actual on BOTH distance phases —
 // fix round (whole-branch review, F2): the render-level list was only ever
 // exercised with exactly one actual, which can't tell "renders the list"
 // apart from "renders the list correctly when it has more than one row."
@@ -89,7 +95,6 @@ function multiActualDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
     title: "Two Pieces",
     type: "TR",
     steps: [
-      { k: "wu", minutes: 4 } as unknown as Step,
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
@@ -105,7 +110,7 @@ function multiActualDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
   const started = startDraft(draft);
   saveDraft(started);
   const built = buildRun(started, BASELINES, FIXED_NOW);
-  // Phases: 0 warmup, 1 work (2000m), 2 work (6000m).
+  // Phases: 0 work (2000m), 1 work (6000m).
   const completedAt = new Date(
     FIXED_NOW.getTime() + 40 * 60 * 1000,
   ).toISOString();
@@ -115,9 +120,9 @@ function multiActualDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
     completedAt,
     actuals: {
       // 452/2000*500 = 113.0 exactly (engine.ts's own hand-pinned example).
-      1: { elapsedSeconds: 452, splitSeconds: 113, actualSource: "stopwatch" },
+      0: { elapsedSeconds: 452, splitSeconds: 113, actualSource: "stopwatch" },
       // 1464/6000*500 = 122.0 exactly.
-      2: {
+      1: {
         elapsedSeconds: 1464,
         splitSeconds: 122,
         actualSource: "stopwatch",
@@ -291,7 +296,7 @@ describe("SessionComplete", () => {
   it("omits the meters suffix for a recorded actual on a phase with no meters (defensive — the engine's own contract only ever keys `actuals` off a distance phase, but the label's ternary still has both branches)", async () => {
     mockKeepAwake();
     const { run } = completeDraftAndRun();
-    // Phase 0 is the fixture's warm-up (no `meters`) — not a shape the real
+    // Phase 0 is the fixture's warm-up SETTING phase (no `meters`) — not a shape the real
     // engine ever produces an actual for (only `nextDistance`/Timer.tsx's
     // frozen-elapsed paths write to `actuals`, and both require
     // `phase.meters !== undefined`), constructed directly here purely to

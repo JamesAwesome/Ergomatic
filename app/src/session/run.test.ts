@@ -6,7 +6,7 @@ import { buildRun, pause, advance, nextDistance } from "./engine";
 import { saveRun, loadRun, clearRun, RUN_KEY, type SessionRun } from "./run";
 import { saveDraft, loadDraft, DRAFT_KEY } from "./draft";
 
-// Realistic fixture, per repo convention: Filling Low (AT) — wu 8' +
+// Realistic fixture, per repo convention: Filling Low (AT) —
 // 3x2000m @ 6k+4 with 3' rest — the same reps-expanded distance workout
 // engine.test.ts uses, so a run built from it exercises actuals, set
 // numbering, and originalIndex in one realistic shape.
@@ -32,7 +32,7 @@ function freshRun(): SessionRun {
   return buildRun(fillingLowDraft(`fl-${Math.random()}`), baselines, t0);
 }
 
-// A phase with no `set` (no reps marker active, e.g. warmup) still carries
+// A phase with no `set` (no reps marker active) still carries
 // the KEY with value `undefined` (domain/expand.ts's `phases()` always
 // includes it in the object literal) — JSON.stringify drops undefined-valued
 // keys entirely, so the realistic post-storage shape has no `set` key there
@@ -53,13 +53,13 @@ describe("saveRun / loadRun / clearRun", () => {
 
   it("round-trips a paused, mid-run record with a distance actual recorded", () => {
     const run = freshRun();
-    const withActual = nextDistance({ ...run, index: 1 }, addSeconds(t0, 452));
+    const withActual = nextDistance(run, addSeconds(t0, 452));
     const paused = pause(withActual, addSeconds(t0, 460));
     expect(saveRun(paused)).toBe(true);
     const loaded = loadRun();
     expect(loaded).toStrictEqual(viaJson(paused));
     expect(loaded!.pausedAt).toBe(addSeconds(t0, 460).toISOString());
-    expect(loaded!.actuals[1]).toStrictEqual({
+    expect(loaded!.actuals[0]).toStrictEqual({
       elapsedSeconds: 452,
       splitSeconds: 113,
       actualSource: "stopwatch",
@@ -67,8 +67,8 @@ describe("saveRun / loadRun / clearRun", () => {
   });
 
   it("round-trips a completed run", () => {
-    // Filling Low: wu + 3x(work,rest) = 1 + 6 = 7 phases, indices 0..6.
-    const run = { ...freshRun(), index: 6 }; // the last phase
+    // Filling Low: 3x(work,rest) = 6 phases, indices 0..5.
+    const run = { ...freshRun(), index: 5 }; // the last phase
     const completed = advance(run, addSeconds(t0, 1000));
     expect(saveRun(completed)).toBe(true);
     const loaded = loadRun();

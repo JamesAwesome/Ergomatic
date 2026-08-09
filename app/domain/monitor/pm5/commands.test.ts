@@ -103,22 +103,26 @@ function walkCommands(commandBytes: number[]): number[] {
 }
 
 describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () => {
-  // Sea Smoke: wu 6' + 6x[500m/22spm, 500m/24spm, 500m/22spm, 500m/24spm +
-  // 2' rest] (server/seed/library/o2.ts) -> 1 warmup interval + 24 work
-  // intervals = 25 intervals, the design spec's own named stress case
-  // ("Sea Smoke (25 intervals) is ~=6 frames ~=40 sequential writes",
-  // design spec §3).
-  it("Sea Smoke (25 real intervals): every frame's commands walk cleanly, none truncated", () => {
+  // Sea Smoke: 6x[500m/22spm, 500m/24spm, 500m/22spm, 500m/24spm + 2'
+  // rest] (server/seed/library/o2.ts) -> 24 work intervals, this suite's
+  // stress case. It was 25 until 2026-08-09's warmup setting took the `wu`
+  // step out of every seeded workout (the design spec §3 named it "Sea
+  // Smoke (25 intervals) is ~=6 frames ~=40 sequential writes"); the
+  // interval that left is the warm-up, a per-user SETTING now, prepended
+  // at `buildRun` rather than authored into the workout.
+  it("Sea Smoke (24 real intervals): every frame's commands walk cleanly, none truncated", () => {
     const program = realProgram("Sea Smoke");
-    expect(program.intervals).toHaveLength(25);
+    expect(program.intervals).toHaveLength(24);
 
     const frames = buildProgrammingSequence(program);
-    // L-3 (final-review): pinned exactly, not just "more than one" —
-    // interface-notes.md §15 #6/§17 item 5 and design spec §3 both cite
-    // Sea Smoke needing 7 frames under this packing; a regression to 6 or
-    // 8 (a packing change) must fail this test, not slide through under a
-    // >1 assertion.
-    expect(frames.length).toBe(7);
+    // L-3 (final-review): pinned exactly, not just "more than one" — a
+    // packing change must fail this test, not slide through under a >1
+    // assertion. interface-notes.md §15 #6/§17 item 5 and design spec §3
+    // cite SEVEN frames, measured when Sea Smoke still had its warm-up
+    // interval; MEASURED at 6 here now that 2026-08-09's warmup setting
+    // took that 25th interval out of the workout. The packing itself is
+    // unchanged — one interval fewer to pack.
+    expect(frames.length).toBe(6);
 
     let workoutIntervalCountCommands = 0;
     let screenStateCommands = 0;
@@ -144,16 +148,16 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
     // One SET_WORKOUTINTERVALCOUNT per interval, and exactly one trailing
     // SET_SCREENSTATE for the whole sequence (never duplicated across a
     // split, never dropped).
-    expect(workoutIntervalCountCommands).toBe(25);
+    expect(workoutIntervalCountCommands).toBe(24);
     expect(screenStateCommands).toBe(1);
     // The stronger guard (L7): the COUNT alone survives a mutant that
     // shuffles, duplicates, or reorders interval blocks across frames as
-    // long as it still emits 25 total 0x18 commands — asserting the actual
-    // index VALUES form the exact ascending sequence 0..24, spanning every
+    // long as it still emits 24 total 0x18 commands — asserting the actual
+    // index VALUES form the exact ascending sequence 0..23, spanning every
     // frame boundary in order, is what an atomicity break (or a reordering
     // bug in buildFrameGroups) cannot survive.
     expect(intervalIndexSequence).toStrictEqual(
-      Array.from({ length: 25 }, (_, i) => i),
+      Array.from({ length: 24 }, (_, i) => i),
     );
   });
 
@@ -547,12 +551,18 @@ describe("expectedArmedStructure (fix-3 Task 4 — what 0x0031 must read back)",
     });
   });
 
-  it("a real library workout (Sea Fret): interval 0 is the 300s warmup, so the readback owed is 30000/Time", () => {
+  // Sea Fret's interval 0 was its 300s warm-up until 2026-08-09's warmup
+  // setting stripped `wu` from every seeded workout; it is now the first
+  // of the two 4' work intervals (240s -> 24000 at the TIME scale's 0.01s
+  // lsb). The prediction reads interval 0 whatever it is — that is the
+  // property under test, and a real library workout is still the honest
+  // fixture for it.
+  it("a real library workout (Sea Fret): interval 0 is the 240s work interval, so the readback owed is 24000/Time", () => {
     const program = realProgram("Sea Fret");
-    expect(program.intervals[0]).toMatchObject({ kind: "time", value: 300 });
+    expect(program.intervals[0]).toMatchObject({ kind: "time", value: 240 });
     expect(expectedArmedStructure(program)).toStrictEqual({
       workoutType: 8,
-      workoutDurationRaw: 30000,
+      workoutDurationRaw: 24000,
       workoutDurationType: 0,
     });
   });

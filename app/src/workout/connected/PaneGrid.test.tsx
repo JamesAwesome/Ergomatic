@@ -96,7 +96,15 @@ interface Fixture {
   identity: RunIdentity;
 }
 
-function libraryFixture(title: string): Fixture {
+// 2026-08-09's warmup setting: a seeded workout no longer carries a `wu`
+// step, so the warm-up interval every fixture below opens with now comes
+// from the rower's PREFERENCE — `buildRun`'s fourth argument, its one
+// producer (`src/session/engine.ts`'s `warmupPhases`). The minutes passed
+// per title are exactly what that workout's own `wu` row used to carry, so
+// every interval index, count and duration asserted in this file is
+// unchanged. The connected surface still has to render a warm-up interval
+// correctly; this is the shape it arrives in now.
+function libraryFixture(title: string, warmupMinutes: number): Fixture {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
   const id = title.toLowerCase().replace(/ /g, "-");
@@ -106,7 +114,10 @@ function libraryFixture(title: string): Fixture {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0).phases;
+  const phases = buildRun(draft, baselines, t0, {
+    kind: "time",
+    minutes: warmupMinutes,
+  }).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -120,13 +131,13 @@ function libraryFixture(title: string): Fixture {
 
 /** 4 intervals: `time 480` warm-up, then 3 x `distance 2000` with 180 s of
  *  rest. Mixed, and short enough to assert every row of. */
-const FILLING_LOW = libraryFixture("Filling Low");
+const FILLING_LOW = libraryFixture("Filling Low", 8);
 /** 6 intervals: `time 600`, ONE `distance 8000`, then 4 x `time 180` — the
  *  handoff's own single-distance-row caption case, and the mirror of
  *  Filling Low's shape. */
-const SPLIT_FRONT = libraryFixture("Split Front");
+const SPLIT_FRONT = libraryFixture("Split Front", 10);
 /** 25 intervals: `time 360` then 24 x `distance 500`. The scroll case. */
-const SEA_SMOKE = libraryFixture("Sea Smoke");
+const SEA_SMOKE = libraryFixture("Sea Smoke", 6);
 
 /** Sanity on the fixtures themselves, so a later library edit that changed
  *  their shape would break HERE with a clear message rather than in a

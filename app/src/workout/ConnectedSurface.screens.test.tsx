@@ -54,7 +54,18 @@ const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
 
-function libraryFixture(title: string): {
+// 2026-08-09's warmup setting: a seeded workout no longer carries a `wu`
+// step, so the warm-up interval every fixture below opens with now comes
+// from the rower's PREFERENCE — `buildRun`'s fourth argument, its one
+// producer (`src/session/engine.ts`'s `warmupPhases`). The minutes passed
+// per title are exactly what that workout's own `wu` row used to carry, so
+// every interval index, count and duration asserted in this file is
+// unchanged. The connected surface still has to render a warm-up interval
+// correctly; this is the shape it arrives in now.
+function libraryFixture(
+  title: string,
+  warmupMinutes: number,
+): {
   program: WorkoutProgram;
   phases: EnginePhase[];
 } {
@@ -66,7 +77,10 @@ function libraryFixture(title: string): {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0).phases;
+  const phases = buildRun(draft, baselines, t0, {
+    kind: "time",
+    minutes: warmupMinutes,
+  }).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -74,14 +88,14 @@ function libraryFixture(title: string): {
   return { program, phases };
 }
 
-const FIXTURE = libraryFixture("Filling Low");
+const FIXTURE = libraryFixture("Filling Low", 8);
 
 /** Pane C's own second fixture: 25 intervals (6:00 warm-up then 24 x 500 m),
  *  the handoff's own worked example of the case that forces the scroll —
  *  "25 intervals cannot be compressed into 390px honestly" (DEVIATIONS row
  *  2). Filling Low's four rows would photograph the pane without ever
  *  exercising the thing the row is about. */
-const LONG_FIXTURE = libraryFixture("Sea Smoke");
+const LONG_FIXTURE = libraryFixture("Sea Smoke", 6);
 
 /** What the machine reported for an interval that is already behind the
  *  rower. Built from the PROGRAM's own numbers, not typed-in ones: the

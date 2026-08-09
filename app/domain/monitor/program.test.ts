@@ -46,20 +46,24 @@ function fillerWorkPhase(originalIndex: number): CompiledPhase {
 }
 
 describe("compileProgram: real-starter pinned tables", () => {
-  // TR "Beam Sea": wu 5' + 2000m continuous @ 2k+6, spm 24 (server/seed/
-  // library/tr.ts). No rest anywhere — pins the warmup-as-its-own-interval
-  // shape (null target/spm) alongside a plain distance-kind interval.
-  it("Beam Sea: warmup interval + single distance interval, no rest", () => {
+  // 2026-08-09 (the warmup setting): every table in this describe used to
+  // open with a warm-up interval, because every seeded workout opened with
+  // a `wu` step. `wu` left the `Step` union and the seeds were stripped, so
+  // `expandPhases` — this file's only phase source — can no longer produce
+  // a `type: "warmup"` phase at all (`domain/expand.ts`'s own comment where
+  // `case "wu"` used to be). A warm-up is now the rower's SETTING,
+  // prepended by `src/session/engine.ts`'s `buildRun`, which `domain/`
+  // cannot import: the warm-up interval's own compilation is pinned
+  // directly from hand-built phases in "the warm-up arm" below, and
+  // end-to-end from the setting in `src/monitor/program.sweep.test.ts`.
+
+  // TR "Beam Sea": 2000m continuous @ 2k+6, spm 24 (server/seed/library/
+  // tr.ts). No rest anywhere — the simplest table there is, one plain
+  // distance-kind interval.
+  it("Beam Sea: a single distance interval, no rest", () => {
     const result = compileProgram(realWorkoutPhases("Beam Sea"));
     expect(result).toStrictEqual({
       intervals: [
-        {
-          kind: "time",
-          value: 300,
-          targetSplit: null,
-          displaySpm: null,
-          restSeconds: 0,
-        },
         {
           kind: "distance",
           value: 2000,
@@ -71,10 +75,10 @@ describe("compileProgram: real-starter pinned tables", () => {
     });
   });
 
-  // TR "Tidal Bore": wu 5' + 5x[1' @ 2k+3 / 1' rest] (server/seed/library/
-  // tr.ts). Pins ordinary single-rest-per-interval folding across a reps
-  // block: each work phase's immediately-following rest phase merges onto
-  // it, never bleeding onto a neighbor.
+  // TR "Tidal Bore": 5x[1' @ 2k+3 / 1' rest] (server/seed/library/tr.ts).
+  // Pins ordinary single-rest-per-interval folding across a reps block:
+  // each work phase's immediately-following rest phase merges onto it,
+  // never bleeding onto a neighbor.
   it("Tidal Bore: reps block folds each rest onto its own interval", () => {
     const result = compileProgram(realWorkoutPhases("Tidal Bore"));
     const rep = {
@@ -85,24 +89,11 @@ describe("compileProgram: real-starter pinned tables", () => {
       restSeconds: 60,
     };
     expect(result).toStrictEqual({
-      intervals: [
-        {
-          kind: "time",
-          value: 300,
-          targetSplit: null,
-          displaySpm: null,
-          restSeconds: 0,
-        },
-        rep,
-        rep,
-        rep,
-        rep,
-        rep,
-      ],
+      intervals: [rep, rep, rep, rep, rep],
     });
   });
 
-  // AN "Dry Microburst": wu 10' + 4 descending ALL-OUT reps (90/60/45/30s,
+  // AN "Dry Microburst": 4 descending ALL-OUT reps (90/60/45/30s,
   // each with its own rest) (server/seed/library/an.ts). The named
   // "Microburst" real-starter test the brief calls for. This is the H8
   // pin: `estimationSplit` resolves every one of these effort phases to a
@@ -120,13 +111,6 @@ describe("compileProgram: real-starter pinned tables", () => {
     const result = compileProgram(input);
     expect(result).toStrictEqual({
       intervals: [
-        {
-          kind: "time",
-          value: 600,
-          targetSplit: null,
-          displaySpm: null,
-          restSeconds: 0,
-        },
         {
           kind: "time",
           value: 90,
@@ -154,6 +138,91 @@ describe("compileProgram: real-starter pinned tables", () => {
           targetSplit: null,
           displaySpm: 32,
           restSeconds: 135,
+        },
+      ],
+    });
+  });
+});
+
+// 2026-08-09's warmup-setting design §4: the warm-up phase reaches this
+// compiler from `src/session/engine.ts`'s `buildRun` (the preference's one
+// producer), never from a step. `domain/` cannot import `src/`, so the
+// phases here are hand-built to the exact shape `warmupPhases` emits —
+// `src/monitor/program.sweep.test.ts` runs the same assertion through the
+// real `buildRun` so the two shapes cannot drift silently.
+describe("compileProgram: the warm-up arm", () => {
+  const work: CompiledPhase = {
+    type: "work",
+    targetKind: "split",
+    targetSplit: 110,
+    spm: 24,
+    seconds: 120,
+    originalIndex: 0,
+  };
+
+  it("compiles a TIME warm-up as interval 0 with no target and no rate", () => {
+    const result = compileProgram([
+      { type: "warmup", seconds: 600, originalIndex: -1 },
+      work,
+    ]);
+    expect(result).toStrictEqual({
+      intervals: [
+        {
+          kind: "time",
+          value: 600,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          kind: "time",
+          value: 120,
+          targetSplit: 110,
+          displaySpm: 24,
+          restSeconds: 0,
+        },
+      ],
+    });
+  });
+
+  it("folds the setting's own trailing rest onto the warm-up interval", () => {
+    const result = compileProgram([
+      { type: "warmup", seconds: 600, originalIndex: -1 },
+      { type: "rest", seconds: 90, originalIndex: -1 },
+      work,
+    ]);
+    expect(result).toMatchObject({
+      intervals: [{ value: 600, restSeconds: 90 }, { value: 120 }],
+    });
+  });
+
+  it("never programs a DISTANCE warm-up's display estimate as a hard target", () => {
+    // The phase carries a real `targetSplit` (the easy-band estimate the
+    // phone needs to price `meters` at all — `domain/expand.ts`'s
+    // `phaseSeconds` returns null without one) and NO `targetKind`, so
+    // neither of the two older null-arms would catch it. Only the phase
+    // TYPE does. Without the warmup arm this interval compiles with
+    // `targetSplit: 140` and the PM5 is handed a pace the rower never
+    // chose for the one interval that is meant to have none.
+    const result = compileProgram([
+      { type: "warmup", meters: 2000, targetSplit: 140, originalIndex: -1 },
+      work,
+    ]);
+    expect(result).toStrictEqual({
+      intervals: [
+        {
+          kind: "distance",
+          value: 2000,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          kind: "time",
+          value: 120,
+          targetSplit: 110,
+          displaySpm: 24,
+          restSeconds: 0,
         },
       ],
     });

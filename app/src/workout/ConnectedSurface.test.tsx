@@ -85,7 +85,14 @@ function fillingLow(): {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0).phases;
+  // 2026-08-09's warmup setting: Filling Low's own 8:00 `wu` row is gone
+  // from the seed; the warm-up interval this whole file's indices assume
+  // now comes from the rower's PREFERENCE, `buildRun`'s one producer for
+  // it. Same 480s interval 0, same everything downstream.
+  const phases = buildRun(draft, baselines, t0, {
+    kind: "time",
+    minutes: 8,
+  }).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);

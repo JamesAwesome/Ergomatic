@@ -11,6 +11,7 @@ import {
 } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { WorkoutType } from "../../domain/types.js";
+import type { WarmupSetting } from "../api/usePreferences";
 import {
   buildDraft,
   loadDraft,
@@ -23,10 +24,12 @@ import { hasRunProgress } from "./Countdown";
 import { loadRun, saveRun, type SessionRun } from "./run";
 
 // Realistic fixture, matching Timer.test.tsx/ConfirmTargets.test.tsx:
-// Hoarfrost (O2) — wu 10' + reps×2 marker + one split-ref work step. Its
-// FIRST phase is always the warm-up ("Easy"), which is what makes it a good
-// fixture for pinning the next-phase line: the assertion doesn't depend on
-// baselines at all.
+// Hoarfrost (O2) — a reps×2 marker + one split-ref work step (12' @
+// 6k+12, spm 22, 5' rest). Its first phase is that work step, labelled
+// with the resolved split ("2:12.0" against this file's BASELINES).
+// (It used to open on a `wu` row labelled "Easy"; 2026-08-09's warmup
+// setting removed warm-ups from workouts entirely — the "warm-up SETTING"
+// describe block below covers the one way a run gets one now.)
 function hoarfrostDraft(id = "id-hoarfrost"): SessionDraft {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === "Hoarfrost");
   if (!w) throw new Error("missing library fixture: Hoarfrost");
@@ -62,6 +65,10 @@ const READY_PREFS = {
   difficulties: [] as never[],
   timeCapMinutes: 60,
   warmupMinutes: 10,
+  // The warm-up SETTING (2026-08-09's design §2), OFF by default for
+  // everyone — so the default fixture below builds runs with no warm-up
+  // phase at all, exactly like production's default.
+  warmup: null as WarmupSetting | null,
   countdownSeconds: 10,
 };
 
@@ -182,9 +189,13 @@ describe("Countdown", () => {
 
     expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
     expect(screen.getByText("10")).toBeInTheDocument();
-    // Hoarfrost's first phase is its warm-up: label "Easy" (domain/expand.ts).
-    expect(screen.getByText("Easy")).toBeInTheDocument();
-    expect(loadRun()).not.toBeNull();
+    // Hoarfrost's first phase is its 12' work step, labelled with the
+    // resolved split (domain/expand.ts's `case "w"`: `fmtSplit(132)`).
+    expect(screen.getByText("2:12.0")).toBeInTheDocument();
+    // The setting is OFF in READY_PREFS, so no warm-up was prepended.
+    const built = loadRun();
+    expect(built).not.toBeNull();
+    expect(built!.phases.some((p) => p.type === "warmup")).toBe(false);
   });
 
   // Phase 6I: `needsBaselines()` (domain/needsBaselines.ts) is the SAME
@@ -217,9 +228,9 @@ describe("Countdown", () => {
     expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
     const run = loadRun();
     expect(run).not.toBeNull();
-    // Heat Lightning's first phase is its own warm-up, "Easy" — the effort
-    // work phase itself is proven separately below.
-    expect(screen.getByText("Easy")).toBeInTheDocument();
+    // Heat Lightning's first phase is its effort work step, labelled with
+    // the effort WORD (domain/pace.ts's `effortWord`) — never a number.
+    expect(screen.getByText("ALL OUT")).toBeInTheDocument();
   });
 
   it("an effort-only workout's built run carries no targetSplit on its effort work phase, and its label is the effort word (never a numeric estimate)", async () => {
@@ -586,5 +597,80 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
     await renderCountdown();
 
     expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+  });
+});
+
+// 2026-08-09's warmup-setting design §4/§9: the phone-timer door is one of
+// the two places a session is born, and it must thread the rower's own
+// preference into `buildRun` — otherwise the setting is a screen that
+// changes nothing. This screen already waits for `usePreferences` to be
+// READY (it needs `countdownSeconds`), so there is no half-loaded window
+// to guess in.
+describe("Countdown — the warm-up setting reaches buildRun", () => {
+  function prefsWith(warmup: WarmupSetting | null) {
+    return {
+      state: "ready",
+      preferences: { ...READY_PREFS, warmup },
+    } as unknown;
+  }
+
+  it("prepends a TIME warm-up to the saved run, ahead of the workout's own first phase", async () => {
+    saveDraft(hoarfrostDraft("id-warmup-time"));
+    mockAdapters({
+      preferencesState: prefsWith({ kind: "time", minutes: 10 }),
+    });
+    await renderCountdown();
+
+    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+    const run = loadRun()!;
+    expect(run.phases[0]).toStrictEqual({
+      type: "warmup",
+      seconds: 600,
+      label: "Easy",
+      originalIndex: -1,
+    });
+    // Hoarfrost's own four phases follow it, unshifted.
+    expect(run.phases).toHaveLength(5);
+    // GET ON THE HANDLE's own next-phase line names the warm-up now.
+    expect(screen.getByText("Easy")).toBeInTheDocument();
+  });
+
+  it("prepends a DISTANCE warm-up and its trailing rest, in that order", async () => {
+    saveDraft(hoarfrostDraft("id-warmup-distance"));
+    mockAdapters({
+      preferencesState: prefsWith({
+        kind: "distance",
+        meters: 2000,
+        restSeconds: 90,
+      }),
+    });
+    await renderCountdown();
+
+    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+    const run = loadRun()!;
+    expect(run.phases.slice(0, 2)).toStrictEqual([
+      {
+        type: "warmup",
+        meters: 2000,
+        // estimationSplit's easy band against this file's 6k baseline:
+        // 120 + 20 (domain/pace.ts:103).
+        targetSplit: 140,
+        label: "Easy",
+        originalIndex: -1,
+      },
+      { type: "rest", seconds: 90, label: "Rest", originalIndex: -1 },
+    ]);
+    expect(run.phases).toHaveLength(6);
+  });
+
+  it("prepends nothing when the setting is OFF (the default for everyone)", async () => {
+    saveDraft(hoarfrostDraft("id-warmup-off"));
+    mockAdapters({ preferencesState: prefsWith(null) });
+    await renderCountdown();
+
+    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
+    const run = loadRun()!;
+    expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
+    expect(run.phases).toHaveLength(4);
   });
 });

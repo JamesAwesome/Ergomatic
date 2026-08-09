@@ -22,20 +22,20 @@ import { buildRun } from "../session/engine";
 // gives for resolving `originalStepIndex` through a lookup rather than
 // reimplementing `phases()`'s reps-expansion).
 //
-// HONEST SCOPE (Task 2 review, M3, corrected in round 2 — the first version
-// of this comment misdescribed Virazon): this sweep runs every seeded
-// workout as a PRISTINE draft — nothing removed, nothing edited. That
-// proves nothing about the removal class: eight real starters reach
-// `leading-rest` through a LEGAL two-tap row removal on Confirm (removing
-// the warmup and the first work row). Seven of them — Moonbow, Sun Dog,
+// HONEST SCOPE (Task 2 review, M3): this sweep runs every seeded workout
+// as a PRISTINE draft — nothing removed, nothing edited. That proves
+// nothing about the removal class: eight real starters reach
+// `leading-rest` through a LEGAL single-tap row removal on Confirm
+// (removing the first work row). Seven of them — Moonbow, Sun Dog,
 // Pogonip, Sun Pillar, Hazy Sunshine, Favonius, Nimbostratus — are shaped
-// `[wu, w, r, w]` in server/seed/library/o2.ts, so removing rows 0-1 leaves
-// the "r" step as the new first entry directly. Virazon is NOT that shape:
-// it's `[wu, w, r, w, r, w]` (two work/rest pairs, o2.ts). Removing rows
-// 0-1 still leaves an "r" step first (`[r, w, r, w]`) — the same
-// leading-rest outcome — because the removed rows are the warmup and ONLY
-// the first work step; the "r" immediately after it was always going to
-// become the new head regardless of how many work/rest pairs follow.
+// `[w, r, w]` in server/seed/library/o2.ts, so removing row 0 leaves the
+// "r" step as the new first entry directly. Virazon is NOT that shape:
+// it's `[w, r, w, r, w]` (two work/rest pairs, o2.ts). Removing row 0
+// still leaves an "r" step first (`[r, w, r, w]`) — the same leading-rest
+// outcome — because the "r" immediately after the first work step was
+// always going to become the new head regardless of how many work/rest
+// pairs follow. (Both shapes carried a leading `wu` row until
+// 2026-08-09's warmup setting, which is why this used to take TWO taps.)
 // `leading-rest`'s message is user-facing, shown on a real screen after a
 // real user action — not a synthetic-fixture-only branch. See the separate
 // "removal dimension" describe block below, which drives the same real
@@ -127,12 +127,15 @@ describe("compileProgram: the 300-workout sweep", () => {
     // real ceiling within the 50-interval limit, distinct from the
     // synthetic 50/51 boundary fixtures in domain/monitor/program.test.ts,
     // which test the LIMIT itself rather than what the library happens to
-    // contain today). Sea Smoke (o2.ts) is the known largest — 25 IR
-    // intervals, matching the adversarial review's independent count.
+    // contain today). Sea Smoke (o2.ts) is the known largest — 24 IR
+    // intervals (25 until 2026-08-09's warmup setting took every seeded
+    // workout's `wu` step out; the warm-up interval a rower actually gets
+    // is prepended from their PREFERENCE now, per the describe block at
+    // the bottom of this file).
     const maxIntervals = Math.max(
       ...compiled.map((r) => (r.outcome === "compiled" ? r.intervalCount : 0)),
     );
-    expect(maxIntervals).toBe(25);
+    expect(maxIntervals).toBe(24);
     const largest = compiled.find(
       (r) => r.outcome === "compiled" && r.intervalCount === maxIntervals,
     );
@@ -142,15 +145,14 @@ describe("compileProgram: the 300-workout sweep", () => {
 
 // The removal dimension (Task 2 review, M3): `leading-rest` reached
 // through a LIVE user action, not a hand-built CompiledPhase[] fixture.
-// Seven of the eight titles below (all but Virazon) are `[wu, w, r, w]` in
+// Seven of the eight titles below (all but Virazon) are `[w, r, w]` in
 // server/seed/library/o2.ts (verified by reading each entry); removing
-// rows 0 and 1 — the warmup and the first work step, exactly two taps on
-// Confirm's per-row remove control — leaves `[r, w]` as the effective
-// steps directly. Virazon is `[wu, w, r, w, r, w]` (two work/rest pairs);
-// removing the same two rows leaves `[r, w, r, w]` — still rest-first, for
-// the same reason (only the warmup and the FIRST work step are removed,
-// so the "r" immediately following the first work step becomes the new
-// head regardless of what follows it). This drives the REAL
+// row 0 — the first work step, one tap on Confirm's per-row remove
+// control — leaves `[r, w]` as the effective steps directly. Virazon is
+// `[w, r, w, r, w]` (two work/rest pairs); removing the same row leaves
+// `[r, w, r, w]` — still rest-first, for the same reason (only the FIRST
+// work step is removed, so the "r" immediately following it becomes the
+// new head regardless of what follows). This drives the REAL
 // `SessionDraft.removed` field through the REAL `effectiveSteps` (via
 // `buildRun`), not a reimplemented filter, for the same "one algorithm,
 // not two copies" reason `sweepOne` above uses `buildDraft`/`buildRun`
@@ -168,7 +170,7 @@ const REMOVAL_LEADING_REST_TITLES = [
 
 describe("compileProgram: the removal dimension — leading-rest is live, not synthetic", () => {
   it.each(REMOVAL_LEADING_REST_TITLES)(
-    "%s: removing the first two rows on Confirm produces leading-rest",
+    "%s: removing the first work row on Confirm produces leading-rest",
     (title) => {
       const workout = LIBRARY_WORKOUTS.find((w) => w.title === title);
       if (!workout) throw new Error(`fixture workout not found: ${title}`);
@@ -179,7 +181,7 @@ describe("compileProgram: the removal dimension — leading-rest is live, not sy
           type: workout.type,
           steps: workout.steps,
         }),
-        removed: [0, 1],
+        removed: [0],
       };
       const run = buildRun(draft, DESIGN_BASELINES, NOW);
       const result = compileProgram(run.phases);
@@ -191,4 +193,93 @@ describe("compileProgram: the removal dimension — leading-rest is live, not sy
       });
     },
   );
+});
+
+// INTEGRATION (2026-08-09 warmup-setting plan, Task 4): the phase
+// `buildRun` prepends from the SETTING reaches `compileProgram` as
+// interval 0 with `targetSplit: null`. Same assembly the Connect door
+// itself runs (`WorkoutDetail.tsx`'s `handleConnectProceed`: buildDraft ->
+// buildRun -> compileProgram), against a real seeded workout —
+// `domain/monitor/program.test.ts`'s own "warm-up arm" block pins the
+// compiler's half from hand-built phases; this is the half that proves the
+// two agree about the SHAPE `buildRun` actually emits.
+describe("compileProgram: the warm-up SETTING reaches interval 0", () => {
+  function programFor(
+    title: string,
+    warmup: Parameters<typeof buildRun>[3],
+  ): ReturnType<typeof compileProgram> {
+    const workout = LIBRARY_WORKOUTS.find((w) => w.title === title)!;
+    const draft = buildDraft({
+      id: `warmup-${title}`,
+      title: workout.title,
+      type: workout.type,
+      steps: workout.steps,
+    });
+    return compileProgram(
+      buildRun(draft, DESIGN_BASELINES, NOW, warmup).phases,
+    );
+  }
+
+  it("a TIME warm-up compiles to interval 0: a time interval, no target, no rate (Beam Sea)", () => {
+    const result = programFor("Beam Sea", { kind: "time", minutes: 10 });
+    expect("intervals" in result).toBe(true);
+    const { intervals } = result as { intervals: unknown[] };
+    expect(intervals[0]).toStrictEqual({
+      kind: "time",
+      value: 600,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 0,
+    });
+    // Beam Sea's own single 2000m interval follows, untouched.
+    expect(intervals).toHaveLength(2);
+  });
+
+  it("a DISTANCE warm-up compiles to interval 0 with targetSplit NULL, despite carrying a real display estimate (Beam Sea)", () => {
+    const workout = LIBRARY_WORKOUTS.find((w) => w.title === "Beam Sea")!;
+    const draft = buildDraft({
+      id: "warmup-distance",
+      title: workout.title,
+      type: workout.type,
+      steps: workout.steps,
+    });
+    const run = buildRun(draft, DESIGN_BASELINES, NOW, {
+      kind: "distance",
+      meters: 2000,
+      restSeconds: 90,
+    });
+    // The phone's own copy DOES carry the easy-band estimate — that is what
+    // prices the phase for the countdown (domain/expand.ts's
+    // `phaseSeconds`). 120 (6k) + 20 = 140 (domain/pace.ts:103).
+    expect(run.phases[0]).toMatchObject({ type: "warmup", targetSplit: 140 });
+
+    const result = compileProgram(run.phases);
+    expect("intervals" in result).toBe(true);
+    const { intervals } = result as { intervals: unknown[] };
+    // …and the WIRE does not: no pace target on a warm-up interval, ever.
+    expect(intervals[0]).toStrictEqual({
+      kind: "distance",
+      value: 2000,
+      targetSplit: null,
+      displaySpm: null,
+      // The setting's own trailing rest, folded onto the warm-up interval
+      // exactly as any other rest phase folds onto the interval before it.
+      restSeconds: 90,
+    });
+  });
+
+  it("prepends no interval at all when the setting is OFF (the default)", () => {
+    const result = programFor("Beam Sea", null);
+    expect(result).toStrictEqual({
+      intervals: [
+        {
+          kind: "distance",
+          value: 2000,
+          targetSplit: 106,
+          displaySpm: 24,
+          restSeconds: 0,
+        },
+      ],
+    });
+  });
 });

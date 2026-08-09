@@ -89,12 +89,17 @@ describe("draftSteps", () => {
   });
 
   it("excludes removed step indices from the effective list", () => {
-    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-2"));
-    const wuIndex = d.steps.findIndex((s) => (s.k as string) === "wu");
-    const mutated: SessionDraft = { ...d, removed: [wuIndex] };
+    // Moonbow (w, r, w) rather than Hoarfrost: this used to strike
+    // Hoarfrost's lead `wu` step, and no workout has one since 2026-08-09's
+    // warmup setting. Its standalone REST row is the same shape of thing —
+    // a non-work row a rower can strike on Confirm.
+    const d = buildDraft(draftInputFor("Moonbow", "id-moonbow-2"));
+    const restIndex = d.steps.findIndex((s) => s.k === "r");
+    expect(restIndex).toBe(1);
+    const mutated: SessionDraft = { ...d, removed: [restIndex] };
     const steps = draftSteps(mutated);
     expect(steps).toHaveLength(d.steps.length - 1);
-    expect(steps.some((s) => (s.k as string) === "wu")).toBe(false);
+    expect(steps.some((s) => s.k === "r")).toBe(false);
   });
 
   it("folds a split-ref work step's nudge into its ref.off", () => {
@@ -114,19 +119,21 @@ describe("effectiveSteps", () => {
   // has to re-derive "which original step was this" by counting positions
   // in the filtered array.
   it("pairs each surviving step with its ORIGINAL index, not its filtered position", () => {
-    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-effective"));
-    const wuIndex = d.steps.findIndex((s) => (s.k as string) === "wu");
-    expect(wuIndex).toBe(0); // Hoarfrost: wu, reps, w — striking index 0
-    const mutated: SessionDraft = { ...d, removed: [wuIndex] };
+    // Moonbow (w, r, w) — a three-step real workout, striking index 0.
+    // (Hoarfrost held this role while every workout opened with a `wu`
+    // step; since 2026-08-09's warmup setting it is only two steps long,
+    // too short to tell "original index" from "filtered position" apart.)
+    const d = buildDraft(draftInputFor("Moonbow", "id-moonbow-effective"));
+    const mutated: SessionDraft = { ...d, removed: [0] };
 
     const effective = effectiveSteps(mutated);
     expect(effective).toHaveLength(d.steps.length - 1);
-    // Position 0 in the filtered array is originally index 1 (the reps
-    // marker) — a caller that mistakenly used the filtered position as the
+    // Position 0 in the filtered array is originally index 1 (the rest
+    // row) — a caller that mistakenly used the filtered position as the
     // key into `nudges`/`spmOverrides` would silently address the wrong
     // step the moment anything upstream of it was removed.
     expect(effective[0]!.originalIndex).toBe(1);
-    expect(effective[0]!.step.k).toBe("reps");
+    expect(effective[0]!.step.k).toBe("r");
     expect(effective[1]!.originalIndex).toBe(2);
     expect(effective[1]!.step.k).toBe("w");
   });
@@ -147,9 +154,10 @@ describe("effectiveSteps", () => {
 describe("draftMinutes", () => {
   it("computes an exact pinned total for a distance workout (Calm Sea) given baselines", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-3"));
-    // wu 8' (480s) + 10,000m @ 6k+12 = 132 s/500m -> 20 * 132 = 2640s.
-    // total 3120s -> round(3120/60) = 52.
-    expect(draftMinutes(d, baselines)).toBe(52);
+    // 10,000m @ 6k+12 = 132 s/500m -> 20 * 132 = 2640s -> 2640/60 = 44
+    // exactly. (Was 52 while the workout also carried a wu 8' step; the
+    // warm-up is a SETTING now and no workout contributes one.)
+    expect(draftMinutes(d, baselines)).toBe(44);
   });
 
   it("returns null for a distance workout when baselines are absent", () => {
@@ -192,11 +200,13 @@ describe("draftMinutes", () => {
     const d: SessionDraft = {
       v: 1,
       workoutId: "synthetic",
-      title: "Warm-up only",
+      title: "Rest only",
       type: "O2",
-      // Task 5 shim: "wu" left the Step union but this file's draft-side
-      // wu handling hasn't yet.
-      steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+      // A lone REST row: the only remaining step kind that prices itself
+      // with no pace ref to resolve. (This was a lone `wu` row until
+      // 2026-08-09's warmup setting deleted that step kind; the property
+      // under test — "no work step, so no baselines needed" — is the same.)
+      steps: [{ k: "r", minutes: 5 }],
       nudges: {},
       spmOverrides: {},
       removed: [],
@@ -208,10 +218,9 @@ describe("draftMinutes", () => {
 
   it("computes an exact pinned total for an effort-ref workout (Fork Lightning) given baselines", () => {
     const d = buildDraft(draftInputFor("Fork Lightning", "id-fork-lightning"));
-    // wu 5' (300s) + reps(5) x [w1{30s work + 45s rest} + w2{30s work +
-    // 135s rest}] = 5 * (30+45+30+135) = 5*240 = 1200s. total 1500s ->
-    // 1500/60 = 25 exactly.
-    expect(draftMinutes(d, baselines)).toBe(25);
+    // reps(5) x [w1{30s work + 45s rest} + w2{30s work + 135s rest}]
+    // = 5 * (30+45+30+135) = 5*240 = 1200s -> 1200/60 = 20 exactly.
+    expect(draftMinutes(d, baselines)).toBe(20);
   });
 
   // F1 fix (final whole-branch review): draftMinutes used to price the
@@ -227,17 +236,17 @@ describe("draftMinutes", () => {
   it("prices a nudge into the recount for a distance workout (the exact case a prior version silently ignored)", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-priced"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
-    // Unnudged: wu 8' (480s) + 10,000m @ 6k+12 = 132 s/500m -> 20*132 =
-    // 2640s; total 3120s -> round(3120/60) = 52 exactly (same pinned total
-    // as the earlier "exact pinned total" test above — this test's whole
-    // point is the BEFORE/AFTER delta, not a fresh number).
-    expect(draftMinutes(d, baselines)).toBe(52);
+    // Unnudged: 10,000m @ 6k+12 = 132 s/500m -> 20*132 = 2640s ->
+    // 2640/60 = 44 exactly (same pinned total as the earlier "exact pinned
+    // total" test above — this test's whole point is the BEFORE/AFTER
+    // delta, not a fresh number).
+    expect(draftMinutes(d, baselines)).toBe(44);
 
-    // -5s/500m nudge: split becomes 127 -> 20*127 = 2540s; total 3020s ->
-    // round(3020/60) = 50 exactly. A version that ignores nudges would
-    // still report 52 here.
+    // -5s/500m nudge: split becomes 127 -> 20*127 = 2540s ->
+    // round(2540/60) = 42. A version that ignores nudges would still
+    // report 44 here.
     const nudged = withNudge(d, workIndex, -5);
-    expect(draftMinutes(nudged, baselines)).toBe(50);
+    expect(draftMinutes(nudged, baselines)).toBe(42);
   });
 });
 
@@ -262,9 +271,13 @@ describe("withNudge", () => {
   });
 
   it("no-ops on a non-work step index and on an out-of-range index", () => {
-    const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-6"));
-    const wuIndex = d.steps.findIndex((s) => (s.k as string) === "wu");
-    expect(withNudge(d, wuIndex, 1)).toBe(d);
+    // Moonbow's index 1 is a REST row — a real non-work step index, which
+    // Calm Sea (a single work step) has none of. This test used to reach
+    // for the `wu` row every workout carried before 2026-08-09's warmup
+    // setting.
+    const d = buildDraft(draftInputFor("Moonbow", "id-moonbow-6"));
+    expect(d.steps[1]!.k).toBe("r");
+    expect(withNudge(d, 1, 1)).toBe(d);
     expect(withNudge(d, 999, 1)).toBe(d);
   });
 });
@@ -306,34 +319,38 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     const mutated: SessionDraft = {
       ...nudged,
       spmOverrides: { [workIndex]: 30 },
-      removed: [0], // strike the warmup
+      // Strike the reps MARKER (index 0) — the removal this draft can
+      // still make now that no workout opens with a warm-up step, and a
+      // sharper one for a round trip: it changes the phase count of every
+      // step after it.
+      removed: [0],
     };
     expect(saveDraft(mutated)).toBe(true);
     const loaded = loadDraft();
     expect(loaded).toStrictEqual(mutated);
     expect(loaded!.nudges).toStrictEqual({});
     const effective = draftSteps(loaded!);
-    expect(effective.some((s) => (s.k as string) === "wu")).toBe(false);
-    // 25 total minus the removed 5' warmup (300s): 1500 - 300 = 1200s ->
-    // 1200/60 = 20 exactly.
-    expect(draftMinutes(loaded!, baselines)).toBe(20);
+    expect(effective.some((s) => s.k === "reps")).toBe(false);
+    // Unrepeated: w1{30s work + 45s rest} + w2{30s work + 135s rest} =
+    // 240s -> 240/60 = 4 exactly (a fifth of the repeated 20).
+    expect(draftMinutes(loaded!, baselines)).toBe(4);
   });
 
   it("round-trips a Calm Sea (distance) draft byte-identical with a nudge applied", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-7"));
     const workIndex = d.steps.findIndex((s) => s.k === "w");
     // -5, not -1: a -1 nudge (132 -> 131 s/500m) still rounds to the same
-    // 52-minute total as unnudged (3100/60 = 51.67 -> 52), so it would pass
+    // 44-minute total as unnudged (2620/60 = 43.67 -> 44), so it would pass
     // whether or not draftMinutes actually priced the nudge in — exactly
     // the gap the F1 fix ("prices a nudge into the recount…" test above)
-    // was found through. -5 changes the total (52 -> 50), so this round
+    // was found through. -5 changes the total (44 -> 42), so this round
     // trip also proves the nudge survived storage AND still prices
     // correctly after a reload.
     const nudged = withNudge(d, workIndex, -5);
     expect(saveDraft(nudged)).toBe(true);
     const loaded = loadDraft();
     expect(loaded).toStrictEqual(nudged);
-    expect(draftMinutes(loaded!, baselines)).toBe(50);
+    expect(draftMinutes(loaded!, baselines)).toBe(42);
     expect(draftMinutes(loaded!, null)).toBeNull();
   });
 
@@ -344,8 +361,8 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(loaded).toStrictEqual(d);
     const steps = draftSteps(loaded!);
     expect(steps.some((s) => s.k === "reps")).toBe(true);
-    // wu 6' (360s) + 2 * (12' work + 5' rest) = 360 + 2040 = 2400s -> 40.
-    expect(draftMinutes(loaded!, baselines)).toBe(40);
+    // 2 * (12' work + 5' rest) = 2040s -> 2040/60 = 34 exactly.
+    expect(draftMinutes(loaded!, baselines)).toBe(34);
   });
 
   it("returns null when nothing is stored", () => {
