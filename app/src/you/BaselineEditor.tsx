@@ -80,25 +80,43 @@ function ConfirmLine({
 }
 
 /** ui-notes round, item 2 — the derivation OFFER. Reads the raw, nullable
- *  `baselines` prop (never the DRAFT, which is never actually empty: an
- *  unset side is seeded to SEED_K2/SEED_K6 the instant `initDraft` runs) so
- *  "exactly one side has a value" means exactly one of these API-level
+ *  `baselines` prop (never the DRAFT's OWN nullability, which never exists:
+ *  an unset side is seeded to SEED_K2/SEED_K6 the instant `initDraft` runs)
+ *  so "exactly one side has a value" means exactly one of these API-level
  *  fields is non-null — the only place that fact still exists. Returns
  *  `null` whenever there's nothing to offer, including when the raw
  *  derivation would leave the editor's own MIN_SPLIT/MAX_SPLIT bounds: an
  *  offer that then silently clamped to a different number than its own
- *  "−7s"/"+7s" copy promised would be a small lie, not a convenience. */
-function deriveOffer(baselines: {
-  k2Seconds: number | null;
-  k6Seconds: number | null;
-}): { which: "k2" | "k6"; value: number } | null {
-  if (baselines.k2Seconds === null && baselines.k6Seconds !== null) {
+ *  "−7s"/"+7s" copy promised would be a small lie, not a convenience.
+ *
+ *  Task-review fix (PR #66): also requires the TARGET (empty) side's own
+ *  `draft` value to still sit at its untouched seed. `baselineDraft.ts`
+ *  tracks dirtiness only in aggregate (`isDirty`, both fields at once), not
+ *  per field, so this compares directly against the SEED_K2/SEED_K6
+ *  constants rather than inventing a new per-field dirty flag for one call
+ *  site. Without this, a rower who had already hand-nudged the seeded,
+ *  still-server-null field away from its seed (their own implicit decline)
+ *  would still see the offer, and tapping it would silently overwrite that
+ *  manual adjustment — nudging the target field now IS declining. */
+function deriveOffer(
+  baselines: { k2Seconds: number | null; k6Seconds: number | null },
+  draft: { k2: number; k6: number },
+): { which: "k2" | "k6"; value: number } | null {
+  if (
+    baselines.k2Seconds === null &&
+    baselines.k6Seconds !== null &&
+    draft.k2 === SEED_K2
+  ) {
     const value = deriveK2FromK6(baselines.k6Seconds);
     return value >= MIN_SPLIT && value <= MAX_SPLIT
       ? { which: "k2", value }
       : null;
   }
-  if (baselines.k6Seconds === null && baselines.k2Seconds !== null) {
+  if (
+    baselines.k6Seconds === null &&
+    baselines.k2Seconds !== null &&
+    draft.k6 === SEED_K6
+  ) {
     const value = deriveK6FromK2(baselines.k2Seconds);
     return value >= MIN_SPLIT && value <= MAX_SPLIT
       ? { which: "k6", value }
@@ -128,7 +146,7 @@ function ReadyEditor({
   const [saving, setSaving] = useState(false);
 
   const dirty = isDirty(state);
-  const offer = deriveOffer(baselines);
+  const offer = deriveOffer(baselines, state.draft);
 
   const handleDiscard = () => {
     setState((s) => discard(s));

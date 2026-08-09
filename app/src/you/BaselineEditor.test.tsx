@@ -246,6 +246,90 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     expect(save).toHaveBeenCalledWith({ k2Seconds: 115, k6Seconds: 122 });
   });
 
+  // Review finding (task review, PR #66): the offer used to key ONLY on the
+  // raw `baselines` prop, ignoring the draft entirely — so a rower who had
+  // already hand-nudged the seeded, still-server-null field away from
+  // SEED_K2/SEED_K6 (their own implicit decline) still saw the offer, and
+  // tapping it would have silently overwritten that manual adjustment.
+  // Nudging the target field now counts as declining: the offer disappears
+  // the moment its own field moves off the untouched seed, with no path
+  // back to it short of a reload (a fresh, unmodified draft).
+  describe("nudging the target field is declining (task review fix)", () => {
+    it("is visible while the target (empty) field still sits at its untouched seed", async () => {
+      mockReady({ k2Seconds: null, k6Seconds: 122 });
+      await renderEditor();
+
+      expect(
+        screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+      ).toBeInTheDocument();
+    });
+
+    it("disappears the instant the rower nudges the target field themselves", async () => {
+      mockReady({ k2Seconds: null, k6Seconds: 122 });
+      await renderEditor();
+
+      // 2k is the empty/target side here (k2Seconds is null) — nudge IT,
+      // not the already-known 6k side.
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+      expect(
+        screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("stays gone after nudging away — no click path remains that could still overwrite the manual value", async () => {
+      const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      // The nudge itself is the only edit made — 112 - 0.5 = 111.5s = 1:51.5.
+      expect(screen.getByText("2k 1:52.0 → 1:51.5")).toBeInTheDocument();
+      // No offer button exists anywhere to click, so there is no remaining
+      // path to the overwrite the finding describes — asserted by absence
+      // (docs/TESTING.md's own "invoke it and assert the consequence" rule
+      // has nothing to invoke here; the consequence IS the absence).
+      expect(
+        screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+      // The rower's own manual nudge survives untouched — never silently
+      // replaced by a derived estimate.
+      expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5, k6Seconds: 122 });
+    });
+
+    it("nudging the OTHER (already-known) side does not hide the offer — only the target field's own movement counts as declining it", async () => {
+      mockReady({ k2Seconds: null, k6Seconds: 122 });
+      await renderEditor();
+
+      // 6k is the already-known side; nudging it is unrelated to the 2k
+      // offer's own decline condition.
+      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+
+      expect(
+        screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+      ).toBeInTheDocument();
+    });
+
+    // The symmetric case on the other side (target = 6k this time) —
+    // written separately from the 2k-target tests above rather than
+    // parameterized, so a mutation isolated to ONE branch of `deriveOffer`
+    // (they're two separate `if` blocks, not a shared helper) still fails
+    // exactly one describe block, not both by accident.
+    it("also disappears on the 6k side when the rower nudges the target field themselves", async () => {
+      mockReady({ k2Seconds: 130, k6Seconds: null });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+
+      expect(
+        screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("refuses the offer when the derived value would leave the editor's own split bounds", async () => {
     // 65 - 7 = 58, below MIN_SPLIT (60) — not offered at all, not clamped
     // silently to a value the "−7s" copy would then be lying about.
