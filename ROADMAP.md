@@ -1483,7 +1483,18 @@ corrected to match what ships.)
 
 ## Phase 7C — PM5 logging
 
-**Status:** Not started
+**Status:** Shipped pending a hardware walk (2026-08-08, Tasks 1-6, Task 6
+close-out this entry) — the exit criterion below is met against the fake
+transport: `e2e/connected.spec.ts`'s connected walk (both orientations) now
+runs a full session through Save, and the stored log's steps come back off
+`GET /api/logs` carrying `actualSource: "pm5"`, the verbatim wire numbers
+(split, work time, distance, stroke rate), and the fake's own `deviceName`.
+The hardware exit is PENDING — no PM5 has actually logged a real session
+through this build; walk 4 (§18) predates this phase's own builder, so the
+seed → builder → screen → server pipeline has never been proven against a
+genuine wire capture end to end, only against the walk-4 fixture values and
+the fake transport's own driven session. Suite: 2927 unit / 244 e2e / 49
+screenshots.
 **Goal:** A PM5-driven session logs with the same fidelity a phone-timer
 session does.
 
