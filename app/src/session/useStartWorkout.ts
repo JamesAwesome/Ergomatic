@@ -1,0 +1,131 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { Step, WorkoutType } from "../../domain/types.js";
+import { buildDraft, loadDraft, saveDraft } from "./draft";
+import { clearRun, loadRun } from "./run";
+import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
+
+/** The shape `startSession`/`handleStart` actually need from a workout —
+ *  structurally compatible with `useWorkouts.ts`'s `LibraryWorkout` (this
+ *  screen's own caller) without importing it, so a future second caller
+ *  (Phase 6I's `BaselineCard`, per the spec) can hand this a designated
+ *  onboarding workout without needing a full `LibraryWorkout` record. */
+export interface StartableWorkout {
+  id: string;
+  title: string;
+  type: WorkoutType;
+  steps: Step[];
+}
+
+/** Two independent reasons can block an immediate start (WorkoutDetail's own
+ *  descending-severity order, preserved here byte-for-byte): a
+ *  completed-but-unlogged record (real data loss — nothing else will ever
+ *  surface it again once overwritten) outranks a merely-started, not-yet-
+ *  finished one (recoverable — the old session was never going to be logged
+ *  anyway once abandoned). `null` means no stage; either non-null value both
+ *  blocks the immediate `confirmReplace()` call AND picks the panel's copy,
+ *  so the two can never disagree about which case triggered it. */
+export type StartReplaceStage = "in-progress" | "unlogged" | null;
+
+export interface UseStartWorkoutResult {
+  /** `null` while the plain Start control should render; non-null while the
+   *  staged replace-confirmation panel has taken over. */
+  replaceStage: StartReplaceStage;
+  /** Set only when `saveDraft` itself fails (quota, private-mode Safari) —
+   *  surfaced inline rather than navigating to a confirm screen with
+   *  nothing behind it. */
+  startError: string | null;
+  /** Start's own click handler: checks for a stale record (an unlogged
+   *  `SessionRun`, an unlogged or live `MonitorRun`, or a started-but-not-
+   *  finished draft) and stages a replace confirmation instead of
+   *  overwriting it outright; otherwise commits immediately. */
+  handleStart: () => void;
+  /** The "Replace session" press: builds and saves a fresh draft, cross-
+   *  clears both the phone-side `SessionRun` and the monitor-side
+   *  `MonitorRun` records, and navigates to Confirm. Also what `handleStart`
+   *  itself calls when there is nothing to stage a confirmation for. */
+  confirmReplace: () => void;
+  /** The "Cancel" press: dismisses the staged panel, touching nothing. */
+  cancelReplace: () => void;
+}
+
+/** WorkoutDetail's own start-guard flow (7B/6B-era `handleStart`/
+ *  `startSession`), extracted verbatim so a second caller (Phase 6I's
+ *  no-baseline `BaselineCard`, per the design spec) gets the SAME
+ *  unlogged-run staged confirm, live-MonitorRun confirm, draft build/save,
+ *  and cross-clears — a bare navigate-and-start would reintroduce the F5
+ *  data-loss class this flow exists to prevent. Deliberately NOT extended
+ *  to cover WorkoutDetail's OWN Connect/nudge paths (`handleConnectProceed`,
+ *  `handleRowInstead`) — those stay in WorkoutDetail.tsx, out of this task's
+ *  scope. */
+export function useStartWorkout(
+  workout: StartableWorkout,
+): UseStartWorkoutResult {
+  const [startError, setStartError] = useState<string | null>(null);
+  const [replaceStage, setReplaceStage] = useState<StartReplaceStage>(null);
+  const navigate = useNavigate();
+
+  // Builds and saves the session draft, then hands off to the confirm
+  // screen. `saveDraft` can fail (quota, private-mode Safari) without
+  // throwing; that's surfaced inline rather than navigating to a confirm
+  // screen with nothing behind it. `clearRun`/`clearMonitorRun` run only
+  // AFTER a successful `saveDraft` — never before — so a save failure never
+  // destroys a prior run record for nothing (the reviewer's F5 finding,
+  // Phase 6B Task 4 fix round, and its Phase 7B Task 2 mirror for
+  // `MonitorRun`).
+  function confirmReplace() {
+    const draft = buildDraft(workout);
+    if (saveDraft(draft)) {
+      clearRun();
+      clearMonitorRun();
+      navigate("/session/confirm");
+    } else {
+      setStartError("Couldn't start this session. Try again.");
+    }
+  }
+
+  // Checked in order of severity: a completed-but-unlogged `SessionRun`
+  // (real data loss) outranks a live-or-unlogged `MonitorRun`, which
+  // outranks a merely-started `SessionDraft`. Checking the run first also
+  // resolves the one case where both could be true at once (the SAME
+  // workout's own detail page, revisited after finishing it): that reads as
+  // "unlogged," the accurate description, not "in progress."
+  //
+  // ROADMAP M-1's "two exceptions untouched" rule: this reads
+  // `loadRun`/`loadMonitorRun` DIRECTLY, never rerouted through
+  // `anyLiveSession()`, which deliberately collapses to "none" and would
+  // silently downgrade "unlogged" to "none" — reintroducing the F5
+  // data-loss class in the other direction.
+  function handleStart() {
+    const existingRun = loadRun();
+    if (existingRun !== null && existingRun.completedAt !== null) {
+      setReplaceStage("unlogged");
+      return;
+    }
+    const existingMonitorRun = loadMonitorRun();
+    if (existingMonitorRun !== null) {
+      setReplaceStage(
+        existingMonitorRun.completedAt !== null ? "unlogged" : "in-progress",
+      );
+      return;
+    }
+    const existingDraft = loadDraft();
+    if (existingDraft !== null && existingDraft.startedAt !== null) {
+      setReplaceStage("in-progress");
+      return;
+    }
+    confirmReplace();
+  }
+
+  function cancelReplace() {
+    setReplaceStage(null);
+  }
+
+  return {
+    replaceStage,
+    startError,
+    handleStart,
+    confirmReplace,
+    cancelReplace,
+  };
+}

@@ -4025,3 +4025,152 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 });
+
+// Phase 6I Task 8: the three new/changed screens the onboarding phase adds —
+// Today's fresh-user block+card state, You's Learning-the-app detail, and
+// News with the Start-here pin. `dismissStartHere` is the one new setup
+// helper this phase's sweeps need beyond what already exists above
+// (`markArticleRead`, `signInViaBackdoor`) — a real `PUT /api/prefs` round
+// trip, same idiom as every other direct-API setup helper in this file.
+async function dismissStartHere(page: Page): Promise<void> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ startHereDismissed: true }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(`dismiss setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+test.describe("today screen (Phase 6I: fresh user — START HERE block + no-baseline card)", () => {
+  test.beforeEach(async ({ page }) => {
+    // A genuinely fresh account (no baselines row at all): the state a
+    // real brand-new sign-in lands on, not a fixture layered on top of one
+    // — both the block and the card only exist in this state.
+    await signInViaBackdoor(page, {
+      email: "design-onboarding-today@e2e.test",
+      name: "Design Onboarding Today Tester",
+    });
+    await page.goto("/today");
+    await expect(page.locator(".baselinecard")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // The dashed `--rule-3` chip (`.baselinecard-chip`, "6K BASELINE · NOT
+  // SET · ROW IT HOW IT FEELS") is the one small mono label this phase
+  // adds outside News's own already-swept row grammar — measured here
+  // rather than assumed identical to an already-passing --ink-3 pairing
+  // elsewhere, per the standing "compute the ratio, don't judge by eye"
+  // rule. The chip itself paints no background of its own (only a dashed
+  // border) — its real background is `.baselinecard`'s own `--surface`
+  // fill, read directly off that ancestor rather than restated as a hex,
+  // same idiom as the News read-row contrast test above.
+  test("the dashed chip's --ink-3 text clears 4.5:1 against the card's own --surface background", async ({
+    page,
+  }) => {
+    const chip = page.locator(".baselinecard-chip");
+    const chipColor = await chip.evaluate((el) => getComputedStyle(el).color);
+    const cardBg = await page
+      .locator(".baselinecard")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(chipColor).toBe("rgb(87, 84, 76)"); // --ink-3
+    expect(cardBg).toBe("rgb(255, 253, 247)"); // --surface
+
+    const ratio = await page.evaluate(
+      ({ fg, bg }) => {
+        function channel(c: number) {
+          const s = c / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        }
+        function luminance(rgb: string) {
+          const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+          if (!m) throw new Error(`unparseable colour: ${rgb}`);
+          const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+          return (
+            0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+          );
+        }
+        const la = luminance(fg);
+        const lb = luminance(bg);
+        const lighter = Math.max(la, lb);
+        const darker = Math.min(la, lb);
+        return (lighter + 0.05) / (darker + 0.05);
+      },
+      { fg: chipColor, bg: cardBg },
+    );
+    // Measured, not assumed: --ink-3 on --surface computes 7.432:1 (the
+    // identical pairing/ratio the News read-row contrast test above
+    // already established for the same two tokens) — comfortably past the
+    // 4.5:1 AA floor.
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+test.describe("you/learning screen (Phase 6I: Learning the app detail)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-onboarding-learning@e2e.test",
+      name: "Design Onboarding Learning Tester",
+    });
+    // Dismissed, so the status line (and PUT IT BACK control) render too —
+    // the fuller of the screen's two states, matching this file's own
+    // "mixed read state, not virgin" precedent for News above.
+    await dismissStartHere(page);
+    await markArticleRead(page, "baselines");
+    await page.goto("/you/learning");
+    await expect(
+      page.getByRole("heading", { name: "Learning the app" }),
+    ).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
+    await assertNoFailingInk4Labels(page);
+  });
+});
+
+test.describe("news screen (Phase 6I: Start-here pin)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-onboarding-news-pin@e2e.test",
+      name: "Design Onboarding News Pin Tester",
+    });
+    await dismissStartHere(page);
+    await page.goto("/news");
+    await expect(page.locator("a.news-pin-starthere")).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations with the Start-here pin on screen", async ({
+    page,
+  }) => {
+    await assertNoA11yViolations(page);
+  });
+});

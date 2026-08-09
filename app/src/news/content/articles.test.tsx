@@ -39,12 +39,26 @@ describe("article registry invariants", () => {
     for (const a of ARTICLES) expect(a.minutes).toBeGreaterThanOrEqual(1);
   });
 
-  it("launch shelf: the two permanent pins plus two latest stories", () => {
+  it("Phase 6I Task 6: your-first-row/connect-the-monitor are unpinned, published 2026-08-08, minutes by the 6H formula (ceil(words/180)) — 216 words -> 2 min, 217 words (post-redraft) -> 2 min", () => {
+    const yourFirstRow = articleBySlug("your-first-row")!;
+    expect(yourFirstRow.pinned).toBe(false);
+    expect(yourFirstRow.publishedAt).toBe("2026-08-08");
+    expect(yourFirstRow.minutes).toBe(2);
+
+    const connectTheMonitor = articleBySlug("connect-the-monitor")!;
+    expect(connectTheMonitor.pinned).toBe(false);
+    expect(connectTheMonitor.publishedAt).toBe("2026-08-08");
+    expect(connectTheMonitor.minutes).toBe(2);
+  });
+
+  it("launch shelf: the two permanent pins plus four latest stories (Phase 6I Task 6: your-first-row/connect-the-monitor land newest, sorting ahead of the two 6H stories)", () => {
     expect(pinnedArticles().map((a) => a.slug)).toStrictEqual([
       "workout-types",
       "baselines",
     ]);
     expect(latestArticles().map((a) => a.slug)).toStrictEqual([
+      "your-first-row",
+      "connect-the-monitor",
       "picking-a-workout",
       "pain-scale",
     ]);
@@ -93,9 +107,20 @@ describe("selectors", () => {
     expect(nextUnreadSlug("workout-types", new Set())).toStrictEqual(
       "baselines",
     );
-    // wraps past the end back to the top
+    // wraps past the end back to the top — the end of the registry is now
+    // connect-the-monitor (Phase 6I Task 6 appended the two new articles
+    // after pain-scale), so every OTHER article must be read for the walk
+    // starting from pain-scale to wrap all the way back to workout-types.
     expect(
-      nextUnreadSlug("pain-scale", new Set(["baselines", "picking-a-workout"])),
+      nextUnreadSlug(
+        "pain-scale",
+        new Set([
+          "baselines",
+          "picking-a-workout",
+          "your-first-row",
+          "connect-the-monitor",
+        ]),
+      ),
     ).toStrictEqual("workout-types");
     // everything else read → nothing to offer
     const allButCurrent = new Set(

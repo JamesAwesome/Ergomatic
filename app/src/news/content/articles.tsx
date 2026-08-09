@@ -3,17 +3,30 @@ import { WorkoutTypesBody } from "./bodies/workoutTypes";
 import { BaselinesBody } from "./bodies/baselines";
 import { PickingAWorkoutBody } from "./bodies/pickingAWorkout";
 import { PainScaleBody } from "./bodies/painScale";
+import { YourFirstRowBody } from "./bodies/yourFirstRow";
+import { ConnectTheMonitorBody } from "./bodies/connectTheMonitor";
 
-// Registry order is display order (pins first, then latest). All four are
-// original prose — structurally informed by the source literature, never
-// verbatim (Phase 6E's content discipline, binding per the 6H spec).
+// Registry order is display order (pins first, then latest — within a tie
+// on `publishedAt`, `latestArticles`' stable sort falls back to THIS array
+// order, which is why the two Phase 6I articles are appended after
+// pain-scale rather than inserted earlier: workout-types/baselines must
+// stay adjacent for the pinned rows, and baselines/picking-a-workout must
+// stay adjacent for `nextUnreadSlug`'s existing registry-order walk). All
+// six are original prose — structurally informed by the source literature,
+// never verbatim (Phase 6E's content discipline, binding per the 6H spec).
 //
 // `minutes` = ceil(rendered word count / 180) — 180 wpm is a deliberately
 // unhurried silent-reading rate for this app's short-form prose, not a
 // speed-reading estimate. Recount and update whenever a body's prose
 // changes (persona-review fix wave, 2026-08-07): workout-types 449 words
 // -> 3 min, baselines 451 words -> 3 min, picking-a-workout 286 words
-// -> 2 min, pain-scale 366 words -> 3 min.
+// -> 2 min, pain-scale 366 words -> 3 min. Phase 6I Task 6 (2026-08-08):
+// your-first-row 216 words -> 2 min, connect-the-monitor 190 words -> 2
+// min — the design spec's own "~3 min" estimate for connect-the-monitor
+// (written before the prose existed) is superseded by this real count;
+// `StartHere.tsx`'s hardcoded minutes were updated to match. Recounted
+// after the disconnect paragraph's redraft (same day, controller fix): 217
+// words -> still 2 min, no further changes needed.
 export const ARTICLES: NewsArticle[] = [
   {
     slug: "workout-types",
@@ -51,6 +64,24 @@ export const ARTICLES: NewsArticle[] = [
     pinned: false,
     publishedAt: "2026-08-07",
     body: <PainScaleBody />,
+  },
+  {
+    slug: "your-first-row",
+    title: "Your first row",
+    minutes: 2,
+    kind: "first-party",
+    pinned: false,
+    publishedAt: "2026-08-08",
+    body: <YourFirstRowBody />,
+  },
+  {
+    slug: "connect-the-monitor",
+    title: "Connect the monitor, and it drives the piece",
+    minutes: 2,
+    kind: "first-party",
+    pinned: false,
+    publishedAt: "2026-08-08",
+    body: <ConnectTheMonitorBody />,
   },
 ];
 

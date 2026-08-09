@@ -117,7 +117,16 @@ export interface ConnectedInterstitialProps {
    *  workout's own data still lives. */
   phases: EnginePhase[];
   identity: RunIdentity;
-  baselines: Baselines;
+  /** Phase 6I: `Baselines | null` — an effort-only workout (`domain/
+   *  needsBaselines.ts`) can Connect with no baselines set at all
+   *  (`WorkoutDetail.tsx`'s own guard loosening); `compileProgram` has
+   *  already resolved `program` successfully by the time this screen ever
+   *  mounts either way. `null` here means only that the WHAT panel's own
+   *  "2K … · 6K …" line has nothing honest to show — it's omitted entirely
+   *  (never a fabricated pair, the same "no bare dash/fake number" house
+   *  rule every other baselines-null display in this codebase follows),
+   *  not that anything else about the connected flow is degraded. */
+  baselines: Baselines | null;
   /** How many of the workout's targets were nudged before Connect was
    *  pressed (the WorkoutDetail preview stack's own nudge state) — the
    *  handoff's "WHAT THE MONITOR IS GETTING" panel names this explicitly.
@@ -311,11 +320,17 @@ export default function ConnectedInterstitial({
             {/* 2K/6K, not K2/K6 (task-5 review, MEDIUM-5): the house's own
                 baseline-label convention everywhere else in the app
                 (LogSession.tsx's "2K …", the builder's 2K/6K/MAX/MIN
-                toggle, the mockup's own panel). */}
-            <p className="connected-panel-line">
-              2K {fmtSplit(baselines.k2Seconds)} · 6K{" "}
-              {fmtSplit(baselines.k6Seconds)}
-            </p>
+                toggle, the mockup's own panel). Phase 6I: omitted entirely
+                for an effort-only workout run with no baselines set —
+                there is no pair to report, and this line has no "no
+                target" idiom of its own to fall back to (unlike a step
+                row), so silence is the honest choice. */}
+            {baselines !== null && (
+              <p className="connected-panel-line">
+                2K {fmtSplit(baselines.k2Seconds)} · 6K{" "}
+                {fmtSplit(baselines.k6Seconds)}
+              </p>
+            )}
             {/* Omitted at zero (LOW-6) — the mockup's own "3 TARGETS NUDGED
                 ON CONFIRM" phrasing has nothing to say when there weren't
                 any. */}

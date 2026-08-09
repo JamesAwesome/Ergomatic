@@ -111,14 +111,47 @@ export function bigNumberSeconds(
 /** The 6px phase-progress bar's fill, 0-100 — reuses `domain/expand.js`'s
  *  `phaseSeconds` estimate for a distance phase exactly as
  *  `totalRemainingSeconds` does (the shared formula, not a second copy of
- *  it). A "test" phase has no full duration to divide by (`phaseSeconds`
- *  returns null), so its bar stays empty throughout — consistent with its
- *  open-ended nature, never a divide-by-zero. */
+ *  it). Returns 0 for a phase with no full duration to divide by
+ *  (`phaseSeconds` returns null) — the RAW math only; Phase 6I's own
+ *  `hasRemainingEstimate` below is what decides whether the caller renders
+ *  this number as a bar at all, or hides the row entirely (never showing
+ *  this 0 as a frozen, misleading empty bar). */
 // eslint-disable-next-line react-refresh/only-export-components
 export function phaseProgressPct(phase: EnginePhase, elapsed: number): number {
   const full = phaseSeconds(phase);
   if (full === null || full <= 0) return 0;
   return Math.min(100, Math.max(0, (elapsed / full) * 100));
+}
+
+/** Phase 6I: whether ANY phase from `fromIndex` (inclusive) to the end of
+ *  `phases` has a real seconds estimate (`phaseSeconds` non-null) — the
+ *  gate for BOTH the phase progress bar and TOTAL LEFT (`TimerRuler`).
+ *  Without this, a session that reaches a stretch with nothing left to
+ *  price (the no-baseline onboarding card's own effort-distance piece,
+ *  which carries no `targetSplit` to estimate FROM, and has nothing after
+ *  it — no embedded rest, no further phase) would freeze TOTAL LEFT at a
+ *  permanent `0:00`/0% and the phase bar at a permanent empty fill for
+ *  however long the rower is actually rowing — the exact "never a frozen
+ *  0:00/0%" house rule this function exists to satisfy by hiding the row
+ *  instead. Every REAL library effort-only workout (Dust Storm, Heat
+ *  Lightning, …) embeds a rest phase after every occurrence, including the
+ *  last, so this is true throughout those sessions — it's the two
+ *  DESIGNATED onboarding workouts (a bare warm-up + one distance-effort
+ *  work step, nothing after it — domain/onboarding.ts) that actually reach
+ *  the false case, once the rower advances past the warm-up. Re-evaluated
+ *  every render against the CURRENT `run.index`, not computed once for the
+ *  whole session — the exact same phase list reads true during the
+ *  warm-up (a real phase ahead has a real duration) and false once the
+ *  effort piece itself is the only phase left. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function hasRemainingEstimate(
+  phases: EnginePhase[],
+  fromIndex: number,
+): boolean {
+  for (let i = fromIndex; i < phases.length; i++) {
+    if (phaseSeconds(phases[i]!) !== null) return true;
+  }
+  return false;
 }
 
 /** TOTAL LEFT's denominator: every phase's full duration, summed from the
@@ -377,6 +410,10 @@ export default function Timer() {
   const elapsed = elapsedSeconds(currentRun, now);
   const pausedAt = currentRun.pausedAt;
   const thenText = thenNextText(currentRun);
+  // Phase 6I: shared gate for the phase progress bar and TOTAL LEFT — see
+  // `hasRemainingEstimate`'s own doc comment for why this is re-evaluated
+  // against the CURRENT index every render rather than computed once.
+  const hasEstimate = hasRemainingEstimate(currentRun.phases, currentRun.index);
 
   function handleEndTap() {
     // Pausing before staging the confirm means the phase clock can't
@@ -599,9 +636,11 @@ export default function Timer() {
         <div className="timer-time">
           {fmtDuration(bigNumberSeconds(currentRun, phase, now) / 60)}
         </div>
-        <div className="timer-phase-bar">
-          <span style={{ width: `${phaseProgressPct(phase, elapsed)}%` }} />
-        </div>
+        {hasEstimate && (
+          <div className="timer-phase-bar">
+            <span style={{ width: `${phaseProgressPct(phase, elapsed)}%` }} />
+          </div>
+        )}
       </div>
 
       <TimerTargets phase={phase} />
@@ -615,10 +654,12 @@ export default function Timer() {
           the strip only ever sees their already-computed output. */}
       <UpNextStrip upNext={upNextText(currentRun)} thenNext={thenText} />
 
-      <TimerRuler
-        totalLeftSeconds={totalRemainingSeconds(currentRun, now)}
-        totalSeconds={totalSessionSeconds(currentRun)}
-      />
+      {hasEstimate && (
+        <TimerRuler
+          totalLeftSeconds={totalRemainingSeconds(currentRun, now)}
+          totalSeconds={totalSessionSeconds(currentRun)}
+        />
+      )}
 
       {suspect ? (
         // Distance-only (only `handleDistanceNext` ever sets `suspect`):

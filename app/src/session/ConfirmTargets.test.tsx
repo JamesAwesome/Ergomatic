@@ -479,6 +479,59 @@ describe("ConfirmTargets", () => {
     expect(saved!.startedAt).not.toBeNull();
     expect(new Date(saved!.startedAt!).toISOString()).toBe(saved!.startedAt);
   });
+
+  // Phase 6I: `needsBaselines` (domain/needsBaselines.ts) is the single
+  // predicate every coupled guard site shares — this is the footer's own
+  // half. Heat Lightning (AN) is a REAL, shipped library workout whose
+  // only work step is an effort ref (`{effort:"max"}`) — the realistic
+  // fixture the repo convention requires, not a hand-built minimum;
+  // Task 1's own review flagged that this exact pre-existing content, not
+  // just the future onboarding pair, is what this guard loosening opens.
+  it("shows a clickable START for an effort-only workout with null baselines (no 'no target' idiom anywhere)", async () => {
+    mockBaselines(NO_BASELINES);
+    seedDraft("Heat Lightning");
+    await renderConfirm();
+
+    expect(
+      screen.getByRole("button", { name: "Looks right, start" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
+    // The recount is still a bare dash — `estimateMinutes` genuinely can't
+    // price an effort phase without baselines, and the "never a bare dash"
+    // house rule is the onboarding CARD's own fixed nominal copy (Task 5),
+    // not this general workout screen's.
+    expect(screen.getByText("— MIN")).toBeInTheDocument();
+  });
+
+  it("START on an effort-only workout with null baselines still stamps startedAt and navigates to /session/countdown (the flow this guard loosening exists to unblock)", async () => {
+    mockBaselines(NO_BASELINES);
+    seedDraft("Heat Lightning");
+    await renderConfirm();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Looks right, start" }),
+    );
+
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
+    const saved = loadDraft();
+    expect(saved).not.toBeNull();
+    expect(saved!.startedAt).not.toBeNull();
+  });
+
+  // Regression pin: a split-ref workout (Hoarfrost — the SAME fixture the
+  // "blocks START" test above already covers) must stay blocked even
+  // though the predicate now lets SOME workouts through — the guard is
+  // conditional, not removed.
+  it("still blocks a split-ref workout's START with null baselines (needsBaselines reads true)", async () => {
+    mockBaselines(NO_BASELINES);
+    seedDraft("Hoarfrost");
+    await renderConfirm();
+
+    expect(
+      screen.queryByRole("button", { name: "Looks right, start" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("no target").length).toBeGreaterThan(0);
+  });
 });
 
 describe("snapDurationSeconds", () => {

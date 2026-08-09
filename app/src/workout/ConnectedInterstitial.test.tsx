@@ -128,6 +128,7 @@ function renderInterstitial(
     onRowInstead: () => void;
     onEnded: () => void;
     nudgedCount: number;
+    baselines: Baselines | null;
   }> = {},
 ) {
   const current = session(overrides);
@@ -140,7 +141,7 @@ function renderInterstitial(
       program={FIXTURE.program}
       phases={FIXTURE.phases}
       identity={FIXTURE.identity}
-      baselines={baselines}
+      baselines={props.baselines === undefined ? baselines : props.baselines}
       nudgedCount={props.nudgedCount ?? 0}
       onExit={onExit}
       onRowInstead={onRowInstead}
@@ -344,6 +345,26 @@ describe("state 5: programming", () => {
   it("falls back to the generic status label if deviceName is somehow still null", () => {
     renderInterstitial({ phase: "programming", deviceName: null });
     expect(screen.getByText("CONNECTING · CONNECTED")).toBeInTheDocument();
+  });
+
+  // Phase 6I: an effort-only workout can reach this screen with no
+  // baselines set at all (WorkoutDetail.tsx's own guard loosening) — the
+  // "2K … · 6K …" line has nothing honest to report and is omitted
+  // entirely, never a fabricated pair. Everything else on the panel
+  // (interval count, nudge count) is unaffected.
+  it("Phase 6I: omits the 2K/6K line entirely when baselines is null — never a fabricated pair", () => {
+    renderInterstitial(
+      { phase: "programming", deviceName: DEVICE_NAME },
+      { baselines: null, nudgedCount: 2 },
+    );
+
+    expect(screen.getByText("WHAT THE MONITOR IS GETTING")).toBeInTheDocument();
+    expect(screen.queryByText(/2K .* · 6K /)).not.toBeInTheDocument();
+    // The rest of the panel still renders normally.
+    expect(
+      screen.getByText(`${FIXTURE.program.intervals.length} INTERVALS`),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 NUDGED")).toBeInTheDocument();
   });
 });
 

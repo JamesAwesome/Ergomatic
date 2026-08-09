@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { estimateMinutes, liveSteps, phases, phaseSeconds } from "./expand.js";
 import { distanceRepeats, intervalLadder } from "./fixtures.js";
-import type { Step } from "./types.js";
+import type { Baselines, Step } from "./types.js";
 
 const B = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -197,6 +197,138 @@ describe("estimateMinutes", () => {
       { k2Seconds: 112, k6Seconds: 122 },
     );
     expect(mins.minutes).toBe(Math.round(((500 / 500) * 112) / 60));
+  });
+});
+
+// Phase 6I Task 1: the no-baseline onboarding path. `phases()` accepts
+// `Baselines | null`; with null, an effort-ref work phase resolves (no
+// number, no crash) while a split-ref work phase is a programmer error —
+// callers must gate on `needsBaselines()` first. Warm-up/rest phases never
+// touched baselines to begin with (see `phases()`'s "wu"/"r" cases above:
+// fixed minutes, fixed "Easy"/"Rest" words), so the null path changes
+// nothing about them — pinned here rather than assumed.
+describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => {
+  // The First-6k shape (design spec): one warm-up + one 6000m distance
+  // work step at an effort ref. The real designated workout doesn't exist
+  // yet (a later task's seed data) — this hand-built fixture matches its
+  // documented shape exactly.
+  const firstSixK: Step[] = [
+    { k: "wu", minutes: 10 },
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { effort: "min" },
+    },
+  ];
+
+  it("expands to one warm-up + one effort work phase, with no targetSplit and no seconds estimate", () => {
+    const p = phases(firstSixK, null);
+    expect(p).toHaveLength(2);
+    expect(p[0]).toMatchObject({ type: "warmup", seconds: 600, label: "Easy" });
+    expect(p[1]).toMatchObject({
+      type: "work",
+      targetKind: "effort",
+      meters: 6000,
+      label: "EASY", // effortWord("min") — the word, never a number
+    });
+    expect(p[1]!.targetSplit).toBeUndefined();
+    // No targetSplit means phaseSeconds (the estimate builder) can't price
+    // this phase either — the "no duration estimate" half of the rule.
+    expect(phaseSeconds(p[1]!)).toBeNull();
+  });
+
+  it("renders warm-up/rest words unaffected by null baselines (they never read baselines)", () => {
+    const steps: Step[] = [
+      { k: "wu", minutes: 5 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1 },
+        ref: { effort: "max" },
+        restMinutes: 2,
+      },
+    ];
+    const p = phases(steps, null);
+    expect(p[0]).toMatchObject({ type: "warmup", label: "Easy" });
+    expect(p.at(-1)).toMatchObject({
+      type: "rest",
+      label: "Rest",
+      seconds: 120,
+    });
+  });
+
+  it("throws when a split-ref work step reaches phases(null) — programmer error, callers gate on needsBaselines() first", () => {
+    const steps: Step[] = [
+      { k: "wu", minutes: 5 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "6k", off: 0 },
+      },
+    ];
+    expect(() => phases(steps, null)).toThrow(/baselines/i);
+  });
+
+  it("existing concrete-baseline callers are untouched (same fixture as the top-level describe, byte-identical result)", () => {
+    expect(phases(intervalLadder.steps, B)).toStrictEqual(
+      phases(intervalLadder.steps, B),
+    );
+    expect(phases(intervalLadder.steps, B)[1]).toMatchObject({
+      targetKind: "split",
+      targetSplit: 122,
+    });
+  });
+});
+
+describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)", () => {
+  const firstSixK: Step[] = [
+    { k: "wu", minutes: 10 },
+    {
+      k: "w",
+      duration: { kind: "distance", meters: 6000 },
+      ref: { effort: "min" },
+    },
+  ];
+  const splitRefSteps: Step[] = [
+    { k: "wu", minutes: 5 },
+    {
+      k: "w",
+      duration: { kind: "time", minutes: 5 },
+      ref: { base: "6k", off: 0 },
+    },
+  ];
+
+  it("returns null for an effort-only workout rather than a partial/misleading number", () => {
+    expect(estimateMinutes(firstSixK, null)).toBeNull();
+  });
+
+  // 2026-08-08 review fix: the null branch used to short-circuit BEFORE
+  // ever looking at `steps`, so a split-ref workout under null baselines
+  // (a programmer error — the caller forgot to gate on needsBaselines())
+  // silently read as "no estimate" instead of the same loud throw
+  // `phases()`/`estimationSplit` already give that exact misuse.
+  it("throws for a split-ref workout under null baselines — the same programmer-error guard as phases()/estimationSplit", () => {
+    expect(() => estimateMinutes(splitRefSteps, null)).toThrow(/baselines/i);
+  });
+
+  // 2026-08-08 review fix: the reviewer's live tsc compile proved the old
+  // two-overload shape ("Baselines" / bare "null") rejected a caller
+  // holding a `Baselines | null`-typed VARIABLE ("No overload matches
+  // this call") — neither overload's parameter type is a superset of the
+  // union. This is a type-level assertion: the test's mere existence
+  // typechecking is half the proof; the runtime behavior on both branches
+  // (already covered above/elsewhere) is the other half.
+  it("accepts a Baselines | null-typed variable directly (type-level proof: this must typecheck)", () => {
+    function pickBaselines(useReal: boolean): Baselines | null {
+      return useReal ? { k2Seconds: 112, k6Seconds: 122 } : null;
+    }
+    const nullable: Baselines | null = pickBaselines(false);
+    expect(estimateMinutes(firstSixK, nullable)).toBeNull();
+
+    const realNullable: Baselines | null = pickBaselines(true);
+    expect(estimateMinutes(splitRefSteps, realNullable)).toStrictEqual({
+      minutes: 10, // wu 5' + w 5' — both time-based, no estimate
+      estimated: false,
+    });
   });
 });
 

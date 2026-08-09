@@ -70,8 +70,36 @@ export function effortSpoken(effort: Effort): "at max effort" | "easy" {
   return effort === "max" ? "at max effort" : "easy";
 }
 
-export function estimationSplit(baselines: Baselines, ref: PaceRef): number {
-  if (!isEffortRef(ref)) return resolveSplit(baselines, ref);
+// Phase 6I: `baselines` is nullable so an effort-ref work step can be
+// priced (or rather, deliberately NOT priced) for the no-baseline
+// onboarding workouts. A split ref has nothing to resolve without
+// baselines at all — that combination is a programmer error, not a
+// fallback, so it throws rather than returning null; `needsBaselines()`
+// is the gate every caller must check first (domain/needsBaselines.ts).
+// Overloaded (rather than a single `Baselines | null` signature) so every
+// EXISTING caller passing a concrete `Baselines` keeps its non-null
+// `number` return with no new null-check forced on it —
+// `src/builder/builderState.ts`'s `rowMinutes` multiplies the result
+// directly and would otherwise fail to typecheck against a value TS
+// can't see is non-null.
+export function estimationSplit(baselines: Baselines, ref: PaceRef): number;
+export function estimationSplit(
+  baselines: Baselines | null,
+  ref: PaceRef,
+): number | null;
+export function estimationSplit(
+  baselines: Baselines | null,
+  ref: PaceRef,
+): number | null {
+  if (!isEffortRef(ref)) {
+    if (baselines === null) {
+      throw new Error(
+        "estimationSplit: a split ref has no baselines to resolve — callers must gate on needsBaselines() first",
+      );
+    }
+    return resolveSplit(baselines, ref);
+  }
+  if (baselines === null) return null;
   return ref.effort === "max" ? baselines.k2Seconds : baselines.k6Seconds + 20;
 }
 

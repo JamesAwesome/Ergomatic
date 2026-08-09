@@ -58,6 +58,7 @@ function readyState(readSlugs: string[]): ArticleReadsState {
     state: "ready",
     readSlugs: new Set(readSlugs),
     markRead: vi.fn(),
+    markUnread: vi.fn(),
   };
 }
 
@@ -107,6 +108,7 @@ describe("Reader", () => {
       state: "ready",
       readSlugs: new Set(),
       markRead,
+      markUnread: vi.fn(),
     });
     rerender(
       <MemoryRouter initialEntries={["/news/baselines"]}>
@@ -142,7 +144,13 @@ describe("Reader", () => {
 
   it("renders no NEXT footer once every other article is already read", () => {
     mockUseArticleReads.mockReturnValue(
-      readyState(["workout-types", "picking-a-workout", "pain-scale"]),
+      readyState([
+        "workout-types",
+        "picking-a-workout",
+        "pain-scale",
+        "your-first-row",
+        "connect-the-monitor",
+      ]),
     );
     renderReader("/news/baselines");
 
@@ -195,6 +203,7 @@ describe("Reader", () => {
       state: "ready",
       readSlugs: new Set(),
       markRead,
+      markUnread: vi.fn(),
     });
     renderReader(`/news/${LINKED_FIXTURE.slug}`);
 

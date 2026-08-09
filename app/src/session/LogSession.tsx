@@ -15,6 +15,8 @@ import type { HeldResult } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef } from "../../domain/pace.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
+import { needsBaselines } from "../../domain/needsBaselines.js";
 import type {
   Baselines,
   PaceBase,
@@ -195,11 +197,20 @@ function pacesLockedText(k2: number | null, k6: number | null): string | null {
  *  changes how many times it appears, repeating it `count` times), and
  *  `.some()` only cares whether at least one match exists, not how many.
  *  Expanding first was a no-op that happened to read as thorough. Reading
- *  `steps` directly is both simpler and correct. */
+ *  `steps` directly is both simpler and correct.
+ *
+ *  Phase 6I close-out fold (Task 2's deferred ledger item): `baselines` is
+ *  now `Baselines | null` — `ManualDoorLog` (below) gates on
+ *  `needsBaselines(steps)`, not bare `baselines === null`, so an
+ *  effort-only workout can reach here with null baselines. `referenced`
+ *  can only read true for a base some SPLIT-ref step names, and
+ *  `needsBaselines` is exactly "some work step is a split ref" — so
+ *  `referenced` and `baselines === null` can never both be true at once;
+ *  the `!` below documents that invariant, not a runtime check. */
 function manualLockedBaseline(
   base: PaceBase,
   steps: Step[],
-  baselines: Baselines,
+  baselines: Baselines | null,
 ): number | null {
   const referenced = steps.some(
     (step) =>
@@ -207,8 +218,8 @@ function manualLockedBaseline(
   );
   return referenced
     ? base === "2k"
-      ? baselines.k2Seconds
-      : baselines.k6Seconds
+      ? baselines!.k2Seconds
+      : baselines!.k6Seconds
     : null;
 }
 
@@ -433,12 +444,45 @@ interface LogFormFields {
  *  false` in the POST body ONLY when the toggle is on; the default
  *  (counting toward the plan) leaves the key OFF the wire entirely, proving
  *  the common path still exercises the server's own `?? true` default
- *  rather than the client silently re-asserting it. */
-function useLogForm(onSaved: () => void) {
+ *  rather than the client silently re-asserting it.
+ *
+ *  Phase 6I: `workoutTitle` (default `""`, so the pre-existing manual-door
+ *  call site below is untouched) seeds `outsidePlan`'s DEFAULT only — a
+ *  designated onboarding workout's log pre-sets the toggle to outside the
+ *  plan, still visible, still changeable (spec: "a baseline test must not
+ *  silently consume plan session 1"). Reliable only where the title is
+ *  known SYNCHRONOUSLY at this hook's own mount (the session door's
+ *  `run.title`, read from localStorage, not fetched); the manual door's
+ *  title comes from `useWorkouts()`, an async fetch that hasn't resolved
+ *  on this hook's own first render, so its call site is left on the `""`
+ *  default rather than reaching for a value that can't actually be known
+ *  yet — a real but narrow gap, not a silent one: onboarding's own real
+ *  path is exclusively the session door (`your-first-row`'s own copy:
+ *  "Tap START on the suggested 6k... run the timer"), never "Log it after"
+ *  on the designated workout's own detail screen.
+ *
+ *  Final-review fix round (2026-08-09): the sibling exclusion sites
+ *  (Today.tsx, Library.tsx, server `/api/today`) all corrected `title`-only
+ *  matching to also require `isGlobal`, so a rower's own CUSTOM workout
+ *  sharing a designated title isn't hidden/misidentified. This call site
+ *  is DELIBERATELY left on `isOnboardingTitle(workoutTitle)` alone —
+ *  `SessionRun` (`session/run.ts`, what `loadRun()` returns) carries only
+ *  `workoutId`/`title`, no `isGlobal`, and there is no synchronous way to
+ *  learn it here (a lookup would mean fetching the workout list before
+ *  this hook's first render, which the manual door already can't do for
+ *  the same reason its own `workoutTitle` stays on the `""` default
+ *  above). Accepted edge, not a silent one: a rower who names their own
+ *  custom workout "First 6k" or "First 2k" and logs it through the SESSION
+ *  door gets `outsidePlan` defaulted to true (same as the real designated
+ *  workout would) — still visible, still changeable before Save, so the
+ *  worst case is one extra tap, not a silently-consumed plan session. */
+function useLogForm(onSaved: () => void, workoutTitle: string = "") {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
-  const [outsidePlan, setOutsidePlan] = useState(false);
+  const [outsidePlan, setOutsidePlan] = useState(() =>
+    isOnboardingTitle(workoutTitle),
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -605,7 +649,14 @@ function LogScreen({
   title: string;
   workoutType: WorkoutType;
   dateLabel: string;
-  totalMinutes: number;
+  // Phase 6I close-out fold: null for the manual door's own effort-only
+  // workout past the needsBaselines gate — `estimateMinutes` deliberately
+  // returns null rather than a partial/wrong sum (domain/expand.ts), so
+  // the header omits the duration segment entirely (never a fabricated
+  // number, the same "never a bare dash" idiom `pacesText` below already
+  // follows). The session door's own `logTotals` always supplies a real
+  // wall-clock number — this door alone can pass null.
+  totalMinutes: number | null;
   pacesText: string | null;
   logSteps: LogStep[];
   expectedPain: number | null;
@@ -640,7 +691,9 @@ function LogScreen({
       <div className="log-meta">
         <TypeBadge type={workoutType} />
         <span className="mono-status">
-          {dateLabel} · {totalMinutes} MIN
+          {totalMinutes !== null
+            ? `${dateLabel} · ${totalMinutes} MIN`
+            : dateLabel}
         </span>
       </div>
 
@@ -859,11 +912,19 @@ function SessionDoorLog() {
     saving,
     saveError,
     submit,
-  } = useLogForm(() => {
-    clearDraft();
-    clearRun();
-    navigate("/today");
-  });
+  } = useLogForm(
+    () => {
+      clearDraft();
+      clearRun();
+      navigate("/today");
+    },
+    // `run` was read synchronously above (`loadRun()`, not a fetch) — safe
+    // to pass its title here even though the `run === null` guard below
+    // hasn't run yet at this point in the component body (hooks can't be
+    // conditional); a null run means this door redirects away before the
+    // default ever matters.
+    run?.title ?? "",
+  );
   // Task 3 (ui-fix round): the two-button `.baseline-confirm` side panel
   // this discard used to open is gone — replaced by the shared
   // `useStagedDiscard` machine and the level system's own in-place L4/
@@ -1285,9 +1346,9 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // WorkoutDetail.tsx/Library.tsx. WorkoutDetail's own gating link means a
   // real rower can't normally reach this state, but a stale bookmark or a
   // baseline cleared in another tab between load and click still can — a
-  // concrete `Baselines` is required from here on (`buildManualLogSteps`'
-  // own non-nullable contract), so this degrades honestly instead of
-  // crashing or fabricating a number.
+  // concrete `Baselines` is required for a SPLIT-ref workout
+  // (`buildManualLogSteps`' own resolveSplit call), so that case degrades
+  // honestly instead of crashing or fabricating a number.
   const baselines: Baselines | null =
     baselinesState.baselines.k2Seconds !== null &&
     baselinesState.baselines.k6Seconds !== null
@@ -1297,7 +1358,19 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         }
       : null;
 
-  if (baselines === null) {
+  // Phase 6I close-out fold (Task 2's deferred ledger item, WorkoutDetail.
+  // tsx's own KNOWN GAP comment on its "Log it after" link): this used to
+  // gate on bare `baselines === null`, blocking EVERY workout alike —
+  // including the two designated effort-only onboarding workouts, whose
+  // whole point is to run (and now log) with no baselines set at all. Gated
+  // on the SAME `needsBaselines` predicate every other coupled guard site
+  // shares (domain/needsBaselines.ts's own header comment names them): an
+  // effort-only workout has nothing to resolve against baselines, so it
+  // reaches the form below with `baselines` possibly still null.
+  // `WorkoutDetail.tsx`'s own gating link already used this predicate for
+  // whether to show this door's link at all (line ~522) — this closes the
+  // one remaining site the design spec named that hadn't followed.
+  if (baselines === null && needsBaselines(workout.steps)) {
     return (
       <main className="screen">
         <BackLink />
@@ -1315,8 +1388,16 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // `estimateMinutes` (the same helper WorkoutDetail.tsx's own preview
   // already calls) stands in for the session door's real wall-clock total,
   // since an off-app row was never timed by this app at all.
+  //
+  // Phase 6I close-out fold: `baselines` can now be null here (an
+  // effort-only workout past the gate above) — `estimateMinutes` returns
+  // null rather than throwing for that case (domain/expand.ts's own
+  // deliberate "never a partial, possibly-wrong sum" rule) and
+  // `totalMinutes` follows it into null, which `LogScreen` renders as no
+  // duration segment at all rather than a fabricated number.
   const dateLabel = formatLogDate(new Date().toISOString());
-  const totalMinutes = estimateMinutes(workout.steps, baselines).minutes;
+  const totalMinutes =
+    estimateMinutes(workout.steps, baselines)?.minutes ?? null;
   const k2 = manualLockedBaseline("2k", workout.steps, baselines);
   const k6 = manualLockedBaseline("6k", workout.steps, baselines);
   const pacesText = pacesLockedText(k2, k6);

@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { parseBulk } from "../../domain/bulk.js";
 import { bucketsForCap } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { PLANS, type PlanCode } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
 import type { Baselines, Difficulty, Step } from "../../domain/types.js";
@@ -767,6 +768,17 @@ export function createDataRouter({
       }
       patch.accentColor = body.accentColor;
     }
+    if (body.startHereDismissed !== undefined) {
+      if (typeof body.startHereDismissed !== "boolean") {
+        badRequest(
+          res,
+          "startHereDismissed must be a boolean",
+          "startHereDismissed",
+        );
+        return;
+      }
+      patch.startHereDismissed = body.startHereDismissed;
+    }
 
     // An empty patch (body `{}`, or all-unknown keys) must be a no-op read,
     // not a write: the real store's put() builds its upsert's `SET` clause
@@ -794,6 +806,19 @@ export function createDataRouter({
       return;
     }
     await stores.articleReads.markRead(req.user!.id, slug);
+    res.status(204).end();
+  });
+
+  // Idempotent: deleting a slug that was never read (or already deleted)
+  // still 204s — MARK ALL FOUR UNREAD (You › Learning the app) fires four
+  // of these unconditionally, partial-failure-safe by re-run.
+  router.delete("/api/article-reads/:slug", async (req, res) => {
+    const { slug } = req.params;
+    if (!SLUG_RE.test(slug)) {
+      badRequest(res, "slug must match ^[a-z0-9-]{1,64}$", "slug");
+      return;
+    }
+    await stores.articleReads.unmarkRead(req.user!.id, slug);
     res.status(204).end();
   });
 
@@ -837,18 +862,31 @@ export function createDataRouter({
       stores.logs.lastDonePerWorkout(userId),
     ]);
 
-    const library: LibraryEntry[] = workouts.map((w) => ({
-      id: w.id,
-      type: w.type,
-      difficulty: w.difficulty,
-      pain: w.pain,
-      estMinutes: estimateMinutes(w.steps as Step[], baselines).minutes,
-      lastDoneDaysAgo: lastDone[w.id] ?? null,
-      // Round 2 (2026-08-04): LibraryEntry.isGlobal is required, mirroring
-      // `w.isGlobal` from `stores.workouts.list()` (server/stores/workouts.ts's
-      // own `withIsGlobal`) exactly.
-      isGlobal: w.isGlobal,
-    }));
+    // Controller addendum (Phase 6I Task 7, design spec's "invisible
+    // outside onboarding" rule): the two designated GLOBAL onboarding
+    // workouts never enter the suggestion pool here, mirroring the
+    // client's own exclusion (Today.tsx's `entries`) — a veteran with real
+    // baselines set (the only account this route ever runs for; see the
+    // 422 guard above) must never be SUGGESTED "First 6k"/"First 2k".
+    // Final-review fix (2026-08-09): also require `isGlobal` — a rower's
+    // own CUSTOM workout that happens to share one of these titles
+    // (`w.isGlobal === false`, `withIsGlobal`'s own `userId !== null`
+    // case) is a real, ownable workout; excluding it by title alone
+    // orphaned it from this route's suggestion pool with no way back.
+    const library: LibraryEntry[] = workouts
+      .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
+      .map((w) => ({
+        id: w.id,
+        type: w.type,
+        difficulty: w.difficulty,
+        pain: w.pain,
+        estMinutes: estimateMinutes(w.steps as Step[], baselines).minutes,
+        lastDoneDaysAgo: lastDone[w.id] ?? null,
+        // Round 2 (2026-08-04): LibraryEntry.isGlobal is required, mirroring
+        // `w.isGlobal` from `stores.workouts.list()` (server/stores/workouts.ts's
+        // own `withIsGlobal`) exactly.
+        isGlobal: w.isGlobal,
+      }));
 
     const suggestion = suggest({
       todayCode,

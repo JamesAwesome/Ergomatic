@@ -445,6 +445,7 @@ describe("domain stores against real Postgres", () => {
         countdownSeconds: 10,
         paceToleranceSeconds: 1,
         accentColor: "#b5341f",
+        startHereDismissed: false,
       });
 
       // get()-when-absent must not have inserted a row

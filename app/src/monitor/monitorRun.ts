@@ -180,10 +180,12 @@ export function clearMonitorRun(): void {
  *  **7B: the reverse half of this rule now ships too** (7A left it as a
  *  documented obligation here, since no 7A code ever constructed a
  *  `SessionRun` while a `MonitorRun` was live). A phone-timer session
- *  committing — `WorkoutDetail`'s `startSession`, downstream of the staged
- *  confirm its `handleStart` puts in front of it — calls `clearMonitorRun`
- *  for the mirrored reason. See `session/run.ts`'s own note on why that
- *  clear is NOT inside `saveRun` despite the spec's prose naming it.
+ *  committing — `session/useStartWorkout.ts`'s `confirmReplace` (Phase 6I
+ *  Task 4: extracted from WorkoutDetail's own former `startSession`),
+ *  downstream of the staged confirm its `handleStart` puts in front of it —
+ *  calls `clearMonitorRun` for the mirrored reason. See `session/run.ts`'s
+ *  own note on why that clear is NOT inside `saveRun` despite the spec's
+ *  prose naming it.
  *
  *  **7C: `logSeed` is REQUIRED here**, not optional the way `MonitorRun`'s
  *  own field is — the record's field stays optional purely to let a v1
@@ -358,8 +360,8 @@ function monitorRunState(): RecordState {
  * The `live`/`live` tie-break (row 5) picks `"monitor"`. **7B closed the
  * gap that used to make this cell ordinarily reachable** — both halves of
  * the cross-clear rule now ship (`createMonitorRun` above clears any
- * `SessionRun`; `WorkoutDetail`'s `startSession` clears any `MonitorRun`),
- * so neither door leaves the other side's record standing.
+ * `SessionRun`; `session/useStartWorkout.ts`'s `confirmReplace` clears any
+ * `MonitorRun`), so neither door leaves the other side's record standing.
  *
  * **One walk through the app's own screens still reaches this cell,
  * though** (Task 2's review, M-2 — an earlier draft of this comment said

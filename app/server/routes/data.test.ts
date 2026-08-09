@@ -6,6 +6,7 @@ import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import type { NewWorkoutInput } from "../stores/workouts.js";
 import type { WorkoutInput } from "../../domain/types.js";
 import { PLANS } from "../../domain/plans.js";
+import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { PREFERENCES_DEFAULTS } from "../stores/preferences.js";
 import { makeFakeStores } from "../testing/fakes.js";
 import { createDataRouter, type Stores } from "./data.js";
@@ -1507,6 +1508,7 @@ describe("GET/PUT /api/prefs", () => {
         countdownSeconds: 5,
         paceToleranceSeconds: 2,
         accentColor: "#123456",
+        startHereDismissed: true,
       },
     );
     expect(res.status).toBe(200);
@@ -1518,7 +1520,34 @@ describe("GET/PUT /api/prefs", () => {
       countdownSeconds: 5,
       paceToleranceSeconds: 2,
       accentColor: "#123456",
+      startHereDismissed: true,
     });
+  });
+
+  it("PUT startHereDismissed round-trips true then back to false", async () => {
+    const app = appFor(makeStores());
+    const dismiss = await asA(request(app).put("/api/prefs")).send({
+      startHereDismissed: true,
+    });
+    expect(dismiss.status).toBe(200);
+    expect(dismiss.body.startHereDismissed).toBe(true);
+    const get = await asA(request(app).get("/api/prefs"));
+    expect(get.body.startHereDismissed).toBe(true);
+
+    // PUT IT BACK ON TODAY (You › Learning the app) clears it again.
+    const restore = await asA(request(app).put("/api/prefs")).send({
+      startHereDismissed: false,
+    });
+    expect(restore.status).toBe(200);
+    expect(restore.body.startHereDismissed).toBe(false);
+  });
+
+  it("rejects a non-boolean startHereDismissed with 400 + field", async () => {
+    const res = await asA(request(appFor(makeStores())).put("/api/prefs")).send(
+      { startHereDismissed: "yes" },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("startHereDismissed");
   });
 
   it("rejects an out-of-range timeCapMinutes with 400 + field", async () => {
@@ -1593,10 +1622,42 @@ describe("article reads", () => {
     }
   });
 
+  it("DELETE then GET round-trips the removal", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/article-reads/baselines"));
+    const del = await asA(request(app).delete("/api/article-reads/baselines"));
+    expect(del.status).toBe(204);
+    const res = await asA(request(app).get("/api/article-reads"));
+    expect(res.body).toStrictEqual({ slugs: [] });
+  });
+
+  it("DELETE is idempotent: a slug never read still 204s and changes nothing", async () => {
+    const app = appFor(makeStores());
+    await asA(request(app).put("/api/article-reads/baselines"));
+    expect(
+      (await asA(request(app).delete("/api/article-reads/never-read"))).status,
+    ).toBe(204);
+    expect(
+      (await asA(request(app).delete("/api/article-reads/never-read"))).status,
+    ).toBe(204);
+    const res = await asA(request(app).get("/api/article-reads"));
+    expect(res.body).toStrictEqual({ slugs: ["baselines"] });
+  });
+
+  it("DELETE rejects a slug outside the safe shape with 400 + field", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).delete("/api/article-reads/UPPER"));
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("slug");
+  });
+
   it("requires a session", async () => {
     const app = appFor(makeStores());
     expect((await request(app).get("/api/article-reads")).status).toBe(401);
     expect((await request(app).put("/api/article-reads/x")).status).toBe(401);
+    expect((await request(app).delete("/api/article-reads/x")).status).toBe(
+      401,
+    );
   });
 });
 
@@ -1699,6 +1760,67 @@ describe("GET /api/today", () => {
     expect(res.status).toBe(200);
     expect(res.body.pool).toContain(g.id);
     expect(res.body.recommendation).toBe(g.id);
+  });
+
+  // Controller addendum (Phase 6I Task 7, design spec's "invisible outside
+  // onboarding" rule): the designated onboarding workout is never
+  // suggested to an account that already has real baselines set — this
+  // route 422s before ever reaching the suggestion pool for a brand-new
+  // account (the only account these workouts are actually FOR), so the
+  // only account this exclusion can be observed against is a returning one
+  // that happens to still have "First 6k" in its library.
+  it("excludes the designated onboarding workout from the pool/recommendation, even at a matching type", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    await asA(request(app).put("/api/baselines")).send({
+      k2Seconds: 120,
+      k6Seconds: 130,
+    });
+    const todayCode = PLANS.sprint.sessions[0] as "AN" | "O2" | "AT" | "TR";
+    const onboarding = seedGlobalWorkout(stores, {
+      sortOrder: 900,
+      title: ONBOARDING_TITLES.k6,
+      type: todayCode,
+    });
+    const real = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({ title: "A Real Workout", type: todayCode }),
+    );
+    const res = await asA(request(app).get("/api/today"));
+    expect(res.status).toBe(200);
+    expect(res.body.pool).not.toContain(onboarding.id);
+    expect(res.body.pool).toContain(real.body.id);
+    expect(res.body.recommendation).toBe(real.body.id);
+  });
+
+  // Final-review fix: the exclusion must key off isGlobal, not title alone
+  // — a rower's own custom workout that happens to be named "First 6k"
+  // (the POST route's own "personal workout sharing a global's title" case,
+  // pinned above) is a real, ownable workout, not a stray collision with
+  // the seeded pair. Excluding it by title alone would orphan it from
+  // /api/today's suggestion pool with no way back.
+  it("a CUSTOM workout named the same as a designated onboarding title stays in the pool — only the GLOBAL row is excluded", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    await asA(request(app).put("/api/baselines")).send({
+      k2Seconds: 120,
+      k6Seconds: 130,
+    });
+    const todayCode = PLANS.sprint.sessions[0] as "AN" | "O2" | "AT" | "TR";
+    const onboarding = seedGlobalWorkout(stores, {
+      sortOrder: 900,
+      title: ONBOARDING_TITLES.k6,
+      type: todayCode,
+    });
+    const custom = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
+    );
+    expect(custom.body.isGlobal).toBe(false);
+
+    const res = await asA(request(app).get("/api/today"));
+    expect(res.status).toBe(200);
+    expect(res.body.pool).not.toContain(onboarding.id);
+    expect(res.body.pool).toContain(custom.body.id);
+    expect(res.body.recommendation).toBe(custom.body.id);
   });
 
   it("uses the selected plan and doneN, not the fallback, and reports the real planKey", async () => {

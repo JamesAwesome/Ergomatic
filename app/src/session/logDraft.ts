@@ -129,13 +129,19 @@ export type ActualSource = "assumed" | "stopwatch" | "pm5";
 /** This module's own `LogStep` — now the SAME shape as `server/stores/
  *  logs.ts`'s `LogStep` (Task 1.5 amendment, module header): `targetSplit`
  *  optional, `actualSplit`/`actualSource` a paired unit, both omitted
- *  together for an effort phase (5G rule). **PM5 PAIRING EXCEPTION (7C spec
- *  §3, adversarial B3):** that pairing is loosened for a monitor-sourced
- *  step only — `buildMonitorLogSteps` (below) can set `actualSource: "pm5"`
- *  with `actualSplit` absent (an unusable `avgSplit` reading), because the
- *  three fields below are still real measurements even when the split
- *  itself wasn't. The phone-timer/manual builders above never produce this
- *  shape; only the monitor door does. */
+ *  together for an effort phase with no MEASURED actual to report (5G
+ *  rule) — Phase 6I amended this: an effort DISTANCE phase's genuine
+ *  stopwatch reading (`actualSource: "stopwatch"`) still carries the
+ *  pair, with `targetSplit` the only field that stays omitted (there was
+ *  never a target to compare it against). `validateLogStepEntry` already
+ *  accepts a paired actual with no `targetSplit` (the 6C amendment).
+ *  **PM5 PAIRING EXCEPTION (7C spec §3, adversarial B3):** that pairing is
+ *  loosened for a monitor-sourced step only — `buildMonitorLogSteps`
+ *  (below) can set `actualSource: "pm5"` with `actualSplit` absent (an
+ *  unusable `avgSplit` reading), because the three fields below are still
+ *  real measurements even when the split itself wasn't. The phone-timer/
+ *  manual builders above never produce this shape; only the monitor door
+ *  does. */
 export interface LogStep {
   label: string;
   targetSplit?: number;
@@ -268,23 +274,29 @@ function draftWorkStep(
  *  - `spm`/`seconds`/`meters`: copied straight through when the phase set
  *    them.
  *  - the actual, joined by phase position (module header's own "subtle
- *    rules", each pinned by a fixture in the test file):
- *      - effort phase -> neither `actualSplit` nor `actualSource` (no
- *        actual is ever attributed to an estimate that was never a target).
- *      - `run.actuals[i]` present -> it can only be a KEPT distance actual
- *        (the engine's `nextDistance` is the only place that ever writes to
- *        `actuals`, and it only runs on a phase with `meters`) -> passes
- *        through as `actualSplit: splitSeconds, actualSource: "stopwatch"`.
- *      - no `actuals[i]` entry, phase has `seconds` (a TIME phase) -> the
- *        engine NEVER records an actual for a time phase (only
- *        `nextDistance` writes one, and it's distance-only) — a completed
- *        time phase is read as "held the target": `actualSplit:
+ *    rules", each pinned by a fixture in the test file). Phase 6I amended
+ *    this: a MEASURED (stopwatch) actual now survives on an effort phase
+ *    too — only an ASSUMED one stays effort-gated (there's no
+ *    `targetSplit` to assume held). Checked in this order:
+ *      - `run.actuals[i]` present (a KEPT distance actual — the engine's
+ *        `nextDistance` is the only place that ever writes to `actuals`,
+ *        and it only runs on a phase with `meters`, effort or split-ref
+ *        alike) -> passes through as `actualSplit: splitSeconds,
+ *        actualSource: "stopwatch"` REGARDLESS of `isEffort`.
+ *      - no `actuals[i]` entry, NOT an effort phase, phase has `seconds`
+ *        (a TIME phase) -> the engine NEVER records an actual for a time
+ *        phase (only `nextDistance` writes one, and it's distance-only) —
+ *        a completed time phase is read as "held the target": `actualSplit:
  *        targetSplit, actualSource: "assumed"`.
- *      - no `actuals[i]` entry, phase has `meters` (a DISTANCE phase) -> the
- *        rower's split was flagged suspect and DISCARDED
- *        (`Timer.tsx`'s `handleDiscardSplit` calls `advance`, not
- *        `nextDistance` — "Discard records NO actual") -> neither key at
- *        all. Absence here is deliberate, not a logged zero. */
+ *      - an EFFORT phase with no `actuals[i]` entry -> neither key at all,
+ *        whether it's a completed effort TIME phase (nothing to assume —
+ *        no `targetSplit`) or a distance one with a DISCARDED suspect
+ *        split (same next bullet's reasoning, applied to an effort ref).
+ *      - a SPLIT-ref DISTANCE phase with no `actuals[i]` entry -> the
+ *        rower's split was flagged suspect and DISCARDED (`Timer.tsx`'s
+ *        `handleDiscardSplit` calls `advance`, not `nextDistance` —
+ *        "Discard records NO actual") -> neither key at all. Absence here
+ *        is deliberate, not a logged zero. */
 export function buildLogSteps(
   run: SessionRun,
   draft: SessionDraft | null,
@@ -365,18 +377,34 @@ export function buildLogSteps(
     if (phase.spm !== undefined) step.spm = phase.spm;
     if (phase.seconds !== undefined) step.seconds = phase.seconds;
     if (phase.meters !== undefined) step.meters = phase.meters;
-    if (!isEffort) {
-      const actual = run.actuals[i];
-      if (actual !== undefined) {
-        step.actualSplit = actual.splitSeconds;
-        step.actualSource = "stopwatch";
-      } else if (phase.seconds !== undefined) {
-        step.actualSplit = phase.targetSplit!;
-        step.actualSource = "assumed";
-      }
-      // else: a distance phase with no recorded actual is a discarded
-      // suspect split — neither key, per the module header.
+    // Phase 6I amendment to the 5G drop rule (module header): a MEASURED
+    // (stopwatch) actual survives regardless of `isEffort` — `run.actuals`
+    // is only ever written by `nextDistance` (engine.ts), which records a
+    // real elapsed/split pair off the rower's own stopwatch with no
+    // reference to `targetSplit` at all, so an effort DISTANCE phase's
+    // measured actual is exactly as real as a split-ref phase's.
+    // `validateLogStepEntry` already accepts a paired
+    // `actualSplit`/`actualSource` with no `targetSplit` (the 6C
+    // amendment, module header's SERVER CONTRACT paragraph) — this is that
+    // exact shape. An ASSUMED actual ("held the target") stays effort-gated
+    // below it: an effort phase has no `targetSplit` to assume held (the
+    // 5G rule, unchanged) — a completed effort TIME phase (the only way to
+    // finish one with no recorded actual: `nextDistance` never touches a
+    // time phase) logs nothing at all, same as before this task.
+    const actual = run.actuals[i];
+    if (actual !== undefined) {
+      step.actualSplit = actual.splitSeconds;
+      step.actualSource = "stopwatch";
+    } else if (!isEffort && phase.seconds !== undefined) {
+      step.actualSplit = phase.targetSplit!;
+      step.actualSource = "assumed";
     }
+    // else: a distance phase with no recorded actual is a discarded
+    // suspect split (split-ref) — neither key, per the module header. An
+    // effort TIME phase with no actual falls here too now, and logs
+    // nothing, which is the SAME outcome the old `if (!isEffort)` wrapper
+    // produced for it (this branch was always unreachable for a completed
+    // effort time phase either way — `nextDistance` never runs on one).
     out.push(step);
   });
   return out;
@@ -413,10 +441,20 @@ export function buildLogSteps(
  *  A `"test"` step (IMP-1, module header) produces a bare-label `LogStep`
  *  the same way `buildLogSteps` does — here it's simpler still, since this
  *  builder always has the step's own ORIGINAL authored `label` straight
- *  from `Step` with no phase/draft indirection to reach through at all. */
+ *  from `Step` with no phase/draft indirection to reach through at all.
+ *
+ *  Phase 6I close-out fold (Task 2's deferred ledger item): `baselines` is
+ *  now `Baselines | null` — `ManualDoorLog` gates its OWN call site on
+ *  `needsBaselines(workout.steps)` rather than bare `baselines === null`,
+ *  so an effort-only workout (every step `isEffortRef`) can reach here
+ *  with null baselines. `resolveSplit` is only ever called from the
+ *  `!isEffort` branch below, which `needsBaselines` guarantees never runs
+ *  when `baselines` is null (the two predicates are the same condition,
+ *  "some work step is a split ref") — the `!` on `baselines` there
+ *  documents that invariant, not a runtime check. */
 export function buildManualLogSteps(
   workout: { steps: Step[] },
-  baselines: Baselines,
+  baselines: Baselines | null,
 ): LogStep[] {
   const out: LogStep[] = [];
   for (const step of liveSteps(workout.steps)) {
@@ -434,7 +472,11 @@ export function buildManualLogSteps(
       label: refPaceLabel(durationLabel, step.ref),
     };
     if (!isEffort) {
-      const split = resolveSplit(baselines, step.ref);
+      // `needsBaselines(workout.steps)` (ManualDoorLog's own call-site
+      // gate) is true whenever any work step reaches this branch — the
+      // caller has already confirmed `baselines` is non-null before
+      // calling at all in that case (module header's Phase 6I paragraph).
+      const split = resolveSplit(baselines!, step.ref);
       logStep.targetSplit = split;
       logStep.actualSplit = split;
       logStep.actualSource = "assumed";
@@ -522,9 +564,17 @@ export interface LogSeed {
  *  and records CURRENT `baselines` under whichever base(s) were actually
  *  referenced — the same F1 rule `manualLockedBaseline` (`LogSession.tsx`)
  *  already established for the manual door. */
+/** Rebase seam (6I over 7C, 2026-08-09): 6I loosened the Connect guard so
+ *  an effort-only workout can program a monitor with NULL baselines — and
+ *  this function (7C) is directly downstream of that guard. Baselines are
+ *  read ONLY in the split-ref branch below, which `needsBaselines` gating
+ *  at the Connect door guarantees is unreachable when they're null; a
+ *  split-ref phase arriving here with null anyway is a programmer error
+ *  and throws loudly, the exact convention `phases()`/`estimationSplit`
+ *  established (domain/expand.ts). */
 export function buildLogSeed(
   phases: EnginePhase[],
-  baselines: Baselines,
+  baselines: Baselines | null,
 ): LogSeed {
   const steps: LogSeed["steps"] = [];
   const paces: LogSeed["paces"] = {};
@@ -558,6 +608,11 @@ export function buildLogSeed(
       // (`durationText`'s header comment) for a fact the domain layer
       // enforces upstream, not a possibility this function needs to guard.
       const splitRef = phase.ref as SplitRef;
+      if (baselines === null) {
+        throw new Error(
+          "buildLogSeed: a split-ref phase needs baselines — callers must gate on needsBaselines() first",
+        );
+      }
       if (splitRef.base === "2k") {
         paces.k2 = baselines.k2Seconds;
       } else {

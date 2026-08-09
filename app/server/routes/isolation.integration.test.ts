@@ -12,7 +12,7 @@ import { createDb, type Db } from "../db/index.js";
 import { createSessionStore } from "../auth/sessions.js";
 import { createUserStore } from "../auth/users.js";
 import { seedGlobalLibrary } from "../seed/seed.js";
-import { LIBRARY_WORKOUTS } from "../seed/library/index.js";
+import { GLOBAL_LIBRARY_SEED } from "../seed/library/index.js";
 import { createArticleReadsStore } from "../stores/articleReads.js";
 import { createBaselinesStore } from "../stores/baselines.js";
 import { createLogsStore } from "../stores/logs.js";
@@ -43,7 +43,15 @@ import type { Stores } from "./data.js";
 // (a logged session's frozen values survive a later baseline edit).
 // ---------------------------------------------------------------------------
 
-const LIBRARY_COUNT = LIBRARY_WORKOUTS.length;
+// Phase 6I: seedGlobalLibrary(db)'s default converge input is
+// GLOBAL_LIBRARY_SEED (the 300-workout library plus the two designated
+// onboarding rows). The client/server "invisible outside onboarding"
+// exclusion has since landed (isOnboardingTitle, applied at Today's pool,
+// the Library list, and /api/today's suggestion input) — but /api/workouts
+// itself deliberately serves all GLOBAL_LIBRARY_SEED.length rows,
+// onboarding pair included, because detail routes (e.g. the no-baseline
+// card's own workout lookups) need to be able to fetch them by id.
+const LIBRARY_COUNT = GLOBAL_LIBRARY_SEED.length;
 
 describe("two-user isolation, global-library sharing, and log-freezing across the full API", () => {
   let container: StartedPostgreSqlContainer;
@@ -451,6 +459,27 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
 
     const readsA = await asA().get("/api/article-reads");
     expect(readsA.body).toStrictEqual({ slugs: ["pain-scale"] });
+  });
+
+  it("article-reads DELETE is isolated per user: A's unmark never touches B's reads, and is idempotent", async () => {
+    // A already carries "pain-scale" from the preceding test in this
+    // ordered chain (shared app/db, no reset between cases) — asserted
+    // below alongside workout-types' removal, not reset away.
+    await asA().put("/api/article-reads/workout-types");
+    await asB().put("/api/article-reads/workout-types");
+
+    expect(
+      (await asA().delete("/api/article-reads/workout-types")).status,
+    ).toBe(204);
+    // Idempotent re-run against a real Postgres DELETE ... WHERE.
+    expect(
+      (await asA().delete("/api/article-reads/workout-types")).status,
+    ).toBe(204);
+
+    const readsA = await asA().get("/api/article-reads");
+    expect(readsA.body).toStrictEqual({ slugs: ["pain-scale"] });
+    const readsB = await asB().get("/api/article-reads");
+    expect(readsB.body).toStrictEqual({ slugs: ["workout-types"] });
   });
 
   it('logging a GLOBAL workout end to end: the FK holds, and "done" status is isolated per user through /api/today', async () => {

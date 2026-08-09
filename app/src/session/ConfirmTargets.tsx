@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useBaselines } from "../api/useBaselines";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
+import { needsBaselines } from "../../domain/needsBaselines.js";
 import {
   effortWord,
   isEffortRef,
@@ -15,6 +16,7 @@ import TypeBadge from "../components/TypeBadge";
 import Stepper from "../builder/Stepper";
 import {
   draftMinutes,
+  draftSteps,
   loadDraft,
   saveDraft,
   startDraft,
@@ -86,6 +88,21 @@ export function clampReps(n: number): number {
 
 function withStepAt(d: SessionDraft, i: number, step: Step): SessionDraft {
   return { ...d, steps: d.steps.map((s, idx) => (idx === i ? step : s)) };
+}
+
+// Phase 6I: START is blocked ONLY when baselines are unset AND the draft's
+// EFFECTIVE steps (removed rows dropped, same view `buildRun` itself
+// resolves against) actually need one — `needsBaselines` is the single
+// predicate every coupled guard site shares (domain/needsBaselines.ts's
+// own header), so this footer can never disagree with Countdown's own
+// redirect/buildRun gate about which workouts are safe to run without
+// baselines. Before this task, this returned `baselines === null`
+// unconditionally (the Phase 6B Task 3 controller decision, flagged then
+// as "blocks START even for a workout with no split-ref work step at all
+// … simplicity over precision, deliberately") — that flagged gap is what
+// this task closes.
+function isStartBlocked(d: SessionDraft, baselines: Baselines | null): boolean {
+  return baselines === null && needsBaselines(draftSteps(d));
 }
 
 function kindLabel(step: Step): string {
@@ -307,11 +324,11 @@ export default function ConfirmTargets() {
     // narrowing doesn't propagate a const's narrowed type into a nested
     // function body across closures, so this both satisfies the compiler
     // and guards a hypothetical future caller of this closure outside its
-    // originating render. `baselines === null` is also re-checked here
-    // (not just in the render below, which swaps the whole button out) —
+    // originating render. `isStartBlocked` is also re-checked here (not
+    // just in the render below, which swaps the whole button out) —
     // belt-and-suspenders against a future caller of this closure that
     // doesn't go through the render's own conditional.
-    if (draft === null || baselines === null) return;
+    if (draft === null || isStartBlocked(draft, baselines)) return;
     const started = startDraft(draft);
     saveDraft(started);
     // Phase 6B Task 2's own gap report: Countdown existed, routed, and
@@ -324,6 +341,7 @@ export default function ConfirmTargets() {
 
   const minutes = draftMinutes(draft, baselines);
   const minutesLabel = minutes === null ? "— MIN" : `${minutes} MIN`;
+  const blocked = isStartBlocked(draft, baselines);
 
   return (
     <main className="screen confirm-screen">
@@ -360,27 +378,24 @@ export default function ConfirmTargets() {
           button sits BELOW the recount rather than beside it. */}
       <footer className="confirm-footer">
         <span className="confirm-recount">{minutesLabel}</span>
-        {baselines ? (
+        {!blocked ? (
           <button type="button" className="button-l1" onClick={handleStart}>
             Looks right, start
           </button>
         ) : (
-          // Controller decision (Phase 6B Task 2's own flagged gap):
-          // `buildRun` requires a concrete `Baselines` — always, even for a
-          // workout with no split-ref step, since it's a fixed 4-arg
-          // contract, not a per-workout one. Rather than have Countdown
-          // silently freeze a near-zero split for the one library/authored
-          // workout that DOES have a split-ref step (the {0,0} dummy this
-          // replaces), START is blocked here, at the one place a rower can
-          // still act on it — the row-level "no target" idiom already
-          // covers this per split-ref row (see step-row-no-target above);
-          // this is that same idiom at the footer, covering the SESSION as
-          // a whole rather than one row. Flagged for James: this blocks
-          // START unconditionally when baselines are unset, even for a
-          // workout with no split-ref work step at all (e.g. warm-up +
-          // effort-only), which technically wouldn't need baselines to
-          // resolve. Simplicity over precision, deliberately — see the
-          // task-3 report.
+          // Phase 6I: `isStartBlocked` (above) is the ONLY thing deciding
+          // this branch now — `buildRun` accepts `Baselines | null` and
+          // `phases()` (domain/expand.ts) resolves an effort work phase to
+          // no target/no estimate rather than crashing, so a workout with
+          // no split-ref work step at all (the two designated onboarding
+          // workouts, and every shipped effort-only AN sprint — Dust
+          // Storm, Heat Lightning, …) genuinely doesn't need baselines to
+          // run. This span (the row-level "no target" idiom, applied at
+          // the footer/session scope) renders only for a workout that
+          // DOES have a split-ref work step with nothing to resolve it
+          // against — the Phase 6B Task 3 gap this replaces used to block
+          // here unconditionally whenever baselines were unset, even for a
+          // workout that needed none.
           <span className="step-row-no-target">
             <em>no target</em> <Link to="/you">Set baselines</Link>
           </span>

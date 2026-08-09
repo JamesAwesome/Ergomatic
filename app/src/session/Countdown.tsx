@@ -3,10 +3,37 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { keepAwakeOff, keepAwakeOn } from "../adapters/keepAwake";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
+import { needsBaselines } from "../../domain/needsBaselines.js";
 import type { Baselines } from "../../domain/types.js";
 import { buildRun } from "./engine";
-import { cancelStart, loadDraft, saveDraft, type SessionDraft } from "./draft";
+import {
+  cancelStart,
+  draftSteps,
+  loadDraft,
+  saveDraft,
+  type SessionDraft,
+} from "./draft";
 import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
+
+// Phase 6I: the SAME predicate ConfirmTargets.tsx's own `isStartBlocked`
+// uses, applied to the two places Countdown itself must agree with it —
+// the build effect's own gate (below) and the render's redirect (further
+// down). Missing either one reintroduces the exact bug a mismatched pair
+// would produce: gate the effect but not the redirect, and an effort-only
+// workout would render "Couldn't load…"-style limbo behind a redirect
+// that fires anyway; gate the redirect but not the effect, and the run
+// record this screen's whole job is to write never gets built at all — a
+// rower stuck on a screen that looks like it's counting down toward a
+// session that doesn't exist. `draftSteps` (not raw `d.steps`) is the
+// EFFECTIVE view — removed rows dropped, nudges folded — the same one
+// `buildRun` itself resolves against, so this can never disagree with what
+// actually gets built.
+function blocksWithoutBaselines(
+  d: SessionDraft,
+  baselines: Baselines | null,
+): boolean {
+  return baselines === null && needsBaselines(draftSteps(d));
+}
 
 // The countdown's own timing state: `total` is the configured length
 // (preferences.countdownSeconds), `startedAtMs` is the wall-clock instant
@@ -92,14 +119,14 @@ export default function Countdown() {
   // Resolved once baselines are READY — `null` covers both "not ready yet"
   // (loading/error; the render below returns before this matters) and the
   // genuine case this exists to catch: ready, but the rower has never set
-  // baselines. ConfirmTargets.tsx now blocks START entirely in that case
-  // (Phase 6B Task 3: the footer shows the "no target" idiom instead of a
-  // clickable START), so reaching this screen with `resolvedBaselines ===
-  // null` should only happen via a direct/deep navigation that skipped
-  // Confirm's own guard — handled below by bouncing back to Confirm rather
-  // than building a run with a dummy pair (the `{0,0}` fallback this
-  // superseded: Task 2's review flagged it as the wrong place to paper over
-  // a gap Confirm itself now closes).
+  // baselines. ConfirmTargets.tsx's own footer blocks START in that case
+  // ONLY when `needsBaselines()` reads true for the draft's effective steps
+  // (Phase 6I — before this task it blocked unconditionally); an
+  // effort-only workout's `resolvedBaselines === null` is therefore a
+  // GENUINE, expected case reaching this screen now, not just a
+  // direct/deep-link that skipped Confirm's guard. `blocksWithoutBaselines`
+  // (module scope, above) is what actually decides whether this null value
+  // blocks the build effect/render below — see its own comment.
   // useMemo, not a plain `const`: `baselinesState` itself is a STABLE
   // reference across renders that don't touch it (the countdown's own 1s
   // repaint interval re-renders this component every second once running),
@@ -161,13 +188,18 @@ export default function Countdown() {
     if (existingRun !== null && hasRunProgress(existingRun)) return;
     if (baselinesState.state !== "ready") return;
     if (preferencesState.state !== "ready") return;
-    // Ready but unset: never build here (see `resolvedBaselines`'s own
-    // comment) — the render below redirects to Confirm instead. `builtRef`
-    // is deliberately NOT flipped in this branch: this isn't "built once,
+    // Ready but unset AND the draft actually needs baselines to resolve
+    // (Phase 6I: `blocksWithoutBaselines`, module scope) — never build
+    // here; the render below redirects to Confirm instead. `builtRef` is
+    // deliberately NOT flipped in this branch: this isn't "built once,
     // never rebuild," it's "nothing to build yet," so a hypothetical future
     // render with real baselines (there isn't one today; nothing here
-    // re-fetches) wouldn't be wrongly blocked by a stale guard.
-    if (resolvedBaselines === null) return;
+    // re-fetches) wouldn't be wrongly blocked by a stale guard. An
+    // effort-only draft falls THROUGH this check even with
+    // `resolvedBaselines === null` — `buildRun` accepts `Baselines | null`
+    // and resolves an effort phase to no target/no estimate rather than
+    // crashing (domain/expand.ts's `phases()`).
+    if (blocksWithoutBaselines(draft, resolvedBaselines)) return;
     builtRef.current = true;
 
     const baselines = resolvedBaselines;
@@ -274,16 +306,20 @@ export default function Countdown() {
     );
   }
 
-  if (resolvedBaselines === null) {
+  if (blocksWithoutBaselines(draft, resolvedBaselines)) {
     // Both hooks are READY by this point (every loading/error branch above
     // already returned), so this means baselines resolved to genuinely
-    // unset — ConfirmTargets.tsx now blocks START in that exact case (its
-    // footer shows the no-target/`/you` idiom instead of a clickable
-    // START), so the only way to land here with this true is a direct/deep
-    // navigation to /session/countdown that skipped Confirm entirely.
-    // Bouncing back to Confirm (rather than building a run against a dummy
-    // pair, the removed `{0,0}` fallback) puts the rower exactly where
-    // they'd land had they tried to START from Confirm in the first place.
+    // unset AND this draft's effective steps need one — ConfirmTargets.tsx
+    // blocks START in that exact case (Phase 6I: its footer shows the
+    // no-target/`/you` idiom instead of a clickable START), so the only way
+    // to land here with this true is a direct/deep navigation to
+    // /session/countdown that skipped Confirm entirely. Bouncing back to
+    // Confirm (rather than building a run against a dummy pair) puts the
+    // rower exactly where they'd land had they tried to START from Confirm
+    // in the first place. An effort-only draft never reaches this branch,
+    // even with `resolvedBaselines === null` — see the build effect's own
+    // identical gate above, and `blocksWithoutBaselines`'s own comment for
+    // why BOTH must share this exact predicate.
     return <Navigate to="/session/confirm" replace />;
   }
 

@@ -5,6 +5,8 @@ import { WorkoutTypesBody } from "./bodies/workoutTypes";
 import { BaselinesBody } from "./bodies/baselines";
 import { PickingAWorkoutBody } from "./bodies/pickingAWorkout";
 import { PainScaleBody } from "./bodies/painScale";
+import { YourFirstRowBody } from "./bodies/yourFirstRow";
+import { ConnectTheMonitorBody } from "./bodies/connectTheMonitor";
 import { PyramidFigure } from "./bodies/PyramidFigure";
 
 describe("article body components", () => {
@@ -84,6 +86,28 @@ describe("article body components", () => {
     render(<PainScaleBody />);
     expect(
       screen.getByText(/stop, and let it settle before you row again/),
+    ).toBeInTheDocument();
+  });
+
+  it("YourFirstRowBody renders with distinctive text (Phase 6I Task 6)", () => {
+    render(<YourFirstRowBody />);
+    expect(
+      screen.getByText(
+        /the average split you can hold for six thousand metres/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/your average split is on the summary screen and/),
+    ).toBeInTheDocument();
+  });
+
+  it("ConnectTheMonitorBody renders with distinctive text (Phase 6I Task 6)", () => {
+    render(<ConnectTheMonitorBody />);
+    expect(
+      screen.getByText(/Every workout in this app can run two ways/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Intervals advance themselves, rest counts itself/),
     ).toBeInTheDocument();
   });
 });

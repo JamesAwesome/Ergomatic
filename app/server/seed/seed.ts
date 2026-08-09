@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import type { WorkoutInput } from "../../domain/types.js";
 import { createWorkoutsStore } from "../stores/workouts.js";
-import { LIBRARY_WORKOUTS } from "./library/index.js";
+import { GLOBAL_LIBRARY_SEED } from "./library/index.js";
 
 // Arbitrary but fixed application-wide key for the seed advisory lock. Any
 // constant works; it only has to be the same in every process. Exported so
@@ -34,7 +34,8 @@ const contentEqual = (
 
 /**
  * Converges the shared global library (user_id NULL rows) onto the code's
- * LIBRARY_WORKOUTS, keyed by title, inside one advisory-locked transaction:
+ * `library` argument (default `GLOBAL_LIBRARY_SEED`), keyed by title,
+ * inside one advisory-locked transaction:
  * content changed → UPDATE in place (row id and session-log links survive —
  * logs snapshot their own data, the FK is navigation only); title missing →
  * INSERT; title removed from code → DELETE (those log links null via
@@ -42,7 +43,9 @@ const contentEqual = (
  * title-set swap, whose gap was that content-only edits never reached an
  * existing volume. Two booting replicas cannot both converge: the loser
  * observes the winner's state and writes nothing. `library` is a test seam —
- * the boot call site passes nothing.
+ * the boot call site passes nothing, so it defaults to
+ * `GLOBAL_LIBRARY_SEED` (the 300-workout library plus the two designated
+ * onboarding rows, Phase 6I — see library/index.ts).
  *
  * Called ONCE from index.ts, after `migrate()` and before the app starts
  * accepting connections — NOT per-user, and NOT from signInWithClaims. The
@@ -60,7 +63,7 @@ const contentEqual = (
  */
 export async function seedGlobalLibrary(
   db: Db,
-  library: readonly LibraryEntry[] = LIBRARY_WORKOUTS,
+  library: readonly LibraryEntry[] = GLOBAL_LIBRARY_SEED,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(${SEED_LOCK_KEY})`);
