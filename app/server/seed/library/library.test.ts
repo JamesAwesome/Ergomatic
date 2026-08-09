@@ -20,13 +20,22 @@ const band = (m: number): Band =>
           ? "45-60"
           : "60+";
 
-// The spec's quota grid, verbatim (docs/superpowers/specs/
-// 2026-08-03-workout-generation-design.md §4). Rows sum 90/75/75/60 = 300.
+// This grid used to be the spec's quota grid verbatim (docs/superpowers/
+// specs/2026-08-03-workout-generation-design.md §4) because every workout's
+// duration included its warm-up. The warmup-setting spec (Task 3,
+// 2026-08-09) deleted the 302 `{ k: "wu", ... }` seed lines — the same
+// content, 5-10 fewer minutes each — so `estimateMinutes` now returns a
+// smaller total for nearly every workout and a meaningful slice crossed a
+// band boundary downward. This test still pins exactly 300, but the counts
+// below are the MEASURED post-strip reality (a content-regression pin), not
+// the design target anymore. `pnpm tsx scripts/library-balance.ts` prints
+// the ongoing TARGET-vs-AFTER drift against the original design grid — rows
+// still sum 90/75/75/60 = 300 since no workout moved TYPE, only band.
 const QUOTA: Record<WorkoutType, Record<Band, number>> = {
-  O2: { "<20": 2, "20-30": 14, "30-45": 36, "45-60": 18, "60+": 20 },
-  AT: { "<20": 5, "20-30": 19, "30-45": 34, "45-60": 13, "60+": 4 },
-  TR: { "<20": 9, "20-30": 22, "30-45": 32, "45-60": 9, "60+": 3 },
-  AN: { "<20": 14, "20-30": 20, "30-45": 18, "45-60": 5, "60+": 3 },
+  O2: { "<20": 12, "20-30": 15, "30-45": 35, "45-60": 13, "60+": 15 },
+  AT: { "<20": 16, "20-30": 27, "30-45": 26, "45-60": 3, "60+": 3 },
+  TR: { "<20": 21, "20-30": 26, "30-45": 19, "45-60": 7, "60+": 2 },
+  AN: { "<20": 32, "20-30": 15, "30-45": 10, "45-60": 1, "60+": 2 },
 };
 
 // Authoring bands from the starter library's conventions (starter.ts header).

@@ -3,7 +3,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
-import type { Step } from "../../domain/types.js";
 import WorkoutRow from "./WorkoutRow";
 
 // Real seeded workout ("Hoarfrost", app/server/seed/library/o2.ts) —
@@ -18,9 +17,6 @@ const HOARFROST: LibraryWorkout = {
   difficulty: "easy",
   pain: 2,
   steps: [
-    // Task 3 shim: the real seed still carries this wu step until it's
-    // stripped; "wu" already left the Step union (Task 1).
-    { k: "wu", minutes: 10 } as unknown as Step,
     { k: "reps", count: 2 },
     {
       k: "w",

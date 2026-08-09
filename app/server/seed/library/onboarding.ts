@@ -14,19 +14,13 @@ import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 // (the card's own lookup, their own detail routes) without perturbing
 // the starter-library gate. Titles come from the domain constant — the
 // ONLY identity the rest of the app uses to recognize them.
-// TEMPORARY SHIM (2026-08-09, the warmup-setting spec, Task 1): this
-// array's `wu` steps make it structurally incompatible with the narrowed
-// `Step` union now that "wu" has left it — Task 3 deletes every `{ k:
-// "wu", ... }` line below (and this cast) when it strips the seeded
-// library's warmups.
-export const ONBOARDING_LIBRARY_WORKOUTS = [
+export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
   {
     title: ONBOARDING_TITLES.k6,
     type: "O2",
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "distance", meters: 6000 },
@@ -40,7 +34,6 @@ export const ONBOARDING_LIBRARY_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
@@ -48,4 +41,4 @@ export const ONBOARDING_LIBRARY_WORKOUTS = [
       },
     ],
   },
-] as unknown as WorkoutInput[]; // Task 3 deletes these lines
+];

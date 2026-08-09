@@ -7,12 +7,7 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // rate-change pieces), not ±1' tweaks; every time-computable total lands on
 // a 0 or 5; continuous threshold singles stay rare. Ordering here IS the
 // library browsing order within the type block.
-// TEMPORARY SHIM (2026-08-09, the warmup-setting spec, Task 1): this
-// array's `wu` steps make it structurally incompatible with the narrowed
-// `Step` union now that "wu" has left it — Task 3 deletes every `{ k:
-// "wu", ... }` line below (and this cast) when it strips the seeded
-// library's warmups.
-export const AT_WORKOUTS = [
+export const AT_WORKOUTS: WorkoutInput[] = [
   {
     // AT: 10' continuous at 6k+4 — one short threshold piece, in and out.
     title: "Occluded Front",
@@ -20,7 +15,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
@@ -36,7 +30,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 3 },
@@ -66,7 +59,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 4 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
@@ -110,7 +102,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 4 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -128,7 +119,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 4 },
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
@@ -158,7 +148,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 6 },
       { k: "reps", count: 3 },
       {
         k: "w",
@@ -176,7 +165,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -220,7 +208,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "distance", meters: 500 },
@@ -250,7 +237,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
@@ -280,7 +266,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 7 },
       {
         k: "w",
         duration: { kind: "time", minutes: 8 },
@@ -305,7 +290,6 @@ export const AT_WORKOUTS = [
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "distance", meters: 1000 },
@@ -335,7 +319,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 4 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -353,7 +336,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 6 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
@@ -390,7 +372,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 2 },
       {
         k: "w",
@@ -415,7 +396,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -459,7 +439,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 8 },
       {
         k: "w",
@@ -477,7 +456,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 4 },
       { k: "reps", count: 3 },
       {
         k: "w",
@@ -502,7 +480,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -553,7 +530,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 8 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -571,7 +547,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 6 },
       {
         k: "w",
         duration: { kind: "distance", meters: 500 },
@@ -615,7 +590,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 9 },
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
@@ -645,7 +619,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
@@ -670,7 +643,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 2 },
       {
         k: "w",
@@ -702,7 +674,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 4 },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
@@ -734,7 +705,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 6 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -752,7 +722,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 25 },
@@ -768,7 +737,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 6 },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -812,7 +780,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 6 },
       { k: "reps", count: 6 },
       {
         k: "w",
@@ -830,7 +797,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 9 },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
@@ -874,7 +840,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
@@ -932,7 +897,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 6 },
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
@@ -957,7 +921,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 3 },
       {
         k: "w",
@@ -975,7 +938,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 9 },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
@@ -1012,7 +974,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "time", minutes: 8 },
@@ -1042,7 +1003,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 2 },
       {
         k: "w",
@@ -1067,7 +1027,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 6 },
       {
         k: "w",
@@ -1085,7 +1044,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 8 },
       { k: "reps", count: 3 },
       {
         k: "w",
@@ -1103,7 +1061,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 8 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -1121,7 +1078,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 8 },
       { k: "reps", count: 2 },
       {
         k: "w",
@@ -1139,7 +1095,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
@@ -1177,7 +1132,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -1222,7 +1176,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
@@ -1259,7 +1212,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 6 },
       {
         k: "w",
         duration: { kind: "time", minutes: 15 },
@@ -1284,7 +1236,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 9 },
       {
         k: "w",
         duration: { kind: "time", minutes: 3 },
@@ -1328,7 +1279,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 5 },
       {
         k: "w",
@@ -1346,7 +1296,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "wu", minutes: 9 },
       { k: "reps", count: 3 },
       {
         k: "w",
@@ -1364,7 +1313,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -1382,7 +1330,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 7 },
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
@@ -1419,7 +1366,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 7 },
       { k: "reps", count: 8 },
       {
         k: "w",
@@ -1437,7 +1383,6 @@ export const AT_WORKOUTS = [
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       { k: "reps", count: 3 },
       {
         k: "w",
@@ -1455,7 +1400,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 6 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -1473,7 +1417,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
@@ -1510,7 +1453,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -1528,7 +1470,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -1572,7 +1513,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 7 },
       {
         k: "w",
         duration: { kind: "time", minutes: 12 },
@@ -1595,7 +1535,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 7 },
       {
         k: "w",
         duration: { kind: "time", minutes: 6 },
@@ -1625,7 +1564,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 8 },
@@ -1657,7 +1595,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 5 },
       {
         k: "w",
@@ -1675,7 +1612,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },
@@ -1700,7 +1636,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 8 },
       {
         k: "w",
         duration: { kind: "distance", meters: 500 },
@@ -1744,7 +1679,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
@@ -1774,7 +1708,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 30 },
@@ -1790,7 +1723,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 20 },
@@ -1813,7 +1745,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "distance", meters: 5000 },
@@ -1836,7 +1767,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 20 },
@@ -1861,7 +1791,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 5 },
       { k: "reps", count: 8 },
       {
         k: "w",
@@ -1879,7 +1808,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 9 },
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
@@ -1923,7 +1851,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       { k: "reps", count: 6 },
       {
         k: "w",
@@ -1941,7 +1868,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 6 },
       { k: "reps", count: 4 },
       {
         k: "w",
@@ -1966,7 +1892,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 8 },
       { k: "reps", count: 12 },
       {
         k: "w",
@@ -1984,7 +1909,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "distance", meters: 3000 },
@@ -2021,7 +1945,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 9 },
       {
         k: "w",
         duration: { kind: "time", minutes: 25 },
@@ -2047,7 +1970,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "distance", meters: 8000 },
@@ -2072,7 +1994,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       { k: "reps", count: 5 },
       {
         k: "w",
@@ -2090,7 +2011,6 @@ export const AT_WORKOUTS = [
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "wu", minutes: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 20 },
@@ -2120,4 +2040,4 @@ export const AT_WORKOUTS = [
       },
     ],
   },
-] as unknown as WorkoutInput[]; // Task 3 deletes these lines
+];

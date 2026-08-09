@@ -8,7 +8,11 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["server/**/*.test.ts", "domain/**/*.test.ts"],
+          include: [
+            "server/**/*.test.ts",
+            "domain/**/*.test.ts",
+            "scripts/**/*.test.ts",
+          ],
           exclude: ["server/**/*.integration.test.ts"],
         },
       },
