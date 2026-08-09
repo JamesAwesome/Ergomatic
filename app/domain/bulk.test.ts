@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseBulk } from "./bulk.js";
+import { droppedWarmupNotice, parseBulk } from "./bulk.js";
 import { parseDurationToken } from "./duration.js";
 
 describe("parseBulk", () => {
@@ -509,5 +509,23 @@ describe("effort refs in bulk blocks", () => {
         message: expect.stringContaining("effort refs take no offset"),
       },
     ]);
+  });
+});
+
+describe("droppedWarmupNotice", () => {
+  it("pluralizes for N > 1", () => {
+    expect(droppedWarmupNotice(2)).toBe(
+      "2 warm-up lines dropped. Warm-ups are a setting now.",
+    );
+  });
+
+  it("stays singular for exactly 1", () => {
+    expect(droppedWarmupNotice(1)).toBe(
+      "1 warm-up line dropped. Warm-ups are a setting now.",
+    );
+  });
+
+  it("carries no em-dash (house rule for user-facing copy)", () => {
+    expect(droppedWarmupNotice(3)).not.toMatch(/—/);
   });
 });

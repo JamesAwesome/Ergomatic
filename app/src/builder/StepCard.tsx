@@ -71,14 +71,13 @@ export default function StepCard({
         )}
       </button>
       <div className="step-card-line2">
-        {/* A `wu`/standalone-`r` row's stepSubSummary is "" (see
-            builderState.ts) — those rows have no spm/rest fields of their
-            own to summarise. Rendering this button unconditionally used to
-            put a focusable control with an empty accessible name in the DOM
-            for every such row (axe button-name / WCAG 4.1.2), which fires on
-            essentially every seeded library workout's edit screen since
-            every one opens with a `wu`. Render it only when there's real
-            text to expose. */}
+        {/* A standalone `r` row's stepSubSummary is "" (see builderState.ts)
+            — it has no spm/rest fields of its own to summarise (`wu` was
+            RowKind's other such member until 2026-08-09's warmup setting
+            removed it). Rendering this button unconditionally used to put a
+            focusable control with an empty accessible name in the DOM for
+            every such row (axe button-name / WCAG 4.1.2). Render it only
+            when there's real text to expose. */}
         {subSummary !== "" && (
           <button type="button" className="step-card-sub" onClick={onExpand}>
             {subSummary}

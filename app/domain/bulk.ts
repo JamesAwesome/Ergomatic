@@ -21,6 +21,19 @@ export interface BulkResult {
   droppedWarmups: number;
 }
 
+/** The shared "N warm-ups dropped" notice copy (2026-08-09's warmup-setting
+ *  spec §6: "the import screen gains a notice line"; the plan's own global
+ *  constraints section pins this exact wording, N interpolated). A session
+ *  draft loaded from localStorage can carry the SAME fact for the SAME
+ *  reason — a `wu` step recorded before the setting shipped — so
+ *  `session/draft.ts`'s legacy-draft strip imports this rather than
+ *  spelling the sentence a second time; one function is what keeps the two
+ *  doors from drifting into two different wordings of one fact. No
+ *  em-dash, per the house rule for user-facing copy. */
+export function droppedWarmupNotice(n: number): string {
+  return `${n} warm-up line${n === 1 ? "" : "s"} dropped. Warm-ups are a setting now.`;
+}
+
 const TYPES: WorkoutType[] = ["AN", "O2", "AT", "TR"];
 const DIFFS: Difficulty[] = ["easy", "medium", "hard"];
 

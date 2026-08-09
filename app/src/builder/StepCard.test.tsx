@@ -6,9 +6,11 @@ import StepCard from "./StepCard";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 
 // Local row-shape helpers, same convention as builderState.test.ts's own
-// workRow/wuRow/restRow — this file can't import those (not exported), and
-// duplicating three tiny object literals is cheaper than exporting test
-// fixtures across module boundaries.
+// workRow/restRow — this file can't import those (not exported), and
+// duplicating two tiny object literals is cheaper than exporting test
+// fixtures across module boundaries. (A `wuRow` helper used to live here
+// too — "wu" left `RowKind` entirely 2026-08-09, the warmup-setting spec —
+// `restRow` already covers the exact same non-work code path.)
 function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   return {
     id: "row-1",
@@ -21,20 +23,6 @@ function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
     spm: "20",
     rest: "1:30",
     ...overrides,
-  };
-}
-
-function wuRow(): BuilderRow {
-  return {
-    id: "wu-1",
-    kind: "wu",
-    durValue: "10:00",
-    durUnit: "min",
-    refBase: "6k",
-    refOff: 0,
-    refEffort: null,
-    spm: "",
-    rest: "",
   };
 }
 
@@ -152,34 +140,21 @@ describe("StepCard", () => {
   });
 
   // The Task 1 landmine, exercised through the actual card rather than just
-  // the bare helper: a wu/standalone-rest row must never show a fabricated
+  // the bare helper: a standalone-rest row must never show a fabricated
   // pace reference (see builderState.ts's stepSummary/stepSubSummary).
-  it("summarises a warm-up row honestly, with no fabricated pace reference", () => {
-    setup({ row: wuRow() });
-    expect(screen.getByText("10:00 warm-up")).toBeInTheDocument();
-    expect(screen.queryByText(/@/)).not.toBeInTheDocument();
-  });
-
   it("summarises a standalone rest row honestly, with no fabricated pace reference", () => {
     setup({ row: restRow() });
     expect(screen.getByText("5:00 rest")).toBeInTheDocument();
     expect(screen.queryByText(/@/)).not.toBeInTheDocument();
   });
 
-  // This review's IMPORTANT 2: stepSubSummary returns "" for a wu/standalone
-  // r row (no spm/rest fields of their own), but `.step-card-sub` used to
+  // This review's IMPORTANT 2: stepSubSummary returns "" for a standalone r
+  // row (no spm/rest fields of its own), but `.step-card-sub` used to
   // render unconditionally regardless — a focusable button with no text
   // content and no aria-label, which axe's button-name rule (WCAG 4.1.2)
-  // flags. Every seeded library workout opens with a `wu`, so this fired on
-  // the edit screen for essentially every workout a rower didn't
-  // hand-author.
+  // flags.
   // Assert the button is entirely absent, not just visually empty — an
   // empty-but-present button would still fail the same audit.
-  it("renders no sub-summary button at all for a warm-up row (no accessible name to give it)", () => {
-    const { container } = setup({ row: wuRow() });
-    expect(container.querySelector(".step-card-sub")).not.toBeInTheDocument();
-  });
-
   it("renders no sub-summary button at all for a standalone rest row (no accessible name to give it)", () => {
     const { container } = setup({ row: restRow() });
     expect(container.querySelector(".step-card-sub")).not.toBeInTheDocument();
@@ -189,7 +164,7 @@ describe("StepCard", () => {
   // the sub-summary button is gone — proves the fix didn't just delete the
   // button and leave the rest of line 2 broken.
   it("still renders the EDIT/duplicate/delete action group when the sub-summary button is absent", async () => {
-    const { onExpand } = setup({ row: wuRow() });
+    const { onExpand } = setup({ row: restRow() });
     expect(screen.getByRole("button", { name: "EDIT" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "EDIT" }));
     expect(onExpand).toHaveBeenCalledTimes(1);

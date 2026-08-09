@@ -88,7 +88,6 @@ const READY_PREFS = {
   preferences: {
     difficulties: [],
     timeCapMinutes: 60,
-    warmupMinutes: 10,
     warmup: { kind: "time", minutes: 8 } as { kind: "time"; minutes: number },
     countdownSeconds: 10,
     startHereDismissed: true,

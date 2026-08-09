@@ -6,8 +6,10 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { resolveSplit } from "../../domain/pace.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutType } from "../../domain/types.js";
+import type { WarmupSetting } from "../api/usePreferences";
 import {
   buildDraft,
+  DRAFT_KEY,
   loadDraft,
   saveDraft,
   startDraft,
@@ -23,16 +25,20 @@ import {
 // Realistic fixtures, per repo convention: real library workouts
 // (app/server/seed/library/index.ts), matching draft.test.ts's own choices
 // so the pinned minute totals here are the exact same already-verified
-// numbers.
-// - Hoarfrost (O2): wu 6' + reps×2 marker + one split-ref work step (22
-//   spm, 6k+12, 5' embedded rest) — the reps-marker fixture.
-// - Calm Sea (O2): wu 8' + a single 10,000 m distance work step — the
+// numbers. (Each of these used to open with its own stored `wu` step —
+// Task 3 stripped all 302 from the seeds 2026-08-09; the warm-up setting
+// below is a per-user PREFERENCE now, layered on top of these same
+// fixtures by the "warm-up (2026-08-09's setting)" suite further down,
+// never part of the workout itself.)
+// - Hoarfrost (O2): reps×2 marker + one split-ref work step (22 spm,
+//   6k+12, 5' embedded rest) — the reps-marker fixture.
+// - Calm Sea (O2): a single 10,000 m distance work step — the
 //   distance-duration-stepper fixture. (Meltemi used to hold this role; the
 //   library rewrite turned it into a 5-phase TIME workout with no distance
 //   step at all, so this suite re-anchored to Calm Sea — same 10,000 m
 //   distance, matching draft.test.ts/engine.test.ts/logDraft.test.ts.)
-// - Heat Lightning (AN): wu 10' + reps×10 marker + an EFFORT-ref work step —
-//   the no-nudge/effort-word fixture. (Fork Lightning used to hold this
+// - Heat Lightning (AN): reps×10 marker + an EFFORT-ref work step — the
+//   no-nudge/effort-word fixture. (Fork Lightning used to hold this
 //   role; the rewrite turned its reps block into TWO alternating work
 //   steps, which renders as two separate editable rows here and breaks the
 //   "exactly one ALL OUT row" assumption this test makes, so this suite
@@ -66,6 +72,25 @@ function mockBaselines(
   }));
 }
 
+// Mutable-box idiom (Builder.test.tsx's own comment explains why: a single
+// `vi.doMock` registration per module id, set up once in `beforeEach`,
+// rather than every test racing a second registration for the same id).
+// Defaults to READY and OFF (`warmup: null`) — the setting's own production
+// default — so every test below that doesn't call `mockPreferences` itself
+// renders exactly as it did before 2026-08-09's warmup setting existed
+// (spec §4's own "OFF renders byte-identically to today" requirement).
+let preferencesMock:
+  | { state: "ready"; preferences: { warmup: WarmupSetting | null } }
+  | { state: "loading" }
+  | { state: "error"; retry: () => void } = {
+  state: "ready",
+  preferences: { warmup: null },
+};
+
+function mockPreferences(warmup: WarmupSetting | null) {
+  preferencesMock = { state: "ready", preferences: { warmup } };
+}
+
 async function renderConfirm(initialPath = "/session/confirm") {
   const { default: ConfirmTargets } = await import("./ConfirmTargets");
   render(
@@ -84,6 +109,10 @@ async function renderConfirm(initialPath = "/session/confirm") {
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
+  preferencesMock = { state: "ready", preferences: { warmup: null } };
+  vi.doMock("../api/usePreferences", () => ({
+    usePreferences: () => preferencesMock,
+  }));
 });
 
 describe("ConfirmTargets", () => {
@@ -152,6 +181,141 @@ describe("ConfirmTargets", () => {
     // total for this exact fixture/baseline pair). No warm-up: the setting
     // is OFF by default and no workout carries one since 2026-08-09.
     expect(screen.getByText("34 MIN")).toBeInTheDocument();
+  });
+
+  // ---- 2026-08-09's warm-up setting ---------------------------------------
+  // The setting is a per-user PREFERENCE (`usePreferences().preferences.
+  // warmup`), never part of the workout itself — every draft below is the
+  // exact same Hoarfrost fixture the "34 MIN" test above already pins, run
+  // through the WHOLE confirm screen, with the setting layered on top.
+
+  it("OFF renders byte-identically to today: no WARM-UP row, no legacy notice, no change to the recount", async () => {
+    mockBaselines();
+    mockPreferences(null);
+    seedDraft("Hoarfrost");
+    await renderConfirm();
+
+    expect(screen.queryByText("WARM-UP")).not.toBeInTheDocument();
+    // A fresh, non-legacy draft strips nothing (`strippedWarmups` is 0) —
+    // the shared notice copy must not appear for that case either.
+    expect(screen.queryByText(/dropped/i)).not.toBeInTheDocument();
+    expect(screen.getByText("34 MIN")).toBeInTheDocument();
+  });
+
+  it("ON with a time-kind setting: shows a WARM-UP row in house format and adds it to the recount", async () => {
+    mockBaselines();
+    mockPreferences({ kind: "time", minutes: 10 });
+    seedDraft("Hoarfrost");
+    await renderConfirm();
+
+    const warmupRow = screen
+      .getByText("WARM-UP")
+      .closest(".step-editor") as HTMLElement;
+    expect(within(warmupRow).getByText("10:00")).toBeInTheDocument();
+    expect(within(warmupRow).queryByText(/REST/)).not.toBeInTheDocument();
+    // 34 (Hoarfrost's own work total) + 10 (the warm-up) = 44.
+    expect(screen.getByText("44 MIN")).toBeInTheDocument();
+  });
+
+  it("ON with a time-kind setting AND rest: the row shows both, and the recount includes both", async () => {
+    mockBaselines();
+    mockPreferences({ kind: "time", minutes: 10, restSeconds: 120 });
+    seedDraft("Hoarfrost");
+    await renderConfirm();
+
+    const warmupRow = screen
+      .getByText("WARM-UP")
+      .closest(".step-editor") as HTMLElement;
+    expect(within(warmupRow).getByText("10:00")).toBeInTheDocument();
+    expect(within(warmupRow).getByText("2:00")).toBeInTheDocument();
+    // 34 + 10 (warm-up) + 2 (rest) = 46.
+    expect(screen.getByText("46 MIN")).toBeInTheDocument();
+  });
+
+  it("ON with a distance-kind setting: the row shows meters, and the recount includes the estimate-priced duration", async () => {
+    mockBaselines();
+    mockPreferences({ kind: "distance", meters: 1000 });
+    seedDraft("Hoarfrost");
+    await renderConfirm();
+
+    const warmupRow = screen
+      .getByText("WARM-UP")
+      .closest(".step-editor") as HTMLElement;
+    expect(within(warmupRow).getByText("1000 M")).toBeInTheDocument();
+    // Estimate: estimationSplit(BASELINES, {effort:"min"}) = k6Seconds + 20
+    // = 140 s/500m (domain/pace.ts's own easy-band rule); 1000m / 500 * 140
+    // = 280s = 4.6667 min. 34 + 4.6667 = 38.6667, rounds to 39 — the SAME
+    // rounding `warmupDisplayMinutes`/`draftMinutes` apply everywhere else.
+    expect(screen.getByText("39 MIN")).toBeInTheDocument();
+  });
+
+  it("the WARM-UP row is non-nudgeable: no REMOVE/RESTORE button and no stepper controls of its own", async () => {
+    mockBaselines();
+    mockPreferences({ kind: "time", minutes: 10, restSeconds: 120 });
+    seedDraft("Hoarfrost");
+    await renderConfirm();
+
+    const warmupRow = screen
+      .getByText("WARM-UP")
+      .closest(".step-editor") as HTMLElement;
+    expect(within(warmupRow).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  // THE ARIA RULING (Task 4 handed this up, pinned here): the WARM-UP row
+  // is preference chrome, not an authored step — it does NOT join the
+  // "Row N" numbering. Row 1 must still name whatever the first AUTHORED
+  // step is (Hoarfrost's reps marker), exactly as it does with the setting
+  // OFF — inserting the warm-up row must not shift it to "Row 2".
+  it("does not join the Row N numbering: the WARM-UP row carries its own label, Row 1 still names the first authored step", async () => {
+    mockBaselines();
+    mockPreferences({ kind: "time", minutes: 10 });
+    seedDraft("Hoarfrost");
+    await renderConfirm();
+
+    // The WARM-UP row's own header is exactly "WARM-UP" — never "ROW n".
+    expect(screen.getByText("WARM-UP")).toBeInTheDocument();
+    expect(screen.queryByText(/ROW \d+ · WARM-UP/i)).not.toBeInTheDocument();
+    // Hoarfrost's reps marker is still Row 1 (unchanged from the OFF case
+    // pinned by the "reps marker gets a rep stepper" test elsewhere in this
+    // file, which seeds the same fixture without any warm-up).
+    expect(screen.getByText(/ROW 1 · REPEAT/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Row 1 reps up" }),
+    ).toBeInTheDocument();
+  });
+
+  // The legacy local-draft strip (draft.ts's `loadDraftWithNotice`): a
+  // draft snapshotted into localStorage before 2026-08-09 can still carry a
+  // `wu` step (buildDraft's deep copy, taken back when Hoarfrost's own
+  // stored steps still opened with one). No real seeded workout can
+  // reproduce that shape any more (Task 3 stripped all 302), so this
+  // hand-splices one onto the real Hoarfrost draft this suite already uses
+  // everywhere else — the exact shape a rower's own phone would still be
+  // holding in localStorage post-deploy.
+  it("strips a legacy wu step from a stored local draft and surfaces the shared notice copy", async () => {
+    mockBaselines();
+    mockPreferences(null);
+    const clean = seedDraft("Hoarfrost");
+    const legacy: SessionDraft = {
+      ...clean,
+      steps: [
+        { k: "wu", minutes: 6 } as unknown as SessionDraft["steps"][number],
+        ...clean.steps,
+      ],
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(legacy));
+    await renderConfirm();
+
+    expect(
+      screen.getByText("1 warm-up line dropped. Warm-ups are a setting now."),
+    ).toBeInTheDocument();
+    // The stripped wu step never renders as a row, and the recount is
+    // exactly Hoarfrost's own pinned total — the legacy step contributes
+    // nothing once stripped.
+    expect(screen.queryByText(/WARM-UP/)).not.toBeInTheDocument();
+    expect(screen.getByText("34 MIN")).toBeInTheDocument();
+    // Row numbering starts from the surviving steps, not the stripped one.
+    expect(screen.getByText(/ROW 1 · REPEAT/)).toBeInTheDocument();
   });
 
   it("shows an em-dash recount and a no-target fallback with no baselines, and hides every nudge control", async () => {

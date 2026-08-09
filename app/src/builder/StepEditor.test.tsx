@@ -7,7 +7,9 @@ import type { BuilderRow } from "./builderState";
 import StepEditor from "./StepEditor";
 
 // Local row-shape helpers — same convention as StepCard.test.tsx's own
-// workRow/wuRow (that file can't import them either; they're not exported).
+// workRow (that file can't import them either; they're not exported). (A
+// `wuRow` helper used to live here too — "wu" left `RowKind` entirely
+// 2026-08-09, the warmup-setting spec.)
 function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   return {
     id: "row-1",
@@ -23,26 +25,11 @@ function workRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   };
 }
 
-function wuRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
-  return {
-    id: "wu-1",
-    kind: "wu",
-    durValue: "10:00",
-    durUnit: "min",
-    refBase: "6k",
-    refOff: 0,
-    refEffort: null,
-    spm: "",
-    rest: "",
-    ...overrides,
-  };
-}
-
-// Standalone `r` (rest) row — same minutes-only shape as wuRow, distinct
-// `kind` and id/durValue so a test can tell which fixture actually rendered.
-// Only `wu` was ever exercised against the real StepEditor before this task
-// (StepCard.test.tsx already covers both kinds; this file didn't) — the
-// final review's ledger carried this as a deferred minor.
+// Standalone `r` (rest) row — minutes-only shape, distinct `kind` and
+// id/durValue so a test can tell which fixture actually rendered. Only
+// `wu` was ever exercised against the real StepEditor before this task
+// (StepCard.test.tsx already covered both kinds; this file didn't) — the
+// final review's ledger carried this as a deferred minor, closed here.
 function restStandaloneRow(overrides: Partial<BuilderRow> = {}): BuilderRow {
   return {
     id: "r-1",
@@ -409,28 +396,13 @@ describe("StepEditor", () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
-  // 8. A wu row renders the minutes-only editor — no PACE, SPM, REST or
-  // TARGET rows — since bulk-imported and library workouts contain them and
+  // 8. A standalone `r` row renders the minutes-only editor — no PACE, SPM,
+  // REST or TARGET rows — since anything bulk-imported can contain one and
   // must stay editable, even though the handoff models only work steps.
-  it("renders a wu row as a minutes-only editor: header, DUR, DONE — no PACE, SPM, REST or TARGET", () => {
-    setup({ row: wuRow() });
-
-    expect(screen.getByText("STEP 1")).toBeInTheDocument();
-    expect(screen.getByLabelText("Row 1 duration")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "DONE" })).toBeInTheDocument();
-
-    expect(screen.queryByText("PACE")).not.toBeInTheDocument();
-    expect(screen.queryByText("SPM")).not.toBeInTheDocument();
-    expect(screen.queryByText("REST")).not.toBeInTheDocument();
-    expect(screen.queryByText("TARGET")).not.toBeInTheDocument();
-  });
-
-  // Coverage: a standalone `r` (rest) row gets the same minutes-only editor
-  // as `wu` — only `wu` was exercised against the real StepEditor before
-  // this task; this is the review's other named blind spot, same shape as
-  // test 8 above but for the sibling kind (`StepEditor.tsx`'s `isWork`
-  // branch treats `wu` and `r` identically, but nothing proved that for
-  // `r` specifically until now).
+  // (`wu` shared this exact branch — `StepEditor.tsx`'s `isWork` guard
+  // treats every non-work kind identically — until 2026-08-09's warmup
+  // setting removed it from `RowKind` entirely; this is the review's
+  // other named blind spot, closed here for the kind that survived.)
   it("renders a standalone r row as a minutes-only editor: header, DUR, DONE — no PACE, SPM, REST or TARGET", () => {
     setup({ row: restStandaloneRow() });
 

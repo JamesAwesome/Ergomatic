@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import StepRow from "./StepRow";
-import type { Step } from "../../domain/types.js";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -44,28 +43,14 @@ describe("StepRow durations (house clock format)", () => {
     expect(screen.getByText(/0:20/)).toBeInTheDocument();
   });
 
-  // LEGACY-DATA PROBE, deliberately kept (arc review F5): this exercises
-  // `StepRow.tsx`'s own surviving `TEMPORARY SHIM (2026-08-09, Task 1)`
-  // branch, which is there for stored/unmigrated data carrying a `wu` step
-  // the `Step` union no longer types. Task 5 owns removing both together —
-  // do NOT "fix" this fixture on its own, or the branch it guards goes
-  // untested while still shipping.
-  it("gives a legacy warm-up row an accessible name a screen reader can say", () => {
-    renderStep(
-      <StepRow
-        step={
-          { k: "wu", minutes: 65 } as unknown as Exclude<Step, { k: "reps" }>
-        }
-        baselines={null}
-        nudge={0}
-        onNudge={() => {}}
-      />,
-    );
-    expect(screen.getByText("1:05:00")).toHaveAccessibleName(
-      "1 hour 5 minutes",
-    );
-  });
-
+  // A LEGACY-DATA PROBE used to live here, exercising `StepRow.tsx`'s own
+  // `TEMPORARY SHIM (2026-08-09, Task 1)` branch for stored/unmigrated data
+  // carrying a `wu` step. Task 5 (this task) removes both together: Task
+  // 2's migration guarantees no stored workout can carry a `wu` step by
+  // the time any client fetches it (spec §6's ordering — migrations run at
+  // server boot, before the api serves a request), so the branch this test
+  // guarded is no longer reachable by anything, and `Step` itself has had
+  // no `wu` member since Task 1.
   it("gives a rest step an accessible name built from the spoken duration", () => {
     renderStep(
       <StepRow

@@ -40,12 +40,14 @@ function clampSpm(n: number): number | undefined {
 
 /** The expanded step editor (docs/design/builder-redesign/README.md §4b):
  *  seven rows — header, DUR, PACE, SPM, REST, TARGET, DONE — for a work
- *  step. `wu`/standalone `r` rows (James's recorded departure from the
- *  handoff, which models only work steps) get a minutes-only editor: just
- *  the header, DUR and DONE, since those rows have no pace ref, spm or rest
- *  concept of their own (see builderState.ts's stepSummary/stepSubSummary
- *  comments) and every seeded library workout plus anything bulk-imported
- *  can contain them.
+ *  step. A standalone `r` row (James's recorded departure from the
+ *  handoff, which models only work steps — `wu` was RowKind's other
+ *  non-work member until 2026-08-09's warmup setting removed it entirely,
+ *  see builderState.ts's own `RowKind` comment) gets a minutes-only
+ *  editor: just the header, DUR and DONE, since it has no pace ref, spm or
+ *  rest concept of its own (see builderState.ts's stepSummary/
+ *  stepSubSummary comments) and anything bulk-imported can still contain
+ *  one.
  *
  *  Replaces StepRowEditor.tsx (deleted this task) — DUR reuses
  *  DurationInput and PACE reuses PaceRefInput wholesale (both already

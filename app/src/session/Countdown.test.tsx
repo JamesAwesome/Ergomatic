@@ -64,7 +64,6 @@ const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const READY_PREFS = {
   difficulties: [] as never[],
   timeCapMinutes: 60,
-  warmupMinutes: 10,
   // The warm-up SETTING (2026-08-09's design §2), OFF by default for
   // everyone — so the default fixture below builds runs with no warm-up
   // phase at all, exactly like production's default.

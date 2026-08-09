@@ -3028,6 +3028,30 @@ button:disabled {
   margin-top: 16px;
 }
 
+/* 2026-08-09's warmup setting: the preference-sourced WARM-UP row sits
+   above `.confirm-steps` (ConfirmTargets.tsx's own render order — reads as
+   an implicit step 0, same "above the list" placement Builder's own hint
+   line settled on) — reuses `.step-editor`/`.step-editor-row`/
+   `.step-editor-row-label`/`.step-editor-target-value` wholesale (no new
+   value/label styling needed), just the top margin `.confirm-steps` would
+   otherwise have supplied against the title above it. */
+.confirm-warmup-row {
+  margin-top: 16px;
+}
+
+/* The legacy local-draft strip's notice (draft.ts's `loadDraftWithNotice`,
+   the same shared copy `domain/bulk.ts`'s `droppedWarmupNotice` states for
+   the import door) — informational, not an error, so it reads in the
+   house's muted small-mono voice rather than `.field-error`'s accent
+   colour. --ink-3 on --page measures 6.69:1 (already computed for this
+   exact pairing, Countdown's own countdown-next/-cancel rule above). */
+.confirm-legacy-notice {
+  margin: 16px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 /* Struck rows stay visible rather than disappearing (binding decision,
    ConfirmTargets.tsx's toggleRemoved comment: only removal has to be
    reversible without surprise, not undiscoverable) — sunken background plus

@@ -198,7 +198,6 @@ function mockHooks(
             preferences: {
               difficulties: [],
               timeCapMinutes: 60,
-              warmupMinutes: 10,
               warmup,
               countdownSeconds: 10,
               startHereDismissed: true,

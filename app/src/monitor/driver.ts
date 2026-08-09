@@ -2054,8 +2054,8 @@ export function createPm5Driver(
    * readback of a program whose interval 0 is byte-identical — which, for
    * a warm-up-on rower, is now the common case rather than a coincidence.
    * 4b carries this on its watch list (`docs/monitor/
-   * pm5-interface-notes.md` §17 item 12 / §20); widening the comparison is
-   * still not available on the evidence.
+   * pm5-interface-notes.md` §18's item-12 entry); widening the comparison
+   * is still not available on the evidence.
    *
    * `intervalIndex` genuinely has no such upgrade path, and did not gain
    * one here: it is business-NULL for the entire armed window

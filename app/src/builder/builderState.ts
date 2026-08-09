@@ -15,7 +15,12 @@ import type {
   WorkoutType,
 } from "../../domain/types.js";
 
-export type RowKind = "wu" | "w" | "r";
+// "wu" left this union 2026-08-09 (the warmup-setting spec, plan Task 5):
+// warm-ups are a per-user SETTING now (`usePreferences`'s own `warmup`
+// field), never an authored row — see BOOKEND_ROW_KINDS just below for
+// what that leaves of the bookend/repeat-span mechanism it used to be the
+// only member of.
+export type RowKind = "w" | "r";
 
 // The four fields `toSteps` ever keys a row-scoped error under
 // (`row:<id>:<field>`) — shared between Builder.tsx (which reads/wires
@@ -51,11 +56,15 @@ export interface BuilderForm {
 }
 
 // Row kinds that sit OUTSIDE the derived repeat span (see `spanStartIndex`).
-// Every seeded library workout opens with a stored `wu` step, so opening one
-// in the builder must not start repeating its warm-up. Adding a cooldown
-// later is one entry here plus a domain kind — nothing else about the span
-// logic needs to change.
-export const BOOKEND_ROW_KINDS: readonly RowKind[] = ["wu"];
+// Empty today: `wu` was the only bookend kind (a seeded workout used to
+// open with one, so opening it in the builder had to not start repeating
+// its warm-up) and it left the row model entirely 2026-08-09 — warm-ups
+// are a per-user setting now, never an authored row, so nothing needs to
+// sit outside the span any more. Kept as a mechanism (not deleted
+// outright) because it's still exactly how a future bookend kind (e.g. a
+// cooldown) would opt in: one entry here plus a domain kind, nothing else
+// about `spanStartIndex`/`hasMidSpanReps` would need to change.
+export const BOOKEND_ROW_KINDS: readonly RowKind[] = [];
 
 // Deterministic, reproducible row ids. No Math.random()/Date.now() — this
 // module-local counter never resets, so ids stay unique across the whole
@@ -119,10 +128,13 @@ export function removeRow(f: BuilderForm, id: string): BuilderForm {
 }
 
 /** Index of the first row NOT in `BOOKEND_ROW_KINDS` — where the derived
- *  repeat span begins. Everything before this index (a run of bookend rows,
- *  e.g. a leading `wu`) sits outside the repeat; everything from here to the
- *  end of `f.rows` repeats. Returns `f.rows.length` when every row is a
- *  bookend (or there are no rows), meaning there's nothing to repeat. */
+ *  repeat span begins. Everything before this index (a run of bookend
+ *  rows) sits outside the repeat; everything from here to the end of
+ *  `f.rows` repeats. `BOOKEND_ROW_KINDS` is empty today (no row kind is a
+ *  bookend — see its own comment), so this always returns 0 for any
+ *  non-empty form; it returns `f.rows.length` (0) when there are no rows,
+ *  or in a future world where some row kind IS a bookend and every row is
+ *  one, meaning there's nothing to repeat either way. */
 export function spanStartIndex(f: BuilderForm): number {
   const index = f.rows.findIndex((r) => !BOOKEND_ROW_KINDS.includes(r.kind));
   return index === -1 ? f.rows.length : index;
@@ -224,15 +236,16 @@ function fmtRowDuration(row: BuilderRow): string {
  *  for a minutes work row, `2000 m @ 2k ±0` for a metres work row.
  *
  *  Guarded by `row.kind` (Task 1's review flagged this as a landmine
- *  carried into Task 2): a `wu`/`r` row has no pace ref of its own —
- *  `refBase`/`refOff` on those rows are just `newRow`'s unused defaults,
- *  never anything the row represents — so echoing them here would fabricate
- *  a target line the row never had. StepCard renders stored workouts (the
- *  seeded library, anything bulk-imported), which genuinely contain `wu`
- *  and standalone `r` rows, so this can no longer assume `w`-only callers. */
+ *  carried into Task 2): a standalone `r` row has no pace ref of its own —
+ *  `refBase`/`refOff` on it are just `newRow`'s unused defaults, never
+ *  anything the row represents — so echoing them here would fabricate a
+ *  target line the row never had. StepCard renders stored workouts
+ *  (anything bulk-imported can still author a standalone `r` row), so this
+ *  can no longer assume `w`-only callers. (`wu` was `RowKind`'s other such
+ *  member, and shared this same guard, until 2026-08-09's warmup setting
+ *  removed the row kind entirely.) */
 export function stepSummary(row: BuilderRow): string {
   const dur = fmtRowDuration(row);
-  if (row.kind === "wu") return `${dur} warm-up`;
   if (row.kind === "r") return `${dur} rest`;
   if (row.refEffort) return `${dur} @ ${refLabel({ effort: row.refEffort })}`;
   return `${dur} @ ${row.refBase} ${fmtSignedOffset(row.refOff)}`;
@@ -245,14 +258,13 @@ export function stepSummary(row: BuilderRow): string {
  *  lowercased to read as prose in a summary line rather than a field
  *  value.
  *
- *  `wu`/`r` rows return `""` rather than reading their spm/rest fields:
- *  those rows have no editor UI for either (StepRowEditor/StepEditor only
- *  render SPM/REST for `isWork`), so the fields are always blank defaults,
- *  never authored values — and a standalone `r`/`wu` row's own duration
- *  (line 1) already IS its rest length / warm-up length, so there's nothing
- *  honest left to add on a second line. Same landmine as `stepSummary`
- *  above: no `row.kind` guard here used to mean a `wu`/`r` row rendered
- *  `"rest none"` as if it had a rest sub-field of its own. */
+ *  A standalone `r` row returns `""` rather than reading spm/rest fields
+ *  it doesn't have an editor UI for (StepEditor only renders SPM/REST for
+ *  `isWork`), so they're always blank defaults, never authored values —
+ *  and its own duration (line 1) already IS its rest length, so there's
+ *  nothing honest left to add on a second line. Same landmine as
+ *  `stepSummary` above (and the same `wu` history: it shared this exact
+ *  guard until the row kind left). */
 export function stepSubSummary(row: BuilderRow): string {
   if (row.kind !== "w") return "";
   const seconds = restSecondsFromRow(row);
@@ -297,9 +309,10 @@ export { TYPE_WORDS } from "../components/typeWords";
  *  The empty-list default (`5:00` / `6k` ±0 / spm `22` / rest `1:00`) stays —
  *  a brand-new workout keeps its head start.
  *
- *  Always produces a `kind: "w"` row, even when the last row is a `wu` or
- *  standalone `r`: "+ ADD STEP" only ever authors a work step, so a workout
- *  ending in a bookend row must not silently hand back another one. */
+ *  Always produces a `kind: "w"` row, even when the last row is a
+ *  standalone `r`: "+ ADD STEP" only ever authors a work step, so a
+ *  workout ending in a non-work row must not silently hand back another
+ *  one. */
 export function addBlankStep(f: BuilderForm): {
   form: BuilderForm;
   id: string;
@@ -381,7 +394,7 @@ export function toSteps(
       steps.push({ k: "reps", count: f.reps });
     }
 
-    if (row.kind === "wu" || row.kind === "r") {
+    if (row.kind === "r") {
       const n = rowDurationNumber(row);
       if (n === null || row.durUnit !== "min") {
         errors[`row:${row.id}:dur`] = "duration must be minutes";
@@ -391,15 +404,7 @@ export function toSteps(
         errors[`row:${row.id}:dur`] = "duration must be 0:01..3:00:00";
         return;
       }
-      steps.push(
-        // TEMPORARY SHIM (2026-08-09, the warmup-setting spec, Task 1):
-        // "wu" left the Step union but the builder's own row model hasn't
-        // yet (Task 5 removes the wu row type from builderState/StepCard/
-        // StepEditor) — a wu row can still be constructed here today.
-        row.kind === "wu"
-          ? ({ k: "wu", minutes: n } as unknown as Step)
-          : { k: "r", minutes: n },
-      );
+      steps.push({ k: "r", minutes: n });
       return;
     }
 
@@ -532,7 +537,17 @@ function rowMinutes(
 /** Sums rows before `spanStartIndex(f)` into `loose` (paid once) and every
  *  row from `spanStartIndex(f)` onward into `perSet` (paid `f.reps` times) —
  *  matching exactly what `toSteps`/the domain's `liveSteps` repeat, since
- *  the reps marker is spliced in at that same index. */
+ *  the reps marker is spliced in at that same index.
+ *
+ *  COVERAGE NOTE (2026-08-09's warmup setting): with `BOOKEND_ROW_KINDS`
+ *  empty, `spanStartIndex` returns 0 for any non-empty form (its own
+ *  comment) — so the `else` branch below is structurally unreachable by
+ *  any input today, not merely untested. `wu` was the last row kind that
+ *  ever put anything in `loose`; every test that used to prove this branch
+ *  (builderState.test.ts's own "totals" suite) went with it. Left as-is
+ *  rather than deleted, matching `BOOKEND_ROW_KINDS`'s own "kept as a
+ *  mechanism" comment: the day a bookend kind returns, this line is the
+ *  ONE place that already knows what to do with it. */
 export function totals(
   f: BuilderForm,
   baselines: Baselines | null,
@@ -560,15 +575,10 @@ function formatDurationValue(d: WorkDuration): {
     : { durValue: String(d.meters), durUnit: "m" };
 }
 
-function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
+function stepToRow(s: Extract<Step, { k: "w" | "r" }>): BuilderRow {
   const row = newRow(s.k);
-  // TEMPORARY SHIM (2026-08-09, Task 1): "wu" left the Step union, so this
-  // branch is unreachable from a properly-typed Step[] today — but legacy
-  // localStorage drafts can still carry a wu step until Task 5's loader
-  // strips them, so the cast keeps this defensive branch alive rather than
-  // deleting Task 5's own cleanup target.
-  if (s.k === "r" || (s.k as string) === "wu") {
-    row.durValue = fmtDuration((s as unknown as { minutes: number }).minutes);
+  if (s.k === "r") {
+    row.durValue = fmtDuration(s.minutes);
     row.durUnit = "min";
   } else {
     const { durValue, durUnit } = formatDurationValue(s.duration);

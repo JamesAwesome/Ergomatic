@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useBaselines } from "../api/useBaselines";
+import { usePreferences } from "../api/usePreferences";
+import type { WarmupSetting } from "../api/usePreferences";
+import { droppedWarmupNotice } from "../../domain/bulk.js";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import { needsBaselines } from "../../domain/needsBaselines.js";
@@ -14,10 +17,11 @@ import type { Baselines, Step } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import TypeBadge from "../components/TypeBadge";
 import Stepper from "../builder/Stepper";
+import { warmupDisplayMinutes } from "./engine";
 import {
   draftMinutes,
   draftSteps,
-  loadDraft,
+  loadDraftWithNotice,
   saveDraft,
   startDraft,
   withNudge,
@@ -25,8 +29,10 @@ import {
 } from "./draft";
 
 // The house 30s grid (docs/superpowers spec: "duration steppers (30 s grid
-// on the stepper, the house rule)") for time-based durations (wu/r minutes
-// and a "w" step's own time-kind duration) — mirrors REST_STEP_SECONDS'
+// on the stepper, the house rule)") for time-based durations (a standalone
+// "r" step's minutes and a "w" step's own time-kind duration — the
+// preference-sourced WARM-UP row below has no stepper of its own at all,
+// see ConfirmTargets' own render) — mirrors REST_STEP_SECONDS'
 // convention (builderState.ts) at the same 30s granularity, just applied to
 // the step's own duration field instead of its rest field. Floor of 30s
 // (not the domain's true 1s floor) keeps every press meaningful on a phone;
@@ -126,12 +132,23 @@ function kindLabel(step: Step): string {
 
 export default function ConfirmTargets() {
   const baselinesState = useBaselines();
+  const preferencesState = usePreferences();
   const navigate = useNavigate();
   // Lazy initializer, same idiom as WorkoutDetail.tsx's nudge state and
   // Today.tsx's pickOverride: read the module's own storage once at mount.
   // The module (draft.ts) stays the sole reader/writer of localStorage —
-  // this component only ever calls its exported functions.
-  const [draft, setDraft] = useState<SessionDraft | null>(() => loadDraft());
+  // this component only ever calls its exported functions. `loadDraftWithNotice`
+  // (rather than plain `loadDraft`) is what this screen needs specifically:
+  // it's the one screen that tells the rower anything changed when a
+  // legacy local draft still carries a `wu` step from before 2026-08-09's
+  // warmup setting — every other screen that reads a draft just wants the
+  // already-clean value `loadDraft` itself delegates to.
+  const [initialLoad] = useState(() => loadDraftWithNotice());
+  const [draft, setDraft] = useState<SessionDraft | null>(initialLoad.draft);
+  const legacyWarmupNotice =
+    initialLoad.strippedWarmups > 0
+      ? droppedWarmupNotice(initialLoad.strippedWarmups)
+      : null;
 
   // Deep-link/reload rule (spec): no draft redirects to /today with no
   // ceremony.
@@ -225,20 +242,17 @@ export default function ConfirmTargets() {
   function stepDuration(i: number, deltaSeconds: number) {
     commit((prev) => {
       const step = prev.steps[i];
-      // TEMPORARY SHIM (2026-08-09, Task 1): "wu" left the Step union, so
-      // this arm is unreachable from a properly-typed draft today — kept
-      // (rather than deleted) because a legacy localStorage draft or an
-      // unstripped stored workout can still carry a wu step until Task 5's
-      // draft loader / Task 2's migration land.
-      if (step.k === "r" || (step.k as string) === "wu") {
-        const minutes = (step as unknown as { minutes: number }).minutes;
+      // "wu" left the Step union 2026-08-09 (Task 1); no draft this screen
+      // ever renders can still carry one by the time this runs — Task 2's
+      // migration strips it at the DB and `loadDraftWithNotice` (draft.ts)
+      // strips a legacy local one before this component's own state is
+      // ever set. So this only ever needs the standalone "r" case now.
+      if (step.k === "r") {
+        const minutes = step.minutes;
         const seconds = snapDurationSeconds(
           Math.round(minutes * 60) + deltaSeconds,
         );
-        return withStepAt(prev, i, {
-          ...step,
-          minutes: seconds / 60,
-        } as unknown as Step);
+        return withStepAt(prev, i, { ...step, minutes: seconds / 60 });
       }
       if (step.k === "w" && step.duration.kind === "time") {
         const seconds = snapDurationSeconds(
@@ -251,7 +265,7 @@ export default function ConfirmTargets() {
       }
       // Defensive, not reachable via the UI: the render below only ever
       // wires a DUR stepper's onDecrement/onIncrement to this function for
-      // a wu/r/w-time row in the first place (a distance "w" row gets
+      // an "r"/w-time row in the first place (a distance "w" row gets
       // stepMeters instead, and reps/test rows get no DUR stepper at all),
       // so `i` can only ever name one of the two kinds handled above.
       return prev;
@@ -350,7 +364,29 @@ export default function ConfirmTargets() {
     navigate("/session/countdown");
   }
 
-  const minutes = draftMinutes(draft, baselines);
+  // The warm-up SETTING (2026-08-09's design §4), read straight off
+  // preferences the same way WorkoutDetail.tsx's Connect door and
+  // Countdown.tsx's phone door both do — `null` while preferences are
+  // still loading/failed/off, never a placeholder value. `draft.steps`
+  // itself never carries a warmup any more (no seed authors one since
+  // Task 3, and no read path this screen reaches can hand it one either —
+  // see `loadDraftWithNotice` above), so this is the ONLY source of a
+  // warmup for this screen.
+  const warmup: WarmupSetting | null =
+    preferencesState.state === "ready"
+      ? preferencesState.preferences.warmup
+      : null;
+
+  // §4: the displayed total includes the warmup (its own phase, priced
+  // exactly as `buildRun` prices it for the real session) plus its rest.
+  // `workMinutes` alone still drives the null case (a split-ref work step
+  // with no baselines) — a warmup can never turn that into a real number,
+  // so the combined total stays "— MIN" exactly when it did before this
+  // task.
+  const workMinutes = draftMinutes(draft, baselines);
+  const warmupMinutes = warmupDisplayMinutes(warmup, baselines);
+  const minutes =
+    workMinutes === null ? null : Math.round(workMinutes + warmupMinutes);
   const minutesLabel = minutes === null ? "— MIN" : `${minutes} MIN`;
   const blocked = isStartBlocked(draft, baselines);
 
@@ -363,6 +399,43 @@ export default function ConfirmTargets() {
         <TypeBadge type={draft.type} />
       </div>
       <h1 className="screen-title">{draft.title}</h1>
+      {legacyWarmupNotice && (
+        <p className="confirm-legacy-notice" role="status">
+          {legacyWarmupNotice}
+        </p>
+      )}
+      {/* THE ARIA RULING (Task 4 handed this up, Task 5 pins it): this row
+          is preference chrome, not an authored step — it does NOT join the
+          `Row N` numbering below (ConfirmStepRow's own `rowLabel`, keyed
+          off position in `draft.steps`, which never contains a warmup).
+          "WARM-UP" is its own, un-numbered header; Row 1 still names
+          whatever the first WORK step is, exactly as if this row weren't
+          here. Non-nudgeable by design (spec §4): no REMOVE/RESTORE, no
+          DUR/REST stepper — the rower edits the SETTING on the You tab,
+          not the session it's about to prepend to. */}
+      {warmup && (
+        <div className="step-editor confirm-warmup-row">
+          <div className="step-editor-header">
+            <span className="step-editor-header-label">WARM-UP</span>
+          </div>
+          <div className="step-editor-row">
+            <span className="step-editor-row-label">DUR</span>
+            <span className="step-editor-target-value">
+              {warmup.kind === "time"
+                ? fmtDuration(warmup.minutes)
+                : `${warmup.meters} M`}
+            </span>
+          </div>
+          {warmup.restSeconds ? (
+            <div className="step-editor-row">
+              <span className="step-editor-row-label">REST</span>
+              <span className="step-editor-target-value">
+                {fmtDuration(warmup.restSeconds / 60)}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="confirm-steps">
         {draft.steps.map((step, i) => (
           <ConfirmStepRow
@@ -471,19 +544,12 @@ function ConfirmStepRow({
         )}
       </div>
 
-      {
-        // TEMPORARY SHIM (2026-08-09, Task 1): see stepDuration's own note
-        // above — "wu" left the Step union but a legacy/unstripped step can
-        // still reach this render until Task 2/5 land.
-      }
-      {(step.k === "r" || (step.k as string) === "wu") && (
+      {step.k === "r" && (
         <div className="step-editor-row">
           <span className="step-editor-row-label">DUR</span>
           <Stepper
             label={`${rowLabel} duration`}
-            value={fmtDuration(
-              (step as unknown as { minutes: number }).minutes,
-            )}
+            value={fmtDuration(step.minutes)}
             onDecrement={() => onDurationStep(-DURATION_STEP_SECONDS)}
             onIncrement={() => onDurationStep(DURATION_STEP_SECONDS)}
           />

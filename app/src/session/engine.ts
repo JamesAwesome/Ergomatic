@@ -111,6 +111,29 @@ function warmupPhases(
   return out;
 }
 
+/** Total minutes the warm-up setting itself contributes (its own phase plus
+ *  any trailing rest) — for a display surface that needs a number without
+ *  building a whole run: ConfirmTargets' own recount (spec §4: "includes
+ *  the warmup … in the displayed total") and the Builder's hint line
+ *  (spec §5). Delegates to the SAME `warmupPhases` `buildRun` prepends and
+ *  the SAME `phaseSeconds` (`domain/expand.ts`) every other display
+ *  surface prices a phase through, so this number can never drift from
+ *  what the session actually runs. `null`/absent warmup, or a distance
+ *  warmup with no baselines to estimate against (Phase 6I's null-baselines
+ *  case — `phaseSeconds` returns `null` for it, same as an unpriced "test"
+ *  phase in `totalRemainingSeconds` above), contributes 0 — never `null`,
+ *  never a throw, matching this file's existing "no fake number" rule. */
+export function warmupDisplayMinutes(
+  warmup: WarmupSetting | null | undefined,
+  baselines: Baselines | null,
+): number {
+  const seconds = warmupPhases(warmup, baselines).reduce(
+    (total, phase) => total + (phaseSeconds(phase) ?? 0),
+    0,
+  );
+  return seconds / 60;
+}
+
 /** Builds a fresh `SessionRun` from a confirmed draft. Freezes phases from
  *  the draft's EFFECTIVE steps — `effectiveSteps` folds `spmOverrides` and
  *  nudges into each work step's `ref.off`/`spm` (see draft.ts's own header

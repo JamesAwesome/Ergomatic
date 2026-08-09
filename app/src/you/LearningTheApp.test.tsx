@@ -29,7 +29,7 @@ function readyReads(readSlugs: string[]): ArticleReadsState {
 const PREFS_DEFAULTS: PreferencesData = {
   difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
-  warmupMinutes: 10,
+  warmup: null,
   countdownSeconds: 5,
   startHereDismissed: false,
 };
