@@ -1249,6 +1249,25 @@ test("news-reader", async ({ page }) => {
   });
 });
 
+// ui-notes round, item 1 — a separate, unscrolled capture: news-reader.png
+// above deliberately scrolls to the pyramid figure (its own established
+// job), which scrolls the header — and this round's new ✕ close inside it
+// — out of frame entirely (recurring-failure #7: open the image and look
+// at it caught that the recaptured news-reader.png was byte-identical to
+// its pre-round version, proving the ✕ never entered that frame). This
+// capture exists solely to put ← BACK and the new ✕ on screen together.
+test("news-reader-close", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-news-reader-close@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/news/workout-types");
+  await page.locator(".reader-body").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "news-reader-close.png"),
+  });
+});
+
 // -- Phase 7B Task 5: the connected interstitial (task-5 review, HIGH-3) ---
 //
 // `pnpm screenshots` was not run for this screen when it first shipped — a

@@ -264,6 +264,53 @@ test("round 4: NEXT navigates into a freshly mounted scroller that starts at 0, 
   ).toBe(0);
 });
 
+// ui-notes round, item 1 — root cause: NEXT used to PUSH with
+// `state={{from: location.pathname}}` (the article being LEFT, not the
+// reading chain's true origin), so mid-chain the real origin was gone and
+// BACK/the tab bar's own fallback landed on NEWS instead of wherever the
+// rower actually started, and escaping took multiple backs. The fix
+// threads the ORIGINAL `location.state.from` through unchanged and
+// REPLACES on every NEXT hop, so the whole chain occupies one history
+// entry; the reader also gains a ✕ Close resolving the same origin.
+test("item 1 (ui-notes round): from Today's START HERE step 1, NEXT-chaining two articles deep, one browser BACK returns to Today — and the ✕ close does too", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `ui-notes-chain-${RUN_ID}@e2e.test`,
+    name: "UI Notes Chain",
+  });
+  await page.goto("/today");
+  await expect(page.locator(".starthere-block")).toBeVisible();
+
+  // Step 1 is "your-first-row" (startHereSteps.tsx's own fixed table),
+  // entered with `from: "/today"` (StartHere.tsx).
+  const step1 = page.locator(".starthere-steps .starthere-row").first();
+  await expect(step1).toHaveAttribute("href", "/news/your-first-row");
+  await step1.click();
+  await expect(page).toHaveURL(/\/news\/your-first-row$/);
+  await expect(page.locator(".reader-body")).toBeVisible();
+
+  await page.locator(".reader-next").click();
+  await expect(page.locator(".reader-body")).toBeVisible();
+  await page.locator(".reader-next").click();
+  await expect(page.locator(".reader-body")).toBeVisible();
+
+  // ONE browser BACK from two hops deep must land on Today, not on the
+  // article one level up the chain — the pre-fix bug would have grown the
+  // history stack by one entry per hop with the wrong origin recorded.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.locator(".starthere-block")).toBeVisible();
+
+  // Re-enter the chain and prove the ✕ close from the same depth.
+  await step1.click();
+  await expect(page).toHaveURL(/\/news\/your-first-row$/);
+  await page.locator(".reader-next").click();
+  await page.locator(".reader-next").click();
+  await page.getByRole("link", { name: "Close" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+});
+
 // Sanity check the titles above actually match the registry, so a future
 // content edit that silently drifts the constants gets caught here instead
 // of failing every test above with a confusing "element not found."

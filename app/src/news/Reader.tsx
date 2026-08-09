@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
-import BackLink from "../shell/BackLink";
+import BackLink, {
+  isSafeInAppPath,
+  resolveBackTarget,
+} from "../shell/BackLink";
 import { useArticleReads } from "../api/useArticleReads";
 import { articleBySlug, nextUnreadSlug } from "./content/articles";
 import { updatedLabel } from "./newsDates";
@@ -42,6 +45,18 @@ export default function Reader() {
       ? articleBySlug(nextUnreadSlug(article.slug, reads.readSlugs) ?? "")
       : undefined;
 
+  // ui-notes round, item 1: `origin` is the ONE resolved value both BACK
+  // (via BackLink, below) and the ✕ close control consume — extracted so
+  // they can never independently drift on what "leaving this screen" means.
+  // `rawFrom` (the un-fallback-substituted state) is what NEXT threads
+  // forward: carrying the already-resolved `origin` ("/news" once
+  // substituted) would silently turn "no origin was ever recorded" into
+  // "the origin is literally /news" for every later hop in the chain —
+  // harmless today (the fallback IS /news) but no longer a fallback if
+  // Reader's own default ever changes.
+  const rawFrom = (location.state as { from?: unknown } | null)?.from;
+  const origin = resolveBackTarget(location.state, "/news");
+
   return (
     // Round 4 (architectural): scrolls in its own element — see
     // .overlay-screen's comment in index.css for why. `key={article.slug}`
@@ -58,7 +73,24 @@ export default function Reader() {
       key={article.slug}
       tabIndex={0}
     >
-      <BackLink fallback="/news" />
+      {/* ui-notes round, item 1: BACK and the new ✕ close share a header row
+          so both resolve to the same `origin` (computed once above) and
+          sit at the same visual height, James's explicit ask for a second
+          way to leave the reader. `.today-unlogged-discard` is Today's own
+          44px icon-control idiom (Today.tsx, ui-fix round Task 3) reused
+          wholesale rather than a second hand-rolled version of the same
+          pattern (recurring-failure #8) — `.reader-close` adds only
+          placement, no new visual language. */}
+      <div className="reader-header">
+        <BackLink fallback="/news" />
+        <Link
+          to={origin}
+          className="today-unlogged-discard reader-close"
+          aria-label="Close"
+        >
+          ✕
+        </Link>
+      </div>
       <p className="reader-meta">
         ERGOMATIC · {article.minutes} MIN
         {article.updatedAt && ` · UPDATED ${updatedLabel(article.updatedAt)}`}
@@ -69,7 +101,8 @@ export default function Reader() {
         <Link
           className="reader-next"
           to={`/news/${next.slug}`}
-          state={{ from: location.pathname }}
+          replace
+          state={isSafeInAppPath(rawFrom) ? { from: rawFrom } : undefined}
         >
           NEXT · {next.minutes} MIN · {next.title}
         </Link>

@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  Routes,
+  RouterProvider,
+} from "react-router-dom";
 import Reader from "./Reader";
 import type { ArticleReadsState } from "../api/useArticleReads";
 import type { NewsArticle } from "./content/types";
@@ -25,6 +31,14 @@ vi.mock("../api/useArticleReads", () => ({
 // other field and slug, and layer in `updatedAt` for "baselines" and a
 // synthetic linked-kind fixture at "external-piece" (same slug/shape
 // News.test.tsx's own linked fixture uses).
+// Registry order (content/articles.tsx): workout-types, baselines,
+// picking-a-workout, pain-scale, your-first-row, connect-the-monitor — the
+// same real order the multi-hop NEXT chain tests below walk.
+const WORKOUT_TYPES_TITLE =
+  "The four workout types, and how hard each should feel";
+const BASELINES_TITLE = "What a baseline is, and why every pace comes from one";
+const PICKING_A_WORKOUT_TITLE = "Picking a workout by how much it should hurt";
+
 const LINKED_FIXTURE: NewsArticle = {
   slug: "external-piece",
   title: "Your 2k predicts less about your 10k than you think",
@@ -68,6 +82,22 @@ function renderReader(initialPath = "/news/baselines") {
       <Routes>
         <Route path="/news/:slug" element={<Reader />} />
         <Route path="/news" element={<p>News Screen</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+// ui-notes round, item 1: a `history` entry array literal is the only way
+// to render Reader WITH incoming `location.state` (MemoryRouter's own
+// `initialEntries` accepts `{pathname, state}` objects, not a bare string)
+// — `renderReader` above only ever exercises the no-`from`/fallback path.
+function renderReaderWithState(pathname: string, state: unknown) {
+  return render(
+    <MemoryRouter initialEntries={[{ pathname, state }]}>
+      <Routes>
+        <Route path="/news/:slug" element={<Reader />} />
+        <Route path="/news" element={<p>News Screen</p>} />
+        <Route path="/today" element={<p>Today Screen</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -263,5 +293,108 @@ describe("Reader", () => {
     // redirect exactly like an unknown slug does, never crash on
     // `article.minutes` etc. against `undefined`.
     expect(screen.getByText("News Screen")).toBeVisible();
+  });
+
+  // ui-notes round, item 1 — root cause: NEXT used to PUSH with
+  // `state={{from: location.pathname}}` (the article being LEFT, not the
+  // chain's true origin), so mid-chain the real origin was gone and
+  // BACK/✕ fell back to /news. The fix threads `location.state.from`
+  // through unchanged on every hop.
+  describe("the reading chain remembers its origin (ui-notes round, item 1)", () => {
+    it("carries a ✕ close control resolving the same origin BACK does", () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      renderReaderWithState("/news/baselines", { from: "/today" });
+
+      const close = screen.getByRole("link", { name: "Close" });
+      expect(close).toHaveAttribute("href", "/today");
+      // Today's own unlogged-row ✕ idiom (Today.tsx, ui-fix round Task 3),
+      // reused rather than a second hand-rolled 44px icon control
+      // (recurring-failure #8).
+      expect(close).toHaveClass("today-unlogged-discard");
+    });
+
+    it("the ✕ close control falls back to /news, same as BACK, when there is no origin in state", () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      renderReader("/news/baselines");
+
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/news",
+      );
+    });
+
+    it("NEXT preserves the origin across the whole chain: after two hops, BACK's href and the ✕'s target both still point at the ORIGINAL origin, not the article just left", async () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      const user = userEvent.setup();
+      renderReaderWithState("/news/workout-types", { from: "/today" });
+
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      await screen.findByRole("heading", { name: BASELINES_TITLE });
+      // Pre-fix behavior this guards against: NEXT set `from` to
+      // "/news/workout-types" (the article just left) instead of carrying
+      // "/today" through — the assertion below would see "/news/workout-
+      // types", not "/today", if that regressed.
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      await screen.findByRole("heading", { name: PICKING_A_WORKOUT_TITLE });
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+    });
+
+    it("NEXT omits `from` (falls back to /news) rather than hardcoding a resolved origin, when it entered with none", async () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      const user = userEvent.setup();
+      renderReader("/news/workout-types");
+
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      await screen.findByRole("heading", { name: BASELINES_TITLE });
+
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/news",
+      );
+    });
+
+    it("NEXT replaces the current history entry — one browser BACK afterward lands on the origin, not the just-departed article", async () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      const router = createMemoryRouter(
+        [
+          { path: "/today", Component: () => <p>Today Screen</p> },
+          { path: "/news/:slug", Component: Reader },
+          { path: "/news", Component: () => <p>News Screen</p> },
+        ],
+        {
+          initialEntries: [
+            "/today",
+            { pathname: "/news/workout-types", state: { from: "/today" } },
+          ],
+          initialIndex: 1,
+        },
+      );
+      render(<RouterProvider router={router} />);
+      await screen.findByRole("heading", { name: WORKOUT_TYPES_TITLE });
+
+      await userEvent.click(screen.getByRole("link", { name: /NEXT/ }));
+      await screen.findByRole("heading", { name: BASELINES_TITLE });
+
+      router.navigate(-1);
+      // The workout-types entry was REPLACED, not pushed alongside — one
+      // BACK from baselines lands on /today (the entry before it), never
+      // back on workout-types.
+      await screen.findByText("Today Screen");
+      expect(
+        screen.queryByRole("heading", { name: WORKOUT_TYPES_TITLE }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

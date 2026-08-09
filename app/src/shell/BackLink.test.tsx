@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import BackLink from "./BackLink";
+import BackLink, { isSafeInAppPath, resolveBackTarget } from "./BackLink";
 
 function renderAt(state: unknown, fallback?: string) {
   return render(
@@ -62,5 +62,27 @@ describe("BackLink", () => {
       "href",
       "/plan",
     );
+  });
+});
+
+// ui-notes round, item 1: exported so Reader.tsx's ✕ close can resolve the
+// SAME origin BACK does — pinned directly here (not just through the
+// component above) so a future refactor of either consumer can't silently
+// diverge them.
+describe("resolveBackTarget / isSafeInAppPath (exported for Reader.tsx's ✕)", () => {
+  it("resolves a valid `from` in state", () => {
+    expect(resolveBackTarget({ from: "/today" }, "/news")).toBe("/today");
+  });
+
+  it("falls back when state carries no safe `from`", () => {
+    expect(resolveBackTarget(null, "/news")).toBe("/news");
+    expect(resolveBackTarget({ from: "//evil" }, "/news")).toBe("/news");
+  });
+
+  it("isSafeInAppPath rejects the same unsafe shapes BackLink's own table does", () => {
+    expect(isSafeInAppPath("/today")).toBe(true);
+    expect(isSafeInAppPath("https://evil")).toBe(false);
+    expect(isSafeInAppPath("//evil")).toBe(false);
+    expect(isSafeInAppPath(42)).toBe(false);
   });
 });
