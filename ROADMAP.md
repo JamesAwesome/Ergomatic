@@ -868,35 +868,94 @@ surface remains unscheduled.
 
 ## Phase 6I — Today onboarding
 
-**Status:** Not started
+**Status:** Done (2026-08-09, PR #63)
 **Goal:** A brand-new rower with no baseline gets taught the app from
 Today itself, not from a screen they have to find.
 **Design authority:** `docs/design/handoffs/2026-08-07-news-tab/README.md`
 decisions 6 and 7.
 
-- [ ] A dismissible `START HERE` four-step block at the top of Today, a
-      44px DISMISS target in its header; read steps go grey and lose their
-      unread square
-- [ ] Until a baseline exists, Today's suggestion card reads
-      `SUGGESTED · SETS YOUR BASELINE` (6k by default, `2K INSTEAD`
-      secondary) instead of a real workout pick; the baseline chip is
-      dashed, reading `6K BASELINE · NOT SET`
-- [ ] A `Learning the app` settings row on You (`START HERE · N OF 4`)
-      opening a detail screen with `PUT IT BACK ON TODAY` (restores the
-      block, keeps read state) and `MARK ALL FOUR UNREAD` (also resets read
-      state)
-- [ ] News's own Pinned Stories gains the `Start here` pin once dismissed
-      on Today, showing `N OF 4 READ · DISMISSED ON TODAY` — the row
-      `DEVIATIONS.md` already tracks as sequenced here
+- [x] **Task 1 — the nullable domain**: `needsBaselines(steps)`
+      (`domain/needsBaselines.ts`) — true unless every work step is an
+      effort ref — the one predicate every coupled call site shares;
+      `phases()`/`buildRun`/`estimateMinutes` accept `Baselines | null` and
+      resolve an effort work phase with no `targetSplit`/no duration
+      estimate rather than throwing
+- [x] **Task 2 — every coupled guard site**: Confirm's footer guard,
+      Countdown's own null-baselines redirect and `buildRun` call, Timer's
+      `hasRemainingEstimate` (TOTAL LEFT and the phase bar hidden, never
+      frozen at 0:00/0%, once no phase ahead has an estimate), and
+      `logDraft.ts`'s 5G-drop-rule amendment — a measured (stopwatch)
+      actual on an effort DISTANCE phase now survives into the saved log
+      (`actualSource:"stopwatch"`, `targetSplit` still omitted); an assumed
+      actual stays effort-gated
+- [x] **Task 3 — server & seed**: `preferences.start_here_dismissed`
+      (migration + `PUT /api/prefs`), `DELETE /api/article-reads/:slug`
+      (idempotent, full store/contract-test stack including per-user
+      isolation), and the two designated global workouts (`First 6k`/
+      `First 2k`, `server/seed/library/onboarding.ts`) via their own
+      `GLOBAL_LIBRARY_SEED` concatenation and gate, exempt from
+      `library.test.ts`'s 300-workout quota grid
+- [x] **Task 4 — hook purity & the start-guard extraction**:
+      `useArticleReads.ts`'s `has(slug)`+PUT hoisted out of the `setState`
+      updater (StrictMode double-fire purity), `markUnread` alongside
+      `markRead`, and `useStartWorkout.ts` — WorkoutDetail's own
+      unlogged-run/live-MonitorRun staged-confirm start flow extracted so a
+      second caller (the no-baseline card) gets the identical guard, never
+      a bare navigate-and-start
+- [x] **Task 5 — the block and the card**: `StartHere.tsx` (the
+      dismissible `START HERE · N OF 4 READ` block, immediate DISMISS, no
+      layout reservation once gone) and `BaselineCard.tsx` (the no-baseline
+      `SUGGESTED · SETS YOUR BASELINE` card — both-null defaults to the 6k
+      with `2K INSTEAD`, exactly-one-null offers only the missing distance
+      with no toggle) replacing the entire plan/suggestion apparatus in
+      `Today.tsx` while either baseline is missing; the designated
+      workouts' own Log screen defaults the plan toggle to outside the plan
+- [x] **Task 6 — the two new articles**: `your-first-row` and
+      `connect-the-monitor` (`src/news/content/`), original prose,
+      fact-checked against 7B's shipped Connect UI, 216/217 words ->
+      2 min each by the house formula
+- [x] **Task 7 — You, News, and the pin**: `You.tsx`'s `Learning the app`
+      settings row (the phase's one real settings row — the mock's others
+      stay unbuilt, per DEVIATIONS), `LearningTheApp.tsx` at
+      `/you/learning` (`PUT IT BACK ON TODAY`, `MARK ALL FOUR UNREAD` —
+      staged, un-reads all four slugs and clears the dismissed flag in one
+      tap), and News's own `Start-here` pinned row, visible only while
+      dismissed
+- [x] **Task 8 — proof, pixels, record**: `e2e/onboarding.spec.ts` — the
+      whole fresh-user arc against the real stack (block+card -> a
+      cross-surface read from News advancing the count -> the card's own
+      START through a real Confirm/Countdown/Timer/Complete/Log/Save loop
+      run with null baselines -> the either-null card swap -> the
+      apparatus returning once both baselines are set -> DISMISS -> the
+      News pin -> `/you/learning`'s PUT IT BACK and MARK ALL FOUR UNREAD
+      round-trip, un-reading and un-dismissing and raising News's own
+      unread count back), plus the designated-workout exclusion pins
+      (SHUFFLE never surfaces `First 6k`/`First 2k` to a baselines-set
+      veteran; Library's list omits both). Folded in: the deferred
+      `ManualDoorLog` fix (Task 2's ledger item) — the manual door's
+      `baselines === null` block now gates on `needsBaselines(steps)`
+      instead, so an effort-only workout (the two designated workouts, and
+      every shipped effort-only AN sprint) opens the Log screen with null
+      baselines rather than the "no target" block a split-ref workout still
+      correctly hits. Design sweeps (axe, 44px, contrast — the dashed chip
+      measured at 7.432:1) on Today's fresh-user state, `/you/learning`,
+      and News-with-pin; `today-onboarding.png` (new) plus `you-learning.png`
+      and `news.png` recaptured. Full e2e green ×2 back-to-back (255/255)
+      plus unit/client/integration, 98%+ across all four coverage metrics
 
-**Sequencing constraint:** deliberately after Phase 7B's own `Today.tsx`
-guard-wiring touch — landing onboarding's Today changes first would mean
-7B rebasing its guard wiring across this phase's edits instead of the
-other way around.
+**Sequencing constraint:** landed after Phase 7B's own `Today.tsx`
+guard-wiring touch, as planned; rebased onto `origin/main` immediately
+before the PR, clean.
 
-**Exit:** A fresh account with no baseline is walked to a set baseline
-without ever leaving Today; dismissing and resetting the tutorial from You
-round-trips correctly.
+**Exit:** MET — a fresh account with no baseline is walked to a set
+baseline without ever leaving Today, using a real effort-only session run
+with null baselines end to end (proof, not just unit coverage); dismissing
+and resetting the tutorial from You round-trips correctly, including its
+cross-surface consequences on News; a baselines-set veteran never sees
+either designated workout suggested or listed.
+
+**Next:** Phase 6J (Trend charts on You), below. Also unblocked: the
+auto-capture follow-on under "Triggered follow-ons."
 
 ## Phase 6J — Trend charts on You
 
@@ -1700,6 +1759,17 @@ next phase. One line per round, newest first.
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
 - **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Phase 6F's UI-fix round is done too, so nothing sits ahead of it in the queue any more — not started, but eligible to schedule now, not just eligible in principle.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
+- **Auto-capture baselines from the onboarding log**: Phase 6I's no-baseline
+  card ends with a manually-entered baseline (You → baseline editor) —
+  the log already carries the exact measured stopwatch split
+  (`actualSource:"stopwatch"`) for the designated workout's own distance
+  phase, so the number a rower would type in by hand already exists on the
+  row they just saved. Not built this phase (spec's own "Out of scope":
+  "auto-capture of baselines from a logged first row (recorded follow-on)").
+  Trigger: a rower feedback signal that manual entry after finishing the
+  baseline test is a real friction point, not just a theoretical one. Then:
+  read the just-saved log's own step actual and pre-fill (never silently
+  overwrite) the relevant baseline field.
 - **Move programming limits onto `MonitorCapabilities`**: `domain/monitor/
   program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   `MIN_DISTANCE_METERS = 100`, `MAX_REST_SECONDS = 595`,
