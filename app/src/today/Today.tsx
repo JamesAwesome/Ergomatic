@@ -15,10 +15,16 @@ import { suggest, suggestFreestyle } from "../../domain/suggest.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
 import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
 import type { PlanCode } from "../../domain/plans.js";
+import {
+  ONBOARDING_TITLES,
+  isOnboardingTitle,
+} from "../../domain/onboarding.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
 import { loadMonitorRun } from "../monitor/monitorRun";
 import { useStagedDiscard } from "../session/useStagedDiscard";
+import StartHere from "./StartHere";
+import BaselineCard from "./BaselineCard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
   loadTodayOverrides,
@@ -403,7 +409,12 @@ export default function Today() {
       key={`${planState.plan.planKey}-${planState.plan.doneN}`}
       library={workoutsState.workouts}
       baselines={baselines}
+      k6Missing={baselinesState.baselines.k6Seconds === null}
+      k2Missing={baselinesState.baselines.k2Seconds === null}
       preferences={preferencesState.preferences}
+      onDismissStartHere={() =>
+        preferencesState.save({ startHereDismissed: true })
+      }
       plan={planState.plan}
       logs={recentLogsState.logs}
       run={run}
@@ -529,14 +540,25 @@ function UnloggedRow({ run }: { run: SessionRun }) {
 function TodayView({
   library,
   baselines,
+  k6Missing,
+  k2Missing,
   preferences,
+  onDismissStartHere,
   plan,
   logs,
   run,
 }: {
   library: LibraryWorkout[];
   baselines: Baselines | null;
+  // Phase 6I: individual nullability, kept alongside the already-combined
+  // `baselines` above (null the moment EITHER is null, per the app-wide
+  // partial-pair convention) — BaselineCard's either-null branching needs
+  // to know WHICH one(s) are missing, information the combined value alone
+  // has already thrown away.
+  k6Missing: boolean;
+  k2Missing: boolean;
   preferences: PreferencesData;
+  onDismissStartHere: () => void;
   plan: PlanData;
   logs: RecentLog[];
   run: SessionRun | null;
@@ -724,7 +746,14 @@ function TodayView({
     loadTodayPick(today, plan.planKey, plan.doneN),
   );
 
-  const entries = library.map((w) => toLibraryEntry(w, baselines));
+  // Phase 6I: the two designated onboarding workouts are never a real
+  // suggestion once a rower has real baselines — "invisible outside
+  // onboarding" (design spec, no-baseline card's own Mechanics section). A
+  // veteran with both baselines set must never see "First 6k"/"First 2k"
+  // in SUGGESTED or SHUFFLE's pool.
+  const entries = library
+    .filter((w) => !isOnboardingTitle(w.title))
+    .map((w) => toLibraryEntry(w, baselines));
 
   // The swapped-in type: a swap always names a real WorkoutType, which IS a
   // PlanCode (WorkoutType is a subset of the PlanCode union), so this needs
@@ -767,6 +796,16 @@ function TodayView({
 
   const canShuffle = suggestion.poolIds.length > 1;
 
+  // Phase 6I: BaselineCard's own two possible targets, looked up from the
+  // UNFILTERED `library` (unlike `entries` above, which drops them from
+  // suggestion pools on purpose) — the card needs to find exactly these
+  // two by title. `undefined` is the defensive "not seeded yet" case
+  // BaselineCard itself documents; never expected once the server has run
+  // its onboarding seed (Phase 6I Task 3).
+  const k6Workout = library.find((w) => w.title === ONBOARDING_TITLES.k6);
+  const k2Workout = library.find((w) => w.title === ONBOARDING_TITLES.k2);
+  const needsBaselineCard = baselines === null;
+
   function handleShuffle() {
     const pool = suggestion.poolIds;
     // Defensive, not reachable via the UI: SHUFFLE's own `disabled={!canShuffle}`
@@ -795,61 +834,78 @@ function TodayView({
   return (
     <main className="screen">
       <h1 className="screen-title">Today</h1>
-      {usesPlan ? (
-        <>
-          <p className="today-plan-line mono-status">
-            SESSION {plan.doneN + 1} OF {plan.sequence.length} ·{" "}
-            {prescribedCode}
-            {overrides.swapType !== null && ` → ${overrides.swapType}`}
-          </p>
-          {/* Type-swap chips: only meaningful with a plan active (there is
-              no "prescribed type" to swap away from in freestyle). Active
-              state reads `swapType ?? effectivePrescribed` — the un-swapped
-              chip lights up whichever type the plan actually calls for
-              today (TR standing in on a TEST day), and tapping THAT chip
-              again clears the swap rather than swapping to itself
-              (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
-              `.today-type-chips` (index.css) now lays these out as a
-              4-column 1fr grid spanning the full content width, rather than
-              `.chip-wrap`'s own inline flex-wrap — 44px chip height
-              unchanged, same `.chip`/TodayChip classes. */}
-          <div className="chip-wrap today-type-chips">
-            {TYPE_CHIPS.map((type) => (
-              <TodayChip
-                key={type}
-                label={type}
-                active={effectiveType === type}
-                onClick={() => handleTypeChip(type)}
-                typeColorVar={TYPE_COLOR_VAR[type]}
-              />
-            ))}
-          </div>
-          {/* The effective type's descriptor word (James's request,
-              2026-08-08 round), reusing the classification card's own word
-              idiom (ClassificationCard.tsx/.classification-type-word —
-              mono, --ink-2, 11px) and its reserved-line-box fix
-              (.classification-type-label-row's min-height pattern) so a
-              rerender can never nudge anything below it — moot here in
-              practice since `effectiveType` is never null whenever this
-              branch renders (a plan is active), but kept for the same
-              belt-and-suspenders reason ClassificationCard.tsx's own
-              comment gives. `aria-hidden`: purely presentational
-              reinforcement of what each chip's own `aria-pressed` already
-              conveys to assistive tech, not a second announcement of it. */}
-          {effectiveType !== null && (
-            <div className="today-type-word-row" aria-hidden="true">
-              <p className="today-type-word">{TYPE_WORDS[effectiveType]}</p>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="today-plan-line today-plan-line-freestyle">
-          <span className="mono-status">FREESTYLE</span>
-          <Link to="/plan" className="today-plan-link">
-            choose a plan →
-          </Link>
-        </div>
+      {/* Phase 6I: mounted above everything else on the screen (spec:
+          "Sits at the top of Today, above the suggestion card") — including
+          the live-run resume card below, per the controller's own "above
+          everything" framing. No layout reservation once dismissed: this
+          simply doesn't render (Today.tsx owns the mount condition;
+          StartHere itself has no opinion on whether it should exist). */}
+      {!preferences.startHereDismissed && (
+        <StartHere onDismiss={onDismissStartHere} />
       )}
+      {/* Phase 6I: the whole plan/freestyle line, type-swap chips and
+          descriptor word are "plan apparatus" (spec's own words) — hidden
+          entirely while the no-baseline card shows, matching the design
+          mock's screen 2b exactly (no plan line of any kind renders there,
+          not even the freestyle variant): "there is no suggestion to
+          filter or swap" applies whether or not a plan happens to be
+          active underneath. */}
+      {!needsBaselineCard &&
+        (usesPlan ? (
+          <>
+            <p className="today-plan-line mono-status">
+              SESSION {plan.doneN + 1} OF {plan.sequence.length} ·{" "}
+              {prescribedCode}
+              {overrides.swapType !== null && ` → ${overrides.swapType}`}
+            </p>
+            {/* Type-swap chips: only meaningful with a plan active (there is
+                no "prescribed type" to swap away from in freestyle). Active
+                state reads `swapType ?? effectivePrescribed` — the un-swapped
+                chip lights up whichever type the plan actually calls for
+                today (TR standing in on a TEST day), and tapping THAT chip
+                again clears the swap rather than swapping to itself
+                (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
+                `.today-type-chips` (index.css) now lays these out as a
+                4-column 1fr grid spanning the full content width, rather than
+                `.chip-wrap`'s own inline flex-wrap — 44px chip height
+                unchanged, same `.chip`/TodayChip classes. */}
+            <div className="chip-wrap today-type-chips">
+              {TYPE_CHIPS.map((type) => (
+                <TodayChip
+                  key={type}
+                  label={type}
+                  active={effectiveType === type}
+                  onClick={() => handleTypeChip(type)}
+                  typeColorVar={TYPE_COLOR_VAR[type]}
+                />
+              ))}
+            </div>
+            {/* The effective type's descriptor word (James's request,
+                2026-08-08 round), reusing the classification card's own word
+                idiom (ClassificationCard.tsx/.classification-type-word —
+                mono, --ink-2, 11px) and its reserved-line-box fix
+                (.classification-type-label-row's min-height pattern) so a
+                rerender can never nudge anything below it — moot here in
+                practice since `effectiveType` is never null whenever this
+                branch renders (a plan is active), but kept for the same
+                belt-and-suspenders reason ClassificationCard.tsx's own
+                comment gives. `aria-hidden`: purely presentational
+                reinforcement of what each chip's own `aria-pressed` already
+                conveys to assistive tech, not a second announcement of it. */}
+            {effectiveType !== null && (
+              <div className="today-type-word-row" aria-hidden="true">
+                <p className="today-type-word">{TYPE_WORDS[effectiveType]}</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="today-plan-line today-plan-line-freestyle">
+            <span className="mono-status">FREESTYLE</span>
+            <Link to="/plan" className="today-plan-link">
+              choose a plan →
+            </Link>
+          </div>
+        ))}
 
       {/* F2 (whole-branch review, spec Resilience #6): a cold start (the OS
           killed the app mid-session — real on iOS) lands here with nothing
@@ -885,111 +941,131 @@ function TodayView({
           arming or firing the discard. */}
       {run !== null && run.completedAt !== null && <UnloggedRow run={run} />}
 
-      <div className="today-suggestion-header">
-        <span className="mono-status">
-          {/* Final fix wave (2026-08-04 round, M2): "SUGGESTED FOR TODAY"
-              wrapped to two lines beside FILTER/SHUFFLE at 390px — "FOR
-              TODAY" was redundant on the Today screen anyway, so the label
-              is just "SUGGESTED" in both modes now (freestyle already used
-              that). Never pick-state — suggestion.reason already says
-              "YOUR PICK: …" when pickOverride is set, so this label
-              staying constant avoids saying the same thing twice in two
-              different places on the card. */}
-          {suggestion.recommendationId ? "SUGGESTED" : ""}
-        </span>
-        <div className="today-suggestion-actions">
-          {/* Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline
-              chip clusters (Phase 6F, then regrouped by fix round 2) are
-              gone — they now live inside TodayFilterSheet, opened by this
-              chip. Same geometry as SHUFFLE below (`.today-shuffle`, chip-
-              style: 44px, transparent, rule-3 border) since the two now sit
-              side by side on the header's right; `filterButtonRef` doubles
-              as SheetShell's focus-restore target once the sheet closes. */}
-          <button
-            type="button"
-            className="button-outline today-shuffle"
-            aria-haspopup="dialog"
-            aria-expanded={sheetOpen}
-            ref={filterButtonRef}
-            onClick={openFilterSheet}
-          >
-            FILTER ⌄
-          </button>
-          <button
-            type="button"
-            className="button-outline today-shuffle"
-            onClick={handleShuffle}
-            disabled={!canShuffle}
-          >
-            SHUFFLE ↻
-          </button>
-        </div>
-      </div>
-
-      {/* The active-filter tokens, one per DEVIATING group (todayFilterTokens.ts)
-          — renders nothing at all (TokenRow's own null-return) when every
-          group still matches `filterDefaults`, which is Today's rest state.
-          CLEAR ALL only ever appears alongside at least one token (the
-          brief's "only when tokens exist"), and resets to `filterDefaults`
-          rather than to nothing — the deliberate divergence from Library's
-          own CLEAR ALL, which empties every filter instead. */}
-      <TokenRow
-        tokens={filterTokens}
-        trailing={
-          filterTokens.length > 0 ? (
-            <button
-              type="button"
-              className="today-clear-all"
-              onClick={clearAllFilters}
-            >
-              CLEAR ALL
-            </button>
-          ) : undefined
-        }
-      />
-
-      {sheetOpen && (
-        <TodayFilterSheet
-          draft={draft}
-          onChangeDraft={setDraft}
-          poolCount={draftPoolCount}
-          opener={filterButtonRef}
-          onApply={applyFilterSheet}
-          onDismiss={dismissFilterSheet}
+      {/* Phase 6I: the no-baseline SETS YOUR BASELINE card (design spec,
+          screen 2b) replaces the entire suggestion apparatus — header
+          (SUGGESTED/FILTER ⌄/SHUFFLE ↻), the active-filter tokens, the
+          filter sheet, and the suggestion/empty card itself — while either
+          baseline is null. There is nothing to filter or swap and nothing
+          real to suggest, so none of it renders alongside the card. */}
+      {needsBaselineCard ? (
+        <BaselineCard
+          k6Missing={k6Missing}
+          k2Missing={k2Missing}
+          k6Workout={k6Workout}
+          k2Workout={k2Workout}
         />
-      )}
-
-      {recommended ? (
-        <Link
-          to={`/library/${recommended.id}`}
-          state={{ from: "/today" }}
-          className="today-card"
-        >
-          <div className="today-card-top">
-            <TypeBadge type={recommended.type} />
-            <span className="today-card-duration">
-              {baselines
-                ? `${estimateMinutes(recommended.steps, baselines).minutes}′`
-                : "—"}
-            </span>
-          </div>
-          <h2 className="today-card-title">{recommended.title}</h2>
-          <p className="today-card-meta">
-            {recommended.difficulty.toUpperCase()} · PAIN {recommended.pain}/5
-          </p>
-          <p className="today-card-reason">{suggestion.reason}</p>
-        </Link>
       ) : (
-        <div className="today-card today-card-empty">
-          <p className="today-card-reason">{suggestion.reason}</p>
-          <Link
-            to="/library/new"
-            state={{ from: "/today" }}
-            className="button-outline"
-          >
-            + Build a workout
-          </Link>
-        </div>
+        <>
+          <div className="today-suggestion-header">
+            <span className="mono-status">
+              {/* Final fix wave (2026-08-04 round, M2): "SUGGESTED FOR TODAY"
+                  wrapped to two lines beside FILTER/SHUFFLE at 390px — "FOR
+                  TODAY" was redundant on the Today screen anyway, so the label
+                  is just "SUGGESTED" in both modes now (freestyle already used
+                  that). Never pick-state — suggestion.reason already says
+                  "YOUR PICK: …" when pickOverride is set, so this label
+                  staying constant avoids saying the same thing twice in two
+                  different places on the card. */}
+              {suggestion.recommendationId ? "SUGGESTED" : ""}
+            </span>
+            <div className="today-suggestion-actions">
+              {/* Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline
+                  chip clusters (Phase 6F, then regrouped by fix round 2) are
+                  gone — they now live inside TodayFilterSheet, opened by this
+                  chip. Same geometry as SHUFFLE below (`.today-shuffle`, chip-
+                  style: 44px, transparent, rule-3 border) since the two now sit
+                  side by side on the header's right; `filterButtonRef` doubles
+                  as SheetShell's focus-restore target once the sheet closes. */}
+              <button
+                type="button"
+                className="button-outline today-shuffle"
+                aria-haspopup="dialog"
+                aria-expanded={sheetOpen}
+                ref={filterButtonRef}
+                onClick={openFilterSheet}
+              >
+                FILTER ⌄
+              </button>
+              <button
+                type="button"
+                className="button-outline today-shuffle"
+                onClick={handleShuffle}
+                disabled={!canShuffle}
+              >
+                SHUFFLE ↻
+              </button>
+            </div>
+          </div>
+
+          {/* The active-filter tokens, one per DEVIATING group (todayFilterTokens.ts)
+              — renders nothing at all (TokenRow's own null-return) when every
+              group still matches `filterDefaults`, which is Today's rest state.
+              CLEAR ALL only ever appears alongside at least one token (the
+              brief's "only when tokens exist"), and resets to `filterDefaults`
+              rather than to nothing — the deliberate divergence from Library's
+              own CLEAR ALL, which empties every filter instead. */}
+          <TokenRow
+            tokens={filterTokens}
+            trailing={
+              filterTokens.length > 0 ? (
+                <button
+                  type="button"
+                  className="today-clear-all"
+                  onClick={clearAllFilters}
+                >
+                  CLEAR ALL
+                </button>
+              ) : undefined
+            }
+          />
+
+          {sheetOpen && (
+            <TodayFilterSheet
+              draft={draft}
+              onChangeDraft={setDraft}
+              poolCount={draftPoolCount}
+              opener={filterButtonRef}
+              onApply={applyFilterSheet}
+              onDismiss={dismissFilterSheet}
+            />
+          )}
+
+          {recommended ? (
+            <Link
+              to={`/library/${recommended.id}`}
+              state={{ from: "/today" }}
+              className="today-card"
+            >
+              <div className="today-card-top">
+                <TypeBadge type={recommended.type} />
+                <span className="today-card-duration">
+                  {/* `baselines` is never null in this branch
+                      (`needsBaselineCard` above already gated on it), so the
+                      bare-dash fallback this ternary used to need is gone —
+                      the branch itself is the guarantee now. */}
+                  {estimateMinutes(recommended.steps, baselines!).minutes}′
+                </span>
+              </div>
+              <h2 className="today-card-title">{recommended.title}</h2>
+              <p className="today-card-meta">
+                {recommended.difficulty.toUpperCase()} · PAIN {recommended.pain}
+                /5
+              </p>
+              <p className="today-card-reason">{suggestion.reason}</p>
+            </Link>
+          ) : (
+            <div className="today-card today-card-empty">
+              <p className="today-card-reason">{suggestion.reason}</p>
+              <Link
+                to="/library/new"
+                state={{ from: "/today" }}
+                className="button-outline"
+              >
+                + Build a workout
+              </Link>
+            </div>
+          )}
+        </>
       )}
 
       <section className="today-last-three">

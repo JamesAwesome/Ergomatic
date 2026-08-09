@@ -48,9 +48,17 @@ test.describe("backdoor sign-in", () => {
     // SignIn screen (SignIn.tsx), and the account block + sign-out control
     // live on /you (You.tsx), not on the landing route.
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "YOU" })).toBeVisible();
+    // `exact: true` (Phase 6I): a never-dismissed START HERE block's own
+    // step-1 row ("Row 6k once. That is your baseline.") contains "your",
+    // a case-insensitive substring match for "YOU" — without `exact`, a
+    // fresh backdoor user (who has never dismissed the block) makes this
+    // locator ambiguous once that block has mounted. The nav tab's own
+    // literal, all-caps "YOU" is the only exact match.
+    await expect(
+      page.getByRole("link", { name: "YOU", exact: true }),
+    ).toBeVisible();
 
-    await page.getByRole("link", { name: "YOU" }).click();
+    await page.getByRole("link", { name: "YOU", exact: true }).click();
     await expect(page.getByText(email)).toBeVisible();
 
     await page.getByRole("button", { name: /sign out/i }).click();
@@ -253,6 +261,13 @@ test.describe("bugfix round: history-aware ← BACK", () => {
       email: "backnav-flow@e2e.test",
       name: "Back Nav Tester",
     });
+    // Phase 6I: this test is about BACK-navigation history, not baseline
+    // state — with baselines unset, Today now shows the no-baseline card
+    // instead of `.today-card` (the exact behavior this spec's own new
+    // describe block down the file proves separately). Setting a real pair
+    // keeps this test's actual intent (the suggestion card's own detail ->
+    // BACK round trip) exercising the surface it was written against.
+    await setBaselines(page);
     await setGenerousTimeCap(page);
     await page.goto("/today");
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();

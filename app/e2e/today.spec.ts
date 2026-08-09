@@ -685,6 +685,12 @@ test.describe("Today enhancements: freestyle spot-check", () => {
       email: "today-freestyle@e2e.test",
       name: "Today Freestyle Tester",
     });
+    // Phase 6I: this test is about the freestyle plan line and the filter
+    // sheet, not baseline state — with baselines unset, Today now shows the
+    // no-baseline card and hides the ENTIRE plan-apparatus block (the
+    // freestyle line included). A real pair keeps this test on the surface
+    // it was written to prove.
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
     await page.goto("/today");
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
     await expect(page.locator(".today-plan-line-freestyle")).toBeVisible();
@@ -830,6 +836,11 @@ test.describe("Today enhancements: sheet dismiss discards the draft", () => {
       email: "today-sheet-dismiss@e2e.test",
       name: "Today Sheet Dismiss Tester",
     });
+    // Phase 6I: this test is about the filter sheet's own backdrop-discard
+    // behavior, not baseline state — the no-baseline card has no filter
+    // sheet at all (nothing to filter), so a real baseline pair is needed
+    // to reach `.today-card` and its FILTER ⌄ trigger in the first place.
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
     await expect(page.locator(".filter-token")).toHaveCount(0);

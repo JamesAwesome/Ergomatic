@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanSequenceItem } from "../api/usePlan";
 import type { RecentLog } from "../api/useRecentLogs";
@@ -47,6 +48,28 @@ const ISOBAR = libraryEntry("Occluded Front", "w-isobar", 10);
 const WARM_FRONT = libraryEntry("Stationary Front", "w-warmfront", 20);
 const TAILWIND = libraryEntry("Pressure Ridge", "w-tailwind", 15);
 
+// Phase 6I: the two designated onboarding workouts, real seed shape
+// (server/seed/library/onboarding.ts) rather than a hand-built minimum —
+// BaselineCard's own lookup (Today.tsx) keys off the exact title constants
+// these carry.
+function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
+  const w = ONBOARDING_LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing onboarding fixture: ${title}`);
+  return {
+    id,
+    title: w.title,
+    type: w.type,
+    difficulty: w.difficulty,
+    pain: w.pain,
+    steps: w.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+}
+
+const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
+const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
+
 // Round 2 (2026-08-04): a personal (isGlobal: false) fixture, same
 // realistic-library-workout convention as the global fixtures above — used
 // by the SOURCE=CUSTOM tests below.
@@ -61,10 +84,22 @@ const STALE_FRONT = libraryEntry("Barometric Low", "w-stalefront", 25);
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
+// Phase 6I: one baseline set, one missing — the "exactly one null" branch
+// (BaselineCard offers only the missing distance, no toggle).
+const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
+// `startHereDismissed: true` is this file's own default (NOT the server's
+// real default, which is `false` — server/stores/preferences.ts) so the
+// pre-existing suite below keeps exercising "normal Today" without every
+// one of ~100 unrelated tests also having an opinion about the START HERE
+// block; the block's own mount/dismiss/step behavior is covered in
+// StartHere.test.tsx, and the few tests here that need it un-dismissed say
+// so explicitly via `mockReady({ preferences: { ..., startHereDismissed:
+// false } })`.
 const DEFAULT_PREFS = {
   difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
   warmupMinutes: 10,
+  startHereDismissed: true,
 };
 
 // 84-entry sequence with `code` at `doneN` and a filler code ("O2")
@@ -142,10 +177,12 @@ const LOGS: RecentLog[] = [
 
 function mockReady(overrides?: {
   workouts?: LibraryWorkout[];
-  baselines?: typeof BASELINES | typeof NO_BASELINES;
+  baselines?: typeof BASELINES | typeof NO_BASELINES | typeof ONLY_K6_BASELINE;
   plan?: PlanData;
   preferences?: typeof DEFAULT_PREFS;
   logs?: RecentLog[];
+  savePreferences?: ReturnType<typeof vi.fn>;
+  readSlugs?: string[];
 }) {
   const workouts = overrides?.workouts ?? [
     ZEPHYR,
@@ -157,6 +194,8 @@ function mockReady(overrides?: {
   const plan = overrides?.plan ?? PLAN_AT;
   const preferences = overrides?.preferences ?? DEFAULT_PREFS;
   const logs = overrides?.logs ?? LOGS;
+  const save = overrides?.savePreferences ?? vi.fn();
+  const readSlugs = overrides?.readSlugs ?? [];
 
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -168,10 +207,23 @@ function mockReady(overrides?: {
     usePlan: () => ({ state: "ready", plan }),
   }));
   vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({ state: "ready", preferences }),
+    usePreferences: () => ({ state: "ready", preferences, save }),
   }));
   vi.doMock("../api/useRecentLogs", () => ({
     useRecentLogs: () => ({ state: "ready", logs }),
+  }));
+  // Phase 6I: StartHere (mounted whenever `!preferences.startHereDismissed`)
+  // reads this hook directly — mocked unconditionally, same "ready, real
+  // Set, no network" shape every StartHere-un-dismissed test below needs;
+  // the pre-existing suite never sees it render at all (DEFAULT_PREFS'
+  // own `startHereDismissed: true`), so this is inert for those ~100 tests.
+  vi.doMock("../api/useArticleReads", () => ({
+    useArticleReads: () => ({
+      state: "ready",
+      readSlugs: new Set(readSlugs),
+      markRead: vi.fn(),
+      markUnread: vi.fn(),
+    }),
   }));
 }
 
@@ -258,22 +310,24 @@ describe("Today (plan mode)", () => {
     expect(screen.getByText("15′")).toBeVisible();
   });
 
-  it("still renders the card, without a duration preview, when baselines are unset — and the reason never claims a cap that was never checked", async () => {
-    mockReady({ baselines: NO_BASELINES });
+  // Phase 6I: baselines unset used to still render the suggestion card
+  // (a bare-dash duration, per the old test this replaces) — the design
+  // spec's no-baseline card now takes over that state entirely instead.
+  // Full branch coverage (both-null/one-null/plan-apparatus-hiding/
+  // exclusion-from-suggestion) lives in the dedicated describe block below;
+  // this just updates the pre-existing "baselines unset" expectation so it
+  // no longer asserts the retired behavior.
+  it("shows the no-baseline card, not the old suggestion card, when baselines are unset", async () => {
+    mockReady({
+      baselines: NO_BASELINES,
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+    });
     await renderToday();
+    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Stationary Front" }),
-    ).toBeVisible();
-    expect(screen.getByText("—")).toBeVisible();
-    const reason = screen.getByText(/Least recently done/);
-    expect(reason).toBeVisible();
-    // Regression guard: every entry's estMinutes is a 0 placeholder with
-    // no baselines (toLibraryEntry), so no real duration was ever checked
-    // against the 60-min cap — the reason must not claim otherwise
-    // (domain/suggest.ts's `durationsUnknown` prefs flag, passed here via
-    // `baselines === null`).
-    expect(reason.textContent).not.toMatch(/cap/i);
-    expect(reason.textContent).not.toMatch(/60/);
+      screen.queryByRole("heading", { name: "Stationary Front" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
   it("links the suggestion card to the workout's detail page", async () => {
@@ -2080,6 +2134,140 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     expect(document.querySelector(".today-card")?.getAttribute("href")).toBe(
       cardHrefBefore,
     );
+  });
+});
+
+describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
+  it("mounts StartHere above everything when the block isn't dismissed", async () => {
+    mockReady({
+      preferences: { ...DEFAULT_PREFS, startHereDismissed: false },
+    });
+    await renderToday();
+
+    const block = await screen.findByText("START HERE · 0 OF 4 READ");
+    expect(block).toBeVisible();
+    // "Above everything" (the controller's own framing): the block's DOM
+    // position precedes even the screen's own <h1>'s next sibling — proven
+    // here as "precedes the plan line," the next thing Today renders.
+    const main = screen
+      .getByRole("heading", { name: "Today" })
+      .closest("main")!;
+    const children = [...main.children];
+    const blockIndex = children.findIndex((c) =>
+      c.classList.contains("starthere-block"),
+    );
+    const planLineIndex = children.findIndex((c) =>
+      c.classList.contains("today-plan-line"),
+    );
+    expect(blockIndex).toBeGreaterThanOrEqual(0);
+    expect(blockIndex).toBeLessThan(planLineIndex);
+  });
+
+  it("renders nothing at all for StartHere when the block is dismissed (this file's own default)", async () => {
+    mockReady();
+    const { container } = await renderToday();
+    await screen.findByRole("heading", { name: "Today" });
+    expect(container.querySelector(".starthere-block")).not.toBeInTheDocument();
+  });
+
+  it("DISMISS calls preferences.save({ startHereDismissed: true }) — no staged confirm", async () => {
+    const save = vi.fn();
+    mockReady({
+      preferences: { ...DEFAULT_PREFS, startHereDismissed: false },
+      savePreferences: save,
+    });
+    await renderToday();
+
+    await userEvent.click(screen.getByRole("button", { name: "DISMISS" }));
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      startHereDismissed: true,
+    });
+  });
+
+  it("both baselines missing: shows the no-baseline card (6k default) and hides the ENTIRE plan/suggestion apparatus", async () => {
+    mockReady({
+      baselines: NO_BASELINES,
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+    });
+    await renderToday();
+
+    expect(
+      await screen.findByText("SUGGESTED · SETS YOUR BASELINE"),
+    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    expect(screen.getByText("ABOUT 25 MIN")).toBeVisible();
+    expect(
+      screen.getByText("6K BASELINE · NOT SET · ROW IT HOW IT FEELS"),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "2K INSTEAD" })).toBeVisible();
+
+    // Plan apparatus, gone entirely — not merely the suggestion card.
+    expect(screen.queryByText(/SESSION \d+ OF \d+/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "FILTER ⌄" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "SHUFFLE ↻" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Stationary Front" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("only the 2k missing: the card offers SETS YOUR 2K BASELINE only, no toggle", async () => {
+    mockReady({
+      baselines: ONLY_K6_BASELINE,
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+    });
+    await renderToday();
+
+    expect(
+      await screen.findByRole("heading", { name: "First 2k" }),
+    ).toBeVisible();
+    expect(screen.getByText("ABOUT 8 MIN")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /INSTEAD/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("both baselines set: normal Today returns — plan apparatus back, no baseline card", async () => {
+    mockReady({
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+    });
+    await renderToday();
+
+    expect(await screen.findByText("SESSION 12 OF 84 · AT")).toBeVisible();
+    expect(screen.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
+    expect(
+      screen.queryByText("SUGGESTED · SETS YOUR BASELINE"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a veteran with real baselines is never SUGGESTED a designated onboarding workout, even shuffled through the whole pool", async () => {
+    // Every non-onboarding fixture is O2/easy so the freestyle pool (no
+    // plan) is exactly {ZEPHYR, FIRST_6K, FIRST_2K} before exclusion —
+    // small enough to shuffle through completely and assert the designated
+    // titles never come up, real seed types (O2/AN) included on purpose so
+    // this can't pass by accident of type mismatch alone.
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [ZEPHYR, { ...FIRST_6K, type: "O2" }, FIRST_2K],
+    });
+    await renderToday();
+
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    const shuffle = screen.getByRole("button", { name: "SHUFFLE ↻" });
+    // Only one real (non-onboarding) entry in the pool — SHUFFLE is
+    // disabled, not merely "happens to keep landing on the same one."
+    expect(shuffle).toBeDisabled();
+    await fireEvent.click(shuffle);
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "First 6k" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "First 2k" }),
+    ).not.toBeInTheDocument();
   });
 });
 

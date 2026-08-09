@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import { compileProgram } from "../../domain/monitor/program.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -125,6 +126,49 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
     lastDoneDaysAgo: 2,
   };
   return { draft: started, run, workout };
+}
+
+// Phase 6I: the real "First 6k" seed workout (server/seed/library/
+// onboarding.ts) — effort ref, no baselines needed (domain/needsBaselines.ts)
+// — driven through the same buildDraft/startDraft/buildRun/saveRun pipeline
+// as `buildSessionFixture` above, `null` baselines rather than a real pair
+// since this workout needs none. Proves the session door's own outside-plan
+// DEFAULT, not the manual door's (see `useLogForm`'s own header comment on
+// why only the session door's title is known synchronously at hook-init).
+function buildOnboardingSessionFixture(): {
+  run: SessionRun;
+  workout: LibraryWorkout;
+} {
+  const seed = ONBOARDING_LIBRARY_WORKOUTS.find((w) => w.title === "First 6k")!;
+  const draft = buildDraft({
+    id: "id-first6k-fixture",
+    title: seed.title,
+    type: seed.type,
+    steps: seed.steps,
+  });
+  const started = startDraft(draft);
+  saveDraft(started);
+  const built = buildRun(started, null, FIXED_NOW);
+  const run: SessionRun = {
+    ...built,
+    index: built.phases.length,
+    completedAt: new Date(FIXED_NOW.getTime() + 25 * 60 * 1000).toISOString(),
+    actuals: {
+      1: { elapsedSeconds: 1500, splitSeconds: 125, actualSource: "stopwatch" },
+    },
+  };
+  saveRun(run);
+  const workout: LibraryWorkout = {
+    id: "id-first6k-fixture",
+    title: seed.title,
+    type: seed.type,
+    difficulty: seed.difficulty,
+    pain: seed.pain,
+    steps: started.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+  return { run, workout };
 }
 
 function mockWorkouts(workouts: LibraryWorkout[]) {
@@ -2591,6 +2635,48 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
     });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
+  });
+
+  // Phase 6I: the designated onboarding workout's own Log screen pre-sets
+  // the toggle to OUTSIDE THE PLAN by default (spec: "a baseline test must
+  // not silently consume plan session 1") — still visible, still
+  // changeable, never forced.
+  it("Phase 6I: a designated onboarding workout's log defaults the toggle to OUTSIDE THE PLAN", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { workout } = buildOnboardingSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByText("AUG 1 · 25 MIN");
+
+    const toggle = screen.getByRole("button", {
+      name: "OUTSIDE THE PLAN · won't advance",
+    });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    // Still changeable — tapping it once opts BACK into the plan, the same
+    // toggle every other workout's log uses.
+    await userEvent.click(toggle);
+    expect(
+      screen.getByRole("button", {
+        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+      }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("Phase 6I: an ordinary (non-onboarding) workout's log still defaults to COUNTS TOWARD PLAN", async () => {
+    // Regression guard for the default itself: proves the new default
+    // branch only fires for a REAL onboarding title, not every workout.
+    mockPlan(readyPlanState(activePlan()));
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    expect(
+      screen.getByRole("button", {
+        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+      }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 
   it("tapping the toggle flips it to OUTSIDE THE PLAN · won't advance, and back again", async () => {

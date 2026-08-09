@@ -15,6 +15,7 @@ import type { HeldResult } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef } from "../../domain/pace.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
 import type {
   Baselines,
   PaceBase,
@@ -433,12 +434,29 @@ interface LogFormFields {
  *  false` in the POST body ONLY when the toggle is on; the default
  *  (counting toward the plan) leaves the key OFF the wire entirely, proving
  *  the common path still exercises the server's own `?? true` default
- *  rather than the client silently re-asserting it. */
-function useLogForm(onSaved: () => void) {
+ *  rather than the client silently re-asserting it.
+ *
+ *  Phase 6I: `workoutTitle` (default `""`, so the pre-existing manual-door
+ *  call site below is untouched) seeds `outsidePlan`'s DEFAULT only — a
+ *  designated onboarding workout's log pre-sets the toggle to outside the
+ *  plan, still visible, still changeable (spec: "a baseline test must not
+ *  silently consume plan session 1"). Reliable only where the title is
+ *  known SYNCHRONOUSLY at this hook's own mount (the session door's
+ *  `run.title`, read from localStorage, not fetched); the manual door's
+ *  title comes from `useWorkouts()`, an async fetch that hasn't resolved
+ *  on this hook's own first render, so its call site is left on the `""`
+ *  default rather than reaching for a value that can't actually be known
+ *  yet — a real but narrow gap, not a silent one: onboarding's own real
+ *  path is exclusively the session door (`your-first-row`'s own copy:
+ *  "Tap START on the suggested 6k... run the timer"), never "Log it after"
+ *  on the designated workout's own detail screen. */
+function useLogForm(onSaved: () => void, workoutTitle: string = "") {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
-  const [outsidePlan, setOutsidePlan] = useState(false);
+  const [outsidePlan, setOutsidePlan] = useState(() =>
+    isOnboardingTitle(workoutTitle),
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -859,11 +877,19 @@ function SessionDoorLog() {
     saving,
     saveError,
     submit,
-  } = useLogForm(() => {
-    clearDraft();
-    clearRun();
-    navigate("/today");
-  });
+  } = useLogForm(
+    () => {
+      clearDraft();
+      clearRun();
+      navigate("/today");
+    },
+    // `run` was read synchronously above (`loadRun()`, not a fetch) — safe
+    // to pass its title here even though the `run === null` guard below
+    // hasn't run yet at this point in the component body (hooks can't be
+    // conditional); a null run means this door redirects away before the
+    // default ever matters.
+    run?.title ?? "",
+  );
   // Task 3 (ui-fix round): the two-button `.baseline-confirm` side panel
   // this discard used to open is gone — replaced by the shared
   // `useStagedDiscard` machine and the level system's own in-place L4/
