@@ -2214,6 +2214,43 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("Task 5 minor (fold): freestyle mode (no plan) with both baselines missing ALSO hides the freestyle line and its /plan link, not just the plan-mode apparatus", async () => {
+    // The existing "hides the ENTIRE plan/suggestion apparatus" test above
+    // exercises this file's DEFAULT plan fixture (an active plan) — it never
+    // covered the OTHER branch `!needsBaselineCard` gates (Today.tsx's own
+    // freestyle variant, `.today-plan-line-freestyle`, "shows a freestyle
+    // line with a link to /plan" per the describe block above). Both
+    // branches share the identical `{!needsBaselineCard && (...)}` guard, so
+    // this pins that the freestyle side of it is ALSO gone, not merely
+    // untested-but-coincidentally-fine.
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      baselines: NO_BASELINES,
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+    });
+    await renderToday();
+
+    expect(
+      await screen.findByText("SUGGESTED · SETS YOUR BASELINE"),
+    ).toBeVisible();
+
+    // The freestyle line and its own /plan link — gone entirely, same as
+    // the plan-mode apparatus in the sibling test.
+    expect(screen.queryByText(/FREESTYLE/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /choose a plan/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "FILTER ⌄" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "SHUFFLE ↻" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Sea Fret" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("only the 2k missing: the card offers SETS YOUR 2K BASELINE only, no toggle", async () => {
     mockReady({
       baselines: ONLY_K6_BASELINE,
