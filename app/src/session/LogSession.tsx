@@ -29,7 +29,6 @@ import {
   buildMonitorLogSteps,
   formatLogDate,
   logTotals,
-  MonitorLogSeedError,
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
@@ -232,9 +231,31 @@ function manualLockedBaseline(
  *     connected session for a DIFFERENT workout must never prefill this
  *     one;
  *  4. `logSeed` exists and aligns with `program.intervals` — proven by
- *     actually calling `buildMonitorLogSteps` and catching
- *     `MonitorLogSeedError` rather than duplicating its own alignment
- *     check here, so the two can never drift apart.
+ *     actually calling `buildMonitorLogSteps` rather than duplicating its
+ *     own alignment check here, so the two can never drift apart.
+ *
+ *  **Fix round 1 (review finding #1):** condition 4's `catch` disqualifies
+ *  the record on ANY exception the builder throws, not only its documented
+ *  `MonitorLogSeedError` — `isMonitorRun` (`monitorRun.ts`) is *deliberately
+ *  shallow* (its own doc comment: "shaped enough not to crash the screens
+ *  that read it immediately, not a deep per-interval domain validation"),
+ *  so a record can pass that check while still carrying a malformed
+ *  `actuals` entry (e.g. a tampered/corrupted localStorage write leaves
+ *  `actuals: [null]`) that `buildMonitorLogSteps` never anticipated —
+ *  reaching, say, `actual.index` on a `null` and throwing a plain
+ *  `TypeError`, not a `MonitorLogSeedError`. The spec's own rule for this
+ *  whole gate is "any miss falls through to today's manual form untouched"
+ *  (§4) — the same "malformed shape is discarded rather than crashing the
+ *  caller" discipline `loadMonitorRun`'s own "Resilience #5" already
+ *  applies one layer down. A narrower `instanceof MonitorLogSeedError`
+ *  check (this function's own pre-fix-round shape) let an unanticipated
+ *  builder exception escape uncaught, straight out of this `useState` lazy
+ *  initializer's render — the log door's one truly unrecoverable crash
+ *  path, for exactly the class of resilience scenario (a hand-edited or
+ *  browser-extension-corrupted record) this file's sibling loaders already
+ *  guard against. Never re-attempt anything against `run` once ANY
+ *  exception fires here — the record is simply untrustworthy for monitor
+ *  mode, and manual is always a safe, fully-functional fallback.
  *
  *  Exported for tests (task brief): each condition gets its own
  *  independent-removal test against this one function, cheaper than
@@ -252,9 +273,8 @@ export function monitorModeRun(
   if (run.workoutId !== workoutId) return null;
   try {
     buildMonitorLogSteps(run);
-  } catch (err) {
-    if (err instanceof MonitorLogSeedError) return null;
-    throw err;
+  } catch {
+    return null;
   }
   return run;
 }

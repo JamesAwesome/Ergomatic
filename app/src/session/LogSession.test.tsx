@@ -306,9 +306,16 @@ function buildMonitorFixture(
     program,
     logSeed,
     actuals: overrides.actuals ?? defaultActuals,
-    // Real hardware's own device ID (pm5-interface-notes.md's hardware
-    // sessions throughout, e.g. "PM5 432331249").
-    deviceName: overrides.deviceName ?? "PM5 432331249",
+    // Real hardware's own BLE advertising name, "Row" suffix and all
+    // (Concept2's own naming, verbatim — pm5-interface-notes.md's hardware
+    // sessions throughout; Task 3's own server fixtures already use this
+    // exact string: server/routes/data.test.ts, stores.integration.test.ts).
+    // Fix round 1 (review finding #2): an earlier version of this fixture
+    // dropped the suffix, believing it a brief typo — it is real, and
+    // `deviceName` is never parsed/trimmed anywhere in the client or
+    // server, so it must round-trip through this screen exactly as
+    // hardware would actually report it.
+    deviceName: overrides.deviceName ?? "PM5 432331249 Row",
     startedAt: FIXED_NOW.toISOString(),
     completedAt,
     terminated: false,
@@ -1856,6 +1863,29 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
   });
 
+  // Fix round 1 (review finding #1): `isMonitorRun` (monitorRun.ts) is
+  // DELIBERATELY SHALLOW — it proves `Array.isArray(value.actuals)`, never
+  // that each ITEM in that array is shaped right — so a record with a
+  // malformed actuals entry (a tampered/corrupted localStorage write, the
+  // exact class of resilience scenario `loadMonitorRun`'s own "Resilience
+  // #5" already guards against one layer down) passes straight through
+  // `loadMonitorRun()` and into `buildMonitorLogSteps`, where
+  // `actual.index` on a `null` throws a plain `TypeError` — NOT a
+  // `MonitorLogSeedError`. Spec §4's own rule ("any miss falls through to
+  // today's manual form untouched") governs here too: this must disqualify
+  // the record exactly like every other condition-4 case, not crash the
+  // `useState` lazy initializer that calls this function during render.
+  it("condition 4 (seed alignment) removed: a malformed actuals ITEM (not caught by isMonitorRun's own shallow validator) disqualifies the record instead of throwing", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({
+      ...run,
+      actuals: [null as unknown as IntervalActual],
+    });
+    const search = new URLSearchParams("from=monitor");
+    expect(() => monitorModeRun(search, MONITOR_WORKOUT_ID)).not.toThrow();
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
   it("THE HIJACK PIN itself: no flag + a stale (but otherwise perfectly valid) completed record for the SAME workout still falls through", () => {
     const { run } = buildMonitorFixture();
     saveMonitorRun(run);
@@ -1902,7 +1932,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     // The caption: middle dot, never an em-dash, both intervals measured.
     expect(
-      screen.getByText("FROM PM5 432331249 · ALL 2 INTERVALS MEASURED"),
+      screen.getByText("FROM PM5 432331249 Row · ALL 2 INTERVALS MEASURED"),
     ).toBeInTheDocument();
     expect(document.querySelector(".log-from-monitor")).not.toBeNull();
 
@@ -1948,7 +1978,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await screen.findByRole("heading", { name: "Log Hoarfrost" });
 
     expect(
-      screen.getByText("FROM PM5 432331249 · 1 OF 2 INTERVALS MEASURED"),
+      screen.getByText("FROM PM5 432331249 Row · 1 OF 2 INTERVALS MEASURED"),
     ).toBeInTheDocument();
     const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows[0]).toHaveTextContent("ACTUAL 2:20.0");
@@ -1985,7 +2015,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // Both intervals carry actualSource: "pm5" (the pairing exception), so
     // the caption still reads "ALL 2" even though row 1 has no ACTUAL line.
     expect(
-      screen.getByText("FROM PM5 432331249 · ALL 2 INTERVALS MEASURED"),
+      screen.getByText("FROM PM5 432331249 Row · ALL 2 INTERVALS MEASURED"),
     ).toBeInTheDocument();
     const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows[0]).not.toHaveTextContent("ACTUAL");
@@ -2020,6 +2050,26 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Fix round 1 (review finding #1), screen-level companion to the
+  // `monitorModeRun` unit test above: proves the door itself never
+  // crashes on a shallowly-valid-but-malformed record — it renders the
+  // ordinary manual form, same as any other condition-4 miss.
+  it("a shallowly-valid MonitorRun with a malformed actuals entry never crashes the log door — it falls through to the manual form", async () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, actuals: [null as unknown as IntervalActual] });
+    const workout = manualWorkoutFixture(MONITOR_WORKOUT_ID);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+
+    expect(
+      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/FROM PM5/)).not.toBeInTheDocument();
+    expect(document.querySelector(".log-from-monitor")).toBeNull();
+    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
+  });
+
   it("POSTs the pm5 steps verbatim (actualSource, avgHr, actualSeconds, actualMeters) plus deviceName, and clears MonitorRun exactly once on success", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
@@ -2043,7 +2093,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(apiFn).toHaveBeenCalledTimes(1);
     const body = parsedBodies(apiFn)[0]!;
     expect(body.workoutId).toBe(MONITOR_WORKOUT_ID);
-    expect(body.deviceName).toBe("PM5 432331249");
+    expect(body.deviceName).toBe("PM5 432331249 Row");
     const steps = body.steps as Record<string, unknown>[];
     expect(steps).toHaveLength(2);
     for (const step of steps) {
@@ -2208,7 +2258,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       program: compileOrThrow(built.phases),
       logSeed: buildLogSeed(built.phases, BASELINES),
       actuals: [],
-      deviceName: "PM5 432331249",
+      deviceName: "PM5 432331249 Row",
       startedAt: FIXED_NOW.toISOString(),
       completedAt: new Date(FIXED_NOW.getTime() + 6 * 60 * 1000).toISOString(),
       terminated: false,
@@ -2265,7 +2315,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       program: compileOrThrow(built.phases),
       logSeed: buildLogSeed(built.phases, BASELINES),
       actuals: [],
-      deviceName: "PM5 432331249",
+      deviceName: "PM5 432331249 Row",
       startedAt: FIXED_NOW.toISOString(),
       completedAt: new Date(FIXED_NOW.getTime() + 3 * 60 * 1000).toISOString(),
       terminated: false,
