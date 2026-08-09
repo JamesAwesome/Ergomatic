@@ -40,6 +40,28 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
+/** Sets the warm-up preference via the real `PUT /api/prefs` route
+ *  (2026-08-09 warmup-setting spec §2) — same real-networking reasoning as
+ *  `setBaselines` above. Used by the captures whose whole point is to show
+ *  the setting ON (the "confirm"/"countdown" screens' own WARM-UP chrome,
+ *  and the "you-warmup-on" capture), since the setting defaults OFF. */
+async function setWarmup(
+  page: Page,
+  warmup: { kind: "time"; minutes: number; restSeconds?: number },
+): Promise<void> {
+  const result = await page.evaluate(async (patch) => {
+    const res = await fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ warmup: patch }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, warmup);
+  if (!result.ok) {
+    throw new Error(`warmup setup failed: ${result.status} ${result.body}`);
+  }
+}
+
 /** Phase 6I Task 7: dismisses START HERE on Today via an in-page fetch —
  *  same real-networking reasoning as `setBaselines` above — so a screenshot
  *  can show News's own Start-here pin (only visible once dismissed) and
@@ -526,33 +548,33 @@ test("workout-detail", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
-// Confirm targets (Phase 6A Task 4/5): a personal workout authored via bulk
-// import (the only way to land a standalone REST row and a reps marker in
-// the same workout — `+ REST`/`+ WARM-UP` aren't authorable from a blank
-// create-mode builder, per docs/design/DEVIATIONS.md's "+ ADD ROW" row) so
-// the committed capture shows every step-row shape Confirm targets renders:
-// WARM-UP (DUR only), REPEAT xN (REPS stepper, no remove/restore — the
-// binding decision from Task 1's review), a work row (DUR + SPM + resolved
-// TARGET + nudges), and a standalone REST row (DUR only) — plus one row
-// struck, so the removed-row treatment (sunken background, struck label)
-// is part of the visual record too, not just the "everything present"
-// state "confirm" would otherwise only ever show.
+// Confirm targets (Phase 6A Task 4/5; refreshed 2026-08-09 for the
+// warmup-setting spec): a personal workout authored via bulk import (the
+// only way to land a standalone REST row and a reps marker in the same
+// workout — `+ REST` isn't authorable from a blank create-mode builder,
+// per docs/design/DEVIATIONS.md's "+ ADD ROW" row) PLUS the warm-up
+// preference turned ON, so the committed capture shows every row shape
+// Confirm targets renders: the preference-sourced WARM-UP row (DUR only,
+// un-numbered, outside Row-N — spec §4's aria ruling), REPEAT xN (REPS
+// stepper, no remove/restore — the binding decision from Task 1's review),
+// a work row (DUR + SPM + resolved TARGET + nudges), and a standalone REST
+// row (DUR only) — plus one row struck, so the removed-row treatment
+// (sunken background, struck label) is part of the visual record too, not
+// just the "everything present" state "confirm" would otherwise only ever
+// show.
 test("confirm", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-confirm@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
+  await setWarmup(page, { kind: "time", minutes: 5 });
 
   const title = "Screenshot Confirm Workout";
   await page.goto("/library/import");
-  const text = [
-    `${title} | AT | medium | 3`,
-    "wu 5",
-    "x3",
-    "w 1' 6k @22",
-    "r 2",
-  ].join("\n");
+  const text = [`${title} | AT | medium | 3`, "x3", "w 1' 6k @22", "r 2"].join(
+    "\n",
+  );
   await page.getByLabel("Bulk import text").fill(text);
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page).toHaveURL(/\/library$/);
@@ -562,13 +584,15 @@ test("confirm", async ({ page }) => {
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page).toHaveURL(/\/session\/confirm$/);
   await page.locator(".confirm-recount").waitFor();
+  await expect(page.locator(".confirm-warmup-row")).toBeVisible();
 
-  // Strike the REST row (Row 4: wu, reps marker, w, r) — the ordinary
+  // Strike the REST row (Row 3: reps marker, w, r — the WARM-UP row above
+  // is preference chrome, outside this numbering entirely) — the ordinary
   // removed-row case, distinct from the marker row's own no-remove-control
   // treatment covered by the design sweep instead of a screenshot.
-  await page.getByRole("button", { name: "Remove Row 4" }).click();
+  await page.getByRole("button", { name: "Remove Row 3" }).click();
   await expect(
-    page.getByRole("button", { name: "Restore Row 4" }),
+    page.getByRole("button", { name: "Restore Row 3" }),
   ).toBeVisible();
 
   // Fix (final whole-branch review): four step-editor rows plus the header
@@ -770,7 +794,6 @@ test("import", async ({ page }) => {
   // example text as BulkImport.tsx's own GRAMMAR_EXAMPLE constant.
   const text = [
     "Ladder Day | AT | medium | 3",
-    "wu 10",
     "x4",
     "w 1' 6k-2 @22 r5",
     "r 5",
@@ -782,6 +805,10 @@ test("import", async ({ page }) => {
   });
 });
 
+// A fresh account's WARM-UP row reads its default OFF state (2026-08-09
+// warmup-setting spec §2: `null` is the column's default, off for
+// everyone) — no setup needed beyond baselines loading, unlike
+// "you-warmup-on" below.
 test("you", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-you@e2e.test",
@@ -791,8 +818,30 @@ test("you", async ({ page }) => {
   // Same "LOADING…" race as /library — wait for the baseline card's real
   // content before capturing.
   await page.locator(".baseline-value").first().waitFor();
+  await expect(
+    page.getByRole("button", { name: "WARM-UP · OFF" }),
+  ).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
+  });
+});
+
+// The ON state's own house duration format (spec §3: `WARM-UP · 10:00`,
+// `+ :30 REST` when set — rendered here as `+ 0:30 REST`, block2-review F5)
+// — "you.png" above only ever shows the default OFF row.
+test("you-warmup-on", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-warmup-on@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setWarmup(page, { kind: "time", minutes: 10, restSeconds: 30 });
+  await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  await expect(
+    page.getByRole("button", { name: /WARM-UP · 10:00 \+ 0:30 REST/ }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-warmup-on.png"),
   });
 });
 
@@ -939,19 +988,18 @@ test("countdown", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  // A warm-up-first, three-step ladder — the realistic shape the seeded
-  // library itself uses (CLAUDE.md's own "test against a realistic
-  // fixture" rule), not a single bare work step. The countdown's own
-  // next-phase line reads the CURRENT (warm-up) phase's resolved label —
-  // "Easy" — the same never-a-dash word every warm-up phase resolves to.
+  // A warm-up-first session — the warm-up preference turned ON (2026-08-09:
+  // no seeded/imported workout can carry a `wu` step any more, the setting
+  // is the ONLY producer of a warm-up phase) ahead of an ordinary two-step
+  // ladder. The countdown's own next-phase line reads the CURRENT (warm-up)
+  // phase's resolved label — "Easy" — the same never-a-dash word every
+  // warm-up phase resolves to.
+  await setWarmup(page, { kind: "time", minutes: 5 });
   await importBulk(
     page,
-    [
-      `${title} | AT | medium | 3`,
-      "wu 5",
-      "w 4:00 6k @20 r1",
-      "w 3:00 6k @18",
-    ].join("\n"),
+    [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1", "w 3:00 6k @18"].join(
+      "\n",
+    ),
   );
   await startFromLibrary(page, title);
   await page.getByRole("button", { name: "START" }).click();

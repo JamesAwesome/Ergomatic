@@ -54,6 +54,28 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
+/** Sets the warm-up preference via the real `PUT /api/prefs` route
+ *  (2026-08-09 warmup-setting spec §2) — same in-page-fetch idiom as
+ *  `setBaselines` above, for a describe whose sweep needs the setting ON
+ *  rather than its OFF default. */
+async function setWarmup(
+  page: Page,
+  warmup:
+    { kind: "time"; minutes: number } | { kind: "distance"; meters: number },
+): Promise<void> {
+  const result = await page.evaluate(async (patch) => {
+    const res = await fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ warmup: patch }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, warmup);
+  if (!result.ok) {
+    throw new Error(`warmup setup failed: ${result.status} ${result.body}`);
+  }
+}
+
 /** Activates a preset plan via the real `PUT /api/plan` route (Plan.tsx's
  *  own `choose`) — this is what puts a genuine 84-row sequence behind
  *  Today's plan-driven suggestion and the Plan screen's active view. */
@@ -593,7 +615,7 @@ test.describe("workout detail screen (personal workout, owner actions)", () => {
   const title = "Design Owner Actions Sweep";
 
   // Per-worker email, same reasoning as the "edit mode with a stored
-  // warm-up row" describe below: this test creates real data (a saved
+  // standalone rest row" describe below: this test creates real data (a saved
   // workout) rather than only reading, and Playwright's fullyParallel
   // config can run this file's tests across several workers at once — a
   // fixed shared email raced two workers' concurrent sign-ins into a 500
@@ -1054,7 +1076,7 @@ test.describe("today screen (plan active, logs present)", () => {
     const soloTitle = "Design Sweep Solo O2 Hard";
     await importBulk(
       page,
-      [`${soloTitle} | O2 | hard | 4`, "wu 5", "w 20:00 6k+10 @20"].join("\n"),
+      [`${soloTitle} | O2 | hard | 4`, "w 20:00 6k+10 @20"].join("\n"),
     );
     await page.goto("/today");
     await expect(page.locator(".today-card")).toBeVisible();
@@ -1063,8 +1085,10 @@ test.describe("today screen (plan active, logs present)", () => {
     // fixture moves through the FILTER sheet — EASY/MEDIUM no longer
     // render inline. Amendment (2026-08-04 PR #50 round): TIME's default
     // (bucketsForCap(60) — the first three buckets) already covers this
-    // fixture's 25-min estimate (wu 5 + 20:00 work), so no TIME cell needs
-    // touching at all to narrow to HARD alone.
+    // fixture's 20-min estimate (2026-08-09: no `wu` line any more — a
+    // workout's own displayed/estimated duration is work-only now, per the
+    // warmup-setting spec §5), so no TIME cell needs touching at all to
+    // narrow to HARD alone.
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "EASY", exact: true }).click();
@@ -1461,8 +1485,10 @@ test.describe("confirm targets screen (effort step present — Heat Lightning)",
     // The effort-ref row's TARGET strip shows the word, not a resolved
     // range (docs/design/DEVIATIONS.md's PACE REF/effort row).
     // Scoped to the TARGET strip's own value cell, not a page-wide text
-    // search: the row's header label also reads "ROW 3 · ALL OUT"
-    // (kindLabel), so an unscoped getByText("ALL OUT") matches both.
+    // search: the row's header label also reads "ROW 2 · ALL OUT"
+    // (kindLabel — Heat Lightning's own `wu` step was stripped 2026-08-09,
+    // so the reps marker is Row 1 and this effort work step is Row 2 now),
+    // so an unscoped getByText("ALL OUT") matches both.
     const effortWord = page.locator(".step-editor-target-value", {
       hasText: "ALL OUT",
     });
@@ -1492,13 +1518,17 @@ test.describe("confirm targets screen (effort step present — Heat Lightning)",
 
   // Task 5 brief: "the confirm sweep runs with an effort step present ...
   // also sweep Confirm's struck-row state (a removed step's styling must
-  // survive contrast checks)". Strikes the warm-up row (guaranteed present,
-  // and NOT the effort/marker rows so this is testing the ordinary case).
+  // survive contrast checks)". Strikes Row 2, Heat Lightning's own effort
+  // work step (guaranteed present and NOT the marker row, which never gets
+  // a remove control — see the reps-marker test above) — this is the
+  // ordinary struck-row case, not the marker's own no-remove-control one.
+  // Row 2, not Row 1: Heat Lightning's `wu` step was stripped 2026-08-09
+  // (the warmup-setting spec), so Row 1 is now the reps marker itself.
   test.describe("a removed step (struck-row state)", () => {
     test.beforeEach(async ({ page }) => {
-      await page.getByRole("button", { name: "Remove Row 1" }).click();
+      await page.getByRole("button", { name: "Remove Row 2" }).click();
       await expect(
-        page.getByRole("button", { name: "Restore Row 1" }),
+        page.getByRole("button", { name: "Restore Row 2" }),
       ).toBeVisible();
     });
 
@@ -1578,7 +1608,10 @@ test.describe("confirm targets screen (effort step present — Heat Lightning)",
     const l1Box = (await l1.boundingBox())!;
     expect(l1Box.y).toBeGreaterThan(recountBox.y);
 
-    const remove = page.getByRole("button", { name: "Remove Row 1" });
+    // Row 2, not Row 1 — see the "removed step" describe above: Heat
+    // Lightning's own `wu` step was stripped 2026-08-09, so Row 1 is now
+    // the reps marker, which never grows a REMOVE control at all.
+    const remove = page.getByRole("button", { name: "Remove Row 2" });
     const removeHeight = await remove.evaluate(
       (el) => el.getBoundingClientRect().height,
     );
@@ -1640,8 +1673,19 @@ test.describe("builder screen", () => {
   // Phase 5F Task 7: the warm-up line moved above the step list, reading as
   // an implicit step 0 rather than a footnote down by the totals — a
   // real-browser structural pin, since jsdom has no layout and can't tell
-  // "above" from "below".
+  // "above" from "below". The line itself is conditional on the warm-up
+  // SETTING now (2026-08-09 warmup-setting spec §5), which defaults OFF —
+  // unlike every other test in this describe (left at the default, class
+  // (a)), warm-up IS this test's subject, so it turns the setting ON via
+  // the real preferences route, then reloads so Builder's own
+  // `usePreferences` mount refetches it (a fresh `page.goto` would also
+  // work; `reload` is scoped to this one test rather than moving into the
+  // shared beforeEach, which every other test in the describe doesn't
+  // need).
   test("the warm-up line precedes the step list", async ({ page }) => {
+    await setWarmup(page, { kind: "time", minutes: 10 });
+    await page.reload();
+
     const warmup = page.locator(".builder-warmup-line");
     const steps = page.locator(".builder-steps");
     await expect(warmup).toBeVisible();
@@ -1940,22 +1984,25 @@ test.describe("builder screen", () => {
   // control any more) — so no sweep's axe scan ever actually rendered a
   // collapsed `wu`/`r` StepCard, the one shape whose sub-summary is empty
   // and used to render a nameless, focusable button (axe button-name /
-  // WCAG 4.1.2). A `wu` row can only land in the builder via bulk import or
-  // an already-saved (edit-mode) workout — see builder.spec.ts's own
-  // "editing a workout with a stored warm-up" test, which this mirrors to
-  // get an edit-mode screen open, but for the axe/tap-target sweep instead
-  // of a save-round-trip assertion. Every one of the library's 300 workouts
-  // opens with a `wu` (verified in Task 12's docs reconcile), so this is the
-  // realistic, common case the earlier sweep never touched.
-  test.describe("edit mode with a stored warm-up row (wu StepCard)", () => {
-    const title = "Design WU Sweep";
+  // WCAG 4.1.2). UPDATED 2026-08-09 (warmup-setting spec): `wu` itself left
+  // the `Step` union — it can no longer land anywhere, including via bulk
+  // import (which now drops a `wu` line with a notice instead) or an
+  // already-saved workout (migration 0008 stripped every stored one). The
+  // standalone `r` (rest) row is the ONLY surviving Step kind with this
+  // empty-sub-summary shape (`StepCard.tsx`'s own comment: "wu was
+  // RowKind's other such member until 2026-08-09's warmup setting removed
+  // it") — a `r` row can still only land in the builder via bulk import or
+  // an already-saved (edit-mode) workout, same as `wu` used to, so this
+  // describe is re-anchored to it instead of being deleted outright.
+  test.describe("edit mode with a stored standalone rest row (r StepCard)", () => {
+    const title = "Design R Sweep";
 
     // Unlike this file's other describe blocks (which only ever read/
     // navigate), every test here creates real data via bulk import under
     // the same title — Playwright runs different tests in this file across
     // several parallel workers, so a fixed shared email here raced two
     // workers' concurrent sign-ins/imports into each other (a 500 from the
-    // backdoor route on a duplicate concurrent signup, and two "Design WU
+    // backdoor route on a duplicate concurrent signup, and two "Design R
     // Sweep" workouts existing at once, breaking the row-filter locator).
     // `parallelIndex` gives each worker its own account, matching
     // builder.spec.ts's own "every test signs in as its own unique email"
@@ -1964,15 +2011,16 @@ test.describe("builder screen", () => {
     // one at a time within a given worker).
     test.beforeEach(async ({ page }, testInfo) => {
       await signInViaBackdoor(page, {
-        email: `design-builder-wu-${testInfo.parallelIndex}@e2e.test`,
-        name: "Design Builder WU Tester",
+        email: `design-builder-r-${testInfo.parallelIndex}@e2e.test`,
+        name: "Design Builder R Tester",
       });
-      // Bulk import is the only way to get a `wu` row into a personal
-      // (editable) workout — seeded library workouts are global and can't be
-      // edited (EditWorkout.tsx refuses isGlobal workouts), and the
-      // create-mode builder has no control that can author one.
+      // Bulk import is the only way to get a standalone `r` row into a
+      // personal (editable) workout — seeded library workouts are global
+      // and can't be edited (EditWorkout.tsx refuses isGlobal workouts),
+      // and the create-mode builder has no control that can author one (no
+      // "+ REST" any more — docs/design/DEVIATIONS.md).
       await page.goto("/library/import");
-      const text = [`${title} | O2 | easy | 2`, "wu 5", "w 10' 6k @20"].join(
+      const text = [`${title} | O2 | easy | 2`, "r 5", "w 10' 6k @20"].join(
         "\n",
       );
       await page.getByLabel("Bulk import text").fill(text);
@@ -1986,7 +2034,7 @@ test.describe("builder screen", () => {
 
       // Edit mode opens with every row collapsed (Builder.tsx) — exactly
       // the state this sweep needs: two collapsed StepCards, one of them
-      // the stored `wu` row, neither ever expanded.
+      // the stored standalone `r` row, neither ever expanded.
       await expect(page.locator(".step-card")).toHaveCount(2);
       await expect(page.locator(".step-editor")).toHaveCount(0);
     });
@@ -2001,20 +2049,20 @@ test.describe("builder screen", () => {
       await assertTapTargets(page);
     });
 
-    test("zero WCAG 2A/2AA violations, including the collapsed wu card's sub-summary button", async ({
+    test("zero WCAG 2A/2AA violations, including the collapsed r card's sub-summary button", async ({
       page,
     }) => {
       await assertNoA11yViolations(page);
     });
 
-    // Structural pin, beyond the axe scan: the first card (the stored `wu`
+    // Structural pin, beyond the axe scan: the first card (the stored `r`
     // row) renders no `.step-card-sub` element at all — not an empty one —
     // proving the fix is "don't render it" and not "render it with empty
     // text" (which would still be a nameless focusable control). The second
     // card (the `w` row) still renders its own populated sub-summary, so
     // this also proves the fix is conditional per-row, not a blanket
     // removal of the control.
-    test("the wu card renders no sub-summary button; the w card still does", async ({
+    test("the r card renders no sub-summary button; the w card still does", async ({
       page,
     }) => {
       const cards = page.locator(".step-card");

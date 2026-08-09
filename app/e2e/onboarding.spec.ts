@@ -193,18 +193,15 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await page.getByRole("button", { name: "SKIP ›" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);
 
-    // Warm-up first (5', a real duration — TOTAL LEFT shows here, per
-    // Timer.test.tsx's own "still shows TOTAL LEFT during the warm-up"
-    // pin) — ▶ advances immediately, no need to wait out 5 real minutes.
-    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
-    await page.getByRole("button", { name: "Next phase" }).click();
-
-    // The distance work phase (STEP 2 OF 2, the LAST phase, and the only
-    // one left — the exact case `hasRemainingEstimate` exists for): the
-    // TARGET SPLIT card shows the effort word ("EASY" — {effort:"min"}),
-    // never a resolved number, and TOTAL LEFT/the phase progress bar are
-    // both gone entirely rather than frozen at 0:00/0%.
-    await expect(page.getByText(/^STEP 2 OF 2/)).toBeVisible();
+    // No warm-up (the setting defaults OFF — this arc never turns it on,
+    // and First 6k's own seed steps carry no `wu` any more since
+    // 2026-08-09's warmup-setting spec stripped it): the distance work
+    // phase is the ONLY phase, STEP 1 OF 1 — the exact case
+    // `hasRemainingEstimate` exists for. The TARGET SPLIT card shows the
+    // effort word ("EASY" — {effort:"min"}), never a resolved number, and
+    // TOTAL LEFT/the phase progress bar are both gone entirely rather than
+    // frozen at 0:00/0%.
+    await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
     const targetCard = page.locator(".timer-card").first();
     await expect(targetCard.locator(".timer-card-label")).toHaveText(
       "TARGET SPLIT",
@@ -250,9 +247,10 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     ).toHaveAttribute("aria-pressed", "true");
 
     // The measured split survives into the log: the ONLY step row (the
-    // distance phase; the warm-up never becomes a LogStep) shows no
-    // target (5G rule, effort) but DOES show its real stopwatch ACTUAL —
-    // the 6I amendment to the drop rule, proven end to end.
+    // distance phase — no warm-up is set for this walk, so there's nothing
+    // else to log) shows no target (5G rule, effort) but DOES show its
+    // real stopwatch ACTUAL — the 6I amendment to the drop rule, proven end
+    // to end.
     const logRows = page.locator(".log-step-row");
     await expect(logRows).toHaveCount(1);
     await expect(logRows.first().locator(".log-step-target")).toHaveText("—");

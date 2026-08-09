@@ -164,21 +164,25 @@ test.describe("authoring loop", () => {
     // which parsePaceRef (domain/pace.ts) never accepts (2k/6k only), so the
     // whole PASTE is rejected — all-or-nothing, not just the second block.
     // Line numbers are 1-based over the raw pasted text (including the
-    // blank separator) — the bad ref sits on line 7.
+    // blank separator) — the bad ref sits on line 5. No `wu` line in either
+    // block: this test's subject is all-or-nothing plus line-number
+    // reporting, not warm-ups, and a `wu` line would just get silently
+    // dropped (2026-08-09 warmup-setting spec) without changing the
+    // numbering (bulk.ts's `RawLine.lineNumber` is assigned before any
+    // drop), so it would only add noise here. The wu lines this block used
+    // to carry are why the bad ref moved from line 7 to line 5.
     const text = [
       "9410 | Bulk Good | O2 | easy | 2",
-      "wu 5",
       "w 10' 6k @20",
       "",
       "9411 | Bulk Bad | O2 | easy | 2",
-      "wu 5",
       "w 10' 9k @20",
     ].join("\n");
     await page.getByLabel("Bulk import text").fill(text);
     await page.getByRole("button", { name: "Import", exact: true }).click();
 
     await expect(page.locator(".bulk-import-errors li")).toHaveText(
-      "line 7: bad pace ref: 9k",
+      "line 5: bad pace ref: 9k",
     );
     // The reversal: this used to read "1 created" (the good block landed
     // despite the bad one) — all-or-nothing means zero, even though only
@@ -422,9 +426,7 @@ test.describe("new controls this phase introduced", () => {
     // legacy number (domain/bulk.ts's parseHeader accepts both shapes; this
     // paste exercises the current one).
     const title = "Import Screen Row";
-    const text = [`${title} | AT | medium | 3`, "wu 5", "w 5 6k @20"].join(
-      "\n",
-    );
+    const text = [`${title} | AT | medium | 3`, "w 5 6k @20"].join("\n");
     await page.getByLabel("Bulk import text").fill(text);
     await page.getByRole("button", { name: "Import", exact: true }).click();
 
@@ -600,52 +602,71 @@ test.describe("new controls this phase introduced", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("editing a workout with a stored warm-up keeps its wu row, and Save still PUTs it unchanged", async ({
+  // Was "editing a workout with a stored warm-up keeps its wu row, and Save
+  // still PUTs it unchanged" — that scenario is now categorically
+  // impossible (2026-08-09 warmup-setting spec): bulk import DROPS `wu`
+  // lines rather than turning them into a step, and migration 0008 already
+  // stripped every existing stored `wu`. Repurposed into the import walk's
+  // own wu-strip notice case (block2-review's plan hole): a paste with one
+  // dropped `wu` line, kept on-screen by a second block's unrelated error
+  // so the notice actually has a chance to render (a CLEAN import navigates
+  // away immediately — BulkImport.tsx's own `onImported` — before any
+  // notice could ever be seen), then confirms the surviving workout really
+  // has no wu row to edit.
+  test("a paste with one wu line shows the drop notice, and the created workout has no wu row to edit", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
-      email: "builder-wu-edit@e2e.test",
-      name: "Builder WU Edit Tester",
+      email: "builder-wu-strip@e2e.test",
+      name: "Builder WU Strip Tester",
     });
     await setBaselines(page);
-    // The builder has no `+ WARM-UP` control any more (docs/design/
-    // DEVIATIONS.md) — a `wu` row can only land in a form via bulk import
-    // or an already-saved workout, so bulk import is how this test
-    // manufactures one to then edit, mirroring every library workout's own
-    // shape (they all open with a stored warm-up).
     await page.goto("/library/import");
-    const title = "WU Edit Row";
-    const text = [`${title} | O2 | easy | 2`, "wu 5", "w 10' 6k @20"].join(
-      "\n",
-    );
+
+    const title = "WU Strip Row";
+    const text = [
+      `${title} | O2 | easy | 2`,
+      "wu 5",
+      "w 10' 6k @20",
+      "",
+      "WU Strip Bad | O2 | easy | 2",
+      "w 10' 9k @20",
+    ].join("\n");
     await page.getByLabel("Bulk import text").fill(text);
     await page.getByRole("button", { name: "Import", exact: true }).click();
-    await expect(page).toHaveURL(/\/library$/);
 
+    // A partial result keeps the rower on this panel (the second block's
+    // bad pace ref is the only error), which is exactly what lets the
+    // dropped-warm-ups notice actually render.
+    await expect(page.locator(".bulk-import-result .mono-status")).toHaveText(
+      "1 created",
+    );
+    await expect(page.locator(".bulk-import-notice")).toHaveText(
+      "1 warm-up line dropped. Warm-ups are a setting now.",
+    );
+    await expect(page.locator(".bulk-import-errors li")).toHaveText(
+      "line 6: bad pace ref: 9k",
+    );
+
+    await page.goto("/library");
     await page.locator(".workout-row").filter({ hasText: title }).click();
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Edit" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/edit$/);
 
-    // Edit mode opens with every row collapsed (Builder.tsx: reviewing
-    // already-authored steps is exactly the wall-of-inputs problem the
-    // accordion exists to fix) — expand Row 1 (the stored `wu` row) via its
-    // own collapsed card before reading its field values.
+    // Exactly one step survived — the dropped `wu` line left no row behind
+    // for the builder to render, edit, or round-trip.
+    await expect(page.locator(".builder-step-list > div")).toHaveCount(1);
     await page
       .locator(".builder-step-list > div")
       .first()
       .getByRole("button", { name: "EDIT" })
       .click();
-
-    // Row 1 is the stored `wu` row — StepEditor's non-work branch, so it
-    // renders only a duration field (no pace/SPM/rest), still showing the
-    // 5 minutes bulk import stored, spelled in the clock form `durValue`
-    // holds now (`fmtDuration(5)`).
     await expect(
       page.getByLabel("Row 1 duration", { exact: true }),
-    ).toHaveValue("5:00");
+    ).toHaveValue("10:00");
     await expect(
-      page.getByRole("radio", { name: "Row 1 duration unit minutes" }),
+      page.getByRole("radio", { name: "Row 1 pace 6K" }),
     ).toHaveAttribute("aria-checked", "true");
 
     const putRequestPromise = page.waitForRequest(
@@ -656,10 +677,12 @@ test.describe("new controls this phase introduced", () => {
     const body = putRequest.postDataJSON() as {
       steps: Array<{ k: string }>;
     };
-    expect(body.steps.some((s) => s.k === "wu")).toBe(true);
+    expect(body.steps).toHaveLength(1);
+    expect(body.steps.some((s) => s.k === "wu")).toBe(false);
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await cleanupByTitle(page, title);
+    await cleanupByTitle(page, "WU Strip Bad");
   });
 
   test("editing a stored workout's rest, then tapping REST once, still saves — the seam that used to write NaN", async ({
