@@ -13,6 +13,7 @@ import { createLogsStore, type LogsStore } from "../stores/logs.js";
 import { seedGlobalLibrary, SEED_LOCK_KEY } from "./seed.js";
 import { GLOBAL_LIBRARY_SEED, LIBRARY_WORKOUTS } from "./library/index.js";
 import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
+import warmupsBefore from "../../scripts/library-warmups-before.json";
 
 describe("seedGlobalLibrary against real Postgres", () => {
   let container: StartedPostgreSqlContainer;
@@ -290,6 +291,79 @@ describe("seedGlobalLibrary against real Postgres", () => {
     expect(after).toMatchObject({ difficulty: "hard", pain: 5 });
     const logRow = await findLog(user.id, logId);
     expect(logRow!.workoutId).toBe(target.id); // link intact
+  });
+
+  // The warmup-setting spec's own converge scenario (design spec §6/M4,
+  // docs/superpowers/specs/2026-08-09-warmup-setting-design.md): a
+  // deployed DB still carries the OLD (pre-strip) `wu`-including shape for
+  // a title the code's library no longer matches byte-for-byte. The
+  // reconcile mechanism is content-addressed, not title-addressed
+  // (server/seed/seed.ts:33's `contentEqual`: `isDeepStrictEqual(row.steps,
+  // w.steps)`), and the line that ACTS on a mismatch —
+  // server/seed/seed.ts:86, `if (row && !contentEqual(row, w)) await
+  // workouts.updateGlobal(row.id, w);` — updates the existing row in
+  // place rather than falling through to the title-missing insert path.
+  // Deleting that `!contentEqual(row, w)` check (always skipping the
+  // update) is exactly what this test would catch: the row would keep its
+  // stale `wu` step forever, since the title still matches.
+  it("converges a workout whose STEPS changed (the warmup-setting strip): same row id, log link intact, wu gone", async () => {
+    await db.delete(workouts);
+    const target = LIBRARY_WORKOUTS[0]!;
+    const historicalWarmupMinutes = (warmupsBefore as Record<string, number>)[
+      target.title
+    ];
+    // Sanity: every one of the 300 library workouts carried a wu step
+    // before Task 3's strip (task-1-report.md / task-3-report.md), so this
+    // must be defined for whichever title happens to sort first.
+    expect(historicalWarmupMinutes).toBeDefined();
+
+    // The OLD shape this row carried in a deployed DB before this PR:
+    // today's steps, plus the real historical `wu` lead-in this exact
+    // title used to have (frozen at scripts/library-warmups-before.json,
+    // captured from the pre-strip seed content in the same commit that
+    // deleted it) — a raw insert, bypassing seedGlobalLibrary entirely,
+    // standing in for "a row seeded by an older deploy."
+    const oldSteps = [
+      { k: "wu", minutes: historicalWarmupMinutes },
+      ...target.steps,
+    ];
+    const [oldRow] = await wk.createMany(null, [
+      {
+        sortOrder: target.sortOrder,
+        title: target.title,
+        type: target.type,
+        difficulty: target.difficulty,
+        pain: target.pain,
+        source: "starter" as const,
+        steps: oldSteps as unknown as typeof target.steps,
+      },
+    ]);
+
+    const user = await users.createUser({
+      googleSub: "converge-wu-strip",
+      email: "converge-wu-strip@x.com",
+      name: "Converge WU Strip",
+    });
+    const logId = await createLogFor(
+      user.id,
+      oldRow!.id,
+      target.title,
+      target.type,
+    );
+
+    await seedGlobalLibrary(db);
+
+    const after = (await wk.listGlobals()).find(
+      (g) => g.title === target.title,
+    )!;
+    expect(after.id).toBe(oldRow!.id); // same row — converge-in-place, not delete+insert
+    expect(after.steps).toStrictEqual(target.steps); // wu gone, everything else byte-identical
+    expect(
+      (after.steps as Array<{ k: string }>).some((s) => s.k === "wu"),
+    ).toBe(false);
+
+    const logRow = await findLog(user.id, logId);
+    expect(logRow!.workoutId).toBe(oldRow!.id); // link intact, not nulled
   });
 
   it("deletes a dropped title (its log link nulls) and inserts a new one", async () => {
