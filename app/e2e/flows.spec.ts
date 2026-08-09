@@ -217,7 +217,13 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
     // never the reps marker (which never grows a remove control at all —
     // ConfirmTargets.tsx's own binding decision), so a REMOVE control is
     // guaranteed there, and striking it removes real minutes from the
-    // recount, unlike the earlier 30s duration nudge.
+    // recount, unlike the earlier 30s duration nudge. RESTORE it again
+    // right after: some seeded workouts (Sea Fret — a bare `REPEAT x2` over
+    // ONE work step) have exactly one non-marker row, so leaving it struck
+    // would hand START a session with zero live phases, landing straight
+    // on /session/complete instead of the running Timer this test still
+    // needs below — found by this test's own first run against exactly
+    // that fixture.
     await page
       .getByRole("button", { name: `Remove ${durationRowLabel}` })
       .click();
@@ -226,6 +232,14 @@ test.describe("Phase 6A/6B: today -> detail -> confirm -> countdown -> timer", (
     ).toBeVisible();
     const recountAfterStrike = await recount.textContent();
     expect(recountAfterStrike).not.toBe(recountAfterDuration);
+    await page
+      .getByRole("button", { name: `Restore ${durationRowLabel}` })
+      .click();
+    await expect(
+      page.getByRole("button", { name: `Remove ${durationRowLabel}` }),
+    ).toBeVisible();
+    const recountAfterRestore = await recount.textContent();
+    expect(recountAfterRestore).toBe(recountAfterDuration);
 
     // START stamps startedAt and navigates to the countdown (Phase 6B Task
     // 3 rewired this: it used to go straight to the 6B placeholder at
