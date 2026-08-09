@@ -374,7 +374,7 @@ test("BACK-walks-the-stack round: from Today's START HERE step 1, NEXT-chaining 
 // FIRST symptom (origin lost entirely) but, by design, made BACK and ✕
 // resolve identically, which is exactly what made the second report
 // possible. `ArticleLink` (the one door an article body may use to link to
-// another article) now pushes and carries the same `{ from, origin }`
+// another article) now pushes and carries the same `{ trail, origin }`
 // shape NEXT does, so BACK retraces THROUGH a cross-link hop exactly like
 // it does through a NEXT hop.
 test("BACK-walks-the-stack round: an in-prose cross-link inside an article retraces via ← BACK one hop at a time (both the in-page link and browser BACK), while ✕ still exits directly to Today", async ({

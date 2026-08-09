@@ -612,6 +612,22 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.body.errors).toHaveLength(1);
   });
 
+  // Shape pin (whole-batch review, Important #1): nothing above asserts
+  // the exact per-line error entry SHAPE — a rename of `line`/`message`,
+  // or a change to the composed text, would still pass every assertion
+  // above. `toStrictEqual` on the one real entry a validation failure
+  // produces pins both keys and their exact values, structurally.
+  it("a validation-failure error entry has the exact {line, message} shape the route's own API surface promises", async () => {
+    const text = `1 | Bad Pain | AT | medium | 9\nwu 10\nw 1' 6k @20`;
+    const res = await asA(
+      request(appFor(makeStores())).post("/api/workouts/bulk"),
+    ).send({ text });
+    expect(res.body.created).toHaveLength(0);
+    expect(res.body.errors).toStrictEqual([
+      { line: null, message: 'workout "Bad Pain": pain must be 1..5' },
+    ]);
+  });
+
   // The falsifying test (brief's own framing): assert the actual PERSISTED
   // count via the store directly, not just what the response body claims
   // — a route that still inserted rows behind a lying `created: []` would

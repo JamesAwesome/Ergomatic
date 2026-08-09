@@ -1416,13 +1416,18 @@ nothing here is new work. Effort guesses are S/M/L.
       rank by signal; (5) MISSED-rows inheritance, which exists only to
       catch what a reconnect BACKFILL fails to fill and so lands with
       reconnect or not at all. **L**
-- [ ] **The platform-conditional default transport** — the same root cause
-      as the item above: `createCapacitorBleTransport` has no call site, a
-      native build passes its own factory through
+- [x] **The platform-conditional default transport** — the same root cause
+      as the item above: `createCapacitorBleTransport` had no call site, a
+      native build passed its own factory through
       `MonitorSessionDeps.createTransport`, and choosing between it and Web
-      Bluetooth belongs in the adapter layer (`src/platform.ts`/
+      Bluetooth belonged in the adapter layer (`src/platform.ts`/
       `src/adapters/`), not the transport-resolution seam
-      (`src/monitor/transports/index.ts`'s own doc comment). **M**
+      (`src/monitor/transports/index.ts`'s own doc comment). Fixed
+      (BACK-walks-the-stack batch, batch A): `src/adapters/
+      monitorTransport.ts` adds the platform-conditional default — native
+      dynamic-imports `createCapacitorBleTransport`, web delegates
+      unchanged to `transports/index.ts`'s `resolveDefaultTransport` —
+      wired through `useMonitorSession.ts`'s existing `??` fallback. **M**
 - [ ] **Anonymous-run logging (`workoutId: null`)** — no library door
       exists to log a connected session that has no workout identity, so
       the record clears through the existing connect/start guards but can
@@ -1454,18 +1459,28 @@ nothing here is new work. Effort guesses are S/M/L.
       all, has never been sent to a real PM5 (§18, walk 1). One row with a
       `.5` target settles it silently, so it rides along with the shopping
       list above. **S**
-- [ ] **`intervalAccrued` on `MonitorFrame`** — pane C's active row shows
-      `—` for the dimension that is not counting down, because no
-      per-interval field exists for it. Closing it is a DRIVER change, not
-      a screen one: `driver.ts` already keeps the per-interval baseline
-      `intervalRemaining` needs (`docs/design/DEVIATIONS.md`'s pane-C
-      active-row row, task-7 review adjudication 4). **M**
-- [ ] **Phase 7A-fix-3's parked minors** — a byte-for-byte duplicated test
+- [x] **`intervalAccrued` on `MonitorFrame`** — pane C's active row showed
+      `—` for the dimension that was not counting down, because no
+      per-interval field existed for it. Closed as a DRIVER change, not a
+      screen one (BACK-walks-the-stack batch, batch A):
+      `computeAccruedForFrame` (`driver.ts`) mirrors `intervalRemaining`'s
+      own per-interval baseline into `MonitorFrame.intervalAccrued`,
+      wired through the per-frame path (`docs/design/DEVIATIONS.md`'s
+      pane-C active-row row, task-7 review adjudication 4). **M**
+- [x] **Phase 7A-fix-3's parked minors** — a byte-for-byte duplicated test
       helper (`stillArmedEmpty`/`stillArmedAtZero`, `driver.test.ts`) and
       three LOW-severity comment/instrumentation nits from its Task 2
       review: a timeout-not-assertion latency pin, the settle not logging
       its own configured bound, and an undocumented off-by-one in that
-      bound's inclusivity. **S**
+      bound's inclusivity. Items 2–4 fixed in batch A (4079a22); item 1
+      (the dedupe) was initially declined there, citing a prior
+      whole-branch review's "parked per reviewer ruling" note (32196d8) as
+      more recent than this ROADMAP line — a real citation, but its
+      recency argument read backwards: 32196d8 predates both this CL
+      line (2026-08-09) and this batch's own brief, and CL is precisely
+      the phase where a parked item comes due. Deduped in the
+      BACK-walks-the-stack batch's fix round: one `stillArmedEmpty`
+      helper, both call sites (`driver.test.ts`), driver suite green. **S**
 - [x] **Bulk import has no transaction** — `POST /api/workouts/bulk`
       (`app/server/routes/data.ts`) used to insert block by block inside a
       plain loop, so a partial failure left the landed blocks behind and

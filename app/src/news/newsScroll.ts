@@ -36,12 +36,17 @@ export function loadNewsScroll(): number | null {
 }
 
 /** Clears the saved position. Called from the tab bar's own NEWS link
- *  (TabBar.tsx), NOT from News itself: `BackLink`'s `<Link>`/`ArticleLink`'s
- *  ✕ and the tab bar's `<NavLink>` all navigate to `/news` carrying no
- *  `location.state` at all, so News's own mount can't tell a BACK return
- *  from a fresh tab tap apart. Clearing at the tab's own click handler is
- *  the point of distinction the design calls for instead — same reasoning
- *  as `libraryScroll.ts`'s own `clearLibraryScroll`. */
+ *  (TabBar.tsx), NOT from News itself: News's own mount never inspects
+ *  `location.state` for this at all, so it can't tell a BACK return from a
+ *  fresh tab tap apart by looking at what it arrived with — a return via
+ *  Reader's own ← BACK/✕ controls (`useReadingTrail`'s `{ trail, origin }`)
+ *  is just as valid a "restore" signal as a bare browser back with no
+ *  state, and News has no reason to treat the two differently. The tab
+ *  bar's own `<NavLink to="/news">` is the ONE link that IS unambiguously
+ *  a fresh visit — it never carries reading-chain state and is the only
+ *  door a rower can use to jump to News on purpose mid-chain — so clearing
+ *  at its own click handler is the point of distinction the design calls
+ *  for, same reasoning as `libraryScroll.ts`'s own `clearLibraryScroll`. */
 export function clearNewsScroll(): void {
   try {
     sessionStorage.removeItem(NEWS_SCROLL_KEY);

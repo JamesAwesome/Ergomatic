@@ -6005,23 +6005,6 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     expect(events.some((e) => e.kind === "intervalComplete")).toBe(true);
   });
 
-  /** A WaitToBegin tick carrying nothing further — the "machine going on
-   *  reporting armed" shape `stillArmedAt` above uses, without that name's
-   *  own non-zero heart rate (irrelevant here). */
-  function stillArmedAtZero(atMs: number): FakeTimelineEvent {
-    return {
-      atMs,
-      kind: "status",
-      workoutState: WORKOUTSTATE_WAITTOBEGIN,
-      elapsedSeconds: 0,
-      distanceMeters: 0,
-      spm: 0,
-      currentSplit: 0,
-      heartRateBpm: null,
-      programIntervalIndex: 0,
-    };
-  }
-
   it("fix-3 Task 5: FakeScript.lagStructureOneTick exercises the driver's N=3 rule against the FAKE's OWN wire — not only stubTransport (SESSION 4a's recorded mid-cycle transients)", async () => {
     // The machine is idle at dispatch (no rowing scripted), so
     // `waitForPrepareSettle` resolves immediately (its own doc comment:
@@ -6029,10 +6012,16 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     // as a genuine, non-empty arm — this test is about the LAG, not the
     // empty arm.
     const program = seaFretProgram();
+    // `stillArmedEmpty` (not a separately-named `stillArmedAtZero`, deduped
+    // per ROADMAP CL item 8's own item 1: the two were byte-for-byte
+    // identical — same WaitToBegin/null-heart-rate shape, just declared
+    // twice in this same describe block) — the "machine going on reporting
+    // armed" shape `stillArmedAt` above uses, without that name's own
+    // non-zero heart rate (irrelevant here).
     const { fake, log, driver } = harness({
       program,
       lagStructureOneTick: true,
-      events: [stillArmedAtZero(1)],
+      events: [stillArmedEmpty(1)],
     });
 
     const pending = driver.program(program);

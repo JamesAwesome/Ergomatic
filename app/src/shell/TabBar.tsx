@@ -40,15 +40,22 @@ export default function TabBar() {
         <NavLink
           key={tab.path}
           to={tab.path}
-          // Library's own Link/BackLink returns, News's own BackLink/✕
-          // returns, and this tab bar's own `<NavLink>`s all navigate to
-          // their screen with no `location.state` at all, so neither
-          // screen's mount can tell a BACK return from a fresh tab visit
-          // apart (see libraryScroll.ts/newsScroll.ts). Clearing right
-          // here, at the one link that IS unambiguously a fresh visit, is
-          // the distinction: a tab tap always starts at the top (with no
-          // filters, for Library); a BACK return (never through this link)
-          // still restores everything.
+          // Library's own Link/BackLink returns carry no `location.state`
+          // at all, so Library's mount can't tell a BACK return from a
+          // fresh tab visit apart by looking at what it arrived with.
+          // News is in the same position for a different reason: a return
+          // via Reader's own ← BACK/✕ controls DOES carry state
+          // (`useReadingTrail`'s `{ trail, origin }`), but News's own
+          // mount never inspects it — that shape means nothing to News's
+          // scroll restore, so a stateful reading-chain return and a bare
+          // stateless browser back are equally valid "restore" signals
+          // (see libraryScroll.ts/newsScroll.ts). Either way, THIS
+          // `<NavLink>` is the one link that IS unambiguously a fresh
+          // visit — it never carries reading-chain state and is the only
+          // door a rower can use to jump to a tab on purpose — so clearing
+          // right here is the distinction: a tab tap always starts at the
+          // top (with no filters, for Library); a BACK return (never
+          // through this link) still restores everything.
           onClick={CLEAR_ON_TAB[tab.path]}
           className={({ isActive }) => (isActive ? "tab tab-active" : "tab")}
         >
