@@ -1,14 +1,22 @@
 # The warmup setting (Phase 9's warmup bullet, pulled forward) — design
 
-**Date:** 2026-08-09. **Authority:** ROADMAP Phase 9's warmup bullet
+**Date:** 2026-08-09, adversarially revised same day (20 findings, 5
+blocking — `2026-08-09-warmup-adversarial-review.md`; every B/M finding
+is resolved in the section that owned it, and the review's Mandate-2
+scorecard drove five briefing amendments the same hour).
+**Authority:** ROADMAP Phase 9's warmup bullet
 (James's ruling, recorded 2026-08-08); `domain/types.ts` `Step`;
 `domain/expand.ts` (`case "wu"` → `EnginePhase{type:"warmup"}`,
 `expand.ts:128-134`); the preferences table (`server/db/schema.ts:144`,
 whose `warmupMinutes`/`warmupOverride` columns predate this ruling and
 model the superseded design); the 300-workout seeded library
-(`server/seed/library/{o2,at,tr,an,onboarding}.ts`); walk 1's §18
-record (a warmup interval programmed to a real PM5 and rendered as
-`1 OF 2 · WARM-UP`). **Product rulings (James, 2026-08-09):** `wu` is
+(`server/seed/library/{o2,at,tr,an,onboarding}.ts`); the in-repo
+warmup-phase consumers (`domain/monitor/program.ts`'s warmup interval
+arm; 7C's `buildLogSeed` warmup-kind tests); operator-observed but
+UNCOMMITTED: walk 1's recording showed the programmed warmup rendered
+as the session's first interval (adversarial M1 caught the §18 citation
+as fabricated — the recording was never committed, so this claim is
+marked for what it is and nothing below leans on it). **Product rulings (James, 2026-08-09):** `wu` is
 FULLY REMOVED as a step type; the setting defaults OFF for everyone.
 
 ## 1. Goal and shape
@@ -22,7 +30,10 @@ row type, and the bulk import strips `wu` lines with a notice.
 THE ARCHITECTURAL KEY (this is what makes the change small): `Step`
 (authoring) and `EnginePhase` (session runtime) are already separate
 types. `Step`'s `wu` dies; `EnginePhase`'s `"warmup"` SURVIVES with
-exactly one producer, the preference, prepended at draft-build. Every
+exactly one producer, the preference, prepended where phases are BORN:
+`buildRun` (`engine.ts:56-84`, the pure step-to-phase expansion —
+adversarial B1: `buildDraft` returns `steps`, no phases, so the earlier
+draft-seam claim was mechanically impossible). Every
 downstream consumer of a warmup phase keeps working unmodified and
 PROVENLY: the timer runs it, `compileProgram` programs it to the PM5 as
 a no-target interval (§18 walk 1 rendered exactly this on hardware),
@@ -52,12 +63,17 @@ Migration: ADD `warmup` jsonb nullable; DROP `warmupMinutes` and
 `warmupOverride` (the override was never consumed anywhere; the minutes
 column's ONE consumer is the Builder hint, rewritten in §5). Existing
 rows get `warmup = null` — off by default applies to everyone, per the
-ruling. Server validation on PUT /api/prefs: the shape above, bounds
-inclusive, anything else 400s. Bounds echo the builder's own step
-bounds where they exist (`domain/validate.ts` is the authority; the
-warmup's time bound reuses the work-step minutes bound, distance
-reuses the meters bound — the plan pins exact constants from
-`validate.ts`, not from this prose).
+ruling. Server validation on PUT /api/prefs: TODAY the route silently ignores
+unknown fields (pinned at `data.test.ts:1472-1481` — adversarial B5;
+the spec's earlier "400s" described a route that does not exist). The
+plan CHANGES the route: `warmup` joins the accepted-field list with
+shape validation (bad shape 400s; unknown fields elsewhere keep their
+ignore behavior), and the patch idiom gains an explicit-null arm — the
+existing `!== undefined` merge cannot express "set warmup to null", so
+clearing the setting needs its own presence check. Bounds are scalar
+deferrals to `domain/validate.ts`'s own constants (time reuses the
+work-step minutes bound, distance the meters bound; owner file named,
+exact values pinned by the plan).
 
 `usePreferences` gains the field (additive, the file's own pattern) and
 its `save` patch carries it.
@@ -80,27 +96,42 @@ existing contract).
 
 ## 4. The session flow
 
-`buildDraft` — the single seam both doors already share (Start and
-Connect both construct the draft/phases there) — prepends, when
-`warmup !== null`:
+The prepend lives in `buildRun` (`engine.ts:56-84`), the one function
+that turns steps into `EnginePhase[]` for BOTH doors — `buildDraft`
+(`draft.ts:46-64`) returns `steps` only and stays untouched
+(adversarial B1). `buildRun` gains an optional `warmup` argument;
+when present it emits, before the expanded steps:
 
-1. `EnginePhase{type: "warmup", seconds}` for time, or the distance
-   equivalent (`expand.ts`'s warmup phase shape; distance warmups reuse
-   the same phase type with `meters` — the plan verifies `EnginePhase`
-   already carries the distance arm the way work phases do, since
-   `WorkDuration` is kind-split everywhere).
-2. `EnginePhase{type: "rest", seconds: restSeconds}` when rest is set.
+1. `EnginePhase{type: "warmup"}` with `seconds` (time kind) or
+   `meters` (distance kind);
+2. a rest phase for `restSeconds` when set.
 
-Consequences, all via existing behavior: ConfirmTargets lists the
-warmup row exactly as it lists one today (no target to nudge); the
-Timer runs it; `compileProgram` emits it as interval 0 with no pace
-target (the §15 #3 pace-time-zero convention, hardware-exercised in
-walk 1); 7C's `buildLogSeed(phases, baselines)` receives the prepended
-phase and marks it `kind: "warmup"`, so the monitor log skips it; the
-manual log builders skip the phase as they always have. The logged
-session's duration still reflects wall-clock reality on the monitor
-path (run stamps) and the estimate path counts the warmup only in the
-session estimate, never in the workout's own displayed duration (§5).
+**Pricing a distance warmup (adversarial B3, the one genuinely new
+mechanism):** the phone timer prices phases via `phaseSeconds`
+(`expand.ts:91-99`), which needs `meters` AND a split; a warmup has no
+target by ruling. The EFFORT precedent already solves this shape:
+effort phases carry a display-only estimate (`domain/pace.ts`'s
+`estimationSplit`) that prices the phase without programming a target.
+A distance warmup does the same with an easy estimate (the plan pins
+the estimator: `estimationSplit`'s own easy band against the rower's
+6k baseline), used ONLY for the phone's countdown/progress/auto-advance
+arithmetic. Nothing programs it: `compileProgram` still emits the
+warmup interval with no pace target, per its existing warmup arm.
+(§15 #3's pace-time-zero is that module's own INFERENCE, observed on no
+hardware — adversarial M2; the convention is cited as the code's, not
+as proven.)
+
+**ConfirmTargets learns the prefix as NEW code (adversarial B2):** the
+screen maps `draft.steps` (`ConfirmTargets.tsx:356`) and its total is
+steps-based (`:342`), so a phase-layer warmup would be invisible.
+It gains one preference-sourced, non-nudgeable WARM-UP row above the
+step rows and includes the warmup (time, or the estimate-priced
+distance) plus its rest in the displayed total. The Timer receives the
+phases from `buildRun` and needs nothing new; a meters warmup behaves
+exactly as a distance work phase does on the phone today. 7C's
+`buildLogSeed(phases, baselines)` receives the prepended phase and
+marks it `kind: "warmup"`; both log builders skip it, as their existing
+tests already pin.
 
 ## 5. Estimates and the Builder
 
@@ -111,41 +142,60 @@ session estimate, never in the workout's own displayed duration (§5).
   renders only when the setting is ON, reading
   `+ <house-format> warm-up from your preferences` (time or meters,
   plus the rest when set), and disappears when OFF.
-- ConfirmTargets' total line includes the prepended phases (it derives
-  from the phase list; no new code expected — the plan verifies).
+- ConfirmTargets' warmup row and total handling are §4's own new code
+  (the earlier "no new code expected" claim was backwards — B2).
 
 ## 6. Removal of `wu`
 
+**The unions, enumerated (the same-name trap — adversarial M7):**
+`Step`'s `"wu"` DIES. The phase/segment vocabulary's `"wu"`/`"warmup"`
+SURVIVES everywhere it appears — `expand.ts`'s `EnginePhase` type,
+`IntervalSegments.tsx`, `surfaceModel.ts`, `Timer.tsx`'s phase arms,
+7C's `logSeed.kind` — because the preference still produces warmup
+phases. Only the AUTHORING union member and its producers are removed.
+
 - `domain/types.ts`: `wu` leaves the `Step` union; `validateSteps`
-  rejects it (the error copy names the setting:
-  `Warm-ups moved to Settings. Set yours on the You tab.`).
-- `domain/expand.ts`: `case "wu"` deleted; `estimateMinutes` follows.
-- `domain/bulk.ts` (import): a `wu` line is STRIPPED, not fatal; the
-  import result carries a notice line
-  (`N warm-up lines dropped. Warm-ups are a setting now.`) in the
-  screen's existing notice idiom.
-- Builder: the `wu` row type and its chip disappear;
-  `builderState.ts`/`StepRow.tsx`/`IntervalSegments.tsx` lose their wu
-  arms.
-- The 300 seeds: every `{ k: "wu", ... }` line deleted across the five
-  library files; nothing else about any workout changes (titles,
-  structure, offsets, spm untouched). The library version marker
-  (whatever `seedGlobalLibrary`'s reconcile keys on — the plan pins it)
-  bumps so the reconcile updates existing databases.
-- Custom workouts: a one-time server-side strip of `wu` steps at
-  migration time (SQL over the workouts' steps jsonb, or a boot-time
-  reconcile pass consistent with how the library reconciler already
-  rewrites rows — the plan picks the mechanism the codebase already
-  trusts and pins it). A stripped custom workout keeps everything else
-  byte-identical.
+  rejects it with `Warm-ups moved to Settings. Set yours on the You
+  tab.`
+- `domain/expand.ts`: `case "wu"` deleted from the STEP switch;
+  `estimateMinutes` follows (the phase-level warmup arithmetic stays).
+- `domain/bulk.ts`: the parser handles `wu` lines EXPLICITLY — parse,
+  drop, count — never by case-deletion (which would make the line fatal
+  and eat its block — adversarial M6). The import screen gains a notice
+  line (NEW UI; no notice idiom exists today):
+  `N warm-up lines dropped. Warm-ups are a setting now.`
+- Builder: the wu row type leaves `builderState.ts` and the accordion
+  components (`StepCard.tsx`/`StepEditor.tsx` — the 5E redesign's
+  files; `StepRow.tsx` does not exist and there is no chip, adversarial
+  M7). Legacy LOCAL builder drafts in localStorage may still carry wu
+  rows: the draft loader strips them with the same notice copy.
+- The seeds: **302 workouts, 302 `wu` steps** (300 library + 2
+  onboarding — adversarial M5; `onboarding.test.ts` updates with its
+  fixtures). Nothing else about any workout changes. No version marker
+  exists or is needed: `seedGlobalLibrary`'s reconcile is
+  content-addressed (`isDeepStrictEqual` over steps — adversarial M4)
+  and rewrites changed rows on boot by itself.
+- **Custom workouts and ORDERING (adversarial B4):** no read path
+  revalidates stored steps, but `expand`/render paths would hit an
+  unhandled step kind. The strip therefore runs IN the migration
+  (SQL over the workouts' steps jsonb, idempotent, byte-preserving
+  everything but `wu` entries), and migrations run at server boot
+  BEFORE the api serves a request — so no client can fetch a stored
+  `wu` after the new bundle exists. The read paths and their fates:
+  workouts GET (post-migration data only), the builder's local draft
+  (stripped at load, above), bulk import (explicit parse, above).
 - `domain/fixtures.ts` and every test fixture carrying `wu` follows.
+- `patterns.json`'s 20 `warmupMinutes` stat entries are ORPHANED, not
+  deleted: the balance script (§7) and any future regen read the file,
+  and rewriting it is the regen follow-on's business, not this
+  phase's. A one-line comment in the balance script names the orphan.
 
 ## 7. The rebalance report (decision input, not a decision)
 
 A committed script (`app/scripts/library-balance.ts`, run via
 `pnpm exec tsx`) that:
 
-- buckets all 300 seeded workouts by `estimateMinutes` into the
+- buckets all 302 seeded workouts by `estimateMinutes` into the
   generation phase's own ranges (the plan reads the exact bucket
   edges and target percentages out of the generation spec /
   patterns.json and pins them),
@@ -172,10 +222,13 @@ replaces the recompute clause.
   `compileProgram` as interval 0 with `targetSplit: null` and reaches
   `buildLogSeed` as `kind: "warmup"` (one integration test each — the
   7C fixtures already model the downstream halves).
-- Server: prefs PUT accepts both shapes + rest, rejects out-of-bounds
-  and `wu`-era fields; the migration leaves existing rows `warmup:
+- Server: prefs PUT accepts both shapes + rest and explicit null
+  (clearing), rejects out-of-bounds shapes; unknown-field ignoring
+  stays pinned as-is; the migration leaves existing rows `warmup:
   null`; the custom-workout strip is idempotent and byte-preserves
-  non-wu steps.
+  non-wu steps. MIGRATION-INDEX CHECK before generating: another
+  session's worktree may hold an unmerged migration — the drizzle
+  timestamp-collision rule applies (briefing).
 - UI: the You row's three states; the Builder hint's conditional; the
   import notice; screenshots for the You row (on/off) and the refreshed
   builder.
