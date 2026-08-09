@@ -32,16 +32,21 @@ export default function StepRow({
   nudge: number;
   onNudge: (delta: number) => void;
 }) {
-  if (step.k === "wu") {
+  // TEMPORARY SHIM (2026-08-09, Task 1): "wu" left the Step union, so this
+  // branch is unreachable from a properly-typed step today — kept (rather
+  // than deleted) because an unstripped stored/legacy workout can still
+  // carry a wu step until Task 2's migration lands.
+  if ((step.k as string) === "wu") {
+    const minutes = (step as unknown as { minutes: number }).minutes;
     return (
       <div className="step-row">
         <div className="step-row-main">
           <span className="step-row-label">Warm-up</span>
           <span
             className="step-row-duration"
-            aria-label={fmtDurationSpoken(step.minutes)}
+            aria-label={fmtDurationSpoken(minutes)}
           >
-            {fmtDuration(step.minutes)}
+            {fmtDuration(minutes)}
           </span>
         </div>
       </div>

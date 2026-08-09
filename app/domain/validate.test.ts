@@ -12,7 +12,7 @@ const work = (over: object = {}) => ({
 describe("validateSteps", () => {
   it("accepts the interval-ladder shape", () => {
     const steps = [
-      { k: "wu", minutes: 10 },
+      { k: "r", minutes: 10 },
       { k: "reps", count: 4 },
       work(),
       work(),
@@ -43,12 +43,29 @@ describe("validateSteps", () => {
       expect.arrayContaining([expect.stringContaining("not an object")]),
     );
   });
-  it("rejects a wu/r step with out-of-range or non-whole-second minutes", () => {
-    expect(validateSteps([{ k: "wu", minutes: 0 }, work()]).ok).toBe(false);
-    expect(validateSteps([{ k: "wu", minutes: 10.123456 }, work()]).ok).toBe(
+  it("rejects an r step with out-of-range or non-whole-second minutes", () => {
+    expect(validateSteps([{ k: "r", minutes: 0 }, work()]).ok).toBe(false);
+    expect(validateSteps([{ k: "r", minutes: 10.123456 }, work()]).ok).toBe(
       false,
     );
     expect(validateSteps([work(), { k: "r", minutes: 200 }]).ok).toBe(false);
+  });
+
+  // "wu" left the Step union 2026-08-09 (the warmup-setting spec):
+  // validateSteps is the permanent runtime guard for stored/imported data
+  // that can still present the retired shape — it rejects every wu step
+  // outright, regardless of whether its own minutes would have been
+  // in-bounds, with copy that points the rower at the new setting.
+  it("rejects a wu step with the copy that points at the setting", () => {
+    const r = validateSteps([{ k: "wu", minutes: 5 }, work()]);
+    expect(r.ok).toBe(false);
+    const errors = r.ok ? [] : r.errors;
+    expect(errors[0]).toBe(
+      "Warm-ups moved to Settings. Set yours on the You tab.",
+    );
+  });
+  it("rejects a wu step even when its own minutes would have been in-bounds", () => {
+    expect(validateSteps([{ k: "wu", minutes: 10 }, work()]).ok).toBe(false);
   });
   it("rejects out-of-bounds values with messages", () => {
     for (const bad of [
@@ -59,7 +76,7 @@ describe("validateSteps", () => {
       [work({ ref: { base: "5k", off: 0 } })],
       [work({ restMinutes: 0.123456 })],
       [work({ restMinutes: 90 })],
-      [{ k: "wu", minutes: 10 }], // no work/test step
+      [{ k: "r", minutes: 10 }], // no work/test step
       [work(), { k: "reps", count: 4 }], // marker last
       [{ k: "reps", count: 2 }, work(), { k: "reps", count: 2 }, work()], // two markers
       [{ k: "reps", count: 0 }, work()], // reps count out of 1..12
@@ -128,11 +145,11 @@ describe("validateSteps", () => {
     const r = validateSteps([work({ restMinutes: 5 })]);
     expect(r.ok).toBe(true);
   });
-  it("treats the wu/restMinutes upper bounds as inclusive, not exclusive", () => {
+  it("treats the r/restMinutes upper bounds as inclusive, not exclusive", () => {
     // minutes tops out at 180 and restMinutes at 60 — both boundary values
     // themselves must be accepted, only values strictly above are invalid.
-    expect(validateSteps([{ k: "wu", minutes: 180 }, work()]).ok).toBe(true);
-    expect(validateSteps([{ k: "wu", minutes: 180.5 }, work()]).ok).toBe(false);
+    expect(validateSteps([{ k: "r", minutes: 180 }, work()]).ok).toBe(true);
+    expect(validateSteps([{ k: "r", minutes: 180.5 }, work()]).ok).toBe(false);
     expect(validateSteps([work({ restMinutes: 60 })]).ok).toBe(true);
     expect(validateSteps([work({ restMinutes: 60.5 })]).ok).toBe(false);
   });
@@ -281,10 +298,9 @@ describe("whole-second durations", () => {
     }
   });
 
-  it("applies the same rule to wu, r and restMinutes", () => {
+  it("applies the same rule to r and restMinutes", () => {
     const res = validateWorkoutInput(
       workout([
-        { k: "wu", minutes: 0.75 },
         {
           k: "w",
           duration: { kind: "time", minutes: 1 },

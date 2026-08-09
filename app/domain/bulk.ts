@@ -11,6 +11,14 @@ export interface BulkError {
 export interface BulkResult {
   workouts: WorkoutInput[];
   errors: BulkError[];
+  // Count of `wu <minutes>` lines recognized and dropped (0 when none).
+  // "wu" left the Step union 2026-08-09 (the warmup-setting spec): a wu
+  // line is no longer a step, but it is still explicitly PARSED (its old
+  // "needs minutes" shape check still applies and still errors on
+  // malformed input) — only a well-formed line is silently dropped and
+  // counted here, never turned into case-deletion's fatal "unknown step
+  // word" (adversarial M6), which would eat the whole block.
+  droppedWarmups: number;
 }
 
 const TYPES: WorkoutType[] = ["AN", "O2", "AT", "TR"];
@@ -176,6 +184,32 @@ function parseWorkStep(
   };
 }
 
+/** Recognizes a `wu <minutes>` line — the wu authoring keyword is fully
+ *  retired (spec §6, adversarial M6), but the parser still handles it
+ *  EXPLICITLY rather than by case-deletion: a malformed line (missing or
+ *  trailing-garbage minutes) still gets the same precise error it always
+ *  has, while a well-formed one is parsed and dropped rather than turned
+ *  into a Step. Returns `null` when `line` isn't a wu line at all, so the
+ *  caller falls through to the normal step grammar. */
+function tryParseWarmupLine(
+  line: RawLine,
+  blockIndex: number,
+  errors: BulkError[],
+): { valid: boolean } | null {
+  const tokens = line.text.split(/\s+/);
+  if (tokens[0] !== "wu") return null;
+  const n = Number(tokens[1]);
+  if (tokens.length !== 2 || !Number.isFinite(n)) {
+    errors.push({
+      block: blockIndex,
+      line: line.lineNumber,
+      message: `wu needs minutes: ${line.text}`,
+    });
+    return { valid: false };
+  }
+  return { valid: true };
+}
+
 function parseStepLine(
   line: RawLine,
   blockIndex: number,
@@ -188,18 +222,17 @@ function parseStepLine(
   if (repsMatch) return { k: "reps", count: Number(repsMatch[1]) };
 
   switch (word) {
-    case "wu":
     case "r": {
       const n = Number(tokens[1]);
       if (tokens.length !== 2 || !Number.isFinite(n)) {
         errors.push({
           block: blockIndex,
           line: line.lineNumber,
-          message: `${word} needs minutes: ${line.text}`,
+          message: `r needs minutes: ${line.text}`,
         });
         return null;
       }
-      return word === "wu" ? { k: "wu", minutes: n } : { k: "r", minutes: n };
+      return { k: "r", minutes: n };
     }
     case "test": {
       const label = tokens.slice(1).join(" ");
@@ -232,6 +265,7 @@ function parseStepLine(
 export function parseBulk(text: string): BulkResult {
   const errors: BulkError[] = [];
   const workouts: WorkoutInput[] = [];
+  let droppedWarmups = 0;
 
   splitBlocks(text).forEach((block, blockIndex) => {
     const [headerLine, ...stepLines] = block;
@@ -250,6 +284,12 @@ export function parseBulk(text: string): BulkResult {
     const steps: Step[] = [];
     let sawError = false;
     for (const line of stepLines) {
+      const warmup = tryParseWarmupLine(line, blockIndex, errors);
+      if (warmup) {
+        if (warmup.valid) droppedWarmups += 1;
+        else sawError = true;
+        continue;
+      }
       const step = parseStepLine(line, blockIndex, errors);
       if (!step) {
         sawError = true;
@@ -262,5 +302,5 @@ export function parseBulk(text: string): BulkResult {
     workouts.push({ ...header, steps });
   });
 
-  return { workouts, errors };
+  return { workouts, errors, droppedWarmups };
 }

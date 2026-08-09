@@ -4,9 +4,9 @@ import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import type { Step } from "./types.js";
 
 describe("needsBaselines — true unless EVERY work step is an effort ref", () => {
-  it("is false when there are no work steps at all (warm-up/rest ignored)", () => {
+  it("is false when there are no work steps at all (rest ignored)", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 10 },
+      { k: "r", minutes: 10 },
       { k: "r", minutes: 2 },
     ];
     expect(needsBaselines(steps)).toBe(false);
@@ -14,7 +14,7 @@ describe("needsBaselines — true unless EVERY work step is an effort ref", () =
 
   it("is false when every work step is an effort ref (the onboarding shape)", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 10 },
+      { k: "r", minutes: 10 },
       {
         k: "w",
         duration: { kind: "distance", meters: 6000 },
@@ -26,7 +26,7 @@ describe("needsBaselines — true unless EVERY work step is an effort ref", () =
 
   it("is true when a work step is a split ref", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "r", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
@@ -54,7 +54,7 @@ describe("needsBaselines — true unless EVERY work step is an effort ref", () =
 
   it("is true for a split ref sitting inside a reps-repeated block", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "r", minutes: 5 },
       { k: "reps", count: 4 },
       {
         k: "w",

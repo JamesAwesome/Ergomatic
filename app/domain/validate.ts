@@ -77,7 +77,13 @@ export function validateSteps(
       return;
     }
     switch (s.k) {
+      // Permanent runtime guard (not a type refinement): the Step union no
+      // longer admits "wu", but stored rows and bulk-imported text can
+      // still present it — this is the API boundary that must keep
+      // rejecting it for as long as either path can produce the shape.
       case "wu":
+        errors.push("Warm-ups moved to Settings. Set yours on the You tab.");
+        break;
       case "r":
         if (!wholeSecond(s.minutes, SECOND, 180))
           errors.push(`step ${i}: invalid minutes`);

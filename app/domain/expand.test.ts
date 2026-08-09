@@ -10,7 +10,7 @@ describe("liveSteps", () => {
     expect(liveSteps(intervalLadder.steps)).toHaveLength(1 + 4 * 6);
   });
   it("is identity without a marker", () => {
-    const steps = [{ k: "wu" as const, minutes: 5 }, intervalLadder.steps[2]];
+    const steps = [{ k: "r" as const, minutes: 5 }, intervalLadder.steps[2]];
     expect(liveSteps(steps)).toStrictEqual(steps);
   });
 });
@@ -24,7 +24,7 @@ describe("phases", () => {
   });
   it("inserts a rest phase after attached-rest work steps", () => {
     const p = phases(distanceRepeats.steps, B);
-    // wu + 5 × (work-distance + rest)
+    // lead-in "r" + 5 × (work-distance + rest)
     expect(p).toHaveLength(1 + 10);
     expect(p[1]).toMatchObject({
       type: "work",
@@ -35,7 +35,7 @@ describe("phases", () => {
   });
   it("labels non-work phases with words, never a bare dash", () => {
     const p = phases(intervalLadder.steps, B);
-    expect(p[0].label).toBe("Easy");
+    expect(p[0].label).toBe("Rest");
     expect(p.at(-1)!.label).toBe("Rest");
   });
   it("marks set membership on repeated steps", () => {
@@ -45,7 +45,7 @@ describe("phases", () => {
   });
   it("expands a test step to an 'All out' phase with no timing fields", () => {
     const steps = [
-      { k: "wu" as const, minutes: 5 },
+      { k: "r" as const, minutes: 5 },
       { k: "test" as const, label: "2k test" },
     ];
     const p = phases(steps, B);
@@ -60,7 +60,7 @@ describe("phases", () => {
 
   it("attributes the same originalStepIndex to every repeated occurrence of a reps block (interval ladder: 5 work + 1 rest, x4)", () => {
     const p = phases(intervalLadder.steps, B);
-    expect(p[0]!.originalStepIndex).toBe(0); // the warmup, index 0
+    expect(p[0]!.originalStepIndex).toBe(0); // the lead-in rest, index 0
     // Steps 2..7 (5 w's + 1 r) form the repeated block; every one of the 4
     // cycles must attribute back to those SAME original indices, not to
     // four distinct sets of indices.
@@ -88,7 +88,7 @@ describe("phases", () => {
   // `restMinutes: 0` case at the source of truth instead of in a caller.
   it("does not insert a rest phase for restMinutes: 0 (falsy, not just absent) and does not shift later attribution", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "r", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
@@ -98,7 +98,7 @@ describe("phases", () => {
       { k: "r", minutes: 2 },
     ];
     const p = phases(steps, B);
-    expect(p.map((ph) => ph.type)).toStrictEqual(["warmup", "work", "rest"]);
+    expect(p.map((ph) => ph.type)).toStrictEqual(["rest", "work", "rest"]);
     expect(p[2]!.originalStepIndex).toBe(2); // the authored "r" step, not shifted
   });
 
@@ -170,13 +170,13 @@ describe("estimateMinutes", () => {
   });
   it("estimates distance steps at resolved pace and flags it", () => {
     const r = estimateMinutes(distanceRepeats.steps, B);
-    // 2500m at 108 s/500m = 540 s = 9 min per rep; 5 reps × (9 + 5 rest) + 10 wu = 80
+    // 2500m at 108 s/500m = 540 s = 9 min per rep; 5 reps × (9 + 5 rest) + 10 lead-in rest = 80
     expect(r.estimated).toBe(true);
     expect(r.minutes).toBe(80);
   });
   it("ignores test-step phases (no seconds/meters) when summing duration", () => {
     const steps = [
-      { k: "wu" as const, minutes: 5 },
+      { k: "r" as const, minutes: 5 },
       { k: "test" as const, label: "2k test" },
     ];
     expect(estimateMinutes(steps, B)).toStrictEqual({
@@ -203,17 +203,21 @@ describe("estimateMinutes", () => {
 // Phase 6I Task 1: the no-baseline onboarding path. `phases()` accepts
 // `Baselines | null`; with null, an effort-ref work phase resolves (no
 // number, no crash) while a split-ref work phase is a programmer error —
-// callers must gate on `needsBaselines()` first. Warm-up/rest phases never
-// touched baselines to begin with (see `phases()`'s "wu"/"r" cases above:
-// fixed minutes, fixed "Easy"/"Rest" words), so the null path changes
-// nothing about them — pinned here rather than assumed.
+// callers must gate on `needsBaselines()` first. Rest phases never touched
+// baselines to begin with (see `phases()`'s "r" case above: fixed minutes,
+// fixed "Rest" word), so the null path changes nothing about them — pinned
+// here rather than assumed. (Before 2026-08-09 the same held for "wu"'s
+// fixed "Easy" word; that case left `phases()` with the Step union member —
+// see the warmup-setting spec, §6.)
 describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => {
-  // The First-6k shape (design spec): one warm-up + one 6000m distance
-  // work step at an effort ref. The real designated workout doesn't exist
-  // yet (a later task's seed data) — this hand-built fixture matches its
-  // documented shape exactly.
+  // The First-6k shape (design spec): one 6000m distance work step at an
+  // effort ref. Pre-2026-08-09 this fixture also carried a leading
+  // `{ k: "wu", minutes: 10 }` step, matching the real designated
+  // workout's shape at the time; the warmup-setting spec strips that step
+  // from every seed (Task 3) and from the Step union itself, so the
+  // fixture now matches the workout's POST-strip shape instead — a single
+  // work step, no lead-in of any kind.
   const firstSixK: Step[] = [
-    { k: "wu", minutes: 10 },
     {
       k: "w",
       duration: { kind: "distance", meters: 6000 },
@@ -221,25 +225,24 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
     },
   ];
 
-  it("expands to one warm-up + one effort work phase, with no targetSplit and no seconds estimate", () => {
+  it("expands to one effort work phase, with no targetSplit and no seconds estimate", () => {
     const p = phases(firstSixK, null);
-    expect(p).toHaveLength(2);
-    expect(p[0]).toMatchObject({ type: "warmup", seconds: 600, label: "Easy" });
-    expect(p[1]).toMatchObject({
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({
       type: "work",
       targetKind: "effort",
       meters: 6000,
       label: "EASY", // effortWord("min") — the word, never a number
     });
-    expect(p[1]!.targetSplit).toBeUndefined();
+    expect(p[0]!.targetSplit).toBeUndefined();
     // No targetSplit means phaseSeconds (the estimate builder) can't price
     // this phase either — the "no duration estimate" half of the rule.
-    expect(phaseSeconds(p[1]!)).toBeNull();
+    expect(phaseSeconds(p[0]!)).toBeNull();
   });
 
-  it("renders warm-up/rest words unaffected by null baselines (they never read baselines)", () => {
+  it("renders rest-step words unaffected by null baselines (they never read baselines)", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "r", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
@@ -248,7 +251,7 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
       },
     ];
     const p = phases(steps, null);
-    expect(p[0]).toMatchObject({ type: "warmup", label: "Easy" });
+    expect(p[0]).toMatchObject({ type: "rest", label: "Rest" });
     expect(p.at(-1)).toMatchObject({
       type: "rest",
       label: "Rest",
@@ -258,7 +261,7 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
 
   it("throws when a split-ref work step reaches phases(null) — programmer error, callers gate on needsBaselines() first", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "r", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
@@ -280,8 +283,9 @@ describe("phases with null baselines (Phase 6I: no-baseline onboarding)", () => 
 });
 
 describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)", () => {
+  // Post-strip First-6k shape — see the note on the same-named fixture
+  // above: no lead-in step of any kind since 2026-08-09.
   const firstSixK: Step[] = [
-    { k: "wu", minutes: 10 },
     {
       k: "w",
       duration: { kind: "distance", meters: 6000 },
@@ -289,7 +293,7 @@ describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)
     },
   ];
   const splitRefSteps: Step[] = [
-    { k: "wu", minutes: 5 },
+    { k: "r", minutes: 5 },
     {
       k: "w",
       duration: { kind: "time", minutes: 5 },
@@ -326,9 +330,54 @@ describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)
 
     const realNullable: Baselines | null = pickBaselines(true);
     expect(estimateMinutes(splitRefSteps, realNullable)).toStrictEqual({
-      minutes: 10, // wu 5' + w 5' — both time-based, no estimate
+      minutes: 10, // r 5' + w 5' — both time-based, no estimate
       estimated: false,
     });
+  });
+});
+
+// Spec §8's property test: since "wu" left the Step union (2026-08-09, the
+// warmup-setting spec), `phases()` has no case left that can EVER emit a
+// `type: "warmup"` Phase from a Step[] input — the ONLY producer left is
+// `buildRun` (engine.ts), prepending a phase straight from the preference,
+// never through this function. Exercised against a realistic spread of
+// step shapes (every surviving kind, mixed refs, reps blocks, distance and
+// time durations) rather than one hand-picked case.
+describe("no Step[] input can produce a warmup phase (spec §8)", () => {
+  const LIBRARY_LIKE_FIXTURES: Step[][] = [
+    intervalLadder.steps,
+    distanceRepeats.steps,
+    [{ k: "test", label: "2k test" }],
+    [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 20 },
+        ref: { effort: "min" },
+      },
+      { k: "r", minutes: 3 },
+    ],
+    [
+      { k: "reps", count: 3 },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 500 },
+        ref: { effort: "max" },
+      },
+      { k: "r", minutes: 2 },
+    ],
+    [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1 },
+        ref: { base: "6k", off: -2 },
+      },
+    ],
+  ];
+
+  it("no Step[] input can produce a warmup phase anymore", () => {
+    for (const steps of LIBRARY_LIKE_FIXTURES) {
+      expect(phases(steps, B).some((p) => p.type === "warmup")).toBe(false);
+    }
   });
 });
 
@@ -347,7 +396,7 @@ describe("phaseSeconds", () => {
 
   it("also works against a real phases() output, not just a hand-built shape (real-fixture parity)", () => {
     const p = phases(distanceRepeats.steps, B);
-    expect(phaseSeconds(p[0]!)).toBe(600); // the 10' warmup
+    expect(phaseSeconds(p[0]!)).toBe(600); // the 10' lead-in rest step
     expect(phaseSeconds(p[1]!)).toBe(540); // 2500m @ 108 s/500m -> 5*108
   });
 });

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import type { Step } from "../../domain/types.js";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -23,7 +24,9 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
   difficulty: "medium",
   pain: 3,
   steps: [
-    { k: "wu", minutes: 10 },
+    // Task 5 shim: "wu" left the Step union but the builder's row model
+    // hasn't yet.
+    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "time", minutes: 5 },

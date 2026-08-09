@@ -125,15 +125,13 @@ export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
         ? { index: Math.floor((i - preCount) / perSet) + 1, of: marker.count }
         : undefined;
     switch (s.k) {
-      case "wu":
-        out.push({
-          type: "warmup",
-          seconds: s.minutes * 60,
-          label: "Easy",
-          set,
-          originalStepIndex,
-        });
-        break;
+      // "wu" left the Step union 2026-08-09 (the warmup-setting spec): no
+      // Step[] input can produce a `type: "warmup"` Phase anymore — the
+      // ONLY producer is buildRun (engine.ts), prepending a phase straight
+      // from the preference, never through this switch. The Phase/
+      // EnginePhase "warmup" member itself is untouched; every downstream
+      // consumer (Timer, compileProgram, buildLogSeed) keeps working
+      // against phases built that other way.
       case "r":
         out.push({
           type: "rest",

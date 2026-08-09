@@ -3,7 +3,7 @@ import type { Step } from "./types.js";
 
 /** True unless EVERY work ("w") step in `steps` is an effort ref
  *  (`{effort:"max"|"min"}`) — i.e. true the moment any work step is a
- *  split ref that needs a resolved baseline. Warm-up/rest/test/reps-marker
+ *  split ref that needs a resolved baseline. Rest/test/reps-marker
  *  steps never carry a ref and are ignored (vacuously "false" contributes
  *  nothing, so a workout with no work steps at all needs no baselines).
  *

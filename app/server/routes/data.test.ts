@@ -63,7 +63,7 @@ function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
     difficulty: "medium",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 10 },
+      { k: "r", minutes: 10 },
       {
         k: "w",
         duration: { kind: "time", minutes: 20 },
@@ -449,7 +449,7 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
       type: "O2",
       difficulty: "easy",
       pain: 2,
-      steps: [{ k: "wu", minutes: 10 }],
+      steps: [{ k: "r", minutes: 10 }],
       source: "user",
     });
     stores.logs.lastDonePerWorkout = async () => ({ [workout.id]: 33 });
@@ -467,7 +467,7 @@ describe("GET /api/workouts: lastDoneDaysAgo", () => {
       type: "AT",
       difficulty: "hard",
       pain: 4,
-      steps: [{ k: "wu", minutes: 10 }],
+      steps: [{ k: "r", minutes: 10 }],
       source: "user",
     });
 
@@ -1917,14 +1917,14 @@ describe("GET /api/today", () => {
         type: todayCode as "AN" | "O2" | "AT" | "TR",
       }),
     );
-    // wu 10' + a 50' work step (fixed `duration: {kind: "time"}`, so its
+    // r 10' + a 50' work step (fixed `duration: {kind: "time"}`, so its
     // seconds don't depend on baselines/pace) = exactly 60 minutes total.
     const atCap = await asA(request(app).post("/api/workouts")).send(
       validWorkoutBody({
         title: "Exactly At The Cap",
         type: todayCode as "AN" | "O2" | "AT" | "TR",
         steps: [
-          { k: "wu", minutes: 10 },
+          { k: "r", minutes: 10 },
           {
             k: "w",
             duration: { kind: "time", minutes: 50 },

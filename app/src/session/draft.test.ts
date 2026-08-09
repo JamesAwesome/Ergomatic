@@ -90,11 +90,11 @@ describe("draftSteps", () => {
 
   it("excludes removed step indices from the effective list", () => {
     const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-2"));
-    const wuIndex = d.steps.findIndex((s) => s.k === "wu");
+    const wuIndex = d.steps.findIndex((s) => (s.k as string) === "wu");
     const mutated: SessionDraft = { ...d, removed: [wuIndex] };
     const steps = draftSteps(mutated);
     expect(steps).toHaveLength(d.steps.length - 1);
-    expect(steps.some((s) => s.k === "wu")).toBe(false);
+    expect(steps.some((s) => (s.k as string) === "wu")).toBe(false);
   });
 
   it("folds a split-ref work step's nudge into its ref.off", () => {
@@ -115,7 +115,7 @@ describe("effectiveSteps", () => {
   // in the filtered array.
   it("pairs each surviving step with its ORIGINAL index, not its filtered position", () => {
     const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-effective"));
-    const wuIndex = d.steps.findIndex((s) => s.k === "wu");
+    const wuIndex = d.steps.findIndex((s) => (s.k as string) === "wu");
     expect(wuIndex).toBe(0); // Hoarfrost: wu, reps, w — striking index 0
     const mutated: SessionDraft = { ...d, removed: [wuIndex] };
 
@@ -194,7 +194,9 @@ describe("draftMinutes", () => {
       workoutId: "synthetic",
       title: "Warm-up only",
       type: "O2",
-      steps: [{ k: "wu", minutes: 5 }],
+      // Task 5 shim: "wu" left the Step union but this file's draft-side
+      // wu handling hasn't yet.
+      steps: [{ k: "wu", minutes: 5 } as unknown as Step],
       nudges: {},
       spmOverrides: {},
       removed: [],
@@ -261,7 +263,7 @@ describe("withNudge", () => {
 
   it("no-ops on a non-work step index and on an out-of-range index", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-calmsea-6"));
-    const wuIndex = d.steps.findIndex((s) => s.k === "wu");
+    const wuIndex = d.steps.findIndex((s) => (s.k as string) === "wu");
     expect(withNudge(d, wuIndex, 1)).toBe(d);
     expect(withNudge(d, 999, 1)).toBe(d);
   });
@@ -311,7 +313,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
     expect(loaded).toStrictEqual(mutated);
     expect(loaded!.nudges).toStrictEqual({});
     const effective = draftSteps(loaded!);
-    expect(effective.some((s) => s.k === "wu")).toBe(false);
+    expect(effective.some((s) => (s.k as string) === "wu")).toBe(false);
     // 25 total minus the removed 5' warmup (300s): 1500 - 300 = 1200s ->
     // 1200/60 = 20 exactly.
     expect(draftMinutes(loaded!, baselines)).toBe(20);

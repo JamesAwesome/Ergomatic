@@ -20,6 +20,9 @@ test 2k
     const result = parseBulk(text);
     expect(result.errors).toStrictEqual([]);
     expect(result.workouts).toHaveLength(2);
+    // Both blocks lead with a wu line — dropped, never turned into a step,
+    // and counted (spec §6/M6): "wu" left the Step union 2026-08-09.
+    expect(result.droppedWarmups).toBe(2);
 
     expect(result.workouts[0]).toStrictEqual({
       title: "Ladder Day",
@@ -27,7 +30,6 @@ test 2k
       difficulty: "medium",
       pain: 3,
       steps: [
-        { k: "wu", minutes: 10 },
         { k: "reps", count: 4 },
         {
           k: "w",
@@ -46,7 +48,6 @@ test 2k
       difficulty: "easy",
       pain: 2,
       steps: [
-        { k: "wu", minutes: 10 },
         { k: "reps", count: 5 },
         {
           k: "w",
@@ -256,7 +257,7 @@ zzz 5`;
     ]);
   });
 
-  it("reports a wu step missing its minutes", () => {
+  it("reports a wu step missing its minutes (a malformed wu line still errors — only a well-formed one is dropped)", () => {
     const text = `1 | Ladder | AT | medium | 3\nwu\nw 1' 6k @20`;
     const result = parseBulk(text);
     expect(result.workouts).toStrictEqual([]);
@@ -267,6 +268,7 @@ zzz 5`;
         message: expect.stringContaining("wu needs minutes"),
       },
     ]);
+    expect(result.droppedWarmups).toBe(0);
   });
 
   it("reports a wu step with trailing garbage after the minutes", () => {
@@ -281,6 +283,29 @@ zzz 5`;
         line: 2,
         message: expect.stringContaining("wu needs minutes"),
       },
+    ]);
+    expect(result.droppedWarmups).toBe(0);
+  });
+
+  // Spec §6, adversarial M6: case-deletion (making "wu" fall through to
+  // "unknown step word") would have made the line fatal and eaten the
+  // whole block. The parser instead recognizes it explicitly, parses it,
+  // drops it, and counts it — the block survives with its other steps
+  // intact.
+  it("a wu line is dropped and counted, never fatal, and its block survives", () => {
+    const text = `Title | AT | medium | 3
+wu 5
+x2
+w 4' 6k-2
+r 1`;
+    const r = parseBulk(text);
+    expect(r.errors).toStrictEqual([]);
+    expect(r.droppedWarmups).toBe(1);
+    expect(r.workouts).toHaveLength(1);
+    expect(r.workouts[0]!.steps.map((s) => s.k)).toStrictEqual([
+      "reps",
+      "w",
+      "r",
     ]);
   });
 
@@ -311,8 +336,16 @@ zzz 5`;
   });
 
   it("returns empty result for blank input", () => {
-    expect(parseBulk("")).toStrictEqual({ workouts: [], errors: [] });
-    expect(parseBulk("   \n\n  ")).toStrictEqual({ workouts: [], errors: [] });
+    expect(parseBulk("")).toStrictEqual({
+      workouts: [],
+      errors: [],
+      droppedWarmups: 0,
+    });
+    expect(parseBulk("   \n\n  ")).toStrictEqual({
+      workouts: [],
+      errors: [],
+      droppedWarmups: 0,
+    });
   });
 
   it("accepts a bare number as minutes, matching what the builder now accepts", () => {
@@ -320,7 +353,10 @@ zzz 5`;
 wu 10
 w 5 6k+0 @20`);
     expect(result.errors).toStrictEqual([]);
-    expect(result.workouts[0].steps[1]).toStrictEqual({
+    expect(result.droppedWarmups).toBe(1);
+    // The wu line is dropped, not turned into a step — the w step is now
+    // steps[0], not steps[1].
+    expect(result.workouts[0].steps[0]).toStrictEqual({
       k: "w",
       duration: { kind: "time", minutes: 5 },
       ref: { base: "6k", off: 0 },

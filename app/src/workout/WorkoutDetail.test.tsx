@@ -26,7 +26,7 @@ import {
 } from "../monitor/monitorRun";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type { WorkoutType } from "../../domain/types.js";
+import type { Step, WorkoutType } from "../../domain/types.js";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -37,7 +37,7 @@ const WORKOUT: LibraryWorkout = {
   difficulty: "medium",
   pain: 3,
   steps: [
-    { k: "wu", minutes: 10 },
+    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "time", minutes: 5 },
@@ -117,7 +117,7 @@ const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
   difficulty: "easy",
   pain: 2,
   steps: [
-    { k: "wu", minutes: 10 },
+    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "distance", meters: 6000 },
@@ -518,7 +518,7 @@ describe("WorkoutDetail", () => {
         id: "w-other",
         title: "Other Session",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 }],
+        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
       }),
     );
     saveDraft(inProgress);
@@ -540,7 +540,7 @@ describe("WorkoutDetail", () => {
         id: "w-other",
         title: "Other Session",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 }],
+        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
       }),
     );
     saveDraft(inProgress);
@@ -563,7 +563,7 @@ describe("WorkoutDetail", () => {
         id: "w-other",
         title: "Other Session",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 }],
+        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
       }),
     );
     saveDraft(inProgress);
@@ -588,7 +588,7 @@ describe("WorkoutDetail", () => {
       id: "w-other",
       title: "Other Session",
       type: "AN",
-      steps: [{ k: "wu", minutes: 5 }],
+      steps: [{ k: "wu", minutes: 5 } as unknown as Step],
     });
     saveDraft(notStarted);
     await renderDetailWithConfirmRoute("/library/w1");
@@ -621,7 +621,7 @@ describe("WorkoutDetail", () => {
           id: "w-other",
           title: "Session A",
           type: "AN",
-          steps: [{ k: "wu", minutes: 5 }],
+          steps: [{ k: "wu", minutes: 5 } as unknown as Step],
         }),
       );
       const runA = completedRunFor(draftA);
@@ -828,7 +828,7 @@ describe("WorkoutDetail", () => {
           id: "w-other",
           title: "Session A",
           type: "AN",
-          steps: [{ k: "wu", minutes: 5 }],
+          steps: [{ k: "wu", minutes: 5 } as unknown as Step],
         }),
       );
       saveDraft(draftA);

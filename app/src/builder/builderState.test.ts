@@ -523,7 +523,9 @@ describe("fromWorkout", () => {
       difficulty: "medium",
       pain: 3,
       steps: [
-        { k: "wu", minutes: 10 },
+        // Task 5 shim: "wu" left the Step union but the builder's own row
+        // model (this suite's whole subject) hasn't yet.
+        { k: "wu", minutes: 10 } as unknown as Step,
         { k: "reps", count: 4 },
         {
           k: "w",
@@ -985,6 +987,8 @@ describe("hasUnsupportedSteps (L2)", () => {
   });
 
   it("is false for a workout made entirely of representable step kinds", () => {
+    // Task 5 shim: "wu" left the Step union but the builder's row model
+    // hasn't yet.
     const steps: Step[] = [
       { k: "wu", minutes: 10 },
       {
@@ -992,7 +996,7 @@ describe("hasUnsupportedSteps (L2)", () => {
         duration: { kind: "time", minutes: 5 },
         ref: { base: "2k", off: 0 },
       },
-    ];
+    ] as unknown as Step[];
     expect(hasUnsupportedSteps(steps)).toBe(false);
   });
 
@@ -1043,6 +1047,8 @@ describe("hasMidSpanReps (H3)", () => {
   });
 
   it("is false when the marker sits at the derived span start, e.g. a normal [wu, reps, w]", () => {
+    // Task 5 shim: "wu" left the Step union but the builder's row model
+    // hasn't yet.
     const steps: Step[] = [
       { k: "wu", minutes: 10 },
       { k: "reps", count: 3 },
@@ -1051,7 +1057,7 @@ describe("hasMidSpanReps (H3)", () => {
         duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: 0 },
       },
-    ];
+    ] as unknown as Step[];
     expect(hasMidSpanReps(steps)).toBe(false);
   });
 

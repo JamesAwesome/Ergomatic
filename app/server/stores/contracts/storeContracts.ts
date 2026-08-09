@@ -57,7 +57,7 @@ function workoutInput(
     type: "AT",
     difficulty: "medium",
     pain: 2,
-    steps: [{ k: "wu", minutes: 10 }],
+    steps: [{ k: "r", minutes: 10 }],
     source: "user",
     ...overrides,
   };
