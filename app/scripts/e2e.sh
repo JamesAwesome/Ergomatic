@@ -10,6 +10,9 @@ set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" # compose.yml lives here
 
+# Per-worktree stack identity — see stack-env.sh for the why.
+source "$(dirname "${BASH_SOURCE[0]}")/stack-env.sh"
+
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-devpass}"
 export TEST_AUTH_SECRET="${TEST_AUTH_SECRET:-e2e-secret}"
 export APP_VERSION="${APP_VERSION:-e2e}"

@@ -3,7 +3,7 @@ name: ergomatic
 services:
   postgres:
     image: postgres:18.4
-    container_name: ergomatic-postgres
+    container_name: ${ERGO_STACK:-ergomatic}-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ergomatic}
@@ -27,7 +27,7 @@ services:
       target: api
       args:
         APP_VERSION: ${APP_VERSION:-dev}
-    container_name: ergomatic-api
+    container_name: ${ERGO_STACK:-ergomatic}-api
     restart: unless-stopped
     # Defense-in-depth: drop privileges, read-only root FS (natalie convention)
     security_opt:
@@ -61,7 +61,7 @@ services:
     build:
       context: ./app
       target: web
-    container_name: ergomatic-web
+    container_name: ${ERGO_STACK:-ergomatic}-web
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -89,7 +89,7 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:2026.7.3
-    container_name: ergomatic-cloudflared
+    container_name: ${ERGO_STACK:-ergomatic}-cloudflared
     restart: unless-stopped
     profiles: ["tunnel"]
     command: tunnel run
