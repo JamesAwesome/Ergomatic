@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { applyFilters, clearFilters, type Filters } from "./filters";
 import { filterTokens } from "./filterTokens";
@@ -227,15 +228,23 @@ export default function Library() {
         }
       : null;
 
-  const total = workoutsState.workouts.length;
-  const visible = applyFilters(workoutsState.workouts, filters, baselines);
+  // Controller addendum (Phase 6I Task 7, design spec's "invisible outside
+  // onboarding" rule): the two designated onboarding workouts never appear
+  // in the Library list or its counts — their detail routes stay reachable
+  // by id (the no-baseline card's own link, Today.tsx), which reads a
+  // workout directly and never goes through this filtered array. Filtered
+  // once, up front, so `total`/`visible`/`draftCount` and the FILTER
+  // sheet's own live count all agree by construction rather than each
+  // re-deriving the exclusion.
+  const workouts = workoutsState.workouts.filter(
+    (w) => !isOnboardingTitle(w.title),
+  );
+
+  const total = workouts.length;
+  const visible = applyFilters(workouts, filters, baselines);
   const tokens = filterTokens(filters);
   const hasFilters = tokens.length > 0;
-  const draftCount = applyFilters(
-    workoutsState.workouts,
-    draftFilters,
-    baselines,
-  ).length;
+  const draftCount = applyFilters(workouts, draftFilters, baselines).length;
 
   function openSheet() {
     setDraftFilters(filters);

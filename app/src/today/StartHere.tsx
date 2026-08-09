@@ -1,110 +1,17 @@
-import { Link } from "react-router-dom";
 import { useArticleReads } from "../api/useArticleReads";
-import type { ArticleReadsState } from "../api/useArticleReads";
+import {
+  START_HERE_STEPS,
+  StepRow,
+  startHereReadCount,
+} from "./startHereSteps";
 
-/** The four onboarding steps (design spec §"The four steps," screen 2b).
- *  Deliberately NOT read from the News registry (`content/articles.tsx`):
- *  this block's own copy/order is a fixed table the spec pins independently
- *  of whatever the registry says. `minutes` for all four now matches their
- *  real registry values (`baselines`: 3, `picking-a-workout`: 2,
- *  `your-first-row`: 2, `connect-the-monitor`: 2) rather than the design
- *  mock's own placeholder numbers (4 MIN/2 MIN for the first pair — sampled,
- *  not authoritative, per the handoff's own "Not built, and fabricated"
- *  section) or the 6I design spec's own pre-prose "~3 min" estimate for
- *  `connect-the-monitor` (Task 6 landed the real word count — 190 words,
- *  ceil(190/180) = 2 — which supersedes that estimate).
- *
- *  Exported so a later screen needing the identical four rows (You ›
- *  Learning the app, Phase 6I Task 7) can import this ONE array rather than
- *  retyping the same four copy strings a second time — the same
- *  single-source-of-truth reasoning `domain/onboarding.ts`'s own
- *  `ONBOARDING_TITLES` comment gives for its fixed-title constants. */
-export interface StartHereStep {
-  slug: string;
-  copy: string;
-  minutes: number;
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export const START_HERE_STEPS: StartHereStep[] = [
-  {
-    slug: "your-first-row",
-    copy: "Row 6k once. That is your baseline.",
-    minutes: 2,
-  },
-  {
-    slug: "baselines",
-    copy: "Every pace is that baseline plus an offset.",
-    minutes: 3,
-  },
-  {
-    slug: "picking-a-workout",
-    copy: "Pick a workout by how much it should hurt.",
-    minutes: 2,
-  },
-  {
-    slug: "connect-the-monitor",
-    copy: "Connect the monitor and it drives the piece.",
-    minutes: 2,
-  },
-];
-
-// Same suppression rule as News.tsx's own `readStateFor`: `undefined`
-// (never `false`) whenever read state isn't known yet, so nothing here ever
-// claims read/unread while the fetch is loading or has failed.
-function readStateFor(
-  slug: string,
-  reads: ArticleReadsState,
-): boolean | undefined {
-  return reads.state === "ready" ? reads.readSlugs.has(slug) : undefined;
-}
-
-/** One step row — News's own `ArticleRow` grammar (unread square, title
- *  weight/color flip on read, minutes meta with a " · READ" suffix)
- *  reused at a smaller scale (`.starthere-row` in index.css sets the
- *  reduced type sizes/padding; the row markup itself is the same shape as
- *  `News.tsx`'s `ArticleRow`) rather than a second hand-rolled version of
- *  the identical pattern (recurring-failure #8). `state={{from:"/today"}}`
- *  per the spec: these rows open from Today, not News, so Reader's own
- *  BackLink returns here. */
-function StepRow({
-  step,
-  reads,
-}: {
-  step: StartHereStep;
-  reads: ArticleReadsState;
-}) {
-  const isRead = readStateFor(step.slug, reads);
-  return (
-    <Link
-      to={`/news/${step.slug}`}
-      state={{ from: "/today" }}
-      className="starthere-row"
-      data-read={isRead}
-    >
-      {isRead !== undefined && (
-        <span
-          className="starthere-square"
-          data-read={isRead}
-          aria-hidden="true"
-        />
-      )}
-      <span className="starthere-row-body">
-        <span className="starthere-row-title">
-          {step.copy}
-          {isRead !== undefined && (
-            <span className="visually-hidden">
-              {isRead ? " Read" : " Unread"}
-            </span>
-          )}
-        </span>
-        <span className="starthere-row-meta">
-          {step.minutes} MIN{isRead ? " · READ" : ""}
-        </span>
-      </span>
-    </Link>
-  );
-}
+// Re-exported so this file's own public surface (and StartHere.test.tsx's
+// `import { START_HERE_STEPS } from "./StartHere"`) is unchanged now that
+// the four-step table itself lives in startHereSteps.tsx (Task 7: You ›
+// Learning the app needs the identical rows without a second hand-typed
+// copy).
+export { START_HERE_STEPS };
+export type { StartHereStep } from "./startHereSteps";
 
 /** START HERE (design spec, screen 2b): the dismissible four-step block at
  *  the very top of Today. Mounting (`!preferences.startHereDismissed`) is
@@ -118,10 +25,7 @@ export default function StartHere({ onDismiss }: { onDismiss: () => void }) {
   // bare "START HERE" with no count/progress claim in that case, the same
   // suppression rule the spec's own Error handling section states for
   // News's suppressed unread count.
-  const readCount =
-    reads.state === "ready"
-      ? START_HERE_STEPS.filter((s) => reads.readSlugs.has(s.slug)).length
-      : null;
+  const readCount = startHereReadCount(reads);
 
   return (
     <div className="starthere-block">
@@ -135,7 +39,7 @@ export default function StartHere({ onDismiss }: { onDismiss: () => void }) {
       </div>
       <div className="starthere-steps">
         {START_HERE_STEPS.map((step) => (
-          <StepRow key={step.slug} step={step} reads={reads} />
+          <StepRow key={step.slug} step={step} reads={reads} from="/today" />
         ))}
       </div>
     </div>

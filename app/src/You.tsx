@@ -1,5 +1,8 @@
+import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
+import { useArticleReads } from "./api/useArticleReads";
+import { startHereReadCount } from "./today/startHereSteps";
 import BaselineEditor from "./you/BaselineEditor";
 
 function initials(name: string): string {
@@ -18,6 +21,12 @@ export default function You({
   user: Me;
   onSignedOut: () => void;
 }) {
+  const reads = useArticleReads();
+  // `null` (not 0) whenever read state isn't known — the meta renders bare
+  // "START HERE" with no count in that case, the same suppression rule
+  // StartHere.tsx's own header uses (startHereSteps.ts's shared helper).
+  const readCount = startHereReadCount(reads);
+
   return (
     <main className="screen">
       <section className="you">
@@ -40,6 +49,20 @@ export default function You({
       </section>
       <h2 className="section-heading">BASELINES</h2>
       <BaselineEditor />
+      {/* Task 7 (design spec §"Learning the app on You"): the mock's other
+          settings rows are filler (DEVIATIONS.md/handoff README §7) and are
+          deliberately not built — this is the ONE real settings row. */}
+      <h2 className="section-heading">SETTINGS</h2>
+      <Link
+        to="/you/learning"
+        state={{ from: "/you" }}
+        className="you-settings-row"
+      >
+        <span className="you-settings-row-title">Learning the app</span>
+        <span className="you-settings-row-meta mono-status">
+          START HERE{readCount !== null ? ` · ${readCount} OF 4` : ""}
+        </span>
+      </Link>
     </main>
   );
 }

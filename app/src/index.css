@@ -1349,6 +1349,85 @@ button:disabled {
   cursor: pointer;
 }
 
+/* You's own SETTINGS row (Phase 6I Task 7, design spec §"Learning the app
+   on You") — the one real settings row; the mock's others are filler and
+   are deliberately not built (DEVIATIONS.md). Same row shape as the
+   baseline row above it (space-between, a bottom rule) rather than
+   News/StartHere's own left-square row grammar: this is a single
+   navigational row, not a list of read/unread items. */
+.you-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--tap);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule-2);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.you-settings-row-title {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.you-settings-row-meta {
+  flex: none;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+/* You › Learning the app (`/you/learning`, Phase 6I Task 7, design spec
+   screen 2e). Reuses StartHere.tsx's own `.starthere-row`/`.starthere-
+   square` row grammar for the four steps (via `startHereSteps.tsx`'s
+   shared `StepRow`) — only this screen's own progress/status/actions chrome
+   is new here. */
+.learning-progress-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 22px 0 4px;
+}
+
+.learning-progress-title {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.learning-progress-count {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+.learning-status-line {
+  margin: 0 0 14px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+
+/* Same column-of-full-width-blocks shape as `.action-stack` (the five-level
+   button system) — a dedicated class rather than reusing `.action-stack`
+   itself since this screen's own vertical rhythm (margin, not just gap)
+   differs from that system's other consumers. */
+.learning-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 24px;
+}
+
+.learning-steps {
+  display: flex;
+  flex-direction: column;
+}
+
 /* -- Today (Phase 6A Task 2) --------------------------------------------
    Tokens only — no new hex values. Reuses the existing --ink/--ink-3/
    --ink-4/--accent/--rule/--surface family, already contrast-audited

@@ -68,9 +68,13 @@ test("News at rest: 6 UNREAD, two pinned rows, four latest rows, WHAT'S NEW v0.5
   // LATEST: your-first-row and connect-the-monitor sort first (Phase 6I
   // Task 6, published 2026-08-08), then picking-a-workout and pain-scale
   // (published 2026-08-07, registry order wins that date's sort tie).
-  const latestRows = page.locator(
-    "section:not(.news-pinned):not(.news-whatsnew) .news-row",
-  );
+  // Minor #3 (Phase 6I Task 7): scoped to the LATEST section's own
+  // `.news-latest` class now, rather than a negation locator — Task 7 added
+  // a third row kind to News.tsx (the Start-here pin, inside `.news-pinned`,
+  // not a fourth `<section>`) that the old `:not(.news-pinned):not(.news-
+  // whatsnew)` selector would still correctly skip, but a named positive
+  // selector is the more robust contract going forward.
+  const latestRows = page.locator(".news-latest .news-row");
   await expect(latestRows).toHaveCount(4);
   await expect(latestRows.nth(0)).toHaveAttribute(
     "href",

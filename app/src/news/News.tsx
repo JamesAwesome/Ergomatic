@@ -3,6 +3,8 @@ import type { WorkoutType } from "../../domain/types.js";
 import TypeBadge from "../components/TypeBadge";
 import { useArticleReads } from "../api/useArticleReads";
 import type { ArticleReadsState } from "../api/useArticleReads";
+import { usePreferences } from "../api/usePreferences";
+import { startHereReadCount } from "../today/startHereSteps";
 import {
   latestArticles,
   pinnedArticles,
@@ -106,10 +108,44 @@ export function ArticleRow({
   );
 }
 
+/** The Start-here pinned row (design spec §"Learning the app on You" /
+ *  News's own §3, screen 2a): a special pinned row, not a registry article
+ *  — it has no body of its own (opens `/you/learning`, not a Reader page),
+ *  and its "read state" is the aggregate of the four step slugs
+ *  (`startHereReadCount`, the same helper StartHere.tsx/You.tsx/
+ *  LearningTheApp.tsx all share) rather than a single slug's own read flag.
+ *  Renders only while `preferences.startHereDismissed` is POSITIVELY known
+ *  to be true — not merely "not false" — so a still-loading/errored
+ *  preferences fetch never risks showing a pin for a rower who never
+ *  dismissed anything. The count portion of its own meta line follows the
+ *  same suppression rule the count itself already uses elsewhere
+ *  (`startHereReadCount` returns `null` while reads aren't ready). */
+function StartHerePin({ reads }: { reads: ArticleReadsState }) {
+  const readCount = startHereReadCount(reads);
+  return (
+    <Link
+      to="/you/learning"
+      state={{ from: "/news" }}
+      className="news-row news-pin-starthere"
+    >
+      <span className="news-row-body">
+        <span className="news-row-title">Start here, in four steps</span>
+        <span className="news-row-meta">
+          {readCount !== null ? `${readCount} OF 4 READ · ` : ""}DISMISSED ON
+          TODAY
+        </span>
+      </span>
+    </Link>
+  );
+}
+
 export default function News() {
   const reads = useArticleReads();
+  const preferences = usePreferences();
   const latest = RELEASE_NOTES[0]!;
   const unread = reads.state === "ready" ? unreadCount(reads.readSlugs) : 0;
+  const startHereDismissed =
+    preferences.state === "ready" && preferences.preferences.startHereDismissed;
 
   return (
     <main className="screen news-screen">
@@ -125,12 +161,13 @@ export default function News() {
         <h2 id="news-pinned-h" className="news-section-label">
           PINNED
         </h2>
+        {startHereDismissed && <StartHerePin reads={reads} />}
         {pinnedArticles().map((a) => (
           <ArticleRow key={a.slug} article={a} reads={reads} />
         ))}
       </section>
 
-      <section aria-labelledby="news-latest-h">
+      <section className="news-latest" aria-labelledby="news-latest-h">
         <h2 id="news-latest-h" className="news-section-label">
           LATEST
         </h2>

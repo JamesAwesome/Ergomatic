@@ -6,6 +6,7 @@ import type { SessionStore, SessionUser } from "../auth/sessions.js";
 import type { NewWorkoutInput } from "../stores/workouts.js";
 import type { WorkoutInput } from "../../domain/types.js";
 import { PLANS } from "../../domain/plans.js";
+import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { PREFERENCES_DEFAULTS } from "../stores/preferences.js";
 import { makeFakeStores } from "../testing/fakes.js";
 import { createDataRouter, type Stores } from "./data.js";
@@ -1759,6 +1760,36 @@ describe("GET /api/today", () => {
     expect(res.status).toBe(200);
     expect(res.body.pool).toContain(g.id);
     expect(res.body.recommendation).toBe(g.id);
+  });
+
+  // Controller addendum (Phase 6I Task 7, design spec's "invisible outside
+  // onboarding" rule): the designated onboarding workout is never
+  // suggested to an account that already has real baselines set — this
+  // route 422s before ever reaching the suggestion pool for a brand-new
+  // account (the only account these workouts are actually FOR), so the
+  // only account this exclusion can be observed against is a returning one
+  // that happens to still have "First 6k" in its library.
+  it("excludes the designated onboarding workout from the pool/recommendation, even at a matching type", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    await asA(request(app).put("/api/baselines")).send({
+      k2Seconds: 120,
+      k6Seconds: 130,
+    });
+    const todayCode = PLANS.sprint.sessions[0] as "AN" | "O2" | "AT" | "TR";
+    const onboarding = seedGlobalWorkout(stores, {
+      sortOrder: 900,
+      title: ONBOARDING_TITLES.k6,
+      type: todayCode,
+    });
+    const real = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({ title: "A Real Workout", type: todayCode }),
+    );
+    const res = await asA(request(app).get("/api/today"));
+    expect(res.status).toBe(200);
+    expect(res.body.pool).not.toContain(onboarding.id);
+    expect(res.body.pool).toContain(real.body.id);
+    expect(res.body.recommendation).toBe(real.body.id);
   });
 
   it("uses the selected plan and doneN, not the fallback, and reports the real planKey", async () => {

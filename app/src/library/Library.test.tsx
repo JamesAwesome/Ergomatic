@@ -3,6 +3,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 
 const WORKOUTS: LibraryWorkout[] = [
   {
@@ -49,6 +51,48 @@ const CUSTOM_WORKOUT: LibraryWorkout = {
 };
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
+
+// Controller addendum (Phase 6I Task 7): the two designated onboarding
+// workouts, real seed shape (server/seed/library/onboarding.ts) rather than
+// a hand-built minimum — the same "test against the real fixture" rule
+// Today.test.tsx's own `onboardingLibraryEntry` already follows for this
+// exact pair, applied here since Library.tsx gets the identical exclusion.
+function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
+  const w = ONBOARDING_LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing onboarding fixture: ${title}`);
+  return {
+    id,
+    title: w.title,
+    type: w.type,
+    difficulty: w.difficulty,
+    pain: w.pain,
+    steps: w.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+}
+
+// A real 300-library workout, standing in for the rest of a realistic
+// library alongside the two onboarding rows below (recurring-failure #3:
+// an empty/synthetic fixture has hidden shipped defects here twice before).
+function realLibraryEntry(title: string, id: string): LibraryWorkout {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  return {
+    id,
+    title: w.title,
+    type: w.type,
+    difficulty: w.difficulty,
+    pain: w.pain,
+    steps: w.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+}
+
+const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
+const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
+const SEA_FRET = realLibraryEntry("Sea Fret", "w-seafret");
 
 function mockReady(workouts: LibraryWorkout[] = WORKOUTS) {
   vi.doMock("../api/useWorkouts", () => ({
@@ -931,6 +975,32 @@ describe("Library", () => {
 
       expect(await screen.findByRole("list")).toBeInTheDocument();
       expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+  });
+
+  describe("designated onboarding workouts are invisible outside onboarding (controller addendum)", () => {
+    it("never renders First 6k/First 2k in the list, and excludes them from the count", async () => {
+      mockReady([SEA_FRET, FIRST_6K, FIRST_2K]);
+      await renderLibrary();
+
+      expect(screen.getByText("1 WORKOUTS")).toBeInTheDocument();
+      expect(screen.getByText("Sea Fret")).toBeInTheDocument();
+      expect(screen.queryByText("First 6k")).not.toBeInTheDocument();
+      expect(screen.queryByText("First 2k")).not.toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual(["/library/w-seafret"]);
+    });
+
+    it("excludes them from the FILTER sheet's own result count too", async () => {
+      mockReady([SEA_FRET, FIRST_6K, FIRST_2K]);
+      await renderLibrary();
+      await openSheet();
+
+      // Sea Fret is O2/easy — the sheet's default draft (everything
+      // selected) should count exactly the one non-onboarding row, not all
+      // three real global rows.
+      expect(
+        screen.getByRole("button", { name: /^Show 1 workout$/ }),
+      ).toBeVisible();
     });
   });
 });

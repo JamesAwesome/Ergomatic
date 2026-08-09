@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { parseBulk } from "../../domain/bulk.js";
 import { bucketsForCap } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { PLANS, type PlanCode } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
 import type { Baselines, Difficulty, Step } from "../../domain/types.js";
@@ -861,18 +862,26 @@ export function createDataRouter({
       stores.logs.lastDonePerWorkout(userId),
     ]);
 
-    const library: LibraryEntry[] = workouts.map((w) => ({
-      id: w.id,
-      type: w.type,
-      difficulty: w.difficulty,
-      pain: w.pain,
-      estMinutes: estimateMinutes(w.steps as Step[], baselines).minutes,
-      lastDoneDaysAgo: lastDone[w.id] ?? null,
-      // Round 2 (2026-08-04): LibraryEntry.isGlobal is required, mirroring
-      // `w.isGlobal` from `stores.workouts.list()` (server/stores/workouts.ts's
-      // own `withIsGlobal`) exactly.
-      isGlobal: w.isGlobal,
-    }));
+    // Controller addendum (Phase 6I Task 7, design spec's "invisible
+    // outside onboarding" rule): the two designated onboarding workouts
+    // never enter the suggestion pool here, mirroring the client's own
+    // exclusion (Today.tsx's `entries`) — a veteran with real baselines set
+    // (the only account this route ever runs for; see the 422 guard above)
+    // must never be SUGGESTED "First 6k"/"First 2k".
+    const library: LibraryEntry[] = workouts
+      .filter((w) => !isOnboardingTitle(w.title))
+      .map((w) => ({
+        id: w.id,
+        type: w.type,
+        difficulty: w.difficulty,
+        pain: w.pain,
+        estMinutes: estimateMinutes(w.steps as Step[], baselines).minutes,
+        lastDoneDaysAgo: lastDone[w.id] ?? null,
+        // Round 2 (2026-08-04): LibraryEntry.isGlobal is required, mirroring
+        // `w.isGlobal` from `stores.workouts.list()` (server/stores/workouts.ts's
+        // own `withIsGlobal`) exactly.
+        isGlobal: w.isGlobal,
+      }));
 
     const suggestion = suggest({
       todayCode,
