@@ -30,11 +30,15 @@ log**, so history doesn't rewrite itself when the baselines move.
 
     app/
       domain/   pure Erg Book logic — no framework imports, dependency-zero
+        monitor/  the PM5 wire: CSAFE codec, status parsers, program compiler
       server/   Express 5 API (JSON only) + Drizzle schema and migrations
       src/      React 19 + Vite client
+        monitor/  the PM5 driver, transports (Web Bluetooth + a DEV fake), session hook
       e2e/      Playwright: user flows, structural design assertions, screenshots
     docs/
       design/   the UI/UX handoff — authoritative, incl. DEVIATIONS.md
+      monitor/  pm5-interface-notes.md: the wire record — every hardware
+                session, every idiosyncrasy the official docs omit (see its §20)
       TESTING.md            testing policy; read before writing or reviewing tests
       deploy.md, RELEASING.md
       superpowers/          per-phase specs and implementation plans
@@ -69,6 +73,21 @@ it is unreachable except through nginx. The Cloudflare tunnel's origin is
 nginx → api → postgres, before it stops rolling back.
 
 Locally, Vite on :5173 plays nginx's part and proxies `/api` to :8080.
+
+## The connected monitor
+
+A Concept2 PM5 can drive a session end to end: Connect on a workout
+detail programs the erg over Bluetooth (variable-interval workouts with
+real pace targets), a three-pane surface mirrors the monitor live, and
+the finished session logs with the machine's own measured splits
+(`actualSource: "pm5"`), stored verbatim for an eventual Concept2
+Logbook sync. The PM5 is authoritative: the app displays what the
+machine says and never fakes a number it did not receive. The whole
+layer sits behind a transport seam and is OPTIONAL FOREVER; the phone
+timer is a complete product without it. Today the radio path is Web
+Bluetooth (desktop Chromium); the Capacitor BLE adapter is a named
+follow-on. The production bundle provably excludes the development
+fake (`pnpm dist:grep`).
 
 ## Native-first
 

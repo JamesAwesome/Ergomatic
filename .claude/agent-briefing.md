@@ -19,6 +19,38 @@ standing rules live here so they cannot drift between dispatches.
   report** instead of working around it silently. Plan errors are found this
   way every phase — the brief is not automatically right.
 
+## Specs and briefs are evidence-backed (Phase 7's own cost)
+
+- **Every load-bearing claim in a spec, plan, or brief carries its
+  evidence**: a `file:line` read THIS session, a committed capture, or a
+  doc §-number. "The code does X" without a citation is a guess wearing a
+  suit. Phase 7C's adversarial spec review found four BLOCKING findings,
+  every one an unverified premise about code the spec never read (inputs
+  the builder could not reach; rows the manual path never emits; server
+  bands real hardware exceeds; a column with no table). Phase 7B shipped
+  a paused predicate derived from an artifact of the wrong machine state.
+  Citing forces reading; reading finds these before a reviewer must.
+- **Hardware-behavior claims cite a committed capture** (§18 or a log
+  file in-repo), never conversation memory. A brief once cited wire hex
+  "in §18" that existed only in the chat — the implementer rightly
+  refused to fake the decode. If the evidence lives in the conversation,
+  COMMIT IT to the record first, then cite it.
+- **An unobserved wire premise never ships as a hard gate.** If a
+  predicate keys on a byte no capture has shown in the deciding state,
+  ship it with a fallback path plus a log entry that records which path
+  fired — then the next hardware session settles it (the `rowingActive`
+  pattern). Corollary for the fake: model such fields HONESTLY (the
+  machine's own default state), never "helpfully" — a fake that defaults
+  a byte to what the gate wants makes every test unable to disprove the
+  premise.
+- **A fix that didn't fix it is evidence about the MECHANISM.** When a
+  symptom survives your fix, stop iterating at that layer: enumerate
+  every producer of the visible behavior (grep for setTimeout / dwell /
+  auto-advance near the screen; list every writer of the state) and get
+  one capture that discriminates between them before the next attempt.
+  Three gate rewrites once chased a skip that was a designed timer in a
+  different component.
+
 ## Environment
 
 - All commands run from `app/`. Node 26 is required:
@@ -93,6 +125,25 @@ a value where they agree).
   investigating a phantom regression. `down -v` also clears the OTHER
   session's fixtures — acceptable, since the stack is meant to be
   reboot-safe, but say so in your report if you had to reach for it.
+  Two additions from running TWO live sessions at once: (1) **verify
+  bundle identity before trusting any browser-gate result** — curl the
+  served page's hashed asset and grep it for a string distinctive to
+  YOUR branch; an invalidated run against another session's bundle looks
+  exactly like 70 real failures; (2) `down -v` does not beat Docker's
+  LAYER CACHE when worktrees switch — if the served bundle still isn't
+  yours, `docker compose -f compose.yml -f compose.e2e.yml build
+  --no-cache` before `up`.
+- **Never override the e2e env contract**: `scripts/e2e.sh` and
+  `e2e/helpers.ts` hardcode their shared `TEST_AUTH_SECRET`
+  (`e2e-secret`); forcing your own value into the compose env 401s every
+  backdoor sign-in and reads like a mass regression.
+- **Drizzle migrations apply by TIMESTAMP, not journal order.** Two
+  branches minting the same migration index = whichever merges second
+  gets silently skipped (api logs "migrations up to date", requests 500
+  on the missing column). The branch that merges second REGENERATES its
+  migration off new main (delete + `pnpm db:generate`) — never a mere
+  journal merge. Check open PRs for a competing index before you
+  generate one.
 
 ## Report contract
 
