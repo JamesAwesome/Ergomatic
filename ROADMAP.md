@@ -1487,12 +1487,20 @@ corrected to match what ships.)
 **Goal:** A PM5-driven session logs with the same fidelity a phone-timer
 session does.
 
-- [ ] Per-step actual splits logged with `actualSource:'pm5'`
+- [x] Per-step actual splits logged with `actualSource:'pm5'`
       (`IntervalActual` → the log's per-step actual, a third source
-      alongside `logDraft.ts`'s existing `'assumed'`/`'stopwatch'`)
-- [ ] The monitor-side log-writing path (`MonitorRun` → a save flow),
+      alongside `logDraft.ts`'s existing `'assumed'`/`'stopwatch'`) —
+      home: `buildMonitorLogSteps` (`app/src/session/logDraft.ts`)
+- [x] The monitor-side log-writing path (`MonitorRun` → a save flow),
       mirroring 6C's `logDraft.ts`/`LogScreen` split for the phone-timer
-      side
+      side — home: `LogSession.tsx`'s monitor mode (`ManualDoorLog`'s
+      `?from=monitor` branch, with its own staged discard)
+- [ ] Anonymous-run logging (`workoutId: null`): no library door exists to
+      log a connected session with no workout identity through, so it
+      never gets one this phase (spec §1's own non-goal,
+      `docs/superpowers/specs/2026-08-08-phase-7c-pm5-logging-design.md`)
+      — the record still clears through the existing connect/start
+      guards, it just can never be saved as a log
 
 **Exit:** A session fully driven by a connected PM5 saves a log
 indistinguishable in shape from a phone-timer session, with real

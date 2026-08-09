@@ -56,16 +56,21 @@ export interface MonitorRun {
   // record (predating this field) still satisfies the type when loaded —
   // `createMonitorRun` below always supplies one for a record it creates.
   logSeed?: LogSeed;
-  // A future 7C log screen prefilling from this array MUST handle
-  // `IntervalActual.index === null` (Phase 7A-fix Task 3, D3) — it means
-  // the machine's reported index couldn't be matched to any interval in
-  // `program`, NOT "this is interval 0". Never assume position in this
-  // array substitutes for `index`, either: a boundary whose two halves
-  // never both arrive (see `driver.ts`'s own `boundaryHalves` gating — the
-  // D4 defect was exactly this, one interval lost out of two) can leave
-  // `actuals`
-  // shorter than `program.intervals`, so array position and program
-  // interval also do not correspond 1:1.
+  // CORRECTED (7C Task 5, adversarial m10): this paragraph used to say a
+  // future 7C log screen "MUST handle" `IntervalActual.index === null`,
+  // which implied it would surface those entries somehow. It does not.
+  // `buildMonitorLogSteps` (`session/logDraft.ts`, spec §3) DROPS every
+  // actual whose `index` is `null` — it means the machine's reported index
+  // couldn't be matched to any interval in `program` at all, NOT "this is
+  // interval 0", so there is no honest program position left to attribute
+  // it to. Its diagnostic life is the wire log's (`eventLog.ts`, the
+  // MONITOR LOG copy button on the Log screen), never the rower's saved
+  // log. Never assume position in this array substitutes for `index`,
+  // either: a boundary whose two halves never both arrive (see
+  // `driver.ts`'s own `boundaryHalves` gating — the D4 defect was exactly
+  // this, one interval lost out of two) can leave `actuals` shorter than
+  // `program.intervals`, so array position and program interval also do
+  // not correspond 1:1.
   //
   // Grows ONLY through `recordActual` below, and ONLY while the run is
   // live (`completedAt === null`) — spec §4's "the record is immutable

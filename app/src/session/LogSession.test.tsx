@@ -2152,6 +2152,78 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  // Task 5: the staged half of the same control, isolated from its own
+  // fire — the session door's own idiom (`useStagedDiscard`'s `armed`
+  // state machine) means the FIRST press only arms; the record must
+  // survive that press untouched, and only the SECOND (only reachable
+  // while armed) actually fires. The test above already exercises both
+  // presses together; this one pins the first press in isolation so a
+  // regression that fires on one press (skipping the arm) still fails
+  // something.
+  it("Discard is staged: the first press only arms (button text flips, no clear, no navigation) — the record survives untouched", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("WORKOUT DETAIL SCREEN")).not.toBeInTheDocument();
+    expect(loadMonitorRun()).not.toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // Task 5 (spec §4's own words: "the manual door has none (`discardSlot`
+  // is null there)"): the PLAIN manual door (no `?from=monitor`, no
+  // MonitorRun at all) is where that null lives — pinned again here,
+  // alongside the rest of this task's discard/lifecycle tests, rather
+  // than only in Task 3's original describe block, since this IS the
+  // property Task 5's own discard work must never regress.
+  it("the plain manual door (no monitor run at all) still has no Discard slot — discardSlot stays null outside monitor mode", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByText(MANUAL_TOTAL_LABEL);
+
+    expect(
+      screen.queryByRole("button", { name: /discard/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Task 5, spec §5's "no new destruction paths": leaving the screen any
+  // way OTHER than the discard firing or a successful save (BackLink, tab
+  // bar, reload) must leave the record standing — `LogScreen`'s `BackLink`
+  // is a plain router `Link`, not a handler this test can "click through"
+  // to a real history pop in a meaningful way, so the faithful way to prove
+  // no hidden cleanup runs on the way out is to unmount the component
+  // outright (the same effect a real navigation away has on this tree) and
+  // check the record is still exactly where it was.
+  it("leaving via BackLink (unmount) leaves the MonitorRun standing — loadMonitorRun() is still non-null after unmount", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { unmount } = await renderManualLog(
+      MONITOR_WORKOUT_ID,
+      "?from=monitor",
+    );
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    expect(screen.getByRole("link", { name: "← BACK" })).toBeInTheDocument();
+
+    unmount();
+
+    expect(loadMonitorRun()).not.toBeNull();
+  });
+
   // The M-2 coexistence contract (spec §5): a phone `SessionRun`/`SessionDraft`
   // sitting around for a DIFFERENT workout must survive both a monitor-mode
   // save and a monitor-mode discard byte-for-byte — this door reads/writes
