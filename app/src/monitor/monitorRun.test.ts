@@ -24,7 +24,7 @@ import {
 } from "./monitorRun";
 
 // Realistic fixture, per repo convention (session/run.test.ts's own
-// comment): Filling Low (AT) — wu 8' + 3x2000m @ 6k+4 with 3' rest,
+// comment): Filling Low (AT) — 3x2000m @ 6k+4 with 3' rest,
 // compiled through the REAL assembly a session would use
 // (buildDraft -> buildRun -> compileProgram(run.phases), the same path
 // program.sweep.test.ts sweeps all 300 workouts through) rather than a

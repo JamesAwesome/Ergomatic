@@ -173,6 +173,7 @@ function mockHooks(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
   workouts: LibraryWorkout[] = [WORKOUT],
   warmup: WarmupSetting | null = null,
+  preferencesReady = true,
 ) {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -187,17 +188,20 @@ function mockHooks(
   // `api` spy several tests assert was never called. Defaults to OFF, the
   // production default.
   vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({
-      state: "ready",
-      preferences: {
-        difficulties: [],
-        timeCapMinutes: 60,
-        warmupMinutes: 10,
-        warmup,
-        countdownSeconds: 10,
-        startHereDismissed: true,
-      },
-    }),
+    usePreferences: () =>
+      preferencesReady
+        ? {
+            state: "ready",
+            preferences: {
+              difficulties: [],
+              timeCapMinutes: 60,
+              warmupMinutes: 10,
+              warmup,
+              countdownSeconds: 10,
+              startHereDismissed: true,
+            },
+          }
+        : { state: "loading" },
   }));
 }
 
@@ -1395,6 +1399,28 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
         "Set your baselines first. Connect needs a target to program.",
       ),
     ).not.toBeInTheDocument();
+  });
+
+  // 2026-08-09's warmup setting: this screen reads the preference for
+  // Connect's own `buildRun` call, but deliberately does NOT hold the
+  // whole workout behind it (see the hook's own comment in
+  // WorkoutDetail.tsx). A preference that hasn't arrived reads as "no
+  // warm-up" and Connect proceeds normally — the OFF default every rower
+  // starts with, never a blocked button or a crash on a half-loaded hook.
+  // (The ON path — the preference actually reaching `buildLogSeed` — is
+  // pinned in WorkoutDetail.connectedEnd.test.tsx, which can intercept the
+  // interstitial's props.)
+  it("Connect proceeds normally while the warm-up preference is still loading", async () => {
+    mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT], null, false);
+    await renderDetail("/library/w-effort");
+
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(
+      await screen.findByText("This device has no Bluetooth transport.", {
+        selector: ".connected-serif-line",
+      }),
+    ).toBeInTheDocument();
   });
 
   // WORKOUT's own "test" step (an open-ended all-out, no fixed time or

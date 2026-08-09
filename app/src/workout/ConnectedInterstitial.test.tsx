@@ -76,7 +76,11 @@ const TEST_SEED: { logSeed: LogSeed } = {
 /** The realistic fixture the repo convention requires — a real seeded
  *  library workout through the real assembly (`buildDraft` -> `buildRun`
  *  -> `compileProgram`), not a hand-built minimum. "Filling Low" compiles
- *  to 4 intervals: an 8:00 warmup (no rest) then 3 x 2000 m / 3:00 rest. */
+ *  to 3 intervals: 3 x 2000 m / 3:00 rest. (It was four while the workout
+ *  carried its own 8:00 `wu` step; since 2026-08-09's warmup setting a
+ *  warm-up interval exists only when the ROWER has one set — this fixture
+ *  deliberately leaves the setting OFF, the production default, since
+ *  nothing in this file is about the warm-up.) */
 function fillingLow(): {
   program: WorkoutProgram;
   phases: EnginePhase[];
