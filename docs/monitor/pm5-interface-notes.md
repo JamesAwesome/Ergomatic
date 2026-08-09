@@ -2046,6 +2046,34 @@ interstitial checklist, never from the log.
     copy overlapping the actual send, a UX question, not a correctness
     one — nothing in `useMonitorSession.ts`'s own state machine assumes a
     particular latency).
+22. **STATUS: OPEN — added by 7C Task 5**
+    (`docs/superpowers/specs/2026-08-08-phase-7c-pm5-logging-design.md`
+    §3, adversarial m1). `IntervalActual.elapsedSeconds`
+    (`session/logDraft.ts`'s `actualSeconds`) maps from 0x0037's
+    Split/Interval Time (offset 6-8, §10's table above), and whether
+    that field measures the WORK portion of an interval alone or the
+    work plus its trailing rest has never been read against a stopwatch
+    on real hardware. The documented shape argues for work-only: 0x0037
+    carries a SEPARATE Interval Rest Time field (offset 12-13, §10's
+    same table), which would be redundant if Split/Interval Time already
+    included the rest it names. Stored under that documented meaning
+    (`logDraft.ts`'s own comment on `actualSeconds`); no walk's own
+    numbers settle the question either way — a decode's internal
+    time/distance/pace self-consistency cannot distinguish the two
+    conventions, because `avgSplit` is itself PM5-computed FROM the same
+    split's time and distance, so it would satisfy the identity
+    regardless of which duration the machine used internally (Task 2's
+    review, ruling the walk-4 arithmetic circular, not evidence). Expected:
+    unknown. Sequence: row one work interval with a programmed rest
+    immediately after it, time the work portion by stopwatch independent
+    of the app, then compare against the logged `actualSeconds` for that
+    interval (§18's runsheet, or the MONITOR LOG copy button's raw
+    `0x0037` capture) — if it exceeds the stopwatch reading by roughly
+    the rest duration, the field is work-plus-rest. If hardware later
+    confirms work-plus-rest, the fix is a re-derivation in
+    `buildMonitorLogSteps` (subtract the interval's own `restSeconds`),
+    never a storage-shape change (`LogStep.actualSeconds`'s own doc
+    comment already carries this contingency).
 
 ## 18. Laptop session observations (results destination for §17)
 
