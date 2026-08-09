@@ -11,7 +11,10 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: "html",
   use: {
-    baseURL: "http://127.0.0.1:8081",
+    // Set by scripts/stack-env.sh (per-worktree compose scoping, Phase CL);
+    // the fallback keeps a bare `playwright test` against a hand-started
+    // legacy stack working.
+    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:8081",
     trace: "on-first-retry",
   },
   projects: [
