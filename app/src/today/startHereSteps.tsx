@@ -10,8 +10,11 @@ import type { ArticleReadsState } from "../api/useArticleReads";
  *  mock's own placeholder numbers (4 MIN/2 MIN for the first pair — sampled,
  *  not authoritative, per the handoff's own "Not built, and fabricated"
  *  section) or the 6I design spec's own pre-prose "~3 min" estimate for
- *  `connect-the-monitor` (Task 6 landed the real word count — 190 words,
- *  ceil(190/180) = 2 — which supersedes that estimate).
+ *  `connect-the-monitor` (Task 6 landed the real word count — 217 words
+ *  after the disconnect paragraph's redraft, ceil(217/180) = 2 — which
+ *  supersedes that estimate; `src/news/content/articles.tsx`'s own comment
+ *  is the authoritative recount, this one restated to match after Task 8's
+ *  close-out comment sweep).
  *
  *  Extracted from `StartHere.tsx` (Task 5) into this module (Task 7) so
  *  `You.tsx`/`you/LearningTheApp.tsx` can share the identical four rows

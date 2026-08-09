@@ -39,7 +39,7 @@ describe("article registry invariants", () => {
     for (const a of ARTICLES) expect(a.minutes).toBeGreaterThanOrEqual(1);
   });
 
-  it("Phase 6I Task 6: your-first-row/connect-the-monitor are unpinned, published 2026-08-08, minutes by the 6H formula (ceil(words/180)) — 216 words -> 2 min, 190 words -> 2 min", () => {
+  it("Phase 6I Task 6: your-first-row/connect-the-monitor are unpinned, published 2026-08-08, minutes by the 6H formula (ceil(words/180)) — 216 words -> 2 min, 217 words (post-redraft) -> 2 min", () => {
     const yourFirstRow = articleBySlug("your-first-row")!;
     expect(yourFirstRow.pinned).toBe(false);
     expect(yourFirstRow.publishedAt).toBe("2026-08-08");

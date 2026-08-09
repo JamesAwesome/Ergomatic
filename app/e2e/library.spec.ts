@@ -50,8 +50,14 @@ test.describe("library list", () => {
     const rows = page.locator(".workout-row");
     await waitForLibraryLoaded(page);
     const count = await rows.count();
-    // The library seeds 300; this floor catches a broken/regressed seed
-    // (e.g. a quota bug shipping 5 rows) without re-pinning the exact count.
+    // The starter library seeds 300 (Phase 6I: the seed itself now converges
+    // 302 global rows — the same 300 plus the two designated onboarding
+    // workouts, server/seed/library/index.ts's GLOBAL_LIBRARY_SEED — but
+    // Library.tsx's own list filters those two out by title, domain/
+    // onboarding.ts's isOnboardingTitle, so the rendered row count here
+    // stays 300). This is a FLOOR, not a pin: it catches a broken/regressed
+    // seed (e.g. a quota bug shipping 5 rows) without hardcoding the exact
+    // count, which is expected to keep growing.
     expect(count).toBeGreaterThan(250);
     await expect(rows).toHaveCount(count);
     await expect(page.locator(".library-count")).toHaveText(
