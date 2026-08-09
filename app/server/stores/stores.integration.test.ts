@@ -440,8 +440,7 @@ describe("domain stores against real Postgres", () => {
       expect(defaults).toStrictEqual({
         difficulties: ["easy", "medium", "hard"],
         timeCapMinutes: 60,
-        warmupMinutes: 10,
-        warmupOverride: false,
+        warmup: null,
         countdownSeconds: 10,
         paceToleranceSeconds: 1,
         accentColor: "#b5341f",
@@ -465,13 +464,26 @@ describe("domain stores against real Postgres", () => {
         timeCapMinutes: 45,
       });
 
-      await s.put(userA, { warmupOverride: true });
+      await s.put(userA, {
+        warmup: { kind: "time", minutes: 12, restSeconds: 30 },
+      });
       const after = await s.get(userA);
       expect(after).toMatchObject({
         accentColor: "#00ff00",
         timeCapMinutes: 45,
-        warmupOverride: true,
+        warmup: { kind: "time", minutes: 12, restSeconds: 30 },
       });
+    });
+
+    it("put with an explicit null warmup clears it back to off", async () => {
+      const s = store();
+      await s.put(userA, { warmup: { kind: "distance", meters: 2000 } });
+      expect((await s.get(userA)).warmup).toStrictEqual({
+        kind: "distance",
+        meters: 2000,
+      });
+      await s.put(userA, { warmup: null });
+      expect((await s.get(userA)).warmup).toBeNull();
     });
 
     it("is invisible across users", async () => {

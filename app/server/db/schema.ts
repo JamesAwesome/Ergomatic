@@ -149,8 +149,14 @@ export const preferences = pgTable("preferences", {
     .notNull()
     .default(["easy", "medium", "hard"]),
   timeCapMinutes: integer("time_cap_minutes").notNull().default(60),
-  warmupMinutes: real("warmup_minutes").notNull().default(10),
-  warmupOverride: boolean("warmup_override").notNull().default(false),
+  // Phase 9's warmup-setting design (2026-08-09, §2): replaces the two
+  // columns above (warmup_minutes/warmup_override — the override was never
+  // consumed anywhere; minutes' one consumer, the Builder hint, is rewritten
+  // against this column). Nullable; null (the default) means OFF for every
+  // existing and new row alike, per James's ruling. Shape is
+  // `server/stores/preferences.ts`'s `WarmupSetting | null`, validated on
+  // PUT — this column carries whatever shape already passed that check.
+  warmup: jsonb("warmup"),
   countdownSeconds: integer("countdown_seconds").notNull().default(10),
   paceToleranceSeconds: real("pace_tolerance_seconds").notNull().default(1),
   accentColor: text("accent_color").notNull().default("#b5341f"),

@@ -50,6 +50,20 @@
       "when": 1786279657015,
       "tag": "0006_windy_wendell_vaughn",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786298224209,
+      "tag": "0007_shallow_kang",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786298242144,
+      "tag": "0008_strip_wu_steps",
+      "breakpoints": true
     }
   ]
 }

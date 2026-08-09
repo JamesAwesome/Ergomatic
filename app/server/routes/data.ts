@@ -19,6 +19,7 @@ import type { PlanKey, PlanStateStore } from "../stores/planState.js";
 import type {
   PreferencesRow,
   PreferencesStore,
+  WarmupSetting,
 } from "../stores/preferences.js";
 import type { TestHistoryStore } from "../stores/testHistory.js";
 import type { NewWorkoutInput, WorkoutsStore } from "../stores/workouts.js";
@@ -43,6 +44,56 @@ const ACTUAL_SOURCES: ActualSource[] = ["assumed", "stopwatch", "pm5"];
 const HELD_RESULTS: HeldResult[] = ["held", "under", "over"];
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+// The warm-up setting's bounds (2026-08-09 design §2). NOTE: these are NOT
+// a reuse of domain/validate.ts's work-step duration bounds, despite the
+// spec's own framing — checked directly against that file: its time bound
+// (`wholeSecond(minutes, SECOND, 180)`) permits fractional, whole-SECOND-
+// precision minutes up to 180, and its distance bound (`int(meters, 100,
+// 42195)`) tops out at marathon distance; neither matches a warm-up's
+// integer-minutes-to-30 / integer-meters-to-10000 shape (only the distance
+// FLOOR of 100 happens to coincide). The rest ceiling (595s = 9:55) isn't in
+// domain/validate.ts at all — it's `domain/monitor/program.ts`'s
+// `MAX_REST_SECONDS`, confirmed against `docs/monitor/pm5-interface-notes.md`
+// Table 19. These bounds are therefore the plan's own literal values, not a
+// derived constant.
+const WARMUP_MINUTES_MIN = 1;
+const WARMUP_MINUTES_MAX = 30;
+const WARMUP_METERS_MIN = 100;
+const WARMUP_METERS_MAX = 10000;
+const WARMUP_REST_SECONDS_MIN = 5;
+const WARMUP_REST_SECONDS_MAX = 595;
+
+function isValidWarmup(v: unknown): v is WarmupSetting {
+  if (!isRec(v)) return false;
+  const durationOk =
+    (v.kind === "time" &&
+      typeof v.minutes === "number" &&
+      Number.isInteger(v.minutes) &&
+      v.minutes >= WARMUP_MINUTES_MIN &&
+      v.minutes <= WARMUP_MINUTES_MAX) ||
+    (v.kind === "distance" &&
+      typeof v.meters === "number" &&
+      Number.isInteger(v.meters) &&
+      v.meters >= WARMUP_METERS_MIN &&
+      v.meters <= WARMUP_METERS_MAX);
+  if (!durationOk) return false;
+  const restOk =
+    v.restSeconds === undefined ||
+    (typeof v.restSeconds === "number" &&
+      Number.isInteger(v.restSeconds) &&
+      v.restSeconds >= WARMUP_REST_SECONDS_MIN &&
+      v.restSeconds <= WARMUP_REST_SECONDS_MAX);
+  if (!restOk) return false;
+  // Reject stray keys (e.g. both `minutes` and `meters` present): only
+  // `kind`, the one duration field its kind implies, and an optional
+  // `restSeconds` are allowed.
+  const allowed = new Set([
+    "kind",
+    v.kind === "time" ? "minutes" : "meters",
+    "restSeconds",
+  ]);
+  return Object.keys(v).every((k) => allowed.has(k));
+}
 // Conservative slug shape, validated here rather than against the bundled
 // registry: client and server versions may skew mid-deploy, and an unknown
 // slug is harmless — it's ignored at display time.
@@ -714,23 +765,20 @@ export function createDataRouter({
       }
       patch.timeCapMinutes = body.timeCapMinutes;
     }
-    if (body.warmupMinutes !== undefined) {
-      if (
-        typeof body.warmupMinutes !== "number" ||
-        body.warmupMinutes < 0 ||
-        body.warmupMinutes > 60
-      ) {
-        badRequest(res, "warmupMinutes must be 0..60", "warmupMinutes");
+    // Presence check, not `!== undefined`: an explicit `warmup: null` in the
+    // body must CLEAR the setting, so "the key is absent" and "the key is
+    // present and null" have to read differently here — the only field on
+    // this route where that distinction matters (2026-08-09 design §2).
+    if ("warmup" in body) {
+      if (body.warmup !== null && !isValidWarmup(body.warmup)) {
+        badRequest(
+          res,
+          "warmup must be null or a valid warm-up shape",
+          "warmup",
+        );
         return;
       }
-      patch.warmupMinutes = body.warmupMinutes;
-    }
-    if (body.warmupOverride !== undefined) {
-      if (typeof body.warmupOverride !== "boolean") {
-        badRequest(res, "warmupOverride must be a boolean", "warmupOverride");
-        return;
-      }
-      patch.warmupOverride = body.warmupOverride;
+      patch.warmup = body.warmup as WarmupSetting | null;
     }
     if (body.countdownSeconds !== undefined) {
       if (
