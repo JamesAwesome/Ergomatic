@@ -4,6 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType } from "../../domain/types.js";
+import { compileProgram } from "../../domain/monitor/program.js";
+import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import type { IntervalActual } from "../../domain/monitor/types.js";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanKey, PlanState } from "../api/usePlan";
@@ -19,8 +22,20 @@ import {
   type SessionDraft,
 } from "./draft";
 import { buildRun } from "./engine";
-import { formatLogDate } from "./logDraft";
+import { buildLogSeed, formatLogDate } from "./logDraft";
 import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
+import {
+  loadMonitorRun,
+  saveMonitorRun,
+  type MonitorRun,
+} from "../monitor/monitorRun";
+// Pure function (task brief: "export the pure helper ... for tests") — a
+// static top-level import is safe here (unlike every other `./LogSession`
+// reference in this file, which goes through a per-test dynamic `import()`
+// because the DEFAULT export's hooks need whatever `vi.doMock` a given test
+// registered first): `monitorModeRun` touches no hook, no mocked module,
+// nothing `vi.resetModules()` below would ever need to invalidate.
+import { monitorModeRun } from "./LogSession";
 
 const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
@@ -205,6 +220,112 @@ function manualWorkoutFixture(id = "id-manual-fixture"): LibraryWorkout {
   };
 }
 
+// Same guard `logDraft.test.ts`'s own `compileOrThrow` uses for its
+// `buildMonitorLogSteps` fixtures — `compileProgram` returns a
+// discriminated union (a real `WorkoutProgram` or a `CompileError`), and a
+// test fixture that fails to compile should say so loudly, not produce a
+// `WorkoutProgram`-shaped `undefined` some assertion three lines down would
+// blame on the wrong thing.
+function compileOrThrow(
+  phases: Parameters<typeof compileProgram>[0],
+): WorkoutProgram {
+  const result = compileProgram(phases);
+  if ("code" in result) {
+    throw new Error(
+      `test fixture failed to compile (${result.code}): ${result.message}`,
+    );
+  }
+  return result;
+}
+
+const MONITOR_WORKOUT_ID = "id-monitor-fixture";
+
+// The 7C monitor-mode fixture — the SAME two real library steps
+// (`buildSessionFixture`/`manualWorkoutFixture`'s own Hoarfrost time-work +
+// Calm Sea distance-work) run through the REAL `buildDraft -> buildRun ->
+// compileProgram -> buildLogSeed` pipeline (this file's own "realistic
+// fixture" idiom, matching `logDraft.test.ts`'s `WALK4_RUN` for the
+// identical reason: the alignment contract between `logSeed.steps` and
+// `program.intervals` is proven, not hand-typed past). Program intervals:
+// [0] warmup, [1] work (time, Hoarfrost), [2] work (distance, Calm Sea) —
+// `IntervalActual.index` below is a position in THAT array, so a "both
+// measured" actuals list uses index 1 and 2, never 0 (the warmup interval,
+// which `buildMonitorLogSteps` never surfaces a step for at all).
+function buildMonitorFixture(
+  overrides: { actuals?: IntervalActual[]; deviceName?: string } = {},
+): { run: MonitorRun; workout: LibraryWorkout } {
+  const hoarfrost = library("Hoarfrost");
+  const timeWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const calmSea = library("Calm Sea");
+  const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const draft = buildDraft({
+    id: MONITOR_WORKOUT_ID,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
+    steps: [{ k: "wu", minutes: 4 }, timeWork, distanceWork],
+  });
+  const started = startDraft(draft);
+  const built = buildRun(started, BASELINES, FIXED_NOW);
+  const program = compileOrThrow(built.phases);
+  const logSeed = buildLogSeed(built.phases, BASELINES);
+  const completedAt = new Date(
+    FIXED_NOW.getTime() + 20 * 60 * 1000,
+  ).toISOString();
+  // Both intervals measured by default (the "ALL 2" case) — deliberately
+  // NOT equal to their own targets (132s both, same as
+  // buildSessionFixture's own choice) so an ACTUAL line is genuinely new
+  // information, not a repeat of the target above it.
+  const defaultActuals: IntervalActual[] = [
+    {
+      index: 1,
+      elapsedSeconds: 705,
+      distanceMeters: 2000,
+      avgSplit: 140,
+      avgSpm: 24,
+      avgHeartRateBpm: 138,
+    },
+    {
+      index: 2,
+      elapsedSeconds: 2500,
+      distanceMeters: 10000,
+      avgSplit: 125,
+      avgSpm: 26,
+      avgHeartRateBpm: 150,
+    },
+  ];
+  const run: MonitorRun = {
+    v: 2,
+    workoutId: MONITOR_WORKOUT_ID,
+    title: hoarfrost.title,
+    program,
+    logSeed,
+    actuals: overrides.actuals ?? defaultActuals,
+    // Real hardware's own device ID (pm5-interface-notes.md's hardware
+    // sessions throughout, e.g. "PM5 432331249").
+    deviceName: overrides.deviceName ?? "PM5 432331249",
+    startedAt: FIXED_NOW.toISOString(),
+    completedAt,
+    terminated: false,
+  };
+  const workout: LibraryWorkout = {
+    id: MONITOR_WORKOUT_ID,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
+    difficulty: hoarfrost.difficulty,
+    pain: hoarfrost.pain,
+    steps: started.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: 2,
+  };
+  return { run, workout };
+}
+
 // Same `vi.doMock` + returned-spy idiom as WorkoutDetail.test.tsx's own
 // `mockApi` — a real `Response`, not a bare object, so `.ok`/`.status`/
 // `.json()` all behave exactly like the real fetch this replaces.
@@ -239,13 +360,16 @@ async function renderLog(initialPath = "/session/log") {
 // Task 3: the manual door's own render helper, registering `:id/log`
 // instead of the session door's fixed `/session/log` — `workoutId`'s
 // presence in the URL is the door-detection signal LogSession's own default
-// export reads via `useParams`.
-async function renderManualLog(workoutId: string) {
+// export reads via `useParams`. 7C: `search` (default "") appends a query
+// string — `?from=monitor` is how a real connected session's own hand-off
+// (`WorkoutDetail.tsx`'s `handleConnectedEnded`) reaches this exact route.
+async function renderManualLog(workoutId: string, search = "") {
   const { default: LogSession } = await import("./LogSession");
   return render(
-    <MemoryRouter initialEntries={[`/library/${workoutId}/log`]}>
+    <MemoryRouter initialEntries={[`/library/${workoutId}/log${search}`]}>
       <Routes>
         <Route path="/library/:id/log" element={<LogSession />} />
+        <Route path="/library/:id" element={<p>WORKOUT DETAIL SCREEN</p>} />
         <Route path="/today" element={<p>TODAY SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
@@ -1257,6 +1381,25 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(screen.getByText("LOADING…")).toBeInTheDocument();
   });
 
+  // 7C Task 4: this door's own gate split the old combined "workouts OR
+  // baselines loading" check in two (`monitorRun`'s own branch has no use
+  // for baselines at all — see LogSession.tsx's own comment on why) —
+  // proving baselines-loading ALONE, with the library already resolved,
+  // reaches LOADING… the same as the combined test above already proves
+  // for workouts alone. Uses a REAL matching workout (this file's own
+  // realistic-fixture convention) so the library lookup that runs before
+  // this gate actually succeeds, rather than short-circuiting on an empty
+  // list first.
+  it("shows LOADING… when baselines alone are still resolving (workouts already ready)", async () => {
+    mockWorkouts([manualWorkoutFixture()]);
+    vi.doMock("../api/useBaselines", () => ({
+      useBaselines: () => ({ state: "loading" }),
+    }));
+    await renderManualLog("id-manual-fixture");
+
+    expect(screen.getByText("LOADING…")).toBeInTheDocument();
+  });
+
   it("shows a retry control when the library fails to load", async () => {
     const retry = vi.fn();
     vi.doMock("../api/useWorkouts", () => ({
@@ -1643,6 +1786,541 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(document.querySelector(".log-paces-value")?.textContent).toBe(
       "2K 1:40.0 · 6K 2:00.0",
     );
+  });
+});
+
+// 7C Task 4: `monitorModeRun`'s own four-condition gate (spec §4), tested
+// directly against the pure function first — cheaper than driving the
+// whole screen four times over (task brief's own words) — with the full
+// screen describe block below proving the wiring on top of it.
+describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () => {
+  it("engages when all four conditions hold", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun(run);
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
+  });
+
+  it("condition 1 (flag) removed: no from=monitor param falls through, even with a real completed matching record", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun(run);
+    const search = new URLSearchParams(); // no "from" at all
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
+  it("condition 1 (flag) wrong value: from=elsewhere also falls through", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun(run);
+    const search = new URLSearchParams("from=elsewhere");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
+  it("condition 2 (record) removed: the flag alone, no MonitorRun in storage at all, falls through — THE HIJACK PIN's mirror image (intent with no evidence)", () => {
+    const search = new URLSearchParams("from=monitor");
+    expect(loadMonitorRun()).toBeNull();
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
+  it("condition 2 (record finished) removed: a LIVE MonitorRun (completedAt: null) falls through — the flag is intent, not evidence of a finished session", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, completedAt: null });
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
+  it("condition 3 (workoutId match) removed: a completed record for a DIFFERENT workout falls through — THE HIJACK PIN, live form", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
+  it("condition 4 (seed alignment) removed: a missing logSeed disqualifies the record (MonitorLogSeedError caught, not thrown)", () => {
+    const { run } = buildMonitorFixture();
+    const { logSeed: _drop, ...v1Shaped } = run;
+    saveMonitorRun({ ...v1Shaped, v: 1 });
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
+  it("condition 4 (seed alignment) removed: a logSeed whose length no longer matches program.intervals disqualifies the record", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({
+      ...run,
+      logSeed: {
+        steps: run.logSeed!.steps.slice(1),
+        paces: run.logSeed!.paces,
+      },
+    });
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+
+  it("THE HIJACK PIN itself: no flag + a stale (but otherwise perfectly valid) completed record for the SAME workout still falls through", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun(run);
+    const search = new URLSearchParams(); // reload/bookmark: no from=monitor
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+});
+
+function mockMonitorRunClearSpy() {
+  const spy = vi.fn();
+  vi.doMock("../monitor/monitorRun", async () => {
+    const actual = await vi.importActual<
+      typeof import("../monitor/monitorRun")
+    >("../monitor/monitorRun");
+    return {
+      ...actual,
+      clearMonitorRun: () => {
+        spy();
+        actual.clearMonitorRun();
+      },
+    };
+  });
+  return spy;
+}
+
+describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+  it("shows the title/type/EXPECTED, the caption, PACES LOCKED from the frozen seed, date+duration from the run's own stamps, and the widened render gate showing every pm5 split", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+
+    expect(
+      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
+    expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
+
+    // Date/duration from startedAt/completedAt (FIXED_NOW + 20 minutes),
+    // NOT `estimateMinutes` — the manual door's own header formula never
+    // runs in this branch.
+    expect(screen.getByText("AUG 1 · 20 MIN")).toBeInTheDocument();
+
+    // The caption: middle dot, never an em-dash, both intervals measured.
+    expect(
+      screen.getByText("FROM PM5 432331249 · ALL 2 INTERVALS MEASURED"),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".log-from-monitor")).not.toBeNull();
+
+    // PACES LOCKED from logSeed.paces — same "6k only" shape as the
+    // fixture's own steps (neither references "2k").
+    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
+      "6K 2:00.0",
+    );
+
+    // The widened render gate: BOTH rows show a real ACTUAL line (pm5),
+    // distinct from their targets (140/125 vs 132 for both).
+    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("2:12.0"); // target
+    expect(rows[0]).toHaveTextContent("ACTUAL 2:20.0");
+    expect(rows[1]).toHaveTextContent("2:12.0"); // target
+    expect(rows[1]).toHaveTextContent("ACTUAL 2:05.0");
+
+    // Unlike the ordinary manual door, this mode DOES have a Discard.
+    expect(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    ).toBeInTheDocument();
+  });
+
+  it("partial: one interval measured, one not — caption reads '1 OF 2', the unmeasured row shows no ACTUAL line", async () => {
+    const { run, workout } = buildMonitorFixture({
+      actuals: [
+        {
+          index: 1,
+          elapsedSeconds: 705,
+          distanceMeters: 2000,
+          avgSplit: 140,
+          avgSpm: 24,
+          avgHeartRateBpm: 138,
+        },
+        // index 2 (Calm Sea's distance work) never reached.
+      ],
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    expect(
+      screen.getByText("FROM PM5 432331249 · 1 OF 2 INTERVALS MEASURED"),
+    ).toBeInTheDocument();
+    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    expect(rows[0]).toHaveTextContent("ACTUAL 2:20.0");
+    expect(rows[1]).not.toHaveTextContent("ACTUAL");
+  });
+
+  it("an unusable avgSplit (0 — 'the wire had no reading') still counts as measured for the caption, with no ACTUAL line of its own", async () => {
+    const { run, workout } = buildMonitorFixture({
+      actuals: [
+        {
+          index: 1,
+          elapsedSeconds: 705,
+          distanceMeters: 2000,
+          avgSplit: 0,
+          avgSpm: 24,
+          avgHeartRateBpm: 138,
+        },
+        {
+          index: 2,
+          elapsedSeconds: 2500,
+          distanceMeters: 10000,
+          avgSplit: 125,
+          avgSpm: 26,
+          avgHeartRateBpm: 150,
+        },
+      ],
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    // Both intervals carry actualSource: "pm5" (the pairing exception), so
+    // the caption still reads "ALL 2" even though row 1 has no ACTUAL line.
+    expect(
+      screen.getByText("FROM PM5 432331249 · ALL 2 INTERVALS MEASURED"),
+    ).toBeInTheDocument();
+    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    expect(rows[0]).not.toHaveTextContent("ACTUAL");
+    expect(rows[1]).toHaveTextContent("ACTUAL 2:05.0");
+  });
+
+  // THE HIJACK PIN, at the screen level (unit-level coverage lives in the
+  // `monitorModeRun` describe block above): a stale completed MonitorRun
+  // for the SAME workout, reached with NO `from=monitor` flag (a reload, a
+  // bookmark, or simply Log it after clicked normally) must render the
+  // manual form BYTE-FOR-BYTE — the caption is absent, and a manual-only
+  // element (the estimated-total header, computed from `estimateMinutes`,
+  // which the monitor branch never calls) is present.
+  it("THE HIJACK PIN: no from=monitor flag + a stale completed MonitorRun for the SAME workout renders the manual form byte-for-byte", async () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun(run);
+    const workout = manualWorkoutFixture(MONITOR_WORKOUT_ID);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID); // no search string at all
+
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    expect(screen.queryByText(/FROM PM5/)).not.toBeInTheDocument();
+    expect(document.querySelector(".log-from-monitor")).toBeNull();
+    // The manual door's own estimated-total header — proves the ordinary
+    // `buildManualLogSteps`/`estimateMinutes` path ran, not the monitor one.
+    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
+    // No Discard at all — the plain manual door's own signature (Task 3's
+    // "no Discard button" test, pinned again here for this exact scenario).
+    expect(
+      screen.queryByRole("button", { name: /discard/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("POSTs the pm5 steps verbatim (actualSource, avgHr, actualSeconds, actualMeters) plus deviceName, and clears MonitorRun exactly once on success", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-1" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.workoutId).toBe(MONITOR_WORKOUT_ID);
+    expect(body.deviceName).toBe("PM5 432331249");
+    const steps = body.steps as Record<string, unknown>[];
+    expect(steps).toHaveLength(2);
+    for (const step of steps) {
+      expect(step.actualSource).toBe("pm5");
+      expect(typeof step.avgHr).toBe("number");
+      expect(typeof step.actualSeconds).toBe("number");
+      expect(typeof step.actualMeters).toBe("number");
+    }
+
+    // Cleared exactly once: the record is gone, and the clearing FUNCTION
+    // itself (not just its effect) was invoked exactly once.
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed save does NOT clear MonitorRun — the record survives so a retry can still prefill", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    mockApi(() => Promise.resolve(new Response(null, { status: 500 })));
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).not.toBeNull();
+    expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  it("Discard clears MonitorRun and navigates back to the workout's detail screen, with no POST ever fired", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
+    expect(
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // The M-2 coexistence contract (spec §5): a phone `SessionRun`/`SessionDraft`
+  // sitting around for a DIFFERENT workout must survive both a monitor-mode
+  // save and a monitor-mode discard byte-for-byte — this door reads/writes
+  // `MONITOR_RUN_KEY` only.
+  it("leaves an unrelated live run/draft byte-identical in storage after a monitor-mode save", async () => {
+    buildSessionFixture();
+    const draftBefore = localStorage.getItem(DRAFT_KEY);
+    const runBefore = localStorage.getItem(RUN_KEY);
+    expect(draftBefore).not.toBeNull();
+    expect(runBefore).not.toBeNull();
+
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-2" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(draftBefore);
+    expect(localStorage.getItem(RUN_KEY)).toBe(runBefore);
+  });
+
+  it("leaves an unrelated live run/draft byte-identical in storage after the monitor-mode discard fires", async () => {
+    buildSessionFixture();
+    const draftBefore = localStorage.getItem(DRAFT_KEY);
+    const runBefore = localStorage.getItem(RUN_KEY);
+
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Discard without logging" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+    await screen.findByText("WORKOUT DETAIL SCREEN");
+
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(draftBefore);
+    expect(localStorage.getItem(RUN_KEY)).toBe(runBefore);
+  });
+
+  it("does not gate on baselines at all — the monitor branch renders even when baselines are unset (a stale bookmark elsewhere never blocks it)", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+
+    expect(
+      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+    ).toBeInTheDocument();
+    // The ordinary manual door's "no target / Set baselines" degradation
+    // never appears — this branch reads `logSeed.paces`, never baselines.
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save session" }),
+    ).toBeInTheDocument();
+  });
+
+  // Same "both bases at once" shape as the plain manual door's own
+  // "resolves each PACES LOCKED base from its OWN matching baseline" test
+  // above — `buildMonitorFixture`'s own two real library steps are both
+  // 6k-based, so this exercises the OTHER half of `logSeed.paces`' own
+  // `k2`/`k6` optional pair (`?? null`) that fixture never reaches.
+  it("shows both PACES LOCKED bases when the frozen seed carries both (a 2k off=0 and a 6k off=0 step)", async () => {
+    const draft = buildDraft({
+      id: "id-monitor-both-bases",
+      title: "Monitor Both Bases",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "2k", off: 0 },
+        },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+    });
+    const started = startDraft(draft);
+    const built = buildRun(started, BASELINES, FIXED_NOW);
+    const run: MonitorRun = {
+      v: 2,
+      workoutId: draft.workoutId,
+      title: draft.title,
+      program: compileOrThrow(built.phases),
+      logSeed: buildLogSeed(built.phases, BASELINES),
+      actuals: [],
+      deviceName: "PM5 432331249",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: new Date(FIXED_NOW.getTime() + 6 * 60 * 1000).toISOString(),
+      terminated: false,
+    };
+    saveMonitorRun(run);
+    const workout: LibraryWorkout = {
+      id: "id-monitor-both-bases",
+      title: "Monitor Both Bases",
+      type: "AT",
+      difficulty: "medium",
+      pain: 3,
+      steps: started.steps,
+      isGlobal: true,
+      lastDoneDaysAgo: null,
+    };
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog("id-monitor-both-bases", "?from=monitor");
+
+    await screen.findByRole("heading", { name: "Log Monitor Both Bases" });
+    // BASELINES.k2Seconds (100) -> "1:40.0"; BASELINES.k6Seconds (120) ->
+    // "2:00.0" — same values `buildLogSeed` froze at "connect" time.
+    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
+      "2K 1:40.0 · 6K 2:00.0",
+    );
+  });
+
+  // The `k6` half of `logSeed.paces`' own optional pair (`?? null`) never
+  // falls to its null branch anywhere else in this describe block
+  // (`buildMonitorFixture`'s two real steps are both 6k-based, and the
+  // "both bases" test just above always supplies one too) — a 2k-only seed
+  // is what actually exercises "6k was never referenced" for the monitor
+  // door, the mirror of the plain manual door's own established "6k only"
+  // fixtures.
+  it("shows only 2K when the frozen seed never references 6k at all", async () => {
+    const draft = buildDraft({
+      id: "id-monitor-2k-only",
+      title: "Monitor 2K Only",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 3 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
+    });
+    const started = startDraft(draft);
+    const built = buildRun(started, BASELINES, FIXED_NOW);
+    const run: MonitorRun = {
+      v: 2,
+      workoutId: draft.workoutId,
+      title: draft.title,
+      program: compileOrThrow(built.phases),
+      logSeed: buildLogSeed(built.phases, BASELINES),
+      actuals: [],
+      deviceName: "PM5 432331249",
+      startedAt: FIXED_NOW.toISOString(),
+      completedAt: new Date(FIXED_NOW.getTime() + 3 * 60 * 1000).toISOString(),
+      terminated: false,
+    };
+    saveMonitorRun(run);
+    const workout: LibraryWorkout = {
+      id: "id-monitor-2k-only",
+      title: "Monitor 2K Only",
+      type: "AT",
+      difficulty: "medium",
+      pain: 3,
+      steps: started.steps,
+      isGlobal: true,
+      lastDoneDaysAgo: null,
+    };
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog("id-monitor-2k-only", "?from=monitor");
+
+    await screen.findByRole("heading", { name: "Log Monitor 2K Only" });
+    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
+      "2K 1:40.0",
+    );
+  });
+
+  it("the outside-plan toggle works identically in monitor mode: renders, flips, and Save posts advancesPlan:false when toggled", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-plan" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    const toggle = screen.getByRole("button", {
+      name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+    });
+    await userEvent.click(toggle);
+    expect(
+      screen.getByRole("button", { name: /OUTSIDE THE PLAN/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.advancesPlan).toBe(false);
   });
 });
 
