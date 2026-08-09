@@ -1368,16 +1368,24 @@ is still owed.
 **Goal:** The suggestion engine and session flow honor per-user preferences.
 
 - [ ] Suggest-workouts-at difficulty chips + time-available cap, live "N of M match" readout, feeding Today and clearing `todayPick`
-- [ ] **Warm-ups leave the workouts and become a setting** (James,
+- [x] **Warm-ups leave the workouts and become a setting** (James,
       2026-08-08, superseding the earlier "override library warm-ups"
       line): the library's own warmup steps are DROPPED; a rower who
       wants one sets it once in preferences — duration as TIME or
       METERS, plus an OPTIONAL trailing rest — and the session flow
-      prepends it. Follow-on in the same phase, after the drop:
-      recompute the library's time-range percentages (the 15'/30'/45'
-      distribution shifts once every workout loses its warmup) and
-      decide whether a workout regen is needed to rebalance
-      (`patterns.json` is regen-ready per the Phase 6 generation work)
+      prepends it. Shipped 2026-08-09, home:
+      `docs/superpowers/specs/2026-08-09-warmup-setting-design.md`.
+      Follow-on, replacing the earlier "recompute the library's
+      time-range percentages" clause: the rebalance report shipped
+      alongside the strip (`app/scripts/library-balance.ts`, spec §7) —
+      its MOVED row (what the strip itself did to each type/band, not
+      the AFT-TGT row, which compares a warm-up-free count against the
+      original warm-up-inclusive target grid and is explicitly NOT a
+      rebalance signal) is the real input. The open question is
+      therefore not "recompute the old percentages" but whether to
+      author a NEW warmup-free target grid — a regen ruling from those
+      numbers, not yet made (`patterns.json` is regen-ready per the
+      Phase 6 generation work)
 - [ ] Pre-workout countdown length 0–60 s (staged)
 - [ ] Pace tolerance (0–3 s) and accent color as real settings
 - [ ] All preferences persisted per-user

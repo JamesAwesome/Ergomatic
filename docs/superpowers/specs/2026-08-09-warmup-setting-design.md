@@ -246,3 +246,47 @@ connected — prepends it; the balance report's numbers are in the PR
 body awaiting the regen ruling; and every consumer of warmup phases
 (timer, confirm, PM5 programming, both log builders, 7C's seed)
 behaves identically to phase 7's hardware-proven behavior.
+
+## Corrections (found in implementation)
+
+Three load-bearing claims above did not survive contact with the code.
+Recorded here so the spec doesn't silently win arguments it lost —
+each implementer's task report caught the falsification at the time;
+this section is the one place a future reader of the spec ITSELF sees
+it, rather than having to cross-reference the SDD ledger.
+
+- **§4's "existing warmup arm" was not existing — it was new code.**
+  §4 claims: "Nothing programs it: `compileProgram` still emits the
+  warmup interval with no pace target, per its existing warmup arm."
+  FALSE: no such arm existed anywhere in `domain/monitor/program.ts`
+  before this phase. Task 4 added it — the `phase.type === "warmup" →
+  targetSplit: null` guard now at `program.ts:488` — which is the
+  correct behavior, but it shipped as NEW code this phase wrote, not a
+  pre-existing convention the design could lean on as already proven.
+
+- **§2's bounds are new constants, not a reuse of `validate.ts`'s.**
+  §2 claims: "Bounds are scalar deferrals to `domain/validate.ts`'s own
+  constants (time reuses the work-step minutes bound, distance the
+  meters bound...)." FALSE: Task 2 shipped them as their own named
+  constants (`server/routes/data.ts`'s `WARMUP_MINUTES_MIN/MAX`,
+  `WARMUP_METERS_MIN/MAX`, `WARMUP_REST_SECONDS_MIN/MAX`, hand-mirrored
+  client-side in `WarmupRow.tsx`), not by importing or otherwise
+  reusing `validate.ts`'s work-step/distance bounds. The VALUES happen
+  to agree (1..30 minutes, 100..10000 meters) — the divergence is the
+  MECHANISM (duplication with a same-values comment, not reuse), and
+  it's documented at the constants' own definition sites, not hidden.
+
+- **§6's "builder LOCAL draft in localStorage" never existed.** (The
+  task dispatch that requested this section cited this claim as "§4" —
+  re-read against the spec's own text, it is §6, "Removal of `wu`":
+  "Legacy LOCAL builder drafts in localStorage may still carry wu
+  rows: the draft loader strips them with the same notice copy."
+  Correcting the citation here rather than silently using the wrong
+  one.) FALSE: `grep -rn "localStorage" src/builder/` returns nothing —
+  the builder has no local draft mechanism at all, in localStorage or
+  otherwise. The real seam needing the equivalent fix was
+  `session/draft.ts`'s `SessionDraft` (the session-confirm screen's own
+  local draft, keyed in localStorage) — Task 5 shipped
+  `stripLegacyWarmups`/`loadDraftWithNotice` there instead, reusing the
+  same shared `droppedWarmupNotice` copy so the two doors a stray `wu`
+  step could arrive from never say the fact two different ways.
