@@ -26,7 +26,13 @@ import { ConnectTheMonitorBody } from "./bodies/connectTheMonitor";
 // (written before the prose existed) is superseded by this real count;
 // `StartHere.tsx`'s hardcoded minutes were updated to match. Recounted
 // after the disconnect paragraph's redraft (same day, controller fix): 217
-// words -> still 2 min, no further changes needed.
+// words -> still 2 min, no further changes needed. ui-notes round
+// (2026-08-09, item 3's two prose surgeries): your-first-row's replaced
+// "Prefer the short test?" paragraph and baselines' one added sentence
+// both grew their bodies — recounted at 256 words (your-first-row) and 476
+// words (baselines, body + the IN THE APP aside together); both stay at
+// their existing `minutes` value above (ceil(256/180)=2, ceil(476/180)=3),
+// no registry or `StartHere.tsx` change needed this round.
 export const ARTICLES: NewsArticle[] = [
   {
     slug: "workout-types",

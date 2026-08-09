@@ -40,7 +40,8 @@ export function BaselinesBody() {
         runs long. They move at different rates and they answer different
         questions, so short, sharp workouts key off your 2k and longer ones key
         off your 6k. Keep both current and every workout in the library speaks
-        your language.
+        your language. If you've only rowed one, the editor can estimate the
+        other from it until you row the real thing.
       </p>
 
       <p>

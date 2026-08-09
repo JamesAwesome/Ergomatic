@@ -49,6 +49,18 @@ describe("article body components", () => {
     ).toBeInTheDocument();
   });
 
+  // ui-notes round, item 3: the two-baselines paragraph gains one sentence
+  // pointing at the derivation offer (item 2) — word-exact per the brief,
+  // James reviews the diff.
+  it("BaselinesBody's two-baselines paragraph names the derivation offer (ui-notes round, item 3)", () => {
+    render(<BaselinesBody />);
+    expect(
+      screen.getByText(
+        /Keep both current and every workout in the library speaks your language\. If you've only rowed one, the editor can estimate the other from it until you row the real thing\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("PickingAWorkoutBody renders with distinctive text", () => {
     // Wrapped in MemoryRouter: this body now carries a real `<Link>` (item J,
     // persona-review fix wave), which throws outside a router context.
@@ -98,6 +110,29 @@ describe("article body components", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/your average split is on the summary screen and/),
+    ).toBeInTheDocument();
+  });
+
+  // ui-notes round, item 3: the "Prefer the short test?" paragraph is
+  // REPLACED in full — word-exact per the brief, James reviews the diff.
+  // Pinned here so a future edit can't silently drift back toward the old
+  // "the app wants both eventually" white lie the brief's root-cause names.
+  it("YourFirstRowBody's replaced 'Prefer the short test?' paragraph names the derivation offer and the honest unset option (ui-notes round, item 3)", () => {
+    render(<YourFirstRowBody />);
+    expect(
+      screen.getByText(
+        /The app uses both baselines eventually: short, sharp workouts key off your 2k, longer ones off your 6k\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /After\s+your first row, the baselines editor can estimate the one you haven't/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /or\s+you can leave it unset and row the real test when you're ready\./,
+      ),
     ).toBeInTheDocument();
   });
 

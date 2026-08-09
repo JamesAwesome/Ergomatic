@@ -24,8 +24,11 @@ export function YourFirstRowBody() {
 
       <p>
         Prefer the short test? 2K INSTEAD runs two thousand metres all out and
-        sets your 2k the same way. The app wants both eventually (short, sharp
-        workouts key off your 2k; longer ones key off your 6k), and Today keeps
+        sets your 2k the same way. The app uses both baselines eventually:
+        short, sharp workouts key off your 2k, longer ones off your 6k. After
+        your first row, the baselines editor can estimate the one you haven't
+        rowed (a 2k runs about seven seconds per 500 m faster than a 6k), or you
+        can leave it unset and row the real test when you're ready. Today keeps
         offering whichever is missing.
       </p>
 
