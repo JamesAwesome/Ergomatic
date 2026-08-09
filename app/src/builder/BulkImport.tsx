@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { droppedWarmupNotice } from "../../domain/bulk.js";
 
 interface BulkError {
   line: number | null;
@@ -10,6 +11,14 @@ interface BulkError {
 interface BulkResponse {
   created: unknown[];
   errors: BulkError[];
+  // 2026-08-09 warmup-setting spec §6: a count of well-formed `wu <minutes>`
+  // lines the server silently dropped (never a Step any more, but still
+  // explicitly recognized rather than an "unknown step word" error — see
+  // domain/bulk.ts's own `tryParseWarmupLine` comment). `droppedWarmupNotice`
+  // is the one shared copy for this fact — `session/draft.ts`'s legacy
+  // local-draft strip renders the identical wording for the other door a
+  // stray `wu` can arrive from.
+  droppedWarmups: number;
 }
 
 // Verbatim from domain/bulk.test.ts's own "parses one valid multi-block
@@ -100,6 +109,11 @@ export default function BulkImport({ onImported }: { onImported: () => void }) {
         {result && (
           <div className="bulk-import-result" role="alert">
             <p className="mono-status">{result.created.length} created</p>
+            {result.droppedWarmups > 0 && (
+              <p className="bulk-import-notice">
+                {droppedWarmupNotice(result.droppedWarmups)}
+              </p>
+            )}
             {result.errors.length > 0 && (
               <ul className="bulk-import-errors">
                 {result.errors.map((err, i) => (

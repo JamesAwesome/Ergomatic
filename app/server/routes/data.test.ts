@@ -648,7 +648,14 @@ describe("POST /api/workouts/bulk", () => {
     expect(titles).not.toContain("Steady");
   });
 
-  it("a clean multi-block paste lands all of them, with the error report's shape unchanged (created + errors, byte-identical)", async () => {
+  // The composed contract's positive half (see `domain/bulk.ts`'s header):
+  // a dropped `wu` line is not "bad", so a paste whose only oddity is
+  // warm-up lines still lands EVERY block — the all-or-nothing gate above
+  // must not see the drop as an error. Byte-identical response shape too:
+  // `created` + `errors` + the `droppedWarmups` count the import screen's
+  // notice reads (task-5-report's Concern #2 — the count was computed and
+  // then discarded on this door until now).
+  it("a clean multi-block paste lands all of them, with the exact response shape (created + errors + droppedWarmups)", async () => {
     const stores = makeStores();
     const text = `1 | Ladder | AT | medium | 3\nwu 10\nw 1' 6k-2 @22 r5\n\n2 | Steady | O2 | easy | 1\nwu 10\nw 20' 2k+10`;
     const res = await asA(
@@ -658,9 +665,38 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.body).toStrictEqual({
       created: expect.any(Array),
       errors: [],
+      droppedWarmups: 2,
     });
     expect(res.body.created).toHaveLength(2);
     expect(await stores.workouts.count("user-a")).toBe(2);
+  });
+
+  it("reports zero dropped warm-up lines for a paste with none", async () => {
+    const text = "1 | Steady | O2 | easy | 1\nw 20' 2k+10";
+    const res = await asA(
+      request(appFor(makeStores())).post("/api/workouts/bulk"),
+    ).send({ text });
+    expect(res.status).toBe(200);
+    expect(res.body.droppedWarmups).toBe(0);
+  });
+
+  // A block whose only step lines are well-formed `wu` lines errors rather
+  // than silently vanishing (domain/bulk.ts's own "no steps at all" guard,
+  // arc review F7) — asserting the route hands this exact message through
+  // unmodified, since task 6's own brief flags it as a case to pin either
+  // way.
+  it("surfaces the warm-up-only-block error like any other line error", async () => {
+    const text = "1 | Warmup Only | AT | medium | 3\nwu 10";
+    const res = await asA(
+      request(appFor(makeStores())).post("/api/workouts/bulk"),
+    ).send({ text });
+    expect(res.status).toBe(200);
+    expect(res.body.created).toHaveLength(0);
+    expect(res.body.errors).toContainEqual(
+      expect.objectContaining({
+        message: "workout needs at least one step. Warm-ups are a setting now.",
+      }),
+    );
   });
 });
 
