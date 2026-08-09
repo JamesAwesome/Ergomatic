@@ -95,7 +95,11 @@ export function commit(s: DraftState): DraftState {
  *  mutator (`nudge`/`setDraft`) sets `touched` in the SAME call that
  *  changes `draft`, and `discard`/`commit` reset both together, so
  *  `draft[x] !== committed[x]` implies `touched[x]` always — `touched`
- *  alone is the complete, simpler answer to "is anything pending." */
+ *  alone is the complete, simpler answer to "is anything pending."
+ *  Accepted edge (re-review round): nudging a field away and back to its
+ *  EXACT original value leaves it `touched` (an act, not a net change), so
+ *  Apply can fire an idempotent resend of an unchanged value — judged
+ *  fine, not worth a "did anything actually move" check of its own. */
 export function isDirty(s: DraftState): boolean {
   return s.touched.k2 || s.touched.k6;
 }

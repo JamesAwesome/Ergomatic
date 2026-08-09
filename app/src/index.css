@@ -1281,7 +1281,28 @@ button:disabled {
   border-bottom: 1px solid var(--rule-2);
 }
 
-.baseline-row:last-of-type {
+/* Re-review round (PR #66): `:last-of-type` matches by TAG, not class — it
+   picks the last `<div>` among ALL sibling divs, not the last `.baseline-row`
+   specifically. That was silently correct only by accident, as long as
+   nothing else `<div>`-shaped ever followed the two rows. `.baseline-derive-
+   slot` (the derivation offer, ui-notes round) broke that accident for the
+   6k-target case ({k2Seconds: real, k6Seconds: null}, offer visible): the
+   slot is now the LAST div, `.baseline-row:last-of-type` stops matching the
+   6k row at all, and its border-bottom reappears as a stray divider sitting
+   flush against the slot below it (confirmed live by the re-reviewer). The
+   OLD dirty-state confirm block (`.baseline-confirm`, a third sibling div
+   whenever `dirty` is true) had the exact same latent flaw — just less
+   visible, since its own 12px top margin put the stray line in blank space
+   rather than flush against visible content.
+   Fixed by asking the real question directly — "is there a LATER sibling
+   that's ALSO a `.baseline-row`?" — instead of "am I the last div, of any
+   kind, in the whole card": `:has(~ .baseline-row)` uses the general
+   sibling combinator (not `+`, which would require ADJACENCY and wrongly
+   strip the 2k row's own divider whenever a slot sits directly between the
+   two rows). This also fixes the pre-existing dirty-state case for free —
+   verified in `design.spec.ts`'s own two-target sweep (2k-target AND
+   6k-target, offer visible) plus `you-derive-offer-6k.png`. */
+.baseline-row:not(:has(~ .baseline-row)) {
   border-bottom: none;
 }
 

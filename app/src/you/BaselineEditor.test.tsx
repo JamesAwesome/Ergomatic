@@ -340,6 +340,34 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       expect(screen.getByText("6k 2:02.0 → 2:02.5")).toBeInTheDocument();
       expect(screen.queryByText(/^2k .* → /)).not.toBeInTheDocument();
     });
+
+    // Re-review round (PR #66), accepted edge: `touched` tracks the ACT of
+    // nudging, not a net value change (deliberate — see Finding 3, which
+    // needs exactly this property for a derived value that lands back on
+    // the seed). Nudging away and back to the EXACT original value leaves
+    // `touched` true, so the confirm card still renders (Apply/Discard
+    // live) even though both ConfirmLines suppress themselves (from===to
+    // for every field) — a confirm card with zero visible lines. Apply
+    // still fires: an idempotent resend of the unchanged values, never an
+    // error or a silently-skipped no-op.
+    it("Apply is an idempotent resend when nudged back to the original value — the confirm card can render with zero ConfirmLines but live Apply/Discard (accepted edge)", async () => {
+      const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+
+      expect(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/→/)).not.toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k6Seconds: 122 });
+    });
   });
 
   // Review finding (task review, PR #66): the offer used to key ONLY on the

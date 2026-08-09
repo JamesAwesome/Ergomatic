@@ -2225,6 +2225,78 @@ test.describe("you screen with the derivation offer visible (task review round, 
     await assertTapTargets(page);
     await assertNoA11yViolations(page);
   });
+
+  // Re-review round (PR #66): `.baseline-row`'s own trailing-divider rule
+  // used to key off `:last-of-type` (matches by TAG, not class — the last
+  // `<div>` among ALL sibling divs), which `.baseline-derive-slot` broke
+  // for the 6K-TARGET case specifically (the mirror test below): the slot
+  // became the last div, so the 6k row's border-bottom reappeared as a
+  // stray divider. This 2k-target case was NEVER actually broken (the 6k
+  // row — with no offer slot after it — was always the true last div
+  // here), so this assertion is the "stayed correct" half of the pair, not
+  // a regression guard on its own.
+  test("no stray divider under the 6k row (this direction was never broken — the mirror test below is the regression guard)", async ({
+    page,
+  }) => {
+    const style = await page
+      .locator(".baseline-row", { hasText: "6k" })
+      .evaluate((el) => getComputedStyle(el).borderBottomStyle);
+    expect(style).toBe("none");
+  });
+});
+
+// Re-review round (PR #66): the CONFIRMED regression, verified live —
+// {k2Seconds: real, k6Seconds: null} (a rower who rowed only the 2k) puts
+// `.baseline-derive-slot` directly after the 6K row, which used to break
+// `.baseline-row:last-of-type`'s tag-based matching and leave a stray
+// border-bottom under the 6k row. Fixed via `:has(~ .baseline-row)`
+// (index.css) — this is the mirror of the "you screen with the derivation
+// offer visible" block above, same sweep shape, opposite direction.
+test.describe("you screen with the derivation offer visible (6k-target mirror, re-review round)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-you-offer-6k@e2e.test",
+      name: "Design You Offer 6K Tester",
+    });
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k2Seconds: 100 }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    });
+    if (!result.ok) {
+      throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+    }
+    await page.goto("/you");
+    await page
+      .getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" })
+      .waitFor();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // The regression itself, pinned structurally: computed
+  // `border-bottom-style` on the 6k row (the one immediately followed by
+  // the offer slot in THIS direction) must be "none", never a stray
+  // "solid".
+  test("no stray divider under the 6k row with the offer slot directly after it (the confirmed regression)", async ({
+    page,
+  }) => {
+    const style = await page
+      .locator(".baseline-row", { hasText: "6k" })
+      .evaluate((el) => getComputedStyle(el).borderBottomStyle);
+    expect(style).toBe("none");
+  });
 });
 
 // Phase 6B (Task 5): the pre-workout countdown (handoff §5). A single

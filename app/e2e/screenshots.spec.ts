@@ -866,6 +866,28 @@ test("you-derive-offer-accepted", async ({ page }) => {
   });
 });
 
+// Re-review round (PR #66): the CONFIRMED CSS regression's own visual
+// record — the MIRROR direction of "you-derive-offer" above. Touching only
+// 2k and applying leaves 6k server-null, so the offer (and
+// `.baseline-derive-slot`) render directly under the 6K row instead of the
+// 2K row — exactly the arrangement that broke `.baseline-row:last-of-type`
+// (fixed in index.css via `:has(~ .baseline-row)`). Reached through the
+// real UI, same discipline as the other offer captures — no raw-API seed.
+test("you-derive-offer-6k", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-derive-offer-6k@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  await page.getByRole("button", { name: "2k slower" }).click();
+  await page.getByRole("button", { name: "Apply baselines" }).click();
+  await page.getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" }).waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-derive-offer-6k.png"),
+  });
+});
+
 // Phase 6I Task 7: You › Learning the app — dismissed on Today (so the
 // status line/PUT IT BACK ON TODAY control both render, not just the
 // baseline empty state) with one of the four steps already read (a real,
