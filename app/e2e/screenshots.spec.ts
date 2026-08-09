@@ -40,6 +40,40 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
+/** Phase 6I Task 7: dismisses START HERE on Today via an in-page fetch —
+ *  same real-networking reasoning as `setBaselines` above — so a screenshot
+ *  can show News's own Start-here pin (only visible once dismissed) and
+ *  the Learning screen's own dismissed status line/PUT IT BACK control,
+ *  rather than the empty/never-dismissed state. */
+async function dismissStartHere(page: Page): Promise<void> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ startHereDismissed: true }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(
+      `dismiss start-here failed: ${result.status} ${result.body}`,
+    );
+  }
+}
+
+/** Marks a single article slug read via an in-page fetch — used to give the
+ *  Learning screen's own progress line/pin meta a real, non-zero count
+ *  rather than a fresh account's 0 OF 4. */
+async function markArticleRead(page: Page, slug: string): Promise<void> {
+  const result = await page.evaluate(async (s) => {
+    const res = await fetch(`/api/article-reads/${s}`, { method: "PUT" });
+    return { ok: res.ok, status: res.status };
+  }, slug);
+  if (!result.ok) {
+    throw new Error(`mark read failed: ${result.status}`);
+  }
+}
+
 /** Neutralises `.tabbar`'s `position: fixed` for a `fullPage: true` capture.
  *  A full-page screenshot on a document taller than the viewport stitches
  *  it together from scrolled segments; a fixed-position element gets
@@ -760,6 +794,25 @@ test("you-staged", async ({ page }) => {
   });
 });
 
+// Phase 6I Task 7: You › Learning the app — dismissed on Today (so the
+// status line/PUT IT BACK ON TODAY control both render, not just the
+// baseline empty state) with one of the four steps already read (a real,
+// non-zero progress count), the realistic state a rower actually reaches
+// this screen from rather than a brand-new account's 0 OF 4.
+test("you-learning", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-learning@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await dismissStartHere(page);
+  await markArticleRead(page, "baselines");
+  await page.goto("/you/learning");
+  await page.locator(".learning-progress-count").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-learning.png"),
+  });
+});
+
 // Phase 6B (Task 5): the pre-workout countdown, live timer (portrait +
 // 844×420 landscape), and session-complete screens. Every capture drives a
 // bulk-imported, non-empty workout through the real START -> countdown ->
@@ -1116,8 +1169,13 @@ test("news", async ({ page }) => {
     email: "screenshots-news@e2e.test",
     name: "Screenshot Tester",
   });
+  // Phase 6I Task 7: dismissed first, so this capture is "News recaptured
+  // with the third pin" (the phase spec's own screenshot obligation) —
+  // Start-here now sits above the two permanent explainers.
+  await dismissStartHere(page);
   await page.goto("/news");
   await page.locator(".news-unread-count").waitFor();
+  await page.locator(".news-pin-starthere").waitFor();
 
   const workoutTypesRow = page.locator(
     'a.news-row[href="/news/workout-types"]',
