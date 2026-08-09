@@ -507,7 +507,11 @@ async function walkToReady(
  *  holds for several real seconds, but "several" is still a budget, and
  *  spending it on unrelated pane clicks before ever looking left nothing
  *  for the actual assertion on two of this file's own earlier runs. */
-async function walkSurfaceToLog(page: Page, title: string): Promise<void> {
+async function walkSurfaceToLog(
+  page: Page,
+  title: string,
+  deviceName: string,
+): Promise<void> {
   // The surface, on the default pane (`DEFAULT_PANE`, "live" — "B on the
   // first connected session").
   await expect(
@@ -596,10 +600,11 @@ async function walkSurfaceToLog(page: Page, title: string): Promise<void> {
   await expect(page.getByText("That is the session")).toBeVisible();
 
   // THE LOG FLOW — `WorkoutDetail.tsx`'s own `handleConnectedEnded`
-  // navigates here; a `MonitorRun`, not a phone `SessionRun`, is what
-  // closed, so this is the manual door's own `/library/:id/log`, not
-  // `/session/log`.
-  await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+  // navigates here, `?from=monitor` appended; a `MonitorRun`, not a phone
+  // `SessionRun`, is what closed, so this is the manual door's own
+  // `/library/:id/log`, not `/session/log`, and the monitor mode (7C spec
+  // §4) is what engages on this exact URL shape.
+  await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
   await expect(page.locator("h1.screen-title")).toHaveText(`Log ${title}`);
 
   // THE STASH (hardware walk 2's loss, pinned in a real browser): the
@@ -614,6 +619,49 @@ async function walkSurfaceToLog(page: Page, title: string): Promise<void> {
   ).not.toBeNull();
   const entries = JSON.parse(stash!) as { kind: string }[];
   expect(entries.some((e) => e.kind === "write")).toBe(true);
+
+  // THE MONITOR MODE FORM (7C spec §4/§7, Task 6): the caption line, a
+  // rendered pm5 split, then Save — proving the mode engaged for real,
+  // not just that the route matched. `buildStoryEvents()` above lands
+  // exactly ONE boundary (interval 0) before End is pressed, so the
+  // caption reads "1 OF 5" (the fixture program's five work intervals,
+  // `monitorCaption`'s own `total` — warmups are never in this array to
+  // begin with) and only interval 0's row grows an ACTUAL line.
+  await expect(page.locator(".log-from-monitor")).toHaveText(
+    `FROM ${deviceName} · 1 OF 5 INTERVALS MEASURED`,
+  );
+  // avgSplit 112 (`buildStoryEvents()`'s own boundary actual) -> fmtSplit
+  // "1:52.0" — a real, plausible split, not a placeholder value.
+  await expect(page.locator(".log-step-actual").first()).toHaveText(
+    "ACTUAL 1:52.0",
+  );
+
+  // Fill idiom from `session.spec.ts`'s own manual door coverage: HELD,
+  // then a mid-scale pain rating (deliberately not the extremes).
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "Save session" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+
+  // THE STORED LOG — the save posted for real; read it back off the same
+  // route Today itself uses, in-page (same-origin, same session cookie).
+  const logs = (await page.evaluate(() =>
+    fetch("/api/logs").then((r) => r.json()),
+  )) as {
+    deviceName: string | null;
+    steps: { actualSource?: string; actualSeconds?: number }[];
+  }[];
+  const newest = logs[0];
+  expect(newest, "the just-saved log is the newest one back").toBeDefined();
+  expect(newest!.deviceName).toBe(deviceName);
+  const pm5Steps = newest!.steps.filter((step) => step.actualSource === "pm5");
+  expect(
+    pm5Steps.length,
+    "at least the one measured interval carries a pm5 step",
+  ).toBeGreaterThan(0);
+  for (const step of pm5Steps) {
+    expect(typeof step.actualSeconds).toBe("number");
+  }
 }
 
 // `STORY_START_MS` (8s) plus the story's own ~7.3s span (`FREEZE_OFFSETS`'s
@@ -627,13 +675,14 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — portrait (39
     page,
   }) => {
     const title = `Connected Walk Portrait ${RUN_ID}`;
+    const deviceName = "PM5 918273645";
     await walkToReady(
       page,
       title,
       `connected-walk-portrait-${RUN_ID}@e2e.test`,
-      "PM5 918273645",
+      deviceName,
     );
-    await walkSurfaceToLog(page, title);
+    await walkSurfaceToLog(page, title, deviceName);
     await cleanupByTitle(page, title);
   });
 });
@@ -645,11 +694,12 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
     page,
   }) => {
     const title = `Connected Walk Landscape ${RUN_ID}`;
+    const deviceName = "PM5 837465921";
     await walkToReady(
       page,
       title,
       `connected-walk-landscape-${RUN_ID}@e2e.test`,
-      "PM5 837465921",
+      deviceName,
     );
 
     // NEW ASSERTION TERRITORY (this task's own brief): the pager rail,
@@ -676,7 +726,7 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
     expect(railBox!.height).toBeGreaterThan(surfaceBox!.height - 30);
     expect(railBox!.y + railBox!.height).toBeGreaterThan(390 - 60);
 
-    await walkSurfaceToLog(page, title);
+    await walkSurfaceToLog(page, title, deviceName);
     await cleanupByTitle(page, title);
   });
 });
