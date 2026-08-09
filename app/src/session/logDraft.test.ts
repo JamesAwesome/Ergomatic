@@ -598,7 +598,7 @@ describe("buildLogSteps", () => {
       });
       // A draft that does NOT match this run at all: its steps[1] (the
       // index Calm Sea's work phase's originalIndex points at) is a
-      // second warm-up, not a "w" step — draftWorkStep must return
+      // rest row, not a "w" step — draftWorkStep must return
       // undefined here, not throw, not silently mislabel. Falls all the
       // way through to the `phase.ref` branch, same as the draft-null case
       // above (a mismatched draft is just as "no real draftStep" as none).
@@ -607,8 +607,8 @@ describe("buildLogSteps", () => {
         title: "Wrong Draft",
         type: "O2",
         steps: [
-          { k: "wu", minutes: 5 } as unknown as Step,
-          { k: "wu", minutes: 3 } as unknown as Step,
+          { k: "r", minutes: 5 },
+          { k: "r", minutes: 3 },
         ],
       });
       expect(buildLogSteps(run, wrongDraft)).toStrictEqual([
@@ -770,9 +770,11 @@ describe("buildLogSteps", () => {
 
 describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", () => {
   it("accepts NULL baselines for an effort-only workout (6I rebase seam): seed carries the step, paces stay empty", () => {
-    // The real First 6k seed shape — wu + one effort distance step — built
-    // through the real assembly, run with the null baselines the loosened
-    // Connect guard now legitimately passes downstream.
+    // The real First 6k seed shape — ONE effort distance step, no lead-in
+    // (2026-08-09's warmup setting took the `wu` step out of both
+    // onboarding rows) — built through the real assembly, run with the
+    // null baselines the loosened Connect guard now legitimately passes
+    // downstream.
     const draft = buildDraft({
       id: "id-first6k-seed",
       title: "First 6k",
@@ -1838,7 +1840,14 @@ describe("buildManualLogSteps", () => {
     ]);
   });
 
-  it("wu/rest steps in an authored workout (not just a reps-expanded run) never produce a LogStep", () => {
+  // LEGACY-DATA PROBE, deliberately kept (arc review F5): `wu` cannot be
+  // AUTHORED any more — it left the `Step` union on 2026-08-09 and
+  // `validateSteps` rejects it — but a workout row stored before Task 2's
+  // migration runs can still present the shape, and this builder must keep
+  // skipping it rather than throwing on an unhandled kind. The cast is what
+  // makes that unauthorable shape expressible; it is NOT a shim awaiting a
+  // fixture update.
+  it("a legacy wu step and a rest step in an authored workout (not just a reps-expanded run) never produce a LogStep", () => {
     const steps: Step[] = [
       { k: "wu", minutes: 5 } as unknown as Step,
       {

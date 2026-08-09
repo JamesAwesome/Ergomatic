@@ -2024,16 +2024,38 @@ export function createPm5Driver(
    * lagged therefore leaves exactly one observation entry and still
    * succeeds.
    *
-   * **What this does NOT cover (review L-2).** 0x0031 carries ONE duration
-   * pair, so only INTERVAL 0 can be compared — 4a supports nothing wider.
-   * A stale readback from a PREVIOUS program whose interval 0 happens to
-   * match therefore passes. That is not hypothetical for 7B: library
-   * workouts routinely share a 300 s warmup, so "program Sea Fret, then
-   * program the next O2 workout" is exactly the shape where a lagging
-   * payload could verify falsely. The prepare-settle wait
-   * (`waitForPrepareSettle`) is the other half of the defence, and 4b
-   * carries this on its watch list; widening the comparison is not
-   * available on the evidence.
+   * **What this does NOT cover (review L-2), and how 2026-08-09's warmup
+   * setting WIDENED it.** 0x0031 carries ONE duration pair, so only
+   * INTERVAL 0 can be compared — 4a supports nothing wider. A stale
+   * readback from a PREVIOUS program whose interval 0 happens to match
+   * therefore passes.
+   *
+   * When 7B shipped, that collision was INCIDENTAL: library workouts each
+   * carried their own `wu` step and many happened to share a 300 s
+   * warm-up, so "program Sea Fret, then program the next O2 workout" was
+   * the shape to watch. Since the warmup setting (the `wu` step type is
+   * gone; `src/session/engine.ts`'s `buildRun` prepends the rower's own
+   * preference instead) the collision is SYSTEMATIC for any rower who has
+   * a warm-up set: every session they start opens with the SAME
+   * preference-derived interval 0, whatever the workout, so every
+   * back-to-back program in that rower's day is a false-verify candidate.
+   * A warm-up-OFF rower is the opposite case and is now strictly safer
+   * than before — interval 0 is the workout's own first work interval,
+   * which differs between workouts far more often than a shared warm-up
+   * did.
+   *
+   * What actually mitigates it is unchanged and is NOT this widening's
+   * cure: the prepare-settle wait (`waitForPrepareSettle`) is the other
+   * half of the defence, and this check still rejects a readback whose
+   * TYPE or SCALE is wrong even when the value collides (the
+   * expected-structure triple compares `workoutType` and
+   * `workoutDurationType` too, so a stale DISTANCE program never passes as
+   * a TIME warm-up, and vice versa). What it cannot catch is a stale
+   * readback of a program whose interval 0 is byte-identical — which, for
+   * a warm-up-on rower, is now the common case rather than a coincidence.
+   * 4b carries this on its watch list (`docs/monitor/
+   * pm5-interface-notes.md` §17 item 12 / §20); widening the comparison is
+   * still not available on the evidence.
    *
    * `intervalIndex` genuinely has no such upgrade path, and did not gain
    * one here: it is business-NULL for the entire armed window

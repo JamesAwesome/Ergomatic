@@ -598,7 +598,9 @@ chosen deliberately for a simpler, more obviously-correct packer: never
 splitting a 26-byte block trivially guarantees never splitting the smaller
 commands inside it. For workouts whose total command bytes exceed one
 120-byte frame (any workout with enough intervals — the design spec's own
-estimate is "Sea Smoke, 25 intervals, ~6 frames"), `buildProgrammingSequence`
+estimate was "Sea Smoke, 25 intervals, ~6 frames"; Sea Smoke is 24
+intervals in 6 frames as of 2026-08-09's warmup setting, MEASURED by
+`domain/monitor/pm5/commands.test.ts`), `buildProgrammingSequence`
 starts a new frame (a new `0x76` wrapper) at an interval-block boundary.
 
 ## 13. The Terminate Workout worked example (CSAFE doc p.89)
@@ -775,9 +777,9 @@ disputed checksums in §6):
    ACROSS multiple separately-acked frames. `buildProgrammingSequence`
    assumes (and `buildFrameGroups`, §12, is built on the assumption) that
    the PM accumulates interval configuration across as many ack-gated
-   frames as it takes — Sea Smoke, the design spec's own named stress case
-   with 25 real intervals, needs 7 frames with this implementation's
-   packing, an interval count and frame count neither document ever
+   frames as it takes — Sea Smoke, the design spec's own named stress case,
+   needs 6 frames for its 24 real intervals with this implementation's
+   packing (24 since 2026-08-09's warmup setting took every seeded workout's `wu` step out; it was 25 when the sessions below were run, and a warm-up-on rower's own preference puts the 25th back), an interval count and frame count neither document ever
    exercises even once. If the real PM instead resets its "programming
    mode" state between frames (e.g. `CONFIGURE_WORKOUT`'s "Programming
    mode enable" byte, sent once per interval, turns out to gate something
@@ -1014,7 +1016,8 @@ audit than one that shows its full history. Two-tier summary:
   program sent right after was still rejected, twice); the no-rest
   work→work boundary index
   (item 13); and distance-kind intervals plus a genuinely multi-FRAME
-  program (Sea Smoke's 25 intervals / 7 frames), neither of which has ever
+  program (Sea Smoke's 24 intervals / 6 frames today, 25 / 7 when this
+  runsheet was written — see §12's note), neither of which has ever
   been tried from a known-empty machine (item 5 — every distance/25-
   interval attempt so far ran immediately after a successful program,
   i.e. against a LOADED monitor, which D1 says gets rejected regardless of
@@ -1037,7 +1040,8 @@ audit than one that shows its full history. Two-tier summary:
 > DISTANCE program (3×500m r60) from a settled state and read its structure
 > back correctly (`8` / `500` / `128`, §18 SESSION 4a). That substantially
 > answers the DISTANCE half of item 5; the genuinely multi-FRAME retention
-> half (Sea Smoke's 25 intervals / 7 frames, from a known-empty machine) is
+> half (Sea Smoke from a known-empty machine — 24 intervals / 6 frames
+> today, 25 / 7 when this was written) is
 > still untested and remains the item's open remainder.
 
 This session remains a **James-device event**, run with a controller
@@ -1231,7 +1235,8 @@ settle off would be worse than one that needed a reconnect.
    fact the whole codec is LEAST confident about. Observed: program a
    workout with enough intervals to force multiple frames (the harness's
    `TEST_PROGRAM` is one frame; a real multi-frame case needs a bigger
-   `WorkoutProgram` — Sea Smoke's 25 intervals need 7) and confirm every
+   `WorkoutProgram` — Sea Smoke's 24 intervals need 6, and needed 7 at 25
+   before 2026-08-09's warmup setting) and confirm every
    interval the PM ends up armed with matches what was sent, not only the
    last frame's.
    > **CORRECTION (2026-08-06, laptop session 3, §18): STATUS: PARTIALLY
@@ -2452,7 +2457,14 @@ establish about programming over a live session.
     `workoutDurationType` but nothing has confirmed whether those fields
     echo an accepted program's real content. Open for the next session.
     **CLOSED by SESSION 4a (2026-08-07) — they do; §17 item 12 carries the
-    readings and `verifyArmed` now gates on them.**
+    readings and `verifyArmed` now gates on them.** **SCOPE LIMIT, widened
+    2026-08-09 (the warmup setting):** the readback compares INTERVAL 0
+    only, so it cannot tell a fresh arm from a lagging readback of a
+    previous program whose interval 0 is byte-identical. That collision
+    used to be incidental; for a rower with the warm-up SETTING on it is
+    now every session's opening interval, hence systematic. See SESSION
+    4b's carried watch-items and `src/monitor/driver.ts`'s `verifyArmed`
+    doc comment.
 
 **Also fixed live this session** (retro-tested by plan Task 4, D6): the
 discovery filter (0x0030 is not advertised — filtering on it left Chrome's
@@ -2881,6 +2893,24 @@ separate hardware actions:**
   whether the resulting arm comes back real or empty — the settle's own gate
   does not wait in this case today, by design, and no hardware reading
   confirms that is safe.
+- **The item-12 false-verify window is now SYSTEMATIC for a warm-up-on
+  rower** (added 2026-08-09 by the warmup-setting arc; the L-2 note this
+  extends lives in `src/monitor/driver.ts`'s `verifyArmed` doc comment,
+  and item 12's own limit is restated at §17 item 12). 0x0031 carries one
+  duration pair, so only INTERVAL 0 can ever be compared. Until this
+  change, two consecutive programs colliding on interval 0 was an accident
+  of content (many seeded workouts happened to open with a 300 s `wu`
+  step). The `wu` step type is gone; a rower who has the warm-up SETTING
+  on now programs the SAME interval 0 at the start of every session,
+  whatever the workout, so back-to-back programs in that rower's day
+  collide BY CONSTRUCTION. A warm-up-OFF rower is strictly safer than
+  before (interval 0 is the workout's own first work interval, which
+  varies far more). **Read on the next session:** program two DIFFERENT
+  workouts back to back with an identical leading warm-up interval and
+  confirm the second `program()` still resolves against its own arm rather
+  than a lagging payload from the first — the prepare-settle wait
+  (`waitForPrepareSettle`) is what is being tested here, since the
+  structural check cannot discriminate two byte-identical interval 0s.
 
 ### [pending] Task 8 connected-flow verification (results destination for §17 items 20-21)
 

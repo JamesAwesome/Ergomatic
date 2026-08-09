@@ -140,7 +140,9 @@ characteristic accepts **20-byte writes**; a variable-interval block is
 **26 bytes/interval** (the document's own 4-interval example is 116
 bytes — a 5th would overflow); responses arrive on a paired
 characteristic and each frame is **ack-gated**. Sea Smoke (25
-intervals) is ≈6 frames ≈ 40 sequential writes. Therefore:
+intervals at the time of writing; **24 intervals / 6 frames MEASURED since
+2026-08-09's warmup setting removed every seeded workout's `wu` step**) is
+≈6 frames ≈ 40 sequential writes. Therefore:
 
 - `pm5/framer.ts` (pure): payload → stuffing-aware frame packing (the
   120-byte budget is POST-stuffing — the packer accounts for expansion)

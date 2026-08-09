@@ -299,6 +299,24 @@ export function parseBulk(text: string): BulkResult {
     }
     if (sawError) return;
 
+    // A block whose ONLY lines were well-formed `wu` lines (arc review F7).
+    // Dropping them is right — spec §6's "never fatal" rule is about not
+    // eating a block's OTHER steps — but the block that is left has no
+    // steps at all, and reporting `ok` for it would hand the caller a
+    // structurally invalid workout that `validateSteps` rejects further
+    // downstream with a message naming neither the warm-up nor the
+    // setting. Errored HERE instead, in the same family as the "no step
+    // lines at all" check above, and the warm-up lines still count toward
+    // `droppedWarmups` so the import screen's notice can say what happened.
+    if (steps.length === 0) {
+      errors.push({
+        block: blockIndex,
+        line: headerLine.lineNumber,
+        message: "workout needs at least one step. Warm-ups are a setting now.",
+      });
+      return;
+    }
+
     workouts.push({ ...header, steps });
   });
 

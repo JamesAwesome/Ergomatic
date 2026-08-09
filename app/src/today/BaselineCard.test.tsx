@@ -14,7 +14,6 @@ import {
 } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { saveRun, type SessionRun } from "../session/run";
-import type { Step } from "../../domain/types.js";
 
 // Realistic fixtures (repo convention): the SAME two designated seed
 // workouts the real server ships (server/seed/library/onboarding.ts),
@@ -177,7 +176,10 @@ describe("BaselineCard", () => {
         id: "w-other",
         title: "Other Session",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+        // An inert stand-in for "some OTHER draft exists" — a rest row,
+        // not the `wu` row this was before 2026-08-09's warmup setting
+        // (which would now expand to zero phases).
+        steps: [{ k: "r", minutes: 5 }],
       }),
     );
     saveDraft(inProgress);
