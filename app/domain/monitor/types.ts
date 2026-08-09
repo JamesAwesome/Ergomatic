@@ -87,6 +87,20 @@ export interface MonitorFrame {
   //   Display cadence: the sample-rate characteristic (0x0034) is
   //   written to its fastest documented rate at connect; the default
   //   500 ms is too coarse for a countdown.
+  intervalAccrued: { kind: "time" | "distance"; value: number } | null;
+  // ^ COMPUTED by the driver, the COMPLEMENT of `intervalRemaining` above:
+  //   how far into the interval the dimension it does NOT count down has
+  //   gone (ROADMAP CL item 7; `docs/design/DEVIATIONS.md`'s pane-C
+  //   active-row row). `kind` is always the OTHER of the two — a
+  //   time-programmed interval accrues distance here, a distance-programmed
+  //   one accrues time. Same absence rule as `intervalRemaining`: `null`
+  //   under the identical conditions (no program armed, or no interval
+  //   current) — the two fields are always both-null or both-set together,
+  //   since `src/monitor/driver.ts` computes them from the same guard and
+  //   the same per-interval baseline. `elapsedSeconds`/`distanceMeters` on
+  //   this frame are the wrong inputs for this (see the sibling field's own
+  //   caveat and `driver.ts`'s `computeAccruedForFrame`); this reads the
+  //   same 0x0033 checkpoint `intervalRemaining` already trusts.
   state: "idle" | "armed" | "rowing" | "resting" | "finished" | "terminated";
   // ^ maps the PM's WORKOUTSTATE honestly: "armed" = WAITTOBEGIN (the
   //   PM starts on the first stroke — there is NO start command;

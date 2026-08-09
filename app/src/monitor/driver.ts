@@ -293,6 +293,29 @@ export function computeIntervalRemaining(
   return { kind: interval.kind, value: Math.max(0, interval.value - progress) };
 }
 
+/**
+ * `MonitorFrame.intervalAccrued`'s computation (ROADMAP CL item 7;
+ * `docs/design/DEVIATIONS.md`'s pane-C active-row row, task-7 review
+ * adjudication 4) — the complement of `computeIntervalRemaining` above, for
+ * the dimension the interval does NOT count down: a time-programmed
+ * interval accrues distance here, a distance-programmed one accrues time.
+ * `progress` is that OTHER dimension's own quantized elapsed value in ITS
+ * unit — never the interval's own kind's progress, which
+ * `computeIntervalRemaining` already owns. Same absence/clamping rules as
+ * its sibling: `null` with no interval, the result never negative (a
+ * quantization edge at a boundary crossing could otherwise read a hair
+ * below zero on the complement dimension exactly as it can on the
+ * programmed one).
+ */
+export function computeIntervalAccrued(
+  interval: ProgramInterval | undefined,
+  progress: number,
+): MonitorFrame["intervalAccrued"] {
+  if (!interval) return null;
+  const kind = interval.kind === "distance" ? "time" : "distance";
+  return { kind, value: Math.max(0, progress) };
+}
+
 /** One arrived response frame on 0x0022: the RAW bytes alongside the
  *  decoded `CsafeResponse` — `sendSequence`'s own ack-gating reads
  *  `response`, but `sendGetErrorType` needs `raw` too (its own log entry
@@ -1214,6 +1237,32 @@ export function createPm5Driver(
     return computeIntervalRemaining(interval, progress);
   }
 
+  /**
+   * `intervalAccrued`'s per-frame wiring — the exact mirror of
+   * `computeRemainingForFrame` above, sharing the SAME 0x0033 "Last Split"
+   * checkpoint pair for the OTHER dimension (ROADMAP CL item 7): both
+   * `lastSplitTimeSeconds` and `lastSplitDistanceMeters` already arrive on
+   * every regular status tick regardless of which one the interval counts
+   * down, so no new wire data is needed, and the two functions' progress
+   * ternaries are exact mirrors of each other (whichever dimension
+   * `computeRemainingForFrame` does NOT read, this one does). Same guard as
+   * its sibling — `!p || frame.intervalIndex === null` — so the two fields
+   * are always both-null or both-set on any given frame.
+   */
+  function computeAccruedForFrame(
+    frame: MonitorFrame,
+  ): MonitorFrame["intervalAccrued"] {
+    const p = armedProgram();
+    if (!p || frame.intervalIndex === null) return null;
+    const interval = p.intervals[frame.intervalIndex];
+    const status = raw as RawPm5Status;
+    const progress =
+      interval?.kind === "distance"
+        ? frame.elapsedSeconds - status.lastSplitTimeSeconds
+        : frame.distanceMeters - status.lastSplitDistanceMeters;
+    return computeIntervalAccrued(interval, progress);
+  }
+
   function maybeEmitFrame(): void {
     // No run gate on the EMISSION itself (Task 4, spec §4): a `frame`
     // event is the machine's current reading, which stays true and stays
@@ -1263,6 +1312,7 @@ export function createPm5Driver(
     const frame: MonitorFrame = {
       ...frameWithIndex,
       intervalRemaining: computeRemainingForFrame(frameWithIndex),
+      intervalAccrued: computeAccruedForFrame(frameWithIndex),
       sessionElapsedSeconds: session.offsetElapsed + base.elapsedSeconds,
       sessionDistanceMeters: session.offsetDistance + base.distanceMeters,
     };

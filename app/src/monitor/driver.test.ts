@@ -45,6 +45,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { createEventLog } from "./eventLog";
 import {
+  computeIntervalAccrued,
   computeIntervalRemaining,
   createPm5Driver,
   ProgramBusyError,
@@ -522,6 +523,51 @@ describe("createPm5Driver: computeIntervalRemaining (pure)", () => {
   });
 });
 
+describe("createPm5Driver: computeIntervalAccrued (pure)", () => {
+  // ROADMAP CL item 7 / DEVIATIONS' pane-C active-row row: the complement of
+  // `computeIntervalRemaining` above — the dimension the interval does NOT
+  // count down. `interval` fixtures are the same shapes that block uses.
+  const timeInterval = {
+    kind: "time" as const,
+    value: 60,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 0,
+  };
+  const distanceInterval = {
+    kind: "distance" as const,
+    value: 500,
+    targetSplit: null,
+    displaySpm: null,
+    restSeconds: 0,
+  };
+
+  it("returns null with no interval (armed/idle/finished/terminated) — same absence rule as its sibling", () => {
+    expect(computeIntervalAccrued(undefined, 30)).toBeNull();
+  });
+
+  it("a TIME interval accrues DISTANCE — the complement kind, not its own", () => {
+    expect(computeIntervalAccrued(timeInterval, 137)).toStrictEqual({
+      kind: "distance",
+      value: 137,
+    });
+  });
+
+  it("a DISTANCE interval accrues TIME — the complement kind, not its own", () => {
+    expect(computeIntervalAccrued(distanceInterval, 42)).toStrictEqual({
+      kind: "time",
+      value: 42,
+    });
+  });
+
+  it("clamps at zero rather than going negative (a quantization edge, mirroring its sibling's clamp)", () => {
+    expect(computeIntervalAccrued(timeInterval, -5)).toStrictEqual({
+      kind: "distance",
+      value: 0,
+    });
+  });
+});
+
 describe("createPm5Driver: a rowing-state frame arriving before program() was ever called", () => {
   it("computes intervalRemaining as null (no program to size the interval against) without crashing", () => {
     // A real device wouldn't produce this shape unprompted, but nothing in
@@ -564,6 +610,9 @@ describe("createPm5Driver: a rowing-state frame arriving before program() was ev
     expect(frames[0]).toMatchObject({
       frame: { intervalIndex: null, intervalRemaining: null },
     });
+    // ROADMAP CL item 7: `intervalAccrued` shares `intervalRemaining`'s own
+    // `!program` guard, so it is null under the identical condition.
+    expect(frames[0]).toMatchObject({ frame: { intervalAccrued: null } });
   });
 });
 
@@ -616,6 +665,53 @@ describe("createPm5Driver: distance-kind interval — intervalRemaining uses dis
     // elapsedSeconds: remaining = 1000 - 700 = 300.
     expect(frames[frames.length - 1]).toMatchObject({
       frame: { intervalRemaining: { kind: "distance", value: 300 } },
+    });
+    // ROADMAP CL item 7: the OTHER dimension (time) accrues from the SAME
+    // Last Split checkpoint (0, same reasoning as above) against
+    // elapsedSeconds, never distanceMeters: accrued = 120 - 0 = 120.
+    expect(frames[frames.length - 1]).toMatchObject({
+      frame: { intervalAccrued: { kind: "time", value: 120 } },
+    });
+  });
+
+  it("a TIME interval accrues DISTANCE the mirror way — the complement dimension, not a second copy of the countdown", async () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 300,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 60,
+        distanceMeters: 300,
+        spm: 22,
+        currentSplit: 100,
+        heartRateBpm: 140,
+        programIntervalIndex: 0,
+      },
+    ];
+    const { fake, driver, events } = harness({ program, events: timeline });
+    await programAndArm(driver, fake, program);
+    fake.tick(100);
+
+    const frames = events.filter((e) => e.kind === "frame");
+    // The programmed dimension (time) counts down: remaining = 300 - 60 =
+    // 240. The complement (distance) accrues from the SAME checkpoint (0,
+    // no boundary yet): accrued = 300 - 0 = 300.
+    expect(frames[frames.length - 1]).toMatchObject({
+      frame: {
+        intervalRemaining: { kind: "time", value: 240 },
+        intervalAccrued: { kind: "distance", value: 300 },
+      },
     });
   });
 });
@@ -791,6 +887,16 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
         distanceMeters: 700,
         intervalRemaining: { kind: "distance", value: 800 },
       },
+    });
+    // ROADMAP CL item 7: the boundary must re-checkpoint BOTH baselines, not
+    // only the programmed dimension's — `intervalAccrued` (time, the
+    // complement of this distance interval) proves the OTHER checkpoint
+    // (`lastSplitTimeSeconds`) moved to 100 too: accrued = 140 - 100 = 40.
+    // A driver that only re-derived the checkpoint `intervalRemaining`
+    // itself reads would leave this stuck at the interval-0 baseline (0)
+    // and report 140 instead.
+    expect(latest).toMatchObject({
+      frame: { intervalAccrued: { kind: "time", value: 40 } },
     });
   });
 });

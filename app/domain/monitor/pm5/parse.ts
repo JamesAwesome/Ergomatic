@@ -359,9 +359,11 @@ export function toMonitorState(workoutState: number): MonitorFrame["state"] {
 }
 
 /**
- * `RawPm5Status` -> `MonitorFrame`. `intervalRemaining` is always `null`
- * here — computed downstream by the driver from the program plus quantized
- * progress (design spec §2; no characteristic reports it). `intervalIndex`
+ * `RawPm5Status` -> `MonitorFrame`. `intervalRemaining`/`intervalAccrued`
+ * are always `null` here — both computed downstream by the driver from the
+ * program plus quantized progress (design spec §2 for the former;
+ * `intervalAccrued` is its ROADMAP CL item 7 companion, its own complement).
+ * No characteristic reports either. `intervalIndex`
  * is `null` outside `rowing`/`resting` (a business rule: no interval is
  * "current" while armed/idle/finished/terminated), never from a wire
  * sentinel — the raw value's numbering base itself is unconfirmed
@@ -417,6 +419,7 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
     // RAW machine value — see this function's own doc comment above.
     intervalIndex: intervalActive ? raw.intervalCount : null,
     intervalRemaining: null,
+    intervalAccrued: null,
     state,
   };
 }

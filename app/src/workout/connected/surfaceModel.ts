@@ -163,6 +163,7 @@ const NO_FRAME: MonitorFrame = {
   rowingActive: false,
   intervalIndex: 0,
   intervalRemaining: null,
+  intervalAccrued: null,
   state: "armed",
 };
 
@@ -442,6 +443,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       actuals: input.actuals,
       activeIndex: intervalIndex,
       remaining,
+      accrued: frame.intervalAccrued,
       // The live cells the ACTIVE row shares with panes A and B — the same
       // objects, so a rower swiping from B to C cannot find the split
       // judged one way on one pane and another way on the next.
@@ -468,27 +470,40 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
  * a completed row with no actual on record shows dashes, and says nothing
  * it cannot back.
  *
- * WHAT THE ACTIVE ROW CANNOT SAY, and why one of its two big cells is a
- * dash. The programmed dimension counts DOWN and comes from
+ * WHAT THE ACTIVE ROW USED TO NOT BE ABLE TO SAY, and why one of its two
+ * big cells was a permanent dash before ROADMAP CL item 7 (CLOSED,
+ * `docs/design/DEVIATIONS.md`'s pane-C active-row row, reconciled the same
+ * batch). The programmed dimension counts DOWN and comes from
  * `MonitorFrame.intervalRemaining` (the driver computes it). The OTHER
  * dimension — meters accrued on a time interval, time accrued on a distance
- * one — has no honest field anywhere on the seam. `MonitorFrame`'s
+ * one — used to have no honest field anywhere on the seam; it now does,
+ * `MonitorFrame.intervalAccrued`, the field's own doc comment (`domain/
+ * monitor/types.ts`) has the full reasoning. The two REJECTED derivations
+ * this comment used to consider are still worth naming, because they are
+ * still why `intervalAccrued` had to be a DRIVER field rather than
+ * something this file computes itself: `MonitorFrame`'s
  * `sessionElapsedSeconds`/`sessionDistanceMeters` are the session's
  * cumulative totals, and subtracting completed intervals from them would
- * silently fold every rest bout into the answer. 0x0031's own
+ * silently fold every rest bout into the answer; 0x0031's own
  * `elapsedSeconds`/`distanceMeters` ARE per-interval (walk 4,
- * interface-notes.md §18 — an earlier version of this comment called them
- * session-cumulative, which the walk disproved), but they span the
- * interval's work AND its trailing rest as one count, so they answer a
- * different question than "meters accrued rowing this interval" too. The
- * mockup draws `198` there; we draw `—`. Recorded in DEVIATIONS, same
- * reasoning as task 6's `TOTAL`-not-`THIS INTERVAL` row.
+ * interface-notes.md §18) but span the interval's work AND its trailing
+ * rest as one count, answering a different question than "meters accrued
+ * rowing this interval". `intervalAccrued` avoids both traps by reading the
+ * SAME 0x0033 per-interval checkpoint `intervalRemaining` already trusts,
+ * for the complement dimension — see `driver.ts`'s `computeAccruedForFrame`.
+ * Same reasoning still applies, unrelated field, to task 6's own
+ * `TOTAL`-not-`THIS INTERVAL` row (panes A/B's meters card).
  */
 export function buildGridModel(args: {
   intervals: ProgramInterval[];
   actuals: IntervalActual[];
   activeIndex: number;
   remaining: MonitorFrame["intervalRemaining"];
+  /** ROADMAP CL item 7: the active row's OTHER cell — meters accrued on a
+   *  time interval, time accrued on a distance one. `null` (the pre-first-
+   *  frame case, same guard `remaining` shares) keeps that cell the house
+   *  dash; anything else replaces it, per `accruedDisplayFor` below. */
+  accrued: MonitorFrame["intervalAccrued"];
   /** THERE IS NO `stale` PARAMETER, deliberately (task-7 review, M2). The
    *  active row's judged cells arrive already judged, as the SAME
    *  `JudgedValue` objects panes A and B show — so the stale greying reaches
@@ -503,7 +518,7 @@ export function buildGridModel(args: {
   targetSplitRef: string | null;
   hasTargetSplit: boolean;
 }): GridModel {
-  const { intervals, activeIndex, remaining } = args;
+  const { intervals, activeIndex, remaining, accrued } = args;
   // An actual whose own `index` is `null` belongs to no interval we can
   // name (`IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
   // `null` AS INTERVAL 0"), so it files against no row rather than against
@@ -518,11 +533,12 @@ export function buildGridModel(args: {
       interval.restSeconds > 0 ? fmtDuration(interval.restSeconds / 60) : DASH;
     if (index === activeIndex) {
       const countdown = countdownDisplayFor(interval, remaining);
+      const accrual = accruedDisplayFor(interval, accrued);
       return {
         index,
         state: "active",
-        time: interval.kind === "time" ? countdown : DASH,
-        meters: interval.kind === "distance" ? countdown : DASH,
+        time: interval.kind === "time" ? countdown : accrual,
+        meters: interval.kind === "distance" ? countdown : accrual,
         countdown: interval.kind === "time" ? "time" : "meters",
         pace: { display: args.livePace.display, judged: args.livePace },
         spm: { display: args.liveRate.display, judged: args.liveRate },
@@ -637,6 +653,27 @@ function countdownDisplayFor(
   return interval.kind === "distance"
     ? String(Math.round(value))
     : fmtDuration(value / 60);
+}
+
+/** The active row's OTHER cell (ROADMAP CL item 7; `docs/design/
+ *  DEVIATIONS.md`'s pane-C active-row row) — meters accrued on a time
+ *  interval, time accrued on a distance one, closing the gap that row
+ *  recorded as a bare dash. `null` — before the machine's first frame, or
+ *  whenever `accrued` disagrees with the interval's own complement kind
+ *  (the same defensive stance `countdownDisplayFor` takes for `remaining`)
+ *  — is the one case still genuinely unknowable, and stays the house dash;
+ *  there is no "programmed value" to fall back to here the way
+ *  `countdownDisplayFor` has one, because an accrual that hasn't started is
+ *  genuinely zero, not "the full interval". */
+function accruedDisplayFor(
+  interval: ProgramInterval,
+  accrued: MonitorFrame["intervalAccrued"],
+): string {
+  const otherKind = interval.kind === "distance" ? "time" : "distance";
+  if (accrued === null || accrued.kind !== otherKind) return DASH;
+  return otherKind === "distance"
+    ? String(Math.round(accrued.value))
+    : fmtDuration(accrued.value / 60);
 }
 
 /** The active row's third line (handoff §3: `REMAINING · TARGET 2:00.0 ·
