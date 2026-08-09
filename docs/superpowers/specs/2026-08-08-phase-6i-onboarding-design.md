@@ -138,8 +138,11 @@ plan time under the standing content discipline, James reviews in the PR:
 - **The designated workouts are invisible outside onboarding:** excluded
   from the suggestion pools (client `suggest`/`suggestFreestyle` inputs
   AND the server's `/api/today`) and from the Library list, by title
-  constants in one shared place; their detail routes stay reachable (the
-  card links there). A veteran must never be SUGGESTED "First 2k".
+  constants in one shared place. Corrected (2026-08-09, final review): the
+  shipped card's START runs the session directly (the shared start-guard
+  flow) rather than linking to a workout-detail route — there is no detail
+  link for these two workouts to keep reachable. A veteran must never be
+  SUGGESTED "First 2k".
 
 ## Learning the app on You (screen 2e, design §7)
 
@@ -236,9 +239,12 @@ before PR like 6H did.
   without the count.
 - Prefs PUT failure on DISMISS: optimistic hide stands for the session;
   the block may return next load (same nicety class as read state).
-- Delete failures in MARK ALL FOUR UNREAD: surface the existing inline
-  retry idiom on the detail screen; partial deletion is safe
-  (idempotent re-run).
+- Delete failures in MARK ALL FOUR UNREAD: corrected (2026-08-09, final
+  review) — shipped behavior is silent fire-and-forget, matching
+  `useArticleReads.ts`'s existing `markRead`/`markUnread` nicety-class
+  handling (optimistic UI update; the DELETE's failure is swallowed and
+  only self-corrects on the next fetch), not an inline retry idiom.
+  Partial deletion is still safe (idempotent re-run).
 
 ## Testing
 
@@ -248,7 +254,7 @@ END against the real stack (fresh user → card → START → confirm →
 countdown SKIP → timer (effort word, stopwatch) → complete → log → You
 entry still manual); the effort-only START-guard loosening tested at the
 guard's own unit level AND e2e; step-read progress advancing via a
-cross-surface read (read `baselines` from News, see `2 OF 4` on Today);
+cross-surface read (read `baselines` from News, see `1 OF 4` on Today);
 dismissal round-trip incl. the News pin appearing and `/you/learning`'s
 two controls; per-file coverage on every new file; design sweeps (axe,
 44px, contrast — the dashed chip and step rows measured) on Today's two

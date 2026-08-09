@@ -45,9 +45,12 @@ import type { Stores } from "./data.js";
 
 // Phase 6I: seedGlobalLibrary(db)'s default converge input is
 // GLOBAL_LIBRARY_SEED (the 300-workout library plus the two designated
-// onboarding rows) — /api/workouts legitimately returns all of it today;
-// the client/server "invisible outside onboarding" exclusion filters land
-// in a later 6I task, not this one.
+// onboarding rows). The client/server "invisible outside onboarding"
+// exclusion has since landed (isOnboardingTitle, applied at Today's pool,
+// the Library list, and /api/today's suggestion input) — but /api/workouts
+// itself deliberately serves all GLOBAL_LIBRARY_SEED.length rows,
+// onboarding pair included, because detail routes (e.g. the no-baseline
+// card's own workout lookups) need to be able to fetch them by id.
 const LIBRARY_COUNT = GLOBAL_LIBRARY_SEED.length;
 
 describe("two-user isolation, global-library sharing, and log-freezing across the full API", () => {
