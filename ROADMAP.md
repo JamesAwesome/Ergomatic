@@ -1480,11 +1480,13 @@ nothing here is new work. Effort guesses are S/M/L.
       fixtures and can serve a bundle from the wrong branch
       (`.claude/agent-briefing.md`'s shared-stack note, which currently
       documents the workaround rather than the fix). **M**
-- [ ] **News scroll memory** — BACK from an article lands News at the top,
-      a tradeoff taken deliberately when the feed was about 1.15 screens
-      and confirmed still standing after the overlay-scroller round below.
-      If the shelf grows, News takes the Library's own scroll-memory
-      pattern. **S**
+- [x] **News scroll memory** — BACK from an article used to land News at
+      the top, a tradeoff taken deliberately when the feed was about 1.15
+      screens and confirmed still standing after the overlay-scroller
+      round below. The shelf grew (six articles plus the Start-here pin),
+      so News now takes the Library's own scroll-memory pattern —
+      `newsScroll.ts` + `News.tsx`'s save/restore effects, `TabBar.tsx`'s
+      clear-on-fresh-tap (CL item, BACK-walks-the-stack batch). **S**
 
 **Exit:** every line above is shipped, re-filed under "Triggered
 follow-ons" with an explicit trigger, or declined in writing.

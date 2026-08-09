@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { clearLibraryFilters } from "../library/libraryFilters";
 import { clearLibraryScroll } from "../library/libraryScroll";
+import { clearNewsScroll } from "../news/newsScroll";
 
 // A fresh Library visit forgets BOTH halves of "where you were" — the
 // scroll position and the filters it was measured against. Clearing one
@@ -10,6 +11,14 @@ function clearLibraryReturnState() {
   clearLibraryScroll();
   clearLibraryFilters();
 }
+
+// CL item / ROADMAP "News scroll memory": News has no filters of its own
+// to clear alongside the scroll position (unlike Library above) — just
+// the one saved value.
+const CLEAR_ON_TAB: Partial<Record<string, () => void>> = {
+  "/library": clearLibraryReturnState,
+  "/news": clearNewsScroll,
+};
 
 // TABS is a fixed, non-component export alongside the TabBar component.
 // react-refresh's allowConstantExport only recognizes literal/unary/
@@ -31,16 +40,16 @@ export default function TabBar() {
         <NavLink
           key={tab.path}
           to={tab.path}
-          // Library's own Link/BackLink returns both navigate to "/library"
-          // with no `location.state` at all, so Library's mount can't tell
-          // a BACK return from a fresh tab visit apart (see libraryScroll.ts).
-          // Clearing right here, at the one link that IS unambiguously a
-          // fresh visit, is the distinction: a tab tap always starts at the
-          // top with no filters; a BACK return (never through this link)
-          // still restores both.
-          onClick={
-            tab.path === "/library" ? clearLibraryReturnState : undefined
-          }
+          // Library's own Link/BackLink returns, News's own BackLink/✕
+          // returns, and this tab bar's own `<NavLink>`s all navigate to
+          // their screen with no `location.state` at all, so neither
+          // screen's mount can tell a BACK return from a fresh tab visit
+          // apart (see libraryScroll.ts/newsScroll.ts). Clearing right
+          // here, at the one link that IS unambiguously a fresh visit, is
+          // the distinction: a tab tap always starts at the top (with no
+          // filters, for Library); a BACK return (never through this link)
+          // still restores everything.
+          onClick={CLEAR_ON_TAB[tab.path]}
           className={({ isActive }) => (isActive ? "tab tab-active" : "tab")}
         >
           {({ isActive }) => (

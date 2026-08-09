@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import TabBar, { TABS } from "./TabBar";
 import { LIBRARY_FILTERS_KEY } from "../library/libraryFilters";
 import { LIBRARY_SCROLL_KEY } from "../library/libraryScroll";
+import { NEWS_SCROLL_KEY } from "../news/newsScroll";
 
 function renderAt(path: string) {
   return render(
@@ -88,6 +89,46 @@ describe("TabBar", () => {
 
       expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("999");
       expect(sessionStorage.getItem(LIBRARY_FILTERS_KEY)).toBe(SAVED_FILTERS);
+    });
+  });
+
+  // CL item / ROADMAP "News scroll memory" — same clear-on-fresh-tap
+  // reasoning as Library's own block above: News's own `BackLink`/✕
+  // returns and the tab bar's `<NavLink>` all navigate to "/news" with no
+  // `location.state`, so News's mount can't tell a BACK return from a
+  // fresh tab tap apart (`newsScroll.ts`'s own doc comment). Clearing here,
+  // at the one link that IS unambiguously a fresh visit, is the
+  // distinction.
+  describe("NEWS tab tap clears the saved scroll position", () => {
+    beforeEach(() => sessionStorage.clear());
+
+    it("removes the saved News scroll position", async () => {
+      sessionStorage.setItem(NEWS_SCROLL_KEY, "777");
+      renderAt("/you");
+
+      await userEvent.click(screen.getByRole("link", { name: "NEWS" }));
+
+      expect(sessionStorage.getItem(NEWS_SCROLL_KEY)).toBeNull();
+    });
+
+    it("leaves other tabs' clicks alone (no accidental clear from an unrelated tab)", async () => {
+      sessionStorage.setItem(NEWS_SCROLL_KEY, "777");
+      renderAt("/news");
+
+      await userEvent.click(screen.getByRole("link", { name: "TODAY" }));
+
+      expect(sessionStorage.getItem(NEWS_SCROLL_KEY)).toBe("777");
+    });
+
+    it("does not touch Library's own saved return state (independent keys, independent clears)", async () => {
+      sessionStorage.setItem(NEWS_SCROLL_KEY, "777");
+      sessionStorage.setItem(LIBRARY_SCROLL_KEY, "999");
+      renderAt("/you");
+
+      await userEvent.click(screen.getByRole("link", { name: "NEWS" }));
+
+      expect(sessionStorage.getItem(NEWS_SCROLL_KEY)).toBeNull();
+      expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("999");
     });
   });
 });

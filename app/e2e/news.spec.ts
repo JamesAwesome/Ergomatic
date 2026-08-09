@@ -172,7 +172,7 @@ test("/news/releases lists all three versions", async ({ page }) => {
   await expect(versions.nth(2)).toContainText("v0.4.0");
 });
 
-test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller", async ({
+test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller, and ← BACK now restores News's own scroll position (CL item: News scroll memory)", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
@@ -191,14 +191,42 @@ test("item 1 / round 4: opening an article from a scrolled News feed lands the r
   await page.goto("/news");
   await expect(page.locator(".news-unread-count")).toBeVisible();
 
-  await page.evaluate(() => window.scrollTo(0, 800));
+  // Scroll to (and open) `pain-scale` specifically — the LAST row of the
+  // LATEST section, i.e. the row nearest the bottom of the feed — rather
+  // than a PINNED row near the top. A first version of this test scrolled
+  // to reveal "ALL RELEASE NOTES" (the true bottom) and then clicked the
+  // `baselines` PINNED row instead: since that row sits off-screen near
+  // the TOP, Playwright's own `.click()` auto-scrolls it into view before
+  // clicking — a second, genuine scroll (down near 45px, `baselines`'s own
+  // resting position) that legitimately overwrites the saved 460 BEFORE
+  // navigating away. That was a real scroll, correctly saved — the test's
+  // own premise was wrong, not `News.tsx`. Clicking a row that's actually
+  // near where the feed was scrolled to avoids manufacturing that second
+  // scroll.
+  const painScaleRow = page.locator('a.news-row[href="/news/pain-scale"]');
+  // A real Playwright scroll action (`scrollIntoViewIfNeeded`), not a raw
+  // `page.evaluate(() => window.scrollTo(...))` — same idiom
+  // `library.spec.ts`'s own scroll-restoration test uses. A synthetic JS
+  // `scrollTo` call updates `window.scrollY` synchronously but doesn't
+  // reliably dispatch a native "scroll" DOM event in this headless
+  // environment (confirmed empirically: `newsScroll.ts`'s sessionStorage
+  // write never landed at all when this test used that form), so
+  // `News.tsx`'s own scroll listener — which the whole point of this test
+  // is to exercise — would never fire in the first place.
+  await painScaleRow.scrollIntoViewIfNeeded();
   await expect
     .poll(() => page.evaluate(() => window.scrollY))
     .toBeGreaterThan(0);
+  const scrolledY = await page.evaluate(() => window.scrollY);
 
-  const baselinesRow = page.locator('a.news-row[href="/news/baselines"]');
-  await baselinesRow.click();
-  await expect(page).toHaveURL(/\/news\/baselines$/);
+  // Deliberately no wait here — same idiom as `library.spec.ts`'s own
+  // scroll-restoration test: the save listener is throttled to ~100ms
+  // (`News.tsx`), and clicking IMMEDIATELY, inside that window, is exactly
+  // the case the unmount cleanup has to cover (flush the CURRENT scrollY
+  // synchronously on unmount) rather than relying on the throttled write
+  // ever having landed on its own.
+  await painScaleRow.click();
+  await expect(page).toHaveURL(/\/news\/pain-scale$/);
   await page.locator(".reader-body").waitFor();
 
   // Round 4 (architectural): the reader is its own scroller now, not the
@@ -214,19 +242,25 @@ test("item 1 / round 4: opening an article from a scrolled News feed lands the r
   expect(readerScroll.scrollTop).toBe(0);
   expect(readerScroll.scrollHeight).toBeGreaterThan(readerScroll.clientHeight);
 
-  // NOT asserted here, deliberately (brief contradiction, see PR body/report):
-  // the brief predicted the window's own scrollY would stay untouched behind
-  // the overlay, restoring News's position for free on BACK. Verified false
-  // on this real stack — `position: fixed` removes the routed screen from
-  // `.app-shell`'s document flow entirely, so `document.body.scrollHeight`
-  // collapses to the app-shell padding alone the instant the overlay mounts,
-  // and the browser clamps `window.scrollY` to 0 as a consequence (the same
-  // clamp Library.tsx's own scroll-memory comment describes for a shorter
-  // list). BACK still lands News at the top, unchanged from round 3 — round
-  // 4 fixes the reader-opens-mid-scroll bug this suite is named for, but
-  // does NOT undo #56's BACK-position tradeoff the way the brief predicted.
+  // CL item / ROADMAP "News scroll memory": BACK now returns to News per
+  // B1's contract (News was the entry surface — `ArticleRow`'s own
+  // `state={{from: "/news"}}`), and News restores (within a small
+  // tolerance — same idiom and reasoning as `library.spec.ts`'s own
+  // `Math.abs(restoredY - scrolledY) <= 50` check) the position it was
+  // left at, reversing the #56 tradeoff this test used to pin as permanent
+  // (a real, verified brief contradiction at the time — now superseded:
+  // the shelf grew, so the tradeoff's own stated trigger fired).
   await page.getByRole("link", { name: "← BACK" }).click();
   await expect(page).toHaveURL(/\/news$/);
+
+  // The restore runs in a useLayoutEffect gated on preferences having
+  // settled — poll rather than read once, so a slow first paint on CI
+  // doesn't race a bare assertion.
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(scrolledY - 50);
+  const restoredY = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(restoredY - scrolledY)).toBeLessThanOrEqual(50);
 });
 
 test("round 4: NEXT navigates into a freshly mounted scroller that starts at 0, even though the first article was scrolled down", async ({
