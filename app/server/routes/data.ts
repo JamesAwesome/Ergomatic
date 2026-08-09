@@ -541,12 +541,21 @@ export function createDataRouter({
     // itself one transaction in the real store (`workouts.ts`) exactly
     // like `logs.ts`'s own `create` wraps its insert + plan_state upsert
     // in one `db.transaction` — reused here rather than re-implemented.
+    // A dropped `wu` line is NOT an error and so never trips this gate: a
+    // paste whose only oddity is warm-up lines still imports in full.
     const created =
       errors.length === 0 && toCreate.length > 0
         ? await stores.workouts.createMany(req.user!.id, toCreate)
         : [];
 
-    res.json({ created, errors });
+    // `droppedWarmups` (2026-08-09 warmup-setting spec §6): well-formed `wu`
+    // lines parseBulk silently strips rather than erroring — the import
+    // screen's own notice (`domain/bulk.ts`'s `droppedWarmupNotice`) is the
+    // only place that count is ever surfaced, so it has to leave the route
+    // in the response. Task 5 wired the identical notice for the local-draft
+    // strip door; this was the import door's own half, left open until now
+    // (task-5-report's Concern #2).
+    res.json({ created, errors, droppedWarmups: parsed.droppedWarmups });
   });
 
   // -- logs ---------------------------------------------------------------

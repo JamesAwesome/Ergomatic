@@ -210,6 +210,88 @@ describe("BulkImport", () => {
     expect(onImported).not.toHaveBeenCalled();
   });
 
+  it("shows the dropped-warm-ups notice when the server reports a nonzero count", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify({ created: [{}], errors: [], droppedWarmups: 2 }),
+          { status: 200 },
+        ),
+    );
+    await renderBulkImport();
+
+    await userEvent.type(
+      screen.getByPlaceholderText("One workout per block, blank line between"),
+      "irrelevant, server owns parsing",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(
+      await screen.findByText(
+        "2 warm-up lines dropped. Warm-ups are a setting now.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no dropped-warm-ups notice when the count is zero", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify({ created: [{}], errors: [], droppedWarmups: 0 }),
+          { status: 200 },
+        ),
+    );
+    await renderBulkImport();
+
+    await userEvent.type(
+      screen.getByPlaceholderText("One workout per block, blank line between"),
+      "irrelevant, server owns parsing",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(await screen.findByText(/1 created/)).toBeInTheDocument();
+    expect(screen.queryByText(/dropped/)).not.toBeInTheDocument();
+  });
+
+  // Task 6's own brief: the warm-up-only-block parse error
+  // (domain/bulk.ts's "workout needs at least one step. Warm-ups are a
+  // setting now.") is a plain line-keyed BulkError, so it needs no special
+  // rendering — this pins that the existing generic errors.map already
+  // carries it through unchanged.
+  it("renders the warm-up-only-block error like any other line error", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify({
+            created: [],
+            errors: [
+              {
+                line: 1,
+                message:
+                  "workout needs at least one step. Warm-ups are a setting now.",
+              },
+            ],
+            droppedWarmups: 1,
+          }),
+          { status: 200 },
+        ),
+    );
+    await renderBulkImport();
+
+    await userEvent.type(
+      screen.getByPlaceholderText("One workout per block, blank line between"),
+      "irrelevant, server owns parsing",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(
+      await screen.findByText(
+        /workout needs at least one step\. Warm-ups are a setting now\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/line 1/)).toBeInTheDocument();
+  });
+
   it("renders a null-line error's message with no 'line null' artifact", async () => {
     mockApi(
       () =>

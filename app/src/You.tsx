@@ -4,6 +4,7 @@ import { signOut as authSignOut } from "./adapters/auth";
 import { useArticleReads } from "./api/useArticleReads";
 import { startHereReadCount } from "./today/startHereSteps";
 import BaselineEditor from "./you/BaselineEditor";
+import WarmupRow from "./you/WarmupRow";
 
 function initials(name: string): string {
   return name
@@ -51,8 +52,10 @@ export default function You({
       <BaselineEditor />
       {/* Task 7 (design spec §"Learning the app on You"): the mock's other
           settings rows are filler (DEVIATIONS.md/handoff README §7) and are
-          deliberately not built — this is the ONE real settings row. */}
+          deliberately not built — WARM-UP (below) is a second real one,
+          added by the 2026-08-09 warmup-setting spec §3. */}
       <h2 className="section-heading">SETTINGS</h2>
+      <WarmupRow />
       <Link
         to="/you/learning"
         state={{ from: "/you" }}

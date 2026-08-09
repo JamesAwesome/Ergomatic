@@ -1438,6 +1438,70 @@ button:disabled {
   color: var(--ink-3);
 }
 
+/* WARM-UP row (warmup-setting spec §3) — a <button>, not a <Link> like
+   `.you-settings-row` on its own is otherwise always used, since tapping
+   this one expands an editor in place rather than navigating. Resets the
+   browser's default button chrome back onto `.you-settings-row`'s own
+   shape (flex/min-height/padding already correct), same "reset onto the
+   shared row shape" idiom StepCard.tsx's own `.step-card-line1` uses for
+   its own tappable-but-not-a-link row. Both the reset AND the redeclared
+   `border-bottom` live in this one rule (rather than relying on
+   `.you-settings-row`'s own border-bottom surviving the cascade) so this
+   rule's own position in the file can never accidentally clobber it. */
+.warmup-row-button {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The expanded WARM-UP editor (WarmupRow.tsx) — reuses `.step-editor`/
+   `.step-editor-row`/`.step-editor-row-label`/`.step-editor-header`/
+   `.step-editor-header-label` wholesale (same visual family ConfirmTargets'
+   own `.confirm-warmup-row` already established for this exact word), just
+   this margin so it sits in the same 12px-ish rhythm `.you-settings-row`'s
+   own padding gave the collapsed row it replaces. */
+.warmup-editor {
+  margin: 12px 0;
+}
+
+/* "REST AFTER" doesn't fit `.step-editor-row-label`'s 34px column (sized
+   for DUR/PACE/SPM/REST's short mnemonics) — same font/color/tracking,
+   just wider. */
+.warmup-rest-label {
+  flex: 0 0 78px;
+  width: 78px;
+}
+
+.warmup-editor-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.warmup-editor-actions .button-outline {
+  flex: 1;
+  text-align: center;
+}
+
+/* `.button-primary` alone assumes an <a>-shaped consumer (no explicit
+   border) — same reset BaselineEditor.tsx's own `.baseline-apply` needed
+   for the identical reason (a real <button>'s UA border otherwise shows). */
+.warmup-save {
+  flex: 2;
+  border: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.warmup-remove {
+  width: 100%;
+  margin-top: 4px;
+}
+
 /* You › Learning the app (`/you/learning`, Phase 6I Task 7, design spec
    screen 2e). Reuses StartHere.tsx's own `.starthere-row`/`.starthere-
    square` row grammar for the four steps (via `startHereSteps.tsx`'s
@@ -2785,6 +2849,20 @@ button:disabled {
 
 .bulk-import-result {
   margin-top: 12px;
+}
+
+/* The dropped-warm-ups notice (warmup-setting spec §6) — informational, not
+   an error, so it reads in the same muted small-mono voice as
+   ConfirmTargets.tsx's own `.confirm-legacy-notice` for the identical fact
+   on the other door a stray `wu` line can arrive from. Renders directly on
+   `.screen`'s own --page background (same context, not a --surface card):
+   --ink-3 on --page measures 6.69:1, the same pairing `.confirm-legacy-
+   notice`'s own comment already computed. */
+.bulk-import-notice {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
 .bulk-import-errors {
