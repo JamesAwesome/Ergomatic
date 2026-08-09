@@ -459,7 +459,23 @@ interface LogFormFields {
  *  yet — a real but narrow gap, not a silent one: onboarding's own real
  *  path is exclusively the session door (`your-first-row`'s own copy:
  *  "Tap START on the suggested 6k... run the timer"), never "Log it after"
- *  on the designated workout's own detail screen. */
+ *  on the designated workout's own detail screen.
+ *
+ *  Final-review fix round (2026-08-09): the sibling exclusion sites
+ *  (Today.tsx, Library.tsx, server `/api/today`) all corrected `title`-only
+ *  matching to also require `isGlobal`, so a rower's own CUSTOM workout
+ *  sharing a designated title isn't hidden/misidentified. This call site
+ *  is DELIBERATELY left on `isOnboardingTitle(workoutTitle)` alone —
+ *  `SessionRun` (`session/run.ts`, what `loadRun()` returns) carries only
+ *  `workoutId`/`title`, no `isGlobal`, and there is no synchronous way to
+ *  learn it here (a lookup would mean fetching the workout list before
+ *  this hook's first render, which the manual door already can't do for
+ *  the same reason its own `workoutTitle` stays on the `""` default
+ *  above). Accepted edge, not a silent one: a rower who names their own
+ *  custom workout "First 6k" or "First 2k" and logs it through the SESSION
+ *  door gets `outsidePlan` defaulted to true (same as the real designated
+ *  workout would) — still visible, still changeable before Save, so the
+ *  worst case is one extra tap, not a silently-consumed plan session. */
 function useLogForm(onSaved: () => void, workoutTitle: string = "") {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);

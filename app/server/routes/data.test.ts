@@ -1792,6 +1792,37 @@ describe("GET /api/today", () => {
     expect(res.body.recommendation).toBe(real.body.id);
   });
 
+  // Final-review fix: the exclusion must key off isGlobal, not title alone
+  // — a rower's own custom workout that happens to be named "First 6k"
+  // (the POST route's own "personal workout sharing a global's title" case,
+  // pinned above) is a real, ownable workout, not a stray collision with
+  // the seeded pair. Excluding it by title alone would orphan it from
+  // /api/today's suggestion pool with no way back.
+  it("a CUSTOM workout named the same as a designated onboarding title stays in the pool — only the GLOBAL row is excluded", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    await asA(request(app).put("/api/baselines")).send({
+      k2Seconds: 120,
+      k6Seconds: 130,
+    });
+    const todayCode = PLANS.sprint.sessions[0] as "AN" | "O2" | "AT" | "TR";
+    const onboarding = seedGlobalWorkout(stores, {
+      sortOrder: 900,
+      title: ONBOARDING_TITLES.k6,
+      type: todayCode,
+    });
+    const custom = await asA(request(app).post("/api/workouts")).send(
+      validWorkoutBody({ title: ONBOARDING_TITLES.k6, type: todayCode }),
+    );
+    expect(custom.body.isGlobal).toBe(false);
+
+    const res = await asA(request(app).get("/api/today"));
+    expect(res.status).toBe(200);
+    expect(res.body.pool).not.toContain(onboarding.id);
+    expect(res.body.pool).toContain(custom.body.id);
+    expect(res.body.recommendation).toBe(custom.body.id);
+  });
+
   it("uses the selected plan and doneN, not the fallback, and reports the real planKey", async () => {
     const app = appFor(makeStores());
     await asA(request(app).put("/api/baselines")).send({

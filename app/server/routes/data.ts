@@ -863,13 +863,18 @@ export function createDataRouter({
     ]);
 
     // Controller addendum (Phase 6I Task 7, design spec's "invisible
-    // outside onboarding" rule): the two designated onboarding workouts
-    // never enter the suggestion pool here, mirroring the client's own
-    // exclusion (Today.tsx's `entries`) — a veteran with real baselines set
-    // (the only account this route ever runs for; see the 422 guard above)
-    // must never be SUGGESTED "First 6k"/"First 2k".
+    // outside onboarding" rule): the two designated GLOBAL onboarding
+    // workouts never enter the suggestion pool here, mirroring the
+    // client's own exclusion (Today.tsx's `entries`) — a veteran with real
+    // baselines set (the only account this route ever runs for; see the
+    // 422 guard above) must never be SUGGESTED "First 6k"/"First 2k".
+    // Final-review fix (2026-08-09): also require `isGlobal` — a rower's
+    // own CUSTOM workout that happens to share one of these titles
+    // (`w.isGlobal === false`, `withIsGlobal`'s own `userId !== null`
+    // case) is a real, ownable workout; excluding it by title alone
+    // orphaned it from this route's suggestion pool with no way back.
     const library: LibraryEntry[] = workouts
-      .filter((w) => !isOnboardingTitle(w.title))
+      .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
       .map((w) => ({
         id: w.id,
         type: w.type,

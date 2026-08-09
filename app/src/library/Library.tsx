@@ -229,15 +229,19 @@ export default function Library() {
       : null;
 
   // Controller addendum (Phase 6I Task 7, design spec's "invisible outside
-  // onboarding" rule): the two designated onboarding workouts never appear
-  // in the Library list or its counts — their detail routes stay reachable
-  // by id (the no-baseline card's own link, Today.tsx), which reads a
-  // workout directly and never goes through this filtered array. Filtered
-  // once, up front, so `total`/`visible`/`draftCount` and the FILTER
-  // sheet's own live count all agree by construction rather than each
-  // re-deriving the exclusion.
+  // onboarding" rule): the two designated GLOBAL onboarding workouts never
+  // appear in the Library list or its counts — their detail routes stay
+  // reachable by id (BaselineCard's own Start, Today.tsx, which runs the
+  // session directly off a workout it already has in hand and never goes
+  // through this filtered array). Filtered once, up front, so
+  // `total`/`visible`/`draftCount` and the FILTER sheet's own live count
+  // all agree by construction rather than each re-deriving the exclusion.
+  // Final-review fix (2026-08-09): also require `isGlobal` — a rower's own
+  // CUSTOM workout that happens to collide with one of these titles is a
+  // real, ownable workout; excluding it by title alone orphaned it from
+  // the Library list with no way back.
   const workouts = workoutsState.workouts.filter(
-    (w) => !isOnboardingTitle(w.title),
+    (w) => !(isOnboardingTitle(w.title) && w.isGlobal),
   );
 
   const total = workouts.length;

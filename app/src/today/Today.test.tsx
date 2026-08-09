@@ -70,6 +70,17 @@ function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
 const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
 const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
 
+// Final-review fix: a CUSTOM (isGlobal: false) workout that happens to
+// collide with a designated onboarding title. The exclusion must key off
+// isGlobal too, not title alone — otherwise a rower's own "First 6k" build
+// becomes an orphan (invisible everywhere, no UI path back). Built the way
+// the builder would (spread a real seed shape, same convention
+// PERSONAL_GRADIENT above already follows), not a hand-built minimum.
+const CUSTOM_FIRST_6K: LibraryWorkout = {
+  ...onboardingLibraryEntry("First 6k", "w-customfirst6k"),
+  isGlobal: false,
+};
+
 // Round 2 (2026-08-04): a personal (isGlobal: false) fixture, same
 // realistic-library-workout convention as the global fixtures above — used
 // by the SOURCE=CUSTOM tests below.
@@ -2305,6 +2316,73 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     expect(
       screen.queryByRole("heading", { name: "First 2k" }),
     ).not.toBeInTheDocument();
+  });
+
+  // Final-review fix: the exclusion must key off isGlobal, not title alone
+  // — a rower's own custom "First 6k" is a real, ownable workout, not a
+  // stray collision with the seeded pair.
+  it('a CUSTOM workout named "First 6k" (title collision, isGlobal:false) stays suggestable — only the GLOBAL row is excluded', async () => {
+    // Global FIRST_6K forced to O2 (matching ZEPHYR/CUSTOM_FIRST_6K's type)
+    // so all three would share a pool before exclusion — the custom one's
+    // survival can't be an accident of type mismatch, same discipline the
+    // sibling test above uses. CUSTOM_FIRST_6K keeps its never-done
+    // (lastDoneDaysAgo: null) fixture value, ranking it ahead of ZEPHYR (30
+    // days ago) as the INITIAL recommendation, not merely pool membership —
+    // proving the exclusion didn't also swallow it.
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [
+        ZEPHYR,
+        { ...FIRST_6K, type: "O2" },
+        { ...CUSTOM_FIRST_6K, type: "O2" },
+      ],
+    });
+    await renderToday();
+
+    expect(
+      await screen.findByRole("heading", { name: "First 6k" }),
+    ).toBeVisible();
+
+    const shuffle = screen.getByRole("button", { name: "SHUFFLE ↻" });
+    // Two real pool members (Zephyr + the custom "First 6k"), not one — the
+    // global "First 6k" is excluded, the custom one isn't.
+    expect(shuffle).not.toBeDisabled();
+    await fireEvent.click(shuffle);
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+  });
+
+  // Final-review fix: the no-baseline card's own k6/k2 lookups (Today.tsx,
+  // looked up from the UNFILTERED library) must also prefer the GLOBAL row
+  // when a title collision exists, not just whichever `.find` hits first —
+  // the card's Start button builds a session draft keyed off that
+  // specific workout's id, so a wrong pick would run the rower's own
+  // custom workout under the "SETS YOUR BASELINE" banner.
+  it('the no-baseline card targets the GLOBAL "First 6k" even when a custom one with the same title sorts first', async () => {
+    mockReady({
+      baselines: NO_BASELINES,
+      // The custom collision listed BEFORE the global row — proves the
+      // card doesn't just take the FIRST title match.
+      workouts: [
+        CUSTOM_FIRST_6K,
+        ZEPHYR,
+        ISOBAR,
+        WARM_FRONT,
+        TAILWIND,
+        FIRST_6K,
+        FIRST_2K,
+      ],
+    });
+    await renderToday();
+
+    expect(
+      await screen.findByRole("heading", { name: "First 6k" }),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY)!) as {
+      workoutId: string;
+    };
+    expect(draft.workoutId).toBe(FIRST_6K.id);
   });
 });
 

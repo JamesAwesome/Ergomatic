@@ -29,8 +29,12 @@ const ONBOARDING_TITLE_SET: ReadonlySet<string> = new Set(
 
 /** Whether `title` is one of the two designated onboarding workouts —
  *  exact match only (no trim/case-fold: these are fixed seed titles, not
- *  user input). Used to exclude them from suggestion pools and the
- *  Library list everywhere except their own detail route. */
+ *  user input). Every exclusion call site (suggestion pools, the Library
+ *  list) ANDs this with the row's own `isGlobal` — title alone isn't
+ *  enough: a rower's own custom workout that happens to share one of
+ *  these titles is a real, ownable row, and must stay visible/suggestable
+ *  (final-review fix, 2026-08-09). Only the two designated GLOBAL rows are
+ *  ever meant to be invisible outside onboarding. */
 export function isOnboardingTitle(title: string): boolean {
   return ONBOARDING_TITLE_SET.has(title);
 }

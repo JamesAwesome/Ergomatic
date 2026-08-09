@@ -750,9 +750,13 @@ function TodayView({
   // suggestion once a rower has real baselines — "invisible outside
   // onboarding" (design spec, no-baseline card's own Mechanics section). A
   // veteran with both baselines set must never see "First 6k"/"First 2k"
-  // in SUGGESTED or SHUFFLE's pool.
+  // in SUGGESTED or SHUFFLE's pool. Final-review fix (2026-08-09): the
+  // exclusion must key off `isGlobal` too, not title alone — a rower's own
+  // CUSTOM workout that happens to collide with one of these titles is a
+  // real, ownable workout, not a stray to hide; excluding it by title
+  // alone orphaned it (invisible everywhere, no UI path back).
   const entries = library
-    .filter((w) => !isOnboardingTitle(w.title))
+    .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
     .map((w) => toLibraryEntry(w, baselines));
 
   // The swapped-in type: a swap always names a real WorkoutType, which IS a
@@ -801,9 +805,17 @@ function TodayView({
   // suggestion pools on purpose) — the card needs to find exactly these
   // two by title. `undefined` is the defensive "not seeded yet" case
   // BaselineCard itself documents; never expected once the server has run
-  // its onboarding seed (Phase 6I Task 3).
-  const k6Workout = library.find((w) => w.title === ONBOARDING_TITLES.k6);
-  const k2Workout = library.find((w) => w.title === ONBOARDING_TITLES.k2);
+  // its onboarding seed (Phase 6I Task 3). Final-review fix (2026-08-09):
+  // also require `isGlobal` — a colliding CUSTOM workout with the same
+  // title must never be the one the card starts (it would run the
+  // rower's own workout under the "SETS YOUR BASELINE" banner instead of
+  // the designated global one).
+  const k6Workout = library.find(
+    (w) => w.title === ONBOARDING_TITLES.k6 && w.isGlobal,
+  );
+  const k2Workout = library.find(
+    (w) => w.title === ONBOARDING_TITLES.k2 && w.isGlobal,
+  );
   const needsBaselineCard = baselines === null;
 
   function handleShuffle() {

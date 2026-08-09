@@ -94,6 +94,17 @@ const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
 const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
 const SEA_FRET = realLibraryEntry("Sea Fret", "w-seafret");
 
+// Final-review fix: a CUSTOM (isGlobal: false) workout that happens to
+// collide with a designated onboarding title. The exclusion must key off
+// isGlobal too, not title alone — otherwise a rower's own "First 6k" build
+// becomes an orphan (invisible everywhere, no UI path back). Built the way
+// the builder would (spread a real seed shape), same convention
+// CUSTOM_WORKOUT above already follows for a from-scratch personal row.
+const CUSTOM_FIRST_6K: LibraryWorkout = {
+  ...onboardingLibraryEntry("First 6k", "w-customfirst6k"),
+  isGlobal: false,
+};
+
 function mockReady(workouts: LibraryWorkout[] = WORKOUTS) {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -1001,6 +1012,23 @@ describe("Library", () => {
       expect(
         screen.getByRole("button", { name: /^Show 1 workout$/ }),
       ).toBeVisible();
+    });
+
+    // Final-review fix: the exclusion must key off isGlobal, not title
+    // alone — a rower's own custom "First 6k" is a real, ownable workout,
+    // not a stray collision with the seeded pair.
+    it('a CUSTOM workout named "First 6k" (title collision, isGlobal:false) stays visible — only the GLOBAL row is excluded', async () => {
+      mockReady([SEA_FRET, FIRST_6K, FIRST_2K, CUSTOM_FIRST_6K]);
+      await renderLibrary();
+
+      expect(screen.getByText("2 WORKOUTS")).toBeInTheDocument();
+      expect(screen.getByText("Sea Fret")).toBeInTheDocument();
+      expect(screen.queryByText("First 6k")).toBeInTheDocument();
+      expect(screen.queryByText("First 2k")).not.toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-seafret",
+        "/library/w-customfirst6k",
+      ]);
     });
   });
 });
