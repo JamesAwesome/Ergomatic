@@ -311,6 +311,73 @@ test("item 1 (ui-notes round): from Today's START HERE step 1, NEXT-chaining two
   await expect(page).toHaveURL(/\/today$/);
 });
 
+// Crosslink round — field bug (James's 2026-08-09 recording, Chromium):
+// Today → START HERE step 3 → the picking-a-workout article → tapping the
+// IN-PROSE cross-link "pain from 1 to 5" → ✕ landed on NEWS, not Today.
+// Root cause: the two body cross-links (workoutTypes.tsx, pickingAWorkout
+// .tsx — raw react-router-dom Links added in the persona round) pushed
+// WITHOUT `replace` and WITHOUT the reading chain's origin, so the origin
+// died at the hop and Reader's BACK/✕ fell back to /news. `ArticleLink`
+// (the one door an article body may use to link to another article) fixes
+// both halves; this test walks James's own exact path and then the depth
+// lock he explicitly required — one BACK THROUGH a cross-link hop, not
+// just a NEXT hop (the sibling "ui-notes round, item 1" test above already
+// covers the NEXT-chain half of this same contract).
+test("crosslink round: an in-prose cross-link inside an article carries the reading chain's origin, same as NEXT", async ({
+  page,
+}) => {
+  await signInViaBackdoor(page, {
+    email: `crosslink-${RUN_ID}@e2e.test`,
+    name: "Crosslink Origin",
+  });
+  await page.goto("/today");
+  await expect(page.locator(".starthere-block")).toBeVisible();
+
+  // Step 3 is "picking-a-workout" (startHereSteps.tsx's own fixed table),
+  // entered with `from: "/today"` (StartHere.tsx).
+  const step3 = page.locator(".starthere-steps .starthere-row").nth(2);
+  await expect(step3).toHaveAttribute("href", "/news/picking-a-workout");
+  await step3.click();
+  await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
+  await expect(page.locator(".reader-title")).toHaveText(
+    PICKING_A_WORKOUT_TITLE,
+  );
+
+  // James's exact path: the IN-PROSE cross-link, not NEXT.
+  const crossLink = page
+    .locator(".reader-body")
+    .getByRole("link", { name: "pain from 1 to 5" });
+  await expect(crossLink).toHaveAttribute("href", "/news/pain-scale");
+  await crossLink.click();
+  await expect(page).toHaveURL(/\/news\/pain-scale$/);
+  await expect(page.locator(".reader-title")).toHaveText(PAIN_SCALE_TITLE);
+
+  // The ✕ must be visible and target Today — the pre-fix bug's own /news
+  // fallback would show up here first, before a single BACK is even tried.
+  const close = page.getByRole("link", { name: "Close" });
+  await expect(close).toBeVisible();
+  await expect(close).toHaveAttribute("href", "/today");
+  await close.click();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.locator(".starthere-block")).toBeVisible();
+
+  // The depth lock (James's explicit requirement): re-enter the chain,
+  // hop through the cross-link again, then ONE browser BACK — proving
+  // `replace` collapsed the chain THROUGH the cross-link hop itself, not
+  // merely through a NEXT hop.
+  await step3.click();
+  await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
+  await page
+    .locator(".reader-body")
+    .getByRole("link", { name: "pain from 1 to 5" })
+    .click();
+  await expect(page).toHaveURL(/\/news\/pain-scale$/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/today$/);
+  await expect(page.locator(".starthere-block")).toBeVisible();
+});
+
 // Sanity check the titles above actually match the registry, so a future
 // content edit that silently drifts the constants gets caught here instead
 // of failing every test above with a confusing "element not found."

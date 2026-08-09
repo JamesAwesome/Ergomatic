@@ -11,8 +11,10 @@ import { PyramidFigure } from "./bodies/PyramidFigure";
 
 describe("article body components", () => {
   it("WorkoutTypesBody renders with distinctive text, the sentence surviving intact across the inline O2 chip that now splits it", () => {
-    // Wrapped in MemoryRouter: this body now carries a real `<Link>` (item I,
-    // persona-review fix wave), which throws outside a router context.
+    // Wrapped in MemoryRouter: this body carries an `ArticleLink` (item I,
+    // persona-review fix wave; ArticleLink itself since the crosslink
+    // round), which calls `useLocation`/renders a `Link` and so throws
+    // outside a router context.
     const { container } = render(
       <MemoryRouter>
         <WorkoutTypesBody />
@@ -62,8 +64,10 @@ describe("article body components", () => {
   });
 
   it("PickingAWorkoutBody renders with distinctive text", () => {
-    // Wrapped in MemoryRouter: this body now carries a real `<Link>` (item J,
-    // persona-review fix wave), which throws outside a router context.
+    // Wrapped in MemoryRouter: this body carries an `ArticleLink` (item J,
+    // persona-review fix wave; ArticleLink itself since the crosslink
+    // round), which calls `useLocation`/renders a `Link` and so throws
+    // outside a router context.
     render(
       <MemoryRouter>
         <PickingAWorkoutBody />
@@ -144,6 +148,33 @@ describe("article body components", () => {
     expect(
       screen.getByText(/Intervals advance themselves, rest counts itself/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("article body cross-links carry the reading chain's origin (crosslink round)", () => {
+  it("no body source imports react-router-dom directly — ArticleLink is the only door an article body may use to link to another article (the pinned defect: a raw Link in a body is how the origin died before)", () => {
+    // A SOURCE SWEEP, via Vite's own `?raw` glob (SheetShell.test.tsx's own
+    // idiom) rather than a directory walk — the client tsconfig carries no
+    // `@types/node`, so this needs no new ambient type at all.
+    const sources = import.meta.glob("./bodies/*.tsx", {
+      eager: true,
+      query: "?raw",
+      import: "default",
+    }) as Record<string, string>;
+
+    // Six bodies exist today (registry order: workoutTypes, baselines,
+    // pickingAWorkout, painScale, yourFirstRow, connectTheMonitor) plus
+    // PyramidFigure — asserting the glob found files at all keeps this test
+    // from silently passing on an empty match if the path ever drifts.
+    const files = Object.keys(sources);
+    expect(files.length).toBeGreaterThan(0);
+
+    for (const [file, text] of Object.entries(sources)) {
+      expect(
+        text,
+        `${file} must not import react-router-dom directly`,
+      ).not.toContain("react-router-dom");
+    }
   });
 });
 

@@ -1495,6 +1495,21 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **PR #TBD** (2026-08-09, "crosslink" round, full cycle) — the ui-notes
+  round below fixed the reader's own NEXT link but missed the two IN-PROSE
+  cross-links inside article bodies (`workoutTypes.tsx`'s "Picking a
+  workout", `pickingAWorkout.tsx`'s "pain from 1 to 5" — raw
+  `react-router-dom` `Link`s added in the persona round), so tapping one
+  mid-chain still dropped the reading chain's origin and BACK/✕ fell back
+  to NEWS (James's 2026-08-09 recording: Today → START HERE step 3 → the
+  picking-a-workout article → the cross-link → ✕ → NEWS, not Today).
+  `useReadingOrigin` extracts Reader's own origin-read (behavior unchanged,
+  proven by Reader's existing tests passing untouched) and a new
+  `ArticleLink` component — THE one door an article body may use to link to
+  another article — applies `replace` plus the same origin-carry NEXT
+  already had; a source-sweep test pins every future body against a raw
+  `Link` reappearing. e2e locks down James's exact path plus the depth-lock
+  he required: one `goBack()` through a cross-link hop, not just a NEXT hop.
 - **PR #TBD** (2026-08-09, "ui-notes" round) — three James device notes
   post-v0.6.0: (1) the reader's NEXT link pushed with the wrong origin
   (`state={{from: location.pathname}}`, the article being LEFT, not the

@@ -1,12 +1,10 @@
 import { useEffect } from "react";
-import { Link, Navigate, useLocation, useParams } from "react-router-dom";
-import BackLink, {
-  isSafeInAppPath,
-  resolveBackTarget,
-} from "../shell/BackLink";
+import { Link, Navigate, useParams } from "react-router-dom";
+import BackLink from "../shell/BackLink";
 import { useArticleReads } from "../api/useArticleReads";
 import { articleBySlug, nextUnreadSlug } from "./content/articles";
 import { updatedLabel } from "./newsDates";
+import { useReadingOrigin } from "./useReadingOrigin";
 
 // The in-app reader (Phase 6H Task 6). Unknown slugs and linked-kind slugs
 // (no first-party body to read) both redirect home rather than rendering a
@@ -15,8 +13,10 @@ import { updatedLabel } from "./newsDates";
 // external browser tab instead.
 export default function Reader() {
   const { slug } = useParams();
-  const location = useLocation();
   const reads = useArticleReads();
+  // Called unconditionally, above the early return below (rules-of-hooks) —
+  // same reason the pre-extraction code read `useLocation()` up here too.
+  const rawFrom = useReadingOrigin();
   const article = slug ? articleBySlug(slug) : undefined;
 
   // Mark read once ready — in an effect keyed on (reads.state, article.slug)
@@ -45,17 +45,19 @@ export default function Reader() {
       ? articleBySlug(nextUnreadSlug(article.slug, reads.readSlugs) ?? "")
       : undefined;
 
-  // ui-notes round, item 1: `origin` is the ONE resolved value both BACK
-  // (via BackLink, below) and the ✕ close control consume — extracted so
-  // they can never independently drift on what "leaving this screen" means.
-  // `rawFrom` (the un-fallback-substituted state) is what NEXT threads
-  // forward: carrying the already-resolved `origin` ("/news" once
-  // substituted) would silently turn "no origin was ever recorded" into
-  // "the origin is literally /news" for every later hop in the chain —
-  // harmless today (the fallback IS /news) but no longer a fallback if
-  // Reader's own default ever changes.
-  const rawFrom = (location.state as { from?: unknown } | null)?.from;
-  const origin = resolveBackTarget(location.state, "/news");
+  // ui-notes round, item 1 (extracted into `useReadingOrigin`, crosslink
+  // round, so `ArticleLink`'s cross-link hop can carry forward the exact
+  // same un-fallback-substituted value NEXT does): `origin` is the ONE
+  // resolved value both BACK (via BackLink, below) and the ✕ close control
+  // consume — they can never independently drift on what "leaving this
+  // screen" means. `rawFrom` (read above, before the early return —
+  // rules-of-hooks) is what NEXT threads forward: carrying the
+  // already-resolved `origin` ("/news" once substituted) would silently
+  // turn "no origin was ever recorded" into "the origin is literally
+  // /news" for every later hop in the chain — harmless today (the
+  // fallback IS /news) but no longer a fallback if Reader's own default
+  // ever changes.
+  const origin = rawFrom ?? "/news";
 
   return (
     // Round 4 (architectural): scrolls in its own element — see
@@ -102,7 +104,7 @@ export default function Reader() {
           className="reader-next"
           to={`/news/${next.slug}`}
           replace
-          state={isSafeInAppPath(rawFrom) ? { from: rawFrom } : undefined}
+          state={rawFrom ? { from: rawFrom } : undefined}
         >
           NEXT · {next.minutes} MIN · {next.title}
         </Link>

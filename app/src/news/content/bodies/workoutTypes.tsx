@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
 import TypeBadge from "../../../components/TypeBadge";
+import ArticleLink from "../../ArticleLink";
 import { PyramidFigure } from "./PyramidFigure";
 
 export function WorkoutTypesBody() {
@@ -75,8 +75,10 @@ export function WorkoutTypesBody() {
         fit rower can be a threshold piece for a newer one. This is why every
         workout also carries a difficulty and an expected pain. The type names
         the job; the other two say how big it is.{" "}
-        <Link to="/news/picking-a-workout">Picking a workout</Link> covers how
-        to use those two numbers.
+        <ArticleLink to="/news/picking-a-workout">
+          Picking a workout
+        </ArticleLink>{" "}
+        covers how to use those two numbers.
       </p>
     </>
   );
