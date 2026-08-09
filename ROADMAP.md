@@ -1466,11 +1466,15 @@ nothing here is new work. Effort guesses are S/M/L.
       review: a timeout-not-assertion latency pin, the settle not logging
       its own configured bound, and an undocumented off-by-one in that
       bound's inclusivity. **S**
-- [ ] **Bulk import has no transaction** — `POST /api/workouts/bulk`
-      (`app/server/routes/data.ts`) inserts block by block inside a plain
-      loop, so a partial failure leaves the landed blocks behind and
-      re-importing the same paste duplicates them. Recorded at Phase 5B's
-      merge, still true. **M**
+- [x] **Bulk import has no transaction** — `POST /api/workouts/bulk`
+      (`app/server/routes/data.ts`) used to insert block by block inside a
+      plain loop, so a partial failure left the landed blocks behind and
+      re-importing the same paste duplicated them. Recorded at Phase 5B's
+      merge. Fixed (CL item, BACK-walks-the-stack batch): any error
+      anywhere in the paste — parse-level or validation-level — now means
+      NOTHING in the request is created; a fully clean paste reaches
+      `stores.workouts.createMany`, itself one transaction in the real
+      store, reused rather than re-implemented. **M**
 - [ ] **No unsaved-changes guard in the builder** — leaving a
       half-authored workout discards it with no warning. Recorded at Phase
       5B's merge, still true. **S**

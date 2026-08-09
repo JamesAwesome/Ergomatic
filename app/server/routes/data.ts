@@ -21,7 +21,7 @@ import type {
   PreferencesStore,
 } from "../stores/preferences.js";
 import type { TestHistoryStore } from "../stores/testHistory.js";
-import type { WorkoutsStore } from "../stores/workouts.js";
+import type { NewWorkoutInput, WorkoutsStore } from "../stores/workouts.js";
 
 export interface Stores {
   baselines: BaselinesStore;
@@ -463,13 +463,13 @@ export function createDataRouter({
     }
 
     const parsed = parseBulk(text);
-    const created: unknown[] = [];
     const errors: Array<{ line: number | null; message: string }> =
       parsed.errors.map((e) => ({
         line: e.line,
         message: e.message,
       }));
 
+    const toCreate: NewWorkoutInput[] = [];
     for (const workout of parsed.workouts) {
       const validated = validateWorkoutInput(workout);
       if (!validated.ok) {
@@ -479,12 +479,21 @@ export function createDataRouter({
         });
         continue;
       }
-      const row = await stores.workouts.create(req.user!.id, {
-        ...validated.workout,
-        source: "user",
-      });
-      created.push(row);
+      toCreate.push({ ...validated.workout, source: "user" });
     }
+
+    // All-or-nothing (Phase 5B merge: a plain per-block loop stranded
+    // already-landed blocks on a later failure, and re-importing the same
+    // paste duplicated them). Any error anywhere in the paste — parse-level
+    // or validation-level, above — means NOTHING in this request gets
+    // created; only a fully clean paste reaches `createMany`, which is
+    // itself one transaction in the real store (`workouts.ts`) exactly
+    // like `logs.ts`'s own `create` wraps its insert + plan_state upsert
+    // in one `db.transaction` — reused here rather than re-implemented.
+    const created =
+      errors.length === 0 && toCreate.length > 0
+        ? await stores.workouts.createMany(req.user!.id, toCreate)
+        : [];
 
     res.json({ created, errors });
   });
