@@ -73,9 +73,9 @@ Per WORK interval, one `LogStep`:
 | `label` | `logSeed.steps[i].label` | the authored step text, frozen at connect |
 | `targetSplit` | `ProgramInterval.targetSplit ?? undefined` | the frozen compile-time target |
 | `seconds`/`meters` | `ProgramInterval.value` by `kind` | the authored duration |
-| `actualSplit` | `IntervalActual.avgSplit`, only if `> 0` | stored unrounded; `0` means the wire had no reading |
+| `actualSplit` | `IntervalActual.avgSplit`, only if `> 0` | stored unrounded; `0` means the wire had no reading; also omitted when `> MONITOR_SPLIT_MAX` (6000) — a wire-representable but server-band-exceeding reading drops the field, it never rejects the log (branch review Medium-1) |
 | `actualSource` | `"pm5"` | present iff the interval HAS a matched actual (see pairing note) |
-| `spm` | `IntervalActual.avgSpm` | |
+| `spm` | `IntervalActual.avgSpm` | omitted when outside `MONITOR_SPM_MIN..MONITOR_SPM_MAX` (0..99) — same drop-the-field rule as `actualSplit`/`avgHr` (branch review Medium-1) |
 | `avgHr` | `IntervalActual.avgHeartRateBpm` | NEW optional field; omitted when null OR outside 20-254 (never rejects a save — adversarial m2) |
 | `actualSeconds` | `IntervalActual.elapsedSeconds` | NEW, pm5-only, `>= 0` |
 | `actualMeters` | `IntervalActual.distanceMeters` | NEW, pm5-only, `>= 0` |
@@ -180,6 +180,10 @@ In monitor mode:
   widening: split `> 0 and <= 6000`, spm `0-99` — walk-4 hardware
   produced avgSpm 66 and splits past 600 on light rowing (adversarial
   B3); the manual bands do not move (a stopwatch 66 spm still rejects).
+  These server bands now guard hand-crafted payloads only: the client
+  (`buildMonitorLogSteps`) mirrors them as `MONITOR_SPLIT_MAX`/
+  `MONITOR_SPM_MIN`/`MAX` and drops `actualSplit`/`spm` rather than
+  posting a value its own server would 400 on (branch review Medium-1).
 - The payload admits optional `deviceName` (string, 1-64 chars) —
   stored in a NEW NULLABLE COLUMN on the logs table via a drizzle
   migration (adversarial B4: `steps` is an array; the earlier "no

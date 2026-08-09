@@ -20,6 +20,9 @@ import {
   MonitorLogSeedError,
   MONITOR_HR_MIN,
   MONITOR_HR_MAX,
+  MONITOR_SPLIT_MAX,
+  MONITOR_SPM_MIN,
+  MONITOR_SPM_MAX,
 } from "./logDraft";
 
 // Realistic fixtures throughout (repo convention, CLAUDE.md's own recurring
@@ -1367,6 +1370,225 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const step = buildMonitorLogSteps(tooLow)[0]!;
     expect(step.actualSource).toBe("pm5");
     expect(step.actualSplit).toBe(WALK4_ACTUALS[0]!.avgSplit);
+  });
+
+  // Branch review Medium-1: the wire's own top end (avgSplit's readU16LE
+  // scale tops out at 0xFFFF / 10 = 6553.5) exceeds the server's pm5 band
+  // (`> 0 and <= 6000`, data.ts's PM5_MAX_SPLIT_SECONDS) — a wire-legal
+  // reading the server would 400 on. `avgHr`'s own rule ("an out-of-band
+  // monitor number drops its own field, it never rejects the rower's log")
+  // now applies to actualSplit too: the step still saves, with
+  // actualSource intact (the pm5 pairing exception), just no actualSplit.
+  it("avgSplit 6553.5 (the wire's own saturation value, past the server's 6000 band) omits actualSplit but keeps source pm5 and every other verbatim field (branch review Medium-1)", () => {
+    const run: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSplit: 6553.5 }],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]!.actualSplit).toBeUndefined();
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[0]!.spm).toBe(WALK4_ACTUALS[0]!.avgSpm);
+    expect(steps[0]!.avgHr).toBe(WALK4_ACTUALS[0]!.avgHeartRateBpm);
+    expect(steps[0]!.actualSeconds).toBe(WALK4_ACTUALS[0]!.elapsedSeconds);
+    expect(steps[0]!.actualMeters).toBe(WALK4_ACTUALS[0]!.distanceMeters);
+    // A reading right at the band's own edge is still admitted — this is a
+    // drop-above-the-line rule, not a general distrust of large splits.
+    const atMax: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSplit: MONITOR_SPLIT_MAX }],
+    };
+    expect(buildMonitorLogSteps(atMax)[0]!.actualSplit).toBe(MONITOR_SPLIT_MAX);
+  });
+
+  // Branch review Medium-1: avgSpm's own wire scale (readU8) tops out at
+  // 255, past the server's pm5 band (`0..99`, PM5_SPM_MIN/MAX). Same
+  // drop-the-field treatment, never a rejected save.
+  it("avgSpm 255 (the wire's own byte ceiling, past the server's 0..99 band) omits spm, the rest of the mapping unaffected (branch review Medium-1)", () => {
+    const run: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: 255 }],
+    };
+    const steps = buildMonitorLogSteps(run);
+    // toStrictEqual (not `.spm` toBeUndefined() alone): proves the `spm` key
+    // is truly ABSENT, not present-with-value-undefined.
+    expect(steps[0]).toStrictEqual({
+      label: WALK4_RUN.logSeed!.steps[0]!.label,
+      targetSplit: WALK4_RUN.program.intervals[0]!.targetSplit ?? undefined,
+      meters: 100,
+      actualSplit: WALK4_ACTUALS[0]!.avgSplit,
+      actualSource: "pm5",
+      avgHr: WALK4_ACTUALS[0]!.avgHeartRateBpm ?? undefined,
+      actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
+      actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
+    });
+    // Both band edges (0 and 99) are still admitted.
+    const atMin: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: MONITOR_SPM_MIN }],
+    };
+    const atMax: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: MONITOR_SPM_MAX }],
+    };
+    expect(buildMonitorLogSteps(atMin)[0]!.spm).toBe(MONITOR_SPM_MIN);
+    expect(buildMonitorLogSteps(atMax)[0]!.spm).toBe(MONITOR_SPM_MAX);
+  });
+
+  // Branch review Medium-2: mutant M2b keyed the warmup skip on `i === 0`
+  // instead of `seedStep.kind === "warmup"` and survived the whole suite —
+  // every warmup fixture on the branch was LEADING. `domain/validate.ts`'s
+  // `validateSteps` imposes no positional constraint on `wu`
+  // (`case "wu": case "r":` — only minutes are checked), so a mid-workout
+  // warmup is production-authorable via the builder or bulk import. This
+  // fixture (work / warmup / work) proves the skip is position-independent.
+  it("a MID-WORKOUT warmup interval (work / warmup / work) produces NO step and does not shift the following work step's mapping (branch review Medium-2)", () => {
+    const draft = buildDraft({
+      id: "id-mid-workout-warmup",
+      title: "Mid-Workout Warmup",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 100 },
+          ref: { base: "6k", off: 0 },
+        },
+        { k: "wu", minutes: 1 },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 200 },
+          ref: { base: "6k", off: 2 },
+        },
+      ],
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    const program = compileOrThrow(built.phases);
+    const logSeed = buildLogSeed(built.phases, BASELINES);
+    expect(logSeed.steps.map((s) => s.kind)).toStrictEqual([
+      "work",
+      "warmup",
+      "work",
+    ]);
+    expect(program.intervals).toHaveLength(3);
+    const run: MonitorRun = {
+      v: 2,
+      workoutId: draft.workoutId,
+      title: draft.title,
+      program,
+      logSeed,
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 32.1,
+          distanceMeters: 100,
+          avgSplit: 160.5,
+          avgSpm: 22,
+          avgHeartRateBpm: 118,
+        },
+        // A boundary landing on the mid-workout warmup's own position —
+        // even if the machine reports one, it must never surface as a step.
+        {
+          index: 1,
+          elapsedSeconds: 60,
+          distanceMeters: 0,
+          avgSplit: null,
+          avgSpm: null,
+          avgHeartRateBpm: null,
+        },
+        {
+          index: 2,
+          elapsedSeconds: 65.3,
+          distanceMeters: 200,
+          avgSplit: 163.3,
+          avgSpm: 23,
+          avgHeartRateBpm: 130,
+        },
+      ],
+      deviceName: "PM5 432331249",
+      startedAt: NOW.toISOString(),
+      completedAt: NOW.toISOString(),
+      terminated: false,
+    };
+    const steps = buildMonitorLogSteps(run);
+    // Exactly two steps — the warmup at position 1 produced none.
+    expect(steps).toHaveLength(2);
+    expect(steps[0]!.label).toBe(logSeed.steps[0]!.label);
+    expect(steps[0]!.meters).toBe(100);
+    // The second WORK step keeps ITS OWN mapping (interval 2, 200 m,
+    // interval 2's actual) — not shifted onto the warmup's interval 1.
+    expect(steps[1]!.label).toBe(logSeed.steps[2]!.label);
+    expect(steps[1]!.meters).toBe(200);
+    expect(steps[1]!.targetSplit).toBe(program.intervals[2]!.targetSplit);
+    expect(steps[1]!.actualSource).toBe("pm5");
+    expect(steps[1]!.actualSeconds).toBe(65.3);
+    expect(steps[1]!.actualMeters).toBe(200);
+    expect(steps[1]!.spm).toBe(23);
+  });
+
+  // Branch review Medium-3: mutant `step.targetSplit =
+  // Math.round(interval.targetSplit)` survived 141/141 — every monitor
+  // fixture on the branch resolved to an INTEGER target (BASELINES above is
+  // {k2Seconds: 100, k6Seconds: 120}, and every fixture's ref is `{base:
+  // "6k", off: 0}` -> exactly 120). Fractional targets are the NORM for
+  // baseline-derived targets, not an edge case
+  // (`domain/monitor/program.ts`'s own M-9 comment: "half-second splits
+  // (2:14.5) are the NORM"). This fixture uses the phase's own real
+  // end-to-end value (a 144s/2k baseline, +1.5 off -> 145.5) to prove
+  // `targetSplit` survives to the LogStep untouched.
+  it("a fractional targetSplit (145.5, the phase's own end-to-end value) survives to the LogStep EXACTLY, never rounded (branch review Medium-3)", () => {
+    const fractionalBaselines: Baselines = { k2Seconds: 144, k6Seconds: 120 };
+    const draft = buildDraft({
+      id: "id-fractional-target",
+      title: "Fractional Target",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 500 },
+          ref: { base: "2k", off: 1.5 },
+        },
+      ],
+    });
+    const built = buildRun(draft, fractionalBaselines, NOW);
+    const program = compileOrThrow(built.phases);
+    expect(program.intervals[0]!.targetSplit).toBe(145.5);
+    const logSeed = buildLogSeed(built.phases, fractionalBaselines);
+    const run: MonitorRun = {
+      v: 2,
+      workoutId: draft.workoutId,
+      title: draft.title,
+      program,
+      logSeed,
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 145.5,
+          distanceMeters: 500,
+          avgSplit: 145.5,
+          avgSpm: 25,
+          avgHeartRateBpm: 141,
+        },
+      ],
+      deviceName: "PM5 432331249",
+      startedAt: NOW.toISOString(),
+      completedAt: NOW.toISOString(),
+      terminated: false,
+    };
+    const steps = buildMonitorLogSteps(run);
+    // toStrictEqual against the literal 145.5 (not read back off the
+    // fixture, per the review's own critique of the happy-path tests that
+    // "cannot detect a transform applied to that same value") — a
+    // Math.round mutant produces 146 here and this assertion fails.
+    expect(steps[0]).toStrictEqual({
+      label: logSeed.steps[0]!.label,
+      targetSplit: 145.5,
+      meters: 500,
+      actualSplit: 145.5,
+      actualSource: "pm5",
+      spm: 25,
+      avgHr: 141,
+      actualSeconds: 145.5,
+      actualMeters: 500,
+    });
   });
 
   it("a missing or misaligned logSeed throws MonitorLogSeedError (the screen catches it as mode disqualification)", () => {

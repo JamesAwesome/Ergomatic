@@ -593,6 +593,27 @@ export class MonitorLogSeedError extends Error {}
 export const MONITOR_HR_MIN = 20;
 export const MONITOR_HR_MAX = 254;
 
+/** The valid `actualSplit` band for a monitor-sourced reading (branch
+ *  review Medium-1): mirrors `server/routes/data.ts`'s own pm5
+ *  `PM5_MAX_SPLIT_SECONDS`, so this builder can never hand the server a
+ *  number its own band would reject (`avgSplit`'s wire range is `0 ..
+ *  6553.5`, wider than the server's `<= 6000`). Same drop-the-field
+ *  treatment as `MONITOR_HR_MIN`/`MAX` above — a reading outside this
+ *  range omits `actualSplit`, it never rejects the step or the save;
+ *  `actualSource: "pm5"` is unaffected (the pm5 pairing exception,
+ *  `LogStep`'s own doc comment). Zero is excluded separately (§3: `0`
+ *  means the wire had no reading), so this constant is only ever checked
+ *  as an upper bound. */
+export const MONITOR_SPLIT_MAX = 6000;
+
+/** The valid `spm` band for a monitor-sourced reading (branch review
+ *  Medium-1): mirrors `server/routes/data.ts`'s pm5 `PM5_SPM_MIN`/
+ *  `PM5_SPM_MAX` (`avgSpm`'s wire range is `0 .. 255`, wider than the
+ *  server's `0..99`). Same drop-the-field treatment as the split/HR bands
+ *  above. */
+export const MONITOR_SPM_MIN = 0;
+export const MONITOR_SPM_MAX = 99;
+
 /** Builds the Log screen's monitor-mode step list straight from a completed
  *  `MonitorRun` — the PM5-driven twin of `buildLogSteps` above, and the
  *  builder the 7C spec's §3 table describes field-by-field. Cannot derive a
@@ -639,9 +660,14 @@ export const MONITOR_HR_MAX = 254;
  *  §3's own "no target" note); `meters`/`seconds` from
  *  `ProgramInterval.value` by `kind`. When a matched actual exists:
  *  `actualSource: "pm5"` unconditionally (the **pm5 pairing exception**,
- *  `LogStep`'s own doc comment above) — `actualSplit` only when
- *  `avgSplit` is a number `> 0` (`0` means the wire had no reading, §3);
- *  `spm`/`avgHr`/`actualSeconds`/`actualMeters` straight from the actual
+ *  `LogStep`'s own doc comment above) — `actualSplit` only when `avgSplit`
+ *  is a number `> 0` AND `<= MONITOR_SPLIT_MAX` (`0` means the wire had no
+ *  reading, §3; the upper band drops the field rather than posting a
+ *  number the server's own `PM5_MAX_SPLIT_SECONDS` band would reject —
+ *  branch review Medium-1, same drop-the-field rule `avgHr` already
+ *  follows); `spm` only when it is within
+ *  `MONITOR_SPM_MIN..MONITOR_SPM_MAX` (branch review Medium-1, same rule);
+ *  `avgHr`/`actualSeconds`/`actualMeters` straight from the actual
  *  (`avgHr` additionally banded to `MONITOR_HR_MIN..MONITOR_HR_MAX`,
  *  `LogStep.avgHr`'s own doc comment). */
 export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
@@ -672,10 +698,20 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
     const actual = actualByIndex.get(i);
     if (actual !== undefined) {
       step.actualSource = "pm5";
-      if (actual.avgSplit !== null && actual.avgSplit > 0) {
+      if (
+        actual.avgSplit !== null &&
+        actual.avgSplit > 0 &&
+        actual.avgSplit <= MONITOR_SPLIT_MAX
+      ) {
         step.actualSplit = actual.avgSplit;
       }
-      if (actual.avgSpm !== null) step.spm = actual.avgSpm;
+      if (
+        actual.avgSpm !== null &&
+        actual.avgSpm >= MONITOR_SPM_MIN &&
+        actual.avgSpm <= MONITOR_SPM_MAX
+      ) {
+        step.spm = actual.avgSpm;
+      }
       if (
         actual.avgHeartRateBpm !== null &&
         actual.avgHeartRateBpm >= MONITOR_HR_MIN &&

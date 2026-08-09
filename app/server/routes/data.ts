@@ -101,6 +101,16 @@ const STEP_SPM_MAX = 60;
 // still a typo). Split's own lower bound is "greater than 0", not a second
 // named minimum: `buildMonitorLogSteps` only ever sets actualSplit when the
 // wire reading is itself a positive number (its own `avgSplit > 0` gate).
+//
+// Branch review Medium-1 (2026-08-09): the wire's own top end (`avgSplit`
+// up to 6553.5, `avgSpm` up to 255) exceeds both bands above, which used to
+// 400 the WHOLE log for a genuinely-measured, wire-legal reading with no
+// recoverable retry. `buildMonitorLogSteps` now mirrors these exact numbers
+// client-side (`MONITOR_SPLIT_MAX`/`MONITOR_SPM_MIN`/`MAX`,
+// `src/session/logDraft.ts`) and drops `actualSplit`/`spm` rather than
+// posting a value past them — a well-behaved client can no longer trigger
+// these bands at all. They stay exactly as they are here to reject a
+// hand-crafted liar, same role `HR_MIN`/`MAX` below already has.
 const PM5_MAX_SPLIT_SECONDS = 6000;
 const PM5_SPM_MIN = 0;
 const PM5_SPM_MAX = 99;
