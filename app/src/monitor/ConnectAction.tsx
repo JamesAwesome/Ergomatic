@@ -86,7 +86,9 @@ export default function ConnectAction({
           </button>
           {/* Straight to `onProceed`, with no clearing of its own: the
               destruction belongs to `createMonitorRun` downstream, exactly
-              as Start's own "Replace session" hands off to `startSession`
+              as Start's own "Replace session" hands off to
+              `useStartWorkout.ts`'s `confirmReplace` (Phase 6I Task 4:
+              extracted from WorkoutDetail's own former `startSession`)
               rather than reaching into storage from the panel. */}
           <button type="button" className="button-primary" onClick={onProceed}>
             Connect anyway

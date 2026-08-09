@@ -28,6 +28,7 @@ function readyState(readSlugs: string[]): ArticleReadsState {
     state: "ready",
     readSlugs: new Set(readSlugs),
     markRead: vi.fn(),
+    markUnread: vi.fn(),
   };
 }
 
@@ -185,6 +186,7 @@ describe("ArticleRow (linked kind — no linked article exists in the real regis
       state: "ready",
       readSlugs: new Set(),
       markRead,
+      markUnread: vi.fn(),
     };
     render(
       <MemoryRouter>

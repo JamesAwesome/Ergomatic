@@ -15,18 +15,18 @@ import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
 import {
   buildDraft,
-  loadDraft,
   saveDraft,
   withNudge,
   type SessionDraft,
 } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import { buildLogSeed } from "../session/logDraft";
-import { clearRun, loadRun } from "../session/run";
-import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
+import { clearRun } from "../session/run";
+import { clearMonitorRun } from "../monitor/monitorRun";
 import ConnectAction from "../monitor/ConnectAction";
 import type { RunIdentity } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
+import { useStartWorkout } from "../session/useStartWorkout";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
@@ -101,11 +101,11 @@ function useBluetoothStatus(): BluetoothStatus {
 }
 
 /** Bakes the WorkoutDetail preview stack's own cumulative nudges into a
- *  fresh draft — the same shape `startSession` would build, minus the
- *  nudges it currently drops (this screen's "Phase 6 will pass them
- *  per-request" comment, still true for the phone-timer Start button
- *  itself; NOT touched here — see this file's own header note on why
- *  Connect gets this and Start does not). `withNudge` takes a cumulative
+ *  fresh draft — the same shape `useStartWorkout`'s own `confirmReplace`
+ *  would build, minus the nudges it currently drops (this screen's "Phase 6
+ *  will pass them per-request" comment, still true for the phone-timer
+ *  Start button itself; NOT touched here — see this file's own header note
+ *  on why Connect gets this and Start does not). `withNudge` takes a cumulative
  *  DELTA against a fresh (zeroed) draft, so applying the whole stored
  *  value once reproduces the same cumulative nudge the preview shows. */
 function buildNudgedDraft(
@@ -209,11 +209,10 @@ function WorkoutDetailView({
   // never persisted to localStorage. Phase 7B Task 5: Connect (via
   // `buildNudgedDraft` below) and its own "Row on the phone timer instead"
   // escape both bake the current value in before committing to a session;
-  // the phone-only `startSession`/`handleStart` path below still does NOT
-  // (a pre-existing gap this task's brief did not ask it to close) — see
+  // the phone-only `useStartWorkout` path below still does NOT (a
+  // pre-existing gap this task's brief did not ask it to close) — see
   // `buildNudgedDraft`'s own comment.
   const [nudges, setNudges] = useState<Record<number, number>>({});
-  const [startError, setStartError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   // `null` = the button/stack is showing; non-null = the full-screen
   // interstitial has taken over (handoff §2: "full screen... a sheet was
@@ -246,17 +245,28 @@ function WorkoutDetailView({
     loadLastDevice(),
   );
   const bluetoothStatus = useBluetoothStatus();
-  // Staged-confirm idiom (src/you/BaselineEditor.tsx, also copied by this
-  // file's own OwnerActions delete flow): gates the one-shot replacement of
-  // an in-progress OR completed-but-unlogged session behind an explicit
-  // second press rather than letting the first Start press silently
-  // overwrite it. Two distinct reasons share one staged panel (below), not
-  // two separate booleans — `null` means "no stage," either non-null value
-  // both blocks the immediate `startSession()` call AND picks the panel's
-  // copy, so the two can never disagree about which case triggered it.
-  const [replaceStage, setReplaceStage] = useState<
-    "in-progress" | "unlogged" | null
-  >(null);
+  // "Row on the phone timer instead"'s OWN saveDraft failure (below) — kept
+  // separate from `useStartWorkout`'s own `startError`, since this flow's
+  // draft is nudged and never goes through the hook at all (this file's
+  // header note on why Connect gets nudges and Start does not); rendered
+  // into the SAME error slot below because it's the identical message
+  // class, never both truthy at once in practice (one screen, one attempt
+  // at a time).
+  const [rowInsteadError, setRowInsteadError] = useState<string | null>(null);
+  // Phase 6I Task 4 — extracted into `session/useStartWorkout.ts` so a second
+  // caller (the no-baseline `BaselineCard`, per the design spec) gets the
+  // SAME unlogged-run staged confirm, live-MonitorRun confirm, draft
+  // build/save, and cross-clears, rather than a duplicated (or skipped) copy
+  // that would reintroduce the F5 data-loss class. The hook's own doc
+  // comments carry the staged-confirm/severity-ordering rationale that used
+  // to live here.
+  const {
+    replaceStage,
+    startError,
+    handleStart,
+    confirmReplace,
+    cancelReplace,
+  } = useStartWorkout(workout);
   const navigate = useNavigate();
   // Whatever origin THIS screen was itself entered from (Today's suggestion
   // card, a Library row, or nothing for a deep link) — forwarded onto the
@@ -267,109 +277,6 @@ function WorkoutDetailView({
   // preserve the ORIGINAL origin").
   const location = useLocation();
   const from = (location.state as { from?: unknown } | null)?.from;
-
-  // Builds and saves the session draft (session/draft.ts owns the shape and
-  // the storage key — this screen never touches localStorage itself), then
-  // hands off to the confirm screen. `saveDraft` can fail (quota, private-
-  // mode Safari) without throwing; that's surfaced inline rather than
-  // navigating to a confirm screen with nothing behind it. `clearRun` runs
-  // only AFTER a successful `saveDraft` — never before — so a save failure
-  // never destroys a prior run record for nothing: the reviewer's F5
-  // finding (Phase 6B Task 4 fix round) was exactly this, a stale run
-  // sitting in RUN_KEY (SessionComplete.tsx deliberately keeps one, for 6C)
-  // getting silently orphaned the instant a NEW draft overwrote DRAFT_KEY —
-  // clearing it here, at the one point this screen actually commits to a
-  // new session, is what makes the staged confirm's "Replace" copy true
-  // rather than aspirational. Unconditional (not gated on `replaceStage`):
-  // `clearRun` is a no-op `localStorage.removeItem` when there was nothing
-  // to clear, so this needs no extra branching for the common case where
-  // there wasn't a stale run at all.
-  //
-  // Phase 7B Task 2 — THE REVERSE CROSS-CLEAR. `clearMonitorRun` is the
-  // mirror of `monitor/monitorRun.ts`'s `createMonitorRun` clearing a
-  // `SessionRun`: 7A shipped only that half and named this one as an open
-  // obligation. It sits HERE, and not in `saveRun`/`buildRun` where the
-  // spec's prose named it — `session/run.ts`'s own comment on `saveRun`
-  // carries the three reasons in full (every-tick call site, deep-linkable
-  // `buildRun`, import cycle). "Behind the confirm only" is the same
-  // property `clearRun` above already has, achieved the same way: by the
-  // time control reaches this function either `handleStart` found no
-  // monitor run at all (a no-op `removeItem`) or the rower read the
-  // warning and pressed Replace. Nothing else on this screen calls
-  // `startSession`.
-  function startSession() {
-    const draft = buildDraft(workout);
-    if (saveDraft(draft)) {
-      clearRun();
-      clearMonitorRun();
-      navigate("/session/confirm");
-    } else {
-      setStartError("Couldn't start this session. Try again.");
-    }
-  }
-
-  // Two independent reasons block an immediate start, checked in order of
-  // severity: a completed-but-unlogged RUN record (reviewer's F5 — real
-  // data loss, since nothing else will ever surface it again once
-  // overwritten) takes priority over a merely-started, not-yet-finished
-  // DRAFT (the original F4 finding, still real but recoverable — the old
-  // session was never going to be logged anyway once abandoned). Checking
-  // the run first also resolves the one case where both could be true at
-  // once (the SAME workout's own detail page, revisited after finishing
-  // it): that reads as "unlogged," the accurate description, not
-  // "in progress." A STARTED draft with no matching run (shouldn't happen
-  // in the normal flow, but costs nothing to keep guarding) still falls
-  // through to the "in-progress" copy exactly as before this fix round.
-  //
-  // Phase 7B Task 2 — THE GUARD IS WIDENED, NOT REROUTED. A second record
-  // is read (`loadMonitorRun()`), by the same direct-read pattern, for the
-  // same reason, into the same two sentences. It is emphatically NOT moved
-  // onto `anyLiveSession()`; ROADMAP M-1, verbatim:
-  //
-  // > Two do NOT, because they need the UNLOGGED distinction
-  // > `anyLiveSession()` deliberately collapses to "none":
-  // > WorkoutDetail's unlogged-run staged confirm (the 6B F5 fix — a
-  // > completed-but-unlogged prior session is exactly what its "Replace"
-  // > warning is FOR) and Today's cold-start stale-draft-discard guard...
-  // > Routing either through `anyLiveSession()` silently downgrades
-  // > "unlogged" to "none" and reintroduces the F5 data-loss class.
-  //
-  // ROADMAP's "two exceptions untouched" is amended by 7B's spec §3 only in
-  // that THIS one now reads two records instead of one; Today's is
-  // untouched, byte-identical. The new read is load-bearing because
-  // `startSession` below now clears the `MonitorRun` too: without these
-  // four lines, a rower who finished a connected session and hadn't logged
-  // it yet would lose it — 7C's entire prefill input — to a single
-  // unwarned Start press. The F5 shape exactly, in the other direction.
-  //
-  // Both `MonitorRun` states stage, with the same severity split the
-  // `SessionRun` side uses: finished-but-unlogged is the data loss and gets
-  // the "unlogged" sentence; a LIVE monitor run (the erg is mid-piece right
-  // now) gets "in progress". Checked AFTER the `SessionRun` branch and
-  // BEFORE the draft branch, which is the same descending-severity order
-  // that block already establishes — and in the one case where a stale
-  // `SessionRun` and a stale `MonitorRun` are both on record, "unlogged" is
-  // the right word either way, so the ordering costs nothing.
-  function handleStart() {
-    const existingRun = loadRun();
-    if (existingRun !== null && existingRun.completedAt !== null) {
-      setReplaceStage("unlogged");
-      return;
-    }
-    const existingMonitorRun = loadMonitorRun();
-    if (existingMonitorRun !== null) {
-      setReplaceStage(
-        existingMonitorRun.completedAt !== null ? "unlogged" : "in-progress",
-      );
-      return;
-    }
-    const existingDraft = loadDraft();
-    if (existingDraft !== null && existingDraft.startedAt !== null) {
-      setReplaceStage("in-progress");
-      return;
-    }
-    startSession();
-  }
 
   // Phase 7B Task 5 — Connect's `onProceed`. Runs AFTER `ConnectAction`'s
   // own guard has already cleared (the staged confirm, if any, resolved to
@@ -438,11 +345,11 @@ function WorkoutDetailView({
 
   // State 6's "Row on the phone timer instead" — the existing Start path,
   // but with the SAME nudged targets Connect was about to send, not the
-  // always-empty ones `startSession` above builds (its own header comment
-  // names that gap; fixing it for Start itself is out of this task's
-  // scope, but the escape hatch's own copy promises "targets intact" and
-  // must actually keep that promise). Mirrors `startSession`'s cross-clear
-  // exactly — this commits to a phone session just as surely.
+  // always-empty ones `useStartWorkout`'s `confirmReplace` builds (its own
+  // header comment names that gap; fixing it for Start itself is out of
+  // this task's scope, but the escape hatch's own copy promises "targets
+  // intact" and must actually keep that promise). Mirrors `confirmReplace`'s
+  // cross-clear exactly — this commits to a phone session just as surely.
   function handleRowInstead() {
     setConnecting(null);
     const draft = buildNudgedDraft(workout, nudges);
@@ -451,7 +358,7 @@ function WorkoutDetailView({
       clearMonitorRun();
       navigate("/session/confirm");
     } else {
-      setStartError("Couldn't start this session. Try again.");
+      setRowInsteadError("Couldn't start this session. Try again.");
     }
   }
 
@@ -581,21 +488,23 @@ function WorkoutDetailView({
               <button
                 type="button"
                 className="button-outline"
-                onClick={() => setReplaceStage(null)}
+                onClick={cancelReplace}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="button-primary"
-                onClick={startSession}
+                onClick={confirmReplace}
               >
                 Replace session
               </button>
             </div>
           </div>
         )}
-        {startError && <p className="baseline-error">{startError}</p>}
+        {(startError ?? rowInsteadError) && (
+          <p className="baseline-error">{startError ?? rowInsteadError}</p>
+        )}
         {/* PHASE 7B TASK 5 — second in the stack (handoff §1: an L2 below
             Start, "it must not compete with Start"). `ConnectAction` (Task
             2) owns the trigger AND the staged confirm guard end to end;

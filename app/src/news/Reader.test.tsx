@@ -58,6 +58,7 @@ function readyState(readSlugs: string[]): ArticleReadsState {
     state: "ready",
     readSlugs: new Set(readSlugs),
     markRead: vi.fn(),
+    markUnread: vi.fn(),
   };
 }
 
@@ -107,6 +108,7 @@ describe("Reader", () => {
       state: "ready",
       readSlugs: new Set(),
       markRead,
+      markUnread: vi.fn(),
     });
     rerender(
       <MemoryRouter initialEntries={["/news/baselines"]}>
@@ -195,6 +197,7 @@ describe("Reader", () => {
       state: "ready",
       readSlugs: new Set(),
       markRead,
+      markUnread: vi.fn(),
     });
     renderReader(`/news/${LINKED_FIXTURE.slug}`);
 

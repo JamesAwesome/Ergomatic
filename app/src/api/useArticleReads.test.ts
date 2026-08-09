@@ -122,4 +122,89 @@ describe("useArticleReads", () => {
 
     expect(apiMock).toHaveBeenCalledTimes(1); // just the initial GET
   });
+
+  it("markUnread is optimistic and fires the DELETE before it resolves", async () => {
+    let resolveDelete: (() => void) | undefined;
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        return new Promise<Response>((resolve) => {
+          resolveDelete = () => resolve(new Response(null, { status: 204 }));
+        });
+      }
+      return new Response(JSON.stringify({ slugs: ["baselines"] }), {
+        status: 200,
+      });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+    const { result } = renderHook(() => useArticleReads());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { markUnread } = result.current;
+
+    act(() => {
+      markUnread("baselines");
+    });
+
+    // Visible before the DELETE resolves.
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    expect(result.current.readSlugs.has("baselines")).toBe(false);
+    expect(apiMock).toHaveBeenCalledWith("/api/article-reads/baselines", {
+      method: "DELETE",
+    });
+
+    resolveDelete?.();
+    await waitFor(() => {
+      if (result.current.state !== "ready") throw new Error("expected ready");
+      expect(result.current.readSlugs.has("baselines")).toBe(false);
+    });
+  });
+
+  it("a failed DELETE stays silent and keeps the optimistic removal for this visit", async () => {
+    const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        throw new Error("offline");
+      }
+      return new Response(JSON.stringify({ slugs: ["baselines"] }), {
+        status: 200,
+      });
+    });
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+    const { result } = renderHook(() => useArticleReads());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { markUnread } = result.current;
+
+    act(() => {
+      markUnread("baselines");
+    });
+
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(2));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    expect(result.current.readSlugs.has("baselines")).toBe(false);
+  });
+
+  it("marking an unread (absent) slug fires no DELETE at all", async () => {
+    const apiMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ slugs: ["baselines"] }), {
+          status: 200,
+        }),
+    );
+    vi.doMock("../api", () => ({ api: apiMock }));
+    const { useArticleReads } = await import("./useArticleReads");
+    const { result } = renderHook(() => useArticleReads());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { markUnread } = result.current;
+
+    act(() => {
+      markUnread("pain-scale"); // never was in readSlugs
+    });
+
+    expect(apiMock).toHaveBeenCalledTimes(1); // just the initial GET
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    expect(result.current.readSlugs.has("pain-scale")).toBe(false);
+  });
 });
