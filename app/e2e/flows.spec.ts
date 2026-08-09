@@ -300,14 +300,19 @@ test.describe("the warm-up setting: You sets it, a library session runs it", () 
     // Set a 5:00 TIME warm-up with a 0:30 trailing rest through the real
     // WarmupRow editor — "500"/"30" into the same masked ClockInput idiom
     // the builder's own duration fields use, rendering "5:00"/"0:30".
+    // Scoped by class, not accessible name: whole-branch review finding F's
+    // dedup fix means the meta slot no longer restates "WARM-UP · " (the
+    // row's title already says "Warm-up"), so the two spans no longer
+    // combine into one matchable literal.
     await page.goto("/you");
-    await page.getByRole("button", { name: /WARM-UP/ }).click();
+    await page.locator(".warmup-row-button").click();
     await page.getByLabel("Warm-up duration", { exact: true }).fill("500");
     await page.getByLabel("Warm-up rest after", { exact: true }).fill("30");
     await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.locator(".warmup-row-button")).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /WARM-UP · 5:00 \+ 0:30 REST/ }),
-    ).toBeVisible();
+      page.locator(".warmup-row-button .you-settings-row-meta"),
+    ).toHaveText("5:00 + 0:30 REST");
 
     // Open any library workout and start it — this walk doesn't pin which
     // one, the same "read whatever's actually there" idiom the suggestion

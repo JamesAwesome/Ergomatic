@@ -249,11 +249,31 @@ behaves identically to phase 7's hardware-proven behavior.
 
 ## Corrections (found in implementation)
 
-Three load-bearing claims above did not survive contact with the code.
+Four load-bearing claims above did not survive contact with the code.
 Recorded here so the spec doesn't silently win arguments it lost —
-each implementer's task report caught the falsification at the time;
-this section is the one place a future reader of the spec ITSELF sees
-it, rather than having to cross-reference the SDD ledger.
+three were caught by implementers' task reports at the time; the
+fourth (§1, below) was caught later, by the whole-branch review, and
+is the more important of the two "existing compileProgram arm" claims
+since §1's own argument for the change being small rests on it.
+
+- **§1's "keeps working unmodified" claim is the same falsehood as
+  §4's, and it's the load-bearing one.** §1, in the paragraph the spec
+  itself labels THE ARCHITECTURAL KEY, claims: "Every downstream
+  consumer of a warmup phase keeps working unmodified and PROVENLY: the
+  timer runs it, `compileProgram` programs it to the PM5 as a no-target
+  interval (§18 walk 1 rendered exactly this on hardware) ..." FALSE in
+  the same way as §4's claim below (Task 4 wrote the `program.ts:488`
+  guard from scratch — nothing "kept working," because nothing existed
+  yet to keep working) — and this is the version that matters more,
+  since §1's whole pitch for the change being architecturally small
+  depends on "unmodified" being true. It is also a second, independent
+  falsehood on its own terms: it leans on "§18 walk 1 rendered exactly
+  this on hardware" one paragraph after this spec's own Authority block
+  (above) discloses that the walk-1 recording was never committed and
+  says explicitly "nothing below leans on it" — §1 leans on it anyway,
+  parenthetically. What actually shipped: `compileProgram`'s warmup arm
+  is new code (Task 4), unverified on real hardware (no committed
+  capture exists either way).
 
 - **§4's "existing warmup arm" was not existing — it was new code.**
   §4 claims: "Nothing programs it: `compileProgram` still emits the

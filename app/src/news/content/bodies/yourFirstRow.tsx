@@ -10,9 +10,11 @@ export function YourFirstRowBody() {
       <p>
         Tap START on the suggested 6k. There are no targets yet, and that is the
         point: the timer runs a plain six-thousand-metre piece and clocks your
-        average split. Warm up for ten minutes first, then row it honestly
-        rather than heroically: hold as even a pace as you can. A 6k that starts
-        too hot undersells your real fitness.
+        average split. Warm up for ten minutes first. Warm-ups are a setting
+        now: set yours on the You tab under WARM-UP and every session, this one
+        included, will start with it. Then row it honestly rather than
+        heroically: hold as even a pace as you can. A 6k that starts too hot
+        undersells your real fitness.
       </p>
 
       <p>

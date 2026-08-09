@@ -118,15 +118,21 @@ export function parseWarmupRest(value: string): RestResult {
   return { ok: true, value: seconds };
 }
 
-/** The house `WARM-UP · <value>` readout (spec §3's own literal examples:
- *  `WARM-UP · 10:00` / `WARM-UP · 2000 m`, `+ :30 REST` when set). Time uses
- *  `fmtDuration` — the same helper ConfirmTargets.tsx/Builder.tsx already
- *  use for this exact quantity, which renders a sub-minute rest as `0:30`,
- *  not the spec prose's elided `:30`: kept consistent with those two
- *  existing call sites rather than inventing a third rendering for the
- *  identical value (see task-6 report). Distance uses a lowercase `m`
- *  (Builder.tsx's own prose convention), not ConfirmTargets' uppercase
- *  structured-cell `M`. */
+/** The row's own status VALUE — `10:00`, `2000 m`, `10:00 + 0:30 REST` —
+ *  read into the shared `.you-settings-row-meta` slot alone, no `WARM-UP ·`
+ *  prefix (whole-branch review finding F: the row's own title already says
+ *  "Warm-up"; repeating it in the meta duplicated the word, including in
+ *  the button's own accessible name, and diverged from the sibling
+ *  "Learning the app" row's convention of "title, then a DIFFERENT fact" —
+ *  see `WarmupRow()` below). Spec §3's own literal examples write the
+ *  prefix in (`WARM-UP · 10:00`), a divergence recorded where the row
+ *  itself is rendered. Time uses `fmtDuration` — the same helper
+ *  ConfirmTargets.tsx/Builder.tsx already use for this exact quantity,
+ *  which renders a sub-minute rest as `0:30`, not the spec prose's elided
+ *  `:30`: kept consistent with those two existing call sites rather than
+ *  inventing a third rendering for the identical value (see task-6
+ *  report). Distance uses a lowercase `m` (Builder.tsx's own prose
+ *  convention), not ConfirmTargets' uppercase structured-cell `M`. */
 function warmupValueText(warmup: WarmupSetting): string {
   const duration =
     warmup.kind === "time" ? fmtDuration(warmup.minutes) : `${warmup.meters} m`;
@@ -250,12 +256,15 @@ function WarmupEditor({
   );
 }
 
-/** The You screen's WARM-UP settings row (2026-08-09 warmup-setting spec
- *  §3), beside 6I's "Learning the app" row: same `.you-settings-row` shape,
- *  but a `<button>` rather than a `<Link>`, since tapping this one expands
- *  an editor in place instead of navigating. Self-contained (calls
- *  `usePreferences` directly), matching BaselineEditor.tsx's own pattern
- *  for the BASELINES card above it. */
+/** The You screen's Warm-up settings row (2026-08-09 warmup-setting spec
+ *  §3), beside 6I's "Learning the app" row: same `.you-settings-row` shape
+ *  (title left, a DIFFERENT fact in the meta slot on the right — "Learning
+ *  the app" pairs with `START HERE · N OF 4`, this pairs with the status
+ *  value alone, not the word "warm-up" restated — whole-branch review
+ *  finding F), but a `<button>` rather than a `<Link>`, since tapping this
+ *  one expands an editor in place instead of navigating. Self-contained
+ *  (calls `usePreferences` directly), matching BaselineEditor.tsx's own
+ *  pattern for the BASELINES card above it. */
 export default function WarmupRow() {
   const preferencesState = usePreferences();
   const [open, setOpen] = useState(false);
@@ -286,7 +295,7 @@ export default function WarmupRow() {
     >
       <span className="you-settings-row-title">Warm-up</span>
       <span className="you-settings-row-meta mono-status">
-        WARM-UP · {warmup ? warmupValueText(warmup) : "OFF"}
+        {warmup ? warmupValueText(warmup) : "OFF"}
       </span>
     </button>
   );

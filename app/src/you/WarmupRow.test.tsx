@@ -55,34 +55,39 @@ async function renderWarmupRow() {
 }
 
 describe("WarmupRow", () => {
-  it("OFF state reads WARM-UP · OFF", async () => {
+  it("OFF state reads OFF in the meta slot, title carries 'warm-up' alone", async () => {
     mockReady(null);
     await renderWarmupRow();
-    expect(screen.getByText("WARM-UP · OFF")).toBeVisible();
+    // Dedup fix (whole-branch review finding F): the meta slot holds the
+    // status value alone, not "WARM-UP · " restated — the row's own title
+    // ("Warm-up") already says that, matching the sibling "Learning the
+    // app" row's "title, then a DIFFERENT fact" convention.
+    expect(screen.getByText("Warm-up")).toBeVisible();
+    expect(screen.getByText("OFF")).toBeVisible();
   });
 
   it("renders nothing while preferences are loading", async () => {
     preferencesMock = { state: "loading" };
     await renderWarmupRow();
-    expect(screen.queryByText(/WARM-UP/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
   });
 
   it("renders nothing on a preferences error", async () => {
     preferencesMock = { state: "error", retry: vi.fn() };
     await renderWarmupRow();
-    expect(screen.queryByText(/WARM-UP/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
   });
 
   it("ON state (time) renders the house duration format", async () => {
     mockReady({ kind: "time", minutes: 10 });
     await renderWarmupRow();
-    expect(screen.getByText("WARM-UP · 10:00")).toBeVisible();
+    expect(screen.getByText("10:00")).toBeVisible();
   });
 
   it("ON state (distance) renders meters with a lowercase unit", async () => {
     mockReady({ kind: "distance", meters: 2000 });
     await renderWarmupRow();
-    expect(screen.getByText("WARM-UP · 2000 m")).toBeVisible();
+    expect(screen.getByText("2000 m")).toBeVisible();
   });
 
   it("ON state with rest appends the REST suffix", async () => {
@@ -92,13 +97,13 @@ describe("WarmupRow", () => {
     // always keeps the leading group), not the spec prose's elided ":30" —
     // matching ConfirmTargets.tsx/Builder.tsx's own existing rendering of
     // this exact quantity, see WarmupRow.tsx's own warmupValueText comment.
-    expect(screen.getByText("WARM-UP · 10:00 + 0:30 REST")).toBeVisible();
+    expect(screen.getByText("10:00 + 0:30 REST")).toBeVisible();
   });
 
   it("tapping the row opens the editor", async () => {
     mockReady(null);
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
     expect(screen.getByLabelText("Warm-up duration")).toBeInTheDocument();
     expect(screen.getByLabelText("Warm-up rest after")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
@@ -107,7 +112,7 @@ describe("WarmupRow", () => {
   it("the time/meters toggle switches the visible input", async () => {
     mockReady(null);
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
 
     // Fresh OFF draft seeds "min" (10:00) — clock-formatted input present.
     expect(screen.getByLabelText("Warm-up duration")).toHaveValue("10:00");
@@ -123,7 +128,7 @@ describe("WarmupRow", () => {
   it("does not offer Remove warm-up when opened from OFF", async () => {
     mockReady(null);
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
     expect(
       screen.queryByRole("button", { name: "Remove warm-up" }),
     ).not.toBeInTheDocument();
@@ -132,7 +137,7 @@ describe("WarmupRow", () => {
   it("Save patches a time warm-up and returns to the ON display", async () => {
     mockReady(null);
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
 
     // Seeded draft is already a valid 10-minute warm-up — Save as-is.
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -140,13 +145,13 @@ describe("WarmupRow", () => {
     expect(saveMock).toHaveBeenCalledWith({
       warmup: { kind: "time", minutes: 10 },
     });
-    expect(screen.getByText("WARM-UP · 10:00")).toBeVisible();
+    expect(screen.getByText("10:00")).toBeVisible();
   });
 
   it("Save patches a distance warm-up", async () => {
     mockReady(null);
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
     await userEvent.click(
       screen.getByRole("radio", { name: "Warm-up duration unit meters" }),
     );
@@ -161,7 +166,7 @@ describe("WarmupRow", () => {
   it("Save with a rest value includes restSeconds", async () => {
     mockReady(null);
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
     // "30" digits into the masked clock field render as "0:30" (30 seconds)
     // — same masking convention StepEditor's own REST field uses.
     await userEvent.type(screen.getByLabelText("Warm-up rest after"), "30");
@@ -175,31 +180,31 @@ describe("WarmupRow", () => {
   it("Remove warm-up patches null and returns to OFF, only offered when currently ON", async () => {
     mockReady({ kind: "time", minutes: 10 });
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
 
     const remove = screen.getByRole("button", { name: "Remove warm-up" });
     await userEvent.click(remove);
 
     expect(saveMock).toHaveBeenCalledWith({ warmup: null });
-    expect(screen.getByText("WARM-UP · OFF")).toBeVisible();
+    expect(screen.getByText("OFF")).toBeVisible();
   });
 
   it("Cancel closes the editor without saving", async () => {
     mockReady({ kind: "time", minutes: 10 });
     await renderWarmupRow();
-    await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+    await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
     await userEvent.type(screen.getByLabelText("Warm-up duration"), "999");
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(saveMock).not.toHaveBeenCalled();
-    expect(screen.getByText("WARM-UP · 10:00")).toBeVisible();
+    expect(screen.getByText("10:00")).toBeVisible();
   });
 
   describe("bounds errors, mirroring the server's own named constants (server/routes/data.ts)", () => {
     it("time below 1 minute shows an inline error and does not save", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       const input = screen.getByLabelText("Warm-up duration");
       await userEvent.clear(input);
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -211,7 +216,7 @@ describe("WarmupRow", () => {
     it("time above 30 minutes shows an inline error", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       const input = screen.getByLabelText("Warm-up duration");
       await userEvent.clear(input);
       // "3100" digits mask to "31:00" (31 minutes) — one past the 30 bound.
@@ -227,7 +232,7 @@ describe("WarmupRow", () => {
     it("an empty distance value shows an inline error", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       await userEvent.click(
         screen.getByRole("radio", { name: "Warm-up duration unit meters" }),
       );
@@ -242,7 +247,7 @@ describe("WarmupRow", () => {
     it("distance below 100 meters shows an inline error", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       await userEvent.click(
         screen.getByRole("radio", { name: "Warm-up duration unit meters" }),
       );
@@ -258,7 +263,7 @@ describe("WarmupRow", () => {
     it("distance above 10000 meters shows an inline error", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       await userEvent.click(
         screen.getByRole("radio", { name: "Warm-up duration unit meters" }),
       );
@@ -273,7 +278,7 @@ describe("WarmupRow", () => {
     it("a rest below 5 seconds shows an inline error", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       await userEvent.type(screen.getByLabelText("Warm-up rest after"), "2");
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -286,7 +291,7 @@ describe("WarmupRow", () => {
     it("a rest above 595 seconds (9:55) shows an inline error", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       // "1000" digits mask to "10:00" (600 seconds) — one past the 595 bound.
       await userEvent.type(screen.getByLabelText("Warm-up rest after"), "1000");
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -300,7 +305,7 @@ describe("WarmupRow", () => {
     it("correcting a field after an error clears that field's own error", async () => {
       mockReady(null);
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       const input = screen.getByLabelText("Warm-up duration");
       await userEvent.clear(input);
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -317,7 +322,7 @@ describe("WarmupRow", () => {
     it("seeds the meters field and unit from an existing distance warm-up", async () => {
       mockReady({ kind: "distance", meters: 2500 });
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       expect(screen.getByLabelText("Warm-up duration")).toHaveValue("2500");
       expect(
         screen.getByRole("radio", { name: "Warm-up duration unit meters" }),
@@ -327,7 +332,7 @@ describe("WarmupRow", () => {
     it("seeds the rest field from an existing restSeconds", async () => {
       mockReady({ kind: "time", minutes: 15, restSeconds: 45 });
       await renderWarmupRow();
-      await userEvent.click(screen.getByRole("button", { name: /WARM-UP/ }));
+      await userEvent.click(screen.getByRole("button", { name: /warm-up/i }));
       expect(screen.getByLabelText("Warm-up rest after")).toHaveValue("0:45");
     });
   });

@@ -818,17 +818,23 @@ test("you", async ({ page }) => {
   // Same "LOADING…" race as /library — wait for the baseline card's real
   // content before capturing.
   await page.locator(".baseline-value").first().waitFor();
+  // Scoped by class, not accessible name: whole-branch review finding F's
+  // dedup fix means the meta slot holds the status value alone ("OFF"),
+  // not "WARM-UP · OFF" — the row's own title ("Warm-up") already says
+  // that word once.
   await expect(
-    page.getByRole("button", { name: "WARM-UP · OFF" }),
-  ).toBeVisible();
+    page.locator(".warmup-row-button .you-settings-row-meta"),
+  ).toHaveText("OFF");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
   });
 });
 
-// The ON state's own house duration format (spec §3: `WARM-UP · 10:00`,
-// `+ :30 REST` when set — rendered here as `+ 0:30 REST`, block2-review F5)
-// — "you.png" above only ever shows the default OFF row.
+// The ON state's own house duration format (spec §3's own literal writes
+// the "WARM-UP · " prefix in; the shipped row doesn't, per finding F's
+// dedup fix — recorded where the row itself renders. `+ :30 REST` when
+// set — rendered here as `+ 0:30 REST`, block2-review F5) — "you.png"
+// above only ever shows the default OFF row.
 test("you-warmup-on", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-you-warmup-on@e2e.test",
@@ -838,8 +844,8 @@ test("you-warmup-on", async ({ page }) => {
   await page.goto("/you");
   await page.locator(".baseline-value").first().waitFor();
   await expect(
-    page.getByRole("button", { name: /WARM-UP · 10:00 \+ 0:30 REST/ }),
-  ).toBeVisible();
+    page.locator(".warmup-row-button .you-settings-row-meta"),
+  ).toHaveText("10:00 + 0:30 REST");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-warmup-on.png"),
   });

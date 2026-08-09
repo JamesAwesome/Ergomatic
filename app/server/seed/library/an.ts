@@ -1510,7 +1510,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 2 rounds of 75/60/45/30 s all out off a 20' warm-up — the reps shrink and the rest shrinks with them.
+    // AN: 2 rounds of 75/60/45/30 s all out — the reps shrink and the rest shrinks with them.
     title: "Bomb Cyclone",
     type: "AN",
     difficulty: "hard",

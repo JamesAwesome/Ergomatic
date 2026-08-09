@@ -6,16 +6,27 @@
 // included) and AFTER, beside the targets, with per-type breakdowns [and]
 // states drift per bucket in points."
 //
-// Run: `pnpm exec tsx scripts/library-balance.ts [--with-warmups]`
+// Run: `pnpm exec tsx scripts/library-balance.ts [--after-only]`
 //
-// Without the flag, prints AFTER vs TARGET only. `--with-warmups` also
-// prints BEFORE, replayed from `library-warmups-before.json` — a frozen
-// literal (workout title -> historical warmup minutes) captured from the
-// pre-strip seed content in the SAME commit that deleted the 302
-// `{ k: "wu", ... }` lines (Task 3 of the warmup-setting plan,
-// 2026-08-09). Replaying is exact: stripping `wu` changed nothing else
-// about any workout (spec §6: "Nothing else about any workout changes"),
-// so BEFORE_minutes(w) = AFTER_minutes(w) + frozen[w.title].
+// Whole-branch review finding D: the default run used to print this very
+// preamble — CHECK, MOVED, "see the verdict line at the end" — and then
+// tables containing none of them, only AFTER/TARGET/AFT-TGT, the one row
+// the preamble itself says is NOT a rebalance signal. ROADMAP's Phase 9
+// bullet points a reader at the MOVED row and spec §7 says this output
+// "lands in the PR body verbatim"; a bare run handed the PR body the
+// misleading row and none of the trustworthy ones. BEFORE/CHECK/MOVED are
+// therefore the DEFAULT now. `--after-only` opts back into the old bare
+// behavior (AFTER vs TARGET only) for a quick post-regen sanity check,
+// once a future regen makes the BEFORE replay (below) no longer meaningful
+// to compare against.
+//
+// The default path prints BEFORE, replayed from `library-warmups-before.
+// json` — a frozen literal (workout title -> historical warmup minutes)
+// captured from the pre-strip seed content in the SAME commit that
+// deleted the 302 `{ k: "wu", ... }` lines (Task 3 of the warmup-setting
+// plan, 2026-08-09). Replaying is exact: stripping `wu` changed nothing
+// else about any workout (spec §6: "Nothing else about any workout
+// changes"), so BEFORE_minutes(w) = AFTER_minutes(w) + frozen[w.title].
 //
 // patterns.json's 20 `warmupMinutes` stat entries (one per generation
 // cell) are ORPHANED by this change, not deleted or corrected — per spec
@@ -230,7 +241,7 @@ function printTypeTable(
 // filesystem/seed import path unnecessarily).
 // ---------------------------------------------------------------------
 function main(): void {
-  const withWarmups = processArgv.includes("--with-warmups");
+  const withWarmups = !processArgv.includes("--after-only");
 
   const after: WorkoutStat[] = GLOBAL_LIBRARY_SEED.map((w) => ({
     type: w.type,
@@ -262,27 +273,40 @@ function main(): void {
     "  things. It measures the STRIP, not the library, and it is NOT a",
   );
   console.log("  rebalance signal. Do not rule on a regen from it.");
-  console.log(
-    "  * CHECK (BEFORE minus TARGET) is the like-for-like comparison and the",
-  );
-  console.log(
-    "    FAITHFULNESS check: 0 in all 20 grid cells means the replay and the",
-  );
-  console.log("    band edges are right. See the verdict line at the end.");
-  console.log(
-    "  * MOVED (AFTER minus BEFORE) is what removing the warm-ups actually",
-  );
-  console.log("    did. That is the real signal.");
-  console.log(
-    "  * AFTER is the new reality and it is AWAITING A NEW TARGET GRID; no",
-  );
-  console.log(
-    "    grid has been authored over warm-up-free durations yet. A rower",
-  );
-  console.log(
-    "    with a 10 minute warm-up preference recovers roughly the original",
-  );
-  console.log("    spread at run time.");
+  if (withWarmups) {
+    console.log(
+      "  * CHECK (BEFORE minus TARGET) is the like-for-like comparison and the",
+    );
+    console.log(
+      "    FAITHFULNESS check: 0 in all 20 grid cells means the replay and the",
+    );
+    console.log("    band edges are right. See the verdict line at the end.");
+    console.log(
+      "  * MOVED (AFTER minus BEFORE) is what removing the warm-ups actually",
+    );
+    console.log("    did. That is the real signal.");
+    console.log(
+      "  * AFTER is the new reality and it is AWAITING A NEW TARGET GRID; no",
+    );
+    console.log(
+      "    grid has been authored over warm-up-free durations yet. A rower",
+    );
+    console.log(
+      "    with a 10 minute warm-up preference recovers roughly the original",
+    );
+    console.log("    spread at run time.");
+  } else {
+    console.log(
+      "  --after-only: printing AFTER vs TARGET only, below (the AFT-TGT",
+    );
+    console.log(
+      "  row above just described, not a rebalance signal). Omit the flag",
+    );
+    console.log(
+      "  to also see BEFORE/CHECK/MOVED against the pre-strip replay — the",
+    );
+    console.log("  numbers ROADMAP's Phase 9 bullet actually points at.");
+  }
 
   let beforeCounts: Record<string, number> | null = null;
   // The same BEFORE replay restricted to the 300 GRID rows — the
