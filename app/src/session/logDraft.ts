@@ -441,10 +441,20 @@ export function buildLogSteps(
  *  A `"test"` step (IMP-1, module header) produces a bare-label `LogStep`
  *  the same way `buildLogSteps` does — here it's simpler still, since this
  *  builder always has the step's own ORIGINAL authored `label` straight
- *  from `Step` with no phase/draft indirection to reach through at all. */
+ *  from `Step` with no phase/draft indirection to reach through at all.
+ *
+ *  Phase 6I close-out fold (Task 2's deferred ledger item): `baselines` is
+ *  now `Baselines | null` — `ManualDoorLog` gates its OWN call site on
+ *  `needsBaselines(workout.steps)` rather than bare `baselines === null`,
+ *  so an effort-only workout (every step `isEffortRef`) can reach here
+ *  with null baselines. `resolveSplit` is only ever called from the
+ *  `!isEffort` branch below, which `needsBaselines` guarantees never runs
+ *  when `baselines` is null (the two predicates are the same condition,
+ *  "some work step is a split ref") — the `!` on `baselines` there
+ *  documents that invariant, not a runtime check. */
 export function buildManualLogSteps(
   workout: { steps: Step[] },
-  baselines: Baselines,
+  baselines: Baselines | null,
 ): LogStep[] {
   const out: LogStep[] = [];
   for (const step of liveSteps(workout.steps)) {
@@ -462,7 +472,11 @@ export function buildManualLogSteps(
       label: refPaceLabel(durationLabel, step.ref),
     };
     if (!isEffort) {
-      const split = resolveSplit(baselines, step.ref);
+      // `needsBaselines(workout.steps)` (ManualDoorLog's own call-site
+      // gate) is true whenever any work step reaches this branch — the
+      // caller has already confirmed `baselines` is non-null before
+      // calling at all in that case (module header's Phase 6I paragraph).
+      const split = resolveSplit(baselines!, step.ref);
       logStep.targetSplit = split;
       logStep.actualSplit = split;
       logStep.actualSource = "assumed";

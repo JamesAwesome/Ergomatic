@@ -377,6 +377,28 @@ function buildMonitorFixture(
   return { run, workout };
 }
 
+// Phase 6I close-out fold (Task 2's deferred ledger item): the real
+// "First 6k" seed workout (server/seed/library/onboarding.ts) — an
+// effort-only workout (`needsBaselines()` reads false), unlike
+// `manualWorkoutFixture()`'s split-ref mix above. Proves the manual door
+// opens for it even with both baselines null, instead of the unconditional
+// `baselines === null` block that used to gate every workout alike.
+function onboardingManualWorkoutFixture(
+  id = "id-first6k-manual",
+): LibraryWorkout {
+  const seed = ONBOARDING_LIBRARY_WORKOUTS.find((w) => w.title === "First 6k")!;
+  return {
+    id,
+    title: seed.title,
+    type: seed.type,
+    difficulty: seed.difficulty,
+    pain: seed.pain,
+    steps: seed.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+}
+
 // Same `vi.doMock` + returned-spy idiom as WorkoutDetail.test.tsx's own
 // `mockApi` — a real `Response`, not a bare object, so `.ok`/`.status`/
 // `.json()` all behave exactly like the real fetch this replaces.
@@ -1503,6 +1525,39 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(
       screen.queryByRole("button", { name: "Save session" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("Phase 6I: an effort-only workout (needsBaselines() false) opens the form with null baselines instead of the no-target block — the ManualDoorLog fix folded from Task 2's deferred ledger item", async () => {
+    const workout = onboardingManualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    await renderManualLog(workout.id);
+
+    expect(
+      await screen.findByRole("heading", { name: "Log First 6k" }),
+    ).toBeInTheDocument();
+    // No "no target"/"Set baselines" block — the form itself renders.
+    expect(screen.queryByText("no target")).not.toBeInTheDocument();
+    // No duration segment — estimateMinutes returns null for an
+    // effort-only workout with no baselines (never a fabricated total);
+    // the header shows just the date, no dangling " · N MIN" or a
+    // "· null MIN" string.
+    expect(document.querySelector(".log-meta .mono-status")?.textContent).toBe(
+      formatLogDate(new Date().toISOString()),
+    );
+    // The effort step's target renders as the 5G-rule dash, same as every
+    // other effort step in this file — never a crash, never a fabricated
+    // split resolved against baselines that don't exist.
+    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("6000 m @ MIN");
+    expect(rows[0].querySelector(".log-step-target")?.textContent).toBe("—");
+    // No PACES LOCKED panel — an effort-only workout references neither
+    // base (F1's "referenced bases only" rule, shared via pacesLockedText).
+    expect(document.querySelector(".log-paces-panel")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save session" }),
+    ).toBeInTheDocument();
   });
 
   it("POSTs workoutId/title/type straight from the fetched workout plus held/pain/notes, and navigates to /today", async () => {
