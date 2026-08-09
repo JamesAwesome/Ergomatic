@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { api } from "../api";
+import type { WarmupSetting } from "../api/usePreferences";
 import type { BuilderEditMode } from "./Builder";
 import { fromWorkout, newForm, newRow, type BuilderForm } from "./builderState";
 import type { Step } from "../../domain/types.js";
@@ -50,18 +51,20 @@ function mockWorkoutsLoading() {
 }
 
 // Same mutable-box idiom as `workoutsMock` above, for the same reason.
-// Defaults to a ready 10' warm-up so every test not concerned with
-// preferences still renders exactly as before.
+// Defaults to READY and OFF (`warmup: null`) — the setting's own production
+// default (server/stores/preferences.ts) — so every test not concerned
+// with the hint renders exactly as it would for a rower who never touched
+// the You screen's warm-up row.
 let preferencesMock:
-  | { state: "ready"; preferences: { warmupMinutes: number } }
+  | { state: "ready"; preferences: { warmup: WarmupSetting | null } }
   | { state: "loading" }
   | { state: "error"; retry: () => void } = {
   state: "ready",
-  preferences: { warmupMinutes: 10 },
+  preferences: { warmup: null },
 };
 
-function mockPreferences(warmupMinutes: number) {
-  preferencesMock = { state: "ready", preferences: { warmupMinutes } };
+function mockPreferences(warmup: WarmupSetting | null) {
+  preferencesMock = { state: "ready", preferences: { warmup } };
 }
 
 function mockPreferencesLoading() {
@@ -128,7 +131,7 @@ async function fillValidForm() {
 beforeEach(() => {
   vi.resetModules();
   mockWorkouts();
-  preferencesMock = { state: "ready", preferences: { warmupMinutes: 10 } };
+  preferencesMock = { state: "ready", preferences: { warmup: null } };
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => workoutsMock,
   }));
@@ -388,11 +391,14 @@ describe("Builder", () => {
     expect(screen.getByText("1 step")).toBeInTheDocument();
   });
 
-  // ---- TOTAL / warm-up / Save to library (task brief test 8) -------------
+  // ---- TOTAL / warm-up hint / Save to library (task brief test 8) --------
+  // 2026-08-09's warmup setting: the hint is conditional on the setting
+  // being ON (spec §5), reading the house-format duration (time or
+  // meters), plus the rest when set — not a bare "N′" number any more.
 
   it("renders TOTAL and the primary button reads Save to library", async () => {
     mockBaselines(BASELINES);
-    mockPreferences(10);
+    mockPreferences({ kind: "time", minutes: 10 });
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
@@ -401,12 +407,43 @@ describe("Builder", () => {
     expect(screen.getByText("TOTAL")).toBeInTheDocument();
     expect(screen.getByText("5 MIN")).toBeInTheDocument();
     expect(
-      screen.getByText("+ 10′ warm-up from your preferences"),
+      screen.getByText("+ 10:00 warm-up from your preferences"),
     ).toBeInTheDocument();
 
     expect(
       screen.getByRole("button", { name: "Save to library" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the hint with its rest appended when the setting has one", async () => {
+    mockBaselines(BASELINES);
+    mockPreferences({ kind: "time", minutes: 10, restSeconds: 120 });
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(
+      screen.getByText("+ 10:00 warm-up + 2:00 rest from your preferences"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders a distance warm-up's hint in meters, house-format", async () => {
+    mockBaselines(BASELINES);
+    mockPreferences({ kind: "distance", meters: 2000 });
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(
+      screen.getByText("+ 2000 m warm-up from your preferences"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders no hint at all when the setting is OFF (null)", async () => {
+    mockBaselines(BASELINES);
+    mockPreferences(null);
+    mockApi(() => new Response(null, { status: 201 }));
+    await renderBuilder();
+
+    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
   });
 
   // ---- Warm-up placement (Phase 5F task 7) --------------------------------
@@ -416,9 +453,9 @@ describe("Builder", () => {
 
   it("shows the warm-up above the step list, not below the totals", async () => {
     mockBaselines(BASELINES);
-    mockPreferences(10);
+    mockPreferences({ kind: "time", minutes: 10 });
     mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder(); // preferences default to "ready" (see beforeEach)
+    await renderBuilder();
 
     const warmup = await screen.findByText(/warm-up from your preferences/);
     const steps = screen.getByText("STEPS");
@@ -471,7 +508,7 @@ describe("Builder", () => {
       () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
     );
     mockBaselines(BASELINES);
-    mockPreferences(10);
+    mockPreferences({ kind: "time", minutes: 10 });
     await renderBuilder();
 
     await fillValidForm();
@@ -1040,56 +1077,18 @@ describe("Builder", () => {
     expect(screen.getByRole("button", { name: "Pain 3" })).toBeInTheDocument();
   });
 
-  // A stored workout's wu row survives being opened for edit — not
-  // authorable from a create-mode button any more, but still editable once
-  // its card is expanded.
-  it("a stored workout's wu row survives being opened for edit", async () => {
-    mockBaselines(BASELINES);
-    mockApi(() => new Response(null, { status: 201 }));
-
-    const wu = newRow("wu");
-    wu.durValue = "10:00";
-    const work = newRow("w");
-    work.durValue = "5:00";
-
-    const initial: BuilderForm = {
-      title: "Ladder Sets",
-      type: "O2",
-      difficulty: "easy",
-      pain: 3,
-      rows: [wu, work],
-      reps: 1,
-    };
-    await renderBuilder({ kind: "edit", id: "w1", initial });
-
-    // Edit mode starts collapsed; expand the wu row (Row 1).
-    const editButtons = screen.getAllByRole("button", { name: "EDIT" });
-    await userEvent.click(editButtons[0]!);
-    expect(screen.getByLabelText("Row 1 duration")).toHaveValue("10:00");
-  });
-
-  it("derives the repeat span from bookend rows: a leading warm-up stays loose, the rest repeats", async () => {
-    mockBaselines(BASELINES);
-    mockApi(() => new Response(null, { status: 201 }));
-
-    const wu = newRow("wu");
-    wu.durValue = "10:00";
-    const work = newRow("w");
-    work.durValue = "5:00";
-
-    const initial: BuilderForm = {
-      title: "Ladder Sets",
-      type: "O2",
-      difficulty: "easy",
-      pain: 3,
-      rows: [wu, work],
-      reps: 3,
-    };
-    await renderBuilder({ kind: "edit", id: "w1", initial });
-
-    // total = loose(10, the warm-up) + perSet(5) * reps(3) = 25. Exact
-    // singular-plural grammar — a looser regex here would mask a regression.
-    expect(screen.getByText("1 step · 5:00 per set")).toBeInTheDocument();
-    expect(screen.getByText("25 MIN")).toBeInTheDocument();
-  });
+  // Two tests used to live here: "a stored workout's wu row survives being
+  // opened for edit" and "derives the repeat span from bookend rows: a
+  // leading warm-up stays loose, the rest repeats" — both built a
+  // `BuilderForm` containing a `newRow("wu")` row. 2026-08-09's warmup
+  // setting removed "wu" from `RowKind` entirely (builderState.ts's own
+  // comment): warm-ups are a per-user preference now, never an authored
+  // row, so a stored workout can no longer arrive with one (Task 2's
+  // migration strips it at the DB before any client ever fetches it) and
+  // there is no longer a legal `BuilderRow` to construct either. Coverage
+  // for "a leading bookend row stays loose" itself is now moot too —
+  // `BOOKEND_ROW_KINDS` is empty (builderState.test.ts's own
+  // `spanStartIndex`/`BOOKEND_ROW_KINDS` suite), so every row is in the
+  // repeated span unconditionally; that reality is what
+  // `builderState.test.ts`'s "totals" suite now pins directly.
 });

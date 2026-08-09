@@ -4,15 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
-import type { Step } from "../../domain/types.js";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 // A fully-supported personal workout — every step kind the builder's row
-// model can represent (wu/w/r), so `hasUnsupportedSteps` must NOT refuse it.
-// The trailing `r` step matters specifically for phase 5c: the builder
-// dropped its own "+ REST" button (rest is now authored via a work row's
-// REST (OPT) field) but kept StepRowEditor's `kind === "r"` render branch,
+// model can represent (w/r — "wu" left `RowKind` entirely 2026-08-09, the
+// warmup-setting spec), so `hasUnsupportedSteps` must NOT refuse it. The
+// trailing `r` step matters specifically for phase 5c: the builder dropped
+// its own "+ REST" button (rest is now authored via a work row's REST
+// (OPT) field) but kept StepRowEditor's `kind === "r"` render branch,
 // because bulk import — and a workout like this one, pasted in before that
 // change — can still produce a standalone rest step. This fixture proves
 // that step stays representable and editable end to end, not just that
@@ -24,9 +24,6 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
   difficulty: "medium",
   pain: 3,
   steps: [
-    // Task 5 shim: "wu" left the Step union but the builder's row model
-    // hasn't yet.
-    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "time", minutes: 5 },
@@ -242,17 +239,17 @@ describe("EditWorkout", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("Ladder Sets");
     // Edit mode opens with every row collapsed (Phase 5E Task 5's
-    // accordion) — expand Row 2 (the `w` row; PERSONAL_WORKOUT's steps are
-    // [wu, w, r], so the work row is the second card) to reach its
-    // pace-ref control.
-    await userEvent.click(screen.getAllByRole("button", { name: "EDIT" })[1]!);
+    // accordion) — expand Row 1 (the `w` row; PERSONAL_WORKOUT's steps are
+    // [w, r], so the work row is the first card) to reach its pace-ref
+    // control.
+    await userEvent.click(screen.getAllByRole("button", { name: "EDIT" })[0]!);
     // Pins the structured-ref round trip through fromWorkout/stepToRow: the
     // stored step's ref ({base:"6k", off:-2}) must load back into
     // PaceRefInput's base/off props exactly, not just the base. The
     // base+offset -> display-string rendering itself ("6k −2") is
     // PaceRefInput's own concern, covered by PaceRefInput.test.tsx — this
     // only needs to confirm the *value* survived the round trip.
-    expect(screen.getByRole("radio", { name: "Row 2 pace 6K" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Row 1 pace 6K" })).toBeChecked();
     expect(screen.getByText("6k −2")).toBeInTheDocument();
   });
 
@@ -261,29 +258,29 @@ describe("EditWorkout", () => {
     mockHooks([PERSONAL_WORKOUT]);
     await renderEdit("/library/w1/edit");
 
-    // Row 3 (after the wu and w rows): the standalone `r` step from the
-    // fixture. Expand it — edit mode starts collapsed (Phase 5E Task 5).
-    await userEvent.click(screen.getAllByRole("button", { name: "EDIT" })[2]!);
+    // Row 2 (after the w row): the standalone `r` step from the fixture.
+    // Expand it — edit mode starts collapsed (Phase 5E Task 5).
+    await userEvent.click(screen.getAllByRole("button", { name: "EDIT" })[1]!);
     // Not a `w` row, so it gets none of StepEditor's isWork-only controls
     // (SPM/REST/pace) — only the shared duration field, pre-filled from
     // `stepToRow`'s clock-form `durValue` (Phase 5F Task 4: a `min`-unit
     // row's duration is now the clock string the masked field produces,
     // `fmtDuration(3)`, not a bare numeric string).
-    expect(screen.getByLabelText("Row 3 duration")).toHaveValue("3:00");
+    expect(screen.getByLabelText("Row 2 duration")).toHaveValue("3:00");
     // Distinguishes it from also being a `w` row rendered with blank
     // optional fields: a `w` row would additionally expose SPM/REST inputs
     // and a pace-ref radiogroup, none of which exist for this row.
     expect(
-      screen.queryByRole("radio", { name: "Row 3 pace 6K" }),
+      screen.queryByRole("radio", { name: "Row 2 pace 6K" }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Save to library" }),
     );
 
-    // Exact body equality (not just "contains an r step") — proves the wu
-    // and w steps also survived the round trip unchanged, not just the one
-    // this test is nominally about.
+    // Exact body equality (not just "contains an r step") — proves the w
+    // step also survived the round trip unchanged, not just the one this
+    // test is nominally about.
     expect(api).toHaveBeenCalledWith("/api/workouts/w1", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -293,7 +290,6 @@ describe("EditWorkout", () => {
         difficulty: "medium",
         pain: 3,
         steps: [
-          { k: "wu", minutes: 10 },
           {
             k: "w",
             duration: { kind: "time", minutes: 5 },

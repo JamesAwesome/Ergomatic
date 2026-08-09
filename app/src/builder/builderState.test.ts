@@ -56,34 +56,17 @@ function defaultValidRow(): BuilderRow {
 }
 
 // Shared row-shape helpers for the new BuilderRow (no `marked`, `durValue` +
-// `durUnit` instead of `dur`). `workRow`/`wuRow`/`restRow` all default to a
-// valid, minimal row of their kind — callers spread and override for
-// anything more specific, same convention as `defaultValidRow`.
+// `durUnit` instead of `dur`). `workRow`/`restRow` both default to a valid,
+// minimal row of their kind — callers spread and override for anything
+// more specific, same convention as `defaultValidRow`. (A `wuRow` helper
+// used to live here too — "wu" left `RowKind` entirely 2026-08-09, the
+// warmup-setting spec: warm-ups are a per-user preference now, never an
+// authored row, so there is no longer a legal way to construct one.)
 function workRow(id: string): BuilderRow {
   return {
     id,
     kind: "w",
     durValue: "5:00",
-    durUnit: "min",
-    refBase: "6k",
-    refOff: 0,
-    refEffort: null,
-    spm: "",
-    rest: "",
-  };
-}
-
-// `minutes` is still a plain decimal-minutes string, same convention every
-// caller below already uses ("10", "5", "2") — this formats it into the
-// clock string `durValue` actually holds now, so none of those call sites
-// need to spell out `fmtDuration` themselves. `""` stays `""` (blank is a
-// distinct state from a zero duration — `fmtDuration(0)` would be "0:00", a
-// non-blank value the blank-duration tests must NOT get by accident).
-function wuRow(id: string, minutes: string): BuilderRow {
-  return {
-    id,
-    kind: "wu",
-    durValue: minutes === "" ? "" : fmtDuration(Number(minutes)),
     durUnit: "min",
     refBase: "6k",
     refOff: 0,
@@ -154,16 +137,15 @@ describe("rows", () => {
 });
 
 describe("spanStartIndex / BOOKEND_ROW_KINDS", () => {
-  it("only 'wu' is a bookend kind today", () => {
-    expect(BOOKEND_ROW_KINDS).toStrictEqual(["wu"]);
+  // "wu" was the only bookend kind until 2026-08-09's warmup setting
+  // removed it from `RowKind` entirely (builderState.ts's own comment) —
+  // there is no row kind left that sits outside the repeat span, so the
+  // set is empty and every row participates from index 0.
+  it("is empty today — no row kind is a bookend", () => {
+    expect(BOOKEND_ROW_KINDS).toStrictEqual([]);
   });
 
-  it("keeps a leading warm-up outside the repeat so editing a starter workout doesn't repeat it", () => {
-    const f = formWith({ reps: 3, rows: [wuRow("wu1", "10"), workRow("a")] });
-    expect(spanStartIndex(f)).toBe(1);
-  });
-
-  it("repeats everything when there is no bookend row", () => {
+  it("repeats everything, starting at row 0, since no row kind is a bookend", () => {
     const f = formWith({ reps: 3, rows: [workRow("a"), restRow("r1", "2")] });
     expect(spanStartIndex(f)).toBe(0);
     const out = toSteps(f);
@@ -171,9 +153,9 @@ describe("spanStartIndex / BOOKEND_ROW_KINDS", () => {
     expect(out.steps[0]).toStrictEqual({ k: "reps", count: 3 });
   });
 
-  it("returns rows.length (nothing to repeat) when every row is a bookend", () => {
-    const f = formWith({ rows: [wuRow("wu1", "10")] });
-    expect(spanStartIndex(f)).toBe(1);
+  it("returns rows.length (nothing to repeat) when there are no rows at all", () => {
+    const f = formWith({ rows: [] });
+    expect(spanStartIndex(f)).toBe(0);
   });
 });
 
@@ -295,27 +277,35 @@ describe("toSteps", () => {
     expect(out.steps.some((s) => s.k === "reps")).toBe(false);
   });
 
-  it("emits one marker before the first non-bookend row at xN", () => {
+  it("rejects reps outside 1..12 when a marker would actually be emitted", () => {
+    const f = formWith({ reps: 13, rows: [workRow("a")] });
+    const out = toSteps(f);
+    expect(out.ok).toBe(false);
+    if (out.ok) throw new Error("expected failure");
+    expect(out.errors.reps).toMatch(/reps must be a whole number 1\.\.12/);
+  });
+
+  it("emits one marker before the first row at xN, since no bookend kind exists to skip", () => {
     const f = formWith({
       reps: 4,
-      rows: [wuRow("wu1", "10"), workRow("a"), restRow("r1", "5")],
+      rows: [workRow("a"), restRow("r1", "5")],
     });
     const out = toSteps(f);
     if (!out.ok) throw new Error("expected ok");
-    expect(out.steps.map((s) => s.k)).toStrictEqual(["wu", "reps", "w", "r"]);
-    expect(out.steps[1]).toStrictEqual({ k: "reps", count: 4 });
+    expect(out.steps.map((s) => s.k)).toStrictEqual(["reps", "w", "r"]);
+    expect(out.steps[0]).toStrictEqual({ k: "reps", count: 4 });
   });
 
   it("rejects a form with no work step, matching the domain rule", () => {
-    const f = formWith({ rows: [wuRow("a", "10")] });
+    const f = formWith({ rows: [restRow("a", "10")] });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
     expect(Object.values(out.errors).join(" ")).toMatch(/work/i);
   });
 
-  it("rejects a blank duration on a warm-up/rest row", () => {
-    const f = formWith({ rows: [wuRow("a", ""), workRow("b")] });
+  it("rejects a blank duration on a standalone rest row", () => {
+    const f = formWith({ rows: [restRow("a", ""), workRow("b")] });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
     if (out.ok) throw new Error("expected failure");
@@ -326,9 +316,9 @@ describe("toSteps", () => {
   // no way to type a fraction of a second), so the only way left to violate
   // this bound is going past the ceiling — the old "off the half-step grid"
   // shape (e.g. 5.25 minutes) isn't reachable through the field any more.
-  it("rejects a warm-up/rest row's duration past the domain's 3:00:00 ceiling", () => {
+  it("rejects a standalone rest row's duration past the domain's 3:00:00 ceiling", () => {
     const f = formWith({
-      rows: [{ ...wuRow("a", "10"), durValue: "3:00:01" }, workRow("b")],
+      rows: [{ ...restRow("a", "10"), durValue: "3:00:01" }, workRow("b")],
     });
     const out = toSteps(f);
     expect(out.ok).toBe(false);
@@ -460,34 +450,43 @@ describe("toSteps", () => {
 });
 
 describe("totals", () => {
-  it("separates loose minutes from repeated set minutes", () => {
+  // 2026-08-09's warmup setting removed `wu`, `RowKind`'s only bookend kind
+  // — `BOOKEND_ROW_KINDS` is empty and `spanStartIndex` always returns 0
+  // for a non-empty form (its own comment), so `loose` (rows BEFORE the
+  // span start) can no longer hold anything: every row lives in the
+  // repeated span and multiplies by `f.reps`. These two tests used to pin
+  // a `wu` row's minutes landing in `loose`, paid once; there is no longer
+  // a shape that reaches that branch, so this pins the reality that
+  // replaced it instead of asserting an impossible case.
+  it("has no loose bucket any more — every row multiplies by reps, since no bookend kind exists", () => {
     const f = formWith({
       reps: 4,
       rows: [
-        wuRow("wu", "10"),
+        restRow("rest", "10"),
         { ...workRow("a"), durValue: "1:00", refOff: -2 },
         restRow("b", "5"),
       ],
     });
+    // 10 + 1 + 5 = 16 per set, all in the repeated span.
     expect(totals(f, baselines)).toStrictEqual({
-      loose: 10,
-      perSet: 6,
-      total: 34,
+      loose: 0,
+      perSet: 16,
+      total: 64,
     });
   });
 
-  it("totals bookend minutes once and the span N times", () => {
+  it("multiplies a two-row set by reps with loose still at 0", () => {
     const f = formWith({
       reps: 4,
       rows: [
-        wuRow("wu1", "10"),
+        restRow("rest", "10"),
         { ...workRow("a"), durValue: "5:00", durUnit: "min" },
       ],
     });
     expect(totals(f, baselines)).toStrictEqual({
-      loose: 10,
-      perSet: 5,
-      total: 30,
+      loose: 0,
+      perSet: 15,
+      total: 60,
     });
   });
 
@@ -523,9 +522,6 @@ describe("fromWorkout", () => {
       difficulty: "medium",
       pain: 3,
       steps: [
-        // Task 5 shim: "wu" left the Step union but the builder's own row
-        // model (this suite's whole subject) hasn't yet.
-        { k: "wu", minutes: 10 } as unknown as Step,
         { k: "reps", count: 4 },
         {
           k: "w",
@@ -536,14 +532,33 @@ describe("fromWorkout", () => {
       ],
     });
     expect(f.reps).toBe(4);
-    expect(f.rows.map((r) => r.kind)).toStrictEqual(["wu", "w"]);
-    expect(f.rows[1]).toMatchObject({
+    expect(f.rows.map((r) => r.kind)).toStrictEqual(["w"]);
+    expect(f.rows[0]).toMatchObject({
       durValue: "1:00",
       durUnit: "min",
       refBase: "6k",
       refOff: -2,
       spm: "22",
     });
+  });
+
+  it("round-trips a standalone rest step into a minutes-only 'r' row", () => {
+    const f = fromWorkout({
+      title: "Ladder",
+      type: "AT",
+      difficulty: "medium",
+      pain: 3,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "6k", off: 0 },
+        },
+        { k: "r", minutes: 3 },
+      ],
+    });
+    expect(f.rows.map((r) => r.kind)).toStrictEqual(["w", "r"]);
+    expect(f.rows[1]).toMatchObject({ kind: "r", durValue: "3:00" });
   });
 
   it("round-trips the structured ref out of a stored workout", () => {
@@ -694,84 +709,17 @@ describe("totals vs. estimateMinutes agreement", () => {
     expect(Math.round(t!.total)).toBe(estimate.minutes);
   });
 
-  // TRANSITIONAL (2026-08-09's warmup setting, plan Task 4 -> Task 5):
-  // `estimateMinutes` stopped pricing `wu` steps when `wu` left the `Step`
-  // union (domain/expand.ts's own comment where `case "wu"` used to be),
-  // but the BUILDER still authors a `wu` row — `BOOKEND_ROW_KINDS` is
-  // `["wu"]` and nothing else, so the bookend/span behaviour these two
-  // tests exist for cannot even be expressed without one until Task 5
-  // removes the row kind. So the two sides no longer agree, and the
-  // difference is EXACTLY the wu rows' own minutes; that exact difference
-  // is what these two now pin, rather than a looser "they differ"
-  // assertion that a real bucketing bug could hide inside. Task 5 (which
-  // takes the wu row out of `builderState.ts`) deletes or rewrites both.
-  it("H3: buckets a bookend + repeated tail positionally, differing from estimateMinutes by exactly the bookend's own (no longer priced) minutes", () => {
-    // [wu 10' bookend, w 5' repeated, r 2' repeated], reps 3. toSteps emits
-    // [wu, reps, w, r] because the marker goes at spanStartIndex (right
-    // after the bookend) and liveSteps repeats everything after it — so the
-    // "r" row repeats even though it was never individually marked, the
-    // same shape the old per-row `marked` model needed a dedicated
-    // non-contiguous-marking regression test for. Under the bookend model
-    // this just falls out of `r` not being in BOOKEND_ROW_KINDS.
-    const f = formWith({
-      reps: 3,
-      rows: [
-        wuRow("wu", "10"),
-        { ...workRow("w"), durValue: "5:00", refBase: "2k" },
-        restRow("r", "2"),
-      ],
-    });
-
-    const out = toSteps(f);
-    if (!out.ok)
-      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
-    expect(out.steps.map((s) => s.k)).toStrictEqual(["wu", "reps", "w", "r"]);
-
-    const t = totals(f, baselines);
-    expect(t).not.toBeNull();
-    // Positional bucketing: the 10' bookend once, plus 3 x (5' + 2').
-    expect(Math.round(t!.total)).toBe(31);
-    // The domain prices only the repeated tail — 3 x 7 = 21 — because the
-    // `wu` step `toSteps` emitted above contributes nothing to
-    // `estimateMinutes` any more.
-    const estimate = estimateMinutes(out.steps, baselines);
-    expect(estimate.minutes).toBe(21);
-    expect(Math.round(t!.total) - estimate.minutes).toBe(10); // the bookend
-  });
-
-  // Reviewer's mutation-testing probe (M4): a mutant that buckets `totals`
-  // by row KIND (`!BOOKEND_ROW_KINDS.includes(row.kind)`) instead of
-  // POSITION (`i >= spanStartIndex(f)`) passes every other test in this
-  // file, because every other fixture only ever puts a bookend row at the
-  // very front. `+ WARM-UP` appends at the end, so a bookend row landing
-  // AFTER the span start is reachable in one click — this pins that exact
-  // shape. Under the kind-bucketing mutant this reports 40 (the mid-span
-  // `wu` treated as always-loose, regardless of where it sits); the correct
-  // positional bucketing reports 60. See the TRANSITIONAL note above for
-  // why `estimateMinutes` no longer reports the same number.
-  it("H4/M4: buckets a bookend row sitting AFTER the span start positionally ([w, wu, w] x3)", () => {
-    const f = formWith({
-      reps: 3,
-      rows: [
-        { ...workRow("a"), durValue: "5:00" },
-        wuRow("wu", "10"),
-        { ...workRow("b"), durValue: "5:00" },
-      ],
-    });
-    expect(spanStartIndex(f)).toBe(0);
-
-    const out = toSteps(f);
-    if (!out.ok)
-      throw new Error(`expected ok, got ${JSON.stringify(out.errors)}`);
-
-    const t = totals(f, baselines);
-    expect(t).not.toBeNull();
-    expect(Math.round(t!.total)).toBe(60); // 3 x (5' + 10' + 5')
-    // 3 x (5' + 5'): the three repeated `wu` occurrences price at nothing.
-    const estimate = estimateMinutes(out.steps, baselines);
-    expect(estimate.minutes).toBe(30);
-    expect(Math.round(t!.total) - estimate.minutes).toBe(30); // 3 x 10'
-  });
+  // H3/H4/M4 used to live here, pinning a TRANSITIONAL disagreement between
+  // `totals` (positional bucketing) and `estimateMinutes` caused by the
+  // builder still authoring a `wu` row after `estimateMinutes` had already
+  // stopped pricing one (Task 4's own report named this "the one assertion
+  // set in the branch that encodes a defect rather than a design").
+  // 2026-08-09's warmup setting removed the `wu` row kind from
+  // `builderState.ts` entirely (this file's own `RowKind`/`BOOKEND_ROW_KINDS`
+  // comments) — the shape these two tests existed to pin can no longer be
+  // constructed at all, so there is nothing left for them to assert.
+  // `totals` and `estimateMinutes` now agree on every representable form,
+  // exactly like the two tests above this comment already prove.
 });
 
 describe("toSteps additional coverage", () => {
@@ -944,7 +892,7 @@ describe("clock durations in rows", () => {
   it("summarises a clock duration without inventing a prime mark", () => {
     const row = { ...newRow("w"), durValue: "0:45", durUnit: "min" as const };
     expect(stepSummary(row)).toBe("0:45 @ 6k ±0");
-    expect(stepSummary({ ...row, kind: "wu" })).toBe("0:45 warm-up");
+    expect(stepSummary({ ...row, kind: "r" as const })).toBe("0:45 rest");
   });
 
   it("rejects a duration past the ceiling and one below a second", () => {
@@ -1005,16 +953,14 @@ describe("hasUnsupportedSteps (L2)", () => {
   });
 
   it("is false for a workout made entirely of representable step kinds", () => {
-    // Task 5 shim: "wu" left the Step union but the builder's row model
-    // hasn't yet.
     const steps: Step[] = [
-      { k: "wu", minutes: 10 },
+      { k: "r", minutes: 2 },
       {
         k: "w",
         duration: { kind: "time", minutes: 5 },
         ref: { base: "2k", off: 0 },
       },
-    ] as unknown as Step[];
+    ];
     expect(hasUnsupportedSteps(steps)).toBe(false);
   });
 
@@ -1064,21 +1010,13 @@ describe("hasMidSpanReps (H3)", () => {
     expect(hasMidSpanReps(steps)).toBe(true);
   });
 
-  it("is false when the marker sits at the derived span start, e.g. a normal [wu, reps, w]", () => {
-    // Task 5 shim: "wu" left the Step union but the builder's row model
-    // hasn't yet.
-    const steps: Step[] = [
-      { k: "wu", minutes: 10 },
-      { k: "reps", count: 3 },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 5 },
-        ref: { base: "6k", off: 0 },
-      },
-    ] as unknown as Step[];
-    expect(hasMidSpanReps(steps)).toBe(false);
-  });
-
+  // A "normal [wu, reps, w]" test used to live here, pinning that a marker
+  // sitting right after a leading bookend row isn't flagged. `wu` left
+  // `RowKind` entirely 2026-08-09 (this file's own `BOOKEND_ROW_KINDS`
+  // comment) — there is no bookend kind left to lead with, so the shape is
+  // no longer constructible, and the test right below already covers the
+  // reality that replaced it: a marker at the derived start (now always
+  // index 0, since nothing is ever a bookend) is fine.
   it("is false when the marker leads a bookend-free workout, e.g. [reps, w, r]", () => {
     const steps: Step[] = [
       { k: "reps", count: 3 },
@@ -1290,16 +1228,13 @@ describe("summaries", () => {
     );
   });
 
-  // The landmine Task 1's review carried forward: called on a `wu`/`r` row,
-  // `stepSummary` used to echo `refBase`/`refOff` straight off `newRow`'s
-  // unused defaults, fabricating a pace reference ("10′ @ 6k ±0") the row
-  // never represents. StepCard renders stored workouts — the seeded library
-  // and anything bulk-imported genuinely contain `wu` and standalone `r`
-  // rows — so this can't stay a `w`-only assumption.
-  it("summarises a warm-up row by duration and kind, with no fabricated pace reference", () => {
-    expect(stepSummary(wuRow("wu1", "10"))).toBe("10:00 warm-up");
-  });
-
+  // The landmine Task 1's review carried forward: called on a standalone
+  // `r` row (or, until 2026-08-09's warmup setting removed it from
+  // `RowKind` entirely, a `wu` row), `stepSummary` used to echo
+  // `refBase`/`refOff` straight off `newRow`'s unused defaults, fabricating
+  // a pace reference ("5:00 @ 6k ±0") the row never represents. StepCard
+  // renders stored workouts — anything bulk-imported can still author a
+  // standalone `r` row — so this can't stay a `w`-only assumption.
   it("summarises a standalone rest row by duration and kind, with no fabricated pace reference", () => {
     // Non-default refBase/refOff on the row itself — proves the guard keys
     // off `row.kind`, not off whether the ref happens to still be blank.
@@ -1308,8 +1243,7 @@ describe("summaries", () => {
     ).toBe("5:00 rest");
   });
 
-  it("gives a wu/r row nothing to add on the sub-summary line — no fabricated spm/rest", () => {
-    expect(stepSubSummary(wuRow("wu1", "10"))).toBe("");
+  it("gives a standalone rest row nothing to add on the sub-summary line — no fabricated spm/rest", () => {
     expect(stepSubSummary(restRow("r1", "5"))).toBe("");
   });
 });
@@ -1449,9 +1383,9 @@ describe("effort refs in rows", () => {
   // only hand-built rows. This used to patch an effort ref onto "Zephyr"
   // because no starter carried one; the generated library's AN block ships
   // many effort-ref workouts for real, so the fixture is the shipped
-  // workout UNPATCHED — a wu step, a reps marker and a work step with an
-  // effort ref, spm and rest together, which is the exact shape a rower
-  // opens when they edit a seeded workout.
+  // workout UNPATCHED — a reps marker and a work step with an effort ref,
+  // spm and rest together, which is the exact shape a rower opens when
+  // they edit a seeded workout.
   it("round-trips a real library workout's effort step (Fork Lightning, unpatched)", () => {
     const forkLightning = LIBRARY_WORKOUTS.find(
       (w) => w.title === "Fork Lightning",
@@ -1532,10 +1466,10 @@ describe("addBlankStep", () => {
     });
   });
 
-  it("adds a work step even when the last row is a warm-up", () => {
+  it("adds a work step even when the last row is a standalone rest", () => {
     const { form, id } = addBlankStep({
       ...newForm(),
-      rows: [{ ...newRow("wu"), durValue: "10:00" }],
+      rows: [{ ...newRow("r"), durValue: "10:00" }],
     });
     expect(form.rows.find((r) => r.id === id)!.kind).toBe("w");
   });

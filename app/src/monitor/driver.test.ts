@@ -70,14 +70,18 @@ import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
 // unchanged — but keeping the warm-up at all is a deliberate choice, and
 // this is the reason:
 //
-// **Interval 0 is this file's ONLY rest-0 leading interval.** The warm-up
+// **Interval 0 is the only rest-0 leading interval compiled from a real
+// workout in this file.** (Synthetic rest-0 fixtures exist elsewhere —
+// `twoIntervalNoRest`, `restlessProgram`, SESSION 4a's `REST_ZERO_PROGRAM`
+// — and independently pin the `toActualIndex(0, "rowing", 3)` clamp branch
+// itself; this fixture's distinct value is exercising that same boundary
+// through the full compiled-library-workout happy path.) The warm-up
 // compiles with `restSeconds: 0` (nothing follows it but the first work
 // phase), which makes its boundary a WORK->WORK one — no rest tick
 // separates it from interval 1, so the state word is still "rowing" when
 // 0x0037/38 arrive. Sea Fret's own two work steps each carry a 60s rest,
 // so a fixture that dropped the warm-up would remove that case from the
-// file entirely and silently retire the `toActualIndex(0, "rowing", 3)`
-// clamp it exercises. See the timeline comment at the "program -> armed ->
+// file entirely. See the timeline comment at the "program -> armed ->
 // frames" walk below, which spells the boundary out.
 //
 // NO HARDWARE PROVENANCE IS CLAIMED FOR THIS FIXTURE, and none should be

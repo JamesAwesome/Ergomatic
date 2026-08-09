@@ -7,8 +7,8 @@ beforeEach(() => {
 });
 
 describe("usePreferences", () => {
-  it("exposes the fetched warmupMinutes once loaded", async () => {
-    const preferences = { warmupMinutes: 10 };
+  it("exposes the fetched countdownSeconds once loaded", async () => {
+    const preferences = { countdownSeconds: 10 };
     vi.doMock("../api", () => ({
       api: vi.fn(
         async () => new Response(JSON.stringify(preferences), { status: 200 }),
@@ -45,7 +45,7 @@ describe("usePreferences", () => {
   });
 
   it("retries successfully and reaches ready state with the refetched value", async () => {
-    const preferences = { warmupMinutes: 15 };
+    const preferences = { countdownSeconds: 15 };
     let callCount = 0;
     const apiMock = vi.fn(async () => {
       callCount += 1;
@@ -92,7 +92,7 @@ describe("usePreferences", () => {
   // same silence rules as useArticleReads.ts's markRead/markUnread.
   describe("save", () => {
     it("is optimistic and fires the PUT with the patch before it resolves", async () => {
-      const preferences = { warmupMinutes: 10, startHereDismissed: false };
+      const preferences = { countdownSeconds: 10, startHereDismissed: false };
       let resolvePut: (() => void) | undefined;
       const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
         if (init?.method === "PUT") {
@@ -117,7 +117,7 @@ describe("usePreferences", () => {
       if (result.current.state !== "ready") throw new Error("expected ready");
       expect(result.current.preferences.startHereDismissed).toBe(true);
       // Untouched fields survive the patch unchanged.
-      expect(result.current.preferences.warmupMinutes).toBe(10);
+      expect(result.current.preferences.countdownSeconds).toBe(10);
       expect(apiMock).toHaveBeenCalledWith("/api/prefs", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -132,7 +132,7 @@ describe("usePreferences", () => {
     });
 
     it("a failed PUT stays silent and keeps the optimistic value for this visit", async () => {
-      const preferences = { warmupMinutes: 10, startHereDismissed: false };
+      const preferences = { countdownSeconds: 10, startHereDismissed: false };
       const apiMock = vi.fn(async (_url: string, init?: RequestInit) => {
         if (init?.method === "PUT") {
           throw new Error("offline");

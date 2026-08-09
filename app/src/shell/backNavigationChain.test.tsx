@@ -63,7 +63,7 @@ function mockHooks() {
       preferences: {
         difficulties: ["easy", "medium", "hard"],
         timeCapMinutes: 60,
-        warmupMinutes: 10,
+        warmup: null,
       },
     }),
   }));

@@ -15,14 +15,11 @@ import type { Difficulty } from "../../domain/types.js";
  *  seconds, the PM5 rest ceiling) are the SERVER's to enforce on PUT
  *  /api/prefs — this client type deliberately states the shape only.
  *
- *  MIRROR NOTE (plan Task 2/Task 4): the plan orders the server column
- *  (Task 2) before this prepend (Task 4), but the tasks were reordered, so
- *  this client copy is introduced FIRST and is currently the only
- *  declaration. Task 2 exports the identical type from
- *  `server/stores/preferences.ts` (`PreferencesRow.warmup`) — keep the two
- *  byte-identical; the client cannot import from `server/stores/` and the
- *  repo's existing convention for this hook's other fields is a
- *  hand-mirrored client type, not a shared module. */
+ *  MIRROR NOTE: this client copy must stay byte-identical to the server's
+ *  own declaration (`server/stores/preferences.ts`'s `PreferencesRow.warmup`,
+ *  Task 2) — the client cannot import from `server/stores/` and the repo's
+ *  existing convention for this hook's other fields is a hand-mirrored
+ *  client type, not a shared module. */
 export type WarmupSetting = (
   { kind: "time"; minutes: number } | { kind: "distance"; meters: number }
 ) & { restSeconds?: number };
@@ -34,23 +31,15 @@ export type WarmupSetting = (
 // START HERE block needs startHereDismissed. Purely additive each time — no
 // response shape changed, just what the client bothers to type.
 //
-// `warmup` (the warmup-setting design §2) is the field that eventually
-// REPLACES `warmupMinutes` — but the two overlap for now, on purpose:
-// Task 2 is what drops the `warmupMinutes`/`warmupOverride` columns and
-// Task 5 is what rewrites the Builder's hint line (Builder.tsx:415), this
-// hook's only reader of the old field. Removing it here would be doing
-// Task 5's work with none of Task 5's tests.
-//
-// Until Task 2 lands, the route does not send `warmup` at all, so it reads
-// `undefined` at runtime rather than `null` (hence the `?`). Every
-// consumer treats absent and null identically — `buildRun`'s own
-// `warmup?: WarmupSetting | null` parameter accepts both and prepends
-// nothing for either.
+// `warmup` (2026-08-09's warmup-setting design §2) REPLACED `warmupMinutes`
+// (Task 2 dropped the `warmupMinutes`/`warmupOverride` server columns; Task
+// 5 removed this hook's last reader of the old field, Builder.tsx's hint
+// line). The server always sends this key now — `null` means the setting
+// is OFF (the column's default), never absent.
 export interface PreferencesData {
   difficulties: Difficulty[];
   timeCapMinutes: number;
-  warmupMinutes: number;
-  warmup?: WarmupSetting | null;
+  warmup: WarmupSetting | null;
   countdownSeconds: number;
   startHereDismissed: boolean;
 }

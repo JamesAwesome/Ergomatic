@@ -5,6 +5,7 @@ import {
   buildDraft,
   saveDraft,
   loadDraft,
+  loadDraftWithNotice,
   clearDraft,
   draftSteps,
   draftMinutes,
@@ -454,5 +455,100 @@ describe("saveDraft / loadDraft / clearDraft", () => {
 
   it("exposes the storage key used", () => {
     expect(DRAFT_KEY).toBe("ergomatic.sessionDraft");
+  });
+});
+
+describe("loadDraftWithNotice / legacy wu strip (2026-08-09's warmup setting)", () => {
+  beforeEach(() => localStorage.clear());
+
+  // No real seeded workout carries a `wu` step any more (Task 3 stripped
+  // all 302) — this hand-splices one onto a REAL library workout's own
+  // steps, the exact shape a draft snapshotted into localStorage before
+  // 2026-08-09 would still hold (`buildDraft`'s deep copy of a workout
+  // that used to open with `{k:"wu", minutes}`, back when Calm Sea's own
+  // seed still authored one).
+  function legacyDraftFor(title: string, id: string): SessionDraft {
+    const d = buildDraft(draftInputFor(title, id));
+    return {
+      ...d,
+      steps: [{ k: "wu", minutes: 8 } as unknown as Step, ...d.steps],
+    };
+  }
+
+  it("strips the legacy wu step and reindexes nudges/spmOverrides/removed to the surviving positions", () => {
+    const legacy = legacyDraftFor("Calm Sea", "id-legacy-1");
+    // Index 1 is Calm Sea's own (only) work step, post-splice — nudge, spm
+    // override and removal all name it, by its PRE-strip position, before
+    // the strip runs.
+    const withState: SessionDraft = {
+      ...legacy,
+      nudges: { 1: -5 },
+      spmOverrides: { 1: 24 },
+      removed: [1],
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
+
+    const { draft, strippedWarmups } = loadDraftWithNotice();
+    expect(strippedWarmups).toBe(1);
+    expect(draft).not.toBeNull();
+    expect(draft!.steps).toStrictEqual(legacy.steps.slice(1));
+    expect(draft!.nudges).toStrictEqual({ 0: -5 });
+    expect(draft!.spmOverrides).toStrictEqual({ 0: 24 });
+    expect(draft!.removed).toStrictEqual([0]);
+
+    // Persisted immediately (a one-time strip, not a re-strip on every
+    // read): a second load sees the already-clean draft and has nothing
+    // left to report.
+    const second = loadDraftWithNotice();
+    expect(second.strippedWarmups).toBe(0);
+    expect(second.draft).toStrictEqual(draft);
+  });
+
+  it("drops a removed index that named ONLY the wu step itself, rather than mapping it onto a survivor", () => {
+    const legacy = legacyDraftFor("Calm Sea", "id-legacy-2");
+    const withState: SessionDraft = { ...legacy, removed: [0] };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
+
+    const { draft } = loadDraftWithNotice();
+    expect(draft!.removed).toStrictEqual([]);
+  });
+
+  it("drops a nudge or spm override that named ONLY the wu step itself, rather than mapping it onto a survivor", () => {
+    const legacy = legacyDraftFor("Calm Sea", "id-legacy-2b");
+    const withState: SessionDraft = {
+      ...legacy,
+      nudges: { 0: 5 },
+      spmOverrides: { 0: 24 },
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
+
+    const { draft } = loadDraftWithNotice();
+    expect(draft!.nudges).toStrictEqual({});
+    expect(draft!.spmOverrides).toStrictEqual({});
+  });
+
+  it("loadDraft (the public wrapper every other screen calls) also returns the stripped draft, with no wu step surviving", () => {
+    const legacy = legacyDraftFor("Calm Sea", "id-legacy-3");
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(legacy));
+
+    const loaded = loadDraft();
+    expect(loaded!.steps.some((s) => (s.k as string) === "wu")).toBe(false);
+    expect(loaded!.steps).toStrictEqual(legacy.steps.slice(1));
+  });
+
+  it("reports strippedWarmups: 0 and returns the exact same draft by value when there is nothing to strip", () => {
+    const d = buildDraft(draftInputFor("Calm Sea", "id-clean-1"));
+    saveDraft(d);
+
+    const { draft, strippedWarmups } = loadDraftWithNotice();
+    expect(strippedWarmups).toBe(0);
+    expect(draft).toStrictEqual(d);
+  });
+
+  it("reports strippedWarmups: 0 for the no-draft-stored case, matching loadDraft's own null", () => {
+    expect(loadDraftWithNotice()).toStrictEqual({
+      draft: null,
+      strippedWarmups: 0,
+    });
   });
 });

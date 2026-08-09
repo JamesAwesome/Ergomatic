@@ -100,21 +100,93 @@ export function saveDraft(d: SessionDraft): boolean {
   }
 }
 
+/** Strips any `wu`-kind step out of a loaded draft's `steps` (2026-08-09's
+ *  warmup setting: `wu` left the authoring union — `domain/types.ts` — but
+ *  a draft snapshotted into localStorage BEFORE that migration, at confirm
+ *  time from a workout's own steps (`buildDraft`'s deep copy), can still
+ *  carry one — the same legacy-data risk Task 2's server-side migration
+ *  strips at the DB, for the one read path that migration cannot reach).
+ *  Every index-keyed field (`nudges`, `spmOverrides`, `removed`) is
+ *  RE-KEYED to the surviving steps' new positions — leaving them pointed
+ *  at the old positions would silently misattribute a nudge or a removal
+ *  to the wrong step the instant a `wu` step (always authored first, per
+ *  every pre-migration seed) is spliced out from under them. Returns the
+ *  same `d` reference, unchanged, when there is nothing to strip — the
+ *  common case — so a caller comparing before/after by value sees no
+ *  difference and no unnecessary `saveDraft` write is ever needed. */
+function stripLegacyWarmups(d: SessionDraft): {
+  draft: SessionDraft;
+  strippedCount: number;
+} {
+  const keepIndices: number[] = [];
+  d.steps.forEach((s, i) => {
+    if ((s.k as string) !== "wu") keepIndices.push(i);
+  });
+  if (keepIndices.length === d.steps.length) {
+    return { draft: d, strippedCount: 0 };
+  }
+
+  const remap = new Map<number, number>();
+  keepIndices.forEach((oldIndex, newIndex) => remap.set(oldIndex, newIndex));
+  const reindexed = (rec: Record<number, number>): Record<number, number> => {
+    const out: Record<number, number> = {};
+    for (const [key, value] of Object.entries(rec)) {
+      const next = remap.get(Number(key));
+      if (next !== undefined) out[next] = value;
+    }
+    return out;
+  };
+
+  return {
+    draft: {
+      ...d,
+      steps: keepIndices.map((i) => d.steps[i]!),
+      nudges: reindexed(d.nudges),
+      spmOverrides: reindexed(d.spmOverrides),
+      removed: d.removed
+        .map((i) => remap.get(i))
+        .filter((i): i is number => i !== undefined),
+    },
+    strippedCount: d.steps.length - keepIndices.length,
+  };
+}
+
 /** Loads the draft. Garbage JSON or an unrecognized version is discarded
  *  (the key is cleared) rather than crashing the caller — an expand-only
  *  shape means a stale build's `v` is the only thing that ever needs this
- *  escape hatch. */
+ *  escape hatch. Delegates to `loadDraftWithNotice` (below) and drops its
+ *  strip count — every caller except ConfirmTargets (the one screen that
+ *  needs to tell the rower anything changed) just wants a clean draft. */
 export function loadDraft(): SessionDraft | null {
+  return loadDraftWithNotice().draft;
+}
+
+/** Same as `loadDraft`, plus how many legacy `wu` steps `stripLegacyWarmups`
+ *  just removed (0 for every draft saved after 2026-08-09, and for "nothing
+ *  stored"/malformed alike) — what ConfirmTargets needs to surface the
+ *  shared `droppedWarmupNotice` (`domain/bulk.ts`) copy once, the same
+ *  fact the bulk-import door states in its own words. A non-zero strip is
+ *  persisted back immediately (`saveDraft`) so the fix is one-time: every
+ *  OTHER caller's own `loadDraft()` on the same key re-reads the already-
+ *  clean value rather than re-stripping on every mount. */
+export function loadDraftWithNotice(): {
+  draft: SessionDraft | null;
+  strippedWarmups: number;
+} {
   const raw = localStorage.getItem(DRAFT_KEY);
-  if (raw === null) return null;
+  if (raw === null) return { draft: null, strippedWarmups: 0 };
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (isSessionDraft(parsed)) return parsed;
+    if (isSessionDraft(parsed)) {
+      const { draft, strippedCount } = stripLegacyWarmups(parsed);
+      if (strippedCount > 0) saveDraft(draft);
+      return { draft, strippedWarmups: strippedCount };
+    }
   } catch {
     // fall through: garbage JSON is handled the same as an unknown shape
   }
   clearDraft();
-  return null;
+  return { draft: null, strippedWarmups: 0 };
 }
 
 export function clearDraft(): void {

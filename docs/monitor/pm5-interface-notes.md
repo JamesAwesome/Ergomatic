@@ -2896,7 +2896,8 @@ separate hardware actions:**
 - **The item-12 false-verify window is now SYSTEMATIC for a warm-up-on
   rower** (added 2026-08-09 by the warmup-setting arc; the L-2 note this
   extends lives in `src/monitor/driver.ts`'s `verifyArmed` doc comment,
-  and item 12's own limit is restated at §17 item 12). 0x0031 carries one
+  and item 12's own limit is restated above in this section's item-12
+  entry). 0x0031 carries one
   duration pair, so only INTERVAL 0 can ever be compared. Until this
   change, two consecutive programs colliding on interval 0 was an accident
   of content (many seeded workouts happened to open with a 300 s `wu`

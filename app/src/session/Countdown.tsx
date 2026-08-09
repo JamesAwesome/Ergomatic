@@ -208,8 +208,11 @@ export default function Countdown() {
     // waits for `preferencesState.state === "ready"` above (for
     // `countdownSeconds`), so the value is loaded, not guessed — the phone
     // timer door never builds a run against a half-loaded preference.
-    // `?? null` covers the pre-Task-2 window where the route doesn't send
-    // the field yet; `buildRun` treats absent and null identically anyway.
+    // `preferences.warmup` is never actually `undefined` (Task 2 landed;
+    // the server always sends the key), but `buildRun`'s own parameter
+    // accepts `WarmupSetting | null | undefined` and treats the two
+    // identically, so this stays defensive rather than asserting a
+    // response shape this file doesn't itself validate.
     const warmup = preferencesState.preferences.warmup ?? null;
 
     const now = new Date();
