@@ -43,6 +43,32 @@ standing rules live here so they cannot drift between dispatches.
   machine's own default state), never "helpfully" — a fake that defaults
   a byte to what the gate wants makes every test unable to disprove the
   premise.
+- **Cite the line that would FALSIFY the claim, not the line that names
+  its subject.** The warmup spec's five blocking findings shared one
+  shape: it cited `buildDraft`'s definition but not its return statement
+  (which disproved the claim), `Phase.meters` but not the pricing
+  function that cannot price it, a component but not the `.map` that
+  contradicted the design. Before writing "X does Y", find the line
+  that would prove X does NOT do Y, and read it.
+- **"The plan pins it" may only defer a SCALAR** (a constant, a bound, a
+  key name) whose owner file is named. It may never defer a premise the
+  design's architecture depends on — that is evidence-dodging wearing a
+  deferral's clothes, and it spent three of its five uses that way in
+  one spec.
+- **A `§`-citation carries its quoted sentence.** Both of the warmup
+  spec's §-citations pointed at sections whose text contradicted the
+  claim (one refuted by its own heading) — the number was carried from
+  conversation and the section never opened. Quote one sentence from
+  the cited section beside the claim; if you cannot, you have not read
+  it.
+- **Deleting a union member: enumerate every union that shares the
+  name.** `Step`'s `"wu"` and the phase/segment vocabulary's `"wu"` are
+  different unions; a removal spec that does not list each same-named
+  member and its fate will delete the wrong one or miss a survivor.
+- **A spec that invalidates STORED data states its ordering.** Name
+  every read path that touches the old shape, whether each revalidates,
+  and what runs first (migration vs deploy vs client cache) — "a
+  one-time strip" without ordering is a white-screen with a delay.
 - **A fix that didn't fix it is evidence about the MECHANISM.** When a
   symptom survives your fix, stop iterating at that layer: enumerate
   every producer of the visible behavior (grep for setTimeout / dwell /
