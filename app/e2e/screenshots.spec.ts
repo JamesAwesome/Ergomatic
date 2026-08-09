@@ -1627,14 +1627,16 @@ async function openLogMonitorForm(
     }
   }
 
-  // A real (wall-clock) wait, not a virtual-clock tick: `MonitorRun.
-  // startedAt`/`completedAt` are real `Date.now()` stamps taken at Connect
-  // and at End, and `monitorLogTotals` rounds their difference to the
-  // nearest minute (`LogSession.tsx`) — without this, the capture reads "0
-  // MIN" the same misleading way `log-session`'s own F1 fix (above) found
-  // and corrected for the phone-timer door. 35 real seconds rounds up to a
-  // genuine, non-zero "1 MIN".
-  await page.waitForTimeout(35_000);
+  // NOTE (unlike `log-session`'s own F1 fix, above): this capture's header
+  // reads "0 MIN", not a padded "1 MIN". `MonitorRun.startedAt` is stamped
+  // only once the machine's first genuinely-rowing frame lands
+  // (`useMonitorSession.ts`'s own `declared`/`fallback` gate), not at
+  // Connect, so getting a real non-zero minute here would mean holding the
+  // LIVE surface open on an actual 30+ second wall-clock wait with no
+  // further scripted wire traffic — a real cost (this whole capture would
+  // roughly 6x in wall time) for one cosmetic digit on a screenshot that is
+  // explicitly NOT diff-asserted (this file's own header: "a human judges
+  // these"). Left honest rather than padded.
 
   // END — staged, two presses, same idiom as `connected.spec.ts`.
   await page.getByRole("button", { name: "End session" }).click();
@@ -1659,7 +1661,6 @@ async function openLogMonitorForm(
 }
 
 test("log-monitor", async ({ page }) => {
-  test.setTimeout(60_000); // a real 35s wall-clock wait, not this file's usual ~3s ones
   const title = "Screenshot Log Monitor Workout";
   await openLogMonitorForm(
     page,
@@ -1679,7 +1680,6 @@ test("log-monitor", async ({ page }) => {
 });
 
 test("log-monitor-landscape", async ({ page }) => {
-  test.setTimeout(60_000); // a real 35s wall-clock wait, not this file's usual ~3s ones
   const title = "Screenshot Log Monitor Landscape Workout";
   await openLogMonitorForm(
     page,
