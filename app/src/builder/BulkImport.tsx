@@ -29,8 +29,11 @@ interface BulkResponse {
 // pain"; a legacy five-field form with a leading number is still accepted
 // and the number discarded (see bulk.ts's parseHeader), but the four-field
 // shape is what this help teaches since the number is dead weight now.
+// No `wu` line (block2-review F1): this is the worked example a rower is
+// invited to copy, and this same screen scolds a `wu` paste with the
+// dropped-warm-ups notice below — teaching the dead keyword here would
+// trip that notice on the very first import that follows the example.
 const GRAMMAR_EXAMPLE = `Ladder Day | AT | medium | 3
-wu 10
 x4
 w 1' 6k-2 @22 r5
 r 5`;

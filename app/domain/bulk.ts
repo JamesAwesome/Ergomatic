@@ -22,8 +22,12 @@ export interface BulkResult {
 }
 
 /** The shared "N warm-ups dropped" notice copy (2026-08-09's warmup-setting
- *  spec §6: "the import screen gains a notice line"; the plan's own global
- *  constraints section pins this exact wording, N interpolated). A session
+ *  spec §6: "the import screen gains a notice line"). The plan's own global
+ *  constraints section pins the literal `N warm-up lines dropped. Warm-ups
+ *  are a setting now.` — this deliberately DIVERGES from it at `n === 1`
+ *  ("1 warm-up line dropped", not "1 warm-up lines dropped"): the pinned
+ *  wording was never grammar-checked at its own singular case, and the
+ *  pluralized sentence is the better one (block2-review F4). A session
  *  draft loaded from localStorage can carry the SAME fact for the SAME
  *  reason — a `wu` step recorded before the setting shipped — so
  *  `session/draft.ts`'s legacy-draft strip imports this rather than
