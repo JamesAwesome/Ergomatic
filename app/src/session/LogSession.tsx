@@ -457,6 +457,22 @@ function useLogForm(onSaved: () => void) {
       notes: notes.trim().length > 0 ? notes : null,
     };
     if (outsidePlan) body.advancesPlan = false;
+    // Branch review Minor: the server's own `deviceName` band is 1..64
+    // chars (`data.ts`), but `webBluetooth.ts`/`capacitorBle.ts` both use
+    // `device.name ?? "PM5"` (nullish, not `||`) — an empty advertised GATT
+    // name (`""`) or one past 64 chars reaches `createMonitorRun` and this
+    // body unguarded, and would otherwise 400 the WHOLE save with no
+    // recoverable retry (the 400-retry above only ever strips `workoutId`).
+    // Same "drop the field, never block the save" rule this branch already
+    // applies to avgHr/actualSplit/spm (`logDraft.ts`'s `buildMonitorLogSteps`)
+    // — the save always goes through; the server reads `deviceName` back as
+    // null, same as any pre-7C row.
+    if (
+      typeof body.deviceName === "string" &&
+      (body.deviceName.length === 0 || body.deviceName.length > 64)
+    ) {
+      delete body.deviceName;
+    }
     try {
       let res = await postLog(body);
       // Retry once with `workoutId: null` ONLY when the 400 is specifically
