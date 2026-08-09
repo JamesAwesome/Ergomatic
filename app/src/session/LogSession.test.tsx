@@ -2109,6 +2109,39 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(clearSpy).toHaveBeenCalledTimes(1);
   });
 
+  // Branch review Minor: `webBluetooth.ts`/`capacitorBle.ts` both use
+  // `device.name ?? "PM5"` — nullish, not `||` — so an empty advertised GATT
+  // name reaches `MonitorRun.deviceName` verbatim, and a >64-char one is
+  // equally possible. The server's own band is 1..64 chars
+  // (`data.ts`), and without a client-side guard either would 400 the
+  // WHOLE save with no recoverable retry (this hook's 400-retry only ever
+  // strips `workoutId`) — the rower's only exit would be losing the
+  // session to Discard. `useLogForm`'s `submit` now drops the key rather
+  // than blocking the save, same "own field, never the log" rule the
+  // branch already applies to avgHr/actualSplit/spm.
+  it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {
+    const { run: emptyRun, workout } = buildMonitorFixture({ deviceName: "" });
+    saveMonitorRun(emptyRun);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-empty" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const body = parsedBodies(apiFn)[0]!;
+    expect("deviceName" in body).toBe(false);
+  });
+
   it("a failed save does NOT clear MonitorRun — the record survives so a retry can still prefill", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
