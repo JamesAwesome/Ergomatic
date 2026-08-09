@@ -11,7 +11,12 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // 20–24 the steady range, 18 only as a ladder's bottom rung and 26
 // only as a ladder's top; time-computable totals end in 0 or 5.
 // Ordering here IS the library browsing order within the type block.
-export const O2_WORKOUTS: WorkoutInput[] = [
+// TEMPORARY SHIM (2026-08-09, the warmup-setting spec, Task 1): this
+// array's `wu` steps make it structurally incompatible with the narrowed
+// `Step` union now that "wu" has left it — Task 3 deletes every `{ k:
+// "wu", ... }` line below (and this cast) when it strips the seeded
+// library's warmups.
+export const O2_WORKOUTS = [
   // ------------------------------------------------------- easy / pain 1
   {
     // O2: 2×4' at 6k+12 with 1' rest — eight easy minutes, already broken.
@@ -2315,4 +2320,4 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       },
     ],
   },
-];
+] as unknown as WorkoutInput[]; // Task 3 deletes these lines

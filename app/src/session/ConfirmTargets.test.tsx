@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { resolveSplit } from "../../domain/pace.js";
 import { fmtSplit } from "../../domain/format.js";
-import type { WorkoutType } from "../../domain/types.js";
+import type { Step, WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
   loadDraft,
@@ -379,7 +379,9 @@ describe("ConfirmTargets", () => {
     title: "Kitchen Sink",
     type: "TR",
     steps: [
-      { k: "wu", minutes: 5 },
+      // Task 5 shim: "wu" left the Step union but ConfirmTargets' own
+      // step-rendering (this suite's subject) hasn't yet.
+      { k: "wu", minutes: 5 } as unknown as Step,
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },

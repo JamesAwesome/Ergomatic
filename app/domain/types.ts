@@ -16,8 +16,13 @@ export type PaceRef = SplitRef | EffortRef;
 export type WorkDuration =
   | { kind: "time"; minutes: number } // 0.5 steps allowed, > 0
   | { kind: "distance"; meters: number }; // integer, 100..42195
+// "wu" left this union 2026-08-09 (the warmup-setting spec): warm-ups are a
+// per-user SETTING now, prepended at buildRun (engine.ts) as an EnginePhase
+// the preference alone produces — never an authored step. That phase union
+// keeps its own "warmup" member (expand.ts's Phase/EnginePhase, unrelated to
+// this one) untouched; validateSteps below is the permanent runtime guard
+// for stored/imported data that can still present the retired shape.
 export type Step =
-  | { k: "wu"; minutes: number }
   | { k: "reps"; count: number } // 1..12, at most one per workout
   | {
       k: "w";

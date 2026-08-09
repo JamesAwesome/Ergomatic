@@ -165,7 +165,7 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     difficulty: "medium",
     pain: 2,
     steps: [
-      { k: "wu", minutes: 5 },
+      { k: "r", minutes: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },

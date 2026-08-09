@@ -11,7 +11,12 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // instead of rep-count tweaks, and every time-computable total lands on
 // a 0/5 minute. Distance sets estimate from the nominal 2k baseline and
 // are exempt from the round-total rule.
-export const AN_WORKOUTS: WorkoutInput[] = [
+// TEMPORARY SHIM (2026-08-09, the warmup-setting spec, Task 1): this
+// array's `wu` steps make it structurally incompatible with the narrowed
+// `Step` union now that "wu" has left it — Task 3 deletes every `{ k:
+// "wu", ... }` line below (and this cast) when it strips the seeded
+// library's warmups.
+export const AN_WORKOUTS = [
   // ------------------------------------------------- medium, pain 3 (1–11)
   {
     // AN: 5×30 s at 2k-3 with 1:3 rest — five short strikes with room to breathe between them.
@@ -1665,4 +1670,4 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       },
     ],
   },
-];
+] as unknown as WorkoutInput[]; // Task 3 deletes these lines

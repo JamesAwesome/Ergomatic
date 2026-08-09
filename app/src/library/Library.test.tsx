@@ -5,7 +5,9 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
+import type { Step } from "../../domain/types.js";
 
+// Task 4/5 shim: "wu" left the Step union but these fixtures haven't.
 const WORKOUTS: LibraryWorkout[] = [
   {
     id: "w-at",
@@ -13,7 +15,7 @@ const WORKOUTS: LibraryWorkout[] = [
     type: "AT",
     difficulty: "medium",
     pain: 3,
-    steps: [{ k: "wu", minutes: 30 }],
+    steps: [{ k: "wu", minutes: 30 } as unknown as Step],
     isGlobal: true,
     lastDoneDaysAgo: 5,
   },
@@ -23,7 +25,7 @@ const WORKOUTS: LibraryWorkout[] = [
     type: "O2",
     difficulty: "easy",
     pain: 1,
-    steps: [{ k: "wu", minutes: 20 }],
+    steps: [{ k: "wu", minutes: 20 } as unknown as Step],
     isGlobal: true,
     lastDoneDaysAgo: 40,
   },
@@ -33,7 +35,7 @@ const WORKOUTS: LibraryWorkout[] = [
     type: "AN",
     difficulty: "hard",
     pain: 5,
-    steps: [{ k: "wu", minutes: 60 }],
+    steps: [{ k: "wu", minutes: 60 } as unknown as Step],
     isGlobal: true,
     lastDoneDaysAgo: null,
   },
@@ -45,7 +47,7 @@ const CUSTOM_WORKOUT: LibraryWorkout = {
   type: "O2",
   difficulty: "medium",
   pain: 2,
-  steps: [{ k: "wu", minutes: 25 }],
+  steps: [{ k: "wu", minutes: 25 } as unknown as Step],
   isGlobal: false,
   lastDoneDaysAgo: null,
 };

@@ -17,6 +17,7 @@ import {
   type MonitorRun,
 } from "../monitor/monitorRun";
 import { compileProgram } from "../../domain/monitor/program.js";
+import type { Step } from "../../domain/types.js";
 import { useStartWorkout, type StartableWorkout } from "./useStartWorkout";
 
 // Realistic fixture (repo convention): shaped like a real seeded library
@@ -26,7 +27,7 @@ const WORKOUT: StartableWorkout = {
   title: "Ladder Sets",
   type: "AT",
   steps: [
-    { k: "wu", minutes: 10 },
+    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "distance", meters: 2500 },
@@ -109,7 +110,7 @@ describe("useStartWorkout", () => {
         id: "w-other",
         title: "Other",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 }],
+        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
       }),
     );
     const runA = completedRunFor(draftA);
@@ -132,7 +133,7 @@ describe("useStartWorkout", () => {
         id: "w-other",
         title: "Other",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 }],
+        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
       }),
     );
     saveDraft(notStarted);
@@ -188,7 +189,7 @@ describe("useStartWorkout", () => {
         id: "w-other",
         title: "Other",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 }],
+        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
       }),
     );
     saveDraft(draftA);

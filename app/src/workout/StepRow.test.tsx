@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import StepRow from "./StepRow";
+import type { Step } from "../../domain/types.js";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -46,7 +47,9 @@ describe("StepRow durations (house clock format)", () => {
   it("gives a warm-up an accessible name a screen reader can say", () => {
     renderStep(
       <StepRow
-        step={{ k: "wu", minutes: 65 }}
+        step={
+          { k: "wu", minutes: 65 } as unknown as Exclude<Step, { k: "reps" }>
+        }
         baselines={null}
         nudge={0}
         onNudge={() => {}}

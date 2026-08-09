@@ -141,7 +141,7 @@ describe("buildLogSteps", () => {
     // Lightning's EFFORT step (0.5' @ MAX), Filling Low's split DISTANCE
     // step (2000m @ 6k+4). No reps marker, so each appears exactly once.
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "wu", minutes: 5 } as unknown as Step,
       workStepFrom("Hoarfrost"),
       workStepFrom("Fork Lightning"),
       workStepFrom("Filling Low"),
@@ -612,8 +612,8 @@ describe("buildLogSteps", () => {
         title: "Wrong Draft",
         type: "O2",
         steps: [
-          { k: "wu", minutes: 5 },
-          { k: "wu", minutes: 3 },
+          { k: "wu", minutes: 5 } as unknown as Step,
+          { k: "wu", minutes: 3 } as unknown as Step,
         ],
       });
       expect(buildLogSteps(run, wrongDraft)).toStrictEqual([
@@ -783,7 +783,7 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
       title: "First 6k",
       type: "O2",
       steps: [
-        { k: "wu", minutes: 5 },
+        { k: "wu", minutes: 5 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "distance", meters: 6000 },
@@ -825,7 +825,7 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
       title: "Seed Fixture",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 5 },
+        { k: "wu", minutes: 5 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 2 },
@@ -929,7 +929,7 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     // Low's split DISTANCE step — no single library workout mixes all
     // three, so this is the realistic way to exercise all three at once.
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "wu", minutes: 5 } as unknown as Step,
       workStepFrom("Hoarfrost"),
       workStepFrom("Fork Lightning"),
       workStepFrom("Filling Low"),
@@ -1261,7 +1261,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       title: "Walk 4 (warmup variant)",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 1 },
+        { k: "wu", minutes: 1 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "distance", meters: 100 },
@@ -1562,7 +1562,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           duration: { kind: "distance", meters: 100 },
           ref: { base: "6k", off: 0 },
         },
-        { k: "wu", minutes: 1 },
+        { k: "wu", minutes: 1 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "distance", meters: 200 },
@@ -1804,7 +1804,7 @@ describe("buildManualLogSteps", () => {
 
   it("wu/rest steps in an authored workout (not just a reps-expanded run) never produce a LogStep", () => {
     const steps: Step[] = [
-      { k: "wu", minutes: 5 },
+      { k: "wu", minutes: 5 } as unknown as Step,
       {
         k: "w",
         duration: { kind: "time", minutes: 10 },

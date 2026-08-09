@@ -7,7 +7,12 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // rate-change pieces), not ±1' tweaks; every time-computable total lands on
 // a 0 or 5; continuous threshold singles stay rare. Ordering here IS the
 // library browsing order within the type block.
-export const AT_WORKOUTS: WorkoutInput[] = [
+// TEMPORARY SHIM (2026-08-09, the warmup-setting spec, Task 1): this
+// array's `wu` steps make it structurally incompatible with the narrowed
+// `Step` union now that "wu" has left it — Task 3 deletes every `{ k:
+// "wu", ... }` line below (and this cast) when it strips the seeded
+// library's warmups.
+export const AT_WORKOUTS = [
   {
     // AT: 10' continuous at 6k+4 — one short threshold piece, in and out.
     title: "Occluded Front",
@@ -2115,4 +2120,4 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       },
     ],
   },
-];
+] as unknown as WorkoutInput[]; // Task 3 deletes these lines

@@ -106,9 +106,11 @@ function isStartBlocked(d: SessionDraft, baselines: Baselines | null): boolean {
 }
 
 function kindLabel(step: Step): string {
+  // "wu" left the Step union 2026-08-09 (Task 1) — this switch's old "wu"
+  // arm ("WARM-UP") is dead: Step can no longer structurally be "wu", and
+  // Task 5 adds the preference-sourced WARM-UP row as new code elsewhere
+  // in this file, not by reviving this arm.
   switch (step.k) {
-    case "wu":
-      return "WARM-UP";
     case "r":
       return "REST";
     case "w":
@@ -223,11 +225,20 @@ export default function ConfirmTargets() {
   function stepDuration(i: number, deltaSeconds: number) {
     commit((prev) => {
       const step = prev.steps[i];
-      if (step.k === "wu" || step.k === "r") {
+      // TEMPORARY SHIM (2026-08-09, Task 1): "wu" left the Step union, so
+      // this arm is unreachable from a properly-typed draft today — kept
+      // (rather than deleted) because a legacy localStorage draft or an
+      // unstripped stored workout can still carry a wu step until Task 5's
+      // draft loader / Task 2's migration land.
+      if (step.k === "r" || (step.k as string) === "wu") {
+        const minutes = (step as unknown as { minutes: number }).minutes;
         const seconds = snapDurationSeconds(
-          Math.round(step.minutes * 60) + deltaSeconds,
+          Math.round(minutes * 60) + deltaSeconds,
         );
-        return withStepAt(prev, i, { ...step, minutes: seconds / 60 });
+        return withStepAt(prev, i, {
+          ...step,
+          minutes: seconds / 60,
+        } as unknown as Step);
       }
       if (step.k === "w" && step.duration.kind === "time") {
         const seconds = snapDurationSeconds(
@@ -460,12 +471,19 @@ function ConfirmStepRow({
         )}
       </div>
 
-      {(step.k === "wu" || step.k === "r") && (
+      {
+        // TEMPORARY SHIM (2026-08-09, Task 1): see stepDuration's own note
+        // above — "wu" left the Step union but a legacy/unstripped step can
+        // still reach this render until Task 2/5 land.
+      }
+      {(step.k === "r" || (step.k as string) === "wu") && (
         <div className="step-editor-row">
           <span className="step-editor-row-label">DUR</span>
           <Stepper
             label={`${rowLabel} duration`}
-            value={fmtDuration(step.minutes)}
+            value={fmtDuration(
+              (step as unknown as { minutes: number }).minutes,
+            )}
             onDecrement={() => onDurationStep(-DURATION_STEP_SECONDS)}
             onIncrement={() => onDurationStep(DURATION_STEP_SECONDS)}
           />

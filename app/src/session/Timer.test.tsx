@@ -59,7 +59,7 @@ function kindMatrixDraft(): SessionDraft {
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
     steps: [
-      { k: "wu", minutes: 4 },
+      { k: "wu", minutes: 4 } as unknown as Step,
       splitWork,
       {
         k: "w",
@@ -84,7 +84,7 @@ function testKindDraft(): SessionDraft {
     title: "Sprint Check",
     type: "AN",
     steps: [
-      { k: "wu", minutes: 2 },
+      { k: "wu", minutes: 2 } as unknown as Step,
       { k: "test", label: "2k test" },
     ],
   });
@@ -117,7 +117,7 @@ function onboardingShapedDraft(): SessionDraft {
     title: "First 6k",
     type: "O2",
     steps: [
-      { k: "wu", minutes: 10 },
+      { k: "wu", minutes: 10 } as unknown as Step,
       {
         k: "w",
         duration: { kind: "distance", meters: 6000 },
@@ -766,7 +766,7 @@ describe("Timer — controls", () => {
       id: "id-one-phase",
       title: "One And Done",
       type: "AN",
-      steps: [{ k: "wu", minutes: 1 }],
+      steps: [{ k: "wu", minutes: 1 } as unknown as Step],
     });
     const run = buildAndSaveRun(draft);
     runAtIndex(run, 0);
@@ -793,7 +793,7 @@ describe("Timer — controls", () => {
       id: "id-one-phase-2",
       title: "One And Done Too",
       type: "AN",
-      steps: [{ k: "wu", minutes: 1 }],
+      steps: [{ k: "wu", minutes: 1 } as unknown as Step],
     });
     const run = buildAndSaveRun(draft);
     runAtIndex(run, 0);
@@ -824,7 +824,7 @@ describe("Timer — controls", () => {
       id: "id-one-phase-3",
       title: "One And Done Three",
       type: "AN",
-      steps: [{ k: "wu", minutes: 1 }],
+      steps: [{ k: "wu", minutes: 1 } as unknown as Step],
     });
     const run = buildAndSaveRun(draft);
     runAtIndex(run, 0);
@@ -1082,7 +1082,7 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
       title: "Final Piece",
       type: "TR",
       steps: [
-        { k: "wu", minutes: 2 },
+        { k: "wu", minutes: 2 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "distance", meters: 500 },
@@ -1199,8 +1199,8 @@ describe("Timer — the repaint loop", () => {
       title: "Quick Check",
       type: "AN",
       steps: [
-        { k: "wu", minutes: 0.5 }, // 30s
-        { k: "wu", minutes: 1 },
+        { k: "wu", minutes: 0.5 } as unknown as Step, // 30s
+        { k: "wu", minutes: 1 } as unknown as Step,
       ],
     });
     buildAndSaveRun(draft);

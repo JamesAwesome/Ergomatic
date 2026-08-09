@@ -90,7 +90,7 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
     id: "id-doldrums-fixture",
     title: hoarfrost.title,
     type,
-    steps: [{ k: "wu", minutes: 4 }, timeWork, distanceWork],
+    steps: [{ k: "wu", minutes: 4 } as unknown as Step, timeWork, distanceWork],
   });
   const started = startDraft(draft);
   saveDraft(started);
@@ -258,7 +258,7 @@ function manualWorkoutFixture(id = "id-manual-fixture"): LibraryWorkout {
     type: hoarfrost.type as WorkoutType,
     difficulty: hoarfrost.difficulty,
     pain: hoarfrost.pain,
-    steps: [{ k: "wu", minutes: 4 }, timeWork, distanceWork],
+    steps: [{ k: "wu", minutes: 4 } as unknown as Step, timeWork, distanceWork],
     isGlobal: true,
     lastDoneDaysAgo: 2,
   };
@@ -312,7 +312,7 @@ function buildMonitorFixture(
     id: MONITOR_WORKOUT_ID,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [{ k: "wu", minutes: 4 }, timeWork, distanceWork],
+    steps: [{ k: "wu", minutes: 4 } as unknown as Step, timeWork, distanceWork],
   });
   const started = startDraft(draft);
   const built = buildRun(started, BASELINES, FIXED_NOW);
@@ -593,7 +593,7 @@ describe("LogSession: prefill from a real completed run", () => {
       title: "Both Bases",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 4 },
+        { k: "wu", minutes: 4 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 3 },
@@ -633,7 +633,7 @@ describe("LogSession: prefill from a real completed run", () => {
       title: "Nudged",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 4 },
+        { k: "wu", minutes: 4 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 3 },
@@ -688,7 +688,7 @@ describe("LogSession: prefill from a real completed run", () => {
       id: "id-fork-lightning-fixture",
       title: forkLightning.title,
       type: forkLightning.type as WorkoutType,
-      steps: [{ k: "wu", minutes: 4 }, effortWork],
+      steps: [{ k: "wu", minutes: 4 } as unknown as Step, effortWork],
     });
     const started = startDraft(draft);
     saveDraft(started);
@@ -1715,7 +1715,7 @@ describe("LogSession: the manual door (Task 3)", () => {
       difficulty: "hard",
       pain: 4,
       steps: [
-        { k: "wu", minutes: 5 },
+        { k: "wu", minutes: 5 } as unknown as Step,
         { k: "test", label: "2k test" },
       ],
       isGlobal: true,
@@ -1867,7 +1867,7 @@ describe("LogSession: the manual door (Task 3)", () => {
       difficulty: "medium",
       pain: 3,
       steps: [
-        { k: "wu", minutes: 4 },
+        { k: "wu", minutes: 4 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 3 },

@@ -37,7 +37,7 @@ function completeDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
     steps: [
-      { k: "wu", minutes: 4 },
+      { k: "wu", minutes: 4 } as unknown as Step,
       splitWork,
       {
         k: "w",
@@ -89,7 +89,7 @@ function multiActualDraftAndRun(): { draft: SessionDraft; run: SessionRun } {
     title: "Two Pieces",
     type: "TR",
     steps: [
-      { k: "wu", minutes: 4 },
+      { k: "wu", minutes: 4 } as unknown as Step,
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },

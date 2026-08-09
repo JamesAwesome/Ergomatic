@@ -392,7 +392,13 @@ export function toSteps(
         return;
       }
       steps.push(
-        row.kind === "wu" ? { k: "wu", minutes: n } : { k: "r", minutes: n },
+        // TEMPORARY SHIM (2026-08-09, the warmup-setting spec, Task 1):
+        // "wu" left the Step union but the builder's own row model hasn't
+        // yet (Task 5 removes the wu row type from builderState/StepCard/
+        // StepEditor) — a wu row can still be constructed here today.
+        row.kind === "wu"
+          ? ({ k: "wu", minutes: n } as unknown as Step)
+          : { k: "r", minutes: n },
       );
       return;
     }
@@ -556,8 +562,13 @@ function formatDurationValue(d: WorkDuration): {
 
 function stepToRow(s: Extract<Step, { k: "wu" | "w" | "r" }>): BuilderRow {
   const row = newRow(s.k);
-  if (s.k === "wu" || s.k === "r") {
-    row.durValue = fmtDuration(s.minutes);
+  // TEMPORARY SHIM (2026-08-09, Task 1): "wu" left the Step union, so this
+  // branch is unreachable from a properly-typed Step[] today — but legacy
+  // localStorage drafts can still carry a wu step until Task 5's loader
+  // strips them, so the cast keeps this defensive branch alive rather than
+  // deleting Task 5's own cleanup target.
+  if (s.k === "r" || (s.k as string) === "wu") {
+    row.durValue = fmtDuration((s as unknown as { minutes: number }).minutes);
     row.durUnit = "min";
   } else {
     const { durValue, durUnit } = formatDurationValue(s.duration);

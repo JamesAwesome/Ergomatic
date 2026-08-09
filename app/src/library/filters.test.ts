@@ -14,6 +14,7 @@ import {
   type Filters,
 } from "./filters";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import type { Step } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -124,8 +125,15 @@ describe("applyFilters", () => {
   });
 
   it("unions duration buckets", () => {
-    const short = w({ id: "short", steps: [{ k: "wu", minutes: 10 }] });
-    const long = w({ id: "long", steps: [{ k: "wu", minutes: 70 }] });
+    // Task 4/5 shim: "wu" left the Step union but these fixtures haven't.
+    const short = w({
+      id: "short",
+      steps: [{ k: "wu", minutes: 10 } as unknown as Step],
+    });
+    const long = w({
+      id: "long",
+      steps: [{ k: "wu", minutes: 70 } as unknown as Step],
+    });
     const f = toggleDuration(EMPTY_FILTERS, "<30");
     expect(
       applyFilters([short, long], f, baselines).map((r) => r.id),

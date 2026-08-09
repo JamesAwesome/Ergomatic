@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type { Baselines, WorkoutType } from "../../domain/types.js";
+import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import { buildDraft, withNudge, type SessionDraft } from "./draft";
 import {
   buildRun,
@@ -159,8 +159,10 @@ describe("buildRun", () => {
       workoutId: null,
       title: "2k test day",
       type: "TR",
+      // Task 4 shim: "wu" left the Step union but buildRun's own producer
+      // for warmup phases (this suite's subject) hasn't landed yet.
       steps: [
-        { k: "wu", minutes: 5 },
+        { k: "wu", minutes: 5 } as unknown as Step,
         { k: "test", label: "2k Test" },
       ],
       nudges: {},
@@ -193,8 +195,10 @@ describe("buildRun", () => {
       workoutId: null,
       title: "hand-edited",
       type: "TR",
+      // Task 4 shim: "wu" left the Step union but buildRun's own producer
+      // for warmup phases (this suite's subject) hasn't landed yet.
       steps: [
-        { k: "wu", minutes: 5 },
+        { k: "wu", minutes: 5 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 2 },
@@ -537,8 +541,10 @@ describe("totalRemainingSeconds", () => {
       workoutId: null,
       title: "2k test day",
       type: "TR",
+      // Task 4 shim: "wu" left the Step union but buildRun's own producer
+      // for warmup phases (this suite's subject) hasn't landed yet.
       steps: [
-        { k: "wu", minutes: 1 },
+        { k: "wu", minutes: 1 } as unknown as Step,
         { k: "test", label: "2k Test" },
       ],
       nudges: {},
