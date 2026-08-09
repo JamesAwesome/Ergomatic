@@ -124,6 +124,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     heartRateBpm: 164,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
+    intervalAccrued: null,
     state: "rowing",
     rowingActive: true,
     ...overrides,

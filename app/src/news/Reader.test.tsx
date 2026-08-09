@@ -295,16 +295,28 @@ describe("Reader", () => {
     expect(screen.getByText("News Screen")).toBeVisible();
   });
 
-  // ui-notes round, item 1 — root cause: NEXT used to PUSH with
-  // `state={{from: location.pathname}}` (the article being LEFT, not the
-  // chain's true origin), so mid-chain the real origin was gone and
-  // BACK/✕ fell back to /news. The fix threads `location.state.from`
-  // through unchanged on every hop.
-  describe("the reading chain remembers its origin (ui-notes round, item 1)", () => {
-    it("carries a ✕ close control resolving the same origin BACK does", () => {
+  // BACK-walks-the-stack round (James's 2026-08-09 recordings, taken
+  // together): report 1 (pre-✕) — escaping N articles took N backs and the
+  // origin got lost — shipped the ui-notes round's replace-collapse + ✕
+  // (#66/#69), which made BACK and ✕ resolve the SAME single value. Report
+  // 2, same day: ← BACK from a cross-linked article jumped straight to
+  // Today instead of the previous article — exactly what a single shared
+  // value can't avoid once the two doors need to disagree. This round
+  // REVERSES the collapse: NEXT/ArticleLink push again, carrying a
+  // walkable `trail` array (not just a `back`/`origin` PAIR of scalars —
+  // see `useReadingTrail`'s own doc comment for why a plain pair can't
+  // support a SECOND ← BACK press correctly) plus `origin`. ← BACK
+  // retraces the stack one article at a time while ✕ still exits directly
+  // to the true origin from any depth.
+  describe("the reading chain: BACK retraces the stack, ✕ exits to the origin (BACK-walks-the-stack round)", () => {
+    it("on the first article, BACK and ✕ both resolve the entry surface — there is no earlier article to retrace to yet", () => {
       mockUseArticleReads.mockReturnValue(readyState([]));
       renderReaderWithState("/news/baselines", { from: "/today" });
 
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/today",
+      );
       const close = screen.getByRole("link", { name: "Close" });
       expect(close).toHaveAttribute("href", "/today");
       // Today's own unlogged-row ✕ idiom (Today.tsx, ui-fix round Task 3),
@@ -313,28 +325,35 @@ describe("Reader", () => {
       expect(close).toHaveClass("today-unlogged-discard");
     });
 
-    it("the ✕ close control falls back to /news, same as BACK, when there is no origin in state", () => {
+    it("both BACK and the ✕ close control fall back to /news when there is no state at all", () => {
       mockUseArticleReads.mockReturnValue(readyState([]));
       renderReader("/news/baselines");
 
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/news",
+      );
       expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
         "href",
         "/news",
       );
     });
 
-    it("NEXT preserves the origin across the whole chain: after two hops, BACK's href and the ✕'s target both still point at the ORIGINAL origin, not the article just left", async () => {
+    it("NEXT preserves the origin across the whole chain while BACK retraces one article per hop — the reversal this round makes: BACK no longer jumps straight to the origin", async () => {
       mockUseArticleReads.mockReturnValue(readyState([]));
       const user = userEvent.setup();
       renderReaderWithState("/news/workout-types", { from: "/today" });
 
       await user.click(screen.getByRole("link", { name: /NEXT/ }));
       await screen.findByRole("heading", { name: BASELINES_TITLE });
-      // Pre-fix behavior this guards against: NEXT set `from` to
-      // "/news/workout-types" (the article just left) instead of carrying
-      // "/today" through — the assertion below would see "/news/workout-
-      // types", not "/today", if that regressed.
+      // Pre-reversal (ui-notes round) behavior this guards against: BACK
+      // here used to read "/today" (the collapsed origin) — it must now
+      // read the article just left instead.
       expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/news/workout-types",
+      );
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
         "href",
         "/today",
       );
@@ -343,7 +362,7 @@ describe("Reader", () => {
       await screen.findByRole("heading", { name: PICKING_A_WORKOUT_TITLE });
       expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
         "href",
-        "/today",
+        "/news/baselines",
       );
       expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
         "href",
@@ -351,7 +370,7 @@ describe("Reader", () => {
       );
     });
 
-    it("NEXT omits `from` (falls back to /news) rather than hardcoding a resolved origin, when it entered with none", async () => {
+    it("BACK retraces to the previous article even when no origin was ever known, and ✕ falls back to that same article — origin defaults to `from` at every hop, not only the very first", async () => {
       mockUseArticleReads.mockReturnValue(readyState([]));
       const user = userEvent.setup();
       renderReader("/news/workout-types");
@@ -361,11 +380,55 @@ describe("Reader", () => {
 
       expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
         "href",
-        "/news",
+        "/news/workout-types",
+      );
+      // No origin was ever recorded (direct entry, no state) — the
+      // defaulting rule ("origin defaults to `from`") isn't special-cased
+      // to only the very first hop, so ✕ resolves to workout-types too:
+      // the first article the rower actually saw functions as their
+      // reading session's own origin, direct URL entry or not.
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/news/workout-types",
       );
     });
 
-    it("NEXT replaces the current history entry — one browser BACK afterward lands on the origin, not the just-departed article", async () => {
+    // The regression a click-through test alone would have caught before
+    // the e2e suite did: every OTHER test in this block only ever presses
+    // ← BACK ONCE and asserts its href. ← BACK PUSHES a fresh entry rather
+    // than truly going back (see useReadingTrail's own doc comment), so a
+    // href-only assertion can't distinguish "retraces correctly" from
+    // "landed on the right article but silently dropped its OWN trail,
+    // stranding a SECOND press" — clicking twice in sequence is the only
+    // way to prove the popped trail was actually threaded forward.
+    it("pressing ← BACK a SECOND time (from the article the first press landed on) keeps retracing — the actual click, not just the first press's href", async () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      const user = userEvent.setup();
+      renderReaderWithState("/news/workout-types", { from: "/today" });
+
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      await screen.findByRole("heading", { name: BASELINES_TITLE });
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      await screen.findByRole("heading", { name: PICKING_A_WORKOUT_TITLE });
+
+      await user.click(screen.getByRole("link", { name: /BACK/ }));
+      expect(
+        await screen.findByRole("heading", { name: BASELINES_TITLE }),
+      ).toBeVisible();
+
+      // The press that a href-only assertion can't see failing: BACK from
+      // here must reach workout-types, not fall through to /news because
+      // the previous press's own trail got lost along the way.
+      await user.click(screen.getByRole("link", { name: /BACK/ }));
+      expect(
+        await screen.findByRole("heading", { name: WORKOUT_TYPES_TITLE }),
+      ).toBeVisible();
+
+      await user.click(screen.getByRole("link", { name: /BACK/ }));
+      expect(await screen.findByText("Today Screen")).toBeVisible();
+    });
+
+    it("NEXT pushes a new history entry — one browser BACK from two hops in lands on the article just left, not the origin", async () => {
       mockUseArticleReads.mockReturnValue(readyState([]));
       const router = createMemoryRouter(
         [
@@ -382,19 +445,175 @@ describe("Reader", () => {
         },
       );
       render(<RouterProvider router={router} />);
-      await screen.findByRole("heading", { name: WORKOUT_TYPES_TITLE });
+      expect(
+        await screen.findByRole("heading", { name: WORKOUT_TYPES_TITLE }),
+      ).toBeVisible();
 
       await userEvent.click(screen.getByRole("link", { name: /NEXT/ }));
-      await screen.findByRole("heading", { name: BASELINES_TITLE });
+      expect(
+        await screen.findByRole("heading", { name: BASELINES_TITLE }),
+      ).toBeVisible();
+      await userEvent.click(screen.getByRole("link", { name: /NEXT/ }));
+      expect(
+        await screen.findByRole("heading", { name: PICKING_A_WORKOUT_TITLE }),
+      ).toBeVisible();
+
+      // The reversal: workout-types and baselines were PUSHED past, not
+      // replaced — one BACK from depth 2 lands back on baselines (the
+      // article just left), never straight through to /today.
+      router.navigate(-1);
+      expect(
+        await screen.findByRole("heading", { name: BASELINES_TITLE }),
+      ).toBeVisible();
 
       router.navigate(-1);
-      // The workout-types entry was REPLACED, not pushed alongside — one
-      // BACK from baselines lands on /today (the entry before it), never
-      // back on workout-types.
-      await screen.findByText("Today Screen");
       expect(
-        screen.queryByRole("heading", { name: WORKOUT_TYPES_TITLE }),
-      ).not.toBeInTheDocument();
+        await screen.findByRole("heading", { name: WORKOUT_TYPES_TITLE }),
+      ).toBeVisible();
+
+      router.navigate(-1);
+      expect(await screen.findByText("Today Screen")).toBeVisible();
+    });
+
+    it("✕ exits directly to the origin from depth 2, skipping the stack entirely", async () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      const user = userEvent.setup();
+      const router = createMemoryRouter(
+        [
+          { path: "/today", Component: () => <p>Today Screen</p> },
+          { path: "/news/:slug", Component: Reader },
+          { path: "/news", Component: () => <p>News Screen</p> },
+        ],
+        {
+          initialEntries: [
+            "/today",
+            { pathname: "/news/workout-types", state: { from: "/today" } },
+          ],
+          initialIndex: 1,
+        },
+      );
+      render(<RouterProvider router={router} />);
+      expect(
+        await screen.findByRole("heading", { name: WORKOUT_TYPES_TITLE }),
+      ).toBeVisible();
+
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      expect(
+        await screen.findByRole("heading", { name: BASELINES_TITLE }),
+      ).toBeVisible();
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      expect(
+        await screen.findByRole("heading", { name: PICKING_A_WORKOUT_TITLE }),
+      ).toBeVisible();
+
+      await user.click(screen.getByRole("link", { name: "Close" }));
+      expect(await screen.findByText("Today Screen")).toBeVisible();
+    });
+
+    it("guards `back` and `origin` independently: an unsafe origin falls back to a safe `back` rather than poisoning it", () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      renderReaderWithState("/news/baselines", {
+        from: "/today",
+        origin: "//evil.example",
+      });
+
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+      // The unsafe `origin` is discarded outright; ✕ falls back to `back`
+      // ("/today"), not to /news — `back` itself is unaffected by the bad
+      // `origin` value.
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+    });
+
+    it("guards `back` and `origin` independently the other way: an unsafe `from` falls BACK back to /news while a safe `origin` still resolves ✕", () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      renderReaderWithState("/news/baselines", {
+        from: "//evil.example",
+        origin: "/today",
+      });
+
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/news",
+      );
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+    });
+
+    it("an unsafe element anywhere in `trail` invalidates the WHOLE array (never a partially-trusted trail) and falls back to the legacy `from`", () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      renderReaderWithState("/news/baselines", {
+        trail: ["/today", "//evil.example"],
+        from: "/today",
+        origin: "/today",
+      });
+
+      // The bad second element condemns the whole array — BACK/✕ resolve
+      // via the legacy `from` fallback, not "/today" (the array's own,
+      // otherwise-safe first element) surviving on its own.
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+    });
+
+    it("an unsafe element in `trail`, with no `from` to fall back to either, leaves both BACK and ✕ at the /news fallback", () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      renderReaderWithState("/news/baselines", {
+        trail: ["//evil.example"],
+      });
+
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/news",
+      );
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/news",
+      );
+    });
+
+    it("origin survives a NEXT + cross-link mix: entering via the same {trail, origin} shape ArticleLink's cross-link hop writes still resolves BACK to the hop just left and ✕ to the ORIGINAL origin, and a further NEXT keeps threading both", async () => {
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      const user = userEvent.setup();
+      // Simulates arriving at pain-scale via ArticleLink's own cross-link
+      // hop from picking-a-workout (itself entered from Today) — the exact
+      // shape ArticleLink.tsx writes (`{ trail: [...trail, <article just
+      // left>], origin }`), not a NEXT hop. Reader can't (and shouldn't)
+      // tell the two doors apart — that's the point of the shared shape.
+      renderReaderWithState("/news/pain-scale", {
+        trail: ["/today", "/news/picking-a-workout"],
+        origin: "/today",
+      });
+
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/news/picking-a-workout",
+      );
+      expect(screen.getByRole("link", { name: "Close" })).toHaveAttribute(
+        "href",
+        "/today",
+      );
+
+      await user.click(screen.getByRole("link", { name: /NEXT/ }));
+      expect(
+        await screen.findByRole("link", { name: "Close" }),
+      ).toHaveAttribute("href", "/today");
+      expect(screen.getByRole("link", { name: /BACK/ })).toHaveAttribute(
+        "href",
+        "/news/pain-scale",
+      );
     });
   });
 });

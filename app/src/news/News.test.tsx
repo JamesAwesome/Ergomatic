@@ -343,4 +343,242 @@ describe("ArticleRow (linked kind — no linked article exists in the real regis
       link.dispatchEvent(new MouseEvent("click", { bubbles: true })),
     ).not.toThrow();
   });
+
+  // CL item / ROADMAP "News scroll memory": BACK from an article used to
+  // land News at the top always — a tradeoff taken deliberately when the
+  // feed was about 1.15 screens, revisited now that it's grown (six
+  // articles plus the Start-here pin). Copies Library's own scroll-memory
+  // idiom (`libraryScroll.ts` + `Library.tsx`'s save/restore effects,
+  // `TabBar.tsx`'s clear-on-tab-tap) — same tests, same shape, ported to
+  // News's own `newsScroll.ts`. Restoration gates on BOTH `reads` and
+  // `preferences` having settled (ready OR error, i.e. "not still
+  // loading") rather than on `rowsReady` the way Library does: News always
+  // renders its article rows immediately (no LOADING placeholder branch),
+  // but every row's read-state markup (the unread square, the " · READ"
+  // suffix) is suppressed while `reads` is loading, and the Start-here
+  // pin's own PRESENCE depends on `preferences` settling — a restore while
+  // either is still unknown could land short of this screen's true final
+  // height (an e2e run caught exactly this: gating on preferences alone
+  // restored to a small fraction of the real saved position while reads
+  // was still in flight).
+  describe("scroll restoration (CL item: News scroll memory)", () => {
+    const SAVED_SCROLL_Y = 900;
+
+    beforeEach(() => {
+      sessionStorage.clear();
+    });
+
+    it("restores the saved position once BOTH reads and preferences settle — never while either is still loading", () => {
+      sessionStorage.setItem("ergomatic.newsScroll", String(SAVED_SCROLL_Y));
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      mockUseArticleReads.mockReturnValue({ state: "loading" });
+      mockUsePreferences.mockReturnValue({ state: "loading" });
+
+      const { rerender } = renderNews();
+      expect(scrollToSpy).not.toHaveBeenCalled();
+
+      // Preferences alone settling must NOT be enough — reads is still
+      // loading, so this screen's true final height (read-state markup
+      // included) isn't known yet.
+      mockUsePreferences.mockReturnValue(readyPrefs());
+      rerender(
+        <MemoryRouter>
+          <News />
+        </MemoryRouter>,
+      );
+      expect(scrollToSpy).not.toHaveBeenCalled();
+
+      mockUseArticleReads.mockReturnValue(readyState([]));
+      rerender(
+        <MemoryRouter>
+          <News />
+        </MemoryRouter>,
+      );
+
+      expect(scrollToSpy).toHaveBeenCalledTimes(1);
+      expect(scrollToSpy).toHaveBeenCalledWith(0, SAVED_SCROLL_Y);
+      scrollToSpy.mockRestore();
+    });
+
+    it("also restores once both settle to an ERROR — the pin simply never renders and read-state markup stays suppressed, but the screen's height is already final either way", () => {
+      sessionStorage.setItem("ergomatic.newsScroll", String(SAVED_SCROLL_Y));
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      mockUseArticleReads.mockReturnValue({ state: "error" });
+      mockUsePreferences.mockReturnValue({ state: "error", retry: vi.fn() });
+
+      renderNews();
+
+      expect(scrollToSpy).toHaveBeenCalledTimes(1);
+      expect(scrollToSpy).toHaveBeenCalledWith(0, SAVED_SCROLL_Y);
+      scrollToSpy.mockRestore();
+    });
+
+    it("does not restore again on a later re-render once already restored", () => {
+      sessionStorage.setItem("ergomatic.newsScroll", String(SAVED_SCROLL_Y));
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      mockUseArticleReads.mockReturnValue(readyState([]));
+
+      const { rerender } = renderNews();
+      expect(scrollToSpy).toHaveBeenCalledTimes(1);
+
+      // A read-state change re-renders the screen without remounting it —
+      // must not trigger a second restore.
+      mockUseArticleReads.mockReturnValue(readyState(["baselines"]));
+      rerender(
+        <MemoryRouter>
+          <News />
+        </MemoryRouter>,
+      );
+
+      expect(scrollToSpy).toHaveBeenCalledTimes(1);
+      scrollToSpy.mockRestore();
+    });
+
+    it("does nothing once ready when nothing was saved (a genuinely fresh visit)", () => {
+      const scrollToSpy = vi
+        .spyOn(window, "scrollTo")
+        .mockImplementation(() => {});
+      mockUseArticleReads.mockReturnValue(readyState([]));
+
+      renderNews();
+
+      expect(scrollToSpy).not.toHaveBeenCalled();
+      scrollToSpy.mockRestore();
+    });
+
+    it("saves scrollY to sessionStorage, throttled to ~100ms (the trailing value survives, not just the first tick)", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockUseArticleReads.mockReturnValue(readyState([]));
+        renderNews();
+
+        Object.defineProperty(window, "scrollY", {
+          value: 111,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        // First scroll of the window fires the leading edge immediately —
+        // nothing throttled to wait for yet.
+        expect(sessionStorage.getItem("ergomatic.newsScroll")).toBe("111");
+
+        // Two scrolls in quick succession, both inside the same 100ms
+        // window: only the LAST position should ultimately land, once the
+        // trailing timer fires.
+        Object.defineProperty(window, "scrollY", {
+          value: 222,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        Object.defineProperty(window, "scrollY", {
+          value: 333,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        expect(sessionStorage.getItem("ergomatic.newsScroll")).toBe("111");
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(sessionStorage.getItem("ergomatic.newsScroll")).toBe("333");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("flushes the CURRENT position on unmount even mid-throttle-window, instead of dropping it", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockUseArticleReads.mockReturnValue(readyState([]));
+        const { unmount } = renderNews();
+
+        Object.defineProperty(window, "scrollY", {
+          value: 500,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        // Leading edge already wrote 500 — now scroll again, still well
+        // inside the 100ms window, so this second position is only
+        // QUEUED (trailing), not written yet.
+        Object.defineProperty(window, "scrollY", {
+          value: 777,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        expect(sessionStorage.getItem("ergomatic.newsScroll")).toBe("500");
+
+        // Navigating away now (e.g. tapping a row) unmounts News before
+        // the trailing timer ever fires. Without an unmount-time flush,
+        // 777 would be lost forever and a later BACK would restore the
+        // stale 500 instead of where the rower actually was.
+        unmount();
+
+        expect(sessionStorage.getItem("ergomatic.newsScroll")).toBe("777");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Defensive guard, `.overlay-screen`'s own documented behaviour
+    // (index.css): navigating to the reader can fire a "scroll" event on
+    // `window` (the browser clamping `window.scrollY` as `.app-shell`'s
+    // document flow collapses) before this effect's own cleanup has
+    // detached the listener. Simulated here by detaching the root element
+    // from the document WITHOUT unmounting React (so the listener is
+    // still live, exactly like the real timing gap) and then firing a
+    // "scroll" event — the save must ignore it rather than overwrite a
+    // real, already-saved position with whatever `window.scrollY` happens
+    // to read at that moment.
+    it("ignores a scroll event that fires after this screen's own root has been removed from the document (a disconnected-root echo, not a real scroll of THIS screen)", () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockUseArticleReads.mockReturnValue(readyState([]));
+        const { container } = renderNews();
+
+        Object.defineProperty(window, "scrollY", {
+          value: 300,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        expect(sessionStorage.getItem("ergomatic.newsScroll")).toBe("300");
+
+        // Simulate "this screen's root is no longer connected" by
+        // overriding the element's own `isConnected` getter directly,
+        // rather than physically moving/removing it from the real DOM
+        // tree (either broke React's OWN reconciliation bookkeeping in
+        // this environment, since React tracks the tree independently
+        // and a raw DOM mutation behind its back desynced the two,
+        // surfacing as a spurious "not a child of this node" error later
+        // during afterEach's own unmount cleanup). This is the one
+        // property the guard actually reads — overriding it in isolation
+        // exercises the exact branch without disturbing anything else.
+        const root = container.querySelector("main.news-screen")!;
+        Object.defineProperty(root, "isConnected", {
+          value: false,
+          configurable: true,
+        });
+
+        // Past the throttle window, so a mutant that dropped the guard
+        // would flush this IMMEDIATELY (elapsed >= 100ms) rather than
+        // merely queueing it — without this advance, the throttle alone
+        // would keep the assertion below green whether or not the guard
+        // exists, proving nothing.
+        vi.advanceTimersByTime(200);
+        Object.defineProperty(window, "scrollY", {
+          value: 45,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+
+        // The real, pre-detachment position survives — the
+        // disconnected-root echo never touched it.
+        expect(sessionStorage.getItem("ergomatic.newsScroll")).toBe("300");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

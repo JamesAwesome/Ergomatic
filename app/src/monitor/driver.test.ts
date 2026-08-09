@@ -45,6 +45,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { createEventLog } from "./eventLog";
 import {
+  computeIntervalAccrued,
   computeIntervalRemaining,
   createPm5Driver,
   ProgramBusyError,
@@ -522,6 +523,51 @@ describe("createPm5Driver: computeIntervalRemaining (pure)", () => {
   });
 });
 
+describe("createPm5Driver: computeIntervalAccrued (pure)", () => {
+  // ROADMAP CL item 7 / DEVIATIONS' pane-C active-row row: the complement of
+  // `computeIntervalRemaining` above — the dimension the interval does NOT
+  // count down. `interval` fixtures are the same shapes that block uses.
+  const timeInterval = {
+    kind: "time" as const,
+    value: 60,
+    targetSplit: 120,
+    displaySpm: null,
+    restSeconds: 0,
+  };
+  const distanceInterval = {
+    kind: "distance" as const,
+    value: 500,
+    targetSplit: null,
+    displaySpm: null,
+    restSeconds: 0,
+  };
+
+  it("returns null with no interval (armed/idle/finished/terminated) — same absence rule as its sibling", () => {
+    expect(computeIntervalAccrued(undefined, 30)).toBeNull();
+  });
+
+  it("a TIME interval accrues DISTANCE — the complement kind, not its own", () => {
+    expect(computeIntervalAccrued(timeInterval, 137)).toStrictEqual({
+      kind: "distance",
+      value: 137,
+    });
+  });
+
+  it("a DISTANCE interval accrues TIME — the complement kind, not its own", () => {
+    expect(computeIntervalAccrued(distanceInterval, 42)).toStrictEqual({
+      kind: "time",
+      value: 42,
+    });
+  });
+
+  it("clamps at zero rather than going negative (a quantization edge, mirroring its sibling's clamp)", () => {
+    expect(computeIntervalAccrued(timeInterval, -5)).toStrictEqual({
+      kind: "distance",
+      value: 0,
+    });
+  });
+});
+
 describe("createPm5Driver: a rowing-state frame arriving before program() was ever called", () => {
   it("computes intervalRemaining as null (no program to size the interval against) without crashing", () => {
     // A real device wouldn't produce this shape unprompted, but nothing in
@@ -564,6 +610,9 @@ describe("createPm5Driver: a rowing-state frame arriving before program() was ev
     expect(frames[0]).toMatchObject({
       frame: { intervalIndex: null, intervalRemaining: null },
     });
+    // ROADMAP CL item 7: `intervalAccrued` shares `intervalRemaining`'s own
+    // `!program` guard, so it is null under the identical condition.
+    expect(frames[0]).toMatchObject({ frame: { intervalAccrued: null } });
   });
 });
 
@@ -616,6 +665,53 @@ describe("createPm5Driver: distance-kind interval — intervalRemaining uses dis
     // elapsedSeconds: remaining = 1000 - 700 = 300.
     expect(frames[frames.length - 1]).toMatchObject({
       frame: { intervalRemaining: { kind: "distance", value: 300 } },
+    });
+    // ROADMAP CL item 7: the OTHER dimension (time) accrues from the SAME
+    // Last Split checkpoint (0, same reasoning as above) against
+    // elapsedSeconds, never distanceMeters: accrued = 120 - 0 = 120.
+    expect(frames[frames.length - 1]).toMatchObject({
+      frame: { intervalAccrued: { kind: "time", value: 120 } },
+    });
+  });
+
+  it("a TIME interval accrues DISTANCE the mirror way — the complement dimension, not a second copy of the countdown", async () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 300,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 60,
+        distanceMeters: 300,
+        spm: 22,
+        currentSplit: 100,
+        heartRateBpm: 140,
+        programIntervalIndex: 0,
+      },
+    ];
+    const { fake, driver, events } = harness({ program, events: timeline });
+    await programAndArm(driver, fake, program);
+    fake.tick(100);
+
+    const frames = events.filter((e) => e.kind === "frame");
+    // The programmed dimension (time) counts down: remaining = 300 - 60 =
+    // 240. The complement (distance) accrues from the SAME checkpoint (0,
+    // no boundary yet): accrued = 300 - 0 = 300.
+    expect(frames[frames.length - 1]).toMatchObject({
+      frame: {
+        intervalRemaining: { kind: "time", value: 240 },
+        intervalAccrued: { kind: "distance", value: 300 },
+      },
     });
   });
 });
@@ -791,6 +887,16 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
         distanceMeters: 700,
         intervalRemaining: { kind: "distance", value: 800 },
       },
+    });
+    // ROADMAP CL item 7: the boundary must re-checkpoint BOTH baselines, not
+    // only the programmed dimension's — `intervalAccrued` (time, the
+    // complement of this distance interval) proves the OTHER checkpoint
+    // (`lastSplitTimeSeconds`) moved to 100 too: accrued = 140 - 100 = 40.
+    // A driver that only re-derived the checkpoint `intervalRemaining`
+    // itself reads would leave this stuck at the interval-0 baseline (0)
+    // and report 140 instead.
+    expect(latest).toMatchObject({
+      frame: { intervalAccrued: { kind: "time", value: 40 } },
     });
   });
 });
@@ -5349,6 +5455,33 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     },
   );
 
+  it("7A-fix-3 Task 2 review, parked minor #3: the 'prepare-settle' entry names its own configured tick bound, not just the prior state", async () => {
+    // A custom, non-default bound (default is 10, DEFAULT_PREPARE_SETTLE_
+    // TICKS) so the assertion below cannot pass by accident against
+    // whatever the default happens to be.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 7 });
+
+    primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+
+    const entry = log
+      .entries()
+      .find(
+        (e) => e.kind === "prepare-settle" && e.detail.includes('"rowing"'),
+      );
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toContain("7");
+
+    transport.fireDisconnect("radio out of range");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
   it(
     "step 5's confirmed trace (§18 session 3 Live bisect / design spec §1b: " +
       "'terminated → idle → armed', a ~0.06s PM-clock span) — waits through " +
@@ -5578,11 +5711,39 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
 
     primeState(transport, WORKOUTSTATE_WAITTOBEGIN); // armed — a settled, main-menu state
 
-    // `programViaStub` IS today's pre-Task-2 sequence: prepare ack, the
-    // real send's own ack, then exactly ONE fresh "armed" status. If the
-    // settle machinery ever consumed a tick here, this single notify inside
-    // `programViaStub` would not be enough and this call would hang.
-    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    // `programViaStub`'s own sequence, inlined rather than called (7A-fix-3
+    // Task 2 review, parked minor #2): that helper ends in a bare
+    // `await pending`, which — if the settle machinery ever consumed a
+    // tick here, since this drives EXACTLY ONE fresh "armed" status and no
+    // more — would simply HANG rather than fail with a message, so the
+    // only signal a regression here ever produced was the test runner's
+    // own generic timeout. Tracking `resolved` via `.then()` and asserting
+    // it BEFORE ever awaiting `pending` turns that silent hang into a real,
+    // fast, named assertion failure.
+    const sent = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const start = sent();
+    let resolved = false;
+    const pending = driver.program(MINIMAL_PROGRAM).then(() => {
+      resolved = true;
+    });
+    await waitUntil(() => sent() > start);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    await waitUntil(() => sent() > start + prepareChunkCount);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    for (let i = 0; i < 50; i += 1) await Promise.resolve();
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    for (let i = 0; i < 50; i += 1) await Promise.resolve();
+
+    expect(resolved).toBe(true);
+    await pending;
 
     expect(log.entries().some((e) => e.kind === "prepare-settle")).toBe(false);
     expect(log.entries().some((e) => e.kind === "prepare-settle-expired")).toBe(
@@ -5844,23 +6005,6 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     expect(events.some((e) => e.kind === "intervalComplete")).toBe(true);
   });
 
-  /** A WaitToBegin tick carrying nothing further — the "machine going on
-   *  reporting armed" shape `stillArmedAt` above uses, without that name's
-   *  own non-zero heart rate (irrelevant here). */
-  function stillArmedAtZero(atMs: number): FakeTimelineEvent {
-    return {
-      atMs,
-      kind: "status",
-      workoutState: WORKOUTSTATE_WAITTOBEGIN,
-      elapsedSeconds: 0,
-      distanceMeters: 0,
-      spm: 0,
-      currentSplit: 0,
-      heartRateBpm: null,
-      programIntervalIndex: 0,
-    };
-  }
-
   it("fix-3 Task 5: FakeScript.lagStructureOneTick exercises the driver's N=3 rule against the FAKE's OWN wire — not only stubTransport (SESSION 4a's recorded mid-cycle transients)", async () => {
     // The machine is idle at dispatch (no rowing scripted), so
     // `waitForPrepareSettle` resolves immediately (its own doc comment:
@@ -5868,10 +6012,16 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     // as a genuine, non-empty arm — this test is about the LAG, not the
     // empty arm.
     const program = seaFretProgram();
+    // `stillArmedEmpty` (not a separately-named `stillArmedAtZero`, deduped
+    // per ROADMAP CL item 8's own item 1: the two were byte-for-byte
+    // identical — same WaitToBegin/null-heart-rate shape, just declared
+    // twice in this same describe block) — the "machine going on reporting
+    // armed" shape `stillArmedAt` above uses, without that name's own
+    // non-zero heart rate (irrelevant here).
     const { fake, log, driver } = harness({
       program,
       lagStructureOneTick: true,
-      events: [stillArmedAtZero(1)],
+      events: [stillArmedEmpty(1)],
     });
 
     const pending = driver.program(program);

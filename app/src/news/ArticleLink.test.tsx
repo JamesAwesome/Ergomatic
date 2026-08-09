@@ -12,10 +12,18 @@ import ArticleLink from "./ArticleLink";
 // in-prose body cross-links (workoutTypes.tsx, pickingAWorkout.tsx) used to
 // render a raw `react-router-dom` `Link` — no `replace`, no origin carried
 // — so BACK/✕ from a cross-linked article fell back to /news instead of
-// wherever the rower actually started. This is the ONE component that owns
-// both halves of the fix; these tests prove each half directly, the same
-// `createMemoryRouter` + `router.navigate(-1)` idiom Reader.test.tsx's own
-// "NEXT replaces the current history entry" test uses to prove `replace`.
+// wherever the rower actually started.
+//
+// BACK-walks-the-stack round (James's report 2, same day): a cross-link hop
+// now PUSHES (the ui-notes round's `replace` reversed) and carries the
+// `{ trail, origin }` shape `useReadingTrail` reads — `trail` grows by the
+// SOURCE article's own path (so BACK from the linked article retraces
+// here, and a further hop can keep retracing beyond it — see
+// useReadingTrail's own doc comment for why this has to be a real array,
+// not a `back`/`origin` pair), `origin` threads the reading chain's true
+// origin forward unchanged. These tests prove both halves directly, the
+// same `createMemoryRouter` + `router.navigate(-1)` idiom Reader.test.tsx's
+// own depth tests use.
 
 function Source({ to, label }: { to: string; label: string }) {
   return <ArticleLink to={to}>{label}</ArticleLink>;
@@ -46,7 +54,7 @@ describe("ArticleLink", () => {
     );
   });
 
-  it("carries the reading chain's origin forward when it entered with one", async () => {
+  it("grows `trail` by its own path AND carries the reading chain's origin forward when it entered with one", async () => {
     const user = userEvent.setup();
     const router = createMemoryRouter(
       [
@@ -62,10 +70,19 @@ describe("ArticleLink", () => {
 
     await user.click(screen.getByRole("link", { name: "Next article" }));
 
-    expect(await screen.findByText('state:{"from":"/today"}')).toBeVisible();
+    // `trail` is `["/today", "/news/a"]` — the legacy single `from` it
+    // entered with (read as an implicit one-element trail), plus the
+    // source's own path appended (what BACK from "/news/b" must retrace
+    // to first). `origin` is "/today", threaded through unchanged via
+    // `useReadingTrail`'s defaulting.
+    expect(
+      await screen.findByText(
+        'state:{"trail":["/today","/news/a"],"origin":"/today"}',
+      ),
+    ).toBeVisible();
   });
 
-  it("carries no state at all (not {from: undefined}) when it entered with no origin", async () => {
+  it("still grows `trail` by its own path (never dropping it) when it entered with no origin at all — `origin` is simply omitted", async () => {
     const user = userEvent.setup();
     const router = createMemoryRouter(
       [
@@ -81,10 +98,17 @@ describe("ArticleLink", () => {
 
     await user.click(screen.getByRole("link", { name: "Next article" }));
 
-    expect(await screen.findByText("state:null")).toBeVisible();
+    // JSON.stringify drops an `undefined`-valued key — this is the direct,
+    // observable proof that `origin` came back `undefined` (never a
+    // resolved fallback smuggled in as the raw value), while `trail` is
+    // still always present, seeded with just the source's own path since
+    // there was nothing else to inherit.
+    expect(
+      await screen.findByText('state:{"trail":["/news/a"]}'),
+    ).toBeVisible();
   });
 
-  it("replaces the current history entry — one BACK from the target skips the cross-link hop entirely", async () => {
+  it("pushes a new history entry — one BACK from the target lands back on the SOURCE article, not past it", async () => {
     const router = createMemoryRouter(
       [
         { path: "/today", Component: () => <p>Today Screen</p> },
@@ -109,10 +133,10 @@ describe("ArticleLink", () => {
 
     router.navigate(-1);
 
-    // The /news/a entry was REPLACED, not pushed alongside — one BACK from
-    // the cross-linked article lands on /today (the entry before it), never
-    // back on the article the link was clicked from.
-    await screen.findByText("Today Screen");
+    // The reversal: /news/a is PUSHED past, not replaced — one BACK from
+    // the cross-linked article lands back on /news/a (the article the link
+    // was clicked from), never straight through to /today.
+    await screen.findByText("Next article");
     expect(screen.queryByText("B Screen")).not.toBeInTheDocument();
   });
 });

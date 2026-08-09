@@ -34,7 +34,7 @@ describe("MonitorCapabilities", () => {
 });
 
 describe("MonitorFrame", () => {
-  it("has no paused state and intervalRemaining is nullable", () => {
+  it("has no paused state and intervalRemaining/intervalAccrued are nullable", () => {
     const frame: MonitorFrame = {
       elapsedSeconds: 12.3,
       distanceMeters: 45.6,
@@ -46,6 +46,7 @@ describe("MonitorFrame", () => {
       rowingActive: true,
       intervalIndex: 1,
       intervalRemaining: { kind: "time", value: 30 },
+      intervalAccrued: { kind: "distance", value: 850 },
       state: "rowing",
     };
     expect(frame.state).not.toBe("paused");
@@ -53,8 +54,10 @@ describe("MonitorFrame", () => {
       ...frame,
       state: "finished",
       intervalRemaining: null,
+      intervalAccrued: null,
     };
     expect(finished.intervalRemaining).toBeNull();
+    expect(finished.intervalAccrued).toBeNull();
   });
 });
 
@@ -82,6 +85,7 @@ describe("MonitorEvent", () => {
           heartRateBpm: null,
           intervalIndex: null,
           intervalRemaining: null,
+          intervalAccrued: null,
           state: "idle",
         },
       },

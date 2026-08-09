@@ -188,17 +188,17 @@ export function autoTicking(
  * `useMonitorSession.ts`'s `connect()` awaits whatever this returns either
  * way, so the two shapes are indistinguishable to every caller.
  *
- * **This is still not the whole native-adapter story** (a pre-existing gap
- * this task's brief did not ask it to close — `useMonitorSession.ts`'s own
- * former `defaultTransport` carried the same caveat before this file
- * existed). `createCapacitorBleTransport` has no call site here: choosing
- * between it and Web Bluetooth is a PLATFORM conditional, and platform
- * conditionals are lint-enforced to the adapter layer
- * (`src/platform.ts`/`src/adapters/`, CLAUDE.md's native-first policy), not
- * this hook's transport-resolution seam. A native-build caller passes its
- * own factory through `MonitorSessionDeps.createTransport` today; wiring
- * the adapter layer itself into this default is ROADMAP's own
- * Capacitor-id-keyed-reconnect follow-on, not this task's.
+ * **Web-only, on purpose.** This function never chooses Capacitor BLE —
+ * that choice is a PLATFORM conditional, and platform conditionals are
+ * lint-enforced to the adapter layer (`src/platform.ts`/`src/adapters/`,
+ * CLAUDE.md's native-first policy), not this transport-resolution seam.
+ * (History: this file's header once recorded that gap as still open —
+ * `createCapacitorBleTransport` had no call site anywhere — ROADMAP CL item
+ * 2, closed by `src/adapters/monitorTransport.ts`'s `defaultTransport`,
+ * which now sits IN FRONT of this function: native picks Capacitor BLE
+ * directly, and only the web arm reaches this seam at all.
+ * `useMonitorSession.ts`'s own `??` fallback points at that adapter now,
+ * not at this function — see its own doc comment.)
  */
 export function resolveDefaultTransport():
   Transport | null | Promise<Transport | null> {

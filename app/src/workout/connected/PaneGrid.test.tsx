@@ -149,6 +149,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     heartRateBpm: 164,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
+    intervalAccrued: null,
     state: "rowing",
     rowingActive: true,
     ...overrides,
@@ -451,6 +452,42 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     ).not.toBeNull();
   });
 
+  it("ROADMAP CL item 7: once the driver reports intervalAccrued, the OTHER cell shows it instead of a bare dash", () => {
+    const distance = renderGrid({
+      frame: frame({
+        intervalRemaining: { kind: "distance", value: 1200 },
+        intervalAccrued: { kind: "time", value: 245 },
+      }),
+    });
+    // Row 2 (the 2000 m rep): meters still counts down, and the time
+    // cell — genuinely unknowable before this task, always a dash — now
+    // carries the driver's own live accrual.
+    expect(cells(row(2)).meters).toBe("1200");
+    expect(cells(row(2)).time).toBe("4:05");
+    // Still no countdown class on the accrual cell — only the PROGRAMMED
+    // dimension wears the accent (DEVIATIONS row 78's own standing rule).
+    expect(
+      row(2).querySelector(".connected-grid-time.connected-grid-countdown"),
+    ).toBeNull();
+    distance.unmount();
+
+    renderGrid({
+      frame: frame({
+        intervalIndex: 0,
+        intervalRemaining: { kind: "time", value: 41 },
+        intervalAccrued: { kind: "distance", value: 137 },
+      }),
+    });
+    expect(cells(row(1)).time).toBe("0:41");
+    expect(cells(row(1)).meters).toBe("137");
+  });
+
+  it("keeps the dash before the machine's first frame — the one genuinely unknowable case", () => {
+    // Default `frame()` carries `intervalAccrued: null` (no reading yet).
+    renderGrid();
+    expect(cells(row(2)).time).toBe("—");
+  });
+
   it("names the distance rows IN WORDS under the grid, never a glyph", () => {
     const many = renderGrid();
     expect(
@@ -517,6 +554,7 @@ describe("distance intervals (handoff §3's distance rules)", () => {
         actuals: [],
         activeIndex: 0,
         remaining: null,
+        accrued: null,
         livePace: NO_READING,
         liveRate: NO_READING,
         liveHr: NO_READING,

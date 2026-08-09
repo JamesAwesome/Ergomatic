@@ -134,7 +134,19 @@ test.describe("authoring loop", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("a bulk paste with one bad pace ref reports the failing line and still creates the good workout", async ({
+  // CL item (BACK-walks-the-stack batch, whole-batch review): bulk import
+  // used to insert block-by-block in a plain loop, so a bad LATER block
+  // left the good EARLIER block created — and re-pasting the same text
+  // after fixing the bad line duplicated it. This e2e twin of the
+  // server-level fix pinned the OLD partial-success contract (a real CI
+  // catch: the scoped gate table's own blind spot — B3 was server-only,
+  // so no gate re-ran this file). Rewritten to the all-or-nothing truth,
+  // stronger than the row it replaces: zero created AND the per-line
+  // error AND the honest end-to-end proof (Library itself, not just the
+  // response body) that the good block never landed — then the recovery
+  // arc that is the actual point of the CL item: fix the one bad line,
+  // re-paste the WHOLE text, and both blocks land exactly once.
+  test("a bulk paste with one bad pace ref creates NOTHING — re-pasting the corrected text afterward creates both, with no duplicate", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -150,9 +162,9 @@ test.describe("authoring loop", () => {
     // Two blocks, blank-line separated (domain/bulk.ts's splitBlocks). The
     // first is entirely valid; the second's only work step references "9k",
     // which parsePaceRef (domain/pace.ts) never accepts (2k/6k only), so the
-    // whole second block is rejected while the first is still created. Line
-    // numbers are 1-based over the raw pasted text (including the blank
-    // separator) — the bad ref sits on line 7.
+    // whole PASTE is rejected — all-or-nothing, not just the second block.
+    // Line numbers are 1-based over the raw pasted text (including the
+    // blank separator) — the bad ref sits on line 7.
     const text = [
       "9410 | Bulk Good | O2 | easy | 2",
       "wu 5",
@@ -168,17 +180,48 @@ test.describe("authoring loop", () => {
     await expect(page.locator(".bulk-import-errors li")).toHaveText(
       "line 7: bad pace ref: 9k",
     );
+    // The reversal: this used to read "1 created" (the good block landed
+    // despite the bad one) — all-or-nothing means zero, even though only
+    // the SECOND block was actually invalid.
     await expect(page.locator(".bulk-import-result .mono-status")).toHaveText(
-      "1 created",
+      "0 created",
     );
 
-    // A partial result (some created, some failed) deliberately keeps the
-    // rower on this panel (BulkImport.tsx) rather than navigating away, so
-    // the created workout's presence has to be confirmed on Library itself.
+    // Any error at all deliberately keeps the rower on this panel
+    // (BulkImport.tsx) rather than navigating away.
+    await expect(page).toHaveURL(/\/library\/import$/);
+
+    // The honest end-to-end proof: the good block genuinely never landed
+    // in the real store — not merely that the response body claims zero,
+    // which a route that still inserted rows behind a lying `created: []`
+    // would also show here.
     await page.goto("/library");
+    await expect(
+      page.getByText("Bulk Good", { exact: false }),
+    ).not.toBeVisible();
+
+    // The recovery arc — the actual defect the CL item existed to kill:
+    // fix the one bad line and re-paste the WHOLE text again. Before the
+    // fix, "Bulk Good" would already have landed on the first attempt, so
+    // this second paste would create it a SECOND time; proving that means
+    // asserting both blocks land exactly once each, not merely that the
+    // corrected paste succeeds.
+    await page.goto("/library/import");
+    const fixedText = text.replace("9k", "6k");
+    await page.getByLabel("Bulk import text").fill(fixedText);
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+
+    // A clean import (zero errors) navigates away automatically
+    // (BulkImportRoute's onImported in AppRoutes.tsx).
+    await expect(page).toHaveURL(/\/library$/);
     await expect(page.getByText("Bulk Good", { exact: false })).toBeVisible();
+    await expect(page.getByText("Bulk Bad", { exact: false })).toBeVisible();
+    // Exactly one of each — the duplicate-on-retry defect would show two.
+    await expect(page.getByText("Bulk Good", { exact: false })).toHaveCount(1);
+    await expect(page.getByText("Bulk Bad", { exact: false })).toHaveCount(1);
 
     await cleanupByTitle(page, "Bulk Good");
+    await cleanupByTitle(page, "Bulk Bad");
   });
 
   test("editing a saved workout's title changes what its detail screen shows", async ({

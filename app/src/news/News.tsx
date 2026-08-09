@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import type { WorkoutType } from "../../domain/types.js";
 import TypeBadge from "../components/TypeBadge";
@@ -10,9 +11,20 @@ import {
   pinnedArticles,
   unreadCount,
 } from "./content/articles";
+import { loadNewsScroll, saveNewsScroll } from "./newsScroll";
 import { RELEASE_NOTES } from "./content/releaseNotes";
 import type { NewsArticle } from "./content/types";
 import { mastheadDate, releaseDate } from "./newsDates";
+
+// Trailing-edge throttle, copied from `library/Library.tsx`'s own idiom
+// (same value, same reasoning — a save fires immediately if 100ms have
+// passed since the last one, otherwise it's rescheduled for whatever's
+// left of that window, so the FINAL scroll position before the rower
+// stops always gets written). Kept as a local constant rather than a
+// shared import — this repo's established per-file duplication
+// convention (see `Library.tsx`'s own `TYPE_COLOR_VAR` comment for the
+// precedent this follows).
+const SCROLL_SAVE_THROTTLE_MS = 100;
 
 // Design 2a's own row order for the workout-types pinned row — the ONLY
 // place teal/ochre appear on News (articles.tsx's own `typeChips` flag).
@@ -146,9 +158,99 @@ export default function News() {
   const unread = reads.state === "ready" ? unreadCount(reads.readSlugs) : 0;
   const startHereDismissed =
     preferences.state === "ready" && preferences.preferences.startHereDismissed;
+  const restoredScrollRef = useRef(false);
+  // The save effect below needs to tell "a real scroll of THIS screen"
+  // apart from a scroll event that fires AFTER this screen's own DOM has
+  // already been replaced — see that effect's own comment for the actual
+  // bug this guards.
+  const rootRef = useRef<HTMLElement>(null);
+  // Every ROW on this screen carries read-state-dependent markup (the
+  // unread square, the accessible Read/Unread word, the " · READ" meta
+  // suffix — all suppressed, not just blank, while `reads.state ===
+  // "loading"`, per `readStateFor`'s own suppression rule above), and the
+  // Start-here pin's very PRESENCE depends on `preferences` settling too —
+  // so BOTH fetches settling is what "this screen's real final height is
+  // now known" actually means, not just one. "Settled" means ready OR
+  // error for each, not `rowsReady`-style "ready only" the way
+  // `Library.tsx` gates its own restore (Library shows a LOADING
+  // placeholder with no list at all while loading; News never does — every
+  // row renders immediately, just with its read-state markup missing until
+  // this settles).
+  const contentSettled =
+    reads.state !== "loading" && preferences.state !== "loading";
+
+  // Save scroll position for the lifetime of this screen, throttled to
+  // ~100ms — copies `Library.tsx`'s own save effect idiom, with one
+  // defensive addition Library's own shorter-lived screen never needed:
+  // `onScroll` bails out once `rootRef.current` is no longer connected to
+  // the document. `.overlay-screen`'s own comment (index.css) documents
+  // that navigating to the reader collapses `.app-shell`'s document flow
+  // the instant its `position: fixed` root mounts, and that the browser
+  // clamps `window.scrollY` to the new, much shorter height as an
+  // automatic consequence — a real "scroll" event on `window`. Nothing
+  // guarantees that clamp fires strictly AFTER this effect's own cleanup
+  // has run (a passive effect's cleanup is scheduled after paint, not
+  // synchronously with the route change), so a still-attached listener
+  // could catch it and silently overwrite a correct save with a
+  // near-zero clamp artifact. Checking `isConnected` on the ROOT element
+  // News itself renders — true for exactly as long as this screen is
+  // genuinely the one on screen — is what tells a real rower-driven
+  // scroll apart from that kind of echo, regardless of which route React
+  // is currently transitioning to.
+  useEffect(() => {
+    let lastKnownY = window.scrollY;
+    let lastSavedAt = 0;
+    let trailing: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      lastSavedAt = Date.now();
+      saveNewsScroll(lastKnownY);
+    };
+    const onScroll = () => {
+      if (!rootRef.current?.isConnected) return;
+      lastKnownY = window.scrollY;
+      const elapsed = Date.now() - lastSavedAt;
+      if (elapsed >= SCROLL_SAVE_THROTTLE_MS) {
+        flush();
+      } else {
+        clearTimeout(trailing);
+        trailing = setTimeout(flush, SCROLL_SAVE_THROTTLE_MS - elapsed);
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      clearTimeout(trailing);
+      // Flush the last KNOWN position synchronously on unmount — navigating
+      // away (e.g. tapping a row) within the throttle window would
+      // otherwise leave the trailing save cancelled with nothing written,
+      // so BACK would restore a stale, pre-scroll position. `lastKnownY`
+      // here is whatever the last GENUINELY-connected `onScroll` call saw
+      // — never a disconnected-root echo, since that call returns early
+      // above without touching it.
+      flush();
+    };
+  }, []);
+
+  // Restores at most once per mount (`restoredScrollRef`) — without the
+  // guard, a later re-render (e.g. a read-state change) would re-fire this
+  // effect and yank the rower back to the saved position mid-browse.
+  // `useLayoutEffect`, not `useEffect`: the scroll must land before the
+  // browser paints the restored frame, or the rower briefly sees the top
+  // of the list flash before it jumps. A fresh tab visit has nothing to
+  // restore because `TabBar.tsx`'s own NEWS link clears the saved value
+  // first — News itself can't tell a BACK return from a fresh tab tap
+  // apart (same reasoning as `libraryScroll.ts`'s own doc comment).
+  useLayoutEffect(() => {
+    if (!contentSettled || restoredScrollRef.current) return;
+    restoredScrollRef.current = true;
+    const saved = loadNewsScroll();
+    if (saved !== null) {
+      window.scrollTo(0, saved);
+    }
+  }, [contentSettled]);
 
   return (
-    <main className="screen news-screen">
+    <main className="screen news-screen" ref={rootRef}>
       <p className="news-masthead">ERGOMATIC · {mastheadDate(new Date())}</p>
       <div className="news-title-row">
         <h1 className="screen-title">News</h1>

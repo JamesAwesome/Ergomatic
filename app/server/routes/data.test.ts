@@ -586,23 +586,81 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.body.errors).toStrictEqual([]);
   });
 
-  it("reports parse errors per line while still creating the valid blocks", async () => {
+  // All-or-nothing (Phase 5B merge bug: a plain per-workout loop stranded
+  // already-landed blocks on a later failure, and re-importing the same
+  // paste duplicated them). Reversal from the pre-transaction behavior
+  // this test used to pin: a parse error on block 2 used to still create
+  // block 1; it must now create NOTHING, so the rower can fix the one bad
+  // block and re-paste the WHOLE text without duplicating what already
+  // landed.
+  it("reports parse errors per line, but creates NOTHING when the paste has ANY error — all-or-nothing", async () => {
     const text = `1 | Ladder | AT | medium | 3\nwu 10\nw 1' 6k-2 @22 r5\n\n2 | Bad | ZZ | easy | 1\nwu 10`;
     const res = await asA(
       request(appFor(makeStores())).post("/api/workouts/bulk"),
     ).send({ text });
     expect(res.status).toBe(200);
-    expect(res.body.created).toHaveLength(1);
+    expect(res.body.created).toHaveLength(0);
     expect(res.body.errors.length).toBeGreaterThan(0);
   });
 
-  it("reports domain validation failures for syntactically-valid but out-of-bounds workouts", async () => {
+  it("reports domain validation failures for syntactically-valid but out-of-bounds workouts, creating nothing", async () => {
     const text = `1 | Bad Pain | AT | medium | 9\nwu 10\nw 1' 6k @20`;
     const res = await asA(
       request(appFor(makeStores())).post("/api/workouts/bulk"),
     ).send({ text });
     expect(res.body.created).toHaveLength(0);
     expect(res.body.errors).toHaveLength(1);
+  });
+
+  // Shape pin (whole-batch review, Important #1): nothing above asserts
+  // the exact per-line error entry SHAPE — a rename of `line`/`message`,
+  // or a change to the composed text, would still pass every assertion
+  // above. `toStrictEqual` on the one real entry a validation failure
+  // produces pins both keys and their exact values, structurally.
+  it("a validation-failure error entry has the exact {line, message} shape the route's own API surface promises", async () => {
+    const text = `1 | Bad Pain | AT | medium | 9\nwu 10\nw 1' 6k @20`;
+    const res = await asA(
+      request(appFor(makeStores())).post("/api/workouts/bulk"),
+    ).send({ text });
+    expect(res.body.created).toHaveLength(0);
+    expect(res.body.errors).toStrictEqual([
+      { line: null, message: 'workout "Bad Pain": pain must be 1..5' },
+    ]);
+  });
+
+  // The falsifying test (brief's own framing): assert the actual PERSISTED
+  // count via the store directly, not just what the response body claims
+  // — a route that still inserted rows behind a lying `created: []` would
+  // pass every assertion above but fail this one.
+  it("a paste whose Nth block fails leaves ZERO rows actually persisted — the valid EARLIER blocks don't land either", async () => {
+    const stores = makeStores();
+    const text = `1 | Ladder | AT | medium | 3\nwu 10\nw 1' 6k-2 @22 r5\n\n2 | Steady | O2 | easy | 1\nwu 10\nw 20' 2k+10\n\n3 | Bad | ZZ | easy | 1\nwu 10`;
+    const res = await asA(
+      request(appFor(stores)).post("/api/workouts/bulk"),
+    ).send({ text });
+    expect(res.status).toBe(200);
+    expect(res.body.created).toHaveLength(0);
+    expect(res.body.errors.length).toBeGreaterThan(0);
+
+    expect(await stores.workouts.count("user-a")).toBe(0);
+    const titles = (await stores.workouts.list("user-a")).map((w) => w.title);
+    expect(titles).not.toContain("Ladder");
+    expect(titles).not.toContain("Steady");
+  });
+
+  it("a clean multi-block paste lands all of them, with the error report's shape unchanged (created + errors, byte-identical)", async () => {
+    const stores = makeStores();
+    const text = `1 | Ladder | AT | medium | 3\nwu 10\nw 1' 6k-2 @22 r5\n\n2 | Steady | O2 | easy | 1\nwu 10\nw 20' 2k+10`;
+    const res = await asA(
+      request(appFor(stores)).post("/api/workouts/bulk"),
+    ).send({ text });
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({
+      created: expect.any(Array),
+      errors: [],
+    });
+    expect(res.body.created).toHaveLength(2);
+    expect(await stores.workouts.count("user-a")).toBe(2);
   });
 });
 

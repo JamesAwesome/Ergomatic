@@ -1994,6 +1994,7 @@ function frame(over: Partial<MonitorFrame>): MonitorFrame {
     heartRateBpm: null,
     intervalIndex: 0,
     intervalRemaining: null,
+    intervalAccrued: null,
     state: "rowing",
     rowingActive: true,
     ...over,

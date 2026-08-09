@@ -60,7 +60,7 @@ import {
   recordActual,
   type MonitorRun,
 } from "./monitorRun";
-import { resolveDefaultTransport } from "./transports/index";
+import { defaultTransport } from "../adapters/monitorTransport";
 
 /** The session state machine (design spec §2, verbatim). Every value here
  *  is reached by a REAL event or frame field — never by a timer and never
@@ -252,9 +252,14 @@ export interface MonitorSessionDeps {
    *  `transport-missing`. May return a `Promise` — `connect()` always
    *  `await`s the result, so a caller building a real, synchronous
    *  transport (every existing test) and the DEV fake-injection seam's
-   *  dynamic `import()` (`transports/index.ts`'s `resolveDefaultTransport`,
-   *  the default when this is omitted) are indistinguishable to it. See
-   *  that function for what the default one can and cannot do today. */
+   *  dynamic `import()` (both `transports/index.ts`'s
+   *  `resolveDefaultTransport` and `adapters/monitorTransport.ts`'s native
+   *  arm) are indistinguishable to it. Omitted (the default when this is
+   *  undefined), the platform-conditional `adapters/monitorTransport.ts`'s
+   *  `defaultTransport` picks Capacitor BLE on native and delegates to
+   *  `transports/index.ts`'s `resolveDefaultTransport` (fake-injection, then
+   *  Web Bluetooth) on web — ROADMAP CL item 2, see that adapter's own doc
+   *  comment for the full reasoning. */
   createTransport?: () => Transport | null | Promise<Transport | null>;
   /** The driver's event log. Injectable so Task 7's diagnostics sheet can
    *  own the log it renders (`exportLog()` — the sheet reads on open; the
@@ -949,14 +954,17 @@ export function useMonitorSession(
     if (connectingRef.current || driverRef.current !== null) return;
     connectingRef.current = true;
     update({ phase: "picking", error: null });
-    // Awaited unconditionally — the DEV fake-injection seam's
-    // `resolveDefaultTransport` (`transports/index.ts`) returns a `Promise`
-    // only when it is about to dynamic-`import()` `fake.ts`; every other
-    // path (a real `createWebBluetoothTransport()`, and every test's own
-    // synchronous `createTransport` override) resolves on the same tick,
-    // so `await` costs nothing observable there.
+    // Awaited unconditionally — the platform-conditional default
+    // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
+    // 2) returns a `Promise` on the native arm (its own dynamic
+    // `import("../monitor/transports/capacitorBle")`) and whenever the DEV
+    // fake-injection seam (`transports/index.ts`'s `resolveDefaultTransport`)
+    // is about to dynamic-`import()` `fake.ts`; every other path (a real
+    // `createWebBluetoothTransport()`, and every test's own synchronous
+    // `createTransport` override) resolves on the same tick, so `await`
+    // costs nothing observable there.
     const transport = await (
-      depsRef.current.createTransport ?? resolveDefaultTransport
+      depsRef.current.createTransport ?? defaultTransport
     )();
     if (transport === null) {
       connectingRef.current = false;
