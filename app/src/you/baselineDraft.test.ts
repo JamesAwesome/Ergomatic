@@ -7,6 +7,7 @@ import {
   initDraft,
   isDirty,
   nudge,
+  setDraft,
 } from "./baselineDraft";
 
 describe("baseline drafts", () => {
@@ -47,5 +48,36 @@ describe("baseline drafts", () => {
     const s = commit(nudge(initDraft(112, 122), "k2", -1));
     expect(s.committed.k2).toBe(111.5);
     expect(isDirty(s)).toBe(false);
+  });
+});
+
+describe("setDraft (ui-notes round, item 2: the derivation offer fills a draft field directly)", () => {
+  it("sets only the requested side, leaving the other and committed untouched", () => {
+    const s = setDraft(initDraft(112, 122), "k2", 115);
+    expect(s.draft).toStrictEqual({ k2: 115, k6: 122 });
+    expect(s.committed).toStrictEqual({ k2: 112, k6: 122 });
+    expect(isDirty(s)).toBe(true);
+  });
+
+  it("sets the other side too", () => {
+    expect(setDraft(initDraft(112, 122), "k6", 119).draft.k6).toBe(119);
+  });
+
+  it("clamps a value below MIN_SPLIT instead of drifting out of range", () => {
+    expect(setDraft(initDraft(112, 122), "k2", MIN_SPLIT - 5).draft.k2).toBe(
+      MIN_SPLIT,
+    );
+  });
+
+  it("clamps a value above MAX_SPLIT instead of drifting out of range", () => {
+    expect(setDraft(initDraft(112, 122), "k6", MAX_SPLIT + 5).draft.k6).toBe(
+      MAX_SPLIT,
+    );
+  });
+
+  it("is an ordinary draft edit: a stepper still nudges the filled value afterward", () => {
+    const filled = setDraft(initDraft(112, 122), "k2", 115);
+    const nudged = nudge(filled, "k2", -1);
+    expect(nudged.draft.k2).toBe(114.5);
   });
 });

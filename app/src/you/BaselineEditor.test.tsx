@@ -51,6 +51,19 @@ describe("BaselineEditor", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
+  // Pre-existing gap this round's own per-file coverage check found
+  // (recurring-failure #2): only "2k faster" and "6k slower" were ever
+  // exercised anywhere in this file — the other two stepper directions
+  // never had a test of their own.
+  it("the other two stepper directions also nudge (2k slower, 6k faster)", async () => {
+    mockReady();
+    await renderEditor();
+    await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+    expect(screen.getByText("2k 1:52.0 → 1:52.5")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+    expect(screen.getByText("6k 2:02.0 → 2:01.5")).toBeInTheDocument();
+  });
+
   it("discard removes the confirm block and restores the displayed value", async () => {
     mockReady();
     await renderEditor();
@@ -84,6 +97,13 @@ describe("BaselineEditor", () => {
     expect(screen.getByText(/starting point/i)).toBeInTheDocument();
     expect(screen.getByText("1:52.0")).toBeInTheDocument();
     expect(screen.getByText("2:02.0")).toBeInTheDocument();
+    // Neither side is a known real value here (both null) — deriving one
+    // from the other would mean deriving from a made-up seed, so the offer
+    // must not appear at all (ui-notes round, item 2's "exactly one side
+    // has a value" condition, false on both).
+    expect(
+      screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+    ).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
     await userEvent.click(
@@ -121,5 +141,129 @@ describe("BaselineEditor", () => {
     await renderEditor();
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(retry).toHaveBeenCalledOnce();
+  });
+});
+
+// ui-notes round, item 2 — the derivation OFFER. Realistic fixture
+// (recurring-failure #3): {k2Seconds: null, k6Seconds: 122} is exactly the
+// real state onboarding.spec.ts's own flow produces the instant a rower
+// enters ONE baseline (`setBaselines(page, { k6Seconds: 122 })`) — not a
+// hand-built minimum.
+describe("the derivation offer (ui-notes round, item 2)", () => {
+  it("offers to estimate the 2k from a known 6k when only the 6k is set", async () => {
+    mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(
+      screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /ESTIMATE FROM 2K/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Found while capturing this round's own screenshot (recurring-failure
+  // #7: open the image and look at it): the "seeded" prompt used to read
+  // `k2Seconds === null || k6Seconds === null`, so a rower with a REAL,
+  // rowed 6k still saw "No baselines yet" sitting right next to it — a
+  // false claim the offer button now makes newly visible and confusing.
+  // Only the both-unset state is genuinely "no baselines yet."
+  it("does not claim 'No baselines yet' when one side is a real, rowed value", async () => {
+    mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(screen.queryByText(/no baselines yet/i)).not.toBeInTheDocument();
+  });
+
+  it("offers to estimate the 6k from a known 2k when only the 2k is set", async () => {
+    mockReady({ k2Seconds: 130, k6Seconds: null });
+    await renderEditor();
+
+    expect(
+      screen.getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /ESTIMATE FROM 6K/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never offers once both baselines are set", async () => {
+    mockReady({ k2Seconds: 112, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(
+      screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("tapping the offer fills only the empty DRAFT field, staging a confirm — nothing saves yet", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+    );
+
+    // 122 - 7 = 115s/500m = 1:55.0, replacing the SEED_K2 starting point
+    // (112 = 1:52.0) the confirm line's "from" side still names.
+    expect(screen.getByText("2k 1:52.0 → 1:55.0")).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("declining is simply not tapping it: the confirm block stays absent and the seeded value stands", async () => {
+    mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(screen.queryByText(/→/)).not.toBeInTheDocument();
+    // The SEED_K2 starting point (112 -> 1:52.0), never the derived 1:55.0.
+    expect(screen.getByText("1:52.0")).toBeInTheDocument();
+  });
+
+  it("the filled value is an ordinary draft edit: a stepper still adjusts it afterward", async () => {
+    mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+    expect(screen.getByText("2k 1:52.0 → 1:54.5")).toBeInTheDocument();
+  });
+
+  it("Apply round-trips the derived value through the real save path", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith({ k2Seconds: 115, k6Seconds: 122 });
+  });
+
+  it("refuses the offer when the derived value would leave the editor's own split bounds", async () => {
+    // 65 - 7 = 58, below MIN_SPLIT (60) — not offered at all, not clamped
+    // silently to a value the "−7s" copy would then be lying about.
+    mockReady({ k2Seconds: null, k6Seconds: 65 });
+    await renderEditor();
+
+    expect(
+      screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("refuses the offer on the other side too, at the MAX_SPLIT boundary", async () => {
+    // 235 + 7 = 242, above MAX_SPLIT (240).
+    mockReady({ k2Seconds: 235, k6Seconds: null });
+    await renderEditor();
+
+    expect(
+      screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -820,6 +820,35 @@ test("you-staged", async ({ page }) => {
   });
 });
 
+// ui-notes round, item 2 — the derivation offer, visible in neither "you"
+// (both baselines unset) nor "you-staged" (both set, mid-nudge): a realistic
+// one-baseline-set rower (the same real state onboarding.spec.ts's own arc
+// reaches via `setBaselines(page, { k6Seconds: 122 })` — a rower who has
+// rowed exactly the 6k test) sees the ESTIMATE FROM 6K offer under the
+// still-empty 2k row.
+test("you-derive-offer", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-derive-offer@e2e.test",
+    name: "Screenshot Tester",
+  });
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k6Seconds: 122.0 }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+  }
+  await page.goto("/you");
+  await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-derive-offer.png"),
+  });
+});
+
 // Phase 6I Task 7: You › Learning the app — dismissed on Today (so the
 // status line/PUT IT BACK ON TODAY control both render, not just the
 // baseline empty state) with one of the four steps already read (a real,
