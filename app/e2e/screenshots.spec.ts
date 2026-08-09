@@ -272,6 +272,32 @@ test("today", async ({ page }) => {
   });
 });
 
+// Phase 6I Task 8: the fresh-user state "today.png" above never shows —
+// that capture deliberately sets baselines first (line ~234) so it can
+// exercise FILTER/SHUFFLE. This is the OTHER state a brand-new account
+// actually lands on: no baselines row at all, the dismissible START HERE
+// block above everything, and the no-baseline SETS YOUR BASELINE card in
+// place of the normal suggestion apparatus — the phase's own new screen,
+// and the one screenshot obligation this phase adds that isn't a re-capture
+// of something that already existed.
+test("today-onboarding", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-onboarding@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/today");
+  await page.locator(".baselinecard").waitFor();
+  // The header's own "N OF 4 READ" count resolves from a separate fetch
+  // (`useArticleReads`) than the card's — waiting on the card alone raced
+  // it on this test's own first run, capturing the bare "START HERE"
+  // loading-suppression fallback instead of the real "0 OF 4 READ" a fresh
+  // account actually shows once both have loaded.
+  await expect(page.locator(".starthere-label")).toContainText("READ");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-onboarding.png"),
+  });
+});
+
 // Task 3 (ui-fix round): the unlogged row's own staged Discard — a real
 // timer run driven to /session/complete, then a bare `/today` nav WITHOUT
 // logging it, is the only way to land a completed-but-unlogged run record
