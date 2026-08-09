@@ -140,25 +140,30 @@ a value where they agree).
   changed** — a stale rationale is a defect here, and comment sweeps have
   cost a fix round in each of the last two phases. This includes doc files:
   `docs/design/DEVIATIONS.md` documents current state, not history.
-- **The `docker compose` e2e/screenshots stack is SHARED across sessions**
-  (one Postgres volume, one `web`/`api` pair, keyed by container name, not
-  per-worktree). A browser gate failing with duplicate workout fixtures
-  (`.workout-row` resolving to 2+ elements for a title your OWN test just
-  imported) or against a bundle that doesn't match your latest source is
-  someone else's leftover state, not necessarily your own defect: run
-  `docker compose -f compose.yml -f compose.e2e.yml down -v` from the repo
-  root (not `app/`) and retry the SAME gate once before spending time
-  investigating a phantom regression. `down -v` also clears the OTHER
-  session's fixtures — acceptable, since the stack is meant to be
-  reboot-safe, but say so in your report if you had to reach for it.
-  Two additions from running TWO live sessions at once: (1) **verify
-  bundle identity before trusting any browser-gate result** — curl the
-  served page's hashed asset and grep it for a string distinctive to
-  YOUR branch; an invalidated run against another session's bundle looks
-  exactly like 70 real failures; (2) `down -v` does not beat Docker's
-  LAYER CACHE when worktrees switch — if the served bundle still isn't
-  yours, `docker compose -f compose.yml -f compose.e2e.yml build
-  --no-cache` before `up`.
+- **The `docker compose` e2e/screenshots stack is PER-WORKTREE** (Phase CL,
+  `scripts/stack-env.sh`, sourced by `e2e.sh`/`screenshots.sh`): every value
+  — `COMPOSE_PROJECT_NAME`, the `ERGO_STACK` container-name prefix, the
+  host `APP_PORT`/`POSTGRES_PORT`, and `playwright.config.ts`'s baseURL —
+  derives deterministically from the worktree's own absolute path, so the
+  same checkout always reuses its own stack (including its own `pgdata`
+  volume) and two checkouts can never share one. Two sessions running
+  browser gates from different worktrees no longer stomp each other's
+  fixtures or serve each other's bundle — that used to be a real failure
+  mode (duplicate `.workout-row` matches, a served bundle from the wrong
+  branch reading as ~70 phantom failures) and is why this section used to
+  carry a `down -v`/bundle-identity workaround; the workaround is gone
+  because the collision it guarded against no longer exists. Explicit env
+  still wins (every assignment is `:-` guarded), so you can still pin a
+  port or project name by exporting it first.
+  Two things from that era still apply generally, not just to the old
+  shared-stack case: (1) **verify bundle identity before trusting any
+  browser-gate result** is still good belt-and-braces practice whenever a
+  result looks impossible — curl the served page's hashed asset and grep
+  it for a string distinctive to your latest source; (2) Docker's LAYER
+  CACHE can still serve a stale image after a real source change even
+  inside your own per-worktree stack (not a multi-session artifact) — if
+  the served bundle doesn't match your latest source, `docker compose -f
+  compose.yml -f compose.e2e.yml build --no-cache` before `up`.
 - **Never override the e2e env contract**: `scripts/e2e.sh` and
   `e2e/helpers.ts` hardcode their shared `TEST_AUTH_SECRET`
   (`e2e-secret`); forcing your own value into the compose env 401s every

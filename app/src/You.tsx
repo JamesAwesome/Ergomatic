@@ -51,9 +51,14 @@ export default function You({
       <h2 className="section-heading">BASELINES</h2>
       <BaselineEditor />
       {/* Task 7 (design spec §"Learning the app on You"): the mock's other
-          settings rows are filler (DEVIATIONS.md/handoff README §7) and are
-          deliberately not built — WARM-UP (below) is a second real one,
-          added by the 2026-08-09 warmup-setting spec §3. */}
+          settings rows (PRE-WORKOUT COUNTDOWN, PACE TOLERANCE, ACCENT
+          COLOR) are filler (DEVIATIONS.md/handoff README §7) and are
+          deliberately not built. WARM-UP (below) is a second real one, but
+          NOT one of that filler set built for real: the mock's own
+          DEFAULT WARM-UP was already a fully-specified control (README
+          §11), superseded rather than filler — whole-branch review
+          finding G, DEVIATIONS' bottom row. Added by the 2026-08-09
+          warmup-setting spec §3. */}
       <h2 className="section-heading">SETTINGS</h2>
       <WarmupRow />
       <Link

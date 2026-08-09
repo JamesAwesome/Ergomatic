@@ -778,6 +778,17 @@ export function createDataRouter({
     // body must CLEAR the setting, so "the key is absent" and "the key is
     // present and null" have to read differently here — the only field on
     // this route where that distinction matters (2026-08-09 design §2).
+    // NOT LOAD-BEARING AT RUNTIME, asked for twice (T2's own Finding 1;
+    // block2-review §3) and recorded a third time here: no test can
+    // actually discriminate `"warmup" in body` from `body.warmup !==
+    // undefined` through the real stack. `express.json()`'s `JSON.parse`
+    // can never produce a present key whose value is `undefined`, and the
+    // client can't produce one either (`usePreferences.ts`'s `save` sends
+    // `JSON.stringify(patch)`, which drops an `undefined`-valued key
+    // entirely) — so the two forms agree on every body a real request can
+    // ever carry. Kept as the more defensive form anyway, at zero cost;
+    // a future "simplification" to `!== undefined` would not fail any
+    // committed test, and that is expected, not a coverage gap.
     if ("warmup" in body) {
       if (body.warmup !== null && !isValidWarmup(body.warmup)) {
         badRequest(

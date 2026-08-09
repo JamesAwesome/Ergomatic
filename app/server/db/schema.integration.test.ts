@@ -244,4 +244,78 @@ describe("migration 0008: the workouts wu-strip", () => {
       .where(eq(workouts.id, row.id));
     expect(after.steps).toStrictEqual(steps);
   });
+
+  // Whole-branch review (fourth reviewer), finding A — MAJOR: the SQL's own
+  // header comment (lines 28-30 above) asserts, as live-probed evidence,
+  // that "a workout whose ONLY step was `wu` rebuilds to `steps = '[]'`,
+  // which satisfies the `steps` column's NOT NULL constraint" — but no
+  // committed test exercised it. The reviewer's own mutation (deleting the
+  // `COALESCE(…, '[]'::jsonb)` wrapper below) survived 125/125 integration
+  // tests: with it gone, `jsonb_agg` over zero surviving elements returns
+  // SQL NULL, `workouts.steps` is `.notNull()` (`schema.ts`), the `UPDATE`
+  // aborts, and since migrations run before the API serves a request, the
+  // whole deploy never comes up. This is that missing test.
+  it("strips a wu-ONLY workout to steps: [], not a migration failure", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "wu-only-user",
+        email: "wu-only@strip.test",
+        name: "WU Only",
+      })
+      .returning();
+
+    // A single-element array whose only step is `wu` — the exact legacy
+    // shape spec §6/B4 says can exist (bulk import accepted a bare `wu 10`
+    // paste, and Phase 5's `+ WARM-UP` could author a workout with nothing
+    // else in it, before either door existed in this form).
+    const [row] = await db
+      .insert(workouts)
+      .values({
+        userId: u.id,
+        title: "Legacy wu-only workout",
+        type: "O2",
+        difficulty: "easy",
+        pain: 1,
+        source: "user",
+        steps: [{ k: "wu", minutes: 10 }],
+      })
+      .returning();
+
+    // (a) boot does not fail: the describe's FIRST test already advanced
+    // this shared container through the real `migrate()` call that applies
+    // 0008 for real (drizzle's own bookkeeping table then skips it on every
+    // later `migrate()` in this container, same reason the "wu-free"
+    // test above replays the raw SQL text directly rather than calling
+    // `migrate()` a second time) — so this row, inserted after that point,
+    // is exercised the same way: executing 0008's own committed SQL
+    // directly. It is the IDENTICAL statement the real boot-time
+    // `migrate()` call runs (not a re-derived equivalent), so a missing
+    // COALESCE guard fails HERE with the same NOT NULL violation it would
+    // raise at a real deploy's boot, before assertion (b) below is ever
+    // reached.
+    const migrationSql = await readFile(
+      path.join("drizzle", "0008_strip_wu_steps.sql"),
+      "utf-8",
+    );
+    await db.execute(sql.raw(migrationSql));
+
+    // (b) the row reads back steps: [] — not null, not omitted, not an
+    // error shape.
+    const [after] = await db
+      .select()
+      .from(workouts)
+      .where(eq(workouts.id, row.id));
+    expect(after.steps).toStrictEqual([]);
+
+    // The companion trace (reviewer's own second-order finding, not a
+    // separate bug): `steps: []` is a shape `domain/validate.ts`'s
+    // `validateSteps` rejects on WRITE and no READ path revalidates
+    // (spec §6's own premise — the strip runs in the migration precisely
+    // because nothing downstream re-checks stored steps). It does not
+    // brick, though: `src/session/engine.ts`'s `isComplete` is
+    // `run.index >= run.phases.length` (true at `index: 0` for a
+    // zero-phase run), so a session built from this workout completes
+    // immediately instead of throwing — degrades rather than crashes.
+  });
 });
