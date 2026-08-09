@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +19,7 @@ function mockReady(
 
 async function renderEditor() {
   const { default: BaselineEditor } = await import("./BaselineEditor");
-  render(<BaselineEditor />);
+  return render(<BaselineEditor />);
 }
 
 afterEach(() => {
@@ -110,7 +111,13 @@ describe("BaselineEditor", () => {
       screen.getByRole("button", { name: /apply baselines/i }),
     );
 
-    expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k6Seconds: 122.5 });
+    // Task review round, Finding 1 (BLOCKER): Apply must send ONLY the
+    // TOUCHED field — k2 was never acted on and is still server-null, so
+    // sending a fabricated k2Seconds:112 here would silently manufacture a
+    // 2k baseline the rower never rowed and never asked for. This is the
+    // exact fresh-both-null-user case Finding 1's test list names.
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith({ k6Seconds: 122.5 });
   });
 
   it("keeps the draft and surfaces an error when save is rejected", async () => {
@@ -246,6 +253,95 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     expect(save).toHaveBeenCalledWith({ k2Seconds: 115, k6Seconds: 122 });
   });
 
+  // Task review round, Finding 1 (BLOCKER) — the core fix, pinned directly:
+  // Apply commits a side iff it was touched OR the server already has a
+  // real value for it; an untouched, still-server-null side is never
+  // fabricated onto the wire just because the draft needs SOME number to
+  // display.
+  describe("Apply commits only touched (or already-real) fields (task review Finding 1)", () => {
+    it("touching only the known-real side still sends both — the untouched side is ALREADY real, not fabricated", async () => {
+      // Both start real (BASELINES-shaped): touching 2k, leaving 6k alone.
+      // 6k is included not because it's touched but because it was already
+      // a real baseline before this session even started.
+      const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5, k6Seconds: 122 });
+    });
+
+    it("an untouched, still-null 2k is never fabricated: nudging only 6k, Apply omits k2Seconds entirely", async () => {
+      // Both start null. Only 6k is acted on — 2k is never touched and
+      // stays server-null, so it must never appear in the PUT body even
+      // though the draft needs SOME number (the seed) to display it.
+      const save = mockReady({ k2Seconds: null, k6Seconds: null });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({ k6Seconds: 121.5 });
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k2Seconds: expect.anything() }),
+      );
+    });
+
+    // The symmetric case (Finding 1's Apply condition is two independent
+    // per-field checks, not one shared expression) — exercises the OTHER
+    // field's own "untouched and still-null" branch, which the test above
+    // never reaches (there, 6k is the one touched).
+    it("an untouched, still-null 6k is never fabricated: nudging only 2k, Apply omits k6Seconds entirely", async () => {
+      const save = mockReady({ k2Seconds: null, k6Seconds: null });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5 });
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k6Seconds: expect.anything() }),
+      );
+    });
+
+    // Finding 3, dissolved by Finding 1's fix: a filled value that happens
+    // to equal the seed must still be Applyable — `touched` (not a value
+    // comparison) is what Apply keys on.
+    it("pins Finding 3's exact case: k6=119 derives k2=112 (=SEED_K2) — Apply still commits it", async () => {
+      // deriveK2FromK6(119) = 119 - 7 = 112, identical to SEED_K2.
+      const save = mockReady({ k2Seconds: null, k6Seconds: 119 });
+      await renderEditor();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k6Seconds: 119 });
+    });
+
+    it("the confirm block previews ONLY the field(s) actually being committed — a rower never sees an untouched value listed as changing", async () => {
+      mockReady({ k2Seconds: null, k6Seconds: null });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+
+      // The 6k line names the real edit; no 2k line exists anywhere on
+      // screen, even though 2k is ALSO displayed (at its seed) elsewhere.
+      expect(screen.getByText("6k 2:02.0 → 2:02.5")).toBeInTheDocument();
+      expect(screen.queryByText(/^2k .* → /)).not.toBeInTheDocument();
+    });
+  });
+
   // Review finding (task review, PR #66): the offer used to key ONLY on the
   // raw `baselines` prop, ignoring the draft entirely — so a rower who had
   // already hand-nudged the seeded, still-server-null field away from
@@ -327,6 +423,81 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       expect(
         screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  // Task review round, Finding 2 (ship-risk): accepting the offer used to
+  // unmount the button under the rower's own finger — a 56px collapse that
+  // slides the 6k steppers up into the tap band (an iOS ghost-tap hazard).
+  // The slot now reserves its own height; only its CHILD content swaps.
+  describe("the offer slot reserves its height across accept (task review Finding 2, ship-risk)", () => {
+    it("the slot's own container element persists (never unmounted) across accepting the offer", async () => {
+      mockReady({ k2Seconds: null, k6Seconds: 122 });
+      const { container } = await renderEditor();
+
+      const slotBefore = container.querySelector(".baseline-derive-slot");
+      expect(slotBefore).not.toBeNull();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+      );
+
+      const slotAfter = container.querySelector(".baseline-derive-slot");
+      // Same DOM node — React never unmounted the container, only swapped
+      // its child (button -> inert line), so the reserved box never leaves
+      // the layout even for a single frame.
+      expect(slotAfter).toBe(slotBefore);
+      expect(
+        screen.getByText("ESTIMATED — ADJUST WITH ± BELOW"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("the inert line disappears (blank, still-reserved slot) once the rower nudges further away from the exact accepted value", async () => {
+      mockReady({ k2Seconds: null, k6Seconds: 122 });
+      const { container } = await renderEditor();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+      );
+      expect(
+        screen.getByText("ESTIMATED — ADJUST WITH ± BELOW"),
+      ).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+      // No longer exactly the derived value, so the "ESTIMATED" claim would
+      // be false — hidden, but the slot itself is still in the DOM (same
+      // reserved box), never re-showing the button either (declined stays
+      // declined).
+      expect(screen.queryByText(/ESTIMATED/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+      ).not.toBeInTheDocument();
+      expect(container.querySelector(".baseline-derive-slot")).not.toBeNull();
+    });
+
+    // jsdom never loads index.css as a real stylesheet (no browser layout
+    // engine backs getComputedStyle here — same limitation
+    // TimerTargets.test.tsx's own comment documents for the identical
+    // reason), so this reads the CSS source text directly rather than a
+    // computed value; the real, rendered pixel-height-stability proof lives
+    // in e2e/design.spec.ts's own boundingBox() comparison against the
+    // actual browser (Finding 2's own "computed min-height... is acceptable
+    // here", satisfied there, not here).
+    it("the slot's own CSS reserves a fixed min-height rather than leaving it to content", () => {
+      // Plain string surgery on `import.meta.url`, not `new URL(...)` —
+      // same jsdom quirk (resolves against `http://localhost:3000/`
+      // instead of the given `file://` base) `TimerTargets.test.tsx`'s own
+      // identical CSS-source-reading precedent already documents.
+      const indexCssPath = import.meta.url
+        .replace(/^file:\/\//, "")
+        .replace(/you\/[^/]+\.test\.tsx$/, "index.css");
+      const css = readFileSync(indexCssPath, "utf-8");
+      const rule = css.match(/\.baseline-derive-slot\s*{[^}]*}/)?.[0] ?? "";
+      expect(rule).toMatch(/min-height:\s*48px/);
     });
   });
 

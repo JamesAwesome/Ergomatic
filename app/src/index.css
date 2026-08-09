@@ -1319,12 +1319,33 @@ button:disabled {
 
 /* ui-notes round, item 2 — the derivation OFFER. `.button-l3` already
    carries the 44px+ tap target and the "commit-in-card" ink treatment
-   (index.css's five-level system, DEVIATIONS.md #46); the only addition
-   here is spacing it off from the baseline row above/below it, since
-   `.baseline-row` doesn't leave a gap for a sibling that isn't itself
-   another `.baseline-row`. */
-.baseline-derive {
+   (index.css's five-level system, DEVIATIONS.md #46).
+   `.baseline-derive-slot` (task-review round, Finding 2, ship-risk) is the
+   fix for a real ghost-tap hazard: accepting the offer used to unmount the
+   button outright, collapsing this 48px+8px-margin box and sliding the row
+   below it up under a still-moving finger. The slot now RESERVES that exact
+   footprint (min-height 48px, the button's own min-height, plus the same
+   8px the button used to carry as its own margin) whenever the offer is
+   ELIGIBLE at all (`BaselineEditor.tsx`'s `deriveOffer`, independent of
+   whether it's still showing the button) — only its child swaps, between
+   the button, the inert `.baseline-derive-done` status line, or nothing. */
+.baseline-derive-slot {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
   margin: 0 0 8px;
+}
+
+.baseline-derive-slot .baseline-derive {
+  width: 100%;
+}
+
+.baseline-derive-done {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
 }
 
 .baseline-confirm {

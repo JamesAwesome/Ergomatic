@@ -2151,6 +2151,82 @@ test.describe("you screen", () => {
   });
 });
 
+// ui-notes round, item 2 / task-review Finding 5 (cheap sweep addition): a
+// design sweep over the derivation-offer state itself — neither the plain
+// "you screen" sweep above (both baselines unset) nor any other existing
+// sweep ever renders `.baseline-derive-slot`/`.baseline-derive-done` at
+// all. A partial raw-API seed is legitimate HERE (unlike
+// onboarding.spec.ts's own reachability-proving test, PR #66 Finding 1):
+// this sweep is about tap targets/contrast on an already-known state, not
+// about proving the client's own Apply can produce it.
+test.describe("you screen with the derivation offer visible (task review round, Finding 5)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-you-offer@e2e.test",
+      name: "Design You Offer Tester",
+    });
+    const result = await page.evaluate(async () => {
+      const res = await fetch("/api/baselines", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k6Seconds: 122 }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    });
+    if (!result.ok) {
+      throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+    }
+    await page.goto("/you");
+    await page
+      .getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" })
+      .waitFor();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // Task-review round, Finding 2 (ship-risk): the actual, rendered proof
+  // that accepting the offer never collapses the layout — the real browser
+  // boundingBox() comparison the client-level test's own comment defers to
+  // (jsdom has no layout engine to measure this against).
+  test("accepting the offer does not change the slot's rendered height — the fix for the ghost-tap hazard", async ({
+    page,
+  }) => {
+    const slot = page.locator(".baseline-derive-slot");
+    const before = await slot.boundingBox();
+    expect(before).not.toBeNull();
+
+    await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
+    await page.getByText("ESTIMATED — ADJUST WITH ± BELOW").waitFor();
+
+    const after = await slot.boundingBox();
+    expect(after).not.toBeNull();
+    expect(after!.height).toBe(before!.height);
+    expect(after!.y).toBe(before!.y);
+  });
+
+  test("the inert 'ESTIMATED' line clears ink contrast, and the sweep re-passes axe with it rendered", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
+    const done = page.getByText("ESTIMATED — ADJUST WITH ± BELOW");
+    await done.waitFor();
+
+    const color = await done.evaluate((el) => getComputedStyle(el).color);
+    expect(color).toBe("rgb(87, 84, 76)"); // --ink-3, 7.43:1 on --surface
+
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+});
+
 // Phase 6B (Task 5): the pre-workout countdown (handoff §5). A single
 // 2-minute work step gets a rower to /session/confirm fast; pressing START
 // lands here without ever pressing SKIP — SKIP/CANCEL's own behavior is
@@ -3553,6 +3629,34 @@ test.describe("reader screen (/news/baselines, mixed read state)", () => {
     });
     expect(stacking).not.toBeNull();
     expect(stacking!.barZ).toBeGreaterThan(stacking!.overlayZ);
+  });
+
+  // ui-notes round, item 1 / task-review Finding 5 (cheap sweep addition):
+  // `.reader-close` is a normal-flow flex child of `.reader-header` today,
+  // not absolutely positioned, so it automatically sits inside `.screen`'s
+  // own safe-area-aware padding (`calc(6px + env(safe-area-inset-top))`).
+  // Pinned structurally so a FUTURE refactor that switches it to
+  // `position: absolute; top: 0` (a plausible-looking "pin it to the
+  // corner" change) can't silently put it under a real device's Dynamic
+  // Island/notch without a test noticing — this environment's own
+  // `env(safe-area-inset-top)` resolves to 0 (no real notch), so the
+  // assertion is really "at or below the padded content edge," not a claim
+  // about a specific inset value.
+  test("the ✕ close sits INSIDE the safe-area-padded content box, not flush with the viewport edge (structural pin against a future absolute-positioning refactor)", async ({
+    page,
+  }) => {
+    const main = page.locator("main.reader-screen");
+    const mainBox = await main.boundingBox();
+    const paddingTop = await main.evaluate((el) =>
+      parseFloat(getComputedStyle(el).paddingTop),
+    );
+    expect(mainBox).not.toBeNull();
+
+    const close = page.locator(".reader-close");
+    const closeBox = await close.boundingBox();
+    expect(closeBox).not.toBeNull();
+
+    expect(closeBox!.y).toBeGreaterThanOrEqual(mainBox!.y + paddingTop);
   });
 });
 

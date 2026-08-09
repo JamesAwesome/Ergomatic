@@ -110,6 +110,43 @@ describe("useBaselines", () => {
     });
   });
 
+  // Task review round (PR #66, Finding 1, BLOCKER): `save` must accept a
+  // PARTIAL patch — the server's own per-field PUT loop
+  // (server/routes/data.ts:327-368) only writes fields present in the
+  // body, and `server/stores/baselines.ts:22-33`'s `put()` spreads that
+  // same partial object into both the INSERT `values` and the
+  // `onConflictDoUpdate` `set`, so an omitted field is never touched in
+  // Postgres either — pinned server-side by
+  // `server/routes/data.test.ts`'s own "PUT updates a field and GET
+  // reflects it" test. `BaselineEditor.tsx`'s Apply relies on this to
+  // never fabricate a value for an untouched, still-unset side.
+  it("save() PUTs only the given field when called with a partial patch", async () => {
+    const initial = { k2Seconds: null, k6Seconds: null };
+    const api = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return new Response(null, { status: 200 });
+      }
+      return new Response(JSON.stringify(initial), { status: 200 });
+    });
+    vi.doMock("../api", () => ({ api }));
+    const { useBaselines } = await import("./useBaselines");
+    const { result } = renderHook(() => useBaselines());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    if (result.current.state !== "ready") throw new Error("expected ready");
+    const { save } = result.current;
+
+    await act(async () => {
+      await save({ k6Seconds: 122.5 });
+    });
+
+    const putCall = api.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(putCall).toBeDefined();
+    const [, init] = putCall as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toStrictEqual({
+      k6Seconds: 122.5,
+    });
+  });
+
   it("refetches after a successful save and exposes the updated values", async () => {
     const oldValues = { k2Seconds: 100, k6Seconds: 320 };
     const newValues = { k2Seconds: 95, k6Seconds: 310 };

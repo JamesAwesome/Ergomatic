@@ -821,31 +821,48 @@ test("you-staged", async ({ page }) => {
 });
 
 // ui-notes round, item 2 — the derivation offer, visible in neither "you"
-// (both baselines unset) nor "you-staged" (both set, mid-nudge): a realistic
-// one-baseline-set rower (the same real state onboarding.spec.ts's own arc
-// reaches via `setBaselines(page, { k6Seconds: 122 })` — a rower who has
-// rowed exactly the 6k test) sees the ESTIMATE FROM 6K offer under the
-// still-empty 2k row.
+// (both baselines unset) nor "you-staged" (both set, mid-nudge): a fresh
+// rower who has nudged ONLY the 6k field and applied sees the ESTIMATE FROM
+// 6K offer appear under the still-empty 2k row. Task-review round (PR #66,
+// Finding 1, BLOCKER) fixed: reached here through the REAL editor flow (a
+// UI nudge + Apply), never a raw `fetch` PUT — a raw-API seed would prove
+// nothing about whether the client's own Apply can actually produce this
+// state (it couldn't, before the fix: Apply always committed both fields).
 test("you-derive-offer", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-you-derive-offer@e2e.test",
     name: "Screenshot Tester",
   });
-  const result = await page.evaluate(async () => {
-    const res = await fetch("/api/baselines", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ k6Seconds: 122.0 }),
-    });
-    return { ok: res.ok, status: res.status, body: await res.text() };
-  });
-  if (!result.ok) {
-    throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
-  }
   await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  await page.getByRole("button", { name: "6k slower" }).click();
+  await page.getByRole("button", { name: "Apply baselines" }).click();
   await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-derive-offer.png"),
+  });
+});
+
+// Task-review round, Finding 2 (ship-risk): accepting the offer used to
+// unmount the button outright — this capture is the committed visual
+// record of the fix, the inert "ESTIMATED" status line occupying the exact
+// same reserved slot the button did, so a reviewer can see the layout
+// never collapses. Continues straight from the offer state above (same
+// account, same session) rather than a fresh sign-in — tapping ESTIMATE
+// FROM 6K is the one interaction this capture exists to show.
+test("you-derive-offer-accepted", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-derive-offer-accepted@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you");
+  await page.locator(".baseline-value").first().waitFor();
+  await page.getByRole("button", { name: "6k slower" }).click();
+  await page.getByRole("button", { name: "Apply baselines" }).click();
+  await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
+  await page.getByText("ESTIMATED — ADJUST WITH ± BELOW").waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-derive-offer-accepted.png"),
   });
 });
 
