@@ -160,7 +160,12 @@ they go stale (this has burned us before). Concretely:
 
 **Exit:** MET — a workout authored as `6k -2 @ 22 SPM` saves, appears in the Library, and resolves to `1:59.0–2:01.0` from real baselines, identically to the seeded workouts.
 
-**Follow-ups (not blockers, recorded at merge):** DUR field width clips long distances (`42195m`); the `×N` stepper keeps its value after the block is cleared; no unsaved-changes guard when leaving the builder; re-importing after a partial bulk failure re-submits the blocks that already landed; `design.spec` sweeps only the blank builder, not the bulk panel or the edit screen; the bulk endpoint inserts blocks sequentially without a transaction (now UI-reachable for the first time).
+**Follow-ups recorded at merge:** three of the six were overtaken by the
+5C–5F builder rebuild and the bulk-import screen (the DUR field's width,
+the `×N` stepper's stale value, the missing bulk/edit design sweeps). The
+three still true — the transaction-less bulk endpoint, the partial-import
+re-submit it causes, and the missing unsaved-changes guard — are in
+Phase CL.
 
 ## Phase 5C — Builder refinements & the number retirement
 
@@ -256,14 +261,9 @@ unable to do something it should be able to do.
       a sub-minute step and a personal workout's Edit/Delete visible in the
       committed screenshots (`e2e/screenshots.spec.ts`)
 
-**Locked decision:** the house time format above is now the app-wide
-convention for any duration display, not a builder-only affordance.
-
-**Deferred, not forgotten:** MAX/MIN effort references (a `PaceRef` beyond
-`2k`/`6k`) are **Phase 5G** — they ripple through `resolveSplit`, validation,
-the bulk grammar and the seeded library, and this phase was scoped to stay
-client-side. The library's custom-workout badge/filter (surfacing a rower's
-own authored workouts distinctly from the starter library) is **Phase 5H**.
+**Locked decision:** the house time format (Locked decisions above) is now
+the app-wide convention for any duration display, not a builder-only
+affordance.
 
 **Exit:** MET — all four device-use reports closed; the phase exit
 criterion (a sub-minute duration typable, stored, and displayed as `0:45`
@@ -313,10 +313,6 @@ a real effort reference, not a stand-in offset.
       `e2e/design.spec.ts` including a MAX-selected sweep — the
       hidden-stepper layout is its own state), and the builder/detail
       screenshots each carry a real `MAX`/`ALL OUT` step
-
-**Deferred, not forgotten:** the library's custom-workout badge/filter
-(surfacing a rower's own authored workouts distinctly from the starter
-library) is still **Phase 5H**.
 
 **Exit:** MET — `0:30 max @ 32` authors, saves, and reopens showing `ALL
 OUT` with no nudge controls, end to end.
@@ -554,12 +550,9 @@ is exactly what 6C's own save flow is for.
       both doors (`log-session.png`, `log-session-manual.png`)
 
 **Note:** the server side of "save advances `doneN`" **already existed** —
-`server/stores/logs.ts`'s `create` bumps `plan_state.done_n` on every
-`POST /api/logs` call, wired since the Phase 4 schema work, well before this
-UI existed. 6C's job was the log-writing screen that calls the existing
-route, not new plan-advancement plumbing (found while seeding e2e fixtures
-for Phase 6A Task 5 — seeding 3 logs against a freshly-chosen plan advanced
-`doneN` to 3, not 0, the first time it was tried).
+`server/stores/logs.ts`'s `create` has bumped `plan_state.done_n` on every
+`POST /api/logs` call since the Phase 4 schema work, so 6C's job was the
+log-writing screen that calls the existing route, not new plumbing.
 
 **Exit:** MET — **every arrow in the core loop closes**: Today → suggestion/
 Library → Confirm → Countdown → Timer → complete → Log → Today, each hand-off
@@ -571,13 +564,11 @@ frozen log paces stay unchanged after a later baseline edit (reconstructed
 from the draft's own frozen ref, not re-read live); the manual door proves
 the same save path from a workout's own detail screen for an off-app row,
 without ever touching the draft/run records an in-progress session elsewhere
-might be using. One seam was left unspanned at the time this phase closed:
-no single browser session ran the WHOLE arc card→log in one continuous
-test, each hand-off was its own proof instead. That gap is now closed —
-Phase 6D's own `today.spec.ts` "the type-swap loop" test drives exactly
-that continuous session in one page (Today's suggestion card → Start →
-Confirm → SKIP the countdown → the live run → complete → Log → Save →
-back to Today), the first (and so far only) e2e in the repo to do so.
+might be using. One seam was left unspanned at close — no single browser
+session ran the WHOLE card→log arc in one continuous test, each hand-off
+was its own proof — and Phase 6D's `today.spec.ts` "the type-swap loop"
+closed it, the one e2e in the repo that drives the whole arc in a single
+page.
 
 ## Phase 6D — Today enhancements
 
@@ -630,11 +621,6 @@ plan: `docs/superpowers/plans/2026-08-02-today-enhancements.md`.
 screen itself, row a plan day as a different type without losing plan
 progress (the swap resets cleanly once that session is logged), and log a
 genuine off-plan or make-up session without moving the plan's counter.
-
-**Next:** a **UI-fix round** (exact targets replace the range displays; a
-drop-X on Today's unlogged line; a discard option on SessionComplete; SHUFFLE
-full-width) — in flight on its own `ui-fix-round` branch, ahead of the
-workout-generation phase below — then Phase 7's PM5 integration.
 
 ## Phase 6E — Workout library generation
 
@@ -696,12 +682,7 @@ plan: `docs/superpowers/plans/2026-08-03-workout-generation.md`.
 set no-ops on a second boot), a content-only edit to an existing title
 reaches the running set on the next boot without any title change, and a
 title rename/removal still converges cleanly; personal workouts and their
-logs are structurally unaffected either way. Pending: James's review of the
-generated batch and PR approval before merge (normal SDLC — no merge
-without it).
-
-**Next:** the deferred UI-fix round below (Phase 6F), then Phase 7's PM5
-integration.
+logs are structurally unaffected either way.
 
 ## Phase 6F — UI-fix round
 
@@ -761,9 +742,6 @@ and a Library filter model that scales; `docs/design/DEVIATIONS.md` and
 `docs/design/README.md` both read true against the shipped app; full e2e
 green ×2 back-to-back plus unit/client/integration.
 
-**Next:** a follow-on round collapsing Today's own filter chips into the
-same sheet pattern (below), then Phase 7's PM5 integration.
-
 ## Phase 6G — Today's collapsible filter
 
 **Status:** Done (2026-08-04)
@@ -807,11 +785,6 @@ plan: `docs/superpowers/plans/2026-08-04-today-filter-sheet.md`.
 deviates); full e2e green ×2 back-to-back plus unit/client/integration;
 zero storage or `suggest()` changes, so every existing `todayOverrides`
 record on a real device stays valid with no migration.
-
-**Next:** Phase 7's PM5 integration. The parametric workout generator
-("Triggered follow-ons" below) is now unblocked — Phase 6E's
-structural-reference pipeline already produced its fixture data — but not
-yet scheduled.
 
 ## Phase 6H — News tab core
 
@@ -863,8 +836,7 @@ plus screenshots and unit/client/integration (2408 tests, 98%+ across all
 four coverage metrics).
 
 **Next:** Phase 6I (Today onboarding) and Phase 6J (Trend charts on You),
-below — both deliberately not this phase's scope. Phase 7B's PM5 connected
-surface remains unscheduled.
+below — both deliberately not this phase's scope.
 
 ## Phase 6I — Today onboarding
 
@@ -928,14 +900,11 @@ sessions — not sample data.
 
 ## Phase 7A — Monitor domain (the domain beneath the screens)
 
-**Status:** Done (2026-08-05, PR #TBD)
+**Status:** Done (2026-08-05; merged 2026-08-06 as PR #52, carrying
+7A-fix-2 below with it).
 **Goal:** The PM5's protocol, a workout compiler, a runtime driver, and the
 localStorage-side session record all exist and are heavily tested — no
-screen changes (deliberately deferred to 7B). Live radio proof was
-originally deferred too, but `phase-7a-fix` (below, 2026-08-05) ran the
-driver against a real PM5 before this phase's own PR merged — see
-"Hardware-verified — partially, not fully" further down for what that
-did and did not establish.
+screen changes (deliberately deferred to 7B).
 **Design authority:** `docs/superpowers/specs/2026-08-05-phase-7a-monitor-domain-design.md`,
 plan: `docs/superpowers/plans/2026-08-05-phase-7a-monitor-domain.md`.
 **Supersedes:** the single-phase "PM5 over Bluetooth" sketch this section
@@ -947,10 +916,10 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
 - [x] `domain/monitor/pm5/`: the CSAFE frame codec (checksum, chunk,
       reassemble), the programming-command byte layouts (`commands.ts`),
       the five BLE status-characteristic decoders (`parse.ts`), and the
-      CSAFE ack/reject response parser (`response.ts`) — every byte cited
-      against the primary CSAFE/BLE PDFs; three checksum errata and one
-      unresolved candidate documented rather than guessed
-      (`docs/monitor/pm5-interface-notes.md`)
+      CSAFE ack/reject response parser (`response.ts`); every byte cited
+      against the primary CSAFE/BLE PDFs, with three checksum errata and
+      one unresolved candidate documented in
+      `docs/monitor/pm5-interface-notes.md` rather than guessed
 - [x] `domain/monitor/program.ts`: `compileProgram`, turning a confirmed
       session's phases into the PM5's variable-interval IR
       (`WorkoutProgram`/`ProgramInterval`) or a typed, copy-ready
@@ -960,18 +929,18 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
       the codec sees (`MonitorCapabilities`/`MonitorFrame`/`IntervalActual`/
       `MonitorEvent`/`MonitorDriver`), plus the `Transport`/
       `DiscoveredMonitor` radio abstraction three later transports satisfy
-- [x] `src/monitor/driver.ts`: the runtime driver — ack-gated write
-      sequencing with a pending-ack queue for coalesced BLE notifications,
-      the state machine with terminal-state latching (Appendix E's
-      auto-cycle never un-finishes a session), an optional tick-driven
-      ack-timeout policy, and `intervalRemaining`'s computation, rooted on
-      0x0033's own Last Split Time/Distance fields; `src/monitor/
-      transports/fake.ts` simulates a real PM5 end to end for CI
-      (byte-for-byte programming verification, six injection hooks)
+- [x] `src/monitor/driver.ts`: the runtime driver, with ack-gated write
+      sequencing over a pending-ack queue for coalesced BLE notifications,
+      a state machine with terminal-state latching (Appendix E's auto-cycle
+      never un-finishes a session), an optional tick-driven ack-timeout
+      policy, and `intervalRemaining` rooted on 0x0033's own Last Split
+      Time/Distance fields; `src/monitor/transports/fake.ts` simulates a
+      real PM5 end to end for CI (byte-for-byte programming verification,
+      six injection hooks)
 - [x] `src/monitor/monitorRun.ts`: the monitor-driven session record
       (`MonitorRun`, localStorage, mirroring `session/run.ts`'s idiom), the
       cross-clear rule (creating a `MonitorRun` clears any `SessionRun`),
-      and `anyLiveSession()`'s coexistence truth table (9 cells, pinned) —
+      and `anyLiveSession()`'s coexistence truth table (9 cells, pinned);
       Today's stale-draft discard gains a live-monitorRun exception, this
       phase's one permitted UI touch
 - [x] `src/monitor/transports/capacitorBle.ts`
@@ -980,18 +949,30 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
       for the two real radios, compile-tested shapes, deliberately excluded
       from the coverage gate alongside `src/native/**` — no BLE radio
       exists in CI to prove either one against
-- [x] `docs/monitor/pm5-interface-notes.md` gains a §17 "laptop session
-      runsheet" consolidating every doc-ambiguity or reviewed-assumption
-      flagged across the phase into one numbered checklist, and (after the
-      session below) a §18 recording what was actually observed against
-      real firmware
+- [x] `docs/monitor/pm5-interface-notes.md` gains §17, the laptop session
+      runsheet consolidating every doc ambiguity and reviewed assumption
+      into one numbered checklist, and §18, what real firmware was then
+      observed to do
 
-**Deferred, deliberately — 7B/7C's job:** no screen wires a `MonitorDriver`
-to anything yet — no "Connect PM5" affordance, no live pace/rate on the
-timer, no PM5-sourced log entries, no reverse cross-clear (a phone-timer
-session starting does not yet clear a stale `MonitorRun`). The remaining
-open §17 items (below) still need a further James-device row — a
-James-device event, not a CI gate, and not required for 7A's own exit.
+**Record:** this domain met real hardware in the same-day `phase-7a-fix`
+pass (plan: `docs/superpowers/plans/2026-08-05-phase-7a-fix.md`), and every
+observation, correction and withdrawal since lives in
+`docs/monitor/pm5-interface-notes.md` §18 (laptop sessions 1-3, hardware
+walks 1-4) and §19 (each idiosyncrasy, and whether it was ours or the
+machine's). The headline reaches back into this phase's own codec: the
+CSAFE status byte is a BITFIELD and `0x81` IS AN ACCEPT (§19.1), so of the
+five defects the fix pass named, D1 and D2 are WITHDRAWN as stated (§19.2;
+the display-emptying `:00` transition stays an open finding), D3's forward
+attribution is real but applies at every boundary rather than only a
+resting one (§19.8), D4 stands (§18's own D1-D5 table), and D5's fix stands
+on corrected reasoning (§19.9). The monitor never goes quiet after a
+workout either; our own terminal latch did (§19.4). Phases 7A-fix-2 and
+7A-fix-3 below are the fix lists that record generated.
+
+**Deferred to 7B/7C, both below:** the screen wiring, PM5-sourced log
+entries, and the reverse cross-clear all shipped there. The §17 items still
+open need an operator at the erg rather than a CI gate; Phase CL collects
+them.
 
 **Exit:** MET — every domain/driver behavior the design spec names has a
 passing test (100% on `domain/monitor/**` and on `src/monitor/
@@ -1004,312 +985,192 @@ UNLOGGED distinction the function deliberately collapses and must keep
 reading `loadRun()`/`loadMonitorRun()` directly — see Phase 7B's own
 bullet below before wiring any guard.
 
-**Hardware-verified — partially, not fully (phase-7a-fix, 2026-08-05).**
-This domain has now met a real PM5: laptop session 1, then a same-day
-diagnosis row, both run against the `pm5-lab` harness + bridge before this
-phase's own PR merged. The codec's bytes were right; the fake's MODEL of
-the machine was wrong in five ways no document states and no test could
-catch, all found and fixed in `phase-7a-fix` (own plan:
-`docs/superpowers/plans/2026-08-05-phase-7a-fix.md`): **D1** a REJECTED
-program WIPES whatever workout was already loaded — CONFIRMED destructive,
-observed twice — but the simple rule that first explained it ("the PM
-accepts a program only when nothing is loaded") is NOT equally confirmed:
-a later hardware session found `terminate()` ACCEPTED with a workout
-loaded, yet the FOLLOWING program was still rejected — twice. The state
-model behind accept/reject is still not understood; only the destructive
-half is, and the real clear command remains unfound; **D2** a `0x01` ack
-does not mean a program landed —
-`program()` now clears, sends, and verifies against the machine's own
-reported state instead of resolving on the ack alone; **D3** the PM
-attributes rests FORWARD into the interval they're heading toward — the
-driver now normalizes every machine index to this codec's own numbering
-before any consumer sees it; **D4** only one `intervalComplete` fired for
-a two-interval program (the first boundary's data arrived but was
-discarded) — fixed by waiting for both status halves of the same boundary
-before emitting; **D5** the no-belt heart-rate sentinel is `0`, not `255`
-as documented for a different characteristic — `parse.ts` now maps both to
-`null`. **This is not a claim of full verification.** One short row
-(`docs/monitor/pm5-interface-notes.md` §17, "The pending verification
-row") is prepared to confirm these five fixes against real hardware but
-has not been run yet, and several §17 items stay open regardless (the real
-clear command, whether an accepted program's structure reads back from
-0x0031, the no-rest work→work boundary index, and distance-kind/
-multi-frame programs from a known-empty machine — none of the last group
-has ever been tested without a loaded workout confounding the result).
-Every hardware claim above cites `pm5-interface-notes.md` §18 as an
-observation, never as something Concept2 documents.
-
-> **CORRECTION (2026-08-06) — most of those five were OURS, not the
-> machine's.** Three research passes validated the hardware observations
-> against Concept2's own CSAFE spec, the C2 PM SDK, and every open-source
-> PM5 implementation that could be found; the record is
-> `docs/monitor/pm5-interface-notes.md` **§19**. The root cause:
-> `app/domain/monitor/pm5/response.ts:72` decides accept-vs-reject with a
-> whole-byte comparison against `0x01`, but the CSAFE status byte is a
-> BITFIELD — bit 7 (`0x80`) is a frame-count toggle, bits 4-5 (`0x30`) are
-> the previous-frame status, bits 0-3 are the slave state. `0x81` is an
-> ACCEPT. Decomposed correctly, **not one status byte in either hardware
-> session was a rejection.** Consequences for the five defects above:
-> **D1** is WITHDRAWN — "accepts only when nothing is loaded" was invented
-> to explain an alternation that was the toggle bit, and "a rejection wipes
-> it" has no rejection left; what emptied the monitor's display that day is
-> now unresolved (§19.2). **D2** is WITHDRAWN as stated — identical bytes
-> producing `0x01` and `0x81` is the toggle, not the machine changing its
-> mind; the clear→send→verify design stays for a different reason (§19.2,
-> §19.6). **D3** stands and is the one genuinely undocumented PM5
-> behaviour on the list, but its SCOPE was wrong: laptop session 2
-> (2026-08-06) showed forward attribution at a no-rest work→work boundary
-> too, so `intervalIndex.ts`'s rest-keyed rule is wrong there (§19.8).
-> **D4** stands (a real ordering/coherence defect, unaffected). **D5**'s
-> observation and fix stand, its stated reasoning does not — the sentinels
-> ARE documented per-field, and mapping both to `null` is a defensive
-> choice a shipped library also makes (§19.9). Also corrected: the PM5 does
-> NOT go quiet after a workout — it parks in `WorkoutLogged` and answers
-> throughout; our own terminal latch produced the silence, and Appendix E
-> documents the recovery path we were not using (§19.4). The fixes are
-> Phase 7A-fix-2's job, below.
-
 ## Phase 7A-fix-2 — the status bitfield, and what it invalidates
 
-**Status:** Code complete (Tasks 1-6, commits `0d0af28`..`fcb7a4c` on
-`phase-7a-monitor-domain`). **The merge-gate row has RUN** (2026-08-06,
-laptop session 3 — `docs/monitor/pm5-interface-notes.md` §17, "The
-merge-gate row (session 3, RUN 2026-08-06 — results in §18)"; §18's
-session-3 heading records Expected-vs-Observed for all five steps, all
-PASSED, plus item 15 (ANSWERED)). The row's own live bisect surfaced a NEW
-defect outside this phase's own scope — programming over a RUNNING workout
-arms structurally empty (`docs/monitor/pm5-interface-notes.md` §19.13) —
-scoped to its own follow-up, Phase 7A-fix-3, below; it does not reopen any
-bullet in this phase. **The merge decision remains James's, not automatic
-on the row having run.** **Heart-rate verification joined this
-row** (owner addition, whole-branch fix wave, 2026-08-06): James's Apple
-Watch is now paired to the PM5 as its HR source, so Steps 2 and 4 also
-observe live `heartRateBpm` and the actuals' `avgHeartRateBpm` PRESENT for
-the first time — every prior observation was the no-HR-source `0` sentinel
-(§19.9). This verifies one device link (watch); the belt path and
-`CSAFE_PM_GET_HRM` stay future.
+**Status:** Done (Tasks 1-6, commits `0d0af28`..`fcb7a4c` on
+`phase-7a-monitor-domain`; merged with 7A as PR #52 on James's explicit
+approval, after the merge-gate row had run).
 **Trigger:** FIRED — `docs/monitor/pm5-interface-notes.md` §19 (2026-08-06)
-established that the CSAFE status byte is being parsed wrongly and that
+established that the CSAFE status byte was being parsed wrongly and that
 several conclusions recorded as PM5 behaviour were consequences of that
-parse. Documentation is corrected; the code now matches it.
-**Authority:** `docs/monitor/pm5-interface-notes.md` §19 for every citation
-below. Nothing here is a new hardware finding — it is the fix list §19
+parse. Nothing here is a new hardware finding; it is the fix list §19
 generated, now shipped.
+**Authority:** `docs/monitor/pm5-interface-notes.md` §19 for every citation
+below.
 
 - [x] **The status bitfield.** `app/domain/monitor/pm5/response.ts` masks
       instead of comparing: accept `(status & 0x30) === 0x00`, reject
       `(status & 0x30) === 0x10`, `bad`/`not-ready` for the other two
       previous-frame values, `status & 0x0F` the slave state, `status &
       0x80` the frame toggle (never tested for failure), bit `0x40`
-      reserved. `REJECT_STATUS_BYTE` is retired. `CsafeResponse` gained a
-      `kind: "unparseable"` member for a garbled frame, distinct from a
-      genuine reject — today's conflation is the bug §1 of the design spec
-      names. `buildAckFrame` and the fake synthesise all four frame
-      statuses, any slave state, either toggle, and echo opcodes. Vectors
-      per previous-frame-status value, per slave state, both toggle
-      polarities. Task 2 (§19.1).
-- [x] **Re-derived D1/D2 from the raw traces.** The 34-row per-send table
-      (§19.1) decodes every captured/narrative status byte in both
-      sessions: zero of the twelve RAW bytes was a rejection. D1 is
-      WITHDRAWN — the display-emptying `:00` transition stays an open
-      finding (Verdict (a), STANDING OPEN, not re-explained as fact); D2's
-      framing is WITHDRAWN but what it was protecting survives via the
-      documented OFFLINE slave-state mechanism (Verdict (c)); and
-      program-over-loaded WORKS (Verdict (b) — corrected in the whole-branch
-      fix wave, 2026-08-06: the observed rest-free row followed a reconnect
-      and a second rest-0 send, not an unbroken rest-30→rest-0 chain on one
-      connection, so the conclusion holds on a weaker argument than
-      originally stated; the clean single-connection observation is still
-      pending, §17's merge-gate row Step 3). Task 1 (§19.1/§19.2).
+      reserved. `REJECT_STATUS_BYTE` is retired, and `CsafeResponse` gained
+      a `kind: "unparseable"` member so a garbled frame is no longer
+      conflated with a genuine reject; `buildAckFrame` and the fake
+      synthesise all four frame statuses, any slave state and either
+      toggle. Task 2 (§19.1).
+- [x] **Re-derived D1/D2 from the raw traces.** §19.1's 34-row per-send
+      table decodes every captured status byte in both sessions: zero of
+      the twelve RAW bytes was a rejection. D1 is WITHDRAWN, with the
+      display-emptying `:00` transition left STANDING OPEN as Verdict (a);
+      D2's framing is WITHDRAWN while what it protected survives through
+      the documented OFFLINE slave state (Verdict (c)); and
+      program-over-loaded WORKS (Verdict (b)), on a weaker argument than
+      first claimed, since the observed rest-free row followed a reconnect
+      and a second send rather than one unbroken connection. Task 1
+      (§19.1/§19.2).
 - [x] **The terminal-latch recovery.** The monitor never stops responding;
       on completion it parks in `WorkoutLogged` and leaves via the Menu
       button or a terminate command ([CSAFE-DEF] Appendix E). `activeRun`
-      is opened by `program()` and only by `program()`; a terminal state
-      closes that run while every subscription stays live — frames keep
-      flowing after `workoutComplete`, `program()` works again with no
-      reconnect, and a boundary arriving outside an open run emits
-      `index: null` plus a `boundary-out-of-run`/`terminal-out-of-run` log
-      entry, and a program replacing an open run's own logs `run-replaced`,
-      rather than either corrupting a closed run's actuals. Task 4 (§19.4).
+      (`src/monitor/driver.ts`) is opened by `program()` and only by
+      `program()`; a terminal state closes that run while every
+      subscription stays live, so frames keep flowing after
+      `workoutComplete` and `program()` works again with no reconnect. A
+      boundary arriving outside an open run emits `index: null` plus a
+      `boundary-out-of-run`/`terminal-out-of-run` entry, and replacing an
+      open run logs `run-replaced`, rather than corrupting a closed run's
+      actuals. Task 4 (§19.4).
 - [x] **The no-rest interval rule.** `domain/monitor/pm5/intervalIndex.ts`
-      applied forward attribution only on the resting side; laptop session
-      2 read `0x0037` = 1 against `0x0033` = 0 at a work→work boundary with
-      `restSeconds: 0`. Done by Phase 7A-fix-2 Task 5: `toActualIndex`
-      applies the offset unconditionally for 0x0037/38 (`IntervalActual.index`),
-      clamped within the explainable range `[0, L+1]` and `null` + a forked
-      `"divergence"` entry outside it; 0x0033's own `toProgramIndex` stays
-      rest-keyed. The `index-unverified` trace entry is RETIRED — the kind
-      no longer exists (§19.8, §17 item 13).
+      had applied forward attribution only on the resting side.
+      `toActualIndex` now applies the offset unconditionally for 0x0037/38
+      (`IntervalActual.index`), clamped to the explainable range
+      `[0, L+1]`, emitting `null` plus a forked `"divergence"` entry
+      outside it; 0x0033's own `toProgramIndex` stays rest-keyed. The
+      `index-unverified` trace entry is RETIRED. Task 5 (§19.8, §17 item
+      13).
 - [x] **`sendPrepare` replaces the clear step.** `program()` still leads
       with a terminate-shaped step, re-justified as the documented
-      `WaitToBegin` recovery path (not a "clear" — nothing clears; terminate
-      re-arms the same workout, §19.5) rather than deleted; its refusal is
-      swallowed as routine (`"prepare-rejected"`), broadened from
-      nak-or-timeout to anything but a confirmed disconnect. Task 3.
-      **Carried finding (§17 item 15, Task 7 close-out):** the refusal's
-      own hardware citation turns out to be an uncaptured byte — see the
-      merge-gate row below.
+      `WaitToBegin` recovery path rather than a "clear" (nothing clears;
+      terminate re-arms the same workout, §19.5); its refusal is swallowed
+      as routine (`"prepare-rejected"`), broadened from nak-or-timeout to
+      anything but a confirmed disconnect. Task 3.
 - [x] **`SetScreenState` is asynchronous.** Its ack means "queued", not
-      "done" ([CSAFE-DEF] p.65). `terminate()` waits the documented ≥1 s
-      fallback delay (a tick bound, no wall clock) rather than polling
-      `CSAFE_PM_GET_SCREENSTATESTATUS` — that poll needs the pull path,
-      which this drop does not build (unconfirmed wrapper; §17 item 14)
-      (§19.6).
+      "done" ([CSAFE-DEF] p.65), so `terminate()` waits the documented
+      ≥1 s fallback delay as a tick bound rather than polling
+      `CSAFE_PM_GET_SCREENSTATESTATUS`, which needs the pull path this drop
+      does not build (§17 item 14, §19.6).
 - [x] **`GetErrorType` on a genuine reject.** A workout-configuration
-      reject is atomic and NOT self-describing — the master must issue
-      `GetErrorType` to learn why ([CSAFE-DEF] p.50). `sendGetErrorType`
-      fires ONE `buildGetErrorType()` on a genuine `"nak"`, bounded by
-      `errorTypeTicks` so an unconfirmed pull-path wrapper cannot hang the
-      call forever, and logs the raw hex reply with no decode claim — the
-      decode itself still waits on §17 item 14 (the pull-path GET, not yet
-      sent). Task 3 (§19.7).
-- [x] **The fake and the driver stopped modelling the withdrawn behaviour.**
-      `src/monitor/transports/fake.ts` accepts-and-replaces instead of
-      rejecting-when-loaded, toggles bit 7 on every response frame, varies
-      slave state (`ready`/`offline`/`in-use`), echoes opcodes in its acks,
-      and can script a genuine `0x11` reject or a garbled frame (each
-      marked synthetic/never-observed). `driver.test.ts` no longer pins D1
-      by name. Task 6.
+      reject is atomic and not self-describing ([CSAFE-DEF] p.50), so
+      `sendGetErrorType` fires ONE `buildGetErrorType()` on a genuine
+      `"nak"`, bounded by `errorTypeTicks`, and logs the raw hex reply with
+      no decode claim; the decode itself waits on §17 item 14. Task 3
+      (§19.7).
+- [x] **The fake and the driver stopped modelling the withdrawn
+      behaviour.** `src/monitor/transports/fake.ts` accepts-and-replaces
+      instead of rejecting-when-loaded, toggles bit 7 on every response
+      frame, varies slave state, echoes opcodes in its acks, and can script
+      a genuine `0x11` reject or a garbled frame (each marked synthetic and
+      never observed); `driver.test.ts` no longer pins D1 by name. Task 6.
 
-**Exit:** every bullet above has a passing test (2282 all-projects / 111
-files, e2e 210 — Task 6's count, unchanged by Task 7's docs-only close-out);
-no test encodes a whole-byte status comparison; §18/§19's corrected record
-and the code agree. **The merge-gate row
-(`docs/monitor/pm5-interface-notes.md` §17's five steps, James-operated) has
-RUN (2026-08-06, laptop session 3), and §18 records Expected-vs-Observed for
-each step — all five PASSED, and item 15 is ANSWERED alongside it.** The
-row's own live bisect found a new, scoped-out defect (Phase 7A-fix-3,
-below) that no bullet in this phase claimed as in scope. **PR #52 leaves
-draft until James gives explicit approval** — the row having run is
-necessary, not sufficient, and the merge decision is his, not this
-commit's.
+**Record:** the merge-gate row (§17's five James-operated steps) RAN on
+2026-08-06 as laptop session 3, and §18's session-3 heading holds
+Expected-vs-Observed for each step: all five PASSED and §17 item 15 is
+ANSWERED. Heart rate joined that row when James's Apple Watch was paired to
+the PM5 as its HR source, so live `heartRateBpm` and the actuals'
+`avgHeartRateBpm` were observed PRESENT for the first time (every earlier
+reading was the no-HR-source `0` sentinel, §19.9); the belt path and
+`CSAFE_PM_GET_HRM` stay future. The row's own live bisect surfaced a defect
+outside this phase's scope, programming over a RUNNING workout arming
+structurally empty (§19.13), which became Phase 7A-fix-3 below and reopened
+no bullet here.
+
+**Exit:** MET — every bullet above has a passing test (2282 all-projects /
+111 files, e2e 210), no test encodes a whole-byte status comparison, and
+§18/§19's corrected record agrees with the code.
 
 ## Phase 7A-fix-3 — program over a live piece
 
-**Status:** Done except session 4b. Design approved (adversarial review,
-2026-08-06); Stage 1 (instrumentation, the settle, the fake's honest
-empty-arm model) and Stage 2 (the structural readback, the
-`"structure-mismatch"` rejection) both SHIPPED — Tasks 1-5, commits
-`5d42e01`..`78a949c` on `phase-7a-fix-3` (2334 all-projects, e2e 210; full
-detail: `.superpowers/sdd/2026-08-06-phase-7a-fix-3/progress.md`). **Session
-4a has RUN** (2026-08-07, James-operated, ~6 min) and answered item 12
-outcome (a) unanimously — the ternary tripwire did not fire, so Stage 2 was
-built as designed, not redesigned (`docs/monitor/pm5-interface-notes.md`
-§18, "SESSION 4a"). **Session 4b — the two-row detection test — has NOT
-run**; §18's own "SESSION 4b (PENDING)" scaffold holds the empty result
-slots.
-**Trigger:** FIRED — the merge-gate row's own live bisect (2026-08-06,
-laptop session 3, `docs/monitor/pm5-interface-notes.md` §18 "Live bisect",
-§19.13). Two unrelated program shapes (`program-many`, 25×100m no-rest, 7
-frames; `program-short`, 3×500m r60, 1 frame) each armed structurally
-EMPTY — `verifyArmed` PASSED, every frame acked, the monitor showed `:00` —
-the one time each was sent while the target machine was still `rowing`.
-Seven other sends of six different shapes (single-variable and paired, from
-a settled/armed-idle machine) all armed correctly, isolating the variable
-to machine STATE, not program CONTENT.
-**Repro recipe:** terminate a workout that is currently mid-piece (state
-`rowing`/`resting`) by sending `program()` again immediately — its own
-internal `sendPrepare()` terminate-shaped step fires while the machine is
-still live, and the send that follows is accepted, verified armed, and
-structurally empty.
-**Authority:** `docs/monitor/pm5-interface-notes.md` §18 (laptop session 3;
-SESSION 4a) and §19.13 for the finding; §17 items 5/12/15/16/17 for what it
-does and does not close.
+**Status:** Done (2026-08-07, PR #53). Design approved by adversarial
+review; Stage 1 (instrumentation, the settle, the fake's honest empty-arm
+model) and Stage 2 (the structural readback and its `"structure-mismatch"`
+rejection) both shipped as Tasks 1-5, commits `5d42e01`..`78a949c` on
+`phase-7a-fix-3`. Hardware sessions 4a (2026-08-07) and 4b both RAN, both
+with every row PASS.
+**Trigger:** FIRED — the merge-gate row's own live bisect (laptop session
+3, 2026-08-06) found two unrelated program shapes arming structurally
+EMPTY, each the one time it was sent while the target machine was still
+`rowing`, while seven sends from a settled machine all armed correctly.
+**Repro recipe:** send `program()` at a workout that is currently mid-piece
+(`rowing`/`resting`); its own internal `sendPrepare()` terminate fires while
+the machine is still live, and the send that follows is accepted, verified
+armed, and structurally empty.
+**Authority:** `docs/monitor/pm5-interface-notes.md` §19.13 for the
+behaviour, §18 (laptop session 3, sessions 4a/4b) for the readings, and
+§17 items 5/12/15/16/17 for what it does and does not close.
 
-- [x] **Remedy A — settle after a mid-session terminate.**
-      `program()`'s `sendPrepare()` step now waits, when the prepare's
-      terminate fired while the machine was `rowing`/`resting`, for the
-      documented Appendix E auto-cycle to reach `armed` (WaitToBegin) plus
-      one further tick — `DriverOptions.prepareSettleTicks`, defaulting to
-      10, its own `pendingPrepareSettle` slot, tick-bounded (not a wall
-      clock). Session 4a measured `"armed" observed on tick 4"` twice at
-      the exact repro, confirming the budget with room to spare. Common-path
-      latency unchanged: the wait only arms when the prior state was
-      `rowing`/`resting`. Task 2 (`5d42e01`→`6fd2636`/`9421033`).
+- [x] **Remedy A — settle after a mid-session terminate.** `program()`'s
+      `sendPrepare()` step now waits, when the prepare's terminate fired
+      while the machine was `rowing`/`resting`, for the documented Appendix
+      E auto-cycle to reach `armed` plus one further tick
+      (`DriverOptions.prepareSettleTicks`, default 10, its own
+      `pendingPrepareSettle` slot, tick-bounded rather than wall-clock).
+      Session 4a measured `armed` on tick 4 twice at the exact repro.
+      Common-path latency is unchanged: the wait only arms when the prior
+      state was `rowing`/`resting`. Task 2 (`5d42e01`→`6fd2636`/`9421033`).
 - [x] **Remedy B — item 12's structural readback, as detection.**
-      `verifyArmed` (`src/monitor/driver.ts`) now resolves only on a fresh
-      post-send tick that is `armed` **AND** whose 0x0031 structure fields
+      `verifyArmed` (`src/monitor/driver.ts`) resolves only on a fresh
+      post-send tick that is `armed` AND whose 0x0031 structure fields
       match `expectedArmedStructure(p)` (`pm5/commands.ts`, sharing the
       encoder's own constants). A mismatch rejects with
       `ProgramRejectionReason: "structure-mismatch"` after 3 consecutive
       armed ticks reporting the SAME wrong structure (a payload still
-      changing restarts the count — session 4a's own captured mid-cycle
-      transients are why), or at `verifyTicks`' outer bound, which now
-      DEFAULTS to 20 instead of meaning unbounded (an unbounded verify
-      under a structure predicate turned a caught defect into a hang).
-      Session 4a's per-shape readings (§18) are what this predicate was
-      built from, not a guess. Task 4 (`970bf26`/`a7ac619`).
+      changing restarts the count, per session 4a's captured mid-cycle
+      transients), or at `verifyTicks`' outer bound, which now DEFAULTS to
+      20 instead of meaning unbounded. Task 4 (`970bf26`/`a7ac619`).
 - [x] **Removed the fake's idle-terminate refusal (§17 item 15).**
       `src/monitor/transports/fake.ts`'s `onClearingFrameComplete` accepts a
-      bare idle terminate unconditionally now; the refusal survives only
-      behind the explicit synthetic `FakeScript.refuseNextPrepare` hook
-      (`injectNak`/`failNextProgramFrame`'s pattern) — real hardware never
-      refused it (§18 session 3, §17 item 15). Task 3 (`e92cee9`/`50eae9b`).
+      bare idle terminate unconditionally; the refusal survives only behind
+      the explicit synthetic `FakeScript.refuseNextPrepare` hook, because
+      real hardware never refused it. Task 3 (`e92cee9`/`50eae9b`).
 - [x] **Revised `sendPrepare`'s doc comment.** `src/monitor/driver.ts`'s
-      `sendPrepare` comment no longer claims hardware showed the PM refuse
-      an idle terminate; it states the swallow-as-routine behaviour on its
-      own terms (ANY non-disconnected prepare outcome is swallowed, by
-      design) and cites the retirement directly (§18 session 3 item 15;
+      `sendPrepare` no longer claims hardware showed the PM refuse an idle
+      terminate; it states the swallow-as-routine behaviour on its own
+      terms and cites the retirement directly (§18 session 3 item 15,
       §19.4/§19.5). Task 3.
 
-**Exit: MET (2026-08-07).** Green (2335 all-projects — the whole-branch
-wave's MED-1 test joined after this line was first written — / e2e 210)
-**+ session 4b RUN with both rows PASS (§18 session 4b: the settle's third
-tick-4 arm; a real PM5 caught by the readback — typed `structure-mismatch`
-on a live empty arm) + James's explicit approval given.** Session 4b was
-necessary, not
-sufficient on its own, and the merge decision is his — same discipline as
-every prior hardware gate in this document. Session 4a resolving cleanly
-(outcome (a), no redesign) means this phase's own remedies ship
-UNCONDITIONALLY on 4b, not on a further design pass; 4b is validation, not
-another decision point. Whether this also resolves session 1's still-OPEN
-Verdict (a) (`:00`/`:00` empty display, §19.1/§19.2) is a hypothesis §19.13
-now treats as its leading candidate, not a fact 4b needs to confirm before
-merge.
-**Parked for the whole-branch reviewer** (not blocking, not this phase's
-own exit — full list with sources: `.superpowers/sdd/
-2026-08-06-phase-7a-fix-3/progress.md`, "Parked minors"): a byte-for-byte
-duplicated test helper (`stillArmedEmpty`/`stillArmedAtZero`,
-`driver.test.ts`); three LOW-severity comment/instrumentation nits from
-Task 2's review (a timeout-not-assertion latency pin, the settle not
-logging its own configured bound, an undocumented off-by-one in the bound's
-inclusivity).
+**Record:** §19.13 holds the finding, its two-shape/one-condition evidence
+and the correction that the empty arm is no longer indistinguishable from a
+healthy one; §18's sessions 4a and 4b hold the readings, including a real
+PM5 caught by the readback with a typed `structure-mismatch` on a live
+empty arm. Session 1's `:00`/`:00` Verdict (a) stays OPEN, with this
+mechanism as its leading candidate explanation rather than its answer. The
+minors this phase parked for the whole-branch reviewer are in Phase CL.
+
+**Exit:** MET (2026-08-07) — green (2335 all-projects, e2e 210), session 4b
+run with both rows PASS, and James's explicit approval given. Session 4a
+resolving as outcome (a) meant the remedies shipped unconditionally on 4b,
+which was validation rather than a further decision point.
 
 ## Phase 7B — PM5 connected surface
 
-**Status:** Done (2026-08-08, Tasks 1-8, Task 8 close-out this entry) — the
-core exit criterion below is met **against the fake transport**; the
-**hardware exit is PENDING**, and it is §17 items 20-21, which nobody has
-run. Everything claimed in this section is fake-driven:
-`e2e/connected.spec.ts` walks connect → pairing → programming → ready →
-the surface → paused → resumed → End → the log screen in a real browser,
-in both orientations, through the real component chain — but through
-`createFakeTransport()`, never a radio. No PM5 has been connected to this
-build. (Whole-branch review H3: this line previously asserted the exit
-criterion below was simply met.) This section's own bullets were never
-checked off as Tasks 1-7 landed them, so this update reconciles the
-checklist against shipped reality in one pass rather than pretending the
-phase is still "Not started."
+**Status:** Done (2026-08-08, Tasks 1-8). The core exit criterion is met
+**against the fake transport**: `e2e/connected.spec.ts` walks connect →
+pairing → programming → ready → the surface → paused → resumed → End → the
+log screen in a real browser, in both orientations, through the real
+component chain, but through `createFakeTransport()`, never a radio. Real
+hardware came afterwards, in walks 1-4
+(`docs/monitor/pm5-interface-notes.md` §18, 2026-08-08), which is where
+this surface's remaining defects were found and fixed; the Record and Exit
+lines below say what hardware has and has not shown.
 **Goal:** A rower can actually connect a PM5 from the app and row against
 it — the screens 7A's domain was built to sit underneath.
-**Design:** returned to design for the connected surface's own handoff,
-reconciled against 7A's shipped types before this phase starts.
+**Design:** the connected surface's own handoff
+(`docs/design/handoffs/2026-08-05-connected-mode/`), reconciled against
+7A's shipped types, with every departure from it recorded in
+`docs/design/DEVIATIONS.md`.
 
-- [x] "Connect PM5" affordance (the plan's name; the shipped button reads
-      `Connect`, one word) — shipped as `WorkoutDetail`'s `ConnectAction`
-      button (not literally "on Confirm targets," the plan's own original
-      wording — the handoff moved it to the workout DETAIL screen instead,
-      ahead of Confirm, `ConnectedInterstitial.tsx`'s own header), gated on
+- [x] The Connect affordance: `WorkoutDetail`'s `ConnectAction` button
+      (shipped on the workout DETAIL screen, ahead of Confirm, rather than
+      "on Confirm targets" as the plan first worded it), gated on
       `resolveDefaultTransport()`/`navigator.bluetooth` availability
-      (`src/monitor/transports/index.ts`); manual NEXT remains untouched;
-      disconnect mid-workout degrades to `"disconnected"` phase, never a
-      crash
-- [x] Live actual pace vs target + live stroke rate vs prescribed SPM —
-      shipped as `ConnectedSurface`'s three panes (Timer/Live/Grid,
+      (`src/monitor/transports/index.ts`); manual NEXT remains untouched,
+      and a disconnect mid-workout degrades to the `"disconnected"` phase
+      rather than crashing
+- [x] Live actual pace against target and live stroke rate against
+      prescribed SPM: `ConnectedSurface`'s three panes (Timer/Live/Grid,
       `src/workout/connected/`), fed by `useMonitorSession`'s `frame`
-      events; distance steps auto-advance on `intervalComplete`
-      (`toActualIndex`'s forward-attribution rule, `domain/monitor/pm5/
-      intervalIndex.ts`)
+      events, with distance steps auto-advancing on `intervalComplete`
+      through `toActualIndex`'s forward-attribution rule
+      (`domain/monitor/pm5/intervalIndex.ts`)
 - [x] **Guard wiring is NOT uniform (final-review M-1 — read before touching
       any guard that reads `RUN_KEY`/`MONITOR_RUN_KEY`).** Most guards that
       only need "is anything live, and on which side" migrate onto
@@ -1330,173 +1191,81 @@ reconciled against 7A's shipped types before this phase starts.
       follow.
 - [x] The reverse cross-clear direction: an existing live `MonitorRun` is
       cleared the same way `createMonitorRun` already clears a `SessionRun`
-      — 7A shipped only its own half (`src/monitor/monitorRun.ts`'s own
-      header comment named this as a documented 7B obligation). Shipped in
-      `WorkoutDetail.tsx`'s `startSession` (behind the Replace confirm),
-      NOT in the spec-named `buildRun`/`saveRun` home — `session/run.ts`'s
-      `saveRun` comment carries the three reasons, and the DEVIATIONS
-      table's reverse-cross-clear row (task-2 review M-1) records the move
-- [ ] **The James laptop-vs-real-PM5 session named above has now run
-      TWICE** (laptop session 1, plus a same-day diagnosis row; laptop
-      session 2, 2026-08-06, both under the OLD whole-byte status parse —
-      recorded in `docs/monitor/pm5-interface-notes.md` §18) **and been
-      re-derived once from the raw bytes without new hardware**
-      (phase-7a-fix-2 Task 1, §19.1's per-send table). Rewritten against the
-      current record, session-by-session claims no longer stand:
-      - The checksum errata, the interval-numbering base, and
-        multi-INTERVAL programming remain ANSWERED.
-      - **No clear/wipe command exists, and none is missing.** §19.5
-        relabelled this DOCUMENTED ABSENCE: `terminate()` is not a failed
-        clear candidate, it is the documented `WaitToBegin`/Rearm recovery
-        path, and nothing in either source document unloads a programmed
-        workout.
-      - **Programming over a loaded workout lands and replaces it**
-        (§19.1's Verdict (b)) — corrected in the whole-branch fix wave: the
-        observed rest-free row followed a reconnect and a second program
-        send, not an unbroken single-connection chain, so this rests on a
-        weaker argument than originally claimed; the clean single-connection
-        confirmation is still pending (§17's merge-gate row, Step 3).
-      - **The no-rest work→work boundary index is ANSWERED** (§17 item 13,
-        §19.8): indices are driver-normalized minus-1, applied
-        unconditionally by `toActualIndex` for 0x0037/38, clamped to
-        `[0, L+1]` with `null` + a `"divergence"` log entry outside it.
-      - **The `:00`/`:00` empty-display transition remains STANDING OPEN**
-        (§19.1's Verdict (a)) — not explained, not re-explained as a
-        rejection-wipe artifact (that mechanism was our own parse bug).
-        Laptop session 3's live bisect (§19.13) found a REAL, hardware-
-        confirmed mechanism that produces the identical `:00` symptom
-        (programming over a running workout arms empty) and is now
-        Verdict (a)'s LEADING candidate explanation — not independently
-        confirmed as the same root cause, so Verdict (a) itself stays open.
-        7B's "confirm the monitor idle before programming" connect-flow
-        warning re-founds on this open finding plus its new leading
-        candidate, not on the withdrawn destruction claim.
-      - Distance-kind intervals and a genuine multi-FRAME program landed
-        on real hardware (§17 item 5's merge-gate Step 5) — but that send
-        happened to land on a running workout and armed structurally empty
-        (§19.13), so "does a full multi-frame DISTANCE program retain all
-        its intervals when rowed to completion from a clean state" is
-        STILL untested; it needs its own row, not a re-run of Step 5.
-      §17's operative row, "The merge-gate row (session 3, RUN 2026-08-06 —
-      results in §18)," has run: all five steps PASSED, item 15 is
-      ANSWERED, and results are recorded in §18's session-3 heading. Its own
-      live bisect opened Phase 7A-fix-3 (above) as a separate, scoped
-      follow-up — this phase's own guard/connect-flow work should read that
-      phase's repro recipe before assuming "confirm idle" is sufficient on
-      its own.
-- [x] Full behavior tested against the fake transport in CI; the laptop
-      session above is this phase's live-hardware verification, never a CI
-      gate — Task 8 closes this out: `e2e/connected.spec.ts`'s browser-
-      driven walk (Connect → pairing → programming → ready → the surface
-      via rail AND swipe → paused → resumed → End → the log screen, both
-      390×844 and 844×390) plus 2812 passing unit/client tests
-- [ ] **A failed `program()` during an OPEN run leaves the old run open and
-      numbering.** `driver.ts`'s `program()` runs `sendPrepare()` →
-      `sendSequence()` → `verifyArmed()` and only replaces `activeRun` at
-      the end (`driver.ts` ~1770), after all three phases resolve. If any
-      of them throws while a run is already open (probe P3b, phase-7a-fix-2
-      Task 4's review), that run stays open: the next boundary is still
-      normalized against the FAILED program's own run, and it still emits
-      its own `workoutComplete` later. This is pre-existing (the prior
-      `let program` variable was equally never cleared on a failed
-      re-program) and was deliberately parked, not fixed, in fix-2 — its
-      original rationale ("the wipe is confirmed for a genuine reject
-      only") cited `program()`'s destructive-fact comment, which fix-2
-      Task 1 WITHDREW (interface-notes.md §19.2): no wipe of any kind is
-      confirmed for any status any more, and no genuine rejection has ever
-      been observed on this hardware. 7B's spec must decide whether/when to
-      close this run on a failed re-program, reasoned fresh against the
-      post-§19.2 record, not against the withdrawn wipe. Cited in the
-      whole-branch fix-2 ledger (`.superpowers/sdd/2026-08-06-phase-7a-fix-2/progress.md`).
+      — shipped in `WorkoutDetail.tsx`'s `startSession`, behind the Replace
+      confirm, not in the spec-named `buildRun`/`saveRun` home;
+      `session/run.ts`'s `saveRun` comment carries the three reasons and
+      the DEVIATIONS table's reverse-cross-clear row records the move
 - [x] **A second `program()` call during the prepare-settle wait strands the
       first.** `driver.ts`'s `pendingAck`/`pendingVerify` single-flight
-      class (immediately above) has a THIRD member as of fix-3's settle:
-      `pendingPrepareSettle`. Phase 7A-fix-3 Task 2's review (Probes C/C3)
-      confirmed the stranding reproduces with the settle both on and off,
-      and — new since the settle shipped — the window it strands in widened
-      from microtasks to up to `prepareSettleTicks` worth of wall time
-      (~5 s at the default of 10 ticks). Pre-existing class, not a fix-3
-      regression, but fix-3 makes the window big enough to hit in practice.
-      Cited in the fix-3 ledger (`.superpowers/sdd/
-      2026-08-06-phase-7a-fix-3/progress.md`, Task 2 review M4). **Fixed in
-      Phase 7B Task 1:** `program()` now checks an in-flight flag FIRST —
-      before `sendPrepare`, before any wire traffic — and throws a new
-      `ProgramBusyError` for a concurrent call (deliberately NOT a
-      `ProgramRejectionReason` member; that union stays
-      machine-statements-only, since no frame was ever sent for the
-      rejected call). The busy call costs zero writes and never affects the
-      first call's own outcome; the flag clears on every exit path
-      (resolve or any reject) via `program()`'s own `try`/`finally`.
-      `driver.test.ts`'s "ProgramBusyError" describe block is the coverage.
-- [x] `src/monitor/driver.ts`'s `createPm5Driver` used to hardcode
-      `capabilities.deviceName: "PM5"` (a placeholder, honestly commented
-      in place) because its constructor signature (`createPm5Driver(t,
-      log)`) was never given a `DiscoveredMonitor`. The real source is
-      `DiscoveredMonitor.name` (`domain/monitor/types.ts`) — the advertised
-      name `Transport.scan()` already returns (e.g. "PM5 432331249").
-      **Fixed in Phase 7B Task 1:** `createPm5Driver` now accepts
-      `options.deviceName` (`DriverOptions.deviceName`), which flows
-      straight into `capabilities.deviceName` and from there into
-      `MonitorRun.deviceName` — falling back to the `"PM5"` placeholder
-      only when no name was given at all, never fabricated otherwise.
-      `scripts/pm5-lab.ts` threads its own `scan()` result (`found.name`)
-      through as the reference caller; a future connect screen does the
-      same.
-- [ ] **Deferred, deliberately — a follow-on, not this phase's scope
-      (Task 8 close-out).** Reconnect and background-scan: today's
-      `resolveDefaultTransport()`/`useMonitorSession.connect()` chain
-      always starts from `scan()`'s OS picker — there is no "reconnect to
-      the last-paired PM5 without re-picking" path, and no background scan
-      that could surface a PM5 already in range before the rower presses
-      Connect (`loadLastDevice()`/`saveLastDevice()`,
-      `ConnectedInterstitial.tsx`, already persist the LAST device's name
-      for a "LAST USED · <name>" caption — nothing reads it back to attempt
-      a silent reconnect). `driver.ts`'s own `resolveDefaultTransport`
-      doc comment names the adjacent gap this shares a root cause with:
-      `createCapacitorBleTransport` has no call site here either — a
-      native-build caller passes its own factory through
-      `MonitorSessionDeps.createTransport` today, and choosing between it
-      and Web Bluetooth is a platform conditional that belongs in the
-      adapter layer (`src/platform.ts`/`src/adapters/`), not this hook.
-      Both — reconnect-by-identity and the platform-conditional default —
-      are the same "wire the adapter layer into the default transport"
-      follow-on, scoped out of 7B/Task 8 on purpose. The full item, per the
-      7B plan's Task 8 close-out, is FIVE pieces, not two: (1) Capacitor
-      id-keyed reconnect; (2) DRIVER RE-SUBSCRIBE — `createPm5Driver`
-      subscribes once at construction, so a transport that silently regains
-      its link still needs the driver to re-attach its notification
-      handler; (3) a `Transport.scan()` background variant that can watch
-      for a known PM5 without the OS picker; (4) `DiscoveredMonitor.rssi`,
-      so a future picker/auto-connect can rank by signal; (5) MISSED-rows
-      inheritance — the handoff §4 `— · MISSED` treatment exists only to
-      catch what a reconnect BACKFILL fails to fill, so it lands with
-      reconnect or not at all (today's descope: the DEVIATIONS MISSED-rows
-      row and `surfaceModel.ts`'s completed-row dashes).
+      class gained a third member with fix-3's settle,
+      `pendingPrepareSettle`, which widened the stranding window from
+      microtasks to up to `prepareSettleTicks` of wall time (~5 s at the
+      default). Pre-existing class, not a fix-3 regression. **Fixed in Task
+      1:** `program()` checks an in-flight flag FIRST, before `sendPrepare`
+      and before any wire traffic, and throws a new `ProgramBusyError` for
+      a concurrent call (deliberately NOT a `ProgramRejectionReason`
+      member; that union stays machine-statements-only, since no frame was
+      ever sent for the rejected call). The busy call costs zero writes and
+      never affects the first call's outcome; the flag clears on every exit
+      path via `program()`'s own `try`/`finally`, and
+      `driver.test.ts`'s "ProgramBusyError" describe block is the coverage
+- [x] The real device name reaches the record: `createPm5Driver` used to
+      hardcode `capabilities.deviceName: "PM5"` because its constructor had
+      no `DiscoveredMonitor` to read a name from. **Fixed in Task 1:** it
+      accepts `options.deviceName` (`DriverOptions.deviceName`), which
+      flows into `capabilities.deviceName` and from there into
+      `MonitorRun.deviceName`, falling back to the `"PM5"` placeholder only
+      when no name was given and never fabricated otherwise;
+      `scripts/pm5-lab.ts` threads its own `scan()` result through as the
+      reference caller
+- [x] Full behaviour tested against the fake transport in CI (Task 8):
+      `e2e/connected.spec.ts`'s browser-driven walk at 390×844 and 844×390,
+      the surface reachable by rail AND swipe, plus 2812 passing
+      unit/client tests
 
-**Exit:** On a real PM5: distance steps auto-advance, live pace shows
-against target, and Connect degrades silently to manual on disconnect.
-**NOT MET — pending.** The fake-transport analogue of all three is met and
-gated in CI (`e2e/connected.spec.ts`, both orientations); the hardware run
-is §17 items 20-21 and has not happened. (The button is one word,
-`Connect` — `ConnectAction.tsx` — not "Connect PM5"; the label above is
-corrected to match what ships.)
+**Record:** the hardware walks that exercised this surface are §18's
+2026-08-08 entry (walks 1-4, PM5 432331249): the interstitial walked clean;
+PAUSED fired on a real program once its derivation was corrected to a
+three-field key; `rowingActive` read true on the first pull, which was the
+unobserved premise the ready gate rested on; the 1.2 s ready dwell was
+removed as an operator ruling; and 0x0031's Elapsed Time and Distance
+turned out to be PER-INTERVAL rather than session-cumulative, which is why
+`driver.ts` now keeps a session accumulator and the surface reads
+`sessionElapsedSeconds`/`sessionDistanceMeters`. Every departure those
+walks forced is a row in `docs/design/DEVIATIONS.md` (the removed dwell,
+the inverted PAUSED band, the lost-link banner's descope, MISSED rows, the
+diagnostics sheet's sequence numbering, the reverse cross-clear's home).
+The reconnect follow-on this phase scoped out, the failed-`program()`
+open-run question 7A-fix-2 parked, and the hardware readings still owed all
+sit in Phase CL.
+
+**Exit:** the fake-transport analogue is MET and gated in CI
+(`e2e/connected.spec.ts`, both orientations): distance steps auto-advance,
+live pace shows against target, and Connect degrades to manual on
+disconnect. On real hardware, walks 1-4 (§18, 2026-08-08) took the surface
+from Connect through programming, rowing, pause and resume to the end
+hand-off on a 2×100 m distance program, closing §17 item 20 and capturing
+real boundary actuals; still unrun are a genuine mid-piece disconnect and
+§17 item 21's pairing/programming timing spans. (The button is one word,
+`Connect`, `ConnectAction.tsx`, not "Connect PM5" as the plan's original
+wording had it.)
 
 ## Phase 7C — PM5 logging
 
-**Status:** Shipped pending a hardware walk (2026-08-08, Tasks 1-6, Task 6
-close-out this entry) — the exit criterion below is met against the fake
-transport: `e2e/connected.spec.ts`'s connected walk (both orientations) now
+**Status:** Done (2026-08-08, Tasks 1-6; merged 2026-08-09), shipped
+pending a hardware walk. The exit criterion is met against the fake
+transport: `e2e/connected.spec.ts`'s connected walk (both orientations)
 runs a full session through Save, and the stored log's steps come back off
 `GET /api/logs` carrying `actualSource: "pm5"`, the verbatim wire numbers
-(split, work time, distance, stroke rate), and the fake's own `deviceName`.
-The hardware exit is PENDING — no PM5 has actually logged a real session
-through this build; walk 4 (§18) predates this phase's own builder, so the
-seed → builder → screen → server pipeline has never been proven against a
-genuine wire capture end to end, only against the walk-4 fixture values and
-the fake transport's own driven session. Suite: 2927 unit / 244 e2e / 49
-screenshots.
+(split, work time, distance, stroke rate) and the fake's own `deviceName`.
+No PM5 has logged a real session through this build: walk 4 (§18) predates
+this phase's own builder, so the seed → builder → screen → server pipeline
+has only ever been proven against walk-4's fixture values and the fake's
+driven session. Suite: 2927 unit / 244 e2e / 49 screenshots.
 **Goal:** A PM5-driven session logs with the same fidelity a phone-timer
 session does.
+**Design authority:**
+`docs/superpowers/specs/2026-08-08-phase-7c-pm5-logging-design.md`.
 
 - [x] Per-step actual splits logged with `actualSource:'pm5'`
       (`IntervalActual` → the log's per-step actual, a third source
@@ -1506,16 +1275,21 @@ session does.
       mirroring 6C's `logDraft.ts`/`LogScreen` split for the phone-timer
       side — home: `LogSession.tsx`'s monitor mode (`ManualDoorLog`'s
       `?from=monitor` branch, with its own staged discard)
-- [ ] Anonymous-run logging (`workoutId: null`): no library door exists to
-      log a connected session with no workout identity through, so it
-      never gets one this phase (spec §1's own non-goal,
-      `docs/superpowers/specs/2026-08-08-phase-7c-pm5-logging-design.md`)
-      — the record still clears through the existing connect/start
-      guards, it just can never be saved as a log
 
-**Exit:** A session fully driven by a connected PM5 saves a log
-indistinguishable in shape from a phone-timer session, with real
-monitor-measured splits.
+**Record:** the only real wire numbers this builder has ever decoded are
+§18 walk 4's captured `0x0037`/`0x0038` pair, decoded through
+`pm5/parse.ts` rather than hand-transcribed. The shape rulings live in the
+design spec above and in three `docs/design/DEVIATIONS.md` rows: a
+monitor-sourced effort interval keeps every measured field, a null-indexed
+actual is dropped rather than misattributed, and `deviceName` rides on the
+log. Anonymous-run logging and §17 item 22 (whether the split time the log
+stores is work-only or work-plus-rest) are the two remainders this phase
+leaves; both are in Phase CL.
+
+**Exit:** MET against the fake transport — a session fully driven by a
+connected PM5 saves a log indistinguishable in shape from a phone-timer
+session, with real monitor-measured splits. The same walk on real hardware
+is still owed.
 
 ## Phase 8 — Plan & Progress
 
@@ -1564,107 +1338,154 @@ monitor-measured splits.
 
 **Exit:** Two rowers share a phone by the erg without re-typing credentials; app installs to a home screen; audit findings closed.
 
+## Phase CL — Cleanup
+
+**Status:** Not started
+**Goal:** One home for the remainders the phases above left behind, so a
+close-out round can be scheduled from a list instead of rediscovered from a
+grep. Collection only: every line below already existed somewhere, and
+nothing here is new work. Effort guesses are S/M/L.
+
+- [ ] **Reconnect and background scan, five pieces** (Phase 7B Task 8
+      close-out; `docs/design/DEVIATIONS.md`'s lost-link and MISSED-rows
+      rows; design spec C5's descope): (1) Capacitor id-keyed reconnect;
+      (2) DRIVER RE-SUBSCRIBE, since `createPm5Driver` subscribes once at
+      construction and a transport that silently regains its link still
+      needs its notification handler re-attached; (3) a `Transport.scan()`
+      background variant that can watch for a known PM5 without the OS
+      picker; (4) `DiscoveredMonitor.rssi`, so a picker or auto-connect can
+      rank by signal; (5) MISSED-rows inheritance, which exists only to
+      catch what a reconnect BACKFILL fails to fill and so lands with
+      reconnect or not at all. **L**
+- [ ] **The platform-conditional default transport** — the same root cause
+      as the item above: `createCapacitorBleTransport` has no call site, a
+      native build passes its own factory through
+      `MonitorSessionDeps.createTransport`, and choosing between it and Web
+      Bluetooth belongs in the adapter layer (`src/platform.ts`/
+      `src/adapters/`), not the transport-resolution seam
+      (`src/monitor/transports/index.ts`'s own doc comment). **M**
+- [ ] **Anonymous-run logging (`workoutId: null`)** — no library door
+      exists to log a connected session that has no workout identity, so
+      the record clears through the existing connect/start guards but can
+      never be saved (Phase 7C, spec §1's own non-goal). **M**
+- [ ] **A failed `program()` during an OPEN run leaves the old run open and
+      numbering** — `driver.ts`'s `program()` replaces `activeRun` only
+      after `sendPrepare()`/`sendSequence()`/`verifyArmed()` all resolve, so
+      a throw part-way leaves the previous run open, still normalizing the
+      next boundary and still emitting its own `workoutComplete`.
+      Pre-existing, parked deliberately in 7A-fix-2 Task 4's review (probe
+      P3b); its original rationale cited a destructive-reject fact §19.2
+      has since WITHDRAWN, so the decision needs re-reasoning against the
+      current record. **M**
+- [ ] **Hardware session shopping list (operator-run, one row at the erg)**
+      — `docs/monitor/pm5-interface-notes.md` §17 item 21 (the three
+      pairing/programming latency spans, still unmeasured against a real
+      PM5) and item 22 (whether `0x0037`'s Split/Interval Time is the work
+      portion alone or work plus its trailing rest, which decides whether
+      `buildMonitorLogSteps` needs a re-derivation); §17 item 5's unrowed
+      question, whether a full multi-FRAME distance program retains all its
+      intervals when rowed to completion from a clean state; and §18's own
+      readings-still-owed list, the PAUSED tick count from a full log and
+      RATE at normal pace on a sustained piece. Add a genuine mid-piece
+      disconnect to the same row, which no walk has ever exercised. **M**
+      (operator time, not build time)
+- [ ] **One `.5` pace target on the wire** — every workout programmed so
+      far has carried whole-second targets, so `representableCentiseconds`,
+      the fix that let baseline-derived splits like `2:14.5` compile at
+      all, has never been sent to a real PM5 (§18, walk 1). One row with a
+      `.5` target settles it silently, so it rides along with the shopping
+      list above. **S**
+- [ ] **`intervalAccrued` on `MonitorFrame`** — pane C's active row shows
+      `—` for the dimension that is not counting down, because no
+      per-interval field exists for it. Closing it is a DRIVER change, not
+      a screen one: `driver.ts` already keeps the per-interval baseline
+      `intervalRemaining` needs (`docs/design/DEVIATIONS.md`'s pane-C
+      active-row row, task-7 review adjudication 4). **M**
+- [ ] **Phase 7A-fix-3's parked minors** — a byte-for-byte duplicated test
+      helper (`stillArmedEmpty`/`stillArmedAtZero`, `driver.test.ts`) and
+      three LOW-severity comment/instrumentation nits from its Task 2
+      review: a timeout-not-assertion latency pin, the settle not logging
+      its own configured bound, and an undocumented off-by-one in that
+      bound's inclusivity. **S**
+- [ ] **Bulk import has no transaction** — `POST /api/workouts/bulk`
+      (`app/server/routes/data.ts`) inserts block by block inside a plain
+      loop, so a partial failure leaves the landed blocks behind and
+      re-importing the same paste duplicates them. Recorded at Phase 5B's
+      merge, still true. **M**
+- [ ] **No unsaved-changes guard in the builder** — leaving a
+      half-authored workout discards it with no warning. Recorded at Phase
+      5B's merge, still true. **S**
+- [ ] **Per-worktree compose scoping** — the e2e/screenshots stack is
+      shared across sessions by container name (one Postgres volume, one
+      `web`/`api` pair), so concurrent worktrees stomp each other's
+      fixtures and can serve a bundle from the wrong branch
+      (`.claude/agent-briefing.md`'s shared-stack note, which currently
+      documents the workaround rather than the fix). **M**
+- [ ] **News scroll memory** — BACK from an article lands News at the top,
+      a tradeoff taken deliberately when the feed was about 1.15 screens
+      and confirmed still standing after the overlay-scroller round below.
+      If the shelf grows, News takes the Library's own scroll-memory
+      pattern. **S**
+
+**Exit:** every line above is shipped, re-filed under "Triggered
+follow-ons" with an explicit trigger, or declined in writing.
+
 ## Bugfix rounds
 
 Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
-- **PR #TBD** (2026-08-08) — e2e retries actually retry: two red main
-  runs traced to fixture non-idempotency, not code — the stack's users are
+- **PR #TBD** (2026-08-08) — e2e retries actually retry: two red main runs
+  traced to fixture non-idempotency, not code. The stack's users are
   find-or-create by email and its volume persists, so a mid-test failure
-  (or killed run) stranded an imported fixed-title workout and the CI
-  retry (or the next local run) re-imported it into a strict-mode
-  duplicate. `signInViaBackdoor` now suffixes every email with a
-  per-process `RUN_ID` (idempotent for specs that already embed one), the
-  connected walks carry unique titles, and `library.spec`'s one-shot
-  scroll read became a poll. 244/244 twice back to back locally.
+  stranded an imported fixed-title workout and the retry re-imported it
+  into a strict-mode duplicate. `signInViaBackdoor` now suffixes every
+  email with a per-process `RUN_ID`, the connected walks carry unique
+  titles, and `library.spec`'s one-shot scroll read became a poll.
 - **PR #TBD** (2026-08-08) — type rows unified to O2 · AT · TR · AN (the
   pyramid's base-first order) across Today's type-swap chips, the Library
-  filter sheet's TYPE cells, and Builder's classification card, with the
+  filter sheet's TYPE cells and Builder's classification card, with the
   design README amended to match; Today's plan line also gains the
   currently-effective type's descriptor word (`TYPE_WORDS`, extracted from
-  `builderState.ts` to a shared `src/components/typeWords.ts`), the same
-  "LOW & SLOW"/"COMFORTABLY HARD"/"HARD INTERVALS"/"SPEED WORK" phrasing the
-  classification card has shown since Phase 5G.
-
-- **PR #TBD** (2026-08-08, round 4 on the same bug, architectural) — round
-  3's `holdScrollTop` rAF hold-loop (below) also lost on real iOS, in both
-  browsers, on fresh bundles — the third window-scroll fix in a row to fail
-  on device. This round fires the recorded next step: stop policing the
-  window scroller and remove it from the fight. The reader and
-  release-notes screens become fixed overlays
-  (`.overlay-screen`, `position: fixed; inset: 0; overflow-y: auto`)
-  scrolling in their OWN element instead of the window. Three window-scroll
-  fixes in a row (this round's two predecessors below) each targeted a
-  different layer of the same fight and each lost on real iOS WebKit; an
-  overlay scroller can't lose that fight the same way, because a freshly
-  mounted element starts at `scrollTop 0` by construction — nothing to
-  scroll to, nothing for iOS to restore. `Reader.tsx`'s root also gains
-  `key={article.slug}` so the NEXT footer's in-place navigation remounts a
-  fresh scroller rather than reusing one that's mid-scroll; both screens'
-  roots gain `tabIndex={0}`, matching Plan.tsx's 84-row sequence (Phase 6A,
-  commit a3e5ee6) exactly — it puts the scroll region itself in the tab
-  order so a keyboard user can Tab to it and scroll with arrow/Page keys.
-  Not required by axe's `scrollable-region-focusable` rule here either way:
-  both screens already carry a focusable `BackLink` descendant, which
-  satisfies the rule's `focusable-content` check regardless of the root's
-  own tabIndex — verified by reading axe-core's own rule source, not
-  assumed. Round 3's
-  `holdScrollTop` helper and its test are deleted outright (grepped clean
-  across `src/`/`e2e/`). **Correction to this round's own original premise:**
-  the architecture does NOT restore News's BACK scroll position the way the
-  round was originally expected to — `position: fixed` removes the routed
-  screen from `.app-shell`'s document flow entirely, so `document.body`'s
-  scroll height collapses to just the app-shell's own padding the instant
-  the overlay mounts, and the browser clamps `window.scrollY` to 0 as an
-  automatic consequence (proven on the real compose stack, not just
-  reasoned about — the same clamp `Library.tsx`'s own scroll-memory comment
-  already describes for a shorter list). BACK still lands News at the top,
-  unchanged from round 2's tradeoff below — round 4 fixes the
-  reader-opens-mid-scroll bug this whole saga is about, but a
-  Library-style scroll-memory addition for News, not this architecture, is
-  what an actual BACK-position fix would take, and that's out of this
-  round's scope.
-- **PR #TBD** (2026-08-07/08, round 3 on the same bug) — the single-shot
-  `window.scrollTo(0, 0)` from the round below (pre-paint, plus
-  `scrollRestoration = "manual"` claimed) still lost on real iOS WebKit —
-  and lost in BOTH iOS browsers, not just Safari, ruling out a
-  browser-chrome-specific cause. Instrumented desktop-WebKit and
-  iPhone-emulated runs never showed a second scroll pass; the mechanism is
-  triangulated by elimination, not directly observed, because no harness on
-  this machine can inject a real touch gesture. This round adds a shared
-  `holdScrollTop` helper (`src/shell/holdScrollTop.ts`): set the top, then
-  hold it at rAF cadence for ~30 frames (~500ms), re-asserting whenever
-  something else moves `scrollY`, aborting instantly on `touchstart`/
-  `wheel`/`keydown` so it never fights a rower's own scroll. Reader and
-  Releases both adopt it in place of their bare `scrollTo` calls. If this
-  round still fails on device, the recorded next step is architectural: the
-  reader becomes its own scroll container, which also restores News's BACK
-  position for free (currently sacrificed — see the round below).
-- **PR #TBD** (2026-08-07, follow-up to the News polish round below) — the
-  reader's scroll-to-top actually holds on iOS Safari: PR #55's
-  `useEffect`-timed `window.scrollTo(0, 0)` ran and landed (proven with
-  instrumented desktop-WebKit + iPhone-emulation runs) but on the real
-  device Safari's own browser-layer scroll pass re-scrolled the reader
-  ~150px down afterwards (James's 2026-08-07 screen recording; frames
-  8–11 show it parked mis-scrolled until a manual swipe). Fix targets the
-  layer that misbehaved: `history.scrollRestoration = "manual"` claimed at
-  App mount (every scroll-sensitive screen already self-manages — reader/
-  releases jump to top, Library restores its own position), plus the two
-  news scroll effects move to `useLayoutEffect` (before paint, ahead of any
-  late browser pass; `Library.tsx`'s own precedent). Known tradeoff, noted
-  deliberately: BACK from an article now lands News at the top on iOS
-  (Safari's auto-restore used to cover that) — the feed is ~1.15 screens
-  today, so this costs one small flick; if the shelf grows, News gets the
-  Library's own scroll-memory pattern rather than browser restoration.
-  **Round 4 update:** the overlay-scroller architecture (round 4, above)
-  was expected to undo this tradeoff for free and does NOT — verified on
-  the real compose stack that `window.scrollY` still clamps to 0 the moment
-  the reader mounts, for an unrelated reason (the fixed overlay collapses
-  `document.body`'s scroll height), so this tradeoff still stands exactly
-  as written above.
-- **PR #TBD** (2026-08-07) — News polish: the reader and release notes
+  `builderState.ts` to a shared `src/components/typeWords.ts`).
+- **PR #TBD** (2026-08-08, round 4 on the same bug, architectural) — the
+  reader and release-notes screens become fixed overlays (`.overlay-screen`,
+  `position: fixed; inset: 0; overflow-y: auto`) scrolling in their OWN
+  element instead of the window, after three window-scroll fixes in a row
+  each lost to real iOS WebKit; a freshly mounted element starts at
+  `scrollTop 0` by construction, so there is nothing for iOS to restore.
+  `Reader.tsx` gains `key={article.slug}` so the NEXT footer remounts a
+  fresh scroller, and both roots gain `tabIndex={0}` for keyboard scrolling
+  (axe's `scrollable-region-focusable` was already satisfied by each
+  screen's focusable `BackLink`, verified against the rule's own source).
+  Round 3's `holdScrollTop` helper and its test are deleted outright.
+  **Correction to the round's own premise:** the architecture does NOT hand
+  News its BACK position back, because a fixed overlay collapses
+  `document.body`'s scroll height and the browser clamps `window.scrollY`
+  to 0; the tradeoff below stands. Full reasoning: `.overlay-screen`'s
+  comment in `index.css`.
+- **PR #TBD** (2026-08-07/08, round 3 on the same bug) — a shared
+  `holdScrollTop` helper (`src/shell/holdScrollTop.ts`) set the top and
+  held it at rAF cadence for ~30 frames, aborting on `touchstart`/`wheel`/
+  `keydown` so it never fought a rower's own scroll. It lost on device too,
+  in BOTH iOS browsers, which ruled out a browser-chrome-specific cause;
+  the mechanism was never directly observed, because no harness here can
+  inject a real touch gesture. The recorded next step, taken by round 4
+  above, was architectural.
+- **PR #56** (2026-08-07, follow-up to the News polish round below) — PR
+  #55's `useEffect`-timed `window.scrollTo(0, 0)` ran and landed (proven
+  under instrumented desktop-WebKit and iPhone emulation) but on the real
+  device Safari's own scroll pass re-scrolled the reader ~150px down
+  afterwards (James's screen recording). Fix targets the layer that
+  misbehaved: `history.scrollRestoration = "manual"` claimed at App mount,
+  since every scroll-sensitive screen already self-manages, plus both news
+  scroll effects moved to `useLayoutEffect`. **Known tradeoff, deliberate:**
+  BACK from an article now lands News at the top on iOS, which costs one
+  small flick at today's ~1.15-screen feed; if the shelf grows, News gets
+  the Library's own scroll-memory pattern rather than browser restoration
+  (Phase CL).
+- **PR #55** (2026-08-07) — News polish: the reader and release notes
   scroll to the top on open instead of keeping the feed's scroll position;
   "heart rate monitor" replaces "heart rate strap" throughout; a prose pass
   removes em dashes and AI-tell constructions from all four articles;

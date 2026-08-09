@@ -2,14 +2,15 @@
 
 **Date:** 2026-08-03 · **Status:** approved in brainstorm, pending James's spec review
 **Sequence:** after Today enhancements (PR #42), before Phase 7 (PM5). Roadmap: the
-"workout-generation phase" queue entry (ROADMAP.md ~line 636).
+"workout-generation phase" queue entry, shipped as `ROADMAP.md`'s Phase 6E.
 
 ## Goal
 
 Replace the 35-workout starter library with ~300 original workouts so TestFlight
 testers have realistic content, using James's Erg Book photos as the structural
 reference — **patterns and parameters only, never entries/titles/prose** (content
-policy, ROADMAP.md line 724 / docs/design/DEVIATIONS.md line 13). Also produce a
+policy, `ROADMAP.md`'s Phase 6E pipeline bullet / docs/design/DEVIATIONS.md's
+"Sample data" row, reason `Content`). Also produce a
 private CSV of the book originals for James's personal use.
 
 ## Decisions (made in brainstorm, 2026-08-03)
