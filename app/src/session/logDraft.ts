@@ -564,9 +564,17 @@ export interface LogSeed {
  *  and records CURRENT `baselines` under whichever base(s) were actually
  *  referenced — the same F1 rule `manualLockedBaseline` (`LogSession.tsx`)
  *  already established for the manual door. */
+/** Rebase seam (6I over 7C, 2026-08-09): 6I loosened the Connect guard so
+ *  an effort-only workout can program a monitor with NULL baselines — and
+ *  this function (7C) is directly downstream of that guard. Baselines are
+ *  read ONLY in the split-ref branch below, which `needsBaselines` gating
+ *  at the Connect door guarantees is unreachable when they're null; a
+ *  split-ref phase arriving here with null anyway is a programmer error
+ *  and throws loudly, the exact convention `phases()`/`estimationSplit`
+ *  established (domain/expand.ts). */
 export function buildLogSeed(
   phases: EnginePhase[],
-  baselines: Baselines,
+  baselines: Baselines | null,
 ): LogSeed {
   const steps: LogSeed["steps"] = [];
   const paces: LogSeed["paces"] = {};
@@ -600,6 +608,11 @@ export function buildLogSeed(
       // (`durationText`'s header comment) for a fact the domain layer
       // enforces upstream, not a possibility this function needs to guard.
       const splitRef = phase.ref as SplitRef;
+      if (baselines === null) {
+        throw new Error(
+          "buildLogSeed: a split-ref phase needs baselines — callers must gate on needsBaselines() first",
+        );
+      }
       if (splitRef.base === "2k") {
         paces.k2 = baselines.k2Seconds;
       } else {

@@ -774,6 +774,46 @@ describe("buildLogSteps", () => {
 });
 
 describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", () => {
+  it("accepts NULL baselines for an effort-only workout (6I rebase seam): seed carries the step, paces stay empty", () => {
+    // The real First 6k seed shape — wu + one effort distance step — built
+    // through the real assembly, run with the null baselines the loosened
+    // Connect guard now legitimately passes downstream.
+    const draft = buildDraft({
+      id: "id-first6k-seed",
+      title: "First 6k",
+      type: "O2",
+      steps: [
+        { k: "wu", minutes: 5 },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 6000 },
+          ref: { effort: "min" },
+        },
+      ],
+    });
+    const run = buildRun(draft, null, NOW);
+    const seed = buildLogSeed(run.phases, null);
+    expect(seed.steps.map((s) => s.kind)).toStrictEqual(["warmup", "work"]);
+    expect(seed.paces).toStrictEqual({});
+  });
+
+  it("throws loudly if a split-ref phase reaches it with null baselines (programmer error — callers gate on needsBaselines)", () => {
+    const draft = buildDraft({
+      id: "id-splitref-seed",
+      title: "Split Ref Seed",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 2 },
+          ref: { base: "6k", off: 4 },
+        },
+      ],
+    });
+    const run = buildRun(draft, BASELINES, NOW);
+    expect(() => buildLogSeed(run.phases, null)).toThrow(/needsBaselines/);
+  });
+
   it("emits one seed step per NON-REST phase, in program-interval order, with the manual builder's own label text", () => {
     // wu(5' = 300s) + w(2' = 120s @ 6k+4, rest 1' = 60s) + w(100m @ 6k+0) —
     // the task brief's own exact phase shape: warmup, work@time, rest,
