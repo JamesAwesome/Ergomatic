@@ -1,5 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { api } from "../api";
 import { useWorkouts, type LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
@@ -20,11 +26,18 @@ import { isComplete } from "./engine";
 import {
   buildLogSteps,
   buildManualLogSteps,
+  buildMonitorLogSteps,
   formatLogDate,
   logTotals,
+  MonitorLogSeedError,
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
+import {
+  clearMonitorRun,
+  loadMonitorRun,
+  type MonitorRun,
+} from "../monitor/monitorRun";
 import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
@@ -200,6 +213,99 @@ function manualLockedBaseline(
     : null;
 }
 
+/** The monitor mode gate (7C spec §4) — the manual door's route
+ *  (`/library/:id/log`) is ALSO where `WorkoutDetail.tsx`'s
+ *  `handleConnectedEnded` sends a just-finished connected session
+ *  (`?from=monitor`). Engaging the monitor mode on that same URL requires
+ *  ALL FOUR of the following, independently — a miss on any one of them
+ *  falls straight through to today's manual form, byte-for-byte (the
+ *  "hijack pin": a stale completed `MonitorRun` sitting in storage must
+ *  never silently take over a bookmarked or reload-of `/library/:id/log`
+ *  that carries no `from=monitor` flag at all):
+ *
+ *  1. the `from=monitor` search param is present — the flag is an INTENT,
+ *     not evidence on its own (a reload after a successful save, or a
+ *     stale/shared URL, still carries it with nothing behind it);
+ *  2. `loadMonitorRun()` returns a record, and it's finished
+ *     (`completedAt !== null`) — the evidence the flag alone can't supply;
+ *  3. that record's own `workoutId` matches THIS route's `:id` — a
+ *     connected session for a DIFFERENT workout must never prefill this
+ *     one;
+ *  4. `logSeed` exists and aligns with `program.intervals` — proven by
+ *     actually calling `buildMonitorLogSteps` and catching
+ *     `MonitorLogSeedError` rather than duplicating its own alignment
+ *     check here, so the two can never drift apart.
+ *
+ *  Exported for tests (task brief): each condition gets its own
+ *  independent-removal test against this one function, cheaper than
+ *  driving the whole screen four times over. Pure — reads `localStorage`
+ *  via `loadMonitorRun()` the same way `loadRun`/`loadDraft` already do at
+ *  this screen's other call sites, never a hook of its own. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function monitorModeRun(
+  search: URLSearchParams,
+  workoutId: string,
+): MonitorRun | null {
+  if (search.get("from") !== "monitor") return null;
+  const run = loadMonitorRun();
+  if (run === null || run.completedAt === null) return null;
+  if (run.workoutId !== workoutId) return null;
+  try {
+    buildMonitorLogSteps(run);
+  } catch (err) {
+    if (err instanceof MonitorLogSeedError) return null;
+    throw err;
+  }
+  return run;
+}
+
+/** Monitor mode's one caption line (7C spec §4): `FROM <deviceName> · N OF
+ *  M INTERVALS MEASURED`, or `FROM <deviceName> · ALL M INTERVALS MEASURED`
+ *  once every work interval carries a matched actual. `total` is
+ *  `logSteps.length` (warmups are never in that array to begin with —
+ *  `buildMonitorLogSteps`' own skip — so it already counts WORK intervals
+ *  only, no separate filter needed here). Middle dot (`·`), matching this
+ *  screen's own `.log-meta` idiom (`{dateLabel} · {totalMinutes} MIN`) —
+ *  NEVER an em-dash (house rule). */
+function monitorCaption(
+  deviceName: string,
+  measured: number,
+  total: number,
+): string {
+  const measuredPart =
+    measured === total
+      ? `ALL ${total} INTERVALS MEASURED`
+      : `${measured} OF ${total} INTERVALS MEASURED`;
+  return `FROM ${deviceName} · ${measuredPart}`;
+}
+
+/** Monitor mode's header line (7C spec §4: "Date and duration from the
+ *  run's `startedAt`/`completedAt` stamps") — the `MonitorRun` twin of
+ *  `logTotals` above, same formula (wall-clock `completedAt - startedAt`,
+ *  floored at 0, rounded to the nearest minute), recomputed independently
+ *  rather than widening `logTotals`' own `SessionRun`-typed signature to
+ *  accept either record (the two run types are deliberately NOT unified —
+ *  `monitorRun.ts`'s own header comment on why — and this is six lines,
+ *  not worth blurring that line for). `completedAt!`: this function's only
+ *  caller only ever holds a `MonitorRun` that already passed
+ *  `monitorModeRun`'s own condition 2 (`completedAt !== null`) — the same
+ *  "guaranteed by the caller, not re-checked here" convention this file's
+ *  `activeRun`/`activeWorkout` aliases already use for a narrowing that
+ *  doesn't survive across a function boundary. */
+function monitorLogTotals(run: MonitorRun): {
+  dateLabel: string;
+  totalMinutes: number;
+} {
+  const completedAt = run.completedAt!;
+  const totalMinutes = Math.round(
+    Math.max(
+      0,
+      new Date(completedAt).getTime() - new Date(run.startedAt).getTime(),
+    ) / 60000,
+  );
+  return { dateLabel: formatLogDate(completedAt), totalMinutes };
+}
+
 /** Resolves the POST body's `workoutType` — `SessionRun` itself doesn't
  *  carry one (confirmed against run.ts's own shape, per the task brief's
  *  "UNVERIFIED — check before use"). Priority order:
@@ -263,6 +369,14 @@ interface LogFormFields {
   workoutTitle: string;
   workoutType: WorkoutType;
   steps: LogStep[];
+  // 7C spec §6: the monitor mode's ONLY addition to the shared body shape —
+  // `run.deviceName`, spread straight onto the wire body below (`{
+  // ...fields }`) the same way every other `LogFormFields` key already is.
+  // Optional so the session/manual doors (which never set it) simply never
+  // put the key on the wire at all, proving the server's own `?? null`
+  // default the same way the outside-plan toggle's `advancesPlan` already
+  // does for its own optional key.
+  deviceName?: string;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -450,6 +564,7 @@ function LogScreen({
   onSave,
   discardSlot,
   backFallback,
+  monitorCaption,
 }: {
   title: string;
   workoutType: WorkoutType;
@@ -476,6 +591,11 @@ function LogScreen({
   onSave: () => void;
   discardSlot: ReactNode;
   backFallback?: string;
+  // 7C spec §4: undefined for both the session door and the manual door's
+  // ordinary (non-monitor) render — only `ManualDoorLog`'s monitor-mode
+  // branch supplies a real string, built by this module's own
+  // `monitorCaption` function immediately above.
+  monitorCaption?: string;
 }) {
   return (
     <main className="screen">
@@ -487,6 +607,10 @@ function LogScreen({
           {dateLabel} · {totalMinutes} MIN
         </span>
       </div>
+
+      {monitorCaption !== undefined && (
+        <p className="log-from-monitor">{monitorCaption}</p>
+      )}
 
       {pacesText !== null && (
         <div className="log-paces-panel">
@@ -509,11 +633,16 @@ function LogScreen({
                   target (logDraft.ts's own rule: a completed time phase is
                   read as "held the target") — showing it a second time here
                   would just repeat the number above with no new
-                  information. Only a REAL stopwatch reading (which can
-                  genuinely differ from the target) earns its own line. The
-                  manual door's actuals are ALWAYS "assumed" (buildManualLog
-                  Steps' own rule), so this line never renders there. */}
-              {step.actualSource === "stopwatch" &&
+                  information. Only a REAL stopwatch OR pm5 reading (either
+                  of which can genuinely differ from the target) earns its
+                  own line — 7C spec §4 widens this gate from
+                  `"stopwatch"`-only, since the monitor door's own rows are
+                  read-only text like every other row here, no new
+                  treatment needed. The manual door's actuals are ALWAYS
+                  "assumed" (buildManualLogSteps' own rule), so this line
+                  never renders there. */}
+              {(step.actualSource === "stopwatch" ||
+                step.actualSource === "pm5") &&
                 step.actualSplit !== undefined && (
                   <span className="log-step-actual">
                     ACTUAL {fmtSplit(step.actualSplit)}
@@ -860,16 +989,49 @@ function SessionDoorLog() {
  *  records — an in-progress session elsewhere survives logging an off-app
  *  row." This component never imports `./draft` or `./run` at all — there
  *  is nothing here that COULD touch either, by construction, not by
- *  discipline. */
+ *  discipline.
+ *
+ *  **7C: this route ALSO doubles as the monitor mode's door** —
+ *  `WorkoutDetail.tsx`'s `handleConnectedEnded` sends a just-finished
+ *  connected session to this exact URL, `?from=monitor` appended
+ *  (`monitorModeRun`'s own doc comment has the full four-condition gate).
+ *  The hard constraint above still holds for the ORIGINAL manual path —
+ *  baselines-gated, no `MonitorRun` in sight — and for the monitor branch's
+ *  OWN records (it reads/writes `MONITOR_RUN_KEY` only, never
+ *  `./draft`/`./run` — the M-2 coexistence contract, spec §5). The one
+ *  qualified exception is `useStagedDiscard` (imported for its `armed`/
+ *  `arm`/`disarm` timing machine, the session door's own idiom, spec §4's
+ *  own words): its `fire()` method calls `clearDraft`/`clearRun`
+ *  internally, so the monitor branch's own discard handler below calls
+ *  `disarm()` plus its OWN `clearMonitorRun()` directly, never `fire()` —
+ *  the one call that would break the constraint. */
 function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const workoutsState = useWorkouts();
   const baselinesState = useBaselines();
   const planState = usePlan();
+  const discard = useStagedDiscard();
+
+  // 7C spec §4: computed once at mount (`useState` lazy init, the same
+  // idiom `SessionDoorLog`'s own `run`/`draft` already use) — a reload of
+  // THIS screen after a successful save must not re-detect a monitor run
+  // that `clearMonitorRun()` (below) already retired; re-deriving on every
+  // render would do exactly that the instant the record disappeared out
+  // from under a still-mounted component.
+  const [monitorRun] = useState<MonitorRun | null>(() =>
+    monitorModeRun(searchParams, workoutId),
+  );
 
   // This door never read the draft/run records in the first place (the
-  // hard constraint below), so `onSaved` here is just the navigation —
-  // unlike the session door's `onSaved`, there is nothing to clear.
+  // hard constraint above), so `onSaved` here is just the navigation —
+  // unlike the session door's `onSaved`, there is nothing to clear, save
+  // for 7C's own addition: a genuine monitor-mode save clears
+  // `MonitorRun` too (spec §5, "SAVE (success only)"), the ONE new
+  // destruction path this door gains, and it fires from inside `onSaved`
+  // so a failed save (network error, a real validation 400, a 500) never
+  // touches the record — `useLogForm`'s own "onSaved only fires on a
+  // genuine 201" contract, unchanged.
   //
   // Must-fix minor (whole-branch review): a browser BACK press after a
   // successful save used to leave this exact route mounted fresh again
@@ -897,7 +1059,10 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     saving,
     saveError,
     submit,
-  } = useLogForm(() => navigate("/today", { replace: true }));
+  } = useLogForm(() => {
+    if (monitorRun !== null) clearMonitorRun();
+    navigate("/today", { replace: true });
+  });
 
   // Fix round 2 (whole-branch review, M1/M2): `planState` no longer joins
   // this gate either. It used to run BEFORE the workouts/baselines error
@@ -907,7 +1072,16 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // reachable at all. `plan` (below) reads as null while `planState` is
   // loading — same value as a genuine no-plan or plan-error state — so the
   // toggle just appears once the plan resolves with an active plan.
-  if (workoutsState.state === "loading" || baselinesState.state === "loading") {
+  //
+  // 7C: `baselinesState`'s own loading/error gates moved BELOW the
+  // `monitorRun !== null` branch (further down this function) — the
+  // monitor branch never calls `buildManualLogSteps` and has no use for
+  // baselines at all (`PACES LOCKED` reads `logSeed.paces`, frozen at
+  // Connect), so a monitor-mode run must not sit at LOADING… (or an error
+  // screen) behind a fetch its own render path never consults. Only
+  // `workoutsState` gates here — both branches need the library lookup
+  // just below.
+  if (workoutsState.state === "loading") {
     return (
       <main className="screen">
         <p className="mono-status">LOADING…</p>
@@ -923,21 +1097,6 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           type="button"
           className="button-outline"
           onClick={workoutsState.retry}
-        >
-          Retry
-        </button>
-      </main>
-    );
-  }
-
-  if (baselinesState.state === "error") {
-    return (
-      <main className="screen">
-        <p className="mono-status">Couldn't load your baselines.</p>
-        <button
-          type="button"
-          className="button-outline"
-          onClick={baselinesState.retry}
         >
           Retry
         </button>
@@ -961,6 +1120,127 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       <main className="screen">
         <p className="mono-status">That workout isn't in your library.</p>
         <BackLink />
+      </main>
+    );
+  }
+
+  if (monitorRun !== null) {
+    // 7C spec §4: the monitor mode's own render — `buildMonitorLogSteps`
+    // never throws here (`monitorModeRun` already proved it wouldn't, by
+    // calling it once itself; this is the SAME pure function against the
+    // SAME immutable record, so a second call is deterministic, not a
+    // second chance to fail).
+    const logSteps = buildMonitorLogSteps(monitorRun);
+    const measured = logSteps.filter(
+      (step) => step.actualSource !== undefined,
+    ).length;
+    const caption = monitorCaption(
+      monitorRun.deviceName,
+      measured,
+      logSteps.length,
+    );
+    // PACES LOCKED renders from the frozen seed, never `manualLockedBaseline`
+    // (spec §4: "the manual recovery path cannot run here") — `logSeed` is
+    // optional only so a pre-7C `MonitorRun` still type-checks;
+    // `monitorModeRun`'s own alignment check is what guarantees a REAL one
+    // exists for any record that reaches this branch.
+    const k2 = monitorRun.logSeed?.paces.k2 ?? null;
+    const k6 = monitorRun.logSeed?.paces.k6 ?? null;
+    const pacesText = pacesLockedText(k2, k6);
+    const { dateLabel, totalMinutes } = monitorLogTotals(monitorRun);
+    // Same narrowing idiom as `activeWorkout`/`activeRun` below/above: TS
+    // narrowing from the `!workout` guard doesn't survive into a closure
+    // declared later in this component.
+    const activeWorkout: LibraryWorkout = workout;
+
+    const handleMonitorSave = () =>
+      submit({
+        workoutId: activeWorkout.id,
+        workoutTitle: activeWorkout.title,
+        workoutType: activeWorkout.type,
+        steps: logSteps,
+        deviceName: monitorRun.deviceName,
+      });
+
+    // Same two-tap shape as `SessionDoorLog`'s own `handleDiscardClick`
+    // (spec §4: "in the session door's idiom") — deliberately does NOT
+    // call `discard.fire()`, which would also clear `./draft`/`./run` (this
+    // door's own hard constraint, header comment above): `disarm()` resets
+    // the armed state, and `clearMonitorRun()` is this branch's own,
+    // narrower destruction. Navigates back to the workout's OWN detail
+    // screen (spec §4: "navigates back to the detail"), not `/today` — the
+    // session door's discard lands on `/today` because it has no other
+    // natural home; this one does.
+    function handleMonitorDiscardClick() {
+      if (discard.armed) {
+        discard.disarm();
+        clearMonitorRun();
+        navigate(`/library/${workoutId}`);
+      } else {
+        discard.arm();
+      }
+    }
+
+    return (
+      <LogScreen
+        title={workout.title}
+        workoutType={workout.type}
+        dateLabel={dateLabel}
+        totalMinutes={totalMinutes}
+        pacesText={pacesText}
+        logSteps={logSteps}
+        expectedPain={workout.pain}
+        held={held}
+        onHeld={setHeld}
+        pain={pain}
+        onPain={setPain}
+        notes={notes}
+        onNotes={setNotes}
+        plan={plan}
+        outsidePlan={outsidePlan}
+        onToggleOutsidePlan={() => setOutsidePlan((v) => !v)}
+        saving={saving}
+        saveError={saveError}
+        onSave={() => void handleMonitorSave()}
+        monitorCaption={caption}
+        discardSlot={
+          <button
+            type="button"
+            className={discard.armed ? "button-l4-armed" : "button-l4"}
+            onClick={handleMonitorDiscardClick}
+            onBlur={discard.disarm}
+          >
+            {discard.armed ? "Tap again to discard" : "Discard without logging"}
+          </button>
+        }
+      />
+    );
+  }
+
+  // 7C: from here on `monitorRun` is provably `null` (the branch above
+  // always returns) — the ORIGINAL manual path's own baselines gate lives
+  // here, not up with `workoutsState`'s, so a monitor-mode run is never
+  // blocked on a fetch it has no use for (this function's own comment,
+  // above, on why).
+  if (baselinesState.state === "loading") {
+    return (
+      <main className="screen">
+        <p className="mono-status">LOADING…</p>
+      </main>
+    );
+  }
+
+  if (baselinesState.state === "error") {
+    return (
+      <main className="screen">
+        <p className="mono-status">Couldn't load your baselines.</p>
+        <button
+          type="button"
+          className="button-outline"
+          onClick={baselinesState.retry}
+        >
+          Retry
+        </button>
       </main>
     );
   }

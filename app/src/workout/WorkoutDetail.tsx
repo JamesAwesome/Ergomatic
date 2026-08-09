@@ -445,13 +445,16 @@ function WorkoutDetailView({
   // to the EXISTING post-session flow: this workout's own log screen, the
   // same door the library's "Log it after" opens. The record the surface
   // just closed is a `MonitorRun`, not a `SessionRun`, so `/session/log`
-  // (which reads the phone timer's record) would find nothing — 7C is the
-  // task that prefills this screen from the monitor's actuals. Navigating
-  // is also what unmounts the interstitial and hangs up the radio; see
-  // `ConnectedSurface.tsx`'s header.
+  // (which reads the phone timer's record) would find nothing.
+  // `?from=monitor` (7C Task 4, `LogSession.tsx`'s `monitorModeRun`) is the
+  // INTENT half of that screen's monitor-mode gate — the flag alone never
+  // engages it (a stale/reloaded URL still carries it with nothing behind
+  // it); the record plus a matching workoutId plus an aligned `logSeed` are
+  // the evidence. Navigating is also what unmounts the interstitial and
+  // hangs up the radio; see `ConnectedSurface.tsx`'s header.
   function handleConnectedEnded() {
     setConnecting(null);
-    navigate(`/library/${workout.id}/log`);
+    navigate(`/library/${workout.id}/log?from=monitor`);
   }
 
   if (connecting !== null) {

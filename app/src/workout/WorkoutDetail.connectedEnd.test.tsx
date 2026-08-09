@@ -151,8 +151,12 @@ describe("a connected session that ends", () => {
     await userEvent.click(screen.getByRole("button", { name: "FIRE ENDED" }));
     // `/library/:id/log`, not `/session/log`: the record the surface just
     // closed is a `MonitorRun`, and `/session/log` reads the phone timer's
-    // `SessionRun`, which a connected session never creates.
-    expect(navigate).toHaveBeenCalledWith(`/library/${WORKOUT.id}/log`);
+    // `SessionRun`, which a connected session never creates. `?from=monitor`
+    // (7C Task 4) is the intent half of that screen's monitor-mode gate —
+    // `LogSession.tsx`'s own `monitorModeRun` tests pin the rest.
+    expect(navigate).toHaveBeenCalledWith(
+      `/library/${WORKOUT.id}/log?from=monitor`,
+    );
   });
 
   it("leaves the interstitial behind, so the hook unmounts and hangs up", async () => {

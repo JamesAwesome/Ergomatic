@@ -4078,6 +4078,26 @@ button:disabled {
   cursor: pointer;
 }
 
+/* 7C monitor mode's one caption line (spec §4): "FROM <deviceName> · N OF M
+   INTERVALS MEASURED" — the SAME small-mono `--ink-3` pairing as this file's
+   own `.log-paces-label`/`.log-step-actual` (the house rule cited at both:
+   never `--ink-4` for an 11px-or-smaller mono label). Sits directly on the
+   screen's `--page` background (#f4f1e8), same as `.log-monitor-diag`
+   immediately above — not inside a panel — measuring 6.69:1 for `--ink-3`
+   (#57544c) there (computed via the WCAG relative-luminance formula, well
+   past the 4.5:1 AA floor; 7.43:1 against `--surface` if it were ever moved
+   onto one). Non-interactive (a `<p>`, not a button) — unlike
+   `.log-monitor-diag`'s copy-to-clipboard affordance, this is read-only
+   context, the same register as `.log-paces-panel`'s own caption text. */
+.log-from-monitor {
+  display: block;
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
 /* Save session — 54px per the task brief (`.button-primary`'s own default
    is 52px, e.g. `.today-resume-button`'s comment on that shared value).
    `border: none; padding: 0;` are load-bearing, not decorative: neither
