@@ -849,6 +849,17 @@ WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
    agreement; the driver LOGS a disagreement when one is observed (never
    corrects or picks a "winner" between the two). Both flagged for the
    laptop session alongside #1.
+   **Walk-4 addendum (2026-08-09, reconciling this item with §18's
+   per-interval finding):** walk 4 proved 0x0031's Elapsed/Distance pair
+   is PER-INTERVAL on interval workouts, yet `intervalRemaining` stayed
+   correct on the same walk. A truly SESSION-cumulative checkpoint
+   subtracted from a per-interval elapsed cannot produce a correct
+   remaining, so on interval workouts either the 0x0033 checkpoint pair
+   also reads interval-relative, or it reads zero; the wording above
+   (written against single-distance §18 #7 evidence) cannot be the whole
+   story. No raw 0x0033 capture exists to distinguish the two. OPEN as
+   §20 entry 24; the computation is bug-free either way on the observed
+   machine, which is why nothing in code changes under this note.
 9. **ANSWERED — CONFIRMED accepted, see §18 #8** (the 2×(work/rest)
    session's final interval's own rest counted down fully before
    `WorkoutEnd`/`workoutComplete` fired, no early termination; no further
@@ -3943,3 +3954,401 @@ explanation, not its answer.**
 > (the structural readback, Task 4) together.
 
 **Follow-up:** ROADMAP's Phase 7A-fix-3 ("program over a live piece").
+
+## 20. What the official documents do not tell you (Phase 7 field summary)
+
+Phase 7 put real bytes on a real PM5 across six sittings: laptop sessions 1
+to 4b (§18, §19) and the 2026-08-08 product-app walks 1-4 (§18). This
+section is the five-minute digest of what those sittings taught that a
+reader of Concept2's two documents alone would not know, or would believe
+wrongly. It DISTILLS and CITES; it never re-litigates. Each entry gives the
+claim, the official position (silent, or says otherwise, cited to the page
+§§6-16 already carry), and where the evidence lives. Where an entry and the
+section it cites differ in emphasis, the section above is the record and
+this one is only the index; the claims here are compressed to the point of
+losing their caveats.
+
+One standing warning before the list. Most of the "PM5 idiosyncrasies" this
+project recorded in its first two sessions turned out to be our own defects
+(§19's verdicts), so treat a surprising machine behaviour as a parse bug
+until the raw bytes say otherwise.
+
+### The CSAFE control path
+
+**1. The response status byte is a BITFIELD, and `0x81` is an ACCEPT.**
+Accept is `(status & 0x30) === 0x00`, reject is `(status & 0x30) === 0x10`,
+`status & 0x0F` is the slave state, and bit 7 is a frame-count toggle that
+alternates on successive frames and must never be tested for failure. Bit 6
+(`0x40`) is unassigned; treat it as reserved.
+**Official docs:** they SAY SO, in a place easy to miss, and contradict
+themselves on the same page. [CSAFE-DEF] p.11 Table 9 gives the bit map;
+Table 8, immediately before it on that page, lists the Status field's range
+as `0x00-0x7F`, which would exclude `0x81`. Roughly fifteen worked examples
+print one successful response as "81 or 01", three of them with both
+checksums, and all six of those checksums verify.
+**Evidence:** §19.1 (the derivation, the `csafe.h`/`main.cp` corroboration,
+and the per-send re-derivation table), §19.2, §19.10. This was the phase's
+founding discovery: under a whole-byte comparison every one of the twelve
+raw-captured status bytes from sessions 1 and 2 was mislabelled a rejection,
+and three "PM5 behaviours" (D1, D2, and "multi-frame accumulation is
+broken") were invented to explain the resulting alternation.
+
+**2. An accepted frame means the FRAME was valid, never that a workout
+landed.** Mid Just Row the monitor answers CSAFE while its own workout state
+machine runs outside master control: a program sent then is accepted at the
+CSAFE level and programs nothing.
+**Official docs:** SILENT on the consequence, though the mechanism is
+documented. [CSAFE-DEF] Figure 7 p.49 shows `Offline` entered from `Ready`
+on "user starts workout before equipment is configured", and the Get Force
+Curve example (pp.98-99) shows status `09` on every frame of a poll against
+an actively rowing erg.
+**Evidence:** §19.1 Verdict (c), with a raw `f1 09 ...` ack captured
+immediately after a `state=rowing` frame; §19.3; §19.2. This is why
+`program()` verifies against the machine's own reported state rather than
+the ack.
+
+**3. A `SetScreenState` ack means "queued", not "done".** The communications
+task answers immediately and the UI task applies the command later, so the
+screen has not changed when the ack arrives.
+**Official docs:** they SAY SO, [CSAFE-DEF] p.65, which puts the UI task at
+2 to 5 Hz. The documented remedy is polling
+`CSAFE_PM_GET_SCREENSTATESTATUS` until `_INACTIVE`, with a delay of a second
+or more as the weaker alternative; Figure 9 p.64 adds "delay several seconds
+to allow logging to complete" after Set Finished.
+**Evidence:** §19.6. This codec's terminate and prepare steps both treat the
+ack as completion and neither remedy is implemented; the measured prepare
+settle (entry 6) is the empirical stand-in.
+
+**4. Workout configuration is atomic at the commit; a CSAFE frame is not.**
+Parameter limits are checked at the commit, and one violation aborts the
+whole configuration with a "PrevReject" status. But an unrecognized command
+inside a frame is skipped while the rest of that frame executes, and one
+status byte covers the whole frame, so a non-OK status does not mean nothing
+took effect. A genuine reject is also not self-describing: recovering the
+reason requires a follow-up `GetErrorType`.
+**Official docs:** they SAY SO, [CSAFE-DEF] pp.50 and 10.
+**Evidence:** §19.7. No genuine reject has ever been provoked on this
+hardware, so `GetErrorType`'s own reply shape and even its request-side
+wrapper remain unconfirmed (§17 item 14).
+
+**5. The documents' printed checksums are the least reliable thing in them.**
+Three worked examples print a checksum that fails the document's own XOR
+rule, a fourth is unresolved, [CID-2010] p.50 carries another, and two "81
+or 01" examples print a single checksum matching neither branch. The PM's
+own ack checksums satisfy the XOR rule exactly as this codec computes it.
+Compute the value; never copy a printed one.
+**Official docs:** they SAY OTHERWISE, in the sense that the printed values
+are simply wrong.
+**Evidence:** §6's errata table, §18 #1 (hand-verified against a real ack),
+§19.1's dual-checksum table, §19.12.
+
+### Programming and arming
+
+**6. Programming over a RUNNING piece arms structurally EMPTY, while acking
+everything.** Two unrelated program shapes sent to a machine still `rowing`
+each armed a workout with no interval structure: every frame acked, the
+state word read `armed`, the monitor showed `:00`, and 108.4 m were rowed
+with `intervalIndex` pinned at 0 and no boundary ever firing. The variable
+is the machine's state at send time, not the program's content; seven
+single-variable and pair probes of the same shapes armed correctly from a
+settled machine.
+**Official docs:** SILENT. Every worked programming example in both
+documents programs from an idle machine, and no surveyed open-source
+implementation sends a program mid-piece either (§19.10's survey).
+**Evidence:** §19.13, §18 session 3 (Step 5 and the live bisect's REPRO
+row), §18 SESSION 4b row 2.
+The empty arm has a readable anatomy on 0x0031: `workoutType=1`,
+`workoutDurationRaw=0`, `workoutDurationType=128`, against a healthy arm's
+`8` plus interval 0's own duration in the units the encoder writes, and a
+never-armed baseline of `0`/`0`/`128` (§17 item 12's table, §18 SESSION 4a).
+Those three fields refresh while the machine is merely armed, no stroke
+needed, which is what makes a structural readback usable at verification
+time. Two caveats that cost real debugging: the readback lags the armed
+state by about a tick on HEALTHY arms (walk 3 witnessed a first sighting of
+`durationRaw=0` and the true `durationRaw=100` one tick later), and
+mid-cycle transients carry `workoutType=1` with stale, NON-ZERO durations,
+so a single mismatched tick is not evidence of a bad arm. Waiting for
+several consecutive armed ticks reporting the SAME wrong structure is what
+separates the two. On the prevention side, a terminate-shaped prepare walks
+the machine `terminated`, `idle`, `armed`, with the armed tick observed on
+tick 4 of the wait in three independent measurements (§18 SESSION 4a twice,
+SESSION 4b once).
+
+**7. "Armed" is a LEVEL reported on every status tick, not an edge.** 0x0031
+notifies at roughly 2 Hz and reports `armed` on every one of those ticks for
+as long as the machine holds an armed program: session 3 counted 154
+consecutive `armed` frames before the first stroke, and the structure fields
+refresh throughout. Anything verifying an arm must read the CURRENT decoded
+state per tick rather than wait for a one-shot.
+**Official docs:** SILENT. The BLE doc gives the sample-rate characteristic
+(p.9's attribute table, §9) and the state enum (Appendix A, p.37, §5) but
+never says whether a state arrives as an event or as a repeated level.
+**Evidence:** §18 session 3 Step 2's state census, §17 item 12 (the fields
+refresh while merely armed), §18 SESSION 4a and 4b's tick-4 settle
+readings. Modelling it as a one-shot is what made the fake's armed status
+stealable by any tick landing between the last frame's ack and the verifier
+subscribing (`app/src/monitor/transports/fake.ts`'s `armedLevel`).
+
+**8. Nothing clears a loaded workout; terminate RE-ARMS it.** The only
+documented way to change what is loaded is to program a new one.
+**Official docs:** a DOCUMENTED ABSENCE plus a documented transition.
+Appendix E routes a mid-workout terminate through `Rearm`, Concept2's own
+word for making the SAME workout ready to run again, and
+`CSAFE_PM_SET_RESET_ALL` (`0xE0`) is marked `<Not implemented>`. A terminate
+from `WorkoutLogged` instead goes straight to `WaitToBegin` with no Rearm
+step, so a prepare step has to work from either starting state.
+**Evidence:** §19.5 (including the two untested candidates,
+`CSAFE_RESET_CMD` and `SCREENVALUEWORKOUT_GOTOMAINSCREEN`), §19.4. Two
+field facts soften this in practice: a terminate sent to an IDLE machine is
+accepted, not refused (§17 item 15, §18 session 3), and programming over a
+loaded but SETTLED workout replaces it cleanly, read live off the monitor
+(§18 session 3 Step 3, §19.1 Verdict (b)).
+
+**9. The monitor never goes quiet at the end of a workout.** It parks in
+`WorkoutLogged` and answers CSAFE in every state, leaving on the user
+pressing Menu or on a Terminate command. A client that wants to keep working
+after a workout completes should terminate and carry on, not drop the
+connection.
+**Official docs:** they SAY SO. Appendix E (p.173 in [CSAFE-DEF] rev 0.31,
+the p.162 §14 cites in rev 0.27) and Table 17, which also warns that the PM
+deliberately deviates from stock CSAFE here: there is no Finished-state
+timeout back to Idle, so expect low nibble `0x01` (Ready), not `0x02`
+(Idle), once a workout concludes.
+**Evidence:** §19.4. The silence we saw was our own terminal-state latch
+short-circuiting the subscriptions.
+
+**10. Multi-frame programming acks end to end; retention rowed to completion
+is still unproven.** A 25-interval program packed into 7 ack-gated CSAFE
+frames had every frame acked, twice.
+**Official docs:** SILENT. Every worked programming example in both
+documents is a SINGLE frame, which made accumulation across frames this
+codec's largest untested assumption (§15 #6).
+**Evidence:** §18 session 3 Step 5 and the live bisect's `bisect-frames`
+row. Stated plainly: what is proven is that seven frames ack and arm from a
+settled state. Step 5's own send landed on a running machine and armed empty
+(entry 6), so nothing yet shows all 25 intervals surviving to be rowed (§17
+item 5's open remainder).
+
+**11. A nonzero rest programmed onto the FINAL interval is honoured.** The
+last interval's own rest counts down fully before `WorkoutEnd` and
+`workoutComplete`, with no early termination.
+**Official docs:** SILENT. Every worked programming example in both
+documents ends on a work interval.
+**Evidence:** §18 #8, §17 item 8. Practically significant rather than a
+corner case: 161 of this app's 300 seeded library workouts compile to a
+program whose last interval carries a nonzero rest.
+
+### Reading the status characteristics
+
+**12. 0x0031's Elapsed Time AND Distance are PER-INTERVAL on an interval
+workout.** Both fields reset together at each new work interval, and each
+interval's count spans its own work plus its trailing rest. A 2x100m read
+`state=resting elapsed=37.81 distance=101.8` and then, on the very next
+frame, `state=rowing elapsed=0 distance=0.7`.
+**Official docs:** SILENT. The BLE doc's layout (pp.13-20, §10's table)
+gives the scales and nothing else, and both field names read as session
+totals.
+**Evidence:** §18 walk 4 and §10's own note. Two consumers had assumed
+session-cumulative and both broke on camera: a total-remaining readout fell
+1:30 to 1:11 and then ROSE to 1:38 at interval 2, and a meters card fell 109
+to 50. A whole-session total has to be accumulated across the resets, and
+such an accumulator is a display estimate: it can only bank the last reading
+it actually saw, so up to one status tick per boundary goes uncounted. The
+per-interval pair is still the right input for "how far into THIS interval".
+
+**13. The workout clock runs before the first pull and through a stopped
+rower; byte 9 is the only reliable first-pull signal.** The PM5 starts the
+workout clock at "row to begin", so elapsed time moves with zero meters and
+zero rate. A rower who stops mid-interval freezes meters, split and rate
+while the interval clock keeps counting down and heart rate keeps moving. A
+flywheel still coasting from a previous piece banks real meters on a piece
+the monitor does not consider started. 0x0031's byte 9 (Rowing State, 0 =
+Inactive, 1 = Active) is the machine's own declaration that rowing has
+begun, and it read TRUE on the first pull.
+**Official docs:** SILENT on all of it. Byte 9 appears in the BLE doc's
+layout (p.13, §10's table) as a bare enum with no stated semantics, and
+nothing describes when the clock starts.
+**Evidence:** §18 walks 1, 2, 3 and 4. Consequences worth stating: a gate
+keyed on elapsed time or on banked meters is wrong on real hardware, and a
+paused-detection key that includes elapsed can never fire.
+
+**14. Stroke rate is instantaneous per stroke and HOLDS its last value
+through a stop.** 0x0032's Stroke Rate is 60 divided by the stroke period,
+not a windowed average, and it keeps reporting the last computed value once
+the rower stops. Barely-moving strokes therefore read absurdly high but
+legitimately: walk 1 saw 57 to 68 and froze at 68, while at real cadence
+walk 4 read 25 then 24, which reads walk 1's numbers as a slow-stroke
+artifact rather than a decode fault.
+**Official docs:** SILENT on both the derivation and the hold. The field is
+documented only as "strokes/min" (§10's 0x0032 table, BLE doc p.14).
+**Evidence:** §18 walks 1 and 4. Not fully closed: no capture carries a raw
+0x0032 sample yet (walk 1's own caveat), and 0x0038's `avgSpm` reported 57
+and 66 across two slow rows (§18 session 3, Steps 2 and 4), recorded there
+as an unexplained machine-reported oddity.
+
+**15. Interval numbering is 0-based on the write side and FORWARD-attributed
+on the read side, and the two read-side fields legitimately disagree.**
+`CSAFE_PM_SET_WORKOUTINTERVALCOUNT`'s index is 0-based, confirmed by §12's
+worked example and again on the wire (`18 01 00/01/02/03`). But
+0x0037/0x0038's Split/Interval Number names the interval being ENTERED
+rather than the one just completed, including at a work-to-work boundary
+with no rest in it, so a two-interval workout produces a phantom index 2. At
+one such boundary 0x0033's Interval Count read `0` while 0x0037 read `1`:
+these are two independently incrementing fields, and correlating them is
+matching values, not reading one field twice.
+**Official docs:** SILENT. Neither document says which interval a reported
+number refers to; the nearest guidance, footnotes 10 (p.23) and 12 (p.25),
+concerns interval TYPE and termination and only says the value changes with
+where you are.
+**Evidence:** §19.8, §18 #3 (D3), §17 item 13, §15 #1. What follows in code:
+subtract one unconditionally for an interval's actual, keep the rest-keyed
+rule for 0x0033, and expect a logged divergence between the two at every
+no-rest boundary by design.
+
+**16. 0x0038 consistently arrives AFTER 0x0037 at a boundary.** Pairing the
+two halves without checking they name the SAME boundary yields a mixed
+actual: one boundary's identity carrying the previous boundary's averages.
+Wait for both halves of one boundary, in either order.
+**Official docs:** SILENT on notification ordering between characteristics.
+**Evidence:** §18 #3's follow-up diagnosis row (D4), and §19.8's own caveat
+about which readings predate the fix.
+
+**17. 0x0033's Last Split Time and Last Split Distance hold steady for a
+whole interval.** They report the point at which the CURRENT interval began
+and update only at the next boundary, refreshing on every regular status
+tick rather than once, which is what lets a consumer recover progress into
+the current interval with no local history at all.
+**Official docs:** SILENT on update cadence. The BLE doc lists the two
+fields (pp.14-15, §10's 0x0033 table) and nothing more.
+**Evidence:** §18 #7, §17 item 7: 58.92 s remaining observed 1.08 s into a
+60 s interval, re-rooted at 60.0 at the next interval's start. §15 #8
+describes the pair as the session-cumulative start point of the current
+interval; walk 4's per-interval finding (entry 12) left this computation
+correct as it stood, and it is deliberately still read against the raw
+per-interval pair.
+
+**18. Heart rate has two sentinels in the field, and only one of them is the
+documented one.** With no belt paired, 0x0038's work-heartrate field
+delivered `0`, not `255`. Map BOTH values to `null` on EVERY heart-rate
+field: no rower reads 0 bpm and none reads 255, so neither mapping can
+discard a genuine measurement. A rest-heartrate average at a boundary with
+no rest in it also reads `0`.
+**Official docs:** they SAY OTHERWISE, per field. 0x0032's Heartrate is
+documented "255=invalid" (BLE doc p.14, §10's table; [CSAFE-DEF] p.21),
+0x0039's Recovery Heart Rate is documented "zero = not valid data"
+([CSAFE-DEF] p.24), and 0x0038's two heart-rate bytes have NO stated
+sentinel at all.
+**Evidence:** §18's D5 and its correction, §19.9, §18 session 3 Step 4 (raw
+0x0038 captured, offset 5 reading `0x00` at a no-rest boundary). One thing
+the value can never tell you: belt presence has its own query,
+`CSAFE_PM_GET_HRM` (`0x84`), reporting Inactive, Discovery or Paired.
+
+**19. The scale, byte-order and layout traps, indexed.** Every one of these
+is stated somewhere in the BLE or CSAFE doc, and every one is easy to read
+past. §10 and §11's tables are the authority; this is only the index.
+
+- 0x0038's Split/Interval Avg Pace is **0.1 s/lsb**, while 0x0032's and
+  0x0033's pace fields are **0.01 s/lsb** (BLE doc pp.19-20 against p.14).
+- `CSAFE_PM_SET_RESTDURATION` writes **whole seconds** while the read-side
+  Rest Time on 0x0032 is **0.01 s/lsb** (CSAFE doc pp.68-71 and §12's worked
+  example, against BLE doc p.14): a write and a read of the same quantity at
+  two different scales.
+- Inside 0x0037, Split/Interval Distance is **1 m/lsb** while the cumulative
+  Distance three rows above it is **0.1 m/lsb** (BLE doc p.19). Same
+  characteristic, two distance scales.
+- Status reads are **little-endian**; the CSAFE programming writes are
+  **big-endian** (§10's header note, §11). This is why the parser and the
+  encoder keep separate integer helpers.
+- The multiplexed `0x0080` restatements of 0x0032 and 0x0033 are NOT
+  byte-identical to the GATT characteristics: the multiplexed 0x0032 is 19
+  bytes and the multiplexed 0x0033 is 18, because Average Power moves from
+  one to the other (BLE doc Table 4, pp.26-27). 0x0031 is the one
+  characteristic restated verbatim. Reusing the GATT offset tables against
+  the multiplexed characteristic silently decodes the wrong field at the
+  wrong scale.
+
+**Official docs:** all STATED, none highlighted.
+**Evidence:** §10, §11, §12.
+
+**20. `CSAFE_PM_SET_TARGETPACETIME` is 0.01 s/lsb, so half-second splits are
+wire-legal.** A 2:14.5 target encodes as raw 13450 and is perfectly
+representable. A validator that copies the whole-second contract of
+`CSAFE_PM_SET_RESTDURATION` onto pace will refuse most realistic targets.
+**Official docs:** they STATE the scale plainly (CSAFE doc pp.68-71; §12's
+worked example encodes 1:40 as `0x00002710`, that is 10000).
+**Evidence:** §11, §12, and §18 walk 1, where exactly that mistaken check
+refused a whole workout and was corrected on the spot. Still owed by a
+future row: no `.5` target has actually reached a real PM5 yet, since every
+workout programmed since has carried whole-second targets.
+
+### Transport and discovery
+
+**21. Three things about the BLE link that neither document mentions.**
+
+- The C2 Rowing service (`0x0030`) is NOT advertised. Filtering discovery on
+  it leaves Chrome's picker empty forever; filter on the device-information
+  service or on the name prefix `PM5`.
+- GATT characteristic handles do not survive a reconnect: every write after
+  one throws `InvalidStateError` until the characteristics are re-fetched.
+- One notification callback can deliver TWO complete CSAFE response frames
+  back to back, so a reassembler has to be drained until it yields nothing
+  rather than read once per callback.
+
+**Official docs:** SILENT on all three. The BLE doc gives the UUID formula
+and the attribute table (p.9, §9) and says nothing about what is advertised.
+**Evidence:** §18's "Also fixed live this session" for the first two, both
+found and fixed on hardware in session 1; §16's coalescing paragraph for the
+third, a proven bug with its own regression test.
+
+**The wire's representable ranges exceed every plausible band, so
+consumers guard per FIELD, never per record.** 0x0037/0x0038's decodes
+put Stroke Rate in 0..255 (`readU8`, `pm5/parse.ts:271`) and average
+pace in 0..6553.5 s/500m (`readU16LE / 10`), while real readings above
+the app's own storage bands were observed on hardware the same day the
+bands were set (avgSpm 66 on light rowing, walk 1's split artifacts).
+The consumer rule that shipped: a wire-legal reading outside a band
+drops ITS OWN FIELD and keeps the rest of the record
+(`src/session/logDraft.ts`'s `MONITOR_SPLIT_MAX`/`MONITOR_SPM_*`
+constants and the 7C design spec §3). Rejecting the whole record for
+one outlandish field would have discarded real sessions.
+**Official docs:** SILENT on value ranges for every read-side field.
+**Evidence:** `pm5/parse.ts`'s decode widths; §18 walk 1's rate
+readings; the 7C branch review (review-derived, code-cited).
+
+### Still open, and honestly so
+
+**22. Whether 0x0037's Split/Interval Time is work-only or work plus rest.**
+An interval's logged elapsed time maps from that field and is stored under
+the work-only reading. The documented shape argues for it: 0x0037 carries a
+SEPARATE Interval Rest Time field at offsets 12-13, which would be redundant
+if Split/Interval Time already included the rest it names.
+**Official docs:** SILENT.
+**Evidence for the open state:** §17 item 22. No walk's numbers settle it,
+and a decode's internal time, distance and pace self-consistency CANNOT
+distinguish the two conventions, because `avgSplit` is itself PM5-computed
+from the same split's time and distance and so satisfies the identity
+regardless of which duration the machine used internally. That arithmetic is
+CIRCULAR, not evidence. Settling it needs one work interval timed by an
+independent stopwatch against the logged value.
+
+**23. Real pairing and programming latency has never been measured.** Three
+spans are unknown: device pick to pairing complete, pairing complete to the
+first programming write, and the programming send's own duration for a known
+interval count.
+**Official docs:** SILENT, and could not be otherwise.
+**Evidence for the open state:** §17 item 21. The fake's 100 ms auto-tick
+and the e2e fixtures' 120-200 ms write latency were chosen for observability
+in a browser test, never measured against hardware, and nothing downstream
+treats them as a timing oracle.
+
+**24. What 0x0033's Last Split checkpoint pair actually reports on
+interval workouts.** §15 #8's session-cumulative reading and walk 4's
+per-interval 0x0031 finding cannot both be whole truths, because the
+driver subtracts one from the other and the countdown was CORRECT on
+hardware; either the checkpoint also reads interval-relative there, or
+it reads zero. One raw 0x0033 capture mid-interval-2 settles it.
+**Official docs:** SILENT (no update cadence, no basis stated).
+**Evidence for the open state:** §15 #8's walk-4 addendum.
+
+Other readings owed by the next hardware row are listed at the end of §18's
+2026-08-08 entry.
