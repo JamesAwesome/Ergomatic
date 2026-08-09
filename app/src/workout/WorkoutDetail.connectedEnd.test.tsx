@@ -72,21 +72,32 @@ vi.mock("../api/useBaselines", () => ({
 
 // 2026-08-09's warmup setting (design §4/§9): the CONNECT door threads the
 // rower's own preference into `buildRun`, exactly as the phone-timer door
-// does in `Countdown.tsx`. This rower has an 8:00 warm-up set — which is
-// where the warm-up seed step asserted below comes from now that no
-// workout carries a `wu` step of its own.
+// does in `Countdown.tsx`. This file is the ONE place that can prove it —
+// it already intercepts the interstitial's props, so it can read the
+// phases and the log seed the screen actually built.
+//
+// The hook's return value is switchable per test (`preferencesReturn`)
+// rather than frozen, because the door has two arms and BOTH need pinning:
+// a loaded preference must reach `buildRun`, and a preference that has NOT
+// loaded must read as no warm-up rather than as anything invented. A
+// frozen "ready" mock can only ever prove the first, which is exactly the
+// gap the arc review's own M4 mutant (a hardcoded 3' warm-up) walked
+// through — see the two tests at the bottom of this file.
+const READY_PREFS = {
+  state: "ready",
+  preferences: {
+    difficulties: [],
+    timeCapMinutes: 60,
+    warmupMinutes: 10,
+    warmup: { kind: "time", minutes: 8 } as { kind: "time"; minutes: number },
+    countdownSeconds: 10,
+    startHereDismissed: true,
+  },
+};
+let preferencesReturn: unknown = READY_PREFS;
+
 vi.mock("../api/usePreferences", () => ({
-  usePreferences: () => ({
-    state: "ready",
-    preferences: {
-      difficulties: [],
-      timeCapMinutes: 60,
-      warmupMinutes: 10,
-      warmup: { kind: "time", minutes: 8 },
-      countdownSeconds: 10,
-      startHereDismissed: true,
-    },
-  }),
+  usePreferences: () => preferencesReturn,
 }));
 
 const WORKOUT = {
@@ -135,6 +146,7 @@ beforeEach(() => {
   localStorage.clear();
   navigate.mockClear();
   capturedProps = null;
+  preferencesReturn = READY_PREFS;
 });
 
 describe("the log seed WorkoutDetail builds (7C Task 1)", () => {
@@ -202,5 +214,57 @@ describe("a connected session that ends", () => {
     await userEvent.click(screen.getByRole("button", { name: "FIRE EXIT" }));
     expect(navigate).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+  });
+});
+
+// Arc review F6: the Connect door's two preference arms, BEHAVIOUR-pinned.
+// `WorkoutDetail.test.tsx`'s own not-ready test can only assert that the
+// screen doesn't break (it has no way to see what was built); these two
+// read the phases and the log seed the screen actually handed the
+// interstitial, so they bind the preference's VALUE, not its presence.
+describe("the Connect door and the warm-up setting (design §4/§9)", () => {
+  async function connectAndCapture() {
+    renderDetail();
+    await openConnect();
+    expect(capturedProps).not.toBeNull();
+    return capturedProps!;
+  }
+
+  it("threads the LOADED preference into buildRun: the phases and the seed both carry that exact warm-up", async () => {
+    const { phases, identity } = await connectAndCapture();
+    // Not just "a warm-up exists" — the 8:00 is the mocked preference's own
+    // value, so a door that invented its own duration fails here.
+    expect(phases[0]).toStrictEqual({
+      type: "warmup",
+      seconds: 480,
+      label: "Easy",
+      originalIndex: -1,
+    });
+    expect(identity.logSeed.steps[0]).toStrictEqual({
+      label: "8:00 warm-up",
+      kind: "warmup",
+    });
+  });
+
+  it("prepends NOTHING while the preference is still loading — the OFF default, never an invented warm-up", async () => {
+    preferencesReturn = { state: "loading" };
+    const { phases, identity } = await connectAndCapture();
+    expect(phases.some((p) => p.type === "warmup")).toBe(false);
+    expect(identity.logSeed.steps.some((s) => s.kind === "warmup")).toBe(false);
+    // The workout's own one work step is still all there, unshifted — a
+    // not-ready preference costs the session nothing but its warm-up.
+    expect(identity.logSeed.steps).toStrictEqual([
+      { label: "2000 m @ 6k +4", kind: "work" },
+    ]);
+  });
+
+  it("prepends nothing when the preference is loaded and OFF (null)", async () => {
+    preferencesReturn = {
+      ...READY_PREFS,
+      preferences: { ...READY_PREFS.preferences, warmup: null },
+    };
+    const { phases, identity } = await connectAndCapture();
+    expect(phases.some((p) => p.type === "warmup")).toBe(false);
+    expect(identity.logSeed.steps.some((s) => s.kind === "warmup")).toBe(false);
   });
 });

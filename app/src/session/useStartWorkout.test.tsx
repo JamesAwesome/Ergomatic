@@ -17,17 +17,18 @@ import {
   type MonitorRun,
 } from "../monitor/monitorRun";
 import { compileProgram } from "../../domain/monitor/program.js";
-import type { Step } from "../../domain/types.js";
 import { useStartWorkout, type StartableWorkout } from "./useStartWorkout";
 
 // Realistic fixture (repo convention): shaped like a real seeded library
-// workout — a warm-up plus a distance work step — not a bare minimum.
+// workout — a distance work step at a split ref — not a bare minimum.
+// (It carried a lead `wu` step until 2026-08-09's warmup setting removed
+// that step kind; a real seeded workout has none now, and the rower's own
+// warm-up SETTING is prepended at `buildRun` instead.)
 const WORKOUT: StartableWorkout = {
   id: "w1",
   title: "Ladder Sets",
   type: "AT",
   steps: [
-    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "distance", meters: 2500 },
@@ -110,7 +111,10 @@ describe("useStartWorkout", () => {
         id: "w-other",
         title: "Other",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+        // An inert stand-in for "some OTHER draft exists" — a rest row,
+        // not the `wu` row this was before 2026-08-09, which would now
+        // expand to zero phases and make `completedRunFor` vacuous.
+        steps: [{ k: "r", minutes: 5 }],
       }),
     );
     const runA = completedRunFor(draftA);
@@ -133,7 +137,10 @@ describe("useStartWorkout", () => {
         id: "w-other",
         title: "Other",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+        // An inert stand-in for "some OTHER draft exists" — a rest row,
+        // not the `wu` row this was before 2026-08-09, which would now
+        // expand to zero phases and make `completedRunFor` vacuous.
+        steps: [{ k: "r", minutes: 5 }],
       }),
     );
     saveDraft(notStarted);
@@ -189,7 +196,10 @@ describe("useStartWorkout", () => {
         id: "w-other",
         title: "Other",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+        // An inert stand-in for "some OTHER draft exists" — a rest row,
+        // not the `wu` row this was before 2026-08-09, which would now
+        // expand to zero phases and make `completedRunFor` vacuous.
+        steps: [{ k: "r", minutes: 5 }],
       }),
     );
     saveDraft(draftA);

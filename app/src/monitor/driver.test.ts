@@ -60,17 +60,37 @@ import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
 // matching `src/monitor/program.sweep.test.ts`'s own pattern. Compiles to
 // 3 intervals: a 300s warmup (no target/rest), then two 240s work
 // intervals at 6k+12 (targetSplit 132s/500m) each followed by a 60s rest —
-// confirmed against this exact fixture before writing the test (see the
-// task report).
+// values read off `compileProgram`'s own output for this fixture, not off
+// a wire capture (see the provenance note below).
 //
 // 2026-08-09's warmup setting: that 300s interval 0 was Sea Fret's own
 // `wu` step until the seeds were stripped; it is a per-user PREFERENCE
 // now, passed to `buildRun` below (its one producer). The 5 minutes are
-// the exact duration the seed carried, deliberately — the hardware pins
-// in this file (the 0x0031 structural readback of 30000/Time, the boundary
-// walk) were measured against a PM5 programmed with exactly this
-// three-interval program, and a fixture that dropped the warm-up would
-// silently stop matching the capture those numbers came from.
+// the exact duration the seed carried, so the compiled program is
+// unchanged — but keeping the warm-up at all is a deliberate choice, and
+// this is the reason:
+//
+// **Interval 0 is this file's ONLY rest-0 leading interval.** The warm-up
+// compiles with `restSeconds: 0` (nothing follows it but the first work
+// phase), which makes its boundary a WORK->WORK one — no rest tick
+// separates it from interval 1, so the state word is still "rowing" when
+// 0x0037/38 arrive. Sea Fret's own two work steps each carry a 60s rest,
+// so a fixture that dropped the warm-up would remove that case from the
+// file entirely and silently retire the `toActualIndex(0, "rowing", 3)`
+// clamp it exercises. See the timeline comment at the "program -> armed ->
+// frames" walk below, which spells the boundary out.
+//
+// NO HARDWARE PROVENANCE IS CLAIMED FOR THIS FIXTURE, and none should be
+// (arc review F1): Sea Fret appears nowhere in `docs/monitor/`, and the
+// structural readback this file asserts is COMPUTED, not captured —
+// `healthyArmedStructureFor` below applies SESSION 4a's documented RULE
+// (`value * 100` at duration type 0 for a time interval) to whatever
+// program it is handed. 4a's own committed capture
+// (`docs/monitor/pm5-interface-notes.md` SESSION 4a) used three synthetic
+// lab programs and read 6000, not 30000. What makes this fixture honest is
+// that a warm-up-on rower running Sea Fret really does program exactly
+// this three-interval shape — a real production configuration, applied to
+// a documented rule.
 function seaFretProgram(): WorkoutProgram {
   const workout = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret");
   if (!workout)
@@ -6604,8 +6624,11 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("a REAL library workout arms for real: Sea Fret's 300s warmup reads back 30000/Time and program() resolves", async () => {
     // The briefing's realistic-fixture rule — Sea Fret through the exact
     // `buildDraft -> buildRun -> compileProgram` assembly `startSession`
-    // uses, not a hand-built minimum. Its interval 0 is the 300s warmup, so
-    // the readback the machine owes us is 30000 at duration type Time.
+    // uses, not a hand-built minimum. Its interval 0 is the 300s warm-up
+    // the rower's SETTING prepends (see `seaFretProgram`'s own note), so
+    // the readback the machine owes us — by SESSION 4a's documented rule,
+    // applied here, not quoted from a capture of this workout — is 30000 at
+    // duration type Time.
     const program = seaFretProgram();
     expect(program.intervals[0]).toMatchObject({ kind: "time", value: 300 });
     expect(healthyArmedStructureFor(program)).toStrictEqual({

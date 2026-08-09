@@ -3,6 +3,7 @@ import {
   band,
   bucket,
   drift,
+  gridMismatches,
   TARGET,
   type WorkoutStat,
 } from "./library-balance.js";
@@ -85,5 +86,52 @@ describe("drift", () => {
     expect(d["AN|60+"]).toBe(-3);
     const total = Object.values(d).reduce((a, b) => a + b, 0);
     expect(total).toBe(-300);
+  });
+});
+
+// Arc review F9: the faithfulness check is what licenses reading the MOVED
+// row at all, so it gets its own pin rather than living only in the CLI
+// path. Its input in production is the BEFORE (warm-up-inclusive) replay
+// over the 300 grid rows; here it is exercised against synthetic grids so
+// the assertion is about the COMPARISON, not about seed content.
+describe("gridMismatches", () => {
+  it("is empty when every one of the 20 cells matches the design grid", () => {
+    // Rebuild the exact TARGET counts as a `type|band` map.
+    const perfect: Record<string, number> = {};
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+      for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
+        perfect[`${type}|${b}`] = TARGET[type][b];
+      }
+    }
+    expect(gridMismatches(perfect)).toStrictEqual({});
+  });
+
+  it("names only the cells that differ, with their signed delta", () => {
+    const perfect: Record<string, number> = {};
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+      for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
+        perfect[`${type}|${b}`] = TARGET[type][b];
+      }
+    }
+    // The exact shape the two onboarding rows produce when they are NOT
+    // excluded (O2 30-45 and AN <20 each gain one) — the case the report's
+    // CHECK row shows and the verdict line deliberately filters out.
+    const withOnboarding = {
+      ...perfect,
+      "O2|30-45": perfect["O2|30-45"]! + 1,
+      "AN|<20": perfect["AN|<20"]! + 1,
+    };
+    expect(gridMismatches(withOnboarding)).toStrictEqual({
+      "O2|30-45": 1,
+      "AN|<20": 1,
+    });
+  });
+
+  it("reports a MISSING cell as a negative delta, never as absent", () => {
+    // An empty grid: all 20 cells differ, each by -TARGET.
+    const all = gridMismatches({});
+    expect(Object.keys(all)).toHaveLength(20);
+    expect(all["O2|<20"]).toBe(-2);
+    expect(Object.values(all).reduce((a, b) => a + b, 0)).toBe(-300);
   });
 });

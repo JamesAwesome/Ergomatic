@@ -26,11 +26,14 @@ import {
 } from "../monitor/monitorRun";
 import { compileProgram } from "../../domain/monitor/program.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type { Step, WorkoutType } from "../../domain/types.js";
+import type { WorkoutType } from "../../domain/types.js";
 import type { WarmupSetting } from "../api/usePreferences";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
-// meters, never an estimated duration.
+// meters, never an estimated duration. (It opened with a `wu` row until
+// 2026-08-09's warmup setting deleted that step kind — a real library
+// workout carries none now, and the rower's own setting is prepended at
+// `buildRun`.)
 const WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "Ladder Sets",
@@ -38,7 +41,6 @@ const WORKOUT: LibraryWorkout = {
   difficulty: "medium",
   pain: 3,
   steps: [
-    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "time", minutes: 5 },
@@ -106,11 +108,13 @@ const PERSONAL_WORKOUT: LibraryWorkout = {
 };
 
 // Phase 6I: an effort-only workout matching the shape Task 3 seeds for the
-// two designated onboarding workouts (domain/onboarding.ts) — a warm-up
-// plus ONE distance work step at an effort ref, nothing else (no "test"/
-// reps step, so `compileProgram` — exercised by the Connect describe block
-// below — has no OTHER reason to refuse it; this fixture's whole point is
-// isolating the baselines predicate). `needsBaselines()` reads false.
+// two designated onboarding workouts (domain/onboarding.ts) — ONE distance
+// work step at an effort ref, nothing else (no "test"/reps step, so
+// `compileProgram` — exercised by the Connect describe block below — has
+// no OTHER reason to refuse it; this fixture's whole point is isolating
+// the baselines predicate). `needsBaselines()` reads false. It had a lead
+// `wu` step until 2026-08-09's warmup setting, which the real onboarding
+// seed no longer carries either.
 const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
   id: "w-effort",
   title: "Effort Only Row",
@@ -118,7 +122,6 @@ const EFFORT_ONLY_WORKOUT: LibraryWorkout = {
   difficulty: "easy",
   pain: 2,
   steps: [
-    { k: "wu", minutes: 10 } as unknown as Step,
     {
       k: "w",
       duration: { kind: "distance", meters: 6000 },
@@ -543,7 +546,7 @@ describe("WorkoutDetail", () => {
         id: "w-other",
         title: "Other Session",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+        steps: [{ k: "r", minutes: 5 }],
       }),
     );
     saveDraft(inProgress);
@@ -565,7 +568,7 @@ describe("WorkoutDetail", () => {
         id: "w-other",
         title: "Other Session",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+        steps: [{ k: "r", minutes: 5 }],
       }),
     );
     saveDraft(inProgress);
@@ -588,7 +591,7 @@ describe("WorkoutDetail", () => {
         id: "w-other",
         title: "Other Session",
         type: "AN",
-        steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+        steps: [{ k: "r", minutes: 5 }],
       }),
     );
     saveDraft(inProgress);
@@ -613,7 +616,7 @@ describe("WorkoutDetail", () => {
       id: "w-other",
       title: "Other Session",
       type: "AN",
-      steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+      steps: [{ k: "r", minutes: 5 }],
     });
     saveDraft(notStarted);
     await renderDetailWithConfirmRoute("/library/w1");
@@ -646,7 +649,7 @@ describe("WorkoutDetail", () => {
           id: "w-other",
           title: "Session A",
           type: "AN",
-          steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+          steps: [{ k: "r", minutes: 5 }],
         }),
       );
       const runA = completedRunFor(draftA);
@@ -853,7 +856,7 @@ describe("WorkoutDetail", () => {
           id: "w-other",
           title: "Session A",
           type: "AN",
-          steps: [{ k: "wu", minutes: 5 } as unknown as Step],
+          steps: [{ k: "r", minutes: 5 }],
         }),
       );
       saveDraft(draftA);
@@ -1404,12 +1407,16 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
   // 2026-08-09's warmup setting: this screen reads the preference for
   // Connect's own `buildRun` call, but deliberately does NOT hold the
   // whole workout behind it (see the hook's own comment in
-  // WorkoutDetail.tsx). A preference that hasn't arrived reads as "no
-  // warm-up" and Connect proceeds normally — the OFF default every rower
-  // starts with, never a blocked button or a crash on a half-loaded hook.
-  // (The ON path — the preference actually reaching `buildLogSeed` — is
-  // pinned in WorkoutDetail.connectedEnd.test.tsx, which can intercept the
-  // interstitial's props.)
+  // WorkoutDetail.tsx). This test pins exactly one thing — that a
+  // half-loaded hook neither blocks the button nor crashes the screen.
+  //
+  // IT DOES NOT PIN WHAT GETS BUILT, and must not be read as if it did
+  // (arc review F6: a mutant hardcoding a 3' warm-up at the Connect door
+  // left this test passing). This file has no way to see the phases or the
+  // log seed — it renders the REAL interstitial. Both preference arms are
+  // BEHAVIOUR-pinned next door, in
+  // `WorkoutDetail.connectedEnd.test.tsx`'s "the Connect door and the
+  // warm-up setting" describe, which intercepts the interstitial's props.
   it("Connect proceeds normally while the warm-up preference is still loading", async () => {
     mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT], null, false);
     await renderDetail("/library/w-effort");

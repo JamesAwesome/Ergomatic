@@ -28,7 +28,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { estimateMinutes } from "../domain/expand.js";
 import type { WorkoutType } from "../domain/types.js";
-import { GLOBAL_LIBRARY_SEED } from "../server/seed/library/index.js";
+import {
+  GLOBAL_LIBRARY_SEED,
+  LIBRARY_WORKOUTS,
+} from "../server/seed/library/index.js";
 
 // See node-shims.d.ts: this tsconfig has no `"node"` in its `types` array,
 // so `process` isn't ambiently typed. Cast locally rather than adding a
@@ -44,11 +47,19 @@ export const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 export type Band = "<20" | "20-30" | "30-45" | "45-60" | "60+";
 
 // Bucket edges and the TARGET grid, verbatim from docs/superpowers/specs/
-// 2026-08-03-workout-generation-design.md §4 ("Quota grid"). The doc's own
-// row directly under the table: "Duration = total time including warm-up
-// and rests." — so removing the warm-up minutes moves the boundary, it
-// does not redefine it; band() below applies the SAME edges the design
-// used when the grid was authored.
+// 2026-08-03-workout-generation-design.md §4 ("Quota grid"). The falsifying
+// line for everything this script prints is that spec's LINE 94, the row
+// directly under the quota table, quoted verbatim:
+//
+//     "Duration = total time including warm-up and rests."
+//
+// THE TARGET GRID IS THEREFORE DEFINED OVER WARM-UP-INCLUSIVE DURATIONS,
+// and AFTER (post-strip) is warm-up-free. AFTER-vs-TARGET is not a
+// like-for-like comparison and must never be read as a rebalance signal —
+// arc review F9. BEFORE-vs-TARGET is the like-for-like one, and it is what
+// this script uses as its FAITHFULNESS CHECK (see `gridMismatches` below).
+// band() applies the SAME edges the design used when the grid was
+// authored; only the durations fed into it changed.
 export const band = (minutes: number): Band =>
   minutes < 20
     ? "<20"
@@ -114,6 +125,30 @@ function totalOf(counts: Record<string, number>): number {
   return Object.values(counts).reduce((a, b) => a + b, 0);
 }
 
+/** The FAITHFULNESS CHECK (arc review F9): every `${type}|${band}` cell
+ *  where `counts` disagrees with the design grid, as `cell: delta` pairs.
+ *  Empty means all 20 cells match.
+ *
+ *  Run against the BEFORE (warm-up-inclusive) replay over the 300 GRID
+ *  rows, an empty result is two things at once: proof the frozen-literal
+ *  replay reproduces the pre-strip library exactly, and proof this script's
+ *  band edges match the convention the generation phase actually used when
+ *  it authored the grid (the spec states the edges' VALUES but never their
+ *  inclusivity, so reproducing all 20 cells is better evidence than the
+ *  doc). It is deliberately computed over `LIBRARY_WORKOUTS` (300), not
+ *  `GLOBAL_LIBRARY_SEED` (302): the two onboarding rows postdate the grid
+ *  and are not part of what it was authored against. */
+export function gridMismatches(
+  counts: Record<string, number>,
+  target: Record<WorkoutType, Record<Band, number>> = TARGET,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [cell, delta] of Object.entries(drift(counts, target))) {
+    if (delta !== 0) out[cell] = delta;
+  }
+  return out;
+}
+
 // One table per type: rows are BEFORE (optional) / AFTER / TARGET / DRIFT,
 // columns are the five bands plus a TOTAL column. Far more legible in a
 // PR body than one 20-column row.
@@ -128,46 +163,64 @@ function printTypeTable(
   const targetTotal = targetRow.reduce((a, b) => a + b, 0);
   const afterRow = BANDS.map((b) => afterCounts[`${type}|${b}`] ?? 0);
   const afterTotal = afterRow.reduce((a, b) => a + b, 0);
-  const driftRow = afterRow.map((a, i) => a - targetRow[i]!);
+
+  const signed = (n: number): string => (n > 0 ? `+${n}` : String(n));
+  const row = (label: string, cells: number[], total: number): void => {
+    console.log(
+      [
+        label.padStart(colWidth),
+        ...cells.map((n) => pad(String(n))),
+        pad(String(total)),
+      ].join(""),
+    );
+  };
+  const signedRow = (label: string, cells: number[], total: number): void => {
+    console.log(
+      [
+        label.padStart(colWidth),
+        ...cells.map((n) => pad(signed(n))),
+        pad(signed(total)),
+      ].join(""),
+    );
+  };
 
   console.log(`\n${type}`);
   console.log(
     ["".padStart(colWidth), ...BANDS.map(pad), pad("TOTAL")].join(""),
   );
+  let beforeRow: number[] | null = null;
+  let beforeTotal = 0;
   if (beforeCounts) {
-    const beforeRow = BANDS.map((b) => beforeCounts[`${type}|${b}`] ?? 0);
-    const beforeTotal = beforeRow.reduce((a, b) => a + b, 0);
-    console.log(
-      [
-        "BEFORE".padStart(colWidth),
-        ...beforeRow.map((n) => pad(String(n))),
-        pad(String(beforeTotal)),
-      ].join(""),
+    beforeRow = BANDS.map((b) => beforeCounts[`${type}|${b}`] ?? 0);
+    beforeTotal = beforeRow.reduce((a, b) => a + b, 0);
+    row("BEFORE", beforeRow, beforeTotal);
+  }
+  row("AFTER", afterRow, afterTotal);
+  row("TARGET", targetRow, targetTotal);
+  if (beforeRow) {
+    // The like-for-like comparison: warm-up-INCLUSIVE BEFORE against a
+    // warm-up-INCLUSIVE grid. Expected to read 0 across the 300 grid rows;
+    // the only nonzero cells are the two onboarding rows Phase 6I added on
+    // top of the grid (O2 30-45 and AN <20). This is the row that says
+    // whether the numbers below can be trusted at all.
+    signedRow(
+      "CHECK",
+      beforeRow.map((b, i) => b - targetRow[i]!),
+      beforeTotal - targetTotal,
+    );
+    // What the STRIP actually did to this type: the real signal.
+    signedRow(
+      "MOVED",
+      afterRow.map((a, i) => a - beforeRow![i]!),
+      afterTotal - beforeTotal,
     );
   }
-  console.log(
-    [
-      "AFTER".padStart(colWidth),
-      ...afterRow.map((n) => pad(String(n))),
-      pad(String(afterTotal)),
-    ].join(""),
-  );
-  console.log(
-    [
-      "TARGET".padStart(colWidth),
-      ...targetRow.map((n) => pad(String(n))),
-      pad(String(targetTotal)),
-    ].join(""),
-  );
-  console.log(
-    [
-      "DRIFT".padStart(colWidth),
-      ...driftRow.map((n) => pad((n > 0 ? "+" : "") + String(n))),
-      pad(
-        (afterTotal - targetTotal > 0 ? "+" : "") +
-          String(afterTotal - targetTotal),
-      ),
-    ].join(""),
+  // NOT a rebalance signal (arc review F9) — warm-up-free counts against a
+  // warm-up-inclusive grid. Renamed from DRIFT so nobody reads it as one.
+  signedRow(
+    "AFT-TGT",
+    afterRow.map((a, i) => a - targetRow[i]!),
+    afterTotal - targetTotal,
   );
 }
 
@@ -187,11 +240,54 @@ function main(): void {
 
   console.log(`GLOBAL_LIBRARY_SEED: ${GLOBAL_LIBRARY_SEED.length} workouts`);
   console.log(
-    "(design TARGET grid sums to 300 — the 2 onboarding rows, Phase 6I,",
+    "(design TARGET grid sums to 300; the 2 onboarding rows, Phase 6I,",
   );
   console.log(" postdate the grid and land on top of it wherever they band)");
+  console.log("");
+  console.log("READ THIS BEFORE THE NUMBERS");
+  console.log(
+    "  The TARGET grid is defined over warm-up-INCLUSIVE durations. The",
+  );
+  console.log(
+    "  generation spec's own line under the quota table (2026-08-03-workout-",
+  );
+  console.log(
+    '  generation-design.md line 94): "Duration = total time including',
+  );
+  console.log('  warm-up and rests."');
+  console.log(
+    "  AFTER is warm-up-FREE, so the AFT-TGT row compares two different",
+  );
+  console.log(
+    "  things. It measures the STRIP, not the library, and it is NOT a",
+  );
+  console.log("  rebalance signal. Do not rule on a regen from it.");
+  console.log(
+    "  * CHECK (BEFORE minus TARGET) is the like-for-like comparison and the",
+  );
+  console.log(
+    "    FAITHFULNESS check: 0 in all 20 grid cells means the replay and the",
+  );
+  console.log("    band edges are right. See the verdict line at the end.");
+  console.log(
+    "  * MOVED (AFTER minus BEFORE) is what removing the warm-ups actually",
+  );
+  console.log("    did. That is the real signal.");
+  console.log(
+    "  * AFTER is the new reality and it is AWAITING A NEW TARGET GRID; no",
+  );
+  console.log(
+    "    grid has been authored over warm-up-free durations yet. A rower",
+  );
+  console.log(
+    "    with a 10 minute warm-up preference recovers roughly the original",
+  );
+  console.log("    spread at run time.");
 
   let beforeCounts: Record<string, number> | null = null;
+  // The same BEFORE replay restricted to the 300 GRID rows — the
+  // faithfulness check's own input; see `gridMismatches`.
+  let gridBeforeCounts: Record<string, number> | null = null;
   if (withWarmups) {
     const scriptDir = dirname(fileURLToPath(import.meta.url));
     const frozenPath = join(scriptDir, "library-warmups-before.json");
@@ -205,6 +301,13 @@ function main(): void {
         estimateMinutes(w.steps, BASELINES)!.minutes + (frozen[w.title] ?? 0),
     }));
     beforeCounts = bucket(before);
+    gridBeforeCounts = bucket(
+      LIBRARY_WORKOUTS.map((w) => ({
+        type: w.type,
+        minutes:
+          estimateMinutes(w.steps, BASELINES)!.minutes + (frozen[w.title] ?? 0),
+      })),
+    );
   }
 
   for (const t of TYPES) printTypeTable(t, afterCounts, beforeCounts);
@@ -214,10 +317,24 @@ function main(): void {
   console.log(
     `\nGRAND TOTAL: AFTER ${totalAfter} vs TARGET ${totalTarget}${
       beforeCounts ? ` vs BEFORE ${totalOf(beforeCounts)}` : ""
-    } (drift ${totalAfter - totalTarget > 0 ? "+" : ""}${
+    } (AFT-TGT ${totalAfter - totalTarget > 0 ? "+" : ""}${
       totalAfter - totalTarget
-    })`,
+    }, not a rebalance signal)`,
   );
+
+  if (gridBeforeCounts) {
+    const mismatches = gridMismatches(gridBeforeCounts);
+    const cells = Object.keys(mismatches).length;
+    console.log(
+      cells === 0
+        ? "\nFAITHFULNESS CHECK: BEFORE reproduces the design grid in 20/20" +
+            " cells (300 grid rows, onboarding excluded). The replay and the" +
+            " band edges are confirmed; the MOVED row can be trusted."
+        : `\nFAITHFULNESS CHECK FAILED: ${cells} of 20 cells differ ` +
+            `(${JSON.stringify(mismatches)}). Nothing below can be trusted` +
+            " until this reads 20/20.",
+    );
+  }
 }
 
 const isMain =

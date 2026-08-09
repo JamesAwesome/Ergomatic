@@ -44,7 +44,13 @@ describe("StepRow durations (house clock format)", () => {
     expect(screen.getByText(/0:20/)).toBeInTheDocument();
   });
 
-  it("gives a warm-up an accessible name a screen reader can say", () => {
+  // LEGACY-DATA PROBE, deliberately kept (arc review F5): this exercises
+  // `StepRow.tsx`'s own surviving `TEMPORARY SHIM (2026-08-09, Task 1)`
+  // branch, which is there for stored/unmigrated data carrying a `wu` step
+  // the `Step` union no longer types. Task 5 owns removing both together —
+  // do NOT "fix" this fixture on its own, or the branch it guards goes
+  // untested while still shipping.
+  it("gives a legacy warm-up row an accessible name a screen reader can say", () => {
     renderStep(
       <StepRow
         step={

@@ -257,6 +257,49 @@ zzz 5`;
     ]);
   });
 
+  // Arc review F7: dropping a well-formed `wu` line must not leave a block
+  // that reports OK while carrying `steps: []`. Before this, a warm-up-only
+  // block parsed "successfully" into an unusable workout, and the only
+  // complaint came from `validateSteps` much further downstream ("steps
+  // must be a non-empty array (max 100)") — a message naming neither the
+  // warm-up nor the setting that replaced it.
+  it("a block whose only lines are warm-ups is a parse ERROR, not an ok workout with no steps", () => {
+    const text = `1 | Warmup Only | AT | medium | 3\nwu 10`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toStrictEqual([
+      {
+        block: 0,
+        line: 1,
+        message: "workout needs at least one step. Warm-ups are a setting now.",
+      },
+    ]);
+    // Still counted: the import notice should say the line was dropped
+    // even though the block it was in could not be built.
+    expect(result.droppedWarmups).toBe(1);
+  });
+
+  it("two warm-up lines and nothing else: the same error once, both counted", () => {
+    const text = `1 | Warmups Only | AT | medium | 3\nwu 10\nwu 5`;
+    const result = parseBulk(text);
+    expect(result.workouts).toStrictEqual([]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.droppedWarmups).toBe(2);
+  });
+
+  it("a warm-up-only block does not eat a neighbouring GOOD block (still never fatal beyond itself)", () => {
+    const text = `1 | Warmup Only | AT | medium | 3
+wu 10
+
+2 | Real One | O2 | easy | 2
+w 20' 6k`;
+    const result = parseBulk(text);
+    expect(result.errors.map((e) => e.block)).toStrictEqual([0]);
+    expect(result.workouts).toHaveLength(1);
+    expect(result.workouts[0]!.title).toBe("Real One");
+    expect(result.droppedWarmups).toBe(1);
+  });
+
   it("reports a wu step missing its minutes (a malformed wu line still errors — only a well-formed one is dropped)", () => {
     const text = `1 | Ladder | AT | medium | 3\nwu\nw 1' 6k @20`;
     const result = parseBulk(text);
