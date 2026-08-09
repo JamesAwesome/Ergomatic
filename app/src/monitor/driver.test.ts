@@ -5455,6 +5455,33 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
     },
   );
 
+  it("7A-fix-3 Task 2 review, parked minor #3: the 'prepare-settle' entry names its own configured tick bound, not just the prior state", async () => {
+    // A custom, non-default bound (default is 10, DEFAULT_PREPARE_SETTLE_
+    // TICKS) so the assertion below cannot pass by accident against
+    // whatever the default happens to be.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, { prepareSettleTicks: 7 });
+
+    primeState(transport, WORKOUTSTATE_INTERVALWORKTIME);
+    const { pending } = await driveThroughPrepareAck(
+      transport,
+      driver,
+      MINIMAL_PROGRAM,
+    );
+
+    const entry = log
+      .entries()
+      .find(
+        (e) => e.kind === "prepare-settle" && e.detail.includes('"rowing"'),
+      );
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toContain("7");
+
+    transport.fireDisconnect("radio out of range");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
   it(
     "step 5's confirmed trace (§18 session 3 Live bisect / design spec §1b: " +
       "'terminated → idle → armed', a ~0.06s PM-clock span) — waits through " +
@@ -5684,11 +5711,39 @@ describe("createPm5Driver: fix-3 Task 2 — prepareSettleTicks (armed+1 before t
 
     primeState(transport, WORKOUTSTATE_WAITTOBEGIN); // armed — a settled, main-menu state
 
-    // `programViaStub` IS today's pre-Task-2 sequence: prepare ack, the
-    // real send's own ack, then exactly ONE fresh "armed" status. If the
-    // settle machinery ever consumed a tick here, this single notify inside
-    // `programViaStub` would not be enough and this call would hang.
-    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    // `programViaStub`'s own sequence, inlined rather than called (7A-fix-3
+    // Task 2 review, parked minor #2): that helper ends in a bare
+    // `await pending`, which — if the settle machinery ever consumed a
+    // tick here, since this drives EXACTLY ONE fresh "armed" status and no
+    // more — would simply HANG rather than fail with a message, so the
+    // only signal a regression here ever produced was the test runner's
+    // own generic timeout. Tracking `resolved` via `.then()` and asserting
+    // it BEFORE ever awaiting `pending` turns that silent hang into a real,
+    // fast, named assertion failure.
+    const sent = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const start = sent();
+    let resolved = false;
+    const pending = driver.program(MINIMAL_PROGRAM).then(() => {
+      resolved = true;
+    });
+    await waitUntil(() => sent() > start);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    await waitUntil(() => sent() > start + prepareChunkCount);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    for (let i = 0; i < 50; i += 1) await Promise.resolve();
+    transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+    for (let i = 0; i < 50; i += 1) await Promise.resolve();
+
+    expect(resolved).toBe(true);
+    await pending;
 
     expect(log.entries().some((e) => e.kind === "prepare-settle")).toBe(false);
     expect(log.entries().some((e) => e.kind === "prepare-settle-expired")).toBe(

@@ -2189,7 +2189,7 @@ export function createPm5Driver(
     }
     log.record(
       "prepare-settle",
-      `waiting for "armed" (+1 tick) before the real send — prior state was "${priorState}"`,
+      `waiting up to ${ticksNeeded} tick(s) for "armed" (+1 tick) before the real send — prior state was "${priorState}"`,
     );
     return new Promise((resolve, reject) => {
       pendingPrepareSettle = {
