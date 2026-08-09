@@ -31,7 +31,15 @@ const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
 
-function libraryFixture(title: string) {
+// 2026-08-09's warmup setting: a seeded workout no longer carries a `wu`
+// step, so the warm-up interval every fixture below opens with now comes
+// from the rower's PREFERENCE — `buildRun`'s fourth argument, its one
+// producer (`src/session/engine.ts`'s `warmupPhases`). The minutes passed
+// per title are exactly what that workout's own `wu` row used to carry, so
+// every interval index, count and duration asserted in this file is
+// unchanged. The connected surface still has to render a warm-up interval
+// correctly; this is the shape it arrives in now.
+function libraryFixture(title: string, warmupMinutes: number) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
   const draft = buildDraft({
@@ -40,7 +48,10 @@ function libraryFixture(title: string) {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0).phases;
+  const phases = buildRun(draft, baselines, t0, {
+    kind: "time",
+    minutes: warmupMinutes,
+  }).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -48,7 +59,7 @@ function libraryFixture(title: string) {
   return { phases, program };
 }
 
-const FIXTURE = libraryFixture("Filling Low");
+const FIXTURE = libraryFixture("Filling Low", 8);
 
 /** The session pair MIRRORS the raw pair unless a case overrides it
  *  outright. 0x0031's `elapsedSeconds`/`distanceMeters` are PER-INTERVAL

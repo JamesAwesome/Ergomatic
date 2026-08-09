@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
+import { phaseSeconds } from "../../domain/expand.js";
+import { estimationSplit } from "../../domain/pace.js";
+import type { Baselines, WorkoutType } from "../../domain/types.js";
+import type { WarmupSetting } from "../api/usePreferences";
 import { buildDraft, withNudge, type SessionDraft } from "./draft";
 import {
   buildRun,
@@ -18,22 +21,30 @@ import {
 import type { SessionRun } from "./run";
 
 // Realistic fixtures, per repo convention (draft.test.ts's own pattern):
-// - Filling Low (AT): wu 8' + 3x2000m @ 6k+4 with 3' rest — the
-//   reps-expanded, auto-rest, DISTANCE fixture. Its 2000m work step is also
-//   the exact shape the brief's own hand-pinned example describes.
-// - Calm Sea (O2): wu 8' + 10,000m @ 6k+12 — a single, non-repeated
-//   distance work step, for the second hand-pinned nextDistance case.
+// - Filling Low (AT): 3x2000m @ 6k+4 with 3' rest — the reps-expanded,
+//   auto-rest, DISTANCE fixture. Its 2000m work step is also the exact
+//   shape the brief's own hand-pinned example describes.
+// - Calm Sea (O2): 10,000m @ 6k+12 — a single, non-repeated distance work
+//   step, for the second hand-pinned nextDistance case.
 //   (Meltemi used to hold this role; the library rewrite turned it into a
 //   5-phase TIME workout with no distance step at all, so this suite
 //   re-anchored to Calm Sea — same 10,000 m distance, matching draft.test.ts.)
-// - Diamond Dust (O2): wu 6' + 8'/8'/8' rate-change (spm 22/24/26, all at
-//   6k+10) — three SEQUENTIAL time work phases with no reps and no
+// - Diamond Dust (O2): 8'/8'/8' rate-change (spm 22/24/26, all at 6k+10) —
+//   three SEQUENTIAL time work phases with no reps and no
 //   auto-rest, ideal for the catch-up walk (each phase's boundary is
 //   unambiguous). (Moderate Breeze used to hold this role; the rewrite
 //   turned it into a reps x8 workout — 17 phases instead of 4 — which broke
 //   every test here that pinned "index 3/4 is the last phase," so this
 //   suite re-anchored to Diamond Dust, the new library's equivalent shape.)
 // - Fork Lightning (AN): the effort-ref fixture (ref: {effort: "max"}).
+//
+// 2026-08-09 (the warmup setting): none of these carries a warm-up any
+// more — `wu` left the `Step` union and the seeded library was stripped, so
+// every phase count/total below is WORK ONLY unless a test passes
+// `buildRun` an explicit `warmup` setting. The setting is OFF by default
+// for everyone, so "no fourth argument" is the honest default case, not an
+// omission. `buildRun and the warm-up setting` (below) is the suite that
+// owns the ON case.
 function library(title: string) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
@@ -67,39 +78,46 @@ function diamondDustRun(now = t0): SessionRun {
   return buildRun(d, baselines, now);
 }
 
+// Hoarfrost (O2): 2x[12' work @ 6k+12 + 5' rest] -> FOUR sequential time
+// phases (720/300/720/300). Diamond Dust held the catch-up walk's
+// "three finished phases, landing in the fourth" case while it was a
+// four-phase workout (its own 6' warm-up plus three 8' pieces); the
+// warm-up left with 2026-08-09's setting, so the walk re-anchors to a
+// real workout that still has four time phases of its own.
+function hoarfrostRun(now = t0): SessionRun {
+  const d = buildDraft(draftInputFor("Hoarfrost", `hf-${Math.random()}`));
+  return buildRun(d, baselines, now);
+}
+
 describe("buildRun", () => {
   it("freezes phases from the draft's effective steps, attributing originalIndex across a reps-expanded distance workout with auto-inserted rest (Filling Low)", () => {
     const run = fillingLowRun();
-    // Filling Low: wu(0), reps(1), w(2){2000m @ 6k+4, restMinutes 3} x3 —
-    // 1 warmup + 3 * (work + rest) = 7 phases.
-    expect(run.phases).toHaveLength(7);
+    // Filling Low: reps(0), w(1){2000m @ 6k+4, restMinutes 3} x3 —
+    // 3 * (work + rest) = 6 phases. No warm-up: the setting is OFF here
+    // (no fourth argument), and the workout itself carries none any more.
+    expect(run.phases).toHaveLength(6);
+    expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
     expect(run.phases[0]).toMatchObject({
-      type: "warmup",
-      seconds: 480,
-      label: "Easy",
-      originalIndex: 0,
-    });
-    expect(run.phases[1]).toMatchObject({
       type: "work",
       meters: 2000,
       targetKind: "split",
       targetSplit: 124, // 120 (k6Seconds) + 4 (off)
       spm: 22,
       set: { index: 1, of: 3 },
-      originalIndex: 2, // the ORIGINAL draft index of the "w" step
+      originalIndex: 1, // the ORIGINAL draft index of the "w" step
     });
-    expect(run.phases[2]).toMatchObject({
+    expect(run.phases[1]).toMatchObject({
       type: "rest",
       seconds: 180,
       set: { index: 1, of: 3 },
-      originalIndex: 2, // shares its work phase's originalIndex
+      originalIndex: 1, // shares its work phase's originalIndex
     });
     // Every one of the 3 reps' work/rest pair carries the same originalIndex
-    // (they all came from the ONE authored "w" step at index 2).
-    for (let i = 1; i < 7; i++) {
-      expect(run.phases[i]!.originalIndex).toBe(2);
+    // (they all came from the ONE authored "w" step at index 1).
+    for (let i = 0; i < 6; i++) {
+      expect(run.phases[i]!.originalIndex).toBe(1);
     }
-    expect(run.phases[6]).toMatchObject({
+    expect(run.phases[5]).toMatchObject({
       type: "rest",
       set: { index: 3, of: 3 },
     });
@@ -159,12 +177,7 @@ describe("buildRun", () => {
       workoutId: null,
       title: "2k test day",
       type: "TR",
-      // Task 4 shim: "wu" left the Step union but buildRun's own producer
-      // for warmup phases (this suite's subject) hasn't landed yet.
-      steps: [
-        { k: "wu", minutes: 5 } as unknown as Step,
-        { k: "test", label: "2k Test" },
-      ],
+      steps: [{ k: "test", label: "2k Test" }],
       nudges: {},
       spmOverrides: {},
       removed: [],
@@ -172,14 +185,14 @@ describe("buildRun", () => {
       startedAt: null,
     };
     const run = buildRun(d, baselines, t0);
-    expect(run.phases).toHaveLength(2);
-    expect(run.phases[1]).toMatchObject({
+    expect(run.phases).toHaveLength(1);
+    expect(run.phases[0]).toMatchObject({
       type: "test",
       label: "All out",
-      originalIndex: 1,
+      originalIndex: 0,
     });
-    expect(run.phases[1]!.seconds).toBeUndefined();
-    expect(run.phases[1]!.meters).toBeUndefined();
+    expect(run.phases[0]!.seconds).toBeUndefined();
+    expect(run.phases[0]!.meters).toBeUndefined();
   });
 
   it("does not shift originalIndex when a hand-edited draft carries restMinutes: 0 (Phase 6B Task 1 review, F1)", () => {
@@ -195,10 +208,7 @@ describe("buildRun", () => {
       workoutId: null,
       title: "hand-edited",
       type: "TR",
-      // Task 4 shim: "wu" left the Step union but buildRun's own producer
-      // for warmup phases (this suite's subject) hasn't landed yet.
       steps: [
-        { k: "wu", minutes: 5 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 2 },
@@ -214,24 +224,178 @@ describe("buildRun", () => {
       startedAt: null,
     };
     const run = buildRun(d, baselines, t0);
-    expect(run.phases.map((p) => p.type)).toStrictEqual([
+    expect(run.phases.map((p) => p.type)).toStrictEqual(["work", "rest"]);
+    expect(run.phases[0]!.originalIndex).toBe(0); // the work step
+    expect(run.phases[1]!.originalIndex).toBe(1); // the authored "r" step — NOT shifted
+  });
+});
+
+// 2026-08-09's warmup-setting design §4: `buildRun` is the ONE producer of
+// `type: "warmup"` phases now that `wu` has left the `Step` union. Every
+// fixture below is a REAL library workout (Filling Low / Calm Sea) run
+// through the real `buildDraft` -> `buildRun` path, per the repo's
+// realistic-fixtures rule — the setting is the only thing that varies.
+describe("buildRun and the warm-up setting", () => {
+  function fillingLowDraft() {
+    return buildDraft(draftInputFor("Filling Low", "fl-warmup"));
+  }
+
+  it("prepends nothing when the setting is absent — the default for everyone", () => {
+    const d = fillingLowDraft();
+    expect(buildRun(d, baselines, t0)).toStrictEqual(
+      buildRun(d, baselines, t0, null),
+    );
+    expect(buildRun(d, baselines, t0, null).phases).toHaveLength(6);
+  });
+
+  it("prepends a time warm-up as the run's first phase, before every authored step (Filling Low)", () => {
+    const run = buildRun(fillingLowDraft(), baselines, t0, {
+      kind: "time",
+      minutes: 10,
+    });
+    expect(run.phases).toHaveLength(7);
+    expect(run.phases[0]).toStrictEqual({
+      type: "warmup",
+      seconds: 600,
+      label: "Easy",
+      originalIndex: -1,
+    });
+    // The workout's own phases follow, unshifted and unchanged: the same
+    // six Filling Low produces with the setting OFF, in the same order.
+    expect(run.phases.slice(1)).toStrictEqual(
+      buildRun(fillingLowDraft(), baselines, t0).phases,
+    );
+  });
+
+  it("prepends the trailing rest SECOND, after the warm-up phase itself", () => {
+    const run = buildRun(fillingLowDraft(), baselines, t0, {
+      kind: "time",
+      minutes: 10,
+      restSeconds: 90,
+    });
+    // Order is the contract (design §4's numbered list): warm-up, then its
+    // rest. Reversed, `compileProgram` would reject every session the
+    // rower ever starts with `leading-rest`.
+    expect(run.phases.slice(0, 3).map((p) => p.type)).toStrictEqual([
       "warmup",
-      "work",
       "rest",
+      "work",
     ]);
-    expect(run.phases[1]!.originalIndex).toBe(1); // the work step
-    expect(run.phases[2]!.originalIndex).toBe(2); // the authored "r" step — NOT shifted
+    expect(run.phases[1]).toStrictEqual({
+      type: "rest",
+      seconds: 90,
+      label: "Rest",
+      originalIndex: -1,
+    });
+    expect(run.phases).toHaveLength(8);
+  });
+
+  it("emits no rest phase for a restSeconds of 0", () => {
+    const run = buildRun(fillingLowDraft(), baselines, t0, {
+      kind: "time",
+      minutes: 10,
+      restSeconds: 0,
+    });
+    expect(run.phases).toHaveLength(7);
+    expect(run.phases[1]!.type).toBe("work");
+  });
+
+  it("prices a distance warm-up with estimationSplit's own easy band, so phaseSeconds is finite (design §4)", () => {
+    const run = buildRun(fillingLowDraft(), baselines, t0, {
+      kind: "distance",
+      meters: 2000,
+    });
+    // The estimator is pinned to the SAME function `phases()`'s effort arm
+    // uses, at its easy band: `estimationSplit(baselines, {effort:"min"})`
+    // is `k6Seconds + 20` (domain/pace.ts:103) = 120 + 20 = 140.
+    const easy = estimationSplit(baselines, { effort: "min" });
+    expect(easy).toBe(140);
+    expect(run.phases[0]).toStrictEqual({
+      type: "warmup",
+      meters: 2000,
+      targetSplit: 140,
+      label: "Easy",
+      originalIndex: -1,
+    });
+    // The whole point of carrying the estimate: `phaseSeconds` can price
+    // the phase at all. (2000 / 500) * 140 = 560.
+    expect(phaseSeconds(run.phases[0]!)).toBe(560);
+    // And it is NOT a target the rower chose — no `targetKind`, so no
+    // screen reads it as a prescription (TimerTargets' own discriminant).
+    expect(run.phases[0]!.targetKind).toBeUndefined();
+  });
+
+  it("makes no estimate at all for a distance warm-up with null baselines (no fake number)", () => {
+    const d = buildDraft(draftInputFor("Fork Lightning", "fk-warmup"));
+    const run = buildRun(d, null, t0, { kind: "distance", meters: 2000 });
+    expect(run.phases[0]).toStrictEqual({
+      type: "warmup",
+      meters: 2000,
+      targetSplit: undefined,
+      label: "Easy",
+      originalIndex: -1,
+    });
+    expect(phaseSeconds(run.phases[0]!)).toBeNull();
+  });
+
+  it("prices the prepended warm-up into TOTAL LEFT, both kinds (Calm Sea)", () => {
+    const d = buildDraft(draftInputFor("Calm Sea", "cs-warmup"));
+    // Calm Sea alone: 10,000m @ 6k+12 -> (10000/500) * 132 = 2640s.
+    expect(totalRemainingSeconds(buildRun(d, baselines, t0), t0)).toBe(2640);
+    expect(
+      totalRemainingSeconds(
+        buildRun(d, baselines, t0, { kind: "time", minutes: 10 }),
+        t0,
+      ),
+    ).toBe(2640 + 600);
+    expect(
+      totalRemainingSeconds(
+        buildRun(d, baselines, t0, {
+          kind: "distance",
+          meters: 2000,
+          restSeconds: 90,
+        }),
+        t0,
+      ),
+    ).toBe(2640 + 560 + 90);
+  });
+
+  it("gives every warm-up phase an originalIndex of -1, leaving the authored steps' attribution untouched", () => {
+    const run = buildRun(fillingLowDraft(), baselines, t0, {
+      kind: "time",
+      minutes: 10,
+      restSeconds: 90,
+    });
+    // The setting is not an authored step, so it points at none.
+    expect(run.phases[0]!.originalIndex).toBe(-1);
+    expect(run.phases[1]!.originalIndex).toBe(-1);
+    // Filling Low's own six phases still all trace to its "w" step at raw
+    // index 1 — the prepend must not shift attribution the way an inserted
+    // STEP would have.
+    for (const phase of run.phases.slice(2)) {
+      expect(phase.originalIndex).toBe(1);
+    }
+  });
+
+  it("cannot express a rest-only setting: every value names a kind and a duration", () => {
+    // A type-level assertion, deliberately: the design's §2 shape is an
+    // intersection of the kind union with an optional `restSeconds`, so
+    // "just give me 90 seconds of rest" is unrepresentable rather than
+    // silently accepted and dropped at runtime.
+    // @ts-expect-error a WarmupSetting with no kind is not assignable
+    const restOnly: WarmupSetting = { restSeconds: 90 };
+    expect(restOnly).toBeDefined();
   });
 });
 
 describe("remainingSeconds", () => {
   it("returns the full phase duration at the instant a phase starts", () => {
-    expect(remainingSeconds(diamondDustRun(), t0)).toBe(360);
+    expect(remainingSeconds(diamondDustRun(), t0)).toBe(480);
   });
 
   it("decreases by elapsed time within the phase", () => {
     expect(remainingSeconds(diamondDustRun(), addSeconds(t0, 120))).toBe(
-      240, // 360 (wu) - 120
+      360, // 480 (the first 8' work phase) - 120
     );
   });
 
@@ -240,26 +404,25 @@ describe("remainingSeconds", () => {
   });
 
   it("is 0 on a distance phase — nothing to count down from", () => {
-    const run = { ...fillingLowRun(), index: 1 }; // the first 2000m work phase
+    const run = fillingLowRun(); // index 0: the first 2000m work phase
     expect(remainingSeconds(run, addSeconds(t0, 50))).toBe(0);
   });
 
   it("is 0 past the last phase", () => {
-    const run = { ...diamondDustRun(), index: 4 };
+    const run = { ...diamondDustRun(), index: 3 };
     expect(remainingSeconds(run, t0)).toBe(0);
   });
 });
 
 describe("elapsedSeconds", () => {
   it("counts up from phaseStartedAt on a distance phase", () => {
-    const run = { ...fillingLowRun(), index: 1 };
+    const run = fillingLowRun(); // index 0: a 2000m work phase
     expect(elapsedSeconds(run, addSeconds(t0, 452))).toBe(452);
   });
 
   it("excludes prior pausedTotalMs", () => {
     const run: SessionRun = {
       ...fillingLowRun(),
-      index: 1,
       pausedTotalMs: 60_000,
     };
     expect(elapsedSeconds(run, addSeconds(t0, 452))).toBe(392);
@@ -272,7 +435,7 @@ describe("tick — the catch-up walk", () => {
     const now = addSeconds(t0, 120);
     const result = tick(run, now);
     expect(result).toBe(run); // same reference: nothing needed to advance
-    expect(remainingSeconds(result, now)).toBe(240); // 360 (wu) - 120
+    expect(remainingSeconds(result, now)).toBe(360); // 480 - 120
   });
 
   it("does not advance while paused, even long past the phase boundary", () => {
@@ -282,17 +445,18 @@ describe("tick — the catch-up walk", () => {
   });
 
   it("walks forward across exactly 3 finished time phases (resilience 3), landing partway into the 4th with phaseStartedAt seeded at the newest boundary, not now", () => {
-    const run = diamondDustRun();
-    // wu 360s + work 480s + work 480s = 1320s boundary; +100s into phase 4.
-    const now = addSeconds(t0, 360 + 480 + 480 + 100);
+    const run = hoarfrostRun();
+    // work 720s + rest 300s + work 720s = 1740s boundary; +100s into the
+    // fourth phase (the closing 5' rest).
+    const now = addSeconds(t0, 720 + 300 + 720 + 100);
     const result = tick(run, now);
     expect(result.index).toBe(3);
-    expect(result.phaseStartedAt).toBe(addSeconds(t0, 1320).toISOString());
+    expect(result.phaseStartedAt).toBe(addSeconds(t0, 1740).toISOString());
     expect(result.phaseStartedAt).not.toBe(now.toISOString()); // NOT now
     expect(result.pausedTotalMs).toBe(0);
     expect(result.pausedAt).toBeNull();
     expect(result.completedAt).toBeNull();
-    expect(remainingSeconds(result, now)).toBe(380); // 480 - 100
+    expect(remainingSeconds(result, now)).toBe(200); // 300 - 100
   });
 
   it("completing the last time phase during a walk sets completedAt to the TRUE finish boundary, not the (much later) wake-up time", () => {
@@ -302,7 +466,7 @@ describe("tick — the catch-up walk", () => {
     // a version that stamps `now` here would silently misreport when the
     // session actually ended.
     const run = diamondDustRun();
-    const finishBoundary = addSeconds(t0, 360 + 480 + 480 + 480); // 1800s
+    const finishBoundary = addSeconds(t0, 480 + 480 + 480); // 1440s
     const wakesUpMuchLater = addSeconds(finishBoundary, 3600); // +1h suspend
     const result = tick(run, wakesUpMuchLater);
     expect(result.index).toBe(run.phases.length);
@@ -311,18 +475,22 @@ describe("tick — the catch-up walk", () => {
     expect(result.completedAt).not.toBe(wakesUpMuchLater.toISOString());
   });
 
-  it("halts at a distance phase reached mid-walk, seeding its stopwatch baseline at the walk's arrival boundary (resilience 3, Filling Low wu -> 2000m)", () => {
-    const run = fillingLowRun(); // index 0: wu 480s, then a 2000m work phase
-    const now = addSeconds(t0, 480 + 50); // 50s into the distance phase
+  it("halts at a distance phase reached mid-walk, seeding its stopwatch baseline at the walk's arrival boundary (resilience 3, Filling Low rest -> 2000m)", () => {
+    // Starts on Filling Low's first 3' REST phase (index 1) — the walk
+    // needs a TIME phase to consume before it can arrive at a distance
+    // one, and since 2026-08-09's warmup setting this workout's own rest
+    // rows are the only time phases it has.
+    const run = { ...fillingLowRun(), index: 1 };
+    const now = addSeconds(t0, 180 + 50); // 50s into the next distance phase
     const result = tick(run, now);
-    expect(result.index).toBe(1);
-    expect(result.phases[1]!.meters).toBe(2000);
-    expect(result.phaseStartedAt).toBe(addSeconds(t0, 480).toISOString());
+    expect(result.index).toBe(2);
+    expect(result.phases[2]!.meters).toBe(2000);
+    expect(result.phaseStartedAt).toBe(addSeconds(t0, 180).toISOString());
     expect(elapsedSeconds(result, now)).toBe(50);
   });
 
   it("does not walk at all when the current phase is already a distance phase", () => {
-    const run = { ...fillingLowRun(), index: 1 };
+    const run = fillingLowRun(); // index 0 is already the 2000m work phase
     const result = tick(run, addSeconds(t0, 10_000));
     expect(result).toBe(run);
   });
@@ -344,7 +512,7 @@ describe("pause / resume", () => {
   });
 
   it("also freezes a distance phase's stopwatch", () => {
-    const run = { ...fillingLowRun(), index: 1 };
+    const run = fillingLowRun(); // index 0: a 2000m distance phase
     const paused = pause(run, addSeconds(t0, 50));
     expect(elapsedSeconds(paused, addSeconds(t0, 5_000))).toBe(50);
   });
@@ -385,19 +553,19 @@ describe("resilience — reload and pause accounting across reloads", () => {
     const now = addSeconds(t0, 120);
     const before = remainingSeconds(run, now);
     const after = remainingSeconds(reload(run), now);
-    expect(before).toBe(240); // 360 (wu) - 120
-    expect(after).toBe(240);
+    expect(before).toBe(360); // 480 - 120
+    expect(after).toBe(360);
   });
 
   it("resilience 2: reload while paused keeps the same remaining time", () => {
     const paused = pause(diamondDustRun(), addSeconds(t0, 50));
     const now = addSeconds(t0, 99_999);
-    expect(remainingSeconds(paused, now)).toBe(310); // 360 (wu) - 50
-    expect(remainingSeconds(reload(paused), now)).toBe(310);
+    expect(remainingSeconds(paused, now)).toBe(430); // 480 - 50
+    expect(remainingSeconds(reload(paused), now)).toBe(430);
     expect(reload(paused).pausedAt).toBe(paused.pausedAt);
   });
 
-  it("pause -> reload -> resume yields remaining identical to never reloading (hand-computed: 360 - 50 = 310)", () => {
+  it("pause -> reload -> resume yields remaining identical to never reloading (hand-computed: 480 - 50 = 430)", () => {
     const run = diamondDustRun();
     const paused = pause(run, addSeconds(t0, 50));
     const resumeAt = addSeconds(t0, 9_000); // a long gap while "closed"
@@ -405,7 +573,7 @@ describe("resilience — reload and pause accounting across reloads", () => {
     const neverReloaded = resume(paused, resumeAt);
     const reloadedThenResumed = resume(reload(paused), resumeAt);
 
-    const expected = 310; // hand-computed: 360s phase, paused after 50s
+    const expected = 430; // hand-computed: 480s phase, paused after 50s
     expect(remainingSeconds(neverReloaded, resumeAt)).toBe(expected);
     expect(remainingSeconds(reloadedThenResumed, resumeAt)).toBe(expected);
   });
@@ -423,7 +591,7 @@ describe("advance / rewind", () => {
   });
 
   it("past the last phase completes the run", () => {
-    const run = { ...diamondDustRun(), index: 3 }; // the last phase (0-indexed, 4 total)
+    const run = { ...diamondDustRun(), index: 2 }; // the last phase (0-indexed, 3 total)
     const now = addSeconds(t0, 1000);
     const result = advance(run, now);
     expect(result.index).toBe(run.phases.length);
@@ -465,35 +633,35 @@ describe("advance / rewind", () => {
 
 describe("nextDistance", () => {
   it("records the actual average split on NEXT — hand-pinned: 452s / 2000m x 500 = 113.0 exactly (Filling Low)", () => {
-    const run = { ...fillingLowRun(), index: 1 }; // the first 2000m work phase
+    const run = fillingLowRun(); // index 0: the first 2000m work phase
     const now = addSeconds(t0, 452);
     const result = nextDistance(run, now);
-    expect(result.actuals[1]).toStrictEqual({
+    expect(result.actuals[0]).toStrictEqual({
       elapsedSeconds: 452,
       splitSeconds: 113,
       actualSource: "stopwatch",
     });
-    expect(result.index).toBe(2); // advanced into the rest phase
+    expect(result.index).toBe(1); // advanced into the rest phase
     expect(result.phaseStartedAt).toBe(now.toISOString());
     expect(result.pausedTotalMs).toBe(0);
   });
 
   it("records a non-integer average split — hand-pinned: 4567s / 10000m x 500 = 228.35 (Calm Sea)", () => {
-    const run = { ...calmSeaRun(), index: 1 }; // the 10,000m work phase
+    const run = calmSeaRun(); // index 0: the 10,000m work phase
     const now = addSeconds(t0, 4567);
     const result = nextDistance(run, now);
-    expect(result.actuals[1]!.splitSeconds).toBe(228.35);
-    expect(result.actuals[1]!.elapsedSeconds).toBe(4567);
+    expect(result.actuals[0]!.splitSeconds).toBe(228.35);
+    expect(result.actuals[0]!.elapsedSeconds).toBe(4567);
   });
 
   it("is a no-op on a non-distance (time) phase", () => {
-    const run = diamondDustRun(); // index 0: wu, a time phase
+    const run = diamondDustRun(); // index 0: an 8' work phase, time-based
     const result = nextDistance(run, addSeconds(t0, 50));
     expect(result).toBe(run);
   });
 
   it("implicitly resumes a paused run — NEXT is a deliberate act (Phase 6B Task 1 review, F4, documented decision)", () => {
-    const run = { ...fillingLowRun(), index: 1 }; // the first 2000m work phase
+    const run = fillingLowRun(); // index 0: the first 2000m work phase
     const paused = pause(run, addSeconds(t0, 100));
     const result = nextDistance(paused, addSeconds(t0, 452));
     expect(result.pausedAt).toBeNull();
@@ -507,7 +675,7 @@ describe("isComplete", () => {
   });
 
   it("is true once index reaches phases.length", () => {
-    const run = { ...diamondDustRun(), index: 3 };
+    const run = { ...diamondDustRun(), index: 2 };
     const completed = advance(run, addSeconds(t0, 10));
     expect(isComplete(completed)).toBe(true);
   });
@@ -516,22 +684,22 @@ describe("isComplete", () => {
 describe("totalRemainingSeconds", () => {
   it("sums remaining time-phase seconds across the current and all upcoming phases (Diamond Dust)", () => {
     const run = diamondDustRun();
-    const now = addSeconds(t0, 50); // 50s into the 360s warmup
-    // 310 (wu remaining) + 480 + 480 + 480 = 1750
-    expect(totalRemainingSeconds(run, now)).toBe(1750);
+    const now = addSeconds(t0, 50); // 50s into the first 480s work phase
+    // 430 (remaining in phase 0) + 480 + 480 = 1390
+    expect(totalRemainingSeconds(run, now)).toBe(1390);
   });
 
   it("prices upcoming distance phases via meters/target-split — the same per-phase arithmetic estimateMinutes uses (Filling Low)", () => {
     const run = fillingLowRun();
-    // wu 480 + 3 * ((2000/500 * 124) + 180) = 480 + 3*676 = 2508
-    expect(totalRemainingSeconds(run, t0)).toBe(2508);
+    // 3 * ((2000/500 * 124) + 180) = 3*676 = 2028
+    expect(totalRemainingSeconds(run, t0)).toBe(2028);
   });
 
   it("gives partial credit for the CURRENT distance phase, subtracting its own elapsed (Filling Low)", () => {
-    const run = { ...fillingLowRun(), index: 1 };
+    const run = fillingLowRun(); // index 0: the first 2000m work phase
     const now = addSeconds(t0, 200);
     // current: (2000/500*124) - 200 = 496 - 200 = 296
-    // remaining phases 2..6: 3*180 + 2*496 = 540 + 992 = 1532
+    // remaining phases 1..5: 3*180 + 2*496 = 540 + 992 = 1532
     expect(totalRemainingSeconds(run, now)).toBe(1828);
   });
 
@@ -541,10 +709,16 @@ describe("totalRemainingSeconds", () => {
       workoutId: null,
       title: "2k test day",
       type: "TR",
-      // Task 4 shim: "wu" left the Step union but buildRun's own producer
-      // for warmup phases (this suite's subject) hasn't landed yet.
+      // A 1' work step ahead of the open-ended one, so "contributes
+      // nothing" is measured against a real, priced phase rather than
+      // against an empty total. (This used to be a `wu 1'` step, back when
+      // a workout could carry one.)
       steps: [
-        { k: "wu", minutes: 1 } as unknown as Step,
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "6k", off: 0 },
+        },
         { k: "test", label: "2k Test" },
       ],
       nudges: {},
@@ -554,7 +728,8 @@ describe("totalRemainingSeconds", () => {
       startedAt: null,
     };
     const run = buildRun(d, baselines, t0);
-    // Only the 60s warmup counts; the open-ended test phase adds nothing.
+    // Only the 60s work phase counts; the open-ended test phase adds
+    // nothing.
     expect(totalRemainingSeconds(run, t0)).toBe(60);
   });
 

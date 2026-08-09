@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { resolveSplit } from "../../domain/pace.js";
 import { fmtSplit } from "../../domain/format.js";
-import type { Step, WorkoutType } from "../../domain/types.js";
+import type { WorkoutType } from "../../domain/types.js";
 import {
   buildDraft,
   loadDraft,
@@ -148,9 +148,10 @@ describe("ConfirmTargets", () => {
       screen.getByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
     expect(screen.getByText("O2")).toBeInTheDocument();
-    // wu 10' (600s) + 2 * (12' work + 3' rest) = 2400s -> 40 (draft.test.ts's
-    // own pinned total for this exact fixture/baseline pair).
-    expect(screen.getByText("40 MIN")).toBeInTheDocument();
+    // 2 * (12' work + 5' rest) = 2040s -> 34 (draft.test.ts's own pinned
+    // total for this exact fixture/baseline pair). No warm-up: the setting
+    // is OFF by default and no workout carries one since 2026-08-09.
+    expect(screen.getByText("34 MIN")).toBeInTheDocument();
   });
 
   it("shows an em-dash recount and a no-target fallback with no baselines, and hides every nudge control", async () => {
@@ -194,15 +195,15 @@ describe("ConfirmTargets", () => {
     seedDraft("Hoarfrost");
     await renderConfirm();
 
-    expect(screen.getByText("40 MIN")).toBeInTheDocument();
+    expect(screen.getByText("34 MIN")).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 3 duration down" }),
+      screen.getByRole("button", { name: "Row 2 duration down" }),
     );
 
-    const group = screen.getByRole("group", { name: "Row 3 duration" });
+    const group = screen.getByRole("group", { name: "Row 2 duration" });
     expect(within(group).getByText("11:30")).toBeInTheDocument();
-    // Removing 30s from each of the 2 reps: 40 - 1 = 39.
-    expect(screen.getByText("39 MIN")).toBeInTheDocument();
+    // Removing 30s from each of the 2 reps: 34 - 1 = 33.
+    expect(screen.getByText("33 MIN")).toBeInTheDocument();
   });
 
   it("a distance work step's duration stepper steps by 100m in both directions", async () => {
@@ -210,16 +211,16 @@ describe("ConfirmTargets", () => {
     seedDraft("Calm Sea");
     await renderConfirm();
 
-    const group = screen.getByRole("group", { name: "Row 2 duration" });
+    const group = screen.getByRole("group", { name: "Row 1 duration" });
     expect(within(group).getByText("10000 M")).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 2 duration up" }),
+      screen.getByRole("button", { name: "Row 1 duration up" }),
     );
     expect(within(group).getByText("10100 M")).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 2 duration down" }),
+      screen.getByRole("button", { name: "Row 1 duration down" }),
     );
     expect(within(group).getByText("10000 M")).toBeInTheDocument();
   });
@@ -229,16 +230,16 @@ describe("ConfirmTargets", () => {
     seedDraft("Hoarfrost"); // the work step carries spm: 22
     await renderConfirm();
 
-    const group = screen.getByRole("group", { name: "Row 3 stroke rate" });
+    const group = screen.getByRole("group", { name: "Row 2 stroke rate" });
     expect(within(group).getByText("22")).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 3 stroke rate up" }),
+      screen.getByRole("button", { name: "Row 2 stroke rate up" }),
     );
     expect(within(group).getByText("23")).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 3 stroke rate down" }),
+      screen.getByRole("button", { name: "Row 2 stroke rate down" }),
     );
     expect(within(group).getByText("22")).toBeInTheDocument();
   });
@@ -284,55 +285,57 @@ describe("ConfirmTargets", () => {
     ).not.toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 2 reps up" }),
+      screen.getByRole("button", { name: "Row 1 reps up" }),
     );
-    // wu 6' + 3 * (12' + 5') = 360 + 3060 = 3420s -> 57.
-    expect(screen.getByText("57 MIN")).toBeInTheDocument();
+    // 3 * (12' + 5') = 3060s -> 51.
+    expect(screen.getByText("51 MIN")).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 2 reps down" }),
+      screen.getByRole("button", { name: "Row 1 reps down" }),
     );
-    expect(screen.getByText("40 MIN")).toBeInTheDocument();
+    expect(screen.getByText("34 MIN")).toBeInTheDocument();
   });
 
+  // Moonbow (w 15' / r 3' / w 12'), not Hoarfrost: these two tests need
+  // two independently removable rows, and Hoarfrost is down to a reps
+  // marker (which has no remove control) plus one work row now that the
+  // warm-up row it used to strike here is gone (2026-08-09's setting).
   it("removing a row excludes it from the recount, strikes it visibly, and restoring undoes both", async () => {
     mockBaselines();
-    seedDraft("Hoarfrost");
+    seedDraft("Moonbow");
     await renderConfirm();
 
-    const warmupRow = screen.getByText(/WARM-UP/).closest(".step-editor");
-    expect(warmupRow).not.toBeNull();
-    expect(warmupRow).not.toHaveClass("confirm-step-removed");
+    const restRow = screen.getByText(/· REST/).closest(".step-editor");
+    expect(restRow).not.toBeNull();
+    expect(restRow).not.toHaveClass("confirm-step-removed");
 
-    await userEvent.click(screen.getByRole("button", { name: "Remove Row 1" }));
+    await userEvent.click(screen.getByRole("button", { name: "Remove Row 2" }));
 
-    expect(warmupRow).toHaveClass("confirm-step-removed");
-    // 2 * (12' + 5') = 34, the warm-up's 6' dropped out.
-    expect(screen.getByText("34 MIN")).toBeInTheDocument();
+    expect(restRow).toHaveClass("confirm-step-removed");
+    // 15' + 12' = 27, the 3' rest dropped out of the 30' total.
+    expect(screen.getByText("27 MIN")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Restore Row 1" }),
+      screen.getByRole("button", { name: "Restore Row 2" }),
     ).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Restore Row 1" }),
+      screen.getByRole("button", { name: "Restore Row 2" }),
     );
 
-    expect(warmupRow).not.toHaveClass("confirm-step-removed");
-    expect(screen.getByText("40 MIN")).toBeInTheDocument();
+    expect(restRow).not.toHaveClass("confirm-step-removed");
+    expect(screen.getByText("30 MIN")).toBeInTheDocument();
   });
 
   it("removing two rows exercises the removed-index sort with a real multi-element array", async () => {
     mockBaselines();
-    seedDraft("Hoarfrost");
+    seedDraft("Moonbow");
     await renderConfirm();
 
     await userEvent.click(screen.getByRole("button", { name: "Remove Row 1" }));
     await userEvent.click(screen.getByRole("button", { name: "Remove Row 3" }));
 
-    // Only the reps marker (Row 2) is left un-struck; with no repeated block
-    // left to multiply, estimateMinutes has nothing to add — a legitimate
-    // zero, not a crash.
-    expect(screen.getByText("0 MIN")).toBeInTheDocument();
+    // Only the 3' rest row (Row 2) is left un-struck — both work rows gone.
+    expect(screen.getByText("3 MIN")).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Restore Row 3" }),
@@ -340,7 +343,7 @@ describe("ConfirmTargets", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Restore Row 1" }),
     );
-    expect(screen.getByText("40 MIN")).toBeInTheDocument();
+    expect(screen.getByText("30 MIN")).toBeInTheDocument();
   });
 
   it("nudging a split step's target updates the exact split shown in both directions, clamped to a real split", async () => {
@@ -353,7 +356,7 @@ describe("ConfirmTargets", () => {
     expect(screen.getByText(before)).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 3 nudge slower" }),
+      screen.getByRole("button", { name: "Row 2 nudge slower" }),
     );
 
     const after = fmtSplit(resolveSplit(BASELINES, ref, 1));
@@ -361,27 +364,25 @@ describe("ConfirmTargets", () => {
     expect(screen.queryByText(before)).not.toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 3 nudge faster" }),
+      screen.getByRole("button", { name: "Row 2 nudge faster" }),
     );
     expect(screen.getByText(before)).toBeInTheDocument();
     expect(screen.queryByText(after)).not.toBeInTheDocument();
   });
 
   // Hand-built rather than a library fixture: no seeded workout carries a
-  // standalone "r" step (rest is always embedded in a "w" step's own
-  // restMinutes — see draft.test.ts's own fixture notes) or a "test" step
-  // (validateSteps permits both; the builder just never authors either), so
-  // this is the only way to exercise every row kind's header label and the
-  // wu/r-shared duration branch's own up AND down presses.
+  // "test" step (validateSteps permits it; the builder just never authors
+  // one), so this is the only way to exercise every row kind's header
+  // label and the REST duration branch's own up AND down presses. (It
+  // carried a `wu` row too until 2026-08-09's warmup setting deleted that
+  // row kind; the rest row is the only user of that shared duration branch
+  // now.)
   const KITCHEN_SINK: SessionDraft = {
     v: 1,
     workoutId: "w-sink",
     title: "Kitchen Sink",
     type: "TR",
     steps: [
-      // Task 5 shim: "wu" left the Step union but ConfirmTargets' own
-      // step-rendering (this suite's subject) hasn't yet.
-      { k: "wu", minutes: 5 } as unknown as Step,
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -403,45 +404,33 @@ describe("ConfirmTargets", () => {
     saveDraft(KITCHEN_SINK);
     await renderConfirm();
 
-    expect(screen.getByText(/WARM-UP/)).toBeInTheDocument();
+    expect(screen.queryByText(/WARM-UP/)).not.toBeInTheDocument();
     expect(screen.getByText(/· REST/)).toBeInTheDocument();
     expect(screen.getByText(/· TEST/)).toBeInTheDocument();
 
-    // wu (Row 1): both directions.
-    const wuGroup = screen.getByRole("group", { name: "Row 1 duration" });
-    expect(within(wuGroup).getByText("5:00")).toBeInTheDocument();
+    // w, time-kind (Row 1): both directions (the "down" direction is
+    // already covered against a different fixture in the recount test
+    // above; this is the branch's own "up" press).
+    const wGroup = screen.getByRole("group", { name: "Row 1 duration" });
+    expect(within(wGroup).getByText("2:00")).toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Row 1 duration up" }),
     );
-    expect(within(wuGroup).getByText("5:30")).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Row 1 duration down" }),
-    );
-    expect(within(wuGroup).getByText("5:00")).toBeInTheDocument();
-
-    // w, time-kind (Row 2): both directions (the "down" direction is
-    // already covered against a different fixture in the recount test
-    // above; this is the branch's own "up" press).
-    const wGroup = screen.getByRole("group", { name: "Row 2 duration" });
-    expect(within(wGroup).getByText("2:00")).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Row 2 duration up" }),
-    );
     expect(within(wGroup).getByText("2:30")).toBeInTheDocument();
 
-    // r (Row 3): both directions.
-    const rGroup = screen.getByRole("group", { name: "Row 3 duration" });
+    // r (Row 2): both directions.
+    const rGroup = screen.getByRole("group", { name: "Row 2 duration" });
     expect(within(rGroup).getByText("2:00")).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 3 duration down" }),
+      screen.getByRole("button", { name: "Row 2 duration down" }),
     );
     expect(within(rGroup).getByText("1:30")).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole("button", { name: "Row 3 duration up" }),
+      screen.getByRole("button", { name: "Row 2 duration up" }),
     );
     expect(within(rGroup).getByText("2:00")).toBeInTheDocument();
 
-    // The TEST row (Row 4): removable, but no stepper controls of its own.
+    // The TEST row (Row 3): removable, but no stepper controls of its own.
     const testRow = screen.getByText(/· TEST/).closest(".step-editor");
     expect(
       within(testRow as HTMLElement).queryByRole("group"),
@@ -457,7 +446,7 @@ describe("ConfirmTargets", () => {
     await renderConfirm();
 
     // Header label and the TARGET row both read the effort word — the
-    // header's own text node is "ROW 3 · ALL OUT" (a regex match on
+    // header's own text node is "ROW 2 · ALL OUT" (a regex match on
     // substring), the TARGET row's is the word alone (an exact match).
     expect(screen.getAllByText(/ALL OUT/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("ALL OUT")).toBeInTheDocument();

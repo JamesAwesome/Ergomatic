@@ -62,6 +62,15 @@ import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
 // intervals at 6k+12 (targetSplit 132s/500m) each followed by a 60s rest —
 // confirmed against this exact fixture before writing the test (see the
 // task report).
+//
+// 2026-08-09's warmup setting: that 300s interval 0 was Sea Fret's own
+// `wu` step until the seeds were stripped; it is a per-user PREFERENCE
+// now, passed to `buildRun` below (its one producer). The 5 minutes are
+// the exact duration the seed carried, deliberately — the hardware pins
+// in this file (the 0x0031 structural readback of 30000/Time, the boundary
+// walk) were measured against a PM5 programmed with exactly this
+// three-interval program, and a fixture that dropped the warm-up would
+// silently stop matching the capture those numbers came from.
 function seaFretProgram(): WorkoutProgram {
   const workout = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret");
   if (!workout)
@@ -76,6 +85,7 @@ function seaFretProgram(): WorkoutProgram {
     draft,
     { k2Seconds: 100, k6Seconds: 120 },
     new Date("2026-01-01"),
+    { kind: "time", minutes: 5 },
   );
   const result = compileProgram(run.phases);
   if (!("intervals" in result)) {

@@ -316,9 +316,12 @@ describe("Today (plan mode)", () => {
   it("renders a resolved duration preview when baselines exist", async () => {
     mockReady();
     await renderToday();
-    // Stationary Front: wu 5' + 3×3' work + 2×0.5' rest (no rest after the
-    // last rung) = 5 + 9 + 1 = 15' total.
-    expect(screen.getByText("15′")).toBeVisible();
+    // Stationary Front: 3×3' work + 2×0.5' rest (no rest after the last
+    // rung) = 9 + 1 = 10' total. (It was 15' while the workout also
+    // carried a 5' wu step; workouts carry no warm-up since 2026-08-09 —
+    // the rower's own warm-up SETTING is prepended at buildRun, and the
+    // library/Today duration is WORK ONLY by design, spec §5.)
+    expect(screen.getByText("10′")).toBeVisible();
   });
 
   // Phase 6I: baselines unset used to still render the suggestion card

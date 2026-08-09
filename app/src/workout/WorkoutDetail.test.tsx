@@ -27,6 +27,7 @@ import {
 import { compileProgram } from "../../domain/monitor/program.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType } from "../../domain/types.js";
+import type { WarmupSetting } from "../api/usePreferences";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration.
@@ -171,12 +172,32 @@ function mockApi(handler: () => Response) {
 function mockHooks(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
   workouts: LibraryWorkout[] = [WORKOUT],
+  warmup: WarmupSetting | null = null,
 ) {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
   }));
   vi.doMock("../api/useBaselines", () => ({
     useBaselines: () => ({ state: "ready", baselines }),
+  }));
+  // 2026-08-09's warmup setting: this screen reads `usePreferences` for
+  // the CONNECT door's own `buildRun` call (design §9 — a connected
+  // session prepends the rower's warm-up too). Mocked here for every test,
+  // not just the Connect ones, so the hook's real fetch never reaches the
+  // `api` spy several tests assert was never called. Defaults to OFF, the
+  // production default.
+  vi.doMock("../api/usePreferences", () => ({
+    usePreferences: () => ({
+      state: "ready",
+      preferences: {
+        difficulties: [],
+        timeCapMinutes: 60,
+        warmupMinutes: 10,
+        warmup,
+        countdownSeconds: 10,
+        startHereDismissed: true,
+      },
+    }),
   }));
 }
 

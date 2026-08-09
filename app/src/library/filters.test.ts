@@ -18,13 +18,36 @@ import type { Step } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
+/** A work step of exactly `minutes` at the 6k baseline (off 0), so
+ *  `estimateMinutes` prices the workout to that many minutes on the nose —
+ *  the only thing a duration-bucket fixture needs to say. */
+function timeWork(minutes: number): Step {
+  return {
+    k: "w",
+    duration: { kind: "time", minutes },
+    ref: { base: "6k", off: 0 },
+  };
+}
+
 function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   return {
     title: "T",
     type: "O2",
     difficulty: "easy",
     pain: 2,
-    steps: [{ k: "wu", minutes: 10 }],
+    // A plain 10' work step at the 6k baseline: `estimateMinutes` prices
+    // it to 10 minutes, which is all any duration-bucket fixture here
+    // needs. (Every fixture in this file was a `wu` row until 2026-08-09's
+    // warmup setting removed that step kind — a `wu` step contributes NO
+    // minutes to `estimateMinutes` any more, so a warm-up-only workout
+    // would now bucket as 0 minutes, not as its authored duration.)
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 10 },
+        ref: { base: "6k", off: 0 },
+      },
+    ],
     isGlobal: true,
     lastDoneDaysAgo: null,
     ...over,
@@ -125,15 +148,8 @@ describe("applyFilters", () => {
   });
 
   it("unions duration buckets", () => {
-    // Task 4/5 shim: "wu" left the Step union but these fixtures haven't.
-    const short = w({
-      id: "short",
-      steps: [{ k: "wu", minutes: 10 } as unknown as Step],
-    });
-    const long = w({
-      id: "long",
-      steps: [{ k: "wu", minutes: 70 } as unknown as Step],
-    });
+    const short = w({ id: "short", steps: [timeWork(10)] });
+    const long = w({ id: "long", steps: [timeWork(70)] });
     const f = toggleDuration(EMPTY_FILTERS, "<30");
     expect(
       applyFilters([short, long], f, baselines).map((r) => r.id),

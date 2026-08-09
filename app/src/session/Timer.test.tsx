@@ -11,6 +11,7 @@ import {
   startDraft,
   type SessionDraft,
 } from "./draft";
+import type { WarmupSetting } from "../api/usePreferences";
 import { buildRun, type EnginePhase } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
 import {
@@ -30,11 +31,14 @@ function library(title: string) {
 
 // The phase-kind matrix fixture — the brief's own "a real starter workout
 // with an added effort step via the draft," extended one further step for
-// distance (no single library step list otherwise exercises wu/work-split/
-// rest/work-effort/distance all in one run). Hoarfrost's own real split-ref
-// work step (time, spm 22, its own embedded 5' rest) supplies wu/
-// work-split/rest; a distance split-ref step and an effort-ref step are
-// appended directly onto the draft. The reps marker is deliberately NOT
+// distance (no single library step list otherwise exercises warmup/
+// work-split/rest/work-effort/distance all in one run). Hoarfrost's own
+// real split-ref work step (time, spm 22, its own embedded 5' rest)
+// supplies work-split/rest; a distance split-ref step and an effort-ref
+// step are appended directly onto the draft; the WARM-UP comes from the
+// SETTING (`MATRIX_WARMUP` below, threaded through `buildRun`'s fourth
+// argument) since 2026-08-09's warmup-setting design made that its one
+// producer. The reps marker is deliberately NOT
 // reused here — appending steps after a LIVE "reps" marker would repeat
 // them too (domain/expand.ts's own `liveIndices`), doubling the appended
 // phases for no reason; this fixture wants each kind exactly once.
@@ -59,7 +63,6 @@ function kindMatrixDraft(): SessionDraft {
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
     steps: [
-      { k: "wu", minutes: 4 } as unknown as Step,
       splitWork,
       {
         k: "w",
@@ -76,17 +79,14 @@ function kindMatrixDraft(): SessionDraft {
 }
 
 // No library workout authors a "test" (open-ended) step (Task 1's own
-// report: none exists in the seeded library) — a hand-built minimal draft,
-// the same exception draft.test.ts's own "Warm-up only" fixture takes.
+// report: none exists in the seeded library) — a hand-built minimal draft.
+// Its warm-up, like the matrix fixture's, comes from the SETTING.
 function testKindDraft(): SessionDraft {
   return buildDraft({
     id: "id-test-kind",
     title: "Sprint Check",
     type: "AN",
-    steps: [
-      { k: "wu", minutes: 2 } as unknown as Step,
-      { k: "test", label: "2k test" },
-    ],
+    steps: [{ k: "test", label: "2k test" }],
   });
 }
 
@@ -94,16 +94,44 @@ function buildAndSaveRun(
   draft: SessionDraft,
   now = FIXED_NOW,
   baselines: Baselines | null = BASELINES,
+  warmup: WarmupSetting | null = null,
 ): SessionRun {
   saveDraft(startDraft(draft));
-  const run = buildRun(draft, baselines, now);
+  const run = buildRun(draft, baselines, now, warmup);
   saveRun(run);
   return run;
 }
 
+// The warm-up SETTING each fixture below pairs with. A rower's warm-up is
+// a preference now, never a step, so every fixture that needs a warmup
+// phase asks `buildRun` for one — the same one call site production uses
+// (`Countdown.tsx`). These are the exact durations the fixtures' step
+// lists used to carry as `wu` rows, so every phase index, STEP N OF M and
+// countdown below is unchanged.
+const MATRIX_WARMUP: WarmupSetting = { kind: "time", minutes: 4 };
+
+function matrixRun(now = FIXED_NOW): SessionRun {
+  return buildAndSaveRun(kindMatrixDraft(), now, BASELINES, MATRIX_WARMUP);
+}
+
+function testKindRun(): SessionRun {
+  return buildAndSaveRun(testKindDraft(), FIXED_NOW, BASELINES, {
+    kind: "time",
+    minutes: 2,
+  });
+}
+
+function onboardingShapedRun(): SessionRun {
+  return buildAndSaveRun(onboardingShapedDraft(), FIXED_NOW, null, {
+    kind: "time",
+    minutes: 10,
+  });
+}
+
 // Phase 6I: the shape Task 3 seeds as the two designated onboarding
-// workouts (domain/onboarding.ts) — a bare warm-up plus ONE distance work
-// step at an effort ref, nothing after it (no reps, no embedded rest).
+// workouts (domain/onboarding.ts) — ONE distance work step at an effort
+// ref, nothing after it (no reps, no embedded rest), run beneath the
+// warm-up SETTING (`onboardingShapedRun` above).
 // Hand-built because the seed doesn't exist yet — this is the one shape in
 // the whole app where a distance work phase is ALSO the run's own final
 // phase, which is what actually exercises `hasRemainingEstimate`'s false
@@ -117,7 +145,6 @@ function onboardingShapedDraft(): SessionDraft {
     title: "First 6k",
     type: "O2",
     steps: [
-      { k: "wu", minutes: 10 } as unknown as Step,
       {
         k: "w",
         duration: { kind: "distance", meters: 6000 },
@@ -324,7 +351,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
   it("warm-up: 'Easy' target, 'rate free', count-DOWN remaining", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 0);
     await renderTimer();
 
@@ -340,7 +367,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
   it("work (split, time): the exact resolved split + its ref sub-line, spm", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 1);
     await renderTimer();
 
@@ -376,18 +403,18 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       steps: hoarfrost.steps,
     });
     const run = buildAndSaveRun(draft);
-    // Phases: [0 wu, 1 work(set 1/2), 2 rest(set 1/2), 3 work(set 2/2), 4 rest(set 2/2)].
-    runAtIndex(run, 1);
+    // Phases: [0 work(set 1/2), 1 rest(set 1/2), 2 work(set 2/2), 3 rest(set 2/2)].
+    runAtIndex(run, 0);
     await renderTimer();
 
     expect(
-      screen.getByText("STEP 2 OF 5 · WORK · SET 1/2"),
+      screen.getByText("STEP 1 OF 4 · WORK · SET 1/2"),
     ).toBeInTheDocument();
   });
 
   it("rest: 'Rest' target, 'rate free'", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 2);
     await renderTimer();
 
@@ -402,7 +429,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
   it("distance: meters folded into the STEP line, count-UP stopwatch, full-width NEXT →", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 3);
     await renderTimer();
 
@@ -429,7 +456,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
   it("work (effort): the word only, NEVER the numeric estimate; FINISH past the last phase", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 4);
     await renderTimer();
 
@@ -456,7 +483,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
   describe("the landscape UP NEXT 'then …' line", () => {
     it("names the phase AFTER the one UP NEXT already shows, when both exist", async () => {
       mockKeepAwake();
-      const run = buildAndSaveRun(kindMatrixDraft());
+      const run = matrixRun();
       runAtIndex(run, 0); // next=work(split), afterNext=rest
       await renderTimer();
 
@@ -471,7 +498,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
     it("reads 'then FINISH' when the phase after next is the last one", async () => {
       mockKeepAwake();
-      const run = buildAndSaveRun(kindMatrixDraft());
+      const run = matrixRun();
       runAtIndex(run, 3); // next=effort work (the last phase), afterNext=none
       await renderTimer();
 
@@ -480,7 +507,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
     it("renders no 'then' line at all on the last phase — UP NEXT itself already reads FINISH there", async () => {
       mockKeepAwake();
-      const run = buildAndSaveRun(kindMatrixDraft());
+      const run = matrixRun();
       runAtIndex(run, 4); // the last phase
       await renderTimer();
 
@@ -493,7 +520,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
 
   it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'rate free', count-UP, standard controls, NO phase bar or TOTAL LEFT row", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(testKindDraft());
+    const run = testKindRun();
     runAtIndex(run, 1);
     await renderTimer();
 
@@ -530,7 +557,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
   // explains is deliberately NOT what this checks).
   it("still shows TOTAL LEFT and the phase bar during the warm-up, even though the test phase ahead of it has no estimate", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(testKindDraft());
+    const run = testKindRun();
     runAtIndex(run, 0);
     await renderTimer();
 
@@ -548,7 +575,7 @@ describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT 
 
   it("shows TOTAL LEFT and the phase bar during the warm-up of a null-baselines onboarding-shaped session", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(onboardingShapedDraft(), FIXED_NOW, null);
+    const run = onboardingShapedRun();
     runAtIndex(run, 0);
     await renderTimer();
 
@@ -559,7 +586,7 @@ describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT 
 
   it("hides TOTAL LEFT and the phase bar entirely once the null-baselines session reaches its un-priceable effort-distance piece — never a frozen 0:00/0%", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(onboardingShapedDraft(), FIXED_NOW, null);
+    const run = onboardingShapedRun();
     runAtIndex(run, 1);
     await renderTimer();
 
@@ -595,10 +622,10 @@ describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT 
       steps: dustStorm.steps,
     });
     const run = buildAndSaveRun(draft, FIXED_NOW, null);
-    // Phases: [0 warmup, 1 work, 2 rest, 3 work, 4 rest, ... last=rest] —
-    // index 1 is the FIRST work (effort-distance) occurrence, immediately
-    // followed by a real, priceable rest phase.
-    runAtIndex(run, 1);
+    // Phases: [0 work, 1 rest, 2 work, 3 rest, ... last=rest] — index 0 is
+    // the FIRST work (effort-distance) occurrence, immediately followed by
+    // a real, priceable rest phase.
+    runAtIndex(run, 0);
     await renderTimer();
 
     expect(document.querySelector(".timer-total")).toBeInTheDocument();
@@ -621,7 +648,7 @@ describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
   });
 
   function legacyKindMatrixRun(): SessionRun {
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     // Phase 1 is Hoarfrost's own split-ref work step (6k+12). Reshape it
     // into exactly what a pre-Task-2 `buildRun` would have frozen: no `ref`
     // at all, and `label` set to the old `toleranceRange(132, 1)` band
@@ -689,7 +716,7 @@ describe("Timer — controls", () => {
 
   it("Pause freezes the displayed remaining time regardless of how long the pause lasts; Resume continues it", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft(), FIXED_NOW);
+    const run = matrixRun();
     runAtIndex(run, 1, FIXED_NOW);
     vi.setSystemTime(new Date(FIXED_NOW.getTime() + 10_000)); // 10s in
     await renderTimer();
@@ -730,7 +757,7 @@ describe("Timer — controls", () => {
 
   it("◀ rewinds to the previous phase, re-seeding its clock (not partially elapsed)", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 1);
     await renderTimer();
     screen.getByText("STEP 2 OF 5 · WORK");
@@ -745,7 +772,7 @@ describe("Timer — controls", () => {
 
   it("▶ advances to the next phase, re-seeding its clock", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 1);
     await renderTimer();
     screen.getByText("STEP 2 OF 5 · WORK");
@@ -766,18 +793,27 @@ describe("Timer — controls", () => {
       id: "id-one-phase",
       title: "One And Done",
       type: "AN",
-      steps: [{ k: "wu", minutes: 1 } as unknown as Step],
+      // One phase, full stop — a single 1' work step. (It was a lone `wu`
+      // row before 2026-08-09's warmup setting; the run's SHAPE is what
+      // this test needs, not the kind of its only phase.)
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
     });
     const run = buildAndSaveRun(draft);
     runAtIndex(run, 0);
     await renderTimer();
-    screen.getByText("STEP 1 OF 1 · WARM-UP");
+    screen.getByText("STEP 1 OF 1 · WORK");
 
     await userEvent.click(screen.getByRole("button", { name: "Next phase" }));
 
     // Not complete yet — still on the last phase, still shows the run.
     expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
-    expect(screen.getByText("STEP 1 OF 1 · WARM-UP")).toBeInTheDocument();
+    expect(screen.getByText("STEP 1 OF 1 · WORK")).toBeInTheDocument();
     expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
 
     await userEvent.click(
@@ -793,7 +829,16 @@ describe("Timer — controls", () => {
       id: "id-one-phase-2",
       title: "One And Done Too",
       type: "AN",
-      steps: [{ k: "wu", minutes: 1 } as unknown as Step],
+      // One phase, full stop — a single 1' work step. (It was a lone `wu`
+      // row before 2026-08-09's warmup setting; the run's SHAPE is what
+      // this test needs, not the kind of its only phase.)
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
     });
     const run = buildAndSaveRun(draft);
     runAtIndex(run, 0);
@@ -824,7 +869,16 @@ describe("Timer — controls", () => {
       id: "id-one-phase-3",
       title: "One And Done Three",
       type: "AN",
-      steps: [{ k: "wu", minutes: 1 } as unknown as Step],
+      // One phase, full stop — a single 1' work step. (It was a lone `wu`
+      // row before 2026-08-09's warmup setting; the run's SHAPE is what
+      // this test needs, not the kind of its only phase.)
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { base: "2k", off: 0 },
+        },
+      ],
     });
     const run = buildAndSaveRun(draft);
     runAtIndex(run, 0);
@@ -850,7 +904,7 @@ describe("Timer — controls", () => {
   // to Today.
   it("END stages an abandon confirm (BaselineEditor idiom) and pauses meanwhile; Keep going resumes back to RUNNING; Abandon clears the draft + run and returns to Today", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 1);
     await renderTimer();
     screen.getByText("RUNNING");
@@ -887,7 +941,7 @@ describe("Timer — controls", () => {
   // undoing.
   it("END on an already-paused run: Keep going leaves it paused (does not resume a pause the rower chose themselves)", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 1);
     await renderTimer();
 
@@ -910,7 +964,7 @@ describe("Timer — controls", () => {
   // END then Keep going used to soft-brick the stopwatch, frozen forever.
   it("END on a DISTANCE phase: Keep going resumes the stopwatch (F1's own reported bug)", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 2_000)); // 2s in
     await renderTimer();
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
@@ -932,7 +986,7 @@ describe("Timer — controls", () => {
 
   it("turns keep-awake on while mounted and off on unmount", async () => {
     const { keepAwakeOn, keepAwakeOff } = mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 0);
     const { unmount } = await renderTimer();
     screen.getByText("RUNNING");
@@ -957,7 +1011,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
 
   it("records the actual normally when elapsed is within 2x the estimate (no staged choice)", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 150_000)); // 150s < 200s
     await renderTimer();
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
@@ -975,7 +1029,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
 
   it("stages a Keep/Discard choice past 2x the estimate; Keep records the (suspect) actual and advances", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 250_000)); // 250s > 200s
     await renderTimer();
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
@@ -1002,7 +1056,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
   // split, unbounded.
   it("Keep split records the elapsed AT STAGE TIME, not a re-measurement at confirm time", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 250_000)); // 250s > 200s
     await renderTimer();
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
@@ -1024,7 +1078,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
 
   it("Discard records NO actual but still advances", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 250_000));
     await renderTimer();
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
@@ -1046,7 +1100,7 @@ describe("Timer — distance mode: the suspect-actual seam", () => {
   // is already showing must not stack a second staged dialog on top.
   it("NEXT no-ops while END is already staged", async () => {
     mockKeepAwake();
-    const run = buildAndSaveRun(kindMatrixDraft());
+    const run = matrixRun();
     runAtIndex(run, 3);
     await renderTimer();
 
@@ -1081,8 +1135,16 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
       id: "id-last-distance",
       title: "Final Piece",
       type: "TR",
+      // A 2' time piece ahead of the distance one, so the distance phase
+      // is the run's LAST but not its only phase. (The 2' piece was a `wu`
+      // row until 2026-08-09's warmup setting; nothing here is about the
+      // warm-up, so it became a real work step rather than a preference.)
       steps: [
-        { k: "wu", minutes: 2 } as unknown as Step,
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 2 },
+          ref: { base: "2k", off: 0 },
+        },
         {
           k: "w",
           duration: { kind: "distance", meters: 500 },
@@ -1198,25 +1260,29 @@ describe("Timer — the repaint loop", () => {
       id: "id-short-phase",
       title: "Quick Check",
       type: "AN",
+      // Two short REST rows (30s, then 1'): the auto-advance under test
+      // needs nothing but two consecutive fixed-duration phases, and a
+      // rest row is the shortest honest way to author one now that `wu`
+      // rows are gone.
       steps: [
-        { k: "wu", minutes: 0.5 } as unknown as Step, // 30s
-        { k: "wu", minutes: 1 } as unknown as Step,
+        { k: "r", minutes: 0.5 }, // 30s
+        { k: "r", minutes: 1 },
       ],
     });
     buildAndSaveRun(draft);
     await renderTimer();
-    screen.getByText("STEP 1 OF 2 · WARM-UP");
+    screen.getByText("STEP 1 OF 2 · REST");
 
     await act(() => vi.advanceTimersByTimeAsync(31_000));
 
-    expect(screen.getByText("STEP 2 OF 2 · WARM-UP")).toBeInTheDocument();
+    expect(screen.getByText("STEP 2 OF 2 · REST")).toBeInTheDocument();
   });
 
   // A locked screen waking up: the catch-up walk must fire from
   // `visibilitychange`, not only from the next 1s interval tick.
   it("catches up multiple phases on visibilitychange (a simulated lock)", async () => {
     mockKeepAwake();
-    // Diamond Dust: wu 6' + 8'/8'/8' rate-change, no reps/rest — three
+    // Diamond Dust: 8'/8'/8' rate-change, no reps/rest — three
     // SEQUENTIAL time work phases, ideal for the catch-up walk (each
     // phase's boundary is unambiguous). (Moderate Breeze used to hold this
     // role; the library rewrite turned it into a reps x8 workout — 17
@@ -1230,17 +1296,17 @@ describe("Timer — the repaint loop", () => {
       steps: diamondDust.steps,
     });
     const run = buildAndSaveRun(draft);
-    // wu 360s + work1 480s = 840s boundary; 130s into work2 (index 2).
-    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 970_000));
+    // work1 480s + work2 480s = 960s boundary; 130s into work3 (index 2).
+    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 1_090_000));
     await renderTimer();
 
     // Before any tick fires, the stale phase 0 is still what renders.
-    expect(screen.getByText(/^STEP 1 OF 4/)).toBeInTheDocument();
+    expect(screen.getByText(/^STEP 1 OF 3/)).toBeInTheDocument();
 
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
 
-    expect(screen.getByText(/^STEP 3 OF 4/)).toBeInTheDocument();
+    expect(screen.getByText(/^STEP 3 OF 3/)).toBeInTheDocument();
   });
 });

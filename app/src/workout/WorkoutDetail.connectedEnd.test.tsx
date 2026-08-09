@@ -70,6 +70,25 @@ vi.mock("../api/useBaselines", () => ({
   }),
 }));
 
+// 2026-08-09's warmup setting (design §4/§9): the CONNECT door threads the
+// rower's own preference into `buildRun`, exactly as the phone-timer door
+// does in `Countdown.tsx`. This rower has an 8:00 warm-up set — which is
+// where the warm-up seed step asserted below comes from now that no
+// workout carries a `wu` step of its own.
+vi.mock("../api/usePreferences", () => ({
+  usePreferences: () => ({
+    state: "ready",
+    preferences: {
+      difficulties: [],
+      timeCapMinutes: 60,
+      warmupMinutes: 10,
+      warmup: { kind: "time", minutes: 8 },
+      countdownSeconds: 10,
+      startHereDismissed: true,
+    },
+  }),
+}));
+
 const WORKOUT = {
   id: "w-conn",
   title: "Filling Low",
@@ -77,7 +96,6 @@ const WORKOUT = {
   difficulty: "medium" as const,
   pain: 3,
   steps: [
-    { k: "wu" as const, minutes: 8 },
     {
       k: "w" as const,
       duration: { kind: "distance" as const, meters: 2000 },
@@ -132,8 +150,11 @@ describe("the log seed WorkoutDetail builds (7C Task 1)", () => {
     // list, a swapped baselines object, or drops the call entirely.
     expect(identity.logSeed).toStrictEqual(buildLogSeed(phases, baselines));
     // And a concrete value, not just self-consistency against a
-    // vacuously-empty result: Filling Low compiles to a warmup + one
-    // 6k+4 distance work step (this file's own WORKOUT fixture).
+    // vacuously-empty result: this rower's 8:00 warm-up SETTING (mocked
+    // above) plus the fixture's one 6k+4 distance work step. The warm-up
+    // row is the load-bearing half here — it can only be present if this
+    // screen actually threaded `usePreferences().preferences.warmup` into
+    // `buildRun`, which is this task's own caller obligation.
     expect(identity.logSeed.steps).toStrictEqual([
       { label: "8:00 warm-up", kind: "warmup" },
       { label: "2000 m @ 6k +4", kind: "work" },

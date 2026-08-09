@@ -7,7 +7,19 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { Step } from "../../domain/types.js";
 
-// Task 4/5 shim: "wu" left the Step union but these fixtures haven't.
+/** A work step of exactly `minutes` at this file's 6k baseline (off 0), so
+ *  `estimateMinutes` prices each fixture to the round number its row is
+ *  asserted to show. Each of these was a `wu` row until 2026-08-09's
+ *  warmup setting removed that step kind; a `wu` step contributes no
+ *  minutes at all now, so every row here would read 0'. */
+function timeWork(minutes: number): Step {
+  return {
+    k: "w",
+    duration: { kind: "time", minutes },
+    ref: { base: "6k", off: 0 },
+  };
+}
+
 const WORKOUTS: LibraryWorkout[] = [
   {
     id: "w-at",
@@ -15,7 +27,7 @@ const WORKOUTS: LibraryWorkout[] = [
     type: "AT",
     difficulty: "medium",
     pain: 3,
-    steps: [{ k: "wu", minutes: 30 } as unknown as Step],
+    steps: [timeWork(30)],
     isGlobal: true,
     lastDoneDaysAgo: 5,
   },
@@ -25,7 +37,7 @@ const WORKOUTS: LibraryWorkout[] = [
     type: "O2",
     difficulty: "easy",
     pain: 1,
-    steps: [{ k: "wu", minutes: 20 } as unknown as Step],
+    steps: [timeWork(20)],
     isGlobal: true,
     lastDoneDaysAgo: 40,
   },
@@ -35,7 +47,7 @@ const WORKOUTS: LibraryWorkout[] = [
     type: "AN",
     difficulty: "hard",
     pain: 5,
-    steps: [{ k: "wu", minutes: 60 } as unknown as Step],
+    steps: [timeWork(60)],
     isGlobal: true,
     lastDoneDaysAgo: null,
   },
@@ -47,7 +59,7 @@ const CUSTOM_WORKOUT: LibraryWorkout = {
   type: "O2",
   difficulty: "medium",
   pain: 2,
-  steps: [{ k: "wu", minutes: 25 } as unknown as Step],
+  steps: [timeWork(25)],
   isGlobal: false,
   lastDoneDaysAgo: null,
 };

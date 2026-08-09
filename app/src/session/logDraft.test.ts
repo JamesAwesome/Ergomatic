@@ -94,20 +94,20 @@ function runFor(
 
 describe("buildLogSteps", () => {
   it("Fork Lightning: 10 effort work phases each omit targetSplit/actualSplit/actualSource entirely (5G rule); label carries the chip word straight from the draft's real ref (F1b's primary, draft-based path)", () => {
-    // wu(5') + reps(5) x [w1{0.5min, effort:max, spm:32, rest .75'} +
-    // w2{0.5min, effort:max, spm:32, rest 2.25'}] -> 1 warmup + 5*(w1+r1+w2+
-    // r2) = 21 phases; work at positions 1,3,5,7,9,11,13,15,17,19. Both
+    // reps(5) x [w1{0.5min, effort:max, spm:32, rest .75'} +
+    // w2{0.5min, effort:max, spm:32, rest 2.25'}] -> 5*(w1+r1+w2+
+    // r2) = 20 phases; work at positions 0,2,4,6,8,10,12,14,16,18. Both
     // authored "w" steps carry the identical effort ref/spm/duration, so
     // every work phase's LogStep is identical even though originalIndex
-    // alternates between the two (2 and 3). estimationSplit(max) =
+    // alternates between the two (1 and 2). estimationSplit(max) =
     // baselines.k2Seconds = 100 (irrelevant here — never surfaced). ref
     // {effort:"max"} -> refLabel = "MAX". duration = fmtDuration(0.5) =
     // "0:30".
     const { draft, run } = runFor("Fork Lightning", {
       completedAt: NOW.toISOString(),
     });
-    expect(run.phases).toHaveLength(21);
-    expect(run.phases[1]).toMatchObject({ originalIndex: 2 });
+    expect(run.phases).toHaveLength(20);
+    expect(run.phases[0]).toMatchObject({ originalIndex: 1 });
     const steps = buildLogSteps(run, draft);
     expect(steps).toHaveLength(10);
     for (const step of steps) {
@@ -141,7 +141,6 @@ describe("buildLogSteps", () => {
     // Lightning's EFFORT step (0.5' @ MAX), Filling Low's split DISTANCE
     // step (2000m @ 6k+4). No reps marker, so each appears exactly once.
     const steps: Step[] = [
-      { k: "wu", minutes: 5 } as unknown as Step,
       workStepFrom("Hoarfrost"),
       workStepFrom("Fork Lightning"),
       workStepFrom("Filling Low"),
@@ -153,9 +152,9 @@ describe("buildLogSteps", () => {
       steps,
     });
     const built = buildRun(draft, BASELINES, NOW);
-    // 1 warmup + (work+rest)*3 (every source step carries its own
-    // restMinutes) = 7 phases; work at 1, 3, 5.
-    expect(built.phases).toHaveLength(7);
+    // (work+rest)*3 (every source step carries its own restMinutes) = 6
+    // phases; work at 0, 2, 4.
+    expect(built.phases).toHaveLength(6);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
@@ -175,10 +174,10 @@ describe("buildLogSteps", () => {
   });
 
   it("F1b: a removed step doesn't shift the surviving phases' draft lookup — indexing is by originalIndex, not position, so it survives a removed sibling", () => {
-    // Gyre: wu(0) + w1(1, 750m@2k+5, rest 2') + w2(2, 500m@2k+3, rest 2') +
-    // w3(3, 250m@2k+1, no rest), no reps marker. Removing w2 (index 2) must
-    // not shift w3's lookup down to index 2 (w2's OWN ref) — it has to
-    // stay 3.
+    // Gyre: w1(0, 750m@2k+5, rest 2') + w2(1, 500m@2k+3, rest 2') +
+    // w3(2, 250m@2k+1, no rest), no reps marker. Removing w2 (index 1) must
+    // not shift w3's lookup down to index 1 (w2's OWN ref) — it has to
+    // stay 2.
     const gyre = library("Gyre");
     const draft: SessionDraft = {
       ...buildDraft({
@@ -187,30 +186,27 @@ describe("buildLogSteps", () => {
         type: gyre.type as WorkoutType,
         steps: gyre.steps,
       }),
-      removed: [2],
+      removed: [1],
     };
     const built = buildRun(draft, BASELINES, NOW);
     expect(built.phases.map((p) => p.type)).toStrictEqual([
-      "warmup",
       "work",
       "rest",
       "work",
     ]);
     // The surviving work phases keep their TRUE draft indices (1 and 3),
-    // skipping the removed step's index (2) entirely — this is what
+    // skipping the removed step's index (1) entirely — this is what
     // proves the draft lookup below reads the right step, not just
     // "whichever step happens to still be at that position."
-    expect(built.phases.map((p) => p.originalIndex)).toStrictEqual([
-      0, 1, 1, 3,
-    ]);
+    expect(built.phases.map((p) => p.originalIndex)).toStrictEqual([0, 0, 2]);
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
       completedAt: NOW.toISOString(),
     };
     expect(buildLogSteps(run, draft).map((s) => s.label)).toStrictEqual([
-      "750 m @ 2k +5", // w1 (index 1) — untouched by w2's removal
-      "250 m @ 2k +1", // w3 (index 3) — NOT w2's "500 m @ 2k +3" (index 2)
+      "750 m @ 2k +5", // w1 (index 0) — untouched by w2's removal
+      "250 m @ 2k +1", // w3 (index 2) — NOT w2's "500 m @ 2k +3" (index 1)
     ]);
   });
 
@@ -338,20 +334,20 @@ describe("buildLogSteps", () => {
   });
 
   it("Calm Sea: a kept stopwatch actual passes through unchanged, keeping meters (not seconds)", () => {
-    // wu(8') + w{10000m @ 6k+12, spm 20} -> phases: [warmup, work]. draft's
-    // real ref {base:"6k", off:12} -> refLabel "6k +12". Elapsed 2500s on
-    // 10000m -> splitSeconds = (2500/10000)*500 = 125.0 exactly.
+    // w{10000m @ 6k+12, spm 20} -> phases: [work]. draft's real ref
+    // {base:"6k", off:12} -> refLabel "6k +12". Elapsed 2500s on 10000m ->
+    // splitSeconds = (2500/10000)*500 = 125.0 exactly.
     const { draft, run } = runFor("Calm Sea", {
       completedAt: new Date(NOW.getTime() + 2500 * 1000).toISOString(),
       actuals: {
-        1: {
+        0: {
           elapsedSeconds: 2500,
           splitSeconds: 125,
           actualSource: "stopwatch",
         },
       },
     });
-    expect(run.phases[1]).toMatchObject({ meters: 10000, targetSplit: 132 });
+    expect(run.phases[0]).toMatchObject({ meters: 10000, targetSplit: 132 });
     const steps = buildLogSteps(run, draft);
     expect(steps).toStrictEqual([
       {
@@ -400,15 +396,15 @@ describe("buildLogSteps", () => {
       index: built.phases.length,
       completedAt: new Date(NOW.getTime() + 52 * 1000).toISOString(),
       actuals: {
-        1: { elapsedSeconds: 52, splitSeconds: 260, actualSource: "stopwatch" },
+        0: { elapsedSeconds: 52, splitSeconds: 260, actualSource: "stopwatch" },
       },
     };
-    expect(run.phases[1]).toMatchObject({
+    expect(run.phases[0]).toMatchObject({
       type: "work",
       targetKind: "effort",
       meters: 100,
     });
-    expect(run.phases[1]!.targetSplit).toBeUndefined();
+    expect(run.phases[0]!.targetSplit).toBeUndefined();
 
     const steps = buildLogSteps(run, draft);
     expect(steps[0]).toStrictEqual({
@@ -446,32 +442,31 @@ describe("buildLogSteps", () => {
     });
   });
 
-  it("Filling Low: wu and the auto-inserted rest phases never become LogSteps, even inside a reps-marker block; kept and discarded actuals interleave correctly by position", () => {
-    // wu(8') + reps(3) x [w{2000m @ 6k+4, spm 22, rest 3'}] -> 1 + 3*(work+
-    // rest) = 7 phases; work at 1,3,5. draft's real ref {base:"6k",
-    // off:4} -> refLabel "6k +4" for every occurrence (same authored step,
-    // repeated by the reps marker — originalIndex is identical for all 3).
-    // Reps 1 & 3 (positions 1 & 5) kept: 850/2000*500 = 212.5,
-    // 800/2000*500 = 200.0. Rep 2 (position 3) discarded (no actuals
+  it("Filling Low: the auto-inserted rest phases never become LogSteps, even inside a reps-marker block; kept and discarded actuals interleave correctly by position", () => {
+    // reps(3) x [w{2000m @ 6k+4, spm 22, rest 3'}] -> 3*(work+rest) = 6
+    // phases; work at 0,2,4. draft's real ref {base:"6k", off:4} ->
+    // refLabel "6k +4" for every occurrence (same authored step, repeated
+    // by the reps marker — originalIndex is identical for all 3).
+    // Reps 1 & 3 (positions 0 & 4) kept: 850/2000*500 = 212.5,
+    // 800/2000*500 = 200.0. Rep 2 (position 2) discarded (no actuals
     // entry).
     const { draft, run } = runFor("Filling Low", {
       completedAt: new Date(NOW.getTime() + 35 * 60 * 1000).toISOString(),
       actuals: {
-        1: {
+        0: {
           elapsedSeconds: 850,
           splitSeconds: 212.5,
           actualSource: "stopwatch",
         },
-        5: {
+        4: {
           elapsedSeconds: 800,
           splitSeconds: 200,
           actualSource: "stopwatch",
         },
       },
     });
-    expect(run.phases).toHaveLength(7);
+    expect(run.phases).toHaveLength(6);
     expect(run.phases.map((p) => p.type)).toStrictEqual([
-      "warmup",
       "work",
       "rest",
       "work",
@@ -502,14 +497,14 @@ describe("buildLogSteps", () => {
   });
 
   it("Hoarfrost: a completed split-ref TIME phase gets actualSplit = targetSplit, actualSource 'assumed' — the engine never records a real actual for a time phase at all", () => {
-    // wu(6') + reps(2) x [w{12min @ 6k+12, spm 22, rest 5'}] -> 5 phases;
-    // work at 1,3. draft's real ref {base:"6k", off:12} -> refLabel
+    // reps(2) x [w{12min @ 6k+12, spm 22, rest 5'}] -> 4 phases;
+    // work at 0,2. draft's real ref {base:"6k", off:12} -> refLabel
     // "6k +12"; fmtDuration(12) = "12:00".
     const { draft, run } = runFor("Hoarfrost", {
       completedAt: new Date(NOW.getTime() + 46 * 60 * 1000).toISOString(),
       actuals: {},
     });
-    expect(run.phases).toHaveLength(5);
+    expect(run.phases).toHaveLength(4);
     const label = "12:00 @ 6k +12";
     expect(buildLogSteps(run, draft)).toStrictEqual([
       {
@@ -665,9 +660,9 @@ describe("buildLogSteps", () => {
       // old tolerance-band string (`toleranceRange(132, 1)` -> "2:11.0–
       // 2:13.0"), and `ref` is simply absent — not undefined-but-present,
       // genuinely missing, the same shape `JSON.parse`ing an old stored
-      // record would produce. `run.phases[1]` is Calm Sea's own work
-      // phase (`[0]` is the warm-up, which never produces a LogStep).
-      const legacyPhase = { ...run.phases[1]! };
+      // record would produce. `run.phases[0]` is Calm Sea's own (and
+      // only) work phase.
+      const legacyPhase = { ...run.phases[0]! };
       delete (legacyPhase as { ref?: unknown }).ref;
       legacyPhase.label = "2:11.0–2:13.0";
       const legacyRun = { ...run, phases: [legacyPhase] };
@@ -783,7 +778,6 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
       title: "First 6k",
       type: "O2",
       steps: [
-        { k: "wu", minutes: 5 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "distance", meters: 6000 },
@@ -793,7 +787,7 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     });
     const run = buildRun(draft, null, NOW);
     const seed = buildLogSeed(run.phases, null);
-    expect(seed.steps.map((s) => s.kind)).toStrictEqual(["warmup", "work"]);
+    expect(seed.steps.map((s) => s.kind)).toStrictEqual(["work"]);
     expect(seed.paces).toStrictEqual({});
   });
 
@@ -815,17 +809,20 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
   });
 
   it("emits one seed step per NON-REST phase, in program-interval order, with the manual builder's own label text", () => {
-    // wu(5' = 300s) + w(2' = 120s @ 6k+4, rest 1' = 60s) + w(100m @ 6k+0) —
-    // the task brief's own exact phase shape: warmup, work@time, rest,
-    // work@distance. Built through the real buildDraft -> buildRun
-    // assembly (like this file's own "Nudge Fixture" tests above), not a
-    // hand-rolled EnginePhase array.
+    // A 5' warm-up SETTING + w(2' = 120s @ 6k+4, rest 1' = 60s) + w(100m
+    // @ 6k+0) — the task brief's own exact phase shape: warmup,
+    // work@time, rest, work@distance. Built through the real buildDraft ->
+    // buildRun assembly (like this file's own "Nudge Fixture" tests
+    // above), not a hand-rolled EnginePhase array. The warm-up reaches
+    // `buildLogSeed` from the SETTING now (2026-08-09's design §4:
+    // `buildRun`'s fourth argument is the phase's one producer), not from
+    // a `wu` step — which is exactly what this task's integration test
+    // below pins.
     const draft = buildDraft({
       id: "id-seed-fixture",
       title: "Seed Fixture",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 5 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 2 },
@@ -839,7 +836,10 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
         },
       ],
     });
-    const built = buildRun(draft, BASELINES, NOW);
+    const built = buildRun(draft, BASELINES, NOW, {
+      kind: "time",
+      minutes: 5,
+    });
     expect(built.phases.map((p) => p.type)).toStrictEqual([
       "warmup",
       "work",
@@ -909,16 +909,14 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
   });
 
   it("an all-effort workout references no base at all: paces is empty", () => {
-    // Fork Lightning: wu + 10 effort ("MAX") work phases — no split ref
+    // Fork Lightning: 10 effort ("MAX") work phases — no split ref
     // anywhere, so nothing to lock a base to.
     const { run } = runFor("Fork Lightning");
     const seed = buildLogSeed(run.phases, BASELINES);
     expect(seed.paces).toStrictEqual({});
-    // 1 warmup + 10 effort work phases (rests folded), all kind "work"
-    // except the warmup.
-    expect(seed.steps).toHaveLength(11);
-    expect(seed.steps[0]!.kind).toBe("warmup");
-    for (const step of seed.steps.slice(1)) {
+    // 10 effort work phases (rests folded), every one kind "work".
+    expect(seed.steps).toHaveLength(10);
+    for (const step of seed.steps) {
       expect(step).toStrictEqual({ label: "0:30 @ MAX", kind: "work" });
     }
   });
@@ -929,7 +927,6 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     // Low's split DISTANCE step — no single library workout mixes all
     // three, so this is the realistic way to exercise all three at once.
     const steps: Step[] = [
-      { k: "wu", minutes: 5 } as unknown as Step,
       workStepFrom("Hoarfrost"),
       workStepFrom("Fork Lightning"),
       workStepFrom("Filling Low"),
@@ -957,13 +954,45 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     ]);
   });
 
-  it("a warmup-only-adjacent workout: the warmup's own seed label carries the real duration, house 'warm-up' idiom", () => {
-    const { run } = runFor("Filling Low");
-    const seed = buildLogSeed(run.phases, BASELINES);
-    expect(seed.steps[0]).toStrictEqual({
+  // INTEGRATION (2026-08-09 warmup-setting plan, Task 4): the phase
+  // `buildRun` prepends from the SETTING reaches `buildLogSeed` as a
+  // `kind: "warmup"` seed step — the downstream half 7C already pins,
+  // reached from its new producer. A real seeded workout (Filling Low)
+  // carries the rest of the run, per the realistic-fixtures rule.
+  it("the SETTING's warm-up phase seeds one kind:'warmup' step, whose label carries the real duration in the house 'warm-up' idiom (both kinds)", () => {
+    const { draft } = runFor("Filling Low");
+
+    const timed = buildRun(draft, BASELINES, NOW, { kind: "time", minutes: 8 });
+    const timedSeed = buildLogSeed(timed.phases, BASELINES);
+    expect(timedSeed.steps[0]).toStrictEqual({
       label: "8:00 warm-up",
       kind: "warmup",
     });
+    // Exactly ONE seed step is a warm-up, and it is the first — the seed
+    // stays aligned with `program.intervals` (this file's own alignment
+    // contract) whatever the setting says.
+    expect(timedSeed.steps.filter((s) => s.kind === "warmup")).toHaveLength(1);
+
+    const metered = buildRun(draft, BASELINES, NOW, {
+      kind: "distance",
+      meters: 2000,
+      restSeconds: 90,
+    });
+    const meteredSeed = buildLogSeed(metered.phases, BASELINES);
+    expect(meteredSeed.steps[0]).toStrictEqual({
+      label: "2000 m warm-up",
+      kind: "warmup",
+    });
+    // The setting's own trailing REST seeds no step of its own, exactly
+    // like every other rest phase.
+    expect(meteredSeed.steps).toHaveLength(timedSeed.steps.length);
+
+    // OFF (the default) seeds no warm-up step at all.
+    const bare = buildLogSeed(
+      buildRun(draft, BASELINES, NOW).phases,
+      BASELINES,
+    );
+    expect(bare.steps.some((s) => s.kind === "warmup")).toBe(false);
   });
 
   it("a 'test' phase (defensive only — compileProgram never lets one reach production) seeds a bare, un-prefixed label", () => {
@@ -995,17 +1024,12 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     // (domain/expand.ts's "case w": `label: fmtSplit(split)`) — deleting
     // `ref` leaves that as the only thing left to compose a label from.
     const { run } = runFor("Calm Sea");
-    const legacyPhase = { ...run.phases[1]! };
+    const legacyPhase = { ...run.phases[0]! };
     expect(legacyPhase.type).toBe("work");
     expect(legacyPhase.label).toBe("2:12.0");
     delete (legacyPhase as { ref?: unknown }).ref;
-    expect(
-      buildLogSeed([run.phases[0]!, legacyPhase], BASELINES),
-    ).toStrictEqual({
-      steps: [
-        { label: expect.any(String), kind: "warmup" },
-        { label: "10000 m @ 2:12.0", kind: "work" },
-      ],
+    expect(buildLogSeed([legacyPhase], BASELINES)).toStrictEqual({
+      steps: [{ label: "10000 m @ 2:12.0", kind: "work" }],
       paces: {},
     });
   });
@@ -1261,7 +1285,6 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       title: "Walk 4 (warmup variant)",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 1 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "distance", meters: 100 },
@@ -1269,7 +1292,9 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
         },
       ],
     });
-    const built = buildRun(draft, BASELINES, NOW);
+    // The warm-up comes from the SETTING now (2026-08-09's design §4), not
+    // from a step — `buildRun`'s fourth argument is its one producer.
+    const built = buildRun(draft, BASELINES, NOW, { kind: "time", minutes: 1 });
     const program = compileOrThrow(built.phases);
     const logSeed = buildLogSeed(built.phases, BASELINES);
     expect(logSeed.steps.map((s) => s.kind)).toStrictEqual(["warmup", "work"]);
@@ -1546,11 +1571,14 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
 
   // Branch review Medium-2: mutant M2b keyed the warmup skip on `i === 0`
   // instead of `seedStep.kind === "warmup"` and survived the whole suite —
-  // every warmup fixture on the branch was LEADING. `domain/validate.ts`'s
-  // `validateSteps` imposes no positional constraint on `wu`
-  // (`case "wu": case "r":` — only minutes are checked), so a mid-workout
-  // warmup is production-authorable via the builder or bulk import. This
-  // fixture (work / warmup / work) proves the skip is position-independent.
+  // every warmup fixture on the branch was LEADING. That fixture used to
+  // be authorable (`wu` carried no positional constraint), and since
+  // 2026-08-09's warmup setting it is not: the setting only ever PREPENDS
+  // (`src/session/engine.ts`'s `warmupPhases`), so nothing in production
+  // can put a warmup phase in the middle any more. The skip is still
+  // written position-independently and this test still holds it to that,
+  // by splicing a REAL warm-up phase — `buildRun`'s own output for the
+  // setting, not a hand-typed literal — between two work phases.
   it("a MID-WORKOUT warmup interval (work / warmup / work) produces NO step and does not shift the following work step's mapping (branch review Medium-2)", () => {
     const draft = buildDraft({
       id: "id-mid-workout-warmup",
@@ -1562,7 +1590,6 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           duration: { kind: "distance", meters: 100 },
           ref: { base: "6k", off: 0 },
         },
-        { k: "wu", minutes: 1 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "distance", meters: 200 },
@@ -1570,7 +1597,16 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
         },
       ],
     });
-    const built = buildRun(draft, BASELINES, NOW);
+    const leading = buildRun(draft, BASELINES, NOW, {
+      kind: "time",
+      minutes: 1,
+    });
+    const warmupPhase = leading.phases[0]!;
+    expect(warmupPhase.type).toBe("warmup");
+    const built = {
+      ...leading,
+      phases: [leading.phases[1]!, warmupPhase, leading.phases[2]!],
+    };
     const program = compileOrThrow(built.phases);
     const logSeed = buildLogSeed(built.phases, BASELINES);
     expect(logSeed.steps.map((s) => s.kind)).toStrictEqual([

@@ -84,7 +84,14 @@ function fillingLow(): { program: WorkoutProgram; title: string; id: string } {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const compiled = compileProgram(buildRun(draft, baselines, t0).phases);
+  // 2026-08-09's warmup setting: Filling Low's 8:00 warm-up is the rower's
+  // PREFERENCE now, not a `wu` step in the seed — `buildRun`'s fourth
+  // argument is its one producer. The compiled program is identical to
+  // what this fixture always produced (interval 0 = time 480, then 3 x
+  // distance 2000), so every index and count below is unchanged.
+  const compiled = compileProgram(
+    buildRun(draft, baselines, t0, { kind: "time", minutes: 8 }).phases,
+  );
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }

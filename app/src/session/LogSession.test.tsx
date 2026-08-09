@@ -56,8 +56,8 @@ function library(title: string) {
  *  deliberately dropped — SessionComplete.test.tsx's own
  *  `completeDraftAndRun` does the same for the identical reason: a live
  *  reps marker would repeat the APPENDED distance step too, which isn't the
- *  shape this fixture wants. Phases: 0 warm-up, 1 work (time, 6k+12), 2
- *  rest (5'), 3 work (distance, 6k+12) — the LAST phase gets a real
+ *  shape this fixture wants. Phases: 0 work (time, 6k+12), 1
+ *  rest (5'), 2 work (distance, 6k+12) — the LAST phase gets a real
  *  recorded (stopwatch) actual; the time phase never does (the engine only
  *  ever records one for a distance phase), so this fixture covers BOTH of
  *  `buildLogSteps`' actual rules in one run. */
@@ -90,7 +90,7 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
     id: "id-doldrums-fixture",
     title: hoarfrost.title,
     type,
-    steps: [{ k: "wu", minutes: 4 } as unknown as Step, timeWork, distanceWork],
+    steps: [timeWork, distanceWork],
   });
   const started = startDraft(draft);
   saveDraft(started);
@@ -258,7 +258,7 @@ function manualWorkoutFixture(id = "id-manual-fixture"): LibraryWorkout {
     type: hoarfrost.type as WorkoutType,
     difficulty: hoarfrost.difficulty,
     pain: hoarfrost.pain,
-    steps: [{ k: "wu", minutes: 4 } as unknown as Step, timeWork, distanceWork],
+    steps: [timeWork, distanceWork],
     isGlobal: true,
     lastDoneDaysAgo: 2,
   };
@@ -294,7 +294,12 @@ const MONITOR_WORKOUT_ID = "id-monitor-fixture";
 // [0] warmup, [1] work (time, Hoarfrost), [2] work (distance, Calm Sea) —
 // `IntervalActual.index` below is a position in THAT array, so a "both
 // measured" actuals list uses index 1 and 2, never 0 (the warmup interval,
-// which `buildMonitorLogSteps` never surfaces a step for at all).
+// which `buildMonitorLogSteps` never surfaces a step for at all). Since
+// 2026-08-09's warmup setting that leading warm-up comes from the rower's
+// PREFERENCE (`buildRun`'s fourth argument — its one producer), not from a
+// `wu` step; keeping it here is deliberate, since the alignment contract
+// this fixture exists to prove is exactly the one a non-logging interval
+// can break.
 function buildMonitorFixture(
   overrides: { actuals?: IntervalActual[]; deviceName?: string } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
@@ -312,10 +317,13 @@ function buildMonitorFixture(
     id: MONITOR_WORKOUT_ID,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [{ k: "wu", minutes: 4 } as unknown as Step, timeWork, distanceWork],
+    steps: [timeWork, distanceWork],
   });
   const started = startDraft(draft);
-  const built = buildRun(started, BASELINES, FIXED_NOW);
+  const built = buildRun(started, BASELINES, FIXED_NOW, {
+    kind: "time",
+    minutes: 4,
+  });
   const program = compileOrThrow(built.phases);
   const logSeed = buildLogSeed(built.phases, BASELINES);
   const completedAt = new Date(
@@ -593,7 +601,6 @@ describe("LogSession: prefill from a real completed run", () => {
       title: "Both Bases",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 4 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 3 },
@@ -633,7 +640,6 @@ describe("LogSession: prefill from a real completed run", () => {
       title: "Nudged",
       type: "AT",
       steps: [
-        { k: "wu", minutes: 4 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 3 },
@@ -641,9 +647,9 @@ describe("LogSession: prefill from a real completed run", () => {
         },
       ],
     });
-    // +5s nudge on the work step (index 1) — the same confirm-time
+    // +5s nudge on the work step (index 0) — the same confirm-time
     // adjustment ConfirmTargets.tsx's own nudge buttons apply.
-    const nudged = withNudge(base, 1, 5);
+    const nudged = withNudge(base, 0, 5);
     const started = startDraft(nudged);
     saveDraft(started);
     const built = buildRun(started, BASELINES, FIXED_NOW);
@@ -688,7 +694,7 @@ describe("LogSession: prefill from a real completed run", () => {
       id: "id-fork-lightning-fixture",
       title: forkLightning.title,
       type: forkLightning.type as WorkoutType,
-      steps: [{ k: "wu", minutes: 4 } as unknown as Step, effortWork],
+      steps: [effortWork],
     });
     const started = startDraft(draft);
     saveDraft(started);
@@ -1386,10 +1392,11 @@ describe("LogSession: staged discard", () => {
 // worth it for a header line whose wall-clock risk (a run straddling
 // midnight) is negligible for a test suite that completes in well under a
 // second.
-// wu 4' (240s) + Hoarfrost's time work (12' = 720s) + its own restMinutes
-// (5' = 300s) + Calm Sea's distance work (10,000m @ 6k+12 = 132 s/500m ->
-// 20*132 = 2640s) = 3900s -> 65 MIN exactly.
-const MANUAL_TOTAL_LABEL = `${formatLogDate(new Date().toISOString())} · 65 MIN`;
+// Hoarfrost's time work (12' = 720s) + its own restMinutes (5' = 300s) +
+// Calm Sea's distance work (10,000m @ 6k+12 = 132 s/500m -> 20*132 =
+// 2640s) = 3660s -> 61 MIN exactly. (It was 65 while the fixture also
+// carried a 4' `wu` row; workouts carry no warm-up since 2026-08-09.)
+const MANUAL_TOTAL_LABEL = `${formatLogDate(new Date().toISOString())} · 61 MIN`;
 
 describe("LogSession: the manual door (Task 3)", () => {
   it("shows the title, type badge, TODAY's date + the estimated total, the PACES LOCKED panel (referenced bases only), the per-step list with every actual 'assumed', and EXPECTED N/5 — with no Discard button at all", async () => {
@@ -1714,10 +1721,7 @@ describe("LogSession: the manual door (Task 3)", () => {
       type: "AN",
       difficulty: "hard",
       pain: 4,
-      steps: [
-        { k: "wu", minutes: 5 } as unknown as Step,
-        { k: "test", label: "2k test" },
-      ],
+      steps: [{ k: "test", label: "2k test" }],
       isGlobal: true,
       lastDoneDaysAgo: null,
     };
@@ -1732,7 +1736,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     );
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Log 2k Test Day" });
-    // The wu never becomes a row; the test step does, as a bare label.
+    // The test step becomes exactly one row, as a bare label.
     const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("2k test");
@@ -1867,7 +1871,6 @@ describe("LogSession: the manual door (Task 3)", () => {
       difficulty: "medium",
       pain: 3,
       steps: [
-        { k: "wu", minutes: 4 } as unknown as Step,
         {
           k: "w",
           duration: { kind: "time", minutes: 3 },

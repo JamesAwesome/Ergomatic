@@ -46,7 +46,12 @@ export interface CompiledPhase {
    *  Phase 6I: with null baselines (the no-baseline onboarding workouts,
    *  `domain/needsBaselines.ts`) an "effort" phase has NO targetSplit at
    *  all — `targetKind`, never `targetSplit === undefined`, is what tells
-   *  the two work-phase kinds apart; see its own comment. */
+   *  the two work-phase kinds apart; see its own comment.
+   *
+   *  2026-08-09 (the warmup setting): a DISTANCE "warmup" phase carries one
+   *  too — the same display-only easy estimate, for the same reason (the
+   *  phone cannot price `meters` without a split). It is never programmed;
+   *  `compileProgram`'s warmup arm nulls it. */
   targetSplit?: number;
   /** Discriminates a work phase's target: "split" is a real, user-chosen
    *  pace; "effort" is a display estimate for "ALL OUT"/"EASY" — the
@@ -81,8 +86,11 @@ export interface ProgramInterval {
   value: number;
   /** Frozen at confirm; null = no hard target (an effort phase, or a
    *  warmup/test interval with nothing to aim for). See `compileProgram`'s
-   *  `targetKind` handling — this is null for BOTH "no ref at all" (warmup)
-   *  AND "targetKind === effort" (when baselines were available, a real
+   *  `targetKind` handling — this is null for a "warmup" phase whatever it
+   *  carries (2026-08-09's warmup setting gave a distance warm-up a
+   *  display-only estimate; the type is the discriminant there), for "no
+   *  ref at all",
+   *  AND for "targetKind === effort" (when baselines were available, a real
    *  number the phone estimated for display, not a pace to program), which
    *  is exactly the H8 fix: reading `targetSplit === undefined` on the
    *  input would have missed the second case back when an effort phase's
@@ -462,8 +470,25 @@ export function compileProgram(
     // none of them integer-constrained on input) can produce genuinely
     // sub-hundredth splits, unlike duration/rest, which only ever carry
     // whole seconds by construction upstream.
+    //
+    // The WARM-UP arm (2026-08-09's warmup-setting design §4): a warm-up
+    // has no pace target by ruling, but since that design a DISTANCE
+    // warm-up does carry a `targetSplit` — the easy-band estimate
+    // `src/session/engine.ts`'s `warmupPhases` sets so the phone can price
+    // the phase at all (`domain/expand.ts`'s `phaseSeconds` needs `meters`
+    // AND a split). That number is display-only, exactly like an effort
+    // phase's, and must never reach the wire; unlike an effort phase it
+    // carries no `targetKind` to say so (that field is a work-phase
+    // discriminant — `Phase.targetKind`'s own comment), so the phase TYPE
+    // is the discriminant here. Without this arm a rower with a distance
+    // warm-up would have their 6k+20 estimate programmed as a hard target
+    // for the one interval that is meant to have none.
     let targetSplit: number | null;
-    if (phase.targetKind === "effort" || phase.targetSplit === undefined) {
+    if (
+      phase.type === "warmup" ||
+      phase.targetKind === "effort" ||
+      phase.targetSplit === undefined
+    ) {
       targetSplit = null;
     } else {
       const roundedSplit = representableCentiseconds(phase.targetSplit);

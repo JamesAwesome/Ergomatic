@@ -204,6 +204,13 @@ export default function Countdown() {
 
     const baselines = resolvedBaselines;
     const countdownSeconds = preferencesState.preferences.countdownSeconds;
+    // The warm-up SETTING (2026-08-09's design §4). This effect already
+    // waits for `preferencesState.state === "ready"` above (for
+    // `countdownSeconds`), so the value is loaded, not guessed — the phone
+    // timer door never builds a run against a half-loaded preference.
+    // `?? null` covers the pre-Task-2 window where the route doesn't send
+    // the field yet; `buildRun` treats absent and null identically anyway.
+    const warmup = preferencesState.preferences.warmup ?? null;
 
     const now = new Date();
     const startedAtMs = now.getTime();
@@ -221,7 +228,7 @@ export default function Countdown() {
     // preferences fetch took) — otherwise the very first "ready" render
     // could read fewer seconds remaining than `countdownSeconds`, or even a
     // negative elapsed if an earlier `nowMs` predates `startedAtMs`.
-    const run = buildRun(draft, baselines, now);
+    const run = buildRun(draft, baselines, now, warmup);
     saveRun(run);
     void Promise.resolve().then(() => {
       setBuilt({
