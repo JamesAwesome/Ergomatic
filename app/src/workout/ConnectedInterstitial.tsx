@@ -5,11 +5,14 @@
 // mid-handoff (see the SEAM COMMENT at the bottom of this file for exactly
 // where Task 6 takes over).
 //
-// States 1-3 (the OS chooser) are NOT built here — `picking` renders
-// nothing of ours (handoff's own C2 ruling: `requestDevice` is a modal,
-// single-result chooser the app never sees a device list from, so there is
-// no scan UI of ours to draw underneath it). States 4 (pairing), 5
-// (programming), 6 (failed) and 7 (ready) are the whole of this file.
+// States 1-3 remain unbuilt here — `idle` renders nothing, and `picking`
+// renders a quiet backdrop, not a scan UI of our own (phone-BLE spec §5):
+// on iOS the platform's monitor chooser is the plugin's OWN in-process list
+// sheet, floated over this file's backdrop rather than blank white; on web
+// it is the browser's own `requestDevice` chrome, a modal single-result
+// chooser the app never sees a device list from either way. States 4
+// (pairing), 5 (programming), 6 (failed) and 7 (ready) are the rest of this
+// file.
 //
 // Screens talk ONLY to `useMonitorSession` (the plan's own layering rule):
 // this file never imports `createPm5Driver`, a `Transport`, or
@@ -19,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { Baselines } from "../../domain/types.js";
+import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import {
   useMonitorSession,
   type ConnectedError,
@@ -55,7 +59,7 @@ export function loadLastDevice(): string | null {
 }
 
 /** Every reason that is NOT the machine actively refusing a workout — the
- *  five that are OURS (about the phone/radio side, never the PM5's own
+ *  six that are OURS (about the phone/radio side, never the PM5's own
  *  vocabulary — `ConnectedError`'s own doc comment in
  *  `useMonitorSession.ts`), plus `"disconnected"` (task-5 review, MEDIUM-7):
  *  it IS one of the eight `ProgramRejectionReason` values, but it says the
@@ -64,15 +68,31 @@ export function loadLastDevice(): string | null {
  *  simply went quiet is the identical mis-attribution the task-4 review
  *  caught for `link-failed` vs `bluetooth-off` one layer down, reintroduced
  *  here for a different tag. The remaining seven `ProgramRejectionReason`
- *  values are genuine machine statements and share one serif line. */
-const NOT_A_MACHINE_REFUSAL = new Set<ConnectedError["reason"]>([
-  "busy",
-  "bluetooth-off",
-  "link-failed",
-  "transport-missing",
-  "scan-dismissed",
-  "disconnected",
-]);
+ *  values are genuine machine statements and share one serif line.
+ *
+ *  An exhaustive `Record`, not a `Set` (phone-BLE adversarial review, I3):
+ *  a `Set<ConnectedError["reason"]>` compiles even if a future reason is
+ *  never added to it, so a rower would read a silent WRONG headline for a
+ *  brand-new tag rather than the compiler catching the gap. Every arm of
+ *  the union is listed here by name; adding a member to `ConnectedError`
+ *  without extending this object is a type error, not a runtime surprise. */
+const NOT_A_MACHINE_REFUSAL: Record<ConnectedError["reason"], boolean> = {
+  busy: true,
+  "bluetooth-off": true,
+  "link-failed": true,
+  "transport-missing": true,
+  "scan-dismissed": true,
+  "permission-denied": true,
+  disconnected: true,
+  // The seven genuine machine statements share one serif line.
+  nak: false,
+  bad: false,
+  "not-ready": false,
+  garbled: false,
+  timeout: false,
+  "not-observed": false,
+  "structure-mismatch": false,
+};
 
 /** `detail` is documented as copy-ready prose (`ConnectedError`'s own doc
  *  comment) for exactly this reason: reusing it here, rather than
@@ -81,9 +101,12 @@ const NOT_A_MACHINE_REFUSAL = new Set<ConnectedError["reason"]>([
  *  accident — the two mappers in `useMonitorSession.ts` already write
  *  different prose for the two tags (task-4 review MEDIUM-4's own
  *  finding), so keying off `detail` inherits that distinction rather than
- *  re-deriving it. */
+ *  re-deriving it. `permission-denied` gets its own fixed title (spec §7) —
+ *  the door, not the detail, is the headline. */
 function failedSerifLine(error: ConnectedError): string {
-  if (NOT_A_MACHINE_REFUSAL.has(error.reason)) return error.detail;
+  if (error.reason === "permission-denied")
+    return "Bluetooth permission needed";
+  if (NOT_A_MACHINE_REFUSAL[error.reason]) return error.detail;
   return "The monitor wouldn't take it";
 }
 
@@ -259,11 +282,20 @@ export default function ConnectedInterstitial({
     });
   }
 
-  if (session.phase === "idle" || session.phase === "picking") {
-    // The OS chooser owns the screen right now (handoff's C2 ruling) —
-    // render nothing of ours over it. Descoped per the plan (states 1-3
-    // are not built this task).
-    return null;
+  if (session.phase === "idle") return null;
+
+  if (session.phase === "picking") {
+    // The chooser (plugin sheet on iOS, browser chrome on web) floats over
+    // this quiet backdrop — before phone-BLE this branch returned null and
+    // iOS drew its sheet over blank white (spec §5).
+    return (
+      <main className="screen connected-interstitial">
+        <div className="connected-interstitial-body">
+          <p className="connected-status-label">CONNECT</p>
+          <p className="connected-serif-line">Choosing your monitor</p>
+        </div>
+      </main>
+    );
   }
 
   if (session.phase === "pairing") {
@@ -359,10 +391,13 @@ export default function ConnectedInterstitial({
           {error !== null && (
             <>
               <p className="connected-serif-line">{failedSerifLine(error)}</p>
-              {!NOT_A_MACHINE_REFUSAL.has(error.reason) && (
+              {!NOT_A_MACHINE_REFUSAL[error.reason] && (
                 <p className="connected-body-line">
                   End whatever is showing on the monitor, then try again.
                 </p>
+              )}
+              {error.reason === "permission-denied" && (
+                <p className="connected-body-line">{error.detail}</p>
               )}
               <p className="connected-reassurance">
                 YOUR WORKOUT AND NUDGES ARE KEPT
@@ -383,6 +418,17 @@ export default function ConnectedInterstitial({
           )}
         </div>
         <div className="action-stack connected-interstitial-actions">
+          {error !== null &&
+            error.reason === "permission-denied" &&
+            canOpenAppSettings() && (
+              <button
+                type="button"
+                className="button-l1"
+                onClick={() => void openAppSettings()}
+              >
+                Open Settings
+              </button>
+            )}
           <button
             type="button"
             className="button-l1"
