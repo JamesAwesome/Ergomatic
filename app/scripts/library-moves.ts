@@ -80,10 +80,12 @@ export const MAX_CELL_ADJUST = 2;
 export const ANCHOR_TITLES: readonly string[] = ["Sea Fret", "Beam Sea"];
 
 /** THE 0/5 TOTALS RULE, as this solver applies it. Three seed headers state
- *  it — `at.ts:7-8` "every time-computable total lands on a 0 or 5",
- *  `an.ts:11-13` (with "Distance sets ... are exempt from the round-total
- *  rule"), `o2.ts:12` "time-computable totals end in 0 or 5". Measured this
- *  session, the rule holds over PRE-STRIP totals in 195 of 195
+ *  it — `at.ts:8-9` and `o2.ts:12-13`, both "Retuned or newly generated
+ *  time-computable totals land on a 0 or 5" (amended by Task 3, this same
+ *  rebalance, once its retunes landed — see each header's own §2/zero-
+ *  five-audit citation), and `an.ts:11-13` (with "Distance sets ... are
+ *  exempt from the round-total rule", not yet amended — Task 4's job).
+ *  Measured this session, the rule holds over PRE-STRIP totals in 195 of 195
  *  time-computable workouts and over post-strip totals in only 104 of 195 —
  *  the warm-up drop broke it, because the warm-up was part of the total the
  *  authors rounded.
