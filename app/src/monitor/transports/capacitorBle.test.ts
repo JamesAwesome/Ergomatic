@@ -16,11 +16,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Phone-BLE phase (spec `2026-08-10-phone-ble-design.md` §3, §9's row for
 // this file): the same reasoning extends to every OTHER seam that is
 // OURS rather than the radio's — the request options we build, the order
-// we build them in, the timeout race we own, the plugin prose we
-// translate, the memo we keep. Those are all pinned below. Two
-// requirements deliberately are NOT tested, because a mocked `BleClient`
-// structurally cannot see them, and pretending otherwise would be the
-// "passes against broken code" defect this repo keeps paying for:
+// we build them in, the timeout race we own AND ITS SCOPE (hangs at
+// `initialize`, at `isEnabled`, and at the picker each get their own
+// test, because REVIEW I6's regression is a race narrowed to the picker
+// alone), the plugin prose we translate, the memo we keep. Those are all
+// pinned below. Two requirements deliberately are NOT tested, because a
+// mocked `BleClient` structurally cannot see them, and pretending
+// otherwise would be the "passes against broken code" defect this repo
+// keeps paying for:
 //   1. the no-double-init requirement (REVIEW B2) — the mock hides
 //      `DeviceManager`/`CBCentralManager` replacement entirely. The
 //      call-count tests below pin the OBSERVABLE half (one `initialize`
@@ -56,15 +59,18 @@ vi.mock("@capacitor-community/bluetooth-le", () => ({
   toUint8Array: vi.fn(),
 }));
 
-const { BleClient, toUint8Array } =
+const { BleClient, numbersToDataView, toUint8Array } =
   await import("@capacitor-community/bluetooth-le");
-const { GENERAL_STATUS_UUID, ROWING_SERVICE_UUID } =
+const { CONTROL_SERVICE_UUID, GENERAL_STATUS_UUID, ROWING_SERVICE_UUID } =
   await import("../../../domain/monitor/pm5/uuids.js");
 const { createCapacitorBleTransport } = await import("./capacitorBle");
 
-/** The default happy-path radio. Every mock is re-armed here so a
- *  per-test override (a rejection, a never-settling promise) can never
- *  leak into the next test. */
+/** The default happy-path radio. Every mock the module exports is re-armed
+ *  here — the nine `BleClient` methods AND the two free functions — so a
+ *  per-test override (a rejection, a never-settling promise, a decoder
+ *  that returns `undefined`) can never leak into the next test.
+ *  `vi.clearAllMocks()` alone would not do it: it clears recorded calls,
+ *  not implementations. */
 beforeEach(() => {
   vi.clearAllMocks();
   handlers.clear();
@@ -91,6 +97,12 @@ beforeEach(() => {
   vi.mocked(BleClient.write).mockResolvedValue(undefined);
   vi.mocked(BleClient.startNotifications).mockResolvedValue(undefined);
   vi.mocked(BleClient.stopNotifications).mockResolvedValue(undefined);
+  vi.mocked(numbersToDataView).mockReturnValue(
+    new DataView(new ArrayBuffer(0)),
+  );
+  vi.mocked(toUint8Array).mockReturnValue(
+    new Uint8Array(0) as Uint8Array<ArrayBuffer>,
+  );
 });
 
 describe("createCapacitorBleTransport: onDisconnect contract (M-2)", () => {
@@ -148,7 +160,12 @@ describe("scan(): the pipeline and its filter (spec §3.1-§3.3)", () => {
     expect(opts).not.toHaveProperty("services");
     expect(opts?.namePrefix).toBe("PM5");
     expect(opts?.displayMode).toBe("list");
-    expect(opts?.optionalServices).toContain(ROWING_SERVICE_UUID);
+    // BOTH services, not just the rowing one: dropping control would
+    // break every CSAFE write on a real link.
+    expect(opts?.optionalServices).toStrictEqual([
+      CONTROL_SERVICE_UUID,
+      ROWING_SERVICE_UUID,
+    ]);
     expect(found).toStrictEqual([{ id: "d1", name: "PM5 431910706" }]);
   });
 
@@ -217,11 +234,18 @@ describe("scan(): the pipeline and its filter (spec §3.1-§3.3)", () => {
  *  timer advance — and reports whatever it settles with. A bare
  *  `expect(...).rejects` assertion held across `advanceTimersByTimeAsync`
  *  is what `vitest/valid-expect` forbids, and awaiting it first would
- *  deadlock the timers, so the settle is captured by hand. */
-function settled(promise: Promise<unknown>): Promise<unknown> {
+ *  deadlock the timers, so the settle is captured by hand. The outcome
+ *  is TAGGED: a resolution and a rejection must never read alike, or a
+ *  scan that wrongly SUCCEEDED could satisfy a rejection assertion by
+ *  accident. */
+type Settled =
+  | { status: "fulfilled"; value: unknown }
+  | { status: "rejected"; value: unknown };
+
+function settled(promise: Promise<unknown>): Promise<Settled> {
   return promise.then(
-    (value) => value,
-    (err: unknown) => err,
+    (value): Settled => ({ status: "fulfilled", value }),
+    (value: unknown): Settled => ({ status: "rejected", value }),
   );
 }
 
@@ -231,6 +255,43 @@ describe("scan(): timeout race (spec §3.3)", () => {
     return () => {
       vi.useRealTimers();
     };
+  });
+
+  it("a hung initialize times out too — the race wraps the WHOLE pipeline (REVIEW I6)", async () => {
+    // The case ruling 2 actually targets (spec §3.3: "the JS timeout's
+    // real job is the INVISIBLE hangs"): `initialize()` settles NOTHING
+    // on a `.resetting`/`.unknown` central, and it is the one timeout
+    // with NO sheet on screen, so no rower action can recover it. A race
+    // scoped to `requestDevice` alone would let this hang forever.
+    vi.mocked(BleClient.initialize).mockImplementation(
+      () => new Promise(() => {}),
+    );
+    const transport = createCapacitorBleTransport();
+
+    const outcome = settled(transport.scan());
+    await vi.advanceTimersByTimeAsync(35_000);
+
+    const settledScan = await outcome;
+    expect(settledScan.status).toBe("rejected");
+    expect(settledScan.value).toMatchObject({ name: "ScanTimeoutError" });
+    // Nothing downstream of the hung step ever ran: no sheet was drawn.
+    expect(BleClient.isEnabled).not.toHaveBeenCalled();
+    expect(BleClient.requestDevice).not.toHaveBeenCalled();
+  });
+
+  it("a hung isEnabled times out too — the race covers the middle of the pipeline as well", async () => {
+    vi.mocked(BleClient.isEnabled).mockImplementation(
+      () => new Promise(() => {}),
+    );
+    const transport = createCapacitorBleTransport();
+
+    const outcome = settled(transport.scan());
+    await vi.advanceTimersByTimeAsync(35_000);
+
+    const settledScan = await outcome;
+    expect(settledScan.status).toBe("rejected");
+    expect(settledScan.value).toMatchObject({ name: "ScanTimeoutError" });
+    expect(BleClient.requestDevice).not.toHaveBeenCalled();
   });
 
   it("a pipeline that never settles rejects ScanTimeoutError at 35s", async () => {
@@ -245,7 +306,9 @@ describe("scan(): timeout race (spec §3.3)", () => {
     expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
 
-    expect(await outcome).toMatchObject({ name: "ScanTimeoutError" });
+    const settledScan = await outcome;
+    expect(settledScan.status).toBe("rejected");
+    expect(settledScan.value).toMatchObject({ name: "ScanTimeoutError" });
   });
 
   it("a LATE REJECTION after the timeout is swallowed (no unhandledrejection)", async () => {
@@ -260,7 +323,9 @@ describe("scan(): timeout race (spec §3.3)", () => {
 
     const outcome = settled(transport.scan());
     await vi.advanceTimersByTimeAsync(35_000);
-    expect(await outcome).toMatchObject({ name: "ScanTimeoutError" });
+    const settledScan = await outcome;
+    expect(settledScan.status).toBe("rejected");
+    expect(settledScan.value).toMatchObject({ name: "ScanTimeoutError" });
 
     // The rower finally taps the sheet's own Cancel, long after the race
     // was lost. The plugin's real cancellation string (spec §3.4).
@@ -284,7 +349,9 @@ describe("scan(): timeout race (spec §3.3)", () => {
 
     const outcome = settled(transport.scan());
     await vi.advanceTimersByTimeAsync(35_000);
-    expect(await outcome).toMatchObject({ name: "ScanTimeoutError" });
+    const settledScan = await outcome;
+    expect(settledScan.status).toBe("rejected");
+    expect(settledScan.value).toMatchObject({ name: "ScanTimeoutError" });
 
     // The rower picks a stale row at t=36s (REVIEW I4: rows stay tappable
     // after the plugin's own 30s scan stop).
