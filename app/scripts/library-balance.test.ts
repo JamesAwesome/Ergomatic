@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   band,
   bucket,
+  DESIGN_GRID_2026_08_03,
   drift,
   gridMismatches,
   TARGET,
@@ -80,12 +81,33 @@ describe("drift", () => {
     expect(d["AN|30-45"]).toBe(0);
   });
 
-  it("against the REAL design TARGET, an empty actual grid drifts by exactly -TARGET everywhere", () => {
+  it("against the REAL rebalance TARGET, an empty actual grid drifts by exactly -TARGET everywhere", () => {
+    // TARGET is patterns.json's `targets` block since the 2026-08-10
+    // rebalance — warm-up-FREE, and the same object library.test.ts's quota
+    // gate reads. These two cells are the ones the solve adjusted off §2's
+    // draft (<20 4 -> 5, AN 60+ 4 unchanged but AN <20 12 -> 14).
     const d = drift({}, TARGET);
-    expect(d["O2|<20"]).toBe(-2);
-    expect(d["AN|60+"]).toBe(-3);
+    expect(d["O2|<20"]).toBe(-5);
+    expect(d["AN|60+"]).toBe(-4);
+    expect(d["AN|<20"]).toBe(-14);
     const total = Object.values(d).reduce((a, b) => a + b, 0);
     expect(total).toBe(-300);
+  });
+
+  it("keeps the two grids distinct — the warm-up-free TARGET is not the 2026-08-03 design grid", () => {
+    // The bug this pins: pointing the faithfulness check at TARGET, or the
+    // AFT-TGT row at the design grid, silently compares warm-up-inclusive
+    // counts against warm-up-free ones. They must stay two objects.
+    expect(TARGET).not.toStrictEqual(DESIGN_GRID_2026_08_03);
+    expect(DESIGN_GRID_2026_08_03.O2["<20"]).toBe(2);
+    expect(TARGET.O2["<20"]).toBe(5);
+    const sum = (g: typeof TARGET): number =>
+      Object.values(g).reduce(
+        (a, row) => a + Object.values(row).reduce((x, y) => x + y, 0),
+        0,
+      );
+    expect(sum(TARGET)).toBe(300);
+    expect(sum(DESIGN_GRID_2026_08_03)).toBe(300);
   });
 });
 
@@ -95,22 +117,35 @@ describe("drift", () => {
 // over the 300 grid rows; here it is exercised against synthetic grids so
 // the assertion is about the COMPARISON, not about seed content.
 describe("gridMismatches", () => {
-  it("is empty when every one of the 20 cells matches the design grid", () => {
-    // Rebuild the exact TARGET counts as a `type|band` map.
+  it("is empty when every one of the 20 cells matches the 2026-08-03 design grid", () => {
+    // Rebuild the exact design-grid counts as a `type|band` map. The default
+    // rod is DESIGN_GRID_2026_08_03, not TARGET: this check exists to prove
+    // the warm-up-INCLUSIVE replay reproduces the warm-up-INCLUSIVE grid.
     const perfect: Record<string, number> = {};
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
       for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
-        perfect[`${type}|${b}`] = TARGET[type][b];
+        perfect[`${type}|${b}`] = DESIGN_GRID_2026_08_03[type][b];
       }
     }
     expect(gridMismatches(perfect)).toStrictEqual({});
+  });
+
+  it("defaults to the design grid, so a perfect TARGET grid does NOT read as faithful", () => {
+    const perfectTarget: Record<string, number> = {};
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+      for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
+        perfectTarget[`${type}|${b}`] = TARGET[type][b];
+      }
+    }
+    expect(gridMismatches(perfectTarget)).not.toStrictEqual({});
+    expect(gridMismatches(perfectTarget, TARGET)).toStrictEqual({});
   });
 
   it("names only the cells that differ, with their signed delta", () => {
     const perfect: Record<string, number> = {};
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
       for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
-        perfect[`${type}|${b}`] = TARGET[type][b];
+        perfect[`${type}|${b}`] = DESIGN_GRID_2026_08_03[type][b];
       }
     }
     // The exact shape the two onboarding rows produce when they are NOT
@@ -132,6 +167,7 @@ describe("gridMismatches", () => {
     const all = gridMismatches({});
     expect(Object.keys(all)).toHaveLength(20);
     expect(all["O2|<20"]).toBe(-2);
+    // -2 is the DESIGN grid's O2 <20, not TARGET's 5 — the default rod.
     expect(Object.values(all).reduce((a, b) => a + b, 0)).toBe(-300);
   });
 });

@@ -2,7 +2,15 @@
   "_meta": {
     "policy": "aggregate statistics only — no titles, no prose, no per-workout rows",
     "source": "owner's reference photos, extracted 2026-08-03",
-    "cards": 334
+    "cards": 334,
+    "cellsAreWarmupInclusive": "The `cells` block bands book entries by their WARM-UP-INCLUSIVE duration, and its `warmupMinutes` stats are the record of that (5-10' in most cells, [10,20] in AN|20-30, AN|30-45 and AN|45-60). The 2026-08-09 warm-up drop neither changed that nor orphaned those stats — the 2026-08-10 library-rebalance spec §6 depends on them: 'A warm-up-free workout consults the cell its duration occupied BEFORE the strip.' The `targets` block below is the opposite convention and says so.",
+    "targets": "The `targets` block below is the library's per-type × band quota grid, WARM-UP-FREE — the opposite convention to `cells`. Source: docs/superpowers/specs/2026-08-10-library-rebalance-design.md §2's opening draft, adjusted by the ±2 rule of the feasibility solve in app/scripts/library-moves.ts (Task 1, 2026-08-10); rows sum 90/75/75/60 = 300. It is AUTHORED, not photo-derived, so a future re-extraction of the book must leave it alone. Single source: app/scripts/library-balance.ts and app/server/seed/library/library.test.ts both read it and neither keeps its own copy."
+  },
+  "targets": {
+    "O2": { "<20": 5, "20-30": 14, "30-45": 34, "45-60": 18, "60+": 19 },
+    "AT": { "<20": 8, "20-30": 20, "30-45": 32, "45-60": 12, "60+": 3 },
+    "TR": { "<20": 12, "20-30": 23, "30-45": 29, "45-60": 7, "60+": 4 },
+    "AN": { "<20": 14, "20-30": 17, "30-45": 18, "45-60": 7, "60+": 4 }
   },
   "cells": {
     "TR|20-30": {
