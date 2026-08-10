@@ -388,6 +388,70 @@ describe("useMonitorSession: connect", () => {
     expect(result.current.error?.reason).toBe("scan-dismissed");
   });
 
+  it("iOS declines the Bluetooth permission: permission-denied, with the §7 door copy", async () => {
+    const denied = Object.assign(new Error("BLE permission denied"), {
+      name: "BluetoothPermissionError",
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () =>
+          stubRadio({ scan: () => Promise.reject(denied) }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(result.current.error).toStrictEqual({
+      reason: "permission-denied",
+      detail:
+        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+      raw: "BLE permission denied",
+    });
+  });
+
+  it("ORDERING PIN: a BluetoothPermissionError whose message ALSO matches the bluetooth-off regex still classifies permission-denied", async () => {
+    const denied = Object.assign(
+      new Error("BLE permission denied (adapter unavailable)"),
+      { name: "BluetoothPermissionError" },
+    );
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () =>
+          stubRadio({ scan: () => Promise.reject(denied) }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(result.current.error?.reason).toBe("permission-denied");
+  });
+
+  it("a scan that times out: scan-dismissed, with its own detail line", async () => {
+    const timedOut = Object.assign(new Error("scan timed out"), {
+      name: "ScanTimeoutError",
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () =>
+          stubRadio({ scan: () => Promise.reject(timedOut) }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(result.current.error).toStrictEqual({
+      reason: "scan-dismissed",
+      detail: "The search took too long. Try again.",
+      raw: "scan timed out",
+    });
+  });
+
   it("Bluetooth switched off: bluetooth-off, even though the adapter throws the same NotFoundError name", async () => {
     const off = new Error("Bluetooth adapter not available.");
     off.name = "NotFoundError";

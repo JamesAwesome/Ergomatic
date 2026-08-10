@@ -68,11 +68,13 @@ import { defaultTransport } from "../adapters/monitorTransport";
  *  which flips SYNCHRONOUSLY at the top of `program()` before anything is
  *  awaited (the double-fire pin; see `program` below).
  *
- *  There is no `"choosing"`: the OS picker IS the scan UI on both platforms
- *  (spec's C2 ruling — `requestDevice` is a modal, single-result chooser
- *  the app never sees a device list from), so interstitial states 1-3 are
- *  descoped and `"picking"` is simply "their chooser is open, we are
- *  showing nothing of ours". */
+ *  There is no `"choosing"`: the platform's chooser owns the interaction
+ *  while `picking` — on iOS it is the plugin's in-process list sheet over
+ *  our own backdrop (phone-BLE spec §5), on web the browser's chrome
+ *  (`requestDevice`'s own modal, single-result chooser the app never sees a
+ *  device list from) — so interstitial states 1-3 remain descoped and
+ *  `"picking"` is "their chooser is open, we draw only a quiet floor under
+ *  it". */
 export type ConnectedPhase =
   | "idle"
   | "picking"
@@ -99,7 +101,10 @@ export type ConnectedPhase =
  * - `"transport-missing"` — no radio at all on this platform/build.
  * - `"scan-dismissed"` — the rower closed the OS picker (or it returned
  *   nothing). Not an error in any moral sense; it renders on state 6's
- *   skeleton with a retry, per the C2 ruling.
+ *   skeleton with a retry, per the C2 ruling. Second producer: the scan
+ *   timeout (phone-BLE §3.3) — same retry surface, its own detail line.
+ * - `"permission-denied"` — iOS declined the Bluetooth permission; iOS
+ *   never re-asks — the remedy is Settings, and the card carries the door.
  * - `"bluetooth-off"` — the ADAPTER itself is unavailable: off, blocked, or
  *   absent from this browser. The one remedy is "turn Bluetooth on", and
  *   that is the only situation this reason is allowed to describe.
@@ -128,7 +133,8 @@ export interface ConnectedError {
     | "bluetooth-off"
     | "link-failed"
     | "transport-missing"
-    | "scan-dismissed";
+    | "scan-dismissed"
+    | "permission-denied";
   detail: string;
   raw?: string;
 }
@@ -534,9 +540,13 @@ function mapProgramFailure(err: unknown): ConnectedError {
   };
 }
 
-/** A `scan()`/`connect()` failure, sorted into the three things it can
- *  actually be. A dismissed picker is the ORDINARY outcome (the rower
- *  changed their mind), and both adapters surface it as a
+/** A `scan()`/`connect()` failure, sorted into the things it can actually
+ *  be. The Capacitor transport pre-translates its own failures to NAMES
+ *  (`BluetoothPermissionError`, `ScanTimeoutError`) before they ever reach
+ *  this function, so only web-transport prose ever reaches the regexes
+ *  below — the two name checks are what let a native rejection skip that
+ *  prose matching entirely. A dismissed picker is the ORDINARY outcome (the
+ *  rower changed their mind), and both adapters surface it as a
  *  `NotFoundError`-shaped rejection — Web Bluetooth's "User cancelled the
  *  requestDevice() chooser", the Capacitor client's own cancellation. The
  *  same `NotFoundError` name is ALSO what Chrome uses when the ADAPTER is
@@ -552,6 +562,26 @@ function mapProgramFailure(err: unknown): ConnectedError {
 function mapRadioFailure(err: unknown): ConnectedError {
   const message = err instanceof Error ? err.message : String(err);
   const name = err instanceof Error ? err.name : "";
+  // ORDERING PIN: these two name checks come BEFORE the message-regex arms
+  // below on purpose. A `BluetoothPermissionError`'s message can itself
+  // match the `unavailable` regex (a plugin whose denied-permission string
+  // happens to mention the adapter) — the name is what the Capacitor
+  // transport deliberately set, and it must win over prose sniffing.
+  if (name === "BluetoothPermissionError") {
+    return {
+      reason: "permission-denied",
+      detail:
+        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+      raw: message,
+    };
+  }
+  if (name === "ScanTimeoutError") {
+    return {
+      reason: "scan-dismissed",
+      detail: "The search took too long. Try again.",
+      raw: message,
+    };
+  }
   const unavailable =
     /adapter|not enabled|not available|unavailable|disabled|powered off|turned off/i.test(
       message,
@@ -629,7 +659,7 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
-  /** One `connect()` at a time — a second press while the OS picker is open
+  /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
 

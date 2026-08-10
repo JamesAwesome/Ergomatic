@@ -48,6 +48,7 @@ import {
   type MonitorSession,
   type RunIdentity,
 } from "../monitor/useMonitorSession";
+import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import ConnectedInterstitial, {
   loadLastDevice,
   saveLastDevice,
@@ -60,7 +61,14 @@ vi.mock("../monitor/useMonitorSession", async () => {
   return { ...actual, useMonitorSession: vi.fn() };
 });
 
+vi.mock("../adapters/appSettings", () => ({
+  canOpenAppSettings: vi.fn(() => false),
+  openAppSettings: vi.fn(() => Promise.resolve()),
+}));
+
 const mockUseMonitorSession = vi.mocked(useMonitorSession);
+const mockCanOpenAppSettings = vi.mocked(canOpenAppSettings);
+const mockOpenAppSettings = vi.mocked(openAppSettings);
 
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
@@ -163,6 +171,8 @@ function connectedError(
 
 beforeEach(() => {
   mockUseMonitorSession.mockReset();
+  mockCanOpenAppSettings.mockReset().mockReturnValue(false);
+  mockOpenAppSettings.mockReset().mockResolvedValue(undefined);
   localStorage.clear();
 });
 
@@ -229,13 +239,20 @@ describe("no spinner anywhere", () => {
 });
 
 // ---------------------------------------------------------------------------
-// States 1-3 (the OS chooser): descoped — render nothing of ours.
+// States 1-3 (the OS chooser / picking backdrop)
 // ---------------------------------------------------------------------------
 
-describe("states 1-3 (picking): nothing of ours renders", () => {
-  it.each(["idle", "picking"] as const)("phase %s renders nothing", (phase) => {
-    const { container } = renderInterstitial({ phase });
+describe("state idle: renders nothing", () => {
+  it("phase idle renders nothing", () => {
+    const { container } = renderInterstitial({ phase: "idle" });
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("state picking: the backdrop floats under the platform chooser", () => {
+  it("phase picking renders the quiet backdrop, not nothing", () => {
+    renderInterstitial({ phase: "picking" });
+    expect(screen.getByText("Choosing your monitor")).toBeInTheDocument();
   });
 });
 
@@ -528,6 +545,99 @@ describe("state 6: failed — every ConnectedError rendered", () => {
       "The link to the monitor failed while programming.",
     );
     expect(serifText()).not.toBe(bluetoothOffSerif);
+  });
+
+  // The door: iOS never re-asks for the Bluetooth permission once declined,
+  // so the remedy is Settings — the card carries the door (spec §4/§7).
+  it("permission-denied renders its own serif line, the §7 body, and an Open Settings button when the platform can open one", () => {
+    mockCanOpenAppSettings.mockReturnValue(true);
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({
+        reason: "permission-denied",
+        detail:
+          "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+      }),
+    });
+
+    expect(screen.getByText("Bluetooth permission needed")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+        { selector: ".connected-body-line" },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Settings" }),
+    ).toBeInTheDocument();
+  });
+
+  it("permission-denied renders no Open Settings button when the platform has no door (web)", () => {
+    mockCanOpenAppSettings.mockReturnValue(false);
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({
+        reason: "permission-denied",
+        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+      }),
+    });
+
+    expect(screen.getByText("Bluetooth permission needed")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Settings" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Open Settings calls the adapter", async () => {
+    mockCanOpenAppSettings.mockReturnValue(true);
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({
+        reason: "permission-denied",
+        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+      }),
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Settings" }),
+    );
+
+    expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("a permission-denied error NEVER renders the generic machine-refusal copy", () => {
+    mockCanOpenAppSettings.mockReturnValue(true);
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({
+        reason: "permission-denied",
+        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+      }),
+    });
+
+    expect(
+      screen.queryByText("The monitor wouldn't take it"),
+    ).not.toBeInTheDocument();
+  });
+
+  // A `permission-denied` error is one of OURS (about the phone side of the
+  // radio), never a machine statement — the "End whatever is showing on the
+  // monitor" line only makes sense when the PM5 itself refused something,
+  // and there was never anything sent for it to refuse here.
+  it("a permission-denied error never renders the 'End whatever is showing' machine-refusal body line", () => {
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({
+        reason: "permission-denied",
+        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+      }),
+    });
+
+    expect(
+      screen.queryByText(
+        "End whatever is showing on the monitor, then try again.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("Row on the phone timer instead cancels the session and hands off with targets intact", async () => {
