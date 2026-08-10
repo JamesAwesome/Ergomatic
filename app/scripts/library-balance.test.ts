@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { estimateMinutes } from "../domain/expand.js";
+import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import {
   band,
+  BASELINES,
   bucket,
   debtRegressions,
   DESIGN_GRID_2026_08_03,
@@ -112,13 +115,17 @@ describe("drift", () => {
   });
 });
 
-// Arc review F9: the faithfulness check is what licenses reading the MOVED
-// row at all, so it gets its own pin rather than living only in the CLI
-// path. Its input in production is the BEFORE (warm-up-inclusive) replay
-// over the 300 grid rows; here it is exercised against synthetic grids so
-// the assertion is about the COMPARISON, not about seed content.
+// gridMismatches has two production call sites now (see its own doc
+// comment): the default rod (DESIGN_GRID_2026_08_03) backs the HISTORICAL
+// note behind library-balance.ts's `--history` flag (arc review F9's
+// original faithfulness check, which read empty once, on 2026-08-09, and
+// is not expected to any more post-rebalance); an explicit `TARGET` rod
+// backs the live ACCEPTANCE gate main() prints by default. Both are
+// exercised here against synthetic grids so the assertion is about the
+// COMPARISON, not about seed content — the real-seed version of the
+// ACCEPTANCE gate has its own describe block below.
 describe("gridMismatches", () => {
-  it("is empty when every one of the 20 cells matches the 2026-08-03 design grid", () => {
+  it("is empty when every one of the 20 cells matches the 2026-08-03 design grid (the historical rod)", () => {
     // Rebuild the exact design-grid counts as a `type|band` map. The default
     // rod is DESIGN_GRID_2026_08_03, not TARGET: this check exists to prove
     // the warm-up-INCLUSIVE replay reproduces the warm-up-INCLUSIVE grid.
@@ -131,7 +138,7 @@ describe("gridMismatches", () => {
     expect(gridMismatches(perfect)).toStrictEqual({});
   });
 
-  it("defaults to the design grid, so a perfect TARGET grid does NOT read as faithful", () => {
+  it("defaults to the design grid, so a perfect TARGET grid does NOT read as faithful — passing TARGET explicitly is the live ACCEPTANCE gate", () => {
     const perfectTarget: Record<string, number> = {};
     for (const type of ["O2", "AT", "TR", "AN"] as const) {
       for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
@@ -170,6 +177,26 @@ describe("gridMismatches", () => {
     expect(all["O2|<20"]).toBe(-2);
     // -2 is the DESIGN grid's O2 <20, not TARGET's 5 — the default rod.
     expect(Object.values(all).reduce((a, b) => a + b, 0)).toBe(-300);
+  });
+});
+
+// The one deliberate exception to this file's "synthetic fixture, not real
+// seed" rule (see the top-of-file comment): this IS the claim
+// library-balance.ts's default CLI output makes as its ACCEPTANCE
+// statement ("AFTER matches patterns.targets exactly"), so it gets a real
+// assertion against the real library rather than living only as something
+// a human reads off a script run. Re-derives the count from LIBRARY_WORKOUTS
+// + estimateMinutes, exactly as main() does, rather than asserting any
+// hand-copied numbers.
+describe("the ACCEPTANCE gate (library-balance.ts's default output, post-2026-08-10-rebalance)", () => {
+  it("reads empty against the real library: AFTER lands on patterns.targets in all 20 cells", () => {
+    const counts = bucket(
+      LIBRARY_WORKOUTS.map((w): WorkoutStat => ({
+        type: w.type,
+        minutes: estimateMinutes(w.steps, BASELINES)!.minutes,
+      })),
+    );
+    expect(gridMismatches(counts, TARGET)).toStrictEqual({});
   });
 });
 

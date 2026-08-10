@@ -1,39 +1,44 @@
 // The rebalance report — docs/superpowers/specs/2026-08-09-warmup-setting-
-// design.md §7 ("The rebalance report (decision input, not a decision)"):
-// "buckets all 302 seeded workouts by `estimateMinutes` into the generation
-// phase's own ranges ... prints the distribution BEFORE the wu-drop
-// (computed from git history's seed state or a flag replaying with warmups
-// included) and AFTER, beside the targets, with per-type breakdowns [and]
-// states drift per bucket in points."
+// design.md §7 ("The rebalance report (decision input, not a decision)"),
+// as re-purposed by the 2026-08-10 library-rebalance spec (§2, ruling B)
+// once that phase actually authored a warm-up-free target grid and retuned
+// the library onto it (300/300, 0 debt, all 20 cells): buckets all 302
+// seeded workouts by `estimateMinutes` into the generation phase's own
+// ranges and prints AFTER beside `patterns.targets`, per type, with drift
+// in points.
 //
-// Run: `pnpm exec tsx scripts/library-balance.ts [--after-only]`
+// Run: `pnpm exec tsx scripts/library-balance.ts [--history]`
 //
-// Whole-branch review finding D: the default run used to print this very
-// preamble — CHECK, MOVED, "see the verdict line at the end" — and then
-// tables containing none of them, only AFTER/TARGET/AFT-TGT, the one row
-// the preamble itself says is NOT a rebalance signal. ROADMAP's Phase 9
-// bullet points a reader at the MOVED row and spec §7 says this output
-// "lands in the PR body verbatim"; a bare run handed the PR body the
-// misleading row and none of the trustworthy ones. BEFORE/CHECK/MOVED are
-// therefore the DEFAULT now. `--after-only` opts back into the old bare
-// behavior (AFTER vs TARGET only) for a quick post-regen sanity check,
-// once a future regen makes the BEFORE replay (below) no longer meaningful
-// to compare against.
+// The DEFAULT output is now the ACCEPTANCE statement the rebalance phase
+// closed against: AFTER vs `patterns.targets`, cell by cell, over the 300
+// grid rows (onboarding excluded — see `gridMismatches`'s own doc comment).
+// It reads 0 in all 20 cells today; a future content change that regresses
+// a cell will make it non-zero again, and that is the signal to read.
 //
-// The default path prints BEFORE, replayed from `library-warmups-before.
-// json` — a frozen literal (workout title -> historical warmup minutes)
-// captured from the pre-strip seed content in the SAME commit that
-// deleted the 302 `{ k: "wu", ... }` lines (Task 3 of the warmup-setting
-// plan, 2026-08-09). Replaying is exact: stripping `wu` changed nothing
-// else about any workout (spec §6: "Nothing else about any workout
-// changes"), so BEFORE_minutes(w) = AFTER_minutes(w) + frozen[w.title].
+// `--history` additionally replays BEFORE (from the frozen `library-
+// warmups-before.json` literal, captured in the SAME commit that deleted
+// the 302 `{ k: "wu", ... }` lines — Task 3 of the warmup-setting plan,
+// 2026-08-09) and prints it against `DESIGN_GRID_2026_08_03`, the ORIGINAL
+// warm-up-inclusive grid the 300-workout library was first authored
+// against. This is HISTORY, not a live gate: it proved, on 2026-08-09,
+// that the frozen replay exactly reproduced the pre-strip library and that
+// this script's band edges matched the 2026-08-03 design's own convention
+// — evidence the warmup strip changed nothing else about any workout
+// (spec §6: "Nothing else about any workout changes"). The 2026-08-10
+// rebalance then retuned 93 of those same workouts' real durations, so
+// BEFORE (AFTER + a now-stale frozen delta) no longer reproduces any real
+// historical state and the replay-vs-design-grid comparison is expected to
+// show mismatches from here on — that is not a regression, it is the
+// replay's job (a snapshot of 2026-08-09) meeting content that moved after
+// it was taken. `--history` prints one sentence saying so rather than an
+// alarming PASS/FAIL banner.
 //
 // patterns.json's 20 `warmupMinutes` stat entries (one per generation
 // cell) are RETAINED, not orphaned — the regen follow-on (the 2026-08-10
 // library-rebalance spec, §2's adversarial B4 correction) found that they
 // are the record of the book cells' warm-up-inclusiveness and that §6's
 // translation rule depends on them. This script still does not read them;
-// it reads that file's NEW `targets` block instead (below).
+// it reads that file's `targets` block instead (below).
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -71,12 +76,13 @@ export type Band = "<20" | "20-30" | "30-45" | "45-60" | "60+";
 //     block, which is also what library.test.ts's quota gate reads.
 //
 // So BEFORE (the warm-up-inclusive replay) is compared against the DESIGN
-// grid — that is the FAITHFULNESS CHECK, `gridMismatches` below — and AFTER
-// (warm-up-free) is compared against TARGET. Both comparisons are now
-// like-for-like; the AFT-TGT row that used to carry the "not a rebalance
-// signal" warning is the rebalance signal now that TARGET changed rods.
-// band() applies the SAME edges the design used when the grid was
-// authored; only the durations fed into it changed.
+// grid — that was the FAITHFULNESS CHECK, `gridMismatches` below, a
+// 2026-08-09 HISTORICAL result now folded behind `--history` — and AFTER
+// (warm-up-free) is compared against TARGET, the live ACCEPTANCE gate. The
+// AFT-TGT row that used to carry the "not a rebalance signal" warning is
+// THE rebalance signal now that TARGET is the grid content was retuned
+// against. band() applies the SAME edges the design used when the grid
+// was authored; only the durations fed into it changed.
 export const band = (minutes: number): Band =>
   minutes < 20
     ? "<20"
@@ -155,25 +161,28 @@ function totalOf(counts: Record<string, number>): number {
   return Object.values(counts).reduce((a, b) => a + b, 0);
 }
 
-/** The FAITHFULNESS CHECK (arc review F9): every `${type}|${band}` cell
- *  where `counts` disagrees with the 2026-08-03 design grid, as `cell: delta`
- *  pairs. Empty means all 20 cells match.
+/** Generic grid comparison: every `${type}|${band}` cell where `counts`
+ *  disagrees with `target`, as `cell: delta` pairs. Empty means all 20
+ *  cells match. Two call sites, two different rods:
  *
- *  It defaults to `DESIGN_GRID_2026_08_03`, NOT to `TARGET`. The check's
- *  whole job is to prove the warm-up-inclusive replay reproduces the library
- *  the warm-up-inclusive grid was authored against; run against the
- *  rebalance's warm-up-free `TARGET` it would compare two different rods and
- *  report 20 meaningless mismatches.
+ *  1. **The live ACCEPTANCE gate** (`main`'s default path): `target` passed
+ *     explicitly as `TARGET` (`patterns.json`'s rebalance grid), `counts`
+ *     the real AFTER content over the 300 grid rows. Empty means the
+ *     rebalance holds — content matches what it was retuned to hit.
+ *  2. **The historical FAITHFULNESS CHECK** (arc review F9, `main`'s
+ *     `--history` path): `target` left at its default, `DESIGN_GRID_2026_08_03`
+ *     — the check's job was to prove the warm-up-inclusive BEFORE replay
+ *     reproduced the library the warm-up-inclusive grid was authored
+ *     against, and that this script's band edges matched the convention
+ *     the generation phase actually used (the spec states the edges'
+ *     VALUES but never their inclusivity, so reproducing all 20 cells was
+ *     better evidence than the doc). It read empty once, on 2026-08-09;
+ *     it is not expected to any more (see the file header) and no code
+ *     path other than `--history` calls it against the design grid.
  *
- *  Run against the BEFORE (warm-up-inclusive) replay over the 300 GRID
- *  rows, an empty result is two things at once: proof the frozen-literal
- *  replay reproduces the pre-strip library exactly, and proof this script's
- *  band edges match the convention the generation phase actually used when
- *  it authored the grid (the spec states the edges' VALUES but never their
- *  inclusivity, so reproducing all 20 cells is better evidence than the
- *  doc). It is deliberately computed over `LIBRARY_WORKOUTS` (300), not
- *  `GLOBAL_LIBRARY_SEED` (302): the two onboarding rows postdate the grid
- *  and are not part of what it was authored against. */
+ *  Both call sites compute over `LIBRARY_WORKOUTS` (300), not
+ *  `GLOBAL_LIBRARY_SEED` (302): the two onboarding rows postdate both
+ *  grids and are not part of what either was authored against. */
 export function gridMismatches(
   counts: Record<string, number>,
   target: Record<WorkoutType, Record<Band, number>> = DESIGN_GRID_2026_08_03,
@@ -273,27 +282,30 @@ function printTypeTable(
   row("AFTER", afterRow, afterTotal);
   row("TARGET", targetRow, targetTotal);
   if (beforeRow) {
-    // The like-for-like comparison: warm-up-INCLUSIVE BEFORE against a
-    // warm-up-INCLUSIVE grid. Expected to read 0 across the 300 grid rows;
-    // the only nonzero cells are the two onboarding rows Phase 6I added on
-    // top of the grid (O2 30-45 and AN <20). This is the row that says
-    // whether the numbers below can be trusted at all.
+    // HISTORY only (`--history`): the like-for-like comparison, warm-up-
+    // INCLUSIVE BEFORE against the warm-up-INCLUSIVE design grid. Read 0
+    // across the 300 grid rows once, on 2026-08-09 (the two onboarding
+    // rows Phase 6I added land on top and are excluded here); the
+    // 2026-08-10 rebalance then retuned 93 workouts' real durations, so
+    // BEFORE (AFTER + a now-stale frozen delta) is not expected to
+    // reproduce it any more — see the file header.
     signedRow(
       "CHECK",
       beforeRow.map((b, i) => b - designRow[i]!),
       beforeTotal - designTotal,
     );
-    // What the STRIP actually did to this type: the real signal.
+    // HISTORY only: what the 2026-08-09 warm-up STRIP did to this type,
+    // frozen at that moment — not the current state of the library.
     signedRow(
       "MOVED",
       afterRow.map((a, i) => a - beforeRow![i]!),
       afterTotal - beforeTotal,
     );
   }
-  // Since the 2026-08-10 rebalance authored a warm-up-FREE TARGET, this row
-  // finally compares two of the same thing: it is the outstanding rebalance
-  // work, cell by cell, and it reads 0 everywhere when the phase is done.
-  // (Arc review F9's warning applied to the old warm-up-inclusive TARGET.)
+  // THE LIVE SIGNAL, printed in every mode: AFTER vs the 2026-08-10
+  // rebalance's warm-up-free TARGET, the grid the library was actually
+  // retuned to hit. Reads 0 everywhere the rebalance holds; a future
+  // content change that regresses a cell makes this row non-zero again.
   signedRow(
     "AFT-TGT",
     afterRow.map((a, i) => a - targetRow[i]!),
@@ -307,67 +319,66 @@ function printTypeTable(
 // filesystem/seed import path unnecessarily).
 // ---------------------------------------------------------------------
 function main(): void {
-  const withWarmups = !processArgv.includes("--after-only");
+  const withHistory = processArgv.includes("--history");
 
   const after: WorkoutStat[] = GLOBAL_LIBRARY_SEED.map((w) => ({
     type: w.type,
     minutes: estimateMinutes(w.steps, BASELINES)!.minutes,
   }));
   const afterCounts = bucket(after);
+  // The same AFTER content restricted to the 300 GRID rows — the
+  // acceptance gate's own input; see `gridMismatches`. Onboarding rows
+  // postdate the grid and are excluded so they can't manufacture a false
+  // mismatch or mask a real one.
+  const gridAfterCounts = bucket(
+    LIBRARY_WORKOUTS.map((w) => ({
+      type: w.type,
+      minutes: estimateMinutes(w.steps, BASELINES)!.minutes,
+    })),
+  );
 
   console.log(`GLOBAL_LIBRARY_SEED: ${GLOBAL_LIBRARY_SEED.length} workouts`);
   console.log(
-    "(both grids sum to 300; the 2 onboarding rows, Phase 6I, postdate them",
+    "(the grid sums to 300; the 2 onboarding rows, Phase 6I, postdate it and",
   );
-  console.log(" and land on top of whichever cell they band into)");
+  console.log(" land on top of whichever cell they band into)");
   console.log("");
   console.log("READ THIS BEFORE THE NUMBERS");
   console.log(
-    "  TWO grids, two rods. TARGET is the 2026-08-10 rebalance grid and it is",
+    "  AFT-TGT is the live signal: AFTER (warm-up-free durations) minus",
   );
   console.log(
-    "  defined over warm-up-FREE durations (patterns.json's `targets`). The",
+    "  TARGET, the 2026-08-10 rebalance grid (patterns.json's `targets`).",
   );
   console.log(
-    "  2026-08-03 DESIGN grid is warm-up-INCLUSIVE — the generation spec's own",
+    "  It reads 0 in every cell when the library matches what it was",
   );
-  console.log(
-    '  line under its quota table (line 94): "Duration = total time including',
-  );
-  console.log('  warm-up and rests."');
-  console.log(
-    "  AFTER is warm-up-free, so AFT-TGT is now a like-for-like comparison:",
-  );
-  console.log(
-    "  it is the OUTSTANDING rebalance work, and it reads 0 when it is done.",
-  );
-  if (withWarmups) {
+  console.log("  retuned to hit; the ACCEPTANCE line below states this.");
+  if (withHistory) {
     console.log(
-      "  * CHECK (BEFORE minus the 2026-08-03 DESIGN grid) is the FAITHFULNESS",
+      "  --history additionally replays BEFORE (warm-up-inclusive, frozen",
     );
     console.log(
-      "    check: 0 in all 20 grid cells means the replay and the band edges",
+      "  2026-08-09) against the ORIGINAL 2026-08-03 DESIGN grid (also warm-",
     );
-    console.log("    are right. See the verdict line at the end.");
     console.log(
-      "  * MOVED (AFTER minus BEFORE) is what removing the warm-ups actually",
+      "  up-inclusive). CHECK/MOVED and the closing note below are that",
     );
-    console.log("    did — the damage the rebalance answers.");
+    console.log(
+      "  2026-08-09 snapshot, not a live gate — see the file header.",
+    );
   } else {
     console.log(
-      "  --after-only: printing AFTER vs TARGET only. Omit the flag to also",
+      "  (pass --history to also see the frozen pre-rebalance BEFORE/CHECK/",
     );
-    console.log(
-      "  see BEFORE/CHECK/MOVED against the pre-strip replay — the numbers",
-    );
-    console.log("  ROADMAP's Phase 9 bullet actually points at.");
+    console.log("  MOVED replay, kept for the record, not as a live gate.)");
   }
 
   let beforeCounts: Record<string, number> | null = null;
   // The same BEFORE replay restricted to the 300 GRID rows — the
-  // faithfulness check's own input; see `gridMismatches`.
+  // historical faithfulness check's own input; see `gridMismatches`.
   let gridBeforeCounts: Record<string, number> | null = null;
-  if (withWarmups) {
+  if (withHistory) {
     const scriptDir = dirname(fileURLToPath(import.meta.url));
     const frozenPath = join(scriptDir, "library-warmups-before.json");
     const frozen = JSON.parse(readFileSync(frozenPath, "utf-8")) as Record<
@@ -401,18 +412,42 @@ function main(): void {
     }; the 2 onboarding rows are the whole difference)`,
   );
 
+  // THE ACCEPTANCE STATEMENT — the default output's real verdict, AFTER
+  // vs `patterns.targets` over the 300 grid rows (onboarding excluded).
+  // This is what the 2026-08-10 rebalance phase closed against; it reads
+  // 0/0 today.
+  const acceptanceMismatches = gridMismatches(gridAfterCounts, TARGET);
+  const acceptanceCells = Object.keys(acceptanceMismatches).length;
+  console.log(
+    acceptanceCells === 0
+      ? "\nACCEPTANCE: AFTER matches patterns.targets exactly in all 20" +
+          " cells (300 grid rows, onboarding excluded). The library holds" +
+          " the shape the 2026-08-10 rebalance retuned it to."
+      : `\nACCEPTANCE FAILED: ${acceptanceCells} of 20 cells differ from` +
+          ` patterns.targets (${JSON.stringify(acceptanceMismatches)}).`,
+  );
+
   if (gridBeforeCounts) {
+    // HISTORY only. Do not print PASS/FAIL: post-rebalance, BEFORE (a
+    // 2026-08-09 snapshot plus a now-stale frozen delta) is not expected
+    // to reproduce the 2026-08-03 design grid any more, so a mismatch
+    // count here is not a regression — see the file header.
     const mismatches = gridMismatches(gridBeforeCounts);
     const cells = Object.keys(mismatches).length;
     console.log(
+      "\nHISTORICAL NOTE (--history): this replay proved, on 2026-08-09" +
+        " (Task 3 of the warmup-setting plan, before the 2026-08-10" +
+        " rebalance retuned 93 workouts), that the frozen BEFORE replay" +
+        " exactly reproduced the pre-strip library and that this script's" +
+        " band edges matched the 2026-08-03 design grid's own convention." +
+        " It is not a live gate any more.",
+    );
+    console.log(
       cells === 0
-        ? "\nFAITHFULNESS CHECK: BEFORE reproduces the 2026-08-03 design" +
-            " grid in 20/20" +
-            " cells (300 grid rows, onboarding excluded). The replay and the" +
-            " band edges are confirmed; the MOVED row can be trusted."
-        : `\nFAITHFULNESS CHECK FAILED: ${cells} of 20 cells differ ` +
-            `(${JSON.stringify(mismatches)}). Nothing below can be trusted` +
-            " until this reads 20/20.",
+        ? "(all 20 cells still match the design grid.)"
+        : `(${cells} of 20 cells now differ — expected, since the` +
+            ` rebalance retuned real durations after this snapshot was` +
+            ` taken: ${JSON.stringify(mismatches)})`,
     );
   }
 }
