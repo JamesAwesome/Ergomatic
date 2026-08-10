@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { api } from "../api";
@@ -8,6 +15,12 @@ import type { BuilderEditMode } from "./Builder";
 import { fromWorkout, newForm, newRow, type BuilderForm } from "./builderState";
 import type { Step } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import {
+  BUILDER_DRAFT_KEY,
+  formFingerprint,
+  saveBuilderDraft,
+  type BuilderDraft,
+} from "./builderDraft";
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -138,6 +151,10 @@ beforeEach(() => {
   vi.doMock("../api/usePreferences", () => ({
     usePreferences: () => preferencesMock,
   }));
+  // The draft-persistence suite below reads/writes the real
+  // BUILDER_DRAFT_KEY slot — a clean slate for every test, including the
+  // ones above this line that never touch it (harmless either way).
+  localStorage.clear();
 });
 
 describe("Builder", () => {
@@ -1091,4 +1108,291 @@ describe("Builder", () => {
   // `spanStartIndex`/`BOOKEND_ROW_KINDS` suite), so every row is in the
   // repeated span unconditionally; that reality is what
   // `builderState.test.ts`'s "totals" suite now pins directly.
+
+  // ---- Draft persistence (CL remainder Task 2) ---------------------------
+  // Autosave, restore-with-notice, and the two-tap START OVER — wired
+  // against the real BUILDER_DRAFT_KEY slot (localStorage.clear() in the
+  // outer beforeEach above keeps every test in this suite starting clean).
+  describe("draft persistence", () => {
+    function draftOf(overrides: Partial<BuilderDraft> = {}): BuilderDraft {
+      return {
+        v: 1,
+        mode: { kind: "new" },
+        form: newForm(),
+        baseline: newForm(),
+        savedAt: "2026-08-10T00:00:00.000Z",
+        ...overrides,
+      };
+    }
+
+    function readStoredDraft(): BuilderDraft {
+      const raw = localStorage.getItem(BUILDER_DRAFT_KEY);
+      expect(raw).not.toBeNull();
+      return JSON.parse(raw!) as BuilderDraft;
+    }
+
+    // Contract item 1.
+    it("typing into a pristine new-mode builder writes a draft containing the current form and the pristine baseline", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      await renderBuilder();
+
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).toBeNull();
+      await userEvent.type(screen.getByLabelText("Title"), "Interrupted");
+
+      const stored = readStoredDraft();
+      expect(stored.form.title).toBe("Interrupted");
+      expect(stored.mode).toStrictEqual({ kind: "new" });
+      expect(formFingerprint(stored.baseline)).toBe(formFingerprint(newForm()));
+    });
+
+    // Contract item 2, first half: reverting content THIS mount wrote.
+    it("hand-reverting a typed title back to pristine clears the draft this mount owns", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      await renderBuilder();
+
+      const title = screen.getByLabelText("Title");
+      await userEvent.type(title, "x");
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).not.toBeNull();
+
+      await userEvent.clear(title);
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).toBeNull();
+    });
+
+    // Contract item 2, same guarantee for a RESTORED (not typed) draft —
+    // `ownsSlot` starts true on restore, not just on first write.
+    it("hand-reverting a restored draft back to pristine clears the slot this mount restored", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      saveBuilderDraft(draftOf({ form: { ...newForm(), title: "Restored" } }));
+      await renderBuilder();
+
+      expect(screen.getByLabelText("Title")).toHaveValue("Restored");
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).not.toBeNull();
+
+      await userEvent.clear(screen.getByLabelText("Title"));
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).toBeNull();
+    });
+
+    // Contract item 2, second half — the subtle one: a mount that never
+    // restored or wrote anything must not destroy a draft some OTHER
+    // screen owns. Opening a DIFFERENT workout for edit while a new-mode
+    // draft sits typed in the slot must leave it alone.
+    it("a pristine mount does not clear a foreign draft it never wrote or restored", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      saveBuilderDraft(
+        draftOf({ form: { ...newForm(), title: "Someone else's draft" } }),
+      );
+
+      // Edit mode for a workout whose own mode never matches the stored
+      // "new"-kind draft, so nothing restores here — this mount arrives,
+      // and stays, pristine.
+      await renderBuilder({ kind: "edit", id: "w9", initial: newForm() });
+
+      const stored = readStoredDraft();
+      expect(stored.form.title).toBe("Someone else's draft");
+    });
+
+    // Contract item 3.
+    it("mounting /library/new with a stored matching new-mode draft restores it, shows the notice, and leaves every card collapsed", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      const row = newRow("w");
+      row.durValue = "5:00";
+      saveBuilderDraft(
+        draftOf({
+          form: { ...newForm(), title: "Restored Draft", rows: [row] },
+        }),
+      );
+
+      await renderBuilder();
+
+      expect(screen.getByText("Draft restored.")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "START OVER" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue("Restored Draft");
+      // Collapsed: no row editor mounted — contrast with a FRESH new-mode
+      // mount, which always opens Row 1 (this file's very first test).
+      expect(
+        screen.queryByLabelText(/Row \d+ duration/),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "EDIT" })).toBeInTheDocument();
+    });
+
+    // Contract item 4 — realistic fixture (briefing's own rule): built from
+    // a real LIBRARY_WORKOUTS entry via fromWorkout, not a hand-rolled form.
+    it("mounting edit mode with a stale-baseline draft drops it silently and deletes it", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+
+      const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret");
+      if (!seaFret) throw new Error("fixture not found: Sea Fret");
+      const currentInitial = fromWorkout({
+        title: seaFret.title,
+        type: seaFret.type,
+        difficulty: seaFret.difficulty,
+        pain: seaFret.pain,
+        steps: seaFret.steps,
+      });
+
+      // Baselined against a DIFFERENT version of this same workout (its
+      // title changed since the draft was written) — the stored baseline
+      // no longer fingerprints equal to the CURRENT `fromWorkout` result.
+      saveBuilderDraft({
+        v: 1,
+        mode: { kind: "edit", workoutId: "sea-fret-id" },
+        form: { ...currentInitial, title: "Half-typed edit" },
+        baseline: { ...currentInitial, title: "An older title" },
+        savedAt: "2026-08-10T00:00:00.000Z",
+      });
+
+      await renderBuilder({
+        kind: "edit",
+        id: "sea-fret-id",
+        initial: currentInitial,
+      });
+
+      expect(screen.queryByText("Draft restored.")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue(seaFret.title);
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).toBeNull();
+    });
+
+    // Contract item 5, first tap + auto-disarm — fireEvent + fake timers,
+    // same idiom as WorkoutDetail.test.tsx's own "disarms after 4 seconds"
+    // case: userEvent's real-time delays would stall against fake timers.
+    it("START OVER's first tap arms with swapped copy and auto-disarms after 4s with no second press", async () => {
+      vi.useFakeTimers();
+      try {
+        mockBaselines(BASELINES);
+        mockApi(() => new Response(null, { status: 201 }));
+        saveBuilderDraft(draftOf({ form: { ...newForm(), title: "Doomed" } }));
+        await renderBuilder();
+
+        fireEvent.click(screen.getByRole("button", { name: "START OVER" }));
+        expect(
+          screen.getByRole("button", { name: "Tap again to start over" }),
+        ).toBeInTheDocument();
+
+        await act(() => vi.advanceTimersByTimeAsync(4000));
+
+        expect(
+          screen.getByRole("button", { name: "START OVER" }),
+        ).toBeInTheDocument();
+        // Auto-disarm alone never resets anything — still the restored
+        // content, still owning the slot.
+        expect(screen.getByLabelText("Title")).toHaveValue("Doomed");
+        expect(localStorage.getItem(BUILDER_DRAFT_KEY)).not.toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Contract item 5, second tap.
+    it("START OVER's second tap clears the draft, resets the form to pristine, and hides the notice", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      saveBuilderDraft(draftOf({ form: { ...newForm(), title: "Doomed" } }));
+      await renderBuilder();
+
+      await userEvent.click(screen.getByRole("button", { name: "START OVER" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Tap again to start over" }),
+      );
+
+      expect(screen.queryByText("Draft restored.")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue("");
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).toBeNull();
+    });
+
+    // Contract item 6.
+    it("a successful save clears the draft before navigating away", async () => {
+      const api = mockApi(
+        () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
+      );
+      mockBaselines(BASELINES);
+      await renderBuilder();
+
+      await fillValidForm();
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).not.toBeNull();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save to library" }),
+      );
+
+      await waitFor(() => expect(api).toHaveBeenCalledTimes(1));
+      expect(localStorage.getItem(BUILDER_DRAFT_KEY)).toBeNull();
+    });
+
+    // Contract item 7.
+    it("a draft for the wrong mode neither restores nor blocks typing — new content overwrites the single slot", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      saveBuilderDraft({
+        v: 1,
+        mode: { kind: "edit", workoutId: "other-workout" },
+        form: { ...newForm(), title: "Somebody else's edit" },
+        baseline: newForm(),
+        savedAt: "2026-08-10T00:00:00.000Z",
+      });
+
+      // New mode — mismatched mode kind, so nothing restores here.
+      await renderBuilder();
+      expect(screen.queryByText("Draft restored.")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue("");
+
+      await userEvent.type(screen.getByLabelText("Title"), "Fresh content");
+
+      const stored = readStoredDraft();
+      expect(stored.mode).toStrictEqual({ kind: "new" });
+      expect(stored.form.title).toBe("Fresh content");
+    });
+
+    // The sketch's own self-mutation target (b): restoring through
+    // `adoptForm` re-identifies every row with a fresh id, so a row added
+    // afterward can never collide with one a previous session assigned.
+    // Rigged so the collision is DETERMINISTIC if adoptForm is skipped: a
+    // fresh Builder module instance's own row-id counter hands out "r1" to
+    // `builderState.ts`'s own module-level `EMPTY_FORM` (consumed at import
+    // time, before anything renders), "r2" to `pristine`'s own default row
+    // (consumed before restore resolves, never rendered), and would hand
+    // out "r3" to the next row created — exactly `rowB`'s raw stored id
+    // below. If restore used `d.form` unadopted, "+ ADD STEP"'s new row
+    // would share `rowB`'s id, and deleting that new row would delete BOTH
+    // (`removeRow`'s `r.id !== id` filter drops every row sharing an id).
+    it("restoring through adoptForm means a row added afterward never collides with a restored row's id", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+
+      const rowA = newRow("w");
+      rowA.id = "rX";
+      const rowB = newRow("w");
+      rowB.id = "r3";
+      saveBuilderDraft(
+        draftOf({
+          form: { ...newForm(), title: "Two Rows", rows: [rowA, rowB] },
+        }),
+      );
+
+      await renderBuilder();
+      expect(screen.getAllByRole("button", { name: "EDIT" })).toHaveLength(2);
+
+      await userEvent.click(screen.getByRole("button", { name: "+ ADD STEP" }));
+      expect(
+        screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
+      ).toHaveLength(3);
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Delete Step 3" }),
+      );
+
+      // Exactly the one row deleted — a collision would silently take
+      // `rowB` down with it, leaving 1 instead of 2.
+      expect(
+        screen.getAllByRole("button", { name: /^Delete Step \d+$/ }),
+      ).toHaveLength(2);
+    });
+  });
 });

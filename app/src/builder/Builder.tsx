@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
@@ -10,9 +10,11 @@ import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
 import BackLink from "../shell/BackLink";
+import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import ClassificationCard from "./ClassificationCard";
 import {
   addBlankStep,
+  adoptForm,
   cloneRow,
   newForm,
   removeRow,
@@ -24,6 +26,12 @@ import {
   type BuilderRow,
   type RowField,
 } from "./builderState";
+import {
+  clearBuilderDraft,
+  formFingerprint,
+  loadBuilderDraft,
+  saveBuilderDraft,
+} from "./builderDraft";
 import { generateName } from "./nameGenerator";
 import StepCard from "./StepCard";
 import StepEditor from "./StepEditor";
@@ -120,20 +128,82 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const location = useLocation();
   const from = (location.state as { from?: unknown } | null)?.from;
 
-  const [form, setForm] = useState<BuilderForm>(mode?.initial ?? newForm());
+  // Set once, via the lazy initializer, and never again — the untouched
+  // baseline this mount compares against for the rest of its life (CL
+  // remainder Task 2's draft-restore mechanism). A `useRef` was tried
+  // first, but eslint's `react-hooks/refs` rule (correctly) rejects
+  // reading a ref's `.current` during render — a plain `useState` lazy
+  // initializer gets the same "compute once at mount" result without it.
+  const [pristine] = useState<BuilderForm>(() => mode?.initial ?? newForm());
+  const pristineFp = formFingerprint(pristine);
+
+  // Resolved once, at mount: a stored draft restores only when its MODE
+  // matches this screen (new vs. this exact edit workoutId) AND its
+  // `baseline` fingerprints equal to what THIS mount's pristine form
+  // fingerprints to right now. A mismatched baseline means the workout
+  // changed elsewhere since the draft was written (a bulk import, another
+  // device) — the draft is dropped and deleted rather than merged into a
+  // form it no longer describes.
+  const restoredDraft = useMemo(() => {
+    const d = loadBuilderDraft();
+    if (!d) return null;
+    const modeMatches = mode
+      ? d.mode.kind === "edit" && d.mode.workoutId === mode.id
+      : d.mode.kind === "new";
+    if (!modeMatches) return null;
+    if (formFingerprint(d.baseline) !== pristineFp) {
+      clearBuilderDraft(); // stale: the workout changed since the draft
+      return null;
+    }
+    return d;
+    // Mount-only: `mode`/`pristine` are stable for the life of this screen
+    // (React never remounts Builder across a mode change — EditWorkout.tsx
+    // and AppRoutes.tsx both key a fresh mount by route/id instead).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // `adoptForm` re-identifies every restored row with a FRESH session-local
+  // id (builderState.ts's own doc comment) — the stored ids came from
+  // whatever session wrote the draft and can collide with ids this
+  // session's own counter is about to hand out to a newly added row.
+  const [form, setForm] = useState<BuilderForm>(() =>
+    restoredDraft ? adoptForm(restoredDraft.form) : pristine,
+  );
+  // Shown only for a RESTORED mount — never for a plain fresh/edit open,
+  // and cleared for good the moment START OVER's second tap fires.
+  const [draftNotice, setDraftNotice] = useState(restoredDraft !== null);
+  // Whether THIS mount is the one that put the current draft in the slot
+  // (by restoring it or by being the first to write it) — the ownership
+  // guard behind the autosave effect below. A pristine mount that never
+  // restored or wrote anything must never clear a draft some OTHER screen
+  // is mid-typing (opening a workout for a read-only look must not destroy
+  // a new-mode draft in progress).
+  const ownsSlot = useRef(restoredDraft !== null);
   // At most one row expanded at a time (design doc's "Interactions &
   // behaviour": `editing = rowId | null`). A brand-new workout opens its one
   // default row immediately — there's nothing to scan yet, only something to
   // fill in, the same reasoning "+ ADD STEP" uses to open what it appends.
-  // Opening an existing (edit-mode) workout leaves everything collapsed —
-  // reviewing six already-authored steps is exactly the wall-of-inputs
-  // problem this accordion exists to fix.
+  // Opening an existing (edit-mode) workout, OR a restored draft (new or
+  // edit), leaves everything collapsed — reviewing already-authored steps
+  // (freshly typed or not) is exactly the wall-of-inputs problem this
+  // accordion exists to fix; a restore is content to REVIEW, not content
+  // to immediately keep typing into.
   const [editing, setEditing] = useState<string | null>(() =>
-    mode ? null : (form.rows[0]?.id ?? null),
+    mode || restoredDraft ? null : (form.rows[0]?.id ?? null),
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // START OVER's own two-tap arm (WorkoutDetail.tsx's OwnerActions Delete
+  // button / LearningTheApp.tsx's identical shape) — deliberately NOT
+  // `useStagedDiscard`, whose `fire()` clears the SESSION draft/run records,
+  // a side effect this control has no business triggering; `ARM_TIMEOUT_MS`
+  // is still imported from that shared home so the one number that must
+  // agree app-wide stays in lockstep.
+  const [startOverArmed, setStartOverArmed] = useState(false);
+  const startOverDisarmTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   // Bumped on every AUTO NAME press so repeated presses cycle through the
   // name pool instead of re-offering the same candidate — generateName is
   // pure, so without this the button would be a no-op after the first click.
@@ -144,6 +214,69 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   // Save focus the first invalid control even when its card is collapsed
   // (`handleSave` expands the owning row first) or scrolled off-screen.
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  // Autosave: writes on every change, clears when the form returns to
+  // EXACTLY the pristine baseline. The ownership guard (`ownsSlot.current`)
+  // is what stops a pristine mount that never restored or wrote anything
+  // from clearing a draft some OTHER screen owns — this branch only ever
+  // calls `clearBuilderDraft()` for a slot THIS mount itself put something
+  // into.
+  useEffect(() => {
+    if (formFingerprint(form) === pristineFp) {
+      if (ownsSlot.current) clearBuilderDraft();
+      return;
+    }
+    ownsSlot.current = true;
+    saveBuilderDraft({
+      v: 1,
+      mode: mode ? { kind: "edit", workoutId: mode.id } : { kind: "new" },
+      form,
+      baseline: pristine,
+      savedAt: new Date().toISOString(),
+    });
+  }, [form, mode, pristine, pristineFp]);
+
+  // Belt-and-suspenders, same as WorkoutDetail.tsx's OwnerActions: a pending
+  // auto-disarm timer must not fire (and call `setState`) after this screen
+  // has already navigated away.
+  useEffect(() => {
+    return () => {
+      if (startOverDisarmTimer.current !== null) {
+        clearTimeout(startOverDisarmTimer.current);
+      }
+    };
+  }, []);
+
+  function disarmStartOver() {
+    if (startOverDisarmTimer.current !== null) {
+      clearTimeout(startOverDisarmTimer.current);
+      startOverDisarmTimer.current = null;
+    }
+    setStartOverArmed(false);
+  }
+
+  function armStartOver() {
+    setStartOverArmed(true);
+    startOverDisarmTimer.current = setTimeout(disarmStartOver, ARM_TIMEOUT_MS);
+  }
+
+  // The button's own click handler carries both taps — the same shape as
+  // WorkoutDetail.tsx's OwnerActions `handleClick`: the first arms, the
+  // second (only reachable while already armed) fires the reset for real.
+  function handleStartOverClick() {
+    if (!startOverArmed) {
+      armStartOver();
+      return;
+    }
+    disarmStartOver();
+    clearBuilderDraft();
+    ownsSlot.current = false;
+    setForm(adoptForm(pristine));
+    setEditing(null);
+    setDraftNotice(false);
+    setErrors({});
+    setSubmitError(null);
+  }
 
   if (baselinesState.state === "loading") {
     return (
@@ -333,6 +466,11 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       } catch {
         savedId = undefined;
       }
+      // Before navigating away — a save that succeeded made whatever this
+      // draft was staging permanent (or, in edit mode, superseded); leaving
+      // it in the slot would restore stale, already-saved content the next
+      // time this screen opens.
+      clearBuilderDraft();
       navigate(savedId ? `/library/${savedId}` : "/library");
     } catch {
       setSubmitError("Couldn't save this workout. Try again.");
@@ -367,6 +505,20 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
           {mode ? "Edit workout" : "New workout"}
         </h1>
       </div>
+
+      {draftNotice && (
+        <div className="builder-draft-notice" role="status">
+          <span>Draft restored.</span>
+          <button
+            type="button"
+            className={startOverArmed ? "button-l4-armed" : "button-l4"}
+            onClick={handleStartOverClick}
+            onBlur={disarmStartOver}
+          >
+            {startOverArmed ? "Tap again to start over" : "START OVER"}
+          </button>
+        </div>
+      )}
 
       <div>
         <div className="builder-title-row">

@@ -401,6 +401,87 @@ test.describe("new controls this phase introduced", () => {
     await cleanupByTitle(page, title);
   });
 
+  // CL remainder Task 2: leaving the builder mid-edit and coming back used
+  // to lose everything typed — there was zero e2e coverage of leaving the
+  // builder at all (verified 2026-08-10). These three flows are against
+  // the REAL Library screen (its "+ NEW" link, `library-new` class — not
+  // the brief's own UNVERIFIED "new workout" guess) and the real tab bar
+  // (`LIBRARY`, all-caps — Playwright's string `name` match is
+  // case-insensitive substring, so "Library" matches it).
+  test.describe("builder draft persistence", () => {
+    test("typed content survives a tab-bar exit and return", async ({
+      page,
+    }) => {
+      await signInViaBackdoor(page, {
+        email: "builder-draft-survive@e2e.test",
+        name: "Builder Draft Survive Tester",
+      });
+      await setBaselines(page);
+      await page.goto("/library/new");
+
+      await page.getByLabel("Title").fill("Draft survives");
+      await page.getByRole("link", { name: "Library" }).click();
+      await expect(page).toHaveURL(/\/library$/);
+
+      await page.getByRole("link", { name: "+ NEW" }).click();
+      await expect(page).toHaveURL(/\/library\/new$/);
+      await expect(page.getByText("Draft restored.")).toBeVisible();
+      await expect(page.getByLabel("Title")).toHaveValue("Draft survives");
+    });
+
+    test("START OVER is two-tap and resets the form", async ({ page }) => {
+      await signInViaBackdoor(page, {
+        email: "builder-draft-startover@e2e.test",
+        name: "Builder Draft Start Over Tester",
+      });
+      await setBaselines(page);
+      await page.goto("/library/new");
+
+      await page.getByLabel("Title").fill("Doomed draft");
+      await page.getByRole("link", { name: "Library" }).click();
+      await page.getByRole("link", { name: "+ NEW" }).click();
+      await expect(page.getByText("Draft restored.")).toBeVisible();
+
+      const startOver = page.getByRole("button", { name: "START OVER" });
+      await startOver.click();
+      const tapAgain = page.getByRole("button", {
+        name: "Tap again to start over",
+      });
+      await expect(tapAgain).toBeVisible();
+      await tapAgain.click();
+
+      await expect(page.getByText("Draft restored.")).not.toBeVisible();
+      await expect(page.getByLabel("Title")).toHaveValue("");
+    });
+
+    test("saving clears the draft: leave and return lands pristine", async ({
+      page,
+    }) => {
+      await signInViaBackdoor(page, {
+        email: "builder-draft-save-clears@e2e.test",
+        name: "Builder Draft Save Clears Tester",
+      });
+      await setBaselines(page);
+      await page.goto("/library/new");
+
+      const title = "Draft Save Clears Row";
+      await page.getByLabel("Title").fill(title);
+      await page.getByRole("button", { name: "Pain 2" }).click();
+      await page.getByLabel("Row 1 duration", { exact: true }).fill("500");
+      await page.getByRole("radio", { name: "Row 1 pace 2K" }).click();
+      await page.getByRole("button", { name: "Save to library" }).click();
+
+      await expect(page).toHaveURL(/\/library\/[^/]+$/);
+      await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+      await page.goto("/library/new");
+      await expect(page.getByText("Draft restored.")).not.toBeVisible();
+      await expect(page.getByLabel("Title")).toHaveValue("");
+
+      await cleanupByTitle(page, title);
+    });
+  });
+
   test("/library/import loads directly on a full page reload and imports a four-field-header paste", async ({
     page,
   }) => {
