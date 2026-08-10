@@ -1,6 +1,9 @@
 # The library rebalance (the warmup-drop regen follow-on) — design
 
-**Date:** 2026-08-10. **Authority:** James's rulings at PR #71's merge
+**Date:** 2026-08-10, adversarially revised same day (20 findings, 4
+blocking — `2026-08-10-rebalance-adversarial-review.md`; §2/§3 were
+REDESIGNED under James's ruling B: workouts get LONGER by intent,
+specific ones may trend shorter, and 30-45 becomes the modal band). **Authority:** James's rulings at PR #71's merge
 ("the 30-45 band took a hit" → rebalance; HYBRID retune/replace; a
 spot-check round against book actuals with a variety guarantee); the
 generation design (`2026-08-03-workout-generation-design.md`: the
@@ -20,53 +23,87 @@ by the balance script, spot-checked against the book, and guaranteed
 varied. Onboarding's 2 workouts untouched throughout; every seed change
 propagates by the content-addressed reconcile; NO migration.
 
-## 2. The new target grid
+## 2. The new target grid (ruling B: longer by intent, mode at 30-45)
 
-The original grid's band shape, re-authored over warm-up-free
-durations: for each type, the OLD target's cell counts stand as the new
-targets (the design intent was always the post-warm-up work
-distribution; the old grid simply measured it warm-up-inclusive). The
-grid lands IN `patterns.json` as the new `targets` block (replacing the
-warm-up-inclusive one), and the 20 orphaned `warmupMinutes` stat
-entries are deleted in the same edit — the file becomes fully
-warm-up-free. `library-balance.ts` reads targets from the file (single
-source; today's duplicated TARGET constant dies) and its acceptance
-statement becomes: AFTER matches the new grid within ±1 per cell
-(the BEFORE-era tolerance: the old check accepted the 2-row onboarding
-skew), with the balance table printed in the PR body.
+The old counts do NOT carry over (adversarial B1/B2: they were authored
+over warm-up-inclusive durations — generation-design:94, "Duration =
+total time including warm-up and rests" — and demanding them from
+work-only durations is jointly infeasible with any character-preserving
+retune rule: 40 of the 144 band-crossers cannot regain their old band
+under +25%, and AN is structurally stuck at 22-under-20 versus an old
+allowance of 14).
+
+Instead the grid is AUTHORED, per type, to James's ruling: 30-45 is the
+LARGEST cell in every type, 20-30 second; the library gets longer than
+today's post-strip reality but is not forced back to the old
+accounting; specific workouts may stay short. Opening draft (James
+vetoes final numbers at the review gate):
+
+| type | <20 | 20-30 | 30-45 | 45-60 | 60+ | total |
+|---|---|---|---|---|---|---|
+| O2 | 4 | 14 | 34 | 18 | 20 | 90 |
+| AT | 6 | 20 | 32 | 12 | 5 | 75 |
+| TR | 10 | 22 | 30 | 9 | 4 | 75 |
+| AN | 12 | 16 | 20 | 8 | 4 | 60 |
+
+**The grid is finalized by a FEASIBILITY SOLVE, not by hand:** plan
+Task 1 computes, for every workout, its reachable bands under §3's
+retune rule, checks a perfect assignment exists (the Hall's-condition
+machinery the adversarial review built), adjusts cells by at most ±2
+where infeasible, and derives the replacement list as the residual.
+Output: the final grid + the complete move plan (who retunes where, who
+gets replaced), submitted for James's approval BEFORE any content work.
+
+Storage: the final grid lands in `patterns.json` as a NEW top-level
+`targets` block (none exists today — adversarial B3; the file currently
+holds only `_meta` and `cells`); `library-balance.ts` AND
+`library.test.ts`'s QUOTA both read from it (the test's quota is today
+a deliberate non-duplication — this phase makes the file the single
+source and rewrites the test's own comment saying so). The 20
+`warmupMinutes` stats are RETAINED (adversarial B4 correction: they are
+the record of the book cells' warm-up-inclusiveness — §6's translation
+rule depends on them; three AN cells run [10,20], not "5-10"). The
+`cells` block stays warm-up-inclusive and says so in `_meta`.
 
 ## 3. The hybrid rule (mechanical first, judgment second)
 
-Walk every workout outside its band, per type, hardest-hit bands first:
+The move plan from §2's feasibility solve assigns every out-of-band
+workout one of:
 
-**RETUNE when** the workout reaches its band by stretching what it
-already is: +1 rep to an existing set, or lengthening existing pieces,
-to a ceiling of +25% total work time — WITHOUT changing its structure
-archetype (a pyramid stays a pyramid; a ladder keeps its rungs' shape;
-continuous stays continuous) and while keeping every house rule:
-time-computable totals end in 0 or 5; spm conventions per the type
-header; offsets within the type's calibrated ranges; rest:work
-character preserved (rest may scale with the pieces it separates,
-same ratios family).
+**RETUNE when** the workout reaches its assigned band by stretching
+what it already is — EITHER adding one rep to an existing repeated
+block OR lengthening existing pieces by up to +25% total work time
+(one-rep adds may exceed 25%; that is the point of the disjunction) —
+WITHOUT changing its structure archetype, and keeping every house
+rule: totals ending 0/5; spm per the type header where a header
+carries calibration (o2.ts fully; an.ts a floor; at.ts/tr.ts have NONE
+— adversarial M8 — so §6's book ranges govern there, tightened by the
+existing library's own observed range); offsets within calibrated
+ranges; rest scaling in the same ratio family. SHRINKING is equally
+legal under ruling B's "specific ones may trend shorter" — same
+character-preservation rules, justified in the review table.
 
-**REPLACE when** retuning would need structural surgery. The
-replacement is a fresh generation in the SAME type/difficulty/pain slot
-targeting the deficient band, from `patterns.json` motifs, honoring the
-generation phase's own rules verbatim: variety from structure not ±1'
-tweaks; **no structure+parameter clone of any book entry** (the :113
-rule); no near-duplicate of a surviving library workout (defined in
-§5). New titles from the house naming vein (weather/sea). Replaced
-workouts simply leave the seeds — logged sessions keep their own title
-copies, so history is safe; `todayPick`/plan references resolve by id
-and the plan re-picks as it already does for any missing workout (the
-plan pins the exact fallback behavior by reading it, falsifying-line
-rule, before claiming it).
+**REPLACE when** the solve says no retune reaches any deficient band
+(the residual list). Same rules as before: fresh generation in the
+same type/difficulty/pain slot from `patterns.json` motifs, no
+book-entry clone (generation-design:113), no near-duplicate of a
+survivor (§5), house naming. Replacement is SAFE, verified not
+deferred (adversarial M11): `seed.ts:44-46/:80-87` DELETES a
+disappeared-title row, and `schema.ts:97-99` nulls the logs' workout
+reference while logged sessions keep their own title copies; the
+first post-deletion boot re-sorts (~290 sortOrder UPDATEs, one-time,
+harmless — adversarial minor 16). `suggest.ts:213-215`'s
+`sorted.find(...) ?? sorted[0]` re-picks Today's workout, already
+pinned at `suggest.test.ts:792` (adversarial M12 — read, not assumed).
 
-**BUDGET expectation, not a rule:** the MOVED table implies most of the
-deficit refills by retune (the +25% ceiling covers a dropped 5' warm-up
-on most 20-40' workouts); replacements should be the minority and each
-one is individually justified in the review table ("cannot stretch
-because ...").
+**Known test blast radius, scoped in (adversarial M10):**
+`library.test.ts` QUOTA (rewritten against the new targets source),
+`library-balance.test.ts`, `driver.test.ts`'s 16 Sea Fret assertions
+(an O2 <20 workout — the solve should prefer KEEPING Sea Fret in <20
+under ruling B's shorter-specifics slack, precisely because the
+committed hardware-era fixtures lean on its shape; if the solve moves
+it anyway, the fixtures update with the same per-test care as the
+warmup fleet), `program.sweep.test.ts`'s Beam Sea.
 
 ## 4. James's review gate (the Phase 6 idiom)
 
@@ -86,8 +123,9 @@ Two halves, one committed report:
 **(a) Book-actuals comparison.** A sample for James to check against
 the book (his photos/originals CSV are PRIVATE and stay off-repo — the
 generation pipeline's own boundary): stratified across type × band ×
-change-kind (every replacement + a random 10% of retunes + 5 untouched
-controls), each row rendering the workout beside the CHECKABLE
+change-kind (every replacement + a random 25% of retunes, minimum 20 + 5
+untouched controls — the earlier 10% had ~51% power against a 5%
+defect rate, adversarial minor 17), each row rendering the workout beside the CHECKABLE
 book-derived conventions the repo already encodes (offset ranges,
 work:rest families, spm ranges, motif name from `patterns.json`). Two
 verdict columns for James to fill: BOOK-FAITHFUL (the spirit — does
@@ -95,7 +133,23 @@ this read like the book's training intent for its type) and NOT-A-CLONE
 (the :113 rule — near-identity to a book entry is a FAIL even when
 faithful). Any FAIL loops that workout back through §3 and re-samples.
 
-**(b) Variety audit, automated and committed as a test.** Per type ×
+**(b) Variety audit, automated and committed as a test.** FIRST the
+classifier: no archetype classifier exists in the repo (adversarial
+M5) — the audit begins by building one over step signatures and
+UNIFYING the two vocabularies (the digest's nxtime/nxdistance/mixed/
+ladder/pyramid/continuous vs the spec's earlier list; rate-change is
+detectable only via spm deltas across steps and joins as a modifier
+flag, not an archetype). Near-duplicate terms defined computably
+(adversarial M7): "piece count" = expanded phase count via liveSteps;
+"same offset band" applies to SplitRefs only — EffortRef workouts
+compare by effort share + archetype + duration instead. THRESHOLDS ARE
+MEASURED, NOT BID (adversarial M6: the earlier bid already fails 12 of
+20 cells today, sharpest in O2|60+ where four near-identical continuous
+6k+12 pieces coexist): the audit's first run against TODAY's library
+sets the baseline; the pinned thresholds are the tightest values
+today's untouched cells pass, and the O2|60+ cluster goes to James in
+the review table as a PRE-EXISTING variety debt with a
+fix-now-or-accept checkbox rather than silently grandfathered. Per type ×
 band: a structure-archetype histogram (continuous / evenly-split
 intervals / pyramid / ladder / rate-change / mixed) asserting no cell
 is single-archetype where it holds ≥4 workouts and no archetype exceeds
@@ -147,7 +201,8 @@ prescribed by effort rather than split.
 Interpretation rules, binding on every generating/retuning agent:
 
 - **The book cells are WARM-UP-INCLUSIVE** (their `warmupMinutes` stats
-  ran 5-10'). A warm-up-free workout consults the cell its duration
+  run 5-10' in most cells and [10,20] in three AN cells — read the
+  cell, not this sentence). A warm-up-free workout consults the cell its duration
   occupied BEFORE the strip: a retuned 27' workout that was 32' with
   its warm-up obeys the 30-45 cell's ranges, not 20-30's.
 - **A dash or missing bound means the book showed no observation
@@ -163,9 +218,19 @@ Interpretation rules, binding on every generating/retuning agent:
   of 35 exists in the book once; live near the mass of the
   distribution, justify anything within 10% of a range edge in the
   review table.
+- **The seed test suite's hard spm gates (`library.test.ts:37-42`)
+  are TIGHTER than the book ranges** (O2 18-26 vs book 12-34; TR 24-28
+  vs book 16-38 — adversarial M9). The gates are James-reviewed library
+  policy and WIN by default; a generated workout may exceed them only
+  with a review-table justification row, and doing so widens the gate
+  in the same commit (policy change made visible, never a test edit
+  smuggled through).
 - The spot-check round (§5a) uses THIS table as its checkable half;
   James's book verdicts remain the authority where the digest is
-  silent.
+  silent. Lead-piece check (James, 2026-08-10, the Katabatic Wind
+  question): where a workout opens with a long steady piece, the
+  BOOK-FAITHFUL verdict also asks whether the lead reads as WORK or as
+  a warm-up that lost its label — the offset is the tell.
 
 ## 7. Mechanics
 
@@ -174,14 +239,13 @@ Interpretation rules, binding on every generating/retuning agent:
   new variety test + the committed review/spot-check artifacts. No
   domain, server, or client code changes expected; any that prove
   necessary are findings, not scope.
-- The reconcile propagates content changes on boot (content-addressed,
-  proven in the warmup phase); replaced workouts' rows update in place
-  by title-keyed upsert or insert/delete per the reconcile's ACTUAL
-  semantics — the plan reads `seedGlobalLibrary` and pins what happens
-  to a row whose title disappears from the seeds (delete? orphan?),
-  since replacement makes that path live for the first time. If
-  disappeared-title rows persist as orphans, the plan adds the cleanup
-  to the reconcile (server change, admitted as scope).
+- The reconcile is RESOLVED, not deferred (adversarial M11):
+  disappeared titles are DELETED (`seed.ts:44-46/:80-87`), logs null
+  their reference and keep their title copies (`schema.ts:97-99`).
+  Band-edge translation (adversarial minor 15): pre-strip durations
+  sitting exactly on a band edge (55 exist) bucket into the LOWER band,
+  matching the balance script's existing edge-inclusivity — the plan
+  cites the script's actual comparison operator before asserting it.
 - Gates: the balance script's acceptance statement; the variety test;
   the full standing suite (seed counts/fixtures update); e2e untouched
   in intent (fixtures pinning specific seed workouts that got retuned
