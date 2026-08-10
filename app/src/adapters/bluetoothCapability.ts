@@ -1,5 +1,15 @@
 import { isNative } from "../platform";
 
+// `navigator.bluetooth`'s own type comes from `monitor/transports/
+// webBluetooth.ts`'s ambient `declare global { interface Navigator {...} }`
+// augmentation — a MODULE-PRIVATE `Bluetooth` interface (that file has no
+// `export`, so its name isn't reachable here to extend by declaration
+// merging). Rather than fight that with a second global augmentation of a
+// name this file cannot see, this probes for `getAvailability` at runtime
+// and types the result narrowly, right where it's used — TypeScript's DOM
+// lib ships no Web Bluetooth types at all (`webBluetooth.ts`'s own header
+// comment: verified, nothing in lib.dom.d.ts), and `getAvailability` is
+// Chromium-only, genuinely absent on older Chromium/other engines.
 interface BluetoothAvailabilityProbe {
   getAvailability?(): Promise<boolean>;
 }

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
+  delete (navigator as { bluetooth?: unknown }).bluetooth;
 });
 
 describe("adapters/bluetoothCapability native arm", () => {
