@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { estimateMinutes } from "../../../domain/expand.js";
 import type { Difficulty, WorkoutType } from "../../../domain/types.js";
 import { validateWorkoutInput } from "../../../domain/validate.js";
+import patterns from "../../../domain/generation/patterns.json";
 import { LIBRARY_WORKOUTS } from "./index.js";
 
 // Reference baselines for banding (splits, s/500m) — the values the retired
@@ -20,22 +21,28 @@ const band = (m: number): Band =>
           ? "45-60"
           : "60+";
 
-// This grid used to be the spec's quota grid verbatim (docs/superpowers/
-// specs/2026-08-03-workout-generation-design.md §4) because every workout's
-// duration included its warm-up. The warmup-setting spec (Task 3,
-// 2026-08-09) deleted the 302 `{ k: "wu", ... }` seed lines — the same
-// content, 5-10 fewer minutes each — so `estimateMinutes` now returns a
-// smaller total for nearly every workout and a meaningful slice crossed a
-// band boundary downward. This test still pins exactly 300, but the counts
-// below are the MEASURED post-strip reality (a content-regression pin), not
-// the design target anymore. `pnpm tsx scripts/library-balance.ts` prints
-// the ongoing TARGET-vs-AFTER drift against the original design grid — rows
-// still sum 90/75/75/60 = 300 since no workout moved TYPE, only band.
-const QUOTA: Record<WorkoutType, Record<Band, number>> = {
-  O2: { "<20": 12, "20-30": 15, "30-45": 35, "45-60": 13, "60+": 15 },
-  AT: { "<20": 16, "20-30": 27, "30-45": 26, "45-60": 3, "60+": 3 },
-  TR: { "<20": 21, "20-30": 26, "30-45": 19, "45-60": 7, "60+": 2 },
-  AN: { "<20": 32, "20-30": 15, "30-45": 10, "45-60": 1, "60+": 2 },
+// THE TARGET GRID IS NOT DUPLICATED HERE ANY MORE. It used to be: this file
+// kept its own copy (the measured post-strip reality) and a comment saying
+// the divergence from `scripts/library-balance.ts`'s TARGET was deliberate.
+// The 2026-08-10 library-rebalance spec (§2) made `patterns.json`'s new
+// `targets` block the single source, and the balance script and this gate
+// both read it. Change the grid in one place and both move.
+const TARGETS = patterns.targets as Record<WorkoutType, Record<Band, number>>;
+
+// What the CONTENT still owes that target, cell by cell. The warmup-setting
+// spec (Task 3, 2026-08-09) deleted the 302 `{ k: "wu", ... }` seed lines —
+// the same content, 4-20 fewer minutes each — and a meaningful slice of the
+// library crossed a band boundary downward; the rebalance is the answer and
+// its content tasks have not landed yet. So the gate stays EXACT, but exact
+// about `target + outstanding` rather than about a hand-copied grid: every
+// retune that lands moves one entry below one closer to zero, the last one
+// zeroes the table, and the constant is deleted in the same commit. Rows
+// still sum 90/75/75/60 = 300 — no workout moves TYPE, only band.
+const OUTSTANDING: Record<WorkoutType, Record<Band, number>> = {
+  O2: { "<20": 7, "20-30": 1, "30-45": 1, "45-60": -5, "60+": -4 },
+  AT: { "<20": 8, "20-30": 7, "30-45": -6, "45-60": -9, "60+": 0 },
+  TR: { "<20": 9, "20-30": 3, "30-45": -10, "45-60": 0, "60+": -2 },
+  AN: { "<20": 18, "20-30": -2, "30-45": -8, "45-60": -6, "60+": -2 },
 };
 
 // Authoring bands from the starter library's conventions (starter.ts header).
@@ -77,16 +84,34 @@ describe("LIBRARY_WORKOUTS", () => {
     expect(new Set(LIBRARY_WORKOUTS.map((w) => w.title)).size).toBe(300);
   });
 
-  it("fills the quota grid exactly", () => {
+  it("fills the quota grid exactly — patterns.json targets plus what the rebalance still owes", () => {
     const got: Record<string, number> = {};
     for (const w of LIBRARY_WORKOUTS) {
       const { minutes } = estimateMinutes(w.steps, BASELINES);
       const key = `${w.type}|${band(minutes)}`;
       got[key] = (got[key] ?? 0) + 1;
     }
-    for (const [type, bands] of Object.entries(QUOTA))
+    for (const [type, bands] of Object.entries(TARGETS))
       for (const [b, n] of Object.entries(bands))
-        expect(got[`${type}|${b}`] ?? 0, `${type} ${b}`).toBe(n);
+        expect(got[`${type}|${b}`] ?? 0, `${type} ${b}`).toBe(
+          n + OUTSTANDING[type as WorkoutType][b as Band],
+        );
+  });
+
+  it("targets sum to 300 across 90/75/75/60, and the outstanding table nets out", () => {
+    // Two properties the rebalance cannot break without noticing: the grid
+    // is still the same library (no workout changes TYPE), and OUTSTANDING
+    // is a redistribution within each type, never a change to its size.
+    const perType: Record<string, number> = { O2: 90, AT: 75, TR: 75, AN: 60 };
+    for (const [type, bands] of Object.entries(TARGETS)) {
+      const sum = Object.values(bands).reduce((a, b) => a + b, 0);
+      expect(sum, `${type} targets`).toBe(perType[type]);
+      const owed = Object.values(OUTSTANDING[type as WorkoutType]).reduce(
+        (a, b) => a + b,
+        0,
+      );
+      expect(owed, `${type} outstanding`).toBe(0);
+    }
   });
 
   it("keeps every work step's spm inside its type's band", () => {

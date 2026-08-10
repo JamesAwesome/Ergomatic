@@ -29,15 +29,16 @@
 // changes"), so BEFORE_minutes(w) = AFTER_minutes(w) + frozen[w.title].
 //
 // patterns.json's 20 `warmupMinutes` stat entries (one per generation
-// cell) are ORPHANED by this change, not deleted or corrected — per spec
-// §6: "patterns.json's 20 `warmupMinutes` stat entries are ORPHANED, not
-// deleted: the balance script (§7) and any future regen read the file,
-// and rewriting it is the regen follow-on's business, not this phase's."
-// This script does not read those entries at all.
+// cell) are RETAINED, not orphaned — the regen follow-on (the 2026-08-10
+// library-rebalance spec, §2's adversarial B4 correction) found that they
+// are the record of the book cells' warm-up-inclusiveness and that §6's
+// translation rule depends on them. This script still does not read them;
+// it reads that file's NEW `targets` block instead (below).
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { estimateMinutes } from "../domain/expand.js";
+import patterns from "../domain/generation/patterns.json";
 import type { WorkoutType } from "../domain/types.js";
 import {
   GLOBAL_LIBRARY_SEED,
@@ -57,18 +58,23 @@ export const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 export type Band = "<20" | "20-30" | "30-45" | "45-60" | "60+";
 
-// Bucket edges and the TARGET grid, verbatim from docs/superpowers/specs/
-// 2026-08-03-workout-generation-design.md §4 ("Quota grid"). The falsifying
-// line for everything this script prints is that spec's LINE 94, the row
-// directly under the quota table, quoted verbatim:
+// Bucket edges, verbatim from docs/superpowers/specs/2026-08-03-workout-
+// generation-design.md §4 ("Quota grid"). TWO grids are in play in this
+// script and confusing them is the mistake arc review F9 caught:
 //
+//   * DESIGN_GRID_2026_08_03 (below) is the ORIGINAL quota grid, and it is
+//     defined over WARM-UP-INCLUSIVE durations. The falsifying line is that
+//     spec's LINE 94, the row directly under the quota table, verbatim:
 //     "Duration = total time including warm-up and rests."
+//   * TARGET (below) is the 2026-08-10 rebalance grid, and it is defined
+//     over WARM-UP-FREE durations. It lives in patterns.json's `targets`
+//     block, which is also what library.test.ts's quota gate reads.
 //
-// THE TARGET GRID IS THEREFORE DEFINED OVER WARM-UP-INCLUSIVE DURATIONS,
-// and AFTER (post-strip) is warm-up-free. AFTER-vs-TARGET is not a
-// like-for-like comparison and must never be read as a rebalance signal —
-// arc review F9. BEFORE-vs-TARGET is the like-for-like one, and it is what
-// this script uses as its FAITHFULNESS CHECK (see `gridMismatches` below).
+// So BEFORE (the warm-up-inclusive replay) is compared against the DESIGN
+// grid — that is the FAITHFULNESS CHECK, `gridMismatches` below — and AFTER
+// (warm-up-free) is compared against TARGET. Both comparisons are now
+// like-for-like; the AFT-TGT row that used to carry the "not a rebalance
+// signal" warning is the rebalance signal now that TARGET changed rods.
 // band() applies the SAME edges the design used when the grid was
 // authored; only the durations fed into it changed.
 export const band = (minutes: number): Band =>
@@ -85,18 +91,31 @@ export const band = (minutes: number): Band =>
 export const BANDS: readonly Band[] = ["<20", "20-30", "30-45", "45-60", "60+"];
 export const TYPES: readonly WorkoutType[] = ["O2", "AT", "TR", "AN"];
 
-// The design's quota grid (§4 table), the ORIGINAL target the 300-workout
-// library was authored against — every workout's duration then included
-// its warm-up. This is deliberately NOT the same object as library.test.ts's
-// QUOTA constant: that file now pins the MEASURED post-strip reality (a
-// content-regression guard), while this is the unchanged design intent
-// the strip drifted away from.
-export const TARGET: Record<WorkoutType, Record<Band, number>> = {
+// The 2026-08-03 design's quota grid (§4 table), the ORIGINAL target the
+// 300-workout library was authored against — every workout's duration then
+// included its warm-up. It survives here for ONE job: the faithfulness
+// check, which asks whether the pre-strip replay reproduces the library the
+// grid was authored against. It is not a target for anything any more.
+export const DESIGN_GRID_2026_08_03: Record<
+  WorkoutType,
+  Record<Band, number>
+> = {
   O2: { "<20": 2, "20-30": 14, "30-45": 36, "45-60": 18, "60+": 20 },
   AT: { "<20": 5, "20-30": 19, "30-45": 34, "45-60": 13, "60+": 4 },
   TR: { "<20": 9, "20-30": 22, "30-45": 32, "45-60": 9, "60+": 3 },
   AN: { "<20": 14, "20-30": 20, "30-45": 18, "45-60": 5, "60+": 3 },
 };
+
+// The live target: the 2026-08-10 rebalance grid, warm-up-free, READ FROM
+// patterns.json rather than duplicated here. `library.test.ts`'s quota gate
+// reads the same block, so the file is the single source and neither the
+// script nor the test can drift from the other (rebalance spec §2:
+// "`library-balance.ts` AND `library.test.ts`'s QUOTA both read from it").
+// The grid itself is the feasibility solve's output — `library-moves.ts`.
+export const TARGET: Record<
+  WorkoutType,
+  Record<Band, number>
+> = patterns.targets;
 
 export interface WorkoutStat {
   readonly type: WorkoutType;
@@ -137,8 +156,14 @@ function totalOf(counts: Record<string, number>): number {
 }
 
 /** The FAITHFULNESS CHECK (arc review F9): every `${type}|${band}` cell
- *  where `counts` disagrees with the design grid, as `cell: delta` pairs.
- *  Empty means all 20 cells match.
+ *  where `counts` disagrees with the 2026-08-03 design grid, as `cell: delta`
+ *  pairs. Empty means all 20 cells match.
+ *
+ *  It defaults to `DESIGN_GRID_2026_08_03`, NOT to `TARGET`. The check's
+ *  whole job is to prove the warm-up-inclusive replay reproduces the library
+ *  the warm-up-inclusive grid was authored against; run against the
+ *  rebalance's warm-up-free `TARGET` it would compare two different rods and
+ *  report 20 meaningless mismatches.
  *
  *  Run against the BEFORE (warm-up-inclusive) replay over the 300 GRID
  *  rows, an empty result is two things at once: proof the frozen-literal
@@ -151,7 +176,7 @@ function totalOf(counts: Record<string, number>): number {
  *  and are not part of what it was authored against. */
 export function gridMismatches(
   counts: Record<string, number>,
-  target: Record<WorkoutType, Record<Band, number>> = TARGET,
+  target: Record<WorkoutType, Record<Band, number>> = DESIGN_GRID_2026_08_03,
 ): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [cell, delta] of Object.entries(drift(counts, target))) {
@@ -172,6 +197,11 @@ function printTypeTable(
   const pad = (s: string): string => s.padStart(colWidth);
   const targetRow = BANDS.map((b) => TARGET[type][b]);
   const targetTotal = targetRow.reduce((a, b) => a + b, 0);
+  // The faithfulness check's own rod — the warm-up-INCLUSIVE grid BEFORE was
+  // authored against. Deliberately not `targetRow`: since the rebalance,
+  // TARGET is warm-up-free and comparing BEFORE to it would be nonsense.
+  const designRow = BANDS.map((b) => DESIGN_GRID_2026_08_03[type][b]);
+  const designTotal = designRow.reduce((a, b) => a + b, 0);
   const afterRow = BANDS.map((b) => afterCounts[`${type}|${b}`] ?? 0);
   const afterTotal = afterRow.reduce((a, b) => a + b, 0);
 
@@ -216,8 +246,8 @@ function printTypeTable(
     // whether the numbers below can be trusted at all.
     signedRow(
       "CHECK",
-      beforeRow.map((b, i) => b - targetRow[i]!),
-      beforeTotal - targetTotal,
+      beforeRow.map((b, i) => b - designRow[i]!),
+      beforeTotal - designTotal,
     );
     // What the STRIP actually did to this type: the real signal.
     signedRow(
@@ -226,8 +256,10 @@ function printTypeTable(
       afterTotal - beforeTotal,
     );
   }
-  // NOT a rebalance signal (arc review F9) — warm-up-free counts against a
-  // warm-up-inclusive grid. Renamed from DRIFT so nobody reads it as one.
+  // Since the 2026-08-10 rebalance authored a warm-up-FREE TARGET, this row
+  // finally compares two of the same thing: it is the outstanding rebalance
+  // work, cell by cell, and it reads 0 everywhere when the phase is done.
+  // (Arc review F9's warning applied to the old warm-up-inclusive TARGET.)
   signedRow(
     "AFT-TGT",
     afterRow.map((a, i) => a - targetRow[i]!),
@@ -251,61 +283,50 @@ function main(): void {
 
   console.log(`GLOBAL_LIBRARY_SEED: ${GLOBAL_LIBRARY_SEED.length} workouts`);
   console.log(
-    "(design TARGET grid sums to 300; the 2 onboarding rows, Phase 6I,",
+    "(both grids sum to 300; the 2 onboarding rows, Phase 6I, postdate them",
   );
-  console.log(" postdate the grid and land on top of it wherever they band)");
+  console.log(" and land on top of whichever cell they band into)");
   console.log("");
   console.log("READ THIS BEFORE THE NUMBERS");
   console.log(
-    "  The TARGET grid is defined over warm-up-INCLUSIVE durations. The",
+    "  TWO grids, two rods. TARGET is the 2026-08-10 rebalance grid and it is",
   );
   console.log(
-    "  generation spec's own line under the quota table (2026-08-03-workout-",
+    "  defined over warm-up-FREE durations (patterns.json's `targets`). The",
   );
   console.log(
-    '  generation-design.md line 94): "Duration = total time including',
+    "  2026-08-03 DESIGN grid is warm-up-INCLUSIVE — the generation spec's own",
+  );
+  console.log(
+    '  line under its quota table (line 94): "Duration = total time including',
   );
   console.log('  warm-up and rests."');
   console.log(
-    "  AFTER is warm-up-FREE, so the AFT-TGT row compares two different",
+    "  AFTER is warm-up-free, so AFT-TGT is now a like-for-like comparison:",
   );
   console.log(
-    "  things. It measures the STRIP, not the library, and it is NOT a",
+    "  it is the OUTSTANDING rebalance work, and it reads 0 when it is done.",
   );
-  console.log("  rebalance signal. Do not rule on a regen from it.");
   if (withWarmups) {
     console.log(
-      "  * CHECK (BEFORE minus TARGET) is the like-for-like comparison and the",
+      "  * CHECK (BEFORE minus the 2026-08-03 DESIGN grid) is the FAITHFULNESS",
     );
     console.log(
-      "    FAITHFULNESS check: 0 in all 20 grid cells means the replay and the",
+      "    check: 0 in all 20 grid cells means the replay and the band edges",
     );
-    console.log("    band edges are right. See the verdict line at the end.");
+    console.log("    are right. See the verdict line at the end.");
     console.log(
       "  * MOVED (AFTER minus BEFORE) is what removing the warm-ups actually",
     );
-    console.log("    did. That is the real signal.");
-    console.log(
-      "  * AFTER is the new reality and it is AWAITING A NEW TARGET GRID; no",
-    );
-    console.log(
-      "    grid has been authored over warm-up-free durations yet. A rower",
-    );
-    console.log(
-      "    with a 10 minute warm-up preference recovers roughly the original",
-    );
-    console.log("    spread at run time.");
+    console.log("    did — the damage the rebalance answers.");
   } else {
     console.log(
-      "  --after-only: printing AFTER vs TARGET only, below (the AFT-TGT",
+      "  --after-only: printing AFTER vs TARGET only. Omit the flag to also",
     );
     console.log(
-      "  row above just described, not a rebalance signal). Omit the flag",
+      "  see BEFORE/CHECK/MOVED against the pre-strip replay — the numbers",
     );
-    console.log(
-      "  to also see BEFORE/CHECK/MOVED against the pre-strip replay — the",
-    );
-    console.log("  numbers ROADMAP's Phase 9 bullet actually points at.");
+    console.log("  ROADMAP's Phase 9 bullet actually points at.");
   }
 
   let beforeCounts: Record<string, number> | null = null;
@@ -343,7 +364,7 @@ function main(): void {
       beforeCounts ? ` vs BEFORE ${totalOf(beforeCounts)}` : ""
     } (AFT-TGT ${totalAfter - totalTarget > 0 ? "+" : ""}${
       totalAfter - totalTarget
-    }, not a rebalance signal)`,
+    }; the 2 onboarding rows are the whole difference)`,
   );
 
   if (gridBeforeCounts) {
@@ -351,7 +372,8 @@ function main(): void {
     const cells = Object.keys(mismatches).length;
     console.log(
       cells === 0
-        ? "\nFAITHFULNESS CHECK: BEFORE reproduces the design grid in 20/20" +
+        ? "\nFAITHFULNESS CHECK: BEFORE reproduces the 2026-08-03 design" +
+            " grid in 20/20" +
             " cells (300 grid rows, onboarding excluded). The replay and the" +
             " band edges are confirmed; the MOVED row can be trusted."
         : `\nFAITHFULNESS CHECK FAILED: ${cells} of 20 cells differ ` +
