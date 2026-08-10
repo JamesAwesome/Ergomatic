@@ -1546,10 +1546,26 @@ third of the library already are: N lead lines, then a repeated block.
       (lead lines + `xN` + block round-trips through parse, validate,
       save, and re-render) and document the syntax in the import
       screen's grammar example. **S**
+- [ ] Pay down the O2|60+ variety debt (James, 2026-08-10, at the
+      rebalance's Gate 2): Fair Wind / Morning Mist / Sleet / Glass Sea
+      (+ Altostratus after its retune) are near-identical long
+      continuous singles. Retune 2-3 into distinct shapes WITHIN the
+      cell so the grid holds; the `variety.test.ts` KNOWN_DEBT entry
+      for O2|60+ shrinks with them (ratchets only ever go down). The
+      other grown ceilings from the rebalance (AT|30-45, TR|30-45,
+      O2|30-45, AN|20-30 — disclosed in the rebalance PR) are fair
+      game for the same pass if it goes well. **M**
+- [ ] Workout rating system (James, 2026-08-10): unscoped — brainstorm
+      first. Open questions to settle there: what a tester rates (the
+      workout, or the session they just rowed), where it surfaces
+      (post-save, library, detail), and whether ratings feed selection
+      or stay informational. **M, brainstorm before sizing**
 
 **Exit:** A rower authors 15' steady then 4x(3' on, 1' off) entirely in
 the builder; the same workout pastes in via import; both render as
-"N× the block below" exactly as the seeded library does.
+"N× the block below" exactly as the seeded library does. The O2|60+
+cluster reads as five different workouts, and testers can rate what
+they row.
 
 ## Bugfix rounds
 
