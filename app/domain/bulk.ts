@@ -1,3 +1,33 @@
+/**
+ * Bulk paste parsing.
+ *
+ * **The import contract, in one sentence** (composed 2026-08-10 when the
+ * warmup setting rebased onto Phase CL's all-or-nothing import, which had
+ * landed independently): **`wu` lines are never "bad"; everything else is
+ * all-or-nothing.**
+ *
+ * Unpacked, because two rulings meet here and neither survives alone:
+ *
+ * - A **well-formed `wu <minutes>` line is DROPPED and COUNTED**
+ *   (`BulkResult.droppedWarmups`, surfaced by `droppedWarmupNotice` below
+ *   and by `POST /api/workouts/bulk`'s own `droppedWarmups` field). It is
+ *   not an error, it does not appear in `errors`, and it therefore never
+ *   trips the all-or-nothing gate — a paste whose only oddity is warm-up
+ *   lines imports in full. James's ruling; `wu` left the `Step` union on
+ *   2026-08-09 and a paste written before that day must still land.
+ * - A **MALFORMED `wu` line is fatal**, like any other malformed line: the
+ *   old "needs minutes" shape check still runs and still errors. A dropped
+ *   line is a line we understood, not a line we skipped.
+ * - A **warm-up-ONLY block is a parse error** ("workout needs at least one
+ *   step. Warm-ups are a setting now."). Dropping its only content would
+ *   make the block vanish silently.
+ * - **Everything else is all-or-nothing** (Phase 5B/CL): ANY entry in
+ *   `errors` — parse-level here, or validation-level in the route — means
+ *   the whole paste creates NOTHING, so a rower can fix the one bad line
+ *   and re-paste the WHOLE text without duplicating what already landed.
+ *   The route (`server/routes/data.ts`) owns that half; this file owns the
+ *   `errors` array it keys on.
+ */
 import { parsePaceRef } from "./pace.js";
 import { parseDurationToken } from "./duration.js";
 import type { Difficulty, Step, WorkoutInput, WorkoutType } from "./types.js";
