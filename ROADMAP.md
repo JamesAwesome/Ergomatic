@@ -1518,6 +1518,32 @@ nothing here is new work. Effort guesses are S/M/L.
 **Exit:** every line above is shipped, re-filed under "Triggered
 follow-ons" with an explicit trigger, or declined in writing.
 
+## Phase CL2 — Post-release authoring parity
+
+**Status:** Not started. **Scheduled AFTER the end-of-CL TestFlight
+release (James, 2026-08-10) — must not block getting the app into
+testers' hands.**
+**Goal:** The builder can author what the domain, the import, and a
+third of the library already are: N lead lines, then a repeated block.
+
+- [ ] Builder: positional repeat-block authoring. Today the repeat is
+      hoisted into a single form field (`builderState.ts`'s `f.reps`),
+      so lead-piece-then-block workouts (the Katabatic Wind shape;
+      "mixed", the book's most common AT archetype at 11 of 19 in the
+      30-45 cell) cannot be authored in-app. The one-marker model stays
+      the constitution (README: everything before the marker runs once,
+      everything after runs count times); the builder learns to PLACE
+      the marker, not to multiply blocks. **M**
+- [ ] Import: the grammar already parses a positional `xN` line
+      (`bulk.ts:268`) into the marker; verify full parity end to end
+      (lead lines + `xN` + block round-trips through parse, validate,
+      save, and re-render) and document the syntax in the import
+      screen's grammar example. **S**
+
+**Exit:** A rower authors 15' steady then 4x(3' on, 1' off) entirely in
+the builder; the same workout pastes in via import; both render as
+"N× the block below" exactly as the seeded library does.
+
 ## Bugfix rounds
 
 Ad hoc fix rounds outside the phase sequence — small bundles of device
