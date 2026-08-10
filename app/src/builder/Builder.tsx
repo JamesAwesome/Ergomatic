@@ -156,9 +156,19 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
       return null;
     }
     return d;
-    // Mount-only: `mode`/`pristine` are stable for the life of this screen
-    // (React never remounts Builder across a mode change — EditWorkout.tsx
-    // and AppRoutes.tsx both key a fresh mount by route/id instead).
+    // Mount-only: `mode`/`pristine` are stable for the life of this screen.
+    // Neither EditWorkout.tsx nor AppRoutes.tsx keys Builder by route/id —
+    // there is no `key=` anywhere on either route — so this actually relies
+    // on a narrower fact: the app has no in-app path from edit-A straight to
+    // edit-B without an unmount in between (every route change in between
+    // goes through a different screen first). A hand-typed URL swap between
+    // two edit routes is the one way to dodge that and keep this mount
+    // alive with a stale `mode`/`pristine` closure — harmless here, because
+    // the persisted consequence is self-healing: `restoredDraft`'s own
+    // staleness check (baseline fingerprint mismatch, above) is exactly
+    // what catches a workout that changed out from under a stale mount, so
+    // a leftover draft from before the swap still resolves correctly on the
+    // NEXT mount even if this one never re-ran.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

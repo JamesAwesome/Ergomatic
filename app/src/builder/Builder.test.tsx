@@ -1222,8 +1222,59 @@ describe("Builder", () => {
       expect(screen.getByRole("button", { name: "EDIT" })).toBeInTheDocument();
     });
 
-    // Contract item 4 — realistic fixture (briefing's own rule): built from
-    // a real LIBRARY_WORKOUTS entry via fromWorkout, not a hand-rolled form.
+    // Contract item 4, positive half — realistic fixture (briefing's own
+    // rule): built from a real LIBRARY_WORKOUTS entry via fromWorkout, not a
+    // hand-rolled form. The negative half (a stale baseline) is the test
+    // right below this one.
+    it("mounting edit mode with a matching workoutId AND matching baseline restores the draft, shows the notice, and leaves every card collapsed", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+
+      const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret");
+      if (!seaFret) throw new Error("fixture not found: Sea Fret");
+      const currentInitial = fromWorkout({
+        title: seaFret.title,
+        type: seaFret.type,
+        difficulty: seaFret.difficulty,
+        pain: seaFret.pain,
+        steps: seaFret.steps,
+      });
+
+      // Same workoutId AND a baseline that fingerprints IDENTICAL to the
+      // current `fromWorkout` result — the workout hasn't changed since
+      // the draft was written, so this restores.
+      saveBuilderDraft({
+        v: 1,
+        mode: { kind: "edit", workoutId: "sea-fret-id" },
+        form: { ...currentInitial, title: "Sea Fret Draft Edit" },
+        baseline: currentInitial,
+        savedAt: "2026-08-10T00:00:00.000Z",
+      });
+
+      await renderBuilder({
+        kind: "edit",
+        id: "sea-fret-id",
+        initial: currentInitial,
+      });
+
+      expect(screen.getByText("Draft restored.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue("Sea Fret Draft Edit");
+      // Collapsed: edit mode already opens collapsed regardless, but a
+      // restored edit-mode mount must ALSO leave every card collapsed
+      // (contract item 3's "new or edit" clause) — assert it explicitly
+      // rather than relying on edit mode's own default to coincidentally
+      // produce the same result.
+      expect(
+        screen.queryByLabelText(/Row \d+ duration/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getAllByRole("button", { name: "EDIT" }).length,
+      ).toBeGreaterThan(0);
+    });
+
+    // Contract item 4, negative half — realistic fixture (briefing's own
+    // rule): built from a real LIBRARY_WORKOUTS entry via fromWorkout, not a
+    // hand-rolled form.
     it("mounting edit mode with a stale-baseline draft drops it silently and deletes it", async () => {
       mockBaselines(BASELINES);
       mockApi(() => new Response(null, { status: 201 }));
@@ -1288,6 +1339,39 @@ describe("Builder", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    // Contract item 5 names blur disarm explicitly, alongside the 4s timer —
+    // same house precedent as WorkoutDetail.test.tsx's own "disarms on
+    // blur" case: a real Edit/BACK click would navigate this test's
+    // single-route render out from under itself, so blur is fired directly
+    // rather than routed through a real navigation.
+    it("disarms on blur — a following tap arms again instead of resetting the form", async () => {
+      mockBaselines(BASELINES);
+      mockApi(() => new Response(null, { status: 201 }));
+      saveBuilderDraft(draftOf({ form: { ...newForm(), title: "Doomed" } }));
+      await renderBuilder();
+
+      const startOver = screen.getByRole("button", { name: "START OVER" });
+      await userEvent.click(startOver);
+      expect(
+        screen.getByRole("button", { name: "Tap again to start over" }),
+      ).toBeInTheDocument();
+
+      fireEvent.blur(
+        screen.getByRole("button", { name: "Tap again to start over" }),
+      );
+      expect(
+        screen.getByRole("button", { name: "START OVER" }),
+      ).toBeInTheDocument();
+
+      // The following tap ARMS again — it does not fire the reset a second
+      // tap would have while still armed. The form content survives.
+      await userEvent.click(screen.getByRole("button", { name: "START OVER" }));
+      expect(
+        screen.getByRole("button", { name: "Tap again to start over" }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Title")).toHaveValue("Doomed");
     });
 
     // Contract item 5, second tap.
