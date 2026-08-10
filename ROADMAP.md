@@ -1030,8 +1030,8 @@ workout either; our own terminal latch did (§19.4). Phases 7A-fix-2 and
 
 **Deferred to 7B/7C, both below:** the screen wiring, PM5-sourced log
 entries, and the reverse cross-clear all shipped there. The §17 items still
-open need an operator at the erg rather than a CI gate; Phase CL collects
-them.
+open need an operator at the erg rather than a CI gate; Triggered follow-ons
+collects them.
 
 **Exit:** MET — every domain/driver behavior the design spec names has a
 passing test (100% on `domain/monitor/**` and on `src/monitor/
@@ -1296,7 +1296,7 @@ the inverted PAUSED band, the lost-link banner's descope, MISSED rows, the
 diagnostics sheet's sequence numbering, the reverse cross-clear's home).
 The reconnect follow-on this phase scoped out, the failed-`program()`
 open-run question 7A-fix-2 parked, and the hardware readings still owed all
-sit in Phase CL.
+sit in Triggered follow-ons.
 
 **Exit:** the fake-transport analogue is MET and gated in CI
 (`e2e/connected.spec.ts`, both orientations): distance steps auto-advance,
@@ -1343,7 +1343,7 @@ monitor-sourced effort interval keeps every measured field, a null-indexed
 actual is dropped rather than misattributed, and `deviceName` rides on the
 log. Anonymous-run logging and §17 item 22 (whether the split time the log
 stores is work-only or work-plus-rest) are the two remainders this phase
-leaves; both are in Phase CL.
+leaves; both are in Triggered follow-ons.
 
 **Exit:** MET against the fake transport — a session fully driven by a
 connected PM5 saves a log indistinguishable in shape from a phone-timer
