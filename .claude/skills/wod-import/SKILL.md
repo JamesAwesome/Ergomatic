@@ -38,7 +38,7 @@ cannot verify its own state write stops and says so.
    `node scripts/wod/fetch-wods.mjs --range <cursor minus K days>
    <cursor minus 1 day>` with K sized to bring unruled candidates to
    about 2xN. Update cursor. Error records in the dump count as ruled
-   rejected (reason: scrape error) — record them so they are never
+   rejected (reason: scrape error); record them so they are never
    re-pulled.
 3. Curate. Keep a candidate only if ALL hold:
    - It translates faithfully to time/distance work steps with optional
@@ -63,7 +63,7 @@ cannot verify its own state write stops and says so.
      drop them anyway.
    - VALIDATE before presenting: write the block to a temp file and run
      `WOD_BLOCK_FILE=/tmp/block.txt pnpm --dir app exec vitest run
-     --project unit server/wodBlockValidation.harness.test.ts`
+     --project unit server/wodBlockValidation.harness.test.ts --reporter=verbose`
      with the block's text in that file. A block that does not print OK
      never reaches James; fix it or drop the candidate.
 5. Scaling, only when James asks (in the original request or per

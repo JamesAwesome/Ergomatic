@@ -22,7 +22,7 @@
  *
  * Invocation (also in .claude/skills/wod-import/SKILL.md):
  *   WOD_BLOCK_FILE=/tmp/block.txt pnpm --dir app exec vitest run \
- *     --project unit server/wodBlockValidation.harness.test.ts
+ *     --project unit server/wodBlockValidation.harness.test.ts --reporter=verbose
  */
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
