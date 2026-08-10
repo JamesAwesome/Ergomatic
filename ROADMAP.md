@@ -1414,23 +1414,12 @@ is still owed.
 
 ## Phase CL — Cleanup
 
-**Status:** Not started
+**Status:** In closing — list adjudicated 2026-08-10, release staged
 **Goal:** One home for the remainders the phases above left behind, so a
 close-out round can be scheduled from a list instead of rediscovered from a
 grep. Collection only: every line below already existed somewhere, and
 nothing here is new work. Effort guesses are S/M/L.
 
-- [ ] **Reconnect and background scan, five pieces** (Phase 7B Task 8
-      close-out; `docs/design/DEVIATIONS.md`'s lost-link and MISSED-rows
-      rows; design spec C5's descope): (1) Capacitor id-keyed reconnect;
-      (2) DRIVER RE-SUBSCRIBE, since `createPm5Driver` subscribes once at
-      construction and a transport that silently regains its link still
-      needs its notification handler re-attached; (3) a `Transport.scan()`
-      background variant that can watch for a known PM5 without the OS
-      picker; (4) `DiscoveredMonitor.rssi`, so a picker or auto-connect can
-      rank by signal; (5) MISSED-rows inheritance, which exists only to
-      catch what a reconnect BACKFILL fails to fill and so lands with
-      reconnect or not at all. **L**
 - [x] **The platform-conditional default transport** — the same root cause
       as the item above: `createCapacitorBleTransport` had no call site, a
       native build passed its own factory through
@@ -1443,37 +1432,6 @@ nothing here is new work. Effort guesses are S/M/L.
       dynamic-imports `createCapacitorBleTransport`, web delegates
       unchanged to `transports/index.ts`'s `resolveDefaultTransport` —
       wired through `useMonitorSession.ts`'s existing `??` fallback. **M**
-- [ ] **Anonymous-run logging (`workoutId: null`)** — no library door
-      exists to log a connected session that has no workout identity, so
-      the record clears through the existing connect/start guards but can
-      never be saved (Phase 7C, spec §1's own non-goal). **M**
-- [ ] **A failed `program()` during an OPEN run leaves the old run open and
-      numbering** — `driver.ts`'s `program()` replaces `activeRun` only
-      after `sendPrepare()`/`sendSequence()`/`verifyArmed()` all resolve, so
-      a throw part-way leaves the previous run open, still normalizing the
-      next boundary and still emitting its own `workoutComplete`.
-      Pre-existing, parked deliberately in 7A-fix-2 Task 4's review (probe
-      P3b); its original rationale cited a destructive-reject fact §19.2
-      has since WITHDRAWN, so the decision needs re-reasoning against the
-      current record. **M**
-- [ ] **Hardware session shopping list (operator-run, one row at the erg)**
-      — `docs/monitor/pm5-interface-notes.md` §17 item 21 (the three
-      pairing/programming latency spans, still unmeasured against a real
-      PM5) and item 22 (whether `0x0037`'s Split/Interval Time is the work
-      portion alone or work plus its trailing rest, which decides whether
-      `buildMonitorLogSteps` needs a re-derivation); §17 item 5's unrowed
-      question, whether a full multi-FRAME distance program retains all its
-      intervals when rowed to completion from a clean state; and §18's own
-      readings-still-owed list, the PAUSED tick count from a full log and
-      RATE at normal pace on a sustained piece. Add a genuine mid-piece
-      disconnect to the same row, which no walk has ever exercised. **M**
-      (operator time, not build time)
-- [ ] **One `.5` pace target on the wire** — every workout programmed so
-      far has carried whole-second targets, so `representableCentiseconds`,
-      the fix that let baseline-derived splits like `2:14.5` compile at
-      all, has never been sent to a real PM5 (§18, walk 1). One row with a
-      `.5` target settles it silently, so it rides along with the shopping
-      list above. **S**
 - [x] **`intervalAccrued` on `MonitorFrame`** — pane C's active row showed
       `—` for the dimension that was not counting down, because no
       per-interval field existed for it. Closed as a DRIVER change, not a
@@ -1505,9 +1463,12 @@ nothing here is new work. Effort guesses are S/M/L.
       NOTHING in the request is created; a fully clean paste reaches
       `stores.workouts.createMany`, itself one transaction in the real
       store, reused rather than re-implemented. **M**
-- [ ] **No unsaved-changes guard in the builder** — leaving a
-      half-authored workout discards it with no warning. Recorded at Phase
-      5B's merge, still true. **S**
+- [x] **No unsaved-changes guard in the builder** — Fixed (CL remainder,
+      this PR): draft persistence, not a navigation guard — `builderDraft.ts`
+      single-slot autosave/restore with a fingerprint staleness guard and a
+      two-tap START OVER; James's explicit shape choice over exit
+      interception and a data-router migration (spec:
+      `docs/superpowers/specs/2026-08-10-cl-remainder-design.md`). **S**
 - [x] **Per-worktree compose scoping** — the e2e/screenshots stack used to
       be shared across sessions by container name (one Postgres volume, one
       `web`/`api` pair), so concurrent worktrees stomped each other's
@@ -1525,8 +1486,10 @@ nothing here is new work. Effort guesses are S/M/L.
       `newsScroll.ts` + `News.tsx`'s save/restore effects, `TabBar.tsx`'s
       clear-on-fresh-tap (CL item, BACK-walks-the-stack batch). **S**
 
-**Exit:** every line above is shipped, re-filed under "Triggered
-follow-ons" with an explicit trigger, or declined in writing.
+**Exit:** MET 2026-08-10 for the list (every line shipped or re-filed with
+its trigger above); the phase itself closes with the staged v0.7.0 release,
+which fires only after the library-rebalance PR merges (James's ruling:
+testers meet the rebalanced library).
 
 ## Phase CL2 — Post-release authoring parity
 
@@ -1723,6 +1686,48 @@ next phase. One line per round, newest first.
   monitor integration becomes real. Then: add a programming-limits channel
   to `MonitorCapabilities`, move the four constants there per-monitor, and
   template the six `CompileError` messages instead of hardcoding "PM5".
+- **Reconnect and background scan, five pieces** (Phase 7B Task 8
+  close-out; `docs/design/DEVIATIONS.md`'s lost-link and MISSED-rows rows;
+  design spec C5's descope): (1) Capacitor id-keyed reconnect; (2) DRIVER
+  RE-SUBSCRIBE, since `createPm5Driver` subscribes once at construction and
+  a transport that silently regains its link still needs its notification
+  handler re-attached; (3) a `Transport.scan()` background variant that can
+  watch for a known PM5 without the OS picker; (4) `DiscoveredMonitor.rssi`,
+  so a picker or auto-connect can rank by signal; (5) MISSED-rows inheritance,
+  which exists only to catch what a reconnect BACKFILL fails to fill and so
+  lands with reconnect or not at all. **A failed `program()` during an OPEN
+  run leaves the old run open and numbering** — `driver.ts`'s `program()`
+  replaces `activeRun` only after `sendPrepare()`/`sendSequence()`/
+  `verifyArmed()` all resolve, so a throw part-way leaves the previous run
+  open, still normalizing the next boundary and still emitting its own
+  `workoutComplete`. Pre-existing, parked deliberately in 7A-fix-2 Task 4's
+  review (probe P3b); its original rationale cited a destructive-reject fact
+  §19.2 has since WITHDRAWN, so the decision needs re-reasoning against the
+  current record (re-reasoning draft in PR #70's body). **Trigger:** Capacitor
+  BLE lands (PM5 reaches the phone), or a tester reports a mid-piece lost link.
+- **Anonymous-run logging (`workoutId: null`)** — every storage and server
+  layer already accepts the record (nullable column, guards key on
+  `completedAt` alone), but no product path can CREATE an anonymous run: the
+  only connect door stamps a real workout id (`WorkoutDetail.tsx`), and
+  `ANONYMOUS_RUN` is dead code by its own comment. The save door lands WITH
+  its first consumer, not before. **Trigger:** a door that creates anonymous
+  runs ships — a free-row entry point, or PM5-initiated sessions.
+- **Hardware session shopping list (operator-run, one row at the erg)** —
+  `docs/monitor/pm5-interface-notes.md` §17 item 21 (the three pairing/
+  programming latency spans, still unmeasured against a real PM5) and item 22
+  (whether `0x0037`'s Split/Interval Time is the work portion alone or work
+  plus its trailing rest, which decides whether `buildMonitorLogSteps` needs
+  a re-derivation); §17 item 5's unrowed question, whether a full multi-FRAME
+  distance program retains all its intervals when rowed to completion from a
+  clean state; and §18's own readings-still-owed list, the PAUSED tick count
+  from a full log and RATE at normal pace on a sustained piece. Add a genuine
+  mid-piece disconnect to the same row, which no walk has ever exercised. **One
+  `.5` pace target on the wire** — every workout programmed so far has carried
+  whole-second targets, so `representableCentiseconds`, the fix that let
+  baseline-derived splits like `2:14.5` compile at all, has never been sent to
+  a real PM5 (§18, walk 1). One row with a `.5` target settles it silently, so
+  it rides along with the shopping list above. **Trigger:** James's next
+  session at the erg (checklist in PR #70's body).
 - **Cron+ntfy revival on the WOD fetcher**: `scripts/wod/fetch-wods.mjs`
   is pull-only today (the `wod-import` skill runs it on demand). Trigger:
   James wants WODs pushed instead of pulled. Then: a cron job runs the
