@@ -5,6 +5,23 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Covers everything since v0.5.1: v0.6.0 shipped without an entry, so
+    // this one carries the 6I onboarding alongside the warmup setting and
+    // the Phase CL fixes (James's ruling, 2026-08-09). Version and date
+    // get a one-line touch at tag time if either drifts.
+    version: "v0.7.0",
+    date: "2026-08-10",
+    items: [
+      "Today now starts you off: a START HERE guide walks your first week, and a baseline-setting workout appears until your 2k and 6k are in.",
+      "Workouts no longer carry their own warm-ups. Set yours once on You and every session includes it automatically.",
+      "New in News: articles on setting baselines and picking a workout, plus a Start here shelf for new rowers.",
+      "Reading flows properly now: BACK walks you through the articles you came from, and the close button returns you to where you started.",
+      "The News feed remembers your scroll position.",
+      "Bulk import is all-or-nothing: a bad line means nothing lands, so fixing and re-pasting never duplicates workouts.",
+      "Connect a PM5 from a workout's page and row with live splits (desktop browsers today; phone support is on the way).",
+    ],
+  },
+  {
     version: "v0.5.1",
     date: "2026-08-04",
     items: [

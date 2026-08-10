@@ -800,6 +800,26 @@ test("builder-draft-restored", async ({ page }) => {
   });
 });
 
+test("releases", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-releases@e2e.test",
+    name: "Screenshot Tester",
+  });
+  // The Releases screen had no committed visual record before the v0.7.0
+  // notes entry; the capture asserts the newest entry is actually rendered
+  // (not an empty state, recurring-failure #7) before shooting.
+  await page.goto("/news/releases");
+  await expect(
+    page.getByRole("heading", { name: "Release notes" }),
+  ).toBeVisible();
+  await expect(page.locator(".news-release-version").first()).toContainText(
+    "v0.7.0",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "releases.png"),
+  });
+});
+
 test("import", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-import@e2e.test",
