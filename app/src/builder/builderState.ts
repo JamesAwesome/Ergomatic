@@ -89,6 +89,15 @@ export function newRow(kind: RowKind): BuilderRow {
   };
 }
 
+/** Re-identifies every row of a form with fresh session-local ids. A form
+ *  restored from localStorage carries ANOTHER session's counter ids (r3,
+ *  r4, …), which this session's own counter can hand out again to a newly
+ *  added row — a duplicate React key and silently shared row identity. Every
+ *  restore goes through this; nothing but `id` changes. */
+export function adoptForm(f: BuilderForm): BuilderForm {
+  return { ...f, rows: f.rows.map((r) => ({ ...r, id: nextRowId() })) };
+}
+
 /** Builds a fresh, independent blank form. Prefer this over `EMPTY_FORM`
  *  whenever a caller needs a form it may go on to edit in place (e.g. a
  *  future field-editor screen) — `newForm()` never shares row objects with

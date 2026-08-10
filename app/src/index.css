@@ -2107,6 +2107,39 @@ button:disabled {
   margin: 0;
 }
 
+/* Draft-restore notice (CL remainder Task 2) — a one-line row shown only
+   when a stored draft was restored on mount, sitting between the header
+   and the form (Builder.tsx). Renders directly on `.screen`'s own --page
+   background, not a --surface card, the same context
+   `.confirm-legacy-notice`/`.bulk-import-notice` already use: --ink-3 on
+   --page measures 6.69:1 (already computed for that exact pairing in this
+   file), clear of the 4.5:1 AA floor. `.button-l4`/`.button-l4-armed`
+   are normally full-width block buttons (the shared `.button-l1`-
+   `.button-l4-armed` rule's own `width: 100%`) — overridden to size to
+   their own label here so START OVER sits beside the text instead of
+   claiming the whole row; `min-height` is left alone, so the button still
+   clears the 44px tap-target floor (52px, unchanged from its own rule). */
+.builder-draft-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.builder-draft-notice span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.builder-draft-notice .button-l4,
+.builder-draft-notice .button-l4-armed {
+  flex: none;
+  width: auto;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
 /* §2 Title row: the title field plus AUTO NAME, replacing the old 🎲 (design
    doc's own note: the dice "read as a label, not a button"). No visible
    "Title" label any more either — the design shows only a placeholder, with
