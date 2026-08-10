@@ -1376,16 +1376,23 @@ is still owed.
       prepends it. Shipped 2026-08-09, home:
       `docs/superpowers/specs/2026-08-09-warmup-setting-design.md`.
       Follow-on, replacing the earlier "recompute the library's
-      time-range percentages" clause: the rebalance report shipped
-      alongside the strip (`app/scripts/library-balance.ts`, spec §7) —
-      its MOVED row (what the strip itself did to each type/band, not
-      the AFT-TGT row, which compares a warm-up-free count against the
-      original warm-up-inclusive target grid and is explicitly NOT a
-      rebalance signal) is the real input. The open question is
-      therefore not "recompute the old percentages" but whether to
-      author a NEW warmup-free target grid — a regen ruling from those
-      numbers, not yet made (`patterns.json` is regen-ready per the
-      Phase 6 generation work)
+      time-range percentages" clause: **RESOLVED 2026-08-10 — the
+      library rebalance**. The rebalance report's MOVED row (what the
+      strip did to each type/band) became the input to a new,
+      warm-up-free target grid authored by a feasibility solve (ruling
+      B: longer by intent, mode at 30-45), and 93 workouts were
+      retuned plus 11 replaced to land the library on it exactly, 0
+      debt in all 20 cells. Home:
+      `docs/superpowers/specs/2026-08-10-library-rebalance-design.md`
+      (the grid and rules) and
+      `docs/superpowers/specs/2026-08-10-library-rebalance-move-plan.md`
+      (the per-workout moves). `patterns.json`'s `targets` block is now
+      the live grid — `library-balance.ts` and `library.test.ts`'s
+      quota gate both read it — and `AFT-TGT` is the report's real
+      signal (0 everywhere the phase is done); the pre-rebalance
+      `DESIGN_GRID_2026_08_03`/`FAITHFULNESS CHECK` pair is retained
+      only as a historical note behind `--history`, since it checks
+      the replay against a grid the library no longer targets
 - [ ] Pre-workout countdown length 0–60 s (staged)
 - [ ] Pace tolerance (0–3 s) and accent color as real settings
 - [ ] All preferences persisted per-user
