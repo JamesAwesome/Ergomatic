@@ -33,4 +33,4 @@ cd "$REPO_ROOT"
 docker compose -f compose.yml -f compose.e2e.yml up -d --build --wait --wait-timeout 120
 
 cd app
-pnpm exec playwright test --project=chromium
+pnpm exec playwright test --project=chromium "$@"

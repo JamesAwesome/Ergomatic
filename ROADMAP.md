@@ -1501,12 +1501,15 @@ nothing here is new work. Effort guesses are S/M/L.
 - [ ] **No unsaved-changes guard in the builder** — leaving a
       half-authored workout discards it with no warning. Recorded at Phase
       5B's merge, still true. **S**
-- [ ] **Per-worktree compose scoping** — the e2e/screenshots stack is
-      shared across sessions by container name (one Postgres volume, one
-      `web`/`api` pair), so concurrent worktrees stomp each other's
-      fixtures and can serve a bundle from the wrong branch
-      (`.claude/agent-briefing.md`'s shared-stack note, which currently
-      documents the workaround rather than the fix). **M**
+- [x] **Per-worktree compose scoping** — the e2e/screenshots stack used to
+      be shared across sessions by container name (one Postgres volume, one
+      `web`/`api` pair), so concurrent worktrees stomped each other's
+      fixtures and could serve a bundle from the wrong branch. Fixed
+      (Phase CL, PR #68): `app/scripts/stack-env.sh` derives
+      `COMPOSE_PROJECT_NAME`, the `ERGO_STACK` container-name prefix, the
+      host ports, and the Playwright baseURL from the worktree's own
+      absolute path; `.claude/agent-briefing.md`'s stack section now
+      documents the fix, not the workaround. **M**
 - [x] **News scroll memory** — BACK from an article used to land News at
       the top, a tradeoff taken deliberately when the feed was about 1.15
       screens and confirmed still standing after the overlay-scroller
