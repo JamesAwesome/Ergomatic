@@ -1551,10 +1551,16 @@ third of the library already are: N lead lines, then a repeated block.
       (+ Altostratus after its retune) are near-identical long
       continuous singles. Retune 2-3 into distinct shapes WITHIN the
       cell so the grid holds; the `variety.test.ts` KNOWN_DEBT entry
-      for O2|60+ shrinks with them (ratchets only ever go down). The
-      other grown ceilings from the rebalance (AT|30-45, TR|30-45,
-      O2|30-45, AN|20-30 — disclosed in the rebalance PR) are fair
-      game for the same pass if it goes well. **M**
+      for O2|60+ shrinks with them (ratchets only ever go down). **M**
+- [ ] Pay down the rebalance's other flagged pairs (James, 2026-08-10,
+      at the PR #78 merge: "any flagged workouts bump to CL2"). The
+      full list, from the PR's disclosure section: O2|30-45 Silver
+      Thaw <> Halo Ring; AT|30-45 Anticyclone <> Jet Streak, Inversion
+      Layer <> Gap Wind, Deepening Low <> Thermal Wind, Thermal Low <>
+      Heat Low; TR|30-45 Gulf Stream <> Piteraq, Southerly Buster <>
+      Cold Snap; AN|20-30 Downburst <> Rope Tornado. Same rules as the
+      cluster above: differentiate WITHIN the cell, grid holds,
+      ratchets shrink. **M**
 - [ ] Workout rating system (James, 2026-08-10): unscoped — brainstorm
       first. Open questions to settle there: what a tester rates (the
       workout, or the session they just rowed), where it surfaces
