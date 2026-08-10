@@ -23,28 +23,28 @@ import type { PaceRef, Step, WorkDuration, WorkoutInput } from "../types.js";
 //
 // | title              | type | source            | expanded durations (min or m) | hand label            | reasoning |
 // |---|---|---|---|---|---|
-// | Fine Weather        | O2 | o2.ts:623  | [40]                          | continuous, rc=false  | one live work step |
-// | Glass Sea           | O2 | o2.ts:709  | [60]                          | continuous, rc=false  | one live work step |
-// | Fair Wind           | O2 | o2.ts:751  | [70]                          | continuous, rc=false  | one live work step |
-// | Sleet               | O2 | o2.ts:2120 | [65]                          | continuous, rc=false  | one live work step |
-// | Morning Mist        | O2 | o2.ts:1478 | [15000] (distance)            | continuous, rc=false  | one live work step, kind irrelevant at n=1 |
-// | Occluded Front      | AT | at.ts:13   | [10]                          | continuous, rc=false  | one live work step |
+// | Fine Weather        | O2 | o2.ts:626  | [40]                          | continuous, rc=false  | one live work step |
+// | Glass Sea           | O2 | o2.ts:712  | [60]                          | continuous, rc=false  | one live work step |
+// | Fair Wind           | O2 | o2.ts:754  | [70]                          | continuous, rc=false  | one live work step |
+// | Sleet               | O2 | o2.ts:2123 | [65]                          | continuous, rc=false  | one live work step |
+// | Morning Mist        | O2 | o2.ts:1481 | [15000] (distance)            | continuous, rc=false  | one live work step, kind irrelevant at n=1 |
+// | Occluded Front      | AT | at.ts:16   | [10]                          | continuous, rc=false  | one live work step |
 // | Beam Sea            | TR | tr.ts:16   | [2000] (distance)             | continuous, rc=false  | one live work step |
-// | Sea Fret            | O2 | o2.ts:18   | [4,4] (reps 2)                | nxtime, rc=false      | equal time durations, spm 22 both |
-// | Petrichor           | O2 | o2.ts:35   | [3,3,3]                       | nxtime, rc=TRUE       | equal durations, spm 20/22/24 |
-// | Thermal Low         | AT | at.ts:936  | [5,5,5,5]                     | nxtime, rc=false      | equal durations, spm 24 throughout |
+// | Sea Fret            | O2 | o2.ts:21   | [4,4] (reps 2)                | nxtime, rc=false      | equal time durations, spm 22 both |
+// | Petrichor           | O2 | o2.ts:38   | [3,3,3]                       | nxtime, rc=TRUE       | equal durations, spm 20/22/24 |
+// | Thermal Low         | AT | at.ts:939  | [5,5,5,5]                     | nxtime, rc=false      | equal durations, spm 24 throughout |
 // | Scud Cloud          | AN | an.ts:18   | [.5]x5 (reps 5)               | nxtime, rc=false      | equal durations, spm 28 throughout |
-// | Laminar             | O2 | o2.ts:64   | [1000,1000,1000] (distance)   | nxdistance, rc=TRUE   | equal distances, spm 20/22/24 |
+// | Laminar             | O2 | o2.ts:67   | [1000,1000,1000] (distance)   | nxdistance, rc=TRUE   | equal distances, spm 20/22/24 |
 // | Hail Shaft          | AN | an.ts:1135 | [300]x10 (reps 10, distance)  | nxdistance, rc=false  | equal distances, spm 32 throughout |
-// | Tule Fog            | O2 | o2.ts:456  | [6,9,12]                      | ladder, rc=TRUE       | strictly increasing, spm 20/22/24 |
-// | Ice Fog             | O2 | o2.ts:485  | [12,9,6,3]                    | ladder, rc=TRUE       | strictly decreasing, spm 18/20/22/24 |
-// | Barometric Low      | AT | at.ts:117  | [4,3,2]                       | ladder, rc=TRUE       | strictly decreasing, spm 22/24/26 |
+// | Tule Fog            | O2 | o2.ts:459  | [6,9,12]                      | ladder, rc=TRUE       | strictly increasing, spm 20/22/24 |
+// | Ice Fog             | O2 | o2.ts:488  | [12,9,6,3]                    | ladder, rc=TRUE       | strictly decreasing, spm 18/20/22/24 |
+// | Barometric Low      | AT | at.ts:120  | [4,3,2]                       | ladder, rc=TRUE       | strictly decreasing, spm 22/24/26 |
 // | Line Squall         | TR | tr.ts:558  | [500,750,1000,1250] (distance)| ladder, rc=TRUE       | strictly increasing, spm 28/26/26/24 |
-// | Millpond            | O2 | o2.ts:125  | [2,3,4,3,2]                   | pyramid, rc=false     | strict up then strict down, spm 22 constant |
-// | Pressure Ridge      | AT | at.ts:57   | [1,2,3,2,1]                   | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
+// | Millpond            | O2 | o2.ts:128  | [2,3,4,3,2]                   | pyramid, rc=false     | strict up then strict down, spm 22 constant |
+// | Pressure Ridge      | AT | at.ts:60   | [1,2,3,2,1]                   | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
 // | Benguela Current    | TR | tr.ts:176  | [250,500,750,500,250] (dist)  | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
 // | Beaver Tail         | AN | an.ts:86   | [.5,.75,1,.75,.5]             | pyramid, rc=TRUE      | strict up-down, spm 30/28/26/28/30 |
-// | Baroclinic Zone     | AT | at.ts:454  | [3,2,3,2,3,2] (reps 3 x [3,2])| ladder, rc=TRUE (RE-ADJUDICATED, block review) | the expansion is up-down-up-down, but it is exactly 3 repetitions of a 2-rung descending block |
+// | Baroclinic Zone     | AT | at.ts:457  | [3,2,3,2,3,2] (reps 3 x [3,2])| ladder, rc=TRUE (RE-ADJUDICATED, block review) | the expansion is up-down-up-down, but it is exactly 3 repetitions of a 2-rung descending block |
 // | Giant Hail          | AN | an.ts:1111 | [1.25,.5]x4 (reps 4, effort)  | ladder, rc=false (RE-ADJUDICATED) | 4 repetitions of a 2-rung descending block — the comment's own "rounds of a ladder" |
 // | Flash Flood         | AN | an.ts:1152 | [.5,.75,1,1.5]x2 (reps 2)     | ladder, rc=TRUE (RE-ADJUDICATED)  | 2 repetitions of a 4-rung ASCENDING block |
 // | Bomb Cyclone        | AN | an.ts:1514 | [1.25,1,.75,.5]x2 (reps 2)    | ladder, rc=false (RE-ADJUDICATED) | 2 repetitions of a 4-rung DESCENDING block |
@@ -86,7 +86,7 @@ const reps = (count: number): Step => ({ k: "reps", count });
 
 describe("classifyArchetype", () => {
   describe("continuous — exactly one live work step", () => {
-    it("Fine Weather (o2.ts:623): 40' single time step", () => {
+    it("Fine Weather (o2.ts:626): 40' single time step", () => {
       const steps = [w(t(40), { base: "6k", off: 12 }, 20)];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "continuous",
@@ -94,7 +94,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Morning Mist (o2.ts:1478): 15000m single distance step — kind doesn't matter at n=1", () => {
+    it("Morning Mist (o2.ts:1481): 15000m single distance step — kind doesn't matter at n=1", () => {
       const steps = [w(d(15000), { base: "6k", off: 12 }, 20)];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "continuous",
@@ -102,7 +102,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Occluded Front (at.ts:13): single AT threshold step", () => {
+    it("Occluded Front (at.ts:16): single AT threshold step", () => {
       const steps = [w(t(10), { base: "6k", off: 4 }, 22)];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "continuous",
@@ -120,7 +120,7 @@ describe("classifyArchetype", () => {
   });
 
   describe("nxtime — reps/identical time-based work steps", () => {
-    it("Sea Fret (o2.ts:18): 2x4' identical, no rate change", () => {
+    it("Sea Fret (o2.ts:21): 2x4' identical, no rate change", () => {
       const steps = [reps(2), w(t(4), { base: "6k", off: 12 }, 22, 1)];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "nxtime",
@@ -128,7 +128,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Petrichor (o2.ts:35): 3x3' equal duration, spm climbs 20->22->24", () => {
+    it("Petrichor (o2.ts:38): 3x3' equal duration, spm climbs 20->22->24", () => {
       const steps = [
         w(t(3), { base: "6k", off: 12 }, 20, 0.5),
         w(t(3), { base: "6k", off: 12 }, 22, 0.5),
@@ -140,7 +140,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Thermal Low (at.ts:936): 4x5' identical, spm 24 throughout", () => {
+    it("Thermal Low (at.ts:939): 4x5' identical, spm 24 throughout", () => {
       const steps = [
         w(t(5), { base: "6k", off: 1 }, 24, 3),
         w(t(5), { base: "6k", off: 1 }, 24, 2),
@@ -161,7 +161,7 @@ describe("classifyArchetype", () => {
   });
 
   describe("nxdistance — reps/identical distance-based work steps", () => {
-    it("Laminar (o2.ts:64): 3x1000m equal distance, rate climbs", () => {
+    it("Laminar (o2.ts:67): 3x1000m equal distance, rate climbs", () => {
       const steps = [
         w(d(1000), { base: "6k", off: 12 }, 20),
         w(d(1000), { base: "6k", off: 12 }, 22),
@@ -183,7 +183,7 @@ describe("classifyArchetype", () => {
   });
 
   describe("ladder — strictly monotonic durations, same kind", () => {
-    it("Tule Fog (o2.ts:456): 6'/9'/12' ascending", () => {
+    it("Tule Fog (o2.ts:459): 6'/9'/12' ascending", () => {
       const steps = [
         w(t(6), { base: "6k", off: 12 }, 20, 1.5),
         w(t(9), { base: "6k", off: 11 }, 22, 1.5),
@@ -195,7 +195,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Ice Fog (o2.ts:485): 12'/9'/6'/3' descending", () => {
+    it("Ice Fog (o2.ts:488): 12'/9'/6'/3' descending", () => {
       const steps = [
         w(t(12), { base: "6k", off: 12 }, 18, 1.5),
         w(t(9), { base: "6k", off: 11 }, 20, 1),
@@ -318,7 +318,7 @@ describe("classifyArchetype", () => {
   });
 
   describe("pyramid — strict up then strict down, peak strictly interior", () => {
-    it("Millpond (o2.ts:125): 2-3-4-3-2, constant spm", () => {
+    it("Millpond (o2.ts:128): 2-3-4-3-2, constant spm", () => {
       const steps = [
         w(t(2), { base: "6k", off: 12 }, 22, 1),
         w(t(3), { base: "6k", off: 12 }, 22, 1),
@@ -332,7 +332,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Pressure Ridge (at.ts:57): 1-2-3-2-1, spm mirrors the shape", () => {
+    it("Pressure Ridge (at.ts:60): 1-2-3-2-1, spm mirrors the shape", () => {
       const steps = [
         w(t(1), { base: "6k", off: 2 }, 26, 0.5),
         w(t(2), { base: "6k", off: 2 }, 24, 0.5),
@@ -389,7 +389,7 @@ describe("classifyArchetype", () => {
   });
 
   describe("mixed — the fallback bucket, including two documented disagreements", () => {
-    it("Baroclinic Zone (at.ts:454): reps 3 x [3',2'] is a 2-rung descending block played three times -> ladder", () => {
+    it("Baroclinic Zone (at.ts:457): reps 3 x [3',2'] is a 2-rung descending block played three times -> ladder", () => {
       const steps = [
         reps(3),
         w(t(3), { base: "6k", off: 4 }, 22, 1),
