@@ -40,8 +40,9 @@ import ConnectedInterstitial, { loadLastDevice } from "./ConnectedInterstitial";
 /** The Connect button's own three states (handoff §1): a real, available
  *  radio; the adapter present but switched off (Chromium can tell us this
  *  via `getAvailability()`); and no Web Bluetooth API on this
- *  platform/browser at all (Safari, Firefox, a non-secure context, or
- *  native platforms). `"unknown"` is the brief instant before the async
+ *  browser at all (Safari, Firefox, a non-secure context). Native is
+ *  always "available": the Capacitor plugin owns permission/off detection
+ *  at connect time. `"unknown"` is the brief instant before the async
  *  probe resolves — rendered identically to `"available"` so the button
  *  never flashes a dashed state it may not deserve. The probe lives in the
  *  bluetoothCapability adapter now. */
