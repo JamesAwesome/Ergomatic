@@ -778,6 +778,28 @@ test("builder", async ({ page }) => {
   });
 });
 
+test("builder-draft-restored", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-builder-draft@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // Real content, not an empty state (recurring-failure #7): type a title,
+  // leave via the tab bar (the silent-discard path the feature exists for),
+  // and come back — the capture's whole point is the `Draft restored.`
+  // notice with its START OVER control above a form that kept the text.
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill("Interrupted workout");
+  await page.getByRole("link", { name: "Library" }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await page.goto("/library/new");
+  await expect(page.getByText("Draft restored.")).toBeVisible();
+  await expect(page.getByLabel("Title")).toHaveValue("Interrupted workout");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "builder-draft-restored.png"),
+  });
+});
+
 test("import", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-import@e2e.test",
