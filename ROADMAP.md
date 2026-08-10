@@ -1665,3 +1665,8 @@ next phase. One line per round, newest first.
   monitor integration becomes real. Then: add a programming-limits channel
   to `MonitorCapabilities`, move the four constants there per-monitor, and
   template the six `CompileError` messages instead of hardcoding "PM5".
+- **Cron+ntfy revival on the WOD fetcher**: `scripts/wod/fetch-wods.mjs`
+  is pull-only today (the `wod-import` skill runs it on demand). Trigger:
+  James wants WODs pushed instead of pulled. Then: a cron job runs the
+  fetcher on a schedule and an ntfy notification surfaces new unruled
+  candidates without a skill invocation.
