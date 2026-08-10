@@ -242,17 +242,28 @@ describe("no spinner anywhere", () => {
 // States 1-3 (the OS chooser / picking backdrop)
 // ---------------------------------------------------------------------------
 
-describe("state idle: renders nothing", () => {
-  it("phase idle renders nothing", () => {
-    const { container } = renderInterstitial({ phase: "idle" });
-    expect(container).toBeEmptyDOMElement();
-  });
+it("phase idle renders nothing", () => {
+  const { container } = renderInterstitial({ phase: "idle" });
+  expect(container).toBeEmptyDOMElement();
 });
 
 describe("state picking: the backdrop floats under the platform chooser", () => {
   it("phase picking renders the quiet backdrop, not nothing", () => {
     renderInterstitial({ phase: "picking" });
     expect(screen.getByText("Choosing your monitor")).toBeInTheDocument();
+  });
+
+  // The `.app-shell:has(.connected-interstitial)` CSS rule (`index.css:5006`,
+  // `:5011`) hides the tab bar for as long as this class is mounted — a
+  // deliberate side effect (this component's own header comment on the
+  // `picking` branch), not an accident: the chooser is modal, so the same
+  // "no tab navigation underneath a connected-flow screen" rule every other
+  // interstitial state already gets should apply here too.
+  it("mounts .connected-interstitial — the class the tab-bar-hiding CSS hook keys on", () => {
+    const { container } = renderInterstitial({ phase: "picking" });
+    expect(
+      container.querySelector(".connected-interstitial"),
+    ).toBeInTheDocument();
   });
 });
 
@@ -549,7 +560,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
 
   // The door: iOS never re-asks for the Bluetooth permission once declined,
   // so the remedy is Settings — the card carries the door (spec §4/§7).
-  it("permission-denied renders its own serif line, the §7 body, and an Open Settings button when the platform can open one", () => {
+  it("permission-denied renders its own serif line, the §7 body, an Open Settings button when the platform can open one, and raw in the DETAIL panel", () => {
     mockCanOpenAppSettings.mockReturnValue(true);
     renderInterstitial({
       phase: "failed",
@@ -557,6 +568,7 @@ describe("state 6: failed — every ConnectedError rendered", () => {
         reason: "permission-denied",
         detail:
           "Ergomatic can't reach your PM5 without Bluetooth. Allow Bluetooth for Ergomatic in Settings, then come back and try again.",
+        raw: "BLE permission denied",
       }),
     });
 
@@ -569,6 +581,13 @@ describe("state 6: failed — every ConnectedError rendered", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open Settings" }),
+    ).toBeInTheDocument();
+    // The DETAIL panel is gated only on `error !== null`, with no reason
+    // branch — `raw` reaches it for permission-denied the same as every
+    // other reason, but nothing pinned that until now.
+    const detail = screen.getByText("DETAIL").closest("div")!;
+    expect(
+      within(detail).getByText("BLE permission denied"),
     ).toBeInTheDocument();
   });
 
@@ -603,6 +622,30 @@ describe("state 6: failed — every ConnectedError rendered", () => {
     );
 
     expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
+  });
+
+  // Best-effort, same idiom as keepAwake.ts's own catches (this component's
+  // own comment on the button): a rejected plugin call must not escape as
+  // an unhandled rejection, and the card must not blow up around it.
+  it("Open Settings swallows a rejected plugin call — no unhandled rejection, card still stands", async () => {
+    mockCanOpenAppSettings.mockReturnValue(true);
+    mockOpenAppSettings.mockRejectedValue(new Error("plugin unavailable"));
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({
+        reason: "permission-denied",
+        detail: "Ergomatic can't reach your PM5 without Bluetooth.",
+      }),
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open Settings" }),
+    );
+
+    expect(mockOpenAppSettings).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "Open Settings" }),
+    ).toBeInTheDocument();
   });
 
   it("a permission-denied error NEVER renders the generic machine-refusal copy", () => {
