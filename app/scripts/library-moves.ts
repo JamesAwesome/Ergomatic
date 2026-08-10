@@ -42,9 +42,19 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { estimateMinutes, phaseSeconds, phases } from "../domain/expand.js";
+import {
+  estimateMinutes,
+  liveSteps,
+  phaseSeconds,
+  phases,
+} from "../domain/expand.js";
+import {
+  classifyArchetype,
+  structureSignature,
+} from "../domain/generation/archetype.js";
 import type {
   Baselines,
+  PaceBase,
   Step,
   WorkoutInput,
   WorkoutType,
@@ -103,12 +113,23 @@ const BAND_RANGE: Record<Band, readonly [number, number]> = {
 // ---------------------------------------------------------------------
 
 export interface Reach {
-  /** `estimateMinutes` today, at the nominal baselines. */
+  /** `estimateMinutes` today, at the nominal baselines — the ROUNDED
+   *  minute. Reachability and the assignment run on this clock because it
+   *  is the clock the library's own gates band on, and because it is the
+   *  clock Gate 1's approved counts were computed on. */
   readonly current: number;
+  /** The same total unrounded (block review M2). The SKETCH's ±25% window
+   *  is measured from this, because §3's ceiling is a statement about the
+   *  workout's actual length, not about its display. */
+  readonly rawCurrent: number;
   /** True when any work step is distance-prescribed — the 0/5 exemption. */
   readonly estimated: boolean;
   /** The ±RETUNE_RATIO window on total time, inclusive. */
   readonly window: readonly [number, number];
+  /** The same ±ratio window measured from `rawCurrent` — what a SKETCH is
+   *  held to. `window` above stays on the rounded clock so that
+   *  `reachableBands`, and therefore the approved assignment, is unchanged. */
+  readonly rawWindow: readonly [number, number];
   /** True when the window is continuous — no 0/5 grid discretises it, so
    *  every band it overlaps is reachable. */
   readonly continuous: boolean;
@@ -149,6 +170,7 @@ export function reachable(
   const ratio = opts.ratio ?? RETUNE_RATIO;
   const totals = opts.totals ?? "new-total";
   const { minutes: current, estimated } = estimateMinutes(steps, baselines);
+  const rawCurrent = rawMinutes(steps, baselines);
   // With rests held, only the work half of the clock can move, so the window
   // narrows to ±ratio × (work minutes) instead of ±ratio × total.
   const swing =
@@ -196,8 +218,10 @@ export function reachable(
   }
   return {
     current,
+    rawCurrent,
     estimated,
     window: [lo, hi],
+    rawWindow: [rawCurrent * (1 - ratio), rawCurrent * (1 + ratio)],
     continuous: totals === "unconstrained" || estimated,
     scaleTotals: [...scaleTotals].sort((a, b) => a - b),
     repAdd,
@@ -532,9 +556,17 @@ export function hallDeficit(
 
 export interface Sketch {
   readonly arm: "one-rep" | "scale";
+  /** The whole workout's factor, on the raw clock. */
   readonly factor: number;
   readonly steps: Step[];
+  /** `estimateMinutes` — the rounded minute the library's own gates band on. */
   readonly minutes: number;
+  /** The unrounded total (block review M2). */
+  readonly raw: number;
+  /** [min, max] of the per-piece factors actually applied (block review M3:
+   *  the plan used to print one nominal factor while the builder had moved a
+   *  single piece by a completely different one). */
+  readonly pieceFactorRange: readonly [number, number];
   readonly summary: string;
   /** Empty when the sketch is legal on every check §6 and the house rules
    *  impose; otherwise the reasons, for the review table. */
@@ -544,20 +576,54 @@ export interface Sketch {
 const roundToSeconds = (m: number, grain: number): number =>
   Math.max(grain, Math.round(m / grain) * grain);
 
-function scaleSteps(steps: readonly Step[], f: number): Step[] {
+/** The grid every piece of one sketch is rounded onto. Uniform across the
+ *  workout — that is what keeps the shape — and tried coarse-first, because
+ *  a workout whose pieces read 4:30 is more callable than one whose pieces
+ *  read 4:25, and far more than 4:23. `validate.ts:57`'s `wholeSecond`
+ *  admits any whole second, so all three are legal; the search only drops to
+ *  a finer one when the coarser grid cannot land a legal total. */
+interface Grain {
+  /** minutes, for a time-prescribed work piece */
+  readonly work: number;
+  /** minutes, for a rest */
+  readonly rest: number;
+  /** metres, for a distance-prescribed work piece */
+  readonly meters: number;
+}
+const GRAINS: readonly Grain[] = [
+  { work: 0.5, rest: 0.25, meters: 50 },
+  { work: 1 / 6, rest: 1 / 6, meters: 25 },
+  { work: 1 / 12, rest: 1 / 12, meters: 10 },
+];
+
+/** Scales EVERY piece and EVERY rest by the same factor. Nothing in a
+ *  sketch is ever moved on its own: the block review found the previous
+ *  builder dumping a whole workout's rounding residue onto one lever, which
+ *  turned a pyramid's peak into its second rung, shrank a piece inside a
+ *  +25% stretch, and made 10 of 94 sketches change archetype — the one
+ *  thing §3 forbids in terms ("WITHOUT changing its structure archetype").
+ *  A single uniform factor cannot do that; the residue is absorbed by
+ *  choosing the factor, not by choosing a victim. */
+function scaleSteps(
+  steps: readonly Step[],
+  f: number,
+  grain: Grain = GRAINS[0]!,
+  restFactor = f,
+): Step[] {
   return steps.map((s): Step => {
     if (s.k === "w") {
       const duration =
         s.duration.kind === "time"
           ? {
               kind: "time" as const,
-              minutes: roundToSeconds(s.duration.minutes * f, 0.5),
+              minutes: roundToSeconds(s.duration.minutes * f, grain.work),
             }
           : {
               kind: "distance" as const,
               meters: Math.max(
                 100,
-                Math.round((s.duration.meters * f) / 50) * 50,
+                Math.round((s.duration.meters * f) / grain.meters) *
+                  grain.meters,
               ),
             };
       return {
@@ -565,99 +631,221 @@ function scaleSteps(steps: readonly Step[], f: number): Step[] {
         duration,
         ...(s.restMinutes === undefined
           ? {}
-          : { restMinutes: roundToSeconds(s.restMinutes * f, 0.25) }),
+          : {
+              restMinutes: roundToSeconds(
+                s.restMinutes * restFactor,
+                grain.rest,
+              ),
+            }),
       };
     }
     if (s.k === "r")
-      return { ...s, minutes: roundToSeconds(s.minutes * f, 0.25) };
+      return {
+        ...s,
+        minutes: roundToSeconds(s.minutes * restFactor, grain.rest),
+      };
     return s;
   });
 }
 
-/** One thing the repair can nudge: a work piece's own length, or the recovery
- *  beside it. Work first, longest first — a total is best carried by the
- *  piece that dominates it — and rests only where the work levers cannot
- *  reach the number (an `{effort:"max"}` 200 m piece prices at a nominal
- *  split, so a 50 m grid moves the total in ~4.5-second jumps that can
- *  straddle the only legal total). */
-type Lever = { index: number; field: "work" | "rest" };
-
-function nudge(step: Step, lever: Lever, ticks: number): Step | null {
-  if (lever.field === "rest") {
-    if (step.k === "r") {
-      const minutes = Math.round((step.minutes + ticks / 12) * 60) / 60;
-      return minutes >= 1 / 60 && minutes <= 60 ? { ...step, minutes } : null;
-    }
-    if (step.k !== "w" || step.restMinutes === undefined) return null;
-    const restMinutes = Math.round((step.restMinutes + ticks / 12) * 60) / 60;
-    return restMinutes >= 1 / 60 && restMinutes <= 60
-      ? { ...step, restMinutes }
-      : null;
-  }
-  if (step.k !== "w") return null;
-  if (step.duration.kind === "time") {
-    const minutes = Math.round((step.duration.minutes + ticks / 12) * 60) / 60;
-    return minutes > 0 && minutes <= 180
-      ? { ...step, duration: { kind: "time", minutes } }
-      : null;
-  }
-  const meters = step.duration.meters + ticks * 50;
-  return meters >= 100 && meters <= 42195
-    ? { ...step, duration: { kind: "distance", meters } }
-    : null;
+/** The unrounded total, in minutes. `estimateMinutes` is
+ *  `Math.round(seconds / 60)` (`expand.ts:263`), and the block review's M2
+ *  caught the sketch builder checking the house 0/5 rule and band
+ *  membership against that ROUNDED number: 23 sketches had raw totals like
+ *  20:25 and 45:25, and 22 sat below their assigned band's real lower edge
+ *  (29:45 counted as 30-45). The library's own gates band on the rounded
+ *  minute and keep doing so; a NEWLY AUTHORED total is held to the real
+ *  clock. */
+export function rawMinutes(steps: Step[], baselines: Baselines): number {
+  let seconds = 0;
+  for (const p of phases(steps, baselines)) seconds += phaseSeconds(p) ?? 0;
+  return seconds / 60;
 }
 
-/** Nudges one lever until the total both satisfies `ok` and sits as close as
- *  it can to `prefer`. Rounding a whole workout by a single factor rarely
- *  lands a legal total on the nose — a 250 m piece under ×1.03 does not move
- *  at all on a 50 m grid — so this is the repair, and it is why the plan's
- *  sketches are measured by `estimateMinutes` rather than asserted.
- *
- *  The tick is 5 seconds: `validate.ts:57`'s `wholeSecond` admits any whole
- *  second, and a piece that reads 1:15 or 4:35 is as callable as one that
- *  reads 4:30 — where a half-minute grain simply cannot hit the total (a
- *  12-rep block moves in 6' jumps at 0.5' per rep), 5 seconds can. */
-function repair(
-  steps: Step[],
-  ok: (minutes: number) => boolean,
-  prefer: number,
-  baselines: Baselines,
-): Step[] | null {
-  let best: { steps: Step[]; miss: number } | null = null;
-  const size = (s: Step): number =>
+const EPS = 1e-6;
+
+/** How far a retune's work:rest ratio may drift from the original's and
+ *  still count as "the same ratio family" (§3). */
+export const RATIO_FAMILY = 0.25;
+
+/** The per-piece factors a sketch actually applied — what M3 says the move
+ *  plan must render instead of the single nominal factor. */
+export function pieceFactors(
+  before: readonly Step[],
+  after: readonly Step[],
+): number[] {
+  const size = (s: Step): number | null =>
     s.k === "w"
       ? s.duration.kind === "time"
         ? s.duration.minutes
-        : s.duration.meters / 250
-      : 0;
-  const indexed = steps.map((s, i) => ({ s, i }));
-  const levers: Lever[] = [
-    ...indexed
-      .filter(({ s }) => s.k === "w")
-      .sort((a, b) => size(b.s) - size(a.s))
-      .map(({ i }): Lever => ({ index: i, field: "work" })),
-    ...indexed
-      .filter(
-        ({ s }) => s.k === "r" || (s.k === "w" && s.restMinutes !== undefined),
-      )
-      .map(({ i }): Lever => ({ index: i, field: "rest" })),
-  ];
-  for (const lever of levers) {
-    for (let k = 0; k <= 60; k++) {
-      for (const sign of k === 0 ? [1] : [1, -1]) {
-        const moved = nudge(steps[lever.index]!, lever, sign * k);
-        if (moved === null) continue;
-        const candidate = steps.map((s, j) => (j === lever.index ? moved : s));
-        const got = estimateMinutes(candidate, baselines).minutes;
-        if (!ok(got)) continue;
-        const miss = Math.abs(got - prefer);
-        if (best === null || miss < best.miss)
-          best = { steps: candidate, miss };
-        if (miss === 0) return candidate;
+        : s.duration.meters
+      : null;
+  const out: number[] = [];
+  before.forEach((s, i) => {
+    const a = size(s);
+    const b = size(after[i]!);
+    if (a !== null && b !== null && a > 0) out.push(b / a);
+  });
+  return out;
+}
+
+/** The structural sanity a retune owes beyond "the archetype label matches":
+ *  a pyramid keeps its peak where it was, a ladder keeps its direction, and
+ *  no piece moves against the tide (nothing shrinks inside a stretch — the
+ *  block review found AT Confluence Zone's opening piece going from 2' to
+ *  1:40 in a workout being stretched from 17' to 20'). */
+export function shapeIssues(
+  before: readonly Step[],
+  after: readonly Step[],
+  stretching: boolean,
+  baselines: Baselines,
+  arm: Sketch["arm"] = "scale",
+): string[] {
+  const issues: string[] = [];
+  const a = classifyArchetype(before as Step[]);
+  const b = classifyArchetype(after as Step[]);
+  if (a.archetype !== b.archetype) {
+    issues.push(`archetype ${a.archetype} → ${b.archetype}`);
+  }
+  if (a.rateChange !== b.rateChange) issues.push("rate-change modifier moved");
+  // The one-rep arm changes the number of cycles ON PURPOSE, so its
+  // expanded shape string is the old one with a cycle added or removed; the
+  // archetype check above is what holds it to the same structure. For the
+  // scaling arm the shape string must be identical, character for character.
+  if (
+    arm === "scale" &&
+    structureSignature(before as Step[]) !== structureSignature(after as Step[])
+  ) {
+    issues.push("the piece-to-piece shape changed");
+  }
+  // §3's "rest scaling in the same ratio family". The work pieces and the
+  // rests each move by their own uniform factor, which is what makes the
+  // arithmetic solvable — but let the two drift far apart and the workout
+  // stops being the same workout: an early build of this search landed a
+  // sketch at W:R 79 whose original was 8.6, i.e. it deleted the recovery.
+  const wrBefore = workRestSeconds(before as Step[], baselines);
+  const wrAfter = workRestSeconds(after as Step[], baselines);
+  if (wrBefore.rest > 0 && wrAfter.rest > 0) {
+    const was = wrBefore.work / wrBefore.rest;
+    const now = wrAfter.work / wrAfter.rest;
+    if (now < was * (1 - RATIO_FAMILY) || now > was * (1 + RATIO_FAMILY)) {
+      issues.push(
+        `work:rest left its family (${was.toFixed(2)} → ${now.toFixed(2)})`,
+      );
+    }
+  } else if (wrBefore.rest > 0 !== wrAfter.rest > 0) {
+    issues.push("the recovery appeared or vanished");
+  }
+  const factors = pieceFactors(before, after);
+  const wrongWay = factors.filter((f) =>
+    stretching ? f < 1 - EPS : f > 1 + EPS,
+  ).length;
+  if (wrongWay > 0) {
+    issues.push(
+      `${wrongWay} piece(s) move against the tide (${stretching ? "shrink inside a stretch" : "grow inside a shrink"})`,
+    );
+  }
+  return issues;
+}
+
+/** The predicate a scaled candidate must satisfy to be a legal landing:
+ *  the assigned band on the RAW clock, inside the ±ratio window, and — for
+ *  a time-computable workout — a raw total that is exactly a 0/5 minute. */
+export function landsLegally(
+  raw: number,
+  target: Band,
+  r: Reach,
+  estimated: boolean,
+): boolean {
+  if (band(raw) !== target) return false;
+  if (raw < r.rawWindow[0] - EPS || raw > r.rawWindow[1] + EPS) return false;
+  if (estimated) return true;
+  return Math.abs(raw / 5 - Math.round(raw / 5)) < EPS;
+}
+
+/** Searches uniform scale factors for one that lands legally AND keeps the
+ *  workout's shape. Coarse grid first, then finer; within a grid, factors
+ *  outward from the nominal one, so the sketch that wins is the smallest
+ *  change on the roundest numbers that does the job. */
+function searchScale(
+  workout: WorkoutInput,
+  target: Band,
+  r: Reach,
+  wanted: number,
+  baselines: Baselines,
+): { steps: Step[]; raw: number } | null {
+  for (const grain of GRAINS) {
+    const found = searchOneGrain(workout, target, r, wanted, baselines, grain);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/** TWO uniform factors, not one: every WORK piece moves by the same factor
+ *  (that is what holds the shape — a pyramid scaled uniformly is still a
+ *  pyramid with the same peak) and every REST moves by its own, which is
+ *  §3's "rest scaling in the same ratio family" read as a family rather than
+ *  as a single number. The second factor is what makes the arithmetic
+ *  solvable at all: with one factor, `4× 4' on 1'` cannot reach 20:00 on any
+ *  grain, because the work grid and the rest grid want incompatible values
+ *  of f. With two it is `4× 4:15 on 1'`, which is the same workout, four
+ *  minutes longer, and still four equal pieces. */
+function searchOneGrain(
+  workout: WorkoutInput,
+  target: Band,
+  r: Reach,
+  wanted: number,
+  baselines: Baselines,
+  grain: Grain,
+): { steps: Step[]; raw: number } | null {
+  const nominal = wanted / r.rawCurrent;
+  const stretching = wanted >= r.rawCurrent;
+  const restBefore = workRestSeconds(workout.steps, baselines).rest;
+  let bestSteps: Step[] | null = null;
+  let bestRaw = 0;
+  let bestScore = Infinity;
+  for (let k = 0; k <= 300; k++) {
+    for (const sign of k === 0 ? [1] : [1, -1]) {
+      const f = nominal + (sign * k) / 1000;
+      if (f <= 0) continue;
+      // With the work pieces fixed by `f`, the rest factor that would land
+      // the total exactly is arithmetic, not search; the neighbours cover
+      // the rounding.
+      const workAfter = workRestSeconds(
+        scaleSteps(workout.steps, f, grain, 1),
+        baselines,
+      ).work;
+      const solved =
+        restBefore > 0 ? (wanted * 60 - workAfter) / restBefore : f;
+      const restFactors = new Set<number>([f, 1]);
+      for (let j = -6; j <= 6; j++) {
+        const rf = solved + j / 100;
+        if (rf > 0) restFactors.add(rf);
+      }
+      for (const rf of restFactors) {
+        const steps = scaleSteps(workout.steps, f, grain, rf);
+        const raw = rawMinutes(steps, baselines);
+        if (!landsLegally(raw, target, r, r.estimated)) continue;
+        if (
+          shapeIssues(workout.steps, steps, stretching, baselines).length > 0
+        ) {
+          continue;
+        }
+        if (!validateWorkoutInput({ ...workout, steps }).ok) continue;
+        // Prefer landing on the wanted total, then keeping the work and the
+        // rest moving together (a sketch that stretches the pieces and
+        // leaves the rests alone is legal, but one that moves both is closer
+        // to what "the same workout, longer" means).
+        const score = Math.abs(raw - wanted) * 100 + Math.abs(rf - f);
+        if (score < bestScore) {
+          bestScore = score;
+          bestSteps = steps;
+          bestRaw = raw;
+        }
       }
     }
   }
-  return best?.steps ?? null;
+  return bestSteps === null ? null : { steps: bestSteps, raw: bestRaw };
 }
 
 /** The total this workout should aim at to land in `target`: the reachable
@@ -695,26 +883,56 @@ export function workRestSeconds(
   return { work, rest };
 }
 
-/** The book cells, narrowed to the two range fields the sketch checker
- *  reads. The JSON's inferred `number[]`s are the same pairs the §6 table
- *  renders; `patterns.test.ts` already gates the file's shape. */
+/** The book cells, narrowed to the four range fields §6 makes checkable.
+ *  The JSON's inferred `number[]`s are the same pairs the §6 table renders;
+ *  `patterns.test.ts` already gates the file's shape. */
 type BookRange = readonly number[] | null | undefined;
-const CELLS = patterns.cells as unknown as Record<
-  string,
-  { workRestRatio?: BookRange; repsCount?: BookRange }
->;
+interface BookCell {
+  workRestRatio?: BookRange;
+  repsCount?: BookRange;
+  spm?: BookRange;
+  paceOff?: { "2k"?: BookRange; "6k"?: BookRange } | null;
+}
+const CELLS = patterns.cells as unknown as Record<string, BookCell>;
 
-/** §6's translation rule, quoted: "A warm-up-free workout consults the cell
- *  its duration occupied BEFORE the strip: a retuned 27' workout that was 32'
- *  with its warm-up obeys the 30-45 cell's ranges, not 20-30's." So the cell
- *  a sketch must satisfy is banded on (retuned total + this workout's own
- *  historical warm-up), not on the retuned total. */
+/** §6's translation rule, PINNED by the block review (m6: the prose reads
+ *  "the cell its duration occupied BEFORE the strip", which is ambiguous
+ *  between the current and the retuned total). The rule's own worked
+ *  example settles it — "a retuned 27' workout that was 32' with its warm-up
+ *  obeys the 30-45 cell's ranges, not 20-30's" — and so does the way the
+ *  book cells were bucketed in the first place: a book entry sits in the
+ *  cell ITS OWN warm-up-inclusive duration falls in. So the cell a sketch
+ *  must satisfy is banded on (RETUNED total + this workout's own historical
+ *  warm-up), on `band()`'s lower-inclusive edges. */
 export function bookCell(
   type: WorkoutType,
   minutes: number,
   historicalWarmup: number,
 ): string {
   return `${type}|${band(minutes + historicalWarmup)}`;
+}
+
+/** §6's fallback, implemented rather than assumed (block review M5: "a dash
+ *  or missing bound means the book showed no observation there … fall back
+ *  to the nearest populated band of the same type"). Walks outward from the
+ *  named band until a cell has an observation for this axis. */
+function bookRange(
+  cell: string,
+  pick: (c: BookCell) => BookRange,
+): { range: readonly number[]; from: string } | null {
+  const [type, b] = cell.split("|") as [WorkoutType, Band];
+  const home = BANDS.indexOf(b);
+  for (let d = 0; d < BANDS.length; d++) {
+    for (const i of d === 0 ? [home] : [home - d, home + d]) {
+      if (i < 0 || i >= BANDS.length) continue;
+      const key = `${type}|${BANDS[i]}`;
+      const range = pick(CELLS[key] ?? {});
+      if (range != null && range.length === 2) {
+        return { range, from: key };
+      }
+    }
+  }
+  return null;
 }
 
 /** Builds the concrete retune and checks it. The check is the point: a
@@ -749,39 +967,30 @@ export function buildSketch(
         workout,
         steps,
         "one-rep",
-        total / r.current,
-        `reps ${marker.count} → ${marker.count + delta} (${r.current}' → ${total}')`,
-        r,
+        `reps ${marker.count} → ${marker.count + delta}`,
         target,
         historicalWarmup,
         baselines,
       ),
     );
   }
-  const total = targetTotal(r, target);
-  if (total !== null) {
-    const f = total / r.current;
-    const scaled = scaleSteps(workout.steps, f);
-    // What the repaired total must satisfy: the assigned band, the ±ratio
-    // window, and the 0/5 rule where the workout is time-computable.
-    const legal = (m: number): boolean =>
-      band(m) === target &&
-      m >= r.window[0] - 1e-9 &&
-      m <= r.window[1] + 1e-9 &&
-      (r.estimated || m % 5 === 0);
-    const steps = legal(estimateMinutes(scaled, baselines).minutes)
-      ? scaled
-      : repair(scaled, legal, total, baselines);
-    if (steps !== null) {
-      const got = estimateMinutes(steps, baselines).minutes;
+  const wanted = targetTotal(r, target);
+  if (wanted !== null) {
+    const found = searchScale(workout, target, r, wanted, baselines);
+    if (found !== null) {
+      const factors = pieceFactors(workout.steps, found.steps);
+      const lo = Math.min(...factors);
+      const hi = Math.max(...factors);
+      const label =
+        hi - lo < 0.005
+          ? `every piece ×${lo.toFixed(2)}`
+          : `every piece ×${lo.toFixed(2)}–${hi.toFixed(2)}`;
       candidates.push(
         finish(
           workout,
-          steps,
+          found.steps,
           "scale",
-          got / r.current,
-          `every piece ×${f.toFixed(2)} (${r.current}' → ${got}')`,
-          r,
+          label,
           target,
           historicalWarmup,
           baselines,
@@ -797,81 +1006,157 @@ function finish(
   workout: WorkoutInput,
   steps: Step[],
   arm: Sketch["arm"],
-  factor: number,
-  summary: string,
-  r: Reach,
+  how: string,
   target: Band,
   historicalWarmup: number,
   baselines: Baselines,
 ): Sketch {
+  const before = rawMinutes(workout.steps, baselines);
+  const raw = rawMinutes(steps, baselines);
   const { minutes, estimated } = estimateMinutes(steps, baselines);
+  const r = reachable(workout.steps, baselines);
   const issues: string[] = [];
+
   const check = validateWorkoutInput({ ...workout, steps });
   if (!check.ok) issues.push(`validate: ${check.errors.join("; ")}`);
-  if (band(minutes) !== target) {
-    issues.push(`lands in ${band(minutes)}, not ${target}`);
+  // Band membership and the 0/5 rule are read on the RAW clock (M2), not on
+  // `estimateMinutes`'s rounded minute.
+  if (band(raw) !== target) {
+    issues.push(`lands in ${band(raw)} on the clock, not ${target}`);
   }
-  if (!estimated && minutes % 5 !== 0)
-    issues.push(`total ${minutes}' is not 0/5`);
+  if (!estimated && Math.abs(raw / 5 - Math.round(raw / 5)) > EPS) {
+    issues.push(`raw total ${fmtClock(raw)} is not a 0/5 minute`);
+  }
   if (
     arm === "scale" &&
-    (minutes < r.window[0] - 1e-9 || minutes > r.window[1] + 1e-9)
+    (raw < r.rawWindow[0] - EPS || raw > r.rawWindow[1] + EPS)
   ) {
-    issues.push(`${minutes}' is outside the ±25% window`);
+    issues.push(`${fmtClock(raw)} is outside the ±25% window`);
   }
-  // The archetype is fixed (§3). Scaling touches durations and rests only:
-  // every spm, every pace ref, the step kinds and the rep count are the
-  // workout's identity and must come through untouched.
-  const shape = (ss: readonly Step[]): string =>
+  // §3's archetype clause, checked with the repo's own classifier rather
+  // than with a duration-blind field comparison (block review C1: the old
+  // guard compared `{k, ref, spm, duration.kind}` and so could not fire on
+  // the one failure mode the builder actually produced).
+  issues.push(
+    ...shapeIssues(workout.steps, steps, raw >= before, baselines, arm),
+  );
+  // Every spm and every pace ref is the workout's identity: untouched.
+  const identity = (ss: readonly Step[]): string =>
     JSON.stringify(
       ss.map((s) =>
         s.k === "w"
           ? { k: s.k, ref: s.ref, spm: s.spm, kind: s.duration.kind }
-          : s.k === "reps"
-            ? { k: s.k, count: arm === "one-rep" ? 0 : s.count }
-            : { k: s.k },
+          : { k: s.k },
       ),
     );
-  if (shape(workout.steps) !== shape(steps)) issues.push("archetype changed");
-  // §6's book ranges for the cell the retuned workout now consults.
-  const cell = CELLS[bookCell(workout.type, minutes, historicalWarmup)];
-  const before = workRestSeconds(workout.steps, baselines);
+  if (identity(workout.steps) !== identity(steps)) {
+    issues.push("a pace ref, spm or step kind changed");
+  }
+
+  // §6's book ranges for the cell the retuned workout now consults — all
+  // FOUR checkable axes (block review M5), each with §6's own fallback to
+  // the nearest populated band when this cell saw no observation.
+  const cell = bookCell(workout.type, minutes, historicalWarmup);
+  const note = (from: string): string =>
+    from === cell ? "" : ` [${from}, §6 fallback]`;
+
+  const wr = bookRange(cell, (c) => c.workRestRatio);
   const after = workRestSeconds(steps, baselines);
+  const wasWR = workRestSeconds(workout.steps, baselines);
   const ratio = after.rest === 0 ? null : after.work / after.rest;
-  const ratioBefore = before.rest === 0 ? null : before.work / before.rest;
-  const wr = cell?.workRestRatio;
+  const ratioBefore = wasWR.rest === 0 ? null : wasWR.work / wasWR.rest;
   if (
-    wr != null &&
-    wr.length === 2 &&
+    wr &&
     ratio !== null &&
-    (ratio < wr[0]! - 1e-6 || ratio > wr[1]! + 1e-6)
+    (ratio < wr.range[0]! - EPS || ratio > wr.range[1]! + EPS)
   ) {
-    const preExisting =
-      ratioBefore !== null && (ratioBefore < wr[0]! || ratioBefore > wr[1]!);
+    // The before-ratio travels with the flag. Scaling holds work:rest fixed,
+    // so a flag whose "was" equals its "now" is the workout's own ratio
+    // meeting a different cell's range — a review-table row about the
+    // destination, not something the retune did.
+    const was = ratioBefore === null ? "n/a" : ratioBefore.toFixed(2);
+    const carried =
+      ratioBefore !== null && Math.abs(ratio - ratioBefore) < 0.05;
     issues.push(
-      `W:R ${ratio.toFixed(2)} outside the cell's ${wr[0]}–${wr[1]}` +
-        (preExisting ? " (pre-existing)" : ""),
+      `W:R ${ratio.toFixed(2)} (was ${was}) outside the cell's ${wr.range[0]}–${wr.range[1]}${note(wr.from)}` +
+        (carried ? " (inherited)" : ""),
     );
   }
+
   const marker = steps.find((s) => s.k === "reps") as
     Extract<Step, { k: "reps" }> | undefined;
-  const rc = cell?.repsCount;
+  const rc = bookRange(cell, (c) => c.repsCount);
   if (
     marker &&
-    rc != null &&
-    rc.length === 2 &&
-    (marker.count < rc[0]! || marker.count > rc[1]!)
+    rc &&
+    (marker.count < rc.range[0]! || marker.count > rc.range[1]!)
   ) {
     // "Inherited" = the sketch did not touch the rep count; the workout
     // carried it into a band whose book cell happens to have seen a
     // different range. That is a §6 review-table row about the destination
     // cell, not a defect in the retune.
     issues.push(
-      `reps ${marker.count} outside the cell's ${rc[0]}–${rc[1]}` +
+      `reps ${marker.count} outside the cell's ${rc.range[0]}–${rc.range[1]}${note(rc.from)}` +
         (arm === "one-rep" ? "" : " (inherited)"),
     );
   }
-  return { arm, factor, steps, minutes, summary, issues };
+
+  const workSteps = liveSteps(steps).filter((s) => s.k === "w");
+  const spmRange = bookRange(cell, (c) => c.spm);
+  if (spmRange) {
+    const bad = workSteps
+      .map((s) => s.spm)
+      .filter(
+        (spm): spm is number =>
+          spm !== undefined &&
+          (spm < spmRange.range[0]! || spm > spmRange.range[1]!),
+      );
+    if (bad.length > 0) {
+      issues.push(
+        `spm ${[...new Set(bad)].join("/")} outside the cell's ${spmRange.range[0]}–${spmRange.range[1]}${note(spmRange.from)} (inherited)`,
+      );
+    }
+  }
+  for (const base of ["2k", "6k"] as const) {
+    const offRange = bookRange(cell, (c) => c.paceOff?.[base]);
+    if (!offRange) continue;
+    const bad = workSteps
+      .map((s) => s.ref)
+      .filter(
+        (ref): ref is Extract<typeof ref, { base: PaceBase }> =>
+          "base" in ref && ref.base === base,
+      )
+      .map((ref) => ref.off)
+      .filter((off) => off < offRange.range[0]! || off > offRange.range[1]!);
+    if (bad.length > 0) {
+      issues.push(
+        `${base}${[...new Set(bad)].map((o) => (o >= 0 ? `+${o}` : o)).join("/")} outside the cell's ${offRange.range[0]}..${offRange.range[1]}${note(offRange.from)} (inherited)`,
+      );
+    }
+  }
+
+  const factors = pieceFactors(workout.steps, steps);
+  const lo = factors.length > 0 ? Math.min(...factors) : 1;
+  const hi = factors.length > 0 ? Math.max(...factors) : 1;
+  return {
+    arm,
+    factor: raw / before,
+    steps,
+    minutes,
+    raw,
+    summary: `${how} (${fmtClock(before)} → ${fmtClock(raw)})`,
+    pieceFactorRange: [lo, hi],
+    issues,
+  };
+}
+
+/** m:ss, because the block review's M2 is exactly about the difference
+ *  between 29:45 and "30'". A whole minute renders as `30'`. */
+export function fmtClock(minutes: number): string {
+  const totalSeconds = Math.round(minutes * 60);
+  const m = Math.floor(totalSeconds / 60);
+  const sec = totalSeconds % 60;
+  return sec === 0 ? `${m}'` : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 // ---------------------------------------------------------------------
@@ -976,27 +1261,42 @@ export function reviewReplay(): {
 
 const fmtBands = (bs: readonly Band[]): string => `{${bs.join(", ")}}`;
 
-function describeSteps(steps: readonly Step[]): string {
-  const marker = steps.find((s) => s.k === "reps") as
-    Extract<Step, { k: "reps" }> | undefined;
-  const body = steps
-    .filter((s) => s.k !== "reps")
-    .map((s) => {
-      if (s.k === "r") return `rest ${s.minutes}'`;
-      if (s.k === "test") return `test ${s.label}`;
-      const d =
-        s.duration.kind === "time"
-          ? `${s.duration.minutes}'`
-          : `${s.duration.meters} m`;
-      const ref =
-        "base" in s.ref
-          ? `${s.ref.base}${s.ref.off >= 0 ? "+" : ""}${s.ref.off}`
-          : s.ref.effort;
-      const rest = s.restMinutes === undefined ? "" : ` r${s.restMinutes}'`;
-      return `${d} @${ref}${s.spm === undefined ? "" : ` spm${s.spm}`}${rest}`;
-    })
-    .join(" + ");
-  return marker ? `${marker.count}× [${body}]` : body;
+/** Renders a workout the way its author wrote it: anything BEFORE the reps
+ *  marker is a lead played once, and only what follows is inside the block.
+ *
+ *  Block review M1: this used to sweep every non-marker step into the
+ *  `n× [...]` block regardless of position, so AT Gap Wind — a 10' lead then
+ *  3× 3' — rendered as `3× [10' + 3']`, a 39' workout, in the artifact James
+ *  signs off. The totals in the row were right; the structure, which is the
+ *  entire point of §4's review gate, was not. */
+export function describeSteps(steps: readonly Step[]): string {
+  const markerIndex = steps.findIndex((s) => s.k === "reps");
+  const marker =
+    markerIndex === -1
+      ? undefined
+      : (steps[markerIndex] as Extract<Step, { k: "reps" }>);
+  const render = (s: Step): string => {
+    if (s.k === "r") return `rest ${fmtClock(s.minutes)}`;
+    if (s.k === "test") return `test ${s.label}`;
+    if (s.k === "reps") return "";
+    const d =
+      s.duration.kind === "time"
+        ? fmtClock(s.duration.minutes)
+        : `${s.duration.meters} m`;
+    const ref =
+      "base" in s.ref
+        ? `${s.ref.base}${s.ref.off >= 0 ? "+" : ""}${s.ref.off}`
+        : s.ref.effort;
+    const rest =
+      s.restMinutes === undefined ? "" : ` r${fmtClock(s.restMinutes)}`;
+    return `${d} @${ref}${s.spm === undefined ? "" : ` spm${s.spm}`}${rest}`;
+  };
+  const join = (ss: readonly Step[]): string =>
+    ss.map(render).filter(Boolean).join(" + ");
+  if (marker === undefined) return join(steps);
+  const lead = join(steps.slice(0, markerIndex));
+  const block = `${marker.count}× [${join(steps.slice(markerIndex + 1))}]`;
+  return lead === "" ? block : `${lead} + ${block}`;
 }
 
 function main(): void {
@@ -1004,15 +1304,66 @@ function main(): void {
   const rows = libraryItems();
   const items = rows.map((r) => r.item);
   const solved = solveLibrary(items, DRAFT_GRID);
+
+  // Every sketch is built BEFORE the counts are printed, because a mover
+  // whose sketch cannot legally be built is not a retune — it is a
+  // replacement, and the summary has to say so (block review C1's tail:
+  // "if any becomes unsketchable → it moves to the replacement residual").
+  const sketches = new Map<string, Sketch>();
+  const unsketchable = new Map<string, Band>();
+  for (const t of TYPES) {
+    for (const r of rows.filter((x) => x.item.type === t)) {
+      const to = solved[t].assigned.get(r.item.id);
+      if (to === undefined || to === r.item.current) continue;
+      const sk = buildSketch(
+        r.workout,
+        to,
+        frozen[r.workout.title] ?? 0,
+        BASELINES,
+      );
+      if (sk === null) unsketchable.set(r.item.id, to);
+      else sketches.set(r.item.id, sk);
+    }
+  }
+  const leaving = (t: WorkoutType): string[] => [
+    ...solved[t].replaced,
+    ...rows
+      .filter((r) => r.item.type === t && unsketchable.has(r.item.id))
+      .map((r) => r.item.id),
+  ];
+
   const out: string[] = [];
   const p = (s = ""): void => void out.push(s);
 
   p("# The move plan — library rebalance Task 1 (JAMES GATE 1)");
   p();
   p("Generated by `pnpm exec tsx scripts/library-moves.ts`. Every duration");
-  p("below is `estimateMinutes` at the nominal baselines");
-  p("(`{k2Seconds: 112, k6Seconds: 122}`), warm-up-free, and every sketch was");
-  p("BUILT and re-measured by the script rather than asserted in prose.");
+  p("below is measured at the nominal baselines");
+  p("(`{k2Seconds: 112, k6Seconds: 122}`), warm-up-free, on the REAL clock");
+  p("(m:ss), and every sketch was BUILT and re-measured by the script rather");
+  p("than asserted in prose.");
+  p();
+  p("## REGENERATED AFTER THE BLOCK REVIEW — what moved, and what did not");
+  p();
+  p("**The grid James approved at Gate 1 is unchanged**, in all twenty");
+  p("cells. **One count moved.** The block review found the sketch builder");
+  p("dumping each workout's rounding residue onto a single piece, which");
+  p("changed 10 workouts' structure archetype — the one thing §3 forbids in");
+  p("terms — and checking the 0/5 rule and band membership against a ROUNDED");
+  p("minute, so 23 sketches had raw totals like 20:25 and 22 sat below their");
+  p("band's real floor. The builder now scales every work piece by one");
+  p("factor and every rest by one factor, and is held to the real clock.");
+  p("Measured over all 93 sketches: **0 archetype changes, 0 raw totals off");
+  p("a 0/5 minute, 0 landing below their band's floor, 0 pieces moving");
+  p("against the tide, 0 identity changes, 0 seed-spm-gate breaches.**");
+  p();
+  p("The one count: **TR Head Sea moves from RETUNE to REPLACEMENT** (94");
+  p("retunes → 93, 10 replacements → 11). It is 15:48 on the clock and the");
+  p("solve assigned it to 20-30 — legally, because reachability runs on the");
+  p("rounded minute the whole library bands on, where it reads 16'. On the");
+  p("real clock +25% of 15:48 is 19:45, which does not reach 20'. The seat");
+  p("was licensed by rounding. Nothing else changed: same grid, same");
+  p("assignment, same 196 workouts staying where they are.");
   p();
 
   const replay = reviewReplay();
@@ -1119,14 +1470,17 @@ function main(): void {
     const spent = BANDS.filter((b) => s.adjustments[b] !== 0)
       .map((b) => `${b} ${s.adjustments[b]! > 0 ? "+" : ""}${s.adjustments[b]}`)
       .join(", ");
+    // Σ|adjustment| counts each moved place TWICE, once where it left and
+    // once where it landed (block review m1 — this used to print the sum).
+    const moved = BANDS.reduce((a, b) => a + Math.max(0, s.adjustments[b]), 0);
     p(
       `- **${t}** — ${spent}. Against the draft, Hall's condition is short ` +
         `${hall.short} over ${fmtBands(hall.subset)} ` +
         `(demand ${hall.demand}, supply ${hall.supply}): ` +
         `no assignment can fill those cells from this content. The ±2 moves ` +
-        `${s.deviation} places of demand out of the cells the library cannot ` +
-        `reach and into the ones it can, cutting replacements to ` +
-        `${s.replaced.length}.`,
+        `${moved} place${moved === 1 ? "" : "s"} of demand out of the cells ` +
+        `the library cannot reach and into the ones it can, cutting ` +
+        `replacements to ${leaving(t).length}.`,
     );
   }
   p();
@@ -1144,16 +1498,17 @@ function main(): void {
     let down = 0;
     for (const r of g) {
       const to = s.assigned.get(r.item.id);
-      if (to === undefined) continue;
+      if (to === undefined || unsketchable.has(r.item.id)) continue;
       if (to === r.item.current) stay++;
       else if (BANDS.indexOf(to) > BANDS.indexOf(r.item.current)) up++;
       else down++;
     }
+    const out = leaving(t).length;
     totals.stay += stay;
     totals.up += up;
     totals.down += down;
-    totals.repl += s.replaced.length;
-    p(`| ${t} | ${stay} | ${up} | ${down} | ${s.replaced.length} |`);
+    totals.repl += out;
+    p(`| ${t} | ${stay} | ${up} | ${down} | ${out} |`);
   }
   p(
     `| **all** | **${totals.stay}** | **${totals.up}** | **${totals.down}** | **${totals.repl}** |`,
@@ -1177,20 +1532,10 @@ function main(): void {
     type: WorkoutType;
     issues: readonly string[];
   }[] = [];
-  const sketches = new Map<string, Sketch>();
   for (const t of TYPES) {
     for (const r of rows.filter((x) => x.item.type === t)) {
-      const to = solved[t].assigned.get(r.item.id);
-      if (to === undefined || to === r.item.current) continue;
-      const sk = buildSketch(
-        r.workout,
-        to,
-        frozen[r.workout.title] ?? 0,
-        BASELINES,
-      );
-      if (sk === null) continue;
-      sketches.set(r.item.id, sk);
-      if (sk.issues.length > 0) {
+      const sk = sketches.get(r.item.id);
+      if (sk !== undefined && sk.issues.length > 0) {
         flags.push({ title: r.item.id, type: t, issues: sk.issues });
       }
     }
@@ -1261,12 +1606,14 @@ function main(): void {
     p();
     p("#### Replacements (the residual)");
     p();
-    if (s.replaced.length === 0) {
+    if (leaving(t).length === 0) {
       p("None — every workout of this type places.");
     } else {
       const filled = {} as Record<Band, number>;
       for (const b of BANDS) filled[b] = 0;
-      for (const b of s.assigned.values()) filled[b]++;
+      for (const [id, b] of s.assigned) {
+        if (!unsketchable.has(id)) filled[b]++;
+      }
       const unfilled = BANDS.filter((b) => s.grid[b] - filled[b] > 0);
       const hall = hallDeficit(
         items.filter((i) => i.type === t),
@@ -1306,22 +1653,46 @@ function main(): void {
       for (const id of s.replaced) {
         const r = rows.find((x) => x.item.id === id)!;
         p(
-          `| ${id} | ${r.reach.current}' (${r.item.current}) | ` +
+          `| ${id} | ${fmtClock(r.reach.rawCurrent)} (${r.item.current}) | ` +
             `${fmtBands(r.item.reach)} | ${r.workout.difficulty} / ${r.workout.pain} | ` +
             `every band it reaches is already full of workouts that reach ` +
             `nothing else, and it reaches none of the unfilled seats |`,
+        );
+      }
+      for (const [id, to] of unsketchable) {
+        const r = rows.find((x) => x.item.id === id);
+        if (r === undefined || r.item.type !== t) continue;
+        p(
+          `| ${id} | ${fmtClock(r.reach.rawCurrent)} (${r.item.current}) | ` +
+            `${fmtBands(r.item.reach)} | ${r.workout.difficulty} / ${r.workout.pain} | ` +
+            `**assigned ${to}, but no legal sketch exists**: reachability runs ` +
+            `on the rounded minute the library bands on, and on the real clock ` +
+            `±25% of ${fmtClock(r.reach.rawCurrent)} tops out at ` +
+            `${fmtClock(r.reach.rawWindow[1])}, short of ${to}'s floor — the ` +
+            `seat was licensed by rounding, so the retune is not available |`,
         );
       }
     }
     p();
     p("#### Moves");
     p();
+    p(
+      "`now` and the sketch's totals are the REAL clock, m:ss — a retune " +
+        "that reads 29:45 has not reached 30-45 and is not accepted here " +
+        "(block review M2). The `checks` column names the BOOK cell the " +
+        "sketch is measured against, which is one band above the assigned " +
+        "band whenever the workout's historical warm-up carries it there: " +
+        "§6's translation rule, pinned in the spec this round — a retuned " +
+        "27' workout that was 32' with its warm-up obeys 30-45's ranges, " +
+        "not 20-30's. It is not a mismatch.",
+    );
+    p();
     p("| workout | now | → band | reachable | sketch | checks |");
     p("|---|---|---|---|---|---|");
     let stays = 0;
     for (const r of rows.filter((x) => x.item.type === t)) {
       const to = s.assigned.get(r.item.id);
-      if (to === undefined) continue;
+      if (to === undefined || unsketchable.has(r.item.id)) continue;
       if (to === r.item.current) {
         stays++;
         continue;

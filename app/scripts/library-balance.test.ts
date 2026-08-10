@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   band,
   bucket,
+  debtRegressions,
   DESIGN_GRID_2026_08_03,
   drift,
   gridMismatches,
@@ -169,5 +170,86 @@ describe("gridMismatches", () => {
     expect(all["O2|<20"]).toBe(-2);
     // -2 is the DESIGN grid's O2 <20, not TARGET's 5 — the default rod.
     expect(Object.values(all).reduce((a, b) => a + b, 0)).toBe(-300);
+  });
+});
+
+describe("debtRegressions (the rebalance ratchet, block review §7)", () => {
+  const target = {
+    O2: { "<20": 5, "20-30": 14, "30-45": 34, "45-60": 18, "60+": 19 },
+    AT: { "<20": 8, "20-30": 20, "30-45": 32, "45-60": 12, "60+": 3 },
+    TR: { "<20": 12, "20-30": 23, "30-45": 29, "45-60": 7, "60+": 4 },
+    AN: { "<20": 14, "20-30": 17, "30-45": 18, "45-60": 7, "60+": 4 },
+  } as const;
+  const baseline = {
+    O2: { "<20": 2, "20-30": 0, "30-45": 0, "45-60": -2, "60+": 0 },
+    AT: { "<20": 0, "20-30": 0, "30-45": 0, "45-60": 0, "60+": 0 },
+    TR: { "<20": 0, "20-30": 0, "30-45": 0, "45-60": 0, "60+": 0 },
+    AN: { "<20": 0, "20-30": 0, "30-45": 0, "45-60": 0, "60+": 0 },
+  } as const;
+  const counts = (over: Record<string, number>): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+      for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
+        out[`${type}|${b}`] = target[type][b] + (baseline[type][b] as number);
+      }
+    }
+    return { ...out, ...over };
+  };
+
+  it("passes the branch's own starting point — the baseline IS the debt today", () => {
+    expect(debtRegressions(counts({}), target, baseline)).toStrictEqual([]);
+  });
+
+  it("passes content that closes debt, in one cell or all of them", () => {
+    expect(
+      debtRegressions(
+        counts({ "O2|<20": target.O2["<20"] + 1, "O2|45-60": 17 }),
+        target,
+        baseline,
+      ),
+    ).toStrictEqual([]);
+    // Every cell exactly on target — the phase's end state.
+    const perfect: Record<string, number> = {};
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+      for (const b of ["<20", "20-30", "30-45", "45-60", "60+"] as const) {
+        perfect[`${type}|${b}`] = target[type][b];
+      }
+    }
+    expect(debtRegressions(perfect, target, baseline)).toStrictEqual([]);
+  });
+
+  it("FAILS a cell whose debt grew", () => {
+    expect(
+      debtRegressions(
+        counts({ "O2|<20": target.O2["<20"] + 3 }),
+        target,
+        baseline,
+      ),
+    ).toStrictEqual(["O2|<20: debt 3, worse than the baseline 2"]);
+  });
+
+  it("FAILS a cell the content walked straight through", () => {
+    // Baseline debt +2, now −1: closer to zero, but on the wrong side.
+    expect(
+      debtRegressions(
+        counts({ "O2|<20": target.O2["<20"] - 1 }),
+        target,
+        baseline,
+      ),
+    ).toStrictEqual(["O2|<20: debt -1 overshot the baseline 2"]);
+  });
+
+  it("FAILS a compensating pair the old per-type-sum check let through", () => {
+    // The exact hole the block review named: +1 here, −1 there, so the type
+    // still sums to its total and the debt still nets to zero — and both
+    // cells are further from the grid than they started.
+    const bad = counts({
+      "AT|20-30": target.AT["20-30"] + 1,
+      "AT|30-45": target.AT["30-45"] - 1,
+    });
+    expect(debtRegressions(bad, target, baseline)).toStrictEqual([
+      "AT|20-30: debt 1, worse than the baseline 0",
+      "AT|30-45: debt -1, worse than the baseline 0",
+    ]);
   });
 });

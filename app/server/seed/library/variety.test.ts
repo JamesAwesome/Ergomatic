@@ -54,29 +54,40 @@ function cellsOf(
 // Full command: see variety-baseline.md at the plan root for the exact
 // per-cell histograms (archetype x rateChange) this table summarizes.
 //
-// | cell       | n  | share (archetype) | pairs |
-// |---|---|---|---|
-// | O2 <20     | 12 | 0.58 (nxtime)      | 0     |
-// | O2 20-30   | 15 | 0.47 (nxtime)      | 2     |
-// | O2 30-45   | 35 | 0.46 (nxtime)      | 6     |
-// | O2 45-60   | 13 | 0.23 (continuous)  | 2     |
-// | O2 60+     | 15 | 0.33 (continuous)  | 4     |
-// | AT <20     | 16 | 0.38 (nxtime)      | 0     |
-// | AT 20-30   | 27 | 0.33 (nxtime)      | 6     |
-// | AT 30-45   | 26 | 0.27 (mixed)       | 3     |
-// | AT 45-60   | 3  | n<4, share rule skipped | 0 |
-// | AT 60+     | 3  | n<4, share rule skipped | 0 |
-// | TR <20     | 21 | 0.33 (mixed)       | 1     |
-// | TR 20-30   | 26 | 0.31 (nxdistance)  | 2     |
-// | TR 30-45   | 19 | 0.42 (nxdistance)  | 1     |
-// | TR 45-60   | 7  | 0.57 (mixed)       | 1     |
-// | TR 60+     | 2  | n<4, share rule skipped | 0 |
-// | AN <20     | 32 | 0.41 (nxtime)      | 3     |
-// | AN 20-30   | 15 | 0.47 (mixed)       | 3     |
-// | AN 30-45   | 10 | 0.50 (nxtime)      | 1     |
-// | AN 45-60   | 1  | n<4, share rule skipped | 0 |
-// | AN 60+     | 2  | n<4, share rule skipped (pairs rule still applies) | 1 |
+// | cell       | n  | share (archetype) | pairs | was |
+// |---|---|---|---|---|
+// | O2 <20     | 12 | 0.58 (nxtime)      | 0     | 0 |
+// | O2 20-30   | 15 | 0.47 (nxtime)      | 2     | 2 |
+// | O2 30-45   | 35 | 0.46 (nxtime)      | 5     | 6 |
+// | O2 45-60   | 13 | 0.23 (continuous)  | 2     | 2 |
+// | O2 60+     | 15 | 0.33 (continuous)  | 4     | 4 |
+// | AT <20     | 16 | 0.44 (nxtime)      | 0     | 0 |
+// | AT 20-30   | 27 | 0.44 (nxtime)      | 3     | 6 |
+// | AT 30-45   | 26 | 0.31 (nxtime)      | 2     | 3 |
+// | AT 45-60   | 3  | n<4, share rule skipped | 0 | 0 |
+// | AT 60+     | 3  | n<4, share rule skipped | 0 | 0 |
+// | TR <20     | 21 | 0.24 (nxdistance)  | 1     | 1 |
+// | TR 20-30   | 26 | 0.31 (nxdistance)  | 1     | 2 |
+// | TR 30-45   | 19 | 0.42 (nxdistance)  | 1     | 1 |
+// | TR 45-60   | 7  | 0.57 (mixed)       | 0     | 1 |
+// | TR 60+     | 2  | n<4, share rule skipped | 0 | 0 |
+// | AN <20     | 32 | 0.41 (nxtime)      | 3     | 3 |
+// | AN 20-30   | 15 | 0.40 (ladder)      | 0     | 3 |
+// | AN 30-45   | 10 | 0.50 (nxtime)      | 1     | 1 |
+// | AN 45-60   | 1  | n<4, share rule skipped | 0 | 0 |
+// | AN 60+     | 2  | n<4, share rule skipped (pairs rule still applies) | 1 | 1 |
 //
+// The `was` column is the FIRST measurement of this baseline, taken before
+// the block review's §5b amendment fixed the classifier's expanded-signature
+// collapse (`archetype.ts`, "BLOCK REVIEW AMENDMENT"). Ten of the 36 pairs
+// it counted were manufactured by the collapse rather than present in the
+// content: a sequence that restarts is never globally monotonic, so every
+// repeated block read as `mixed` and repeated blocks of quite different
+// shapes piled into one bucket. AN|20-30's three — Giant Hail / Flash Flood
+// / Bomb Cyclone, a 2-rung block played four times against an ascending
+// 4-rung block and a descending one — were the review's worked example and
+// are now correctly zero. The O2|60+ cluster, the debt this audit was built
+// to surface, is untouched at 4.
 // CONCLUSION: the spec's ORIGINAL opening bid — no archetype exceeds 60%
 // of a cell with >=4 workouts, and no cell is single-archetype — holds
 // UNMODIFIED on every applicable cell today (O2|<20's 58% is the closest
@@ -107,9 +118,14 @@ const SHARE_CEILING = 0.6;
 // grandfathered" (this task's brief) — every nonzero cell below is
 // content debt, not a policy that says it's fine, and belongs on James's
 // gate-2 review table (design spec §5, the spot-check round).
+// KEYED ON TODAY'S CELLS (block review m5). The rebalance moves 94 workouts
+// between bands, so after Tasks 3/4 land, every cell's membership is
+// different and this whole table must be RE-MEASURED, not patched: a cell
+// whose debt looks unchanged may be carrying an entirely different pair.
+// Re-measure by running the audit and reading the failures.
 const KNOWN_DEBT: Partial<Record<string, number>> = {
   "O2|20-30": 2,
-  "O2|30-45": 6,
+  "O2|30-45": 5,
   "O2|45-60": 2,
   // O2|60+: the sharpest cluster in the library and the adversarial
   // review's own headline example (M2/M6) — four near-identical 6k+12
@@ -119,23 +135,12 @@ const KNOWN_DEBT: Partial<Record<string, number>> = {
   // task was built to surface — fix-now-or-accept goes to James's gate-2
   // review table, not decided here.
   "O2|60+": 4,
-  "AT|20-30": 6,
-  "AT|30-45": 3,
+  "AT|20-30": 3,
+  "AT|30-45": 2,
   "TR|<20": 1,
-  "TR|20-30": 2,
+  "TR|20-30": 1,
   "TR|30-45": 1,
-  "TR|45-60": 1,
   "AN|<20": 3,
-  // AN|20-30: Giant Hail / Flash Flood / Bomb Cyclone — three all-out
-  // interval sets that read as distinct by eye (a short 2-piece block vs
-  // an ascending 4-piece block vs a descending 4-piece block) but share
-  // one computable signature: each expands (via a repeating `reps` block)
-  // to a non-monotonic liveSteps sequence, so archetype is "mixed" for
-  // all three; pieceCount 8; totals 25-27'; effortShare 1.0 (all-out
-  // throughout). This is adversarial M3's own worked example of the
-  // EffortRef arm's coarseness (archetype.test.ts's DISAGREEMENT block
-  // has the full reasoning) — also destined for the review table.
-  "AN|20-30": 3,
   "AN|30-45": 1,
   "AN|60+": 1,
 };

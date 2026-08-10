@@ -3,6 +3,7 @@ import { estimateMinutes } from "../../../domain/expand.js";
 import type { Difficulty, WorkoutType } from "../../../domain/types.js";
 import { validateWorkoutInput } from "../../../domain/validate.js";
 import patterns from "../../../domain/generation/patterns.json";
+import { debtRegressions } from "../../../scripts/library-balance.js";
 import { LIBRARY_WORKOUTS } from "./index.js";
 
 // Reference baselines for banding (splits, s/500m) — the values the retired
@@ -29,16 +30,23 @@ const band = (m: number): Band =>
 // both read it. Change the grid in one place and both move.
 const TARGETS = patterns.targets as Record<WorkoutType, Record<Band, number>>;
 
-// What the CONTENT still owes that target, cell by cell. The warmup-setting
-// spec (Task 3, 2026-08-09) deleted the 302 `{ k: "wu", ... }` seed lines —
-// the same content, 4-20 fewer minutes each — and a meaningful slice of the
+// What the CONTENT still owed that target when this branch started, cell by
+// cell — a FROZEN BASELINE, never edited again. The warmup-setting spec
+// (Task 3, 2026-08-09) deleted the 302 `{ k: "wu", ... }` seed lines — the
+// same content, 4-20 fewer minutes each — and a meaningful slice of the
 // library crossed a band boundary downward; the rebalance is the answer and
-// its content tasks have not landed yet. So the gate stays EXACT, but exact
-// about `target + outstanding` rather than about a hand-copied grid: every
-// retune that lands moves one entry below one closer to zero, the last one
-// zeroes the table, and the constant is deleted in the same commit. Rows
-// still sum 90/75/75/60 = 300 — no workout moves TYPE, only band.
-const OUTSTANDING: Record<WorkoutType, Record<Band, number>> = {
+// its content tasks have not landed yet.
+//
+// The gate below is a RATCHET against this table, not an equality against a
+// hand-maintained copy of reality (block review §7): the previous form
+// asserted `measured === target + OUTSTANDING`, which cannot tell content
+// landing on target from content landing in the WRONG band with the
+// constant edited to match — the per-type sum and the nets-to-zero property
+// both survive a compensating ∓1 pair. Measuring the debt live and holding
+// each cell's |debt| non-increasing means a mis-landing fails on its own,
+// and the phase's end state (all zeros) becomes a property rather than a
+// promise. Rows still sum 90/75/75/60 = 300 — no workout moves TYPE.
+const DEBT_BASELINE: Record<WorkoutType, Record<Band, number>> = {
   O2: { "<20": 7, "20-30": 1, "30-45": 1, "45-60": -5, "60+": -4 },
   AT: { "<20": 8, "20-30": 7, "30-45": -6, "45-60": -9, "60+": 0 },
   TR: { "<20": 9, "20-30": 3, "30-45": -10, "45-60": 0, "60+": -2 },
@@ -84,34 +92,51 @@ describe("LIBRARY_WORKOUTS", () => {
     expect(new Set(LIBRARY_WORKOUTS.map((w) => w.title)).size).toBe(300);
   });
 
-  it("fills the quota grid exactly — patterns.json targets plus what the rebalance still owes", () => {
+  it("every cell's distance from the target grid is non-increasing (the rebalance ratchet)", () => {
     const got: Record<string, number> = {};
     for (const w of LIBRARY_WORKOUTS) {
       const { minutes } = estimateMinutes(w.steps, BASELINES);
       const key = `${w.type}|${band(minutes)}`;
       got[key] = (got[key] ?? 0) + 1;
     }
-    for (const [type, bands] of Object.entries(TARGETS))
-      for (const [b, n] of Object.entries(bands))
-        expect(got[`${type}|${b}`] ?? 0, `${type} ${b}`).toBe(
-          n + OUTSTANDING[type as WorkoutType][b as Band],
-        );
+    expect(debtRegressions(got, TARGETS, DEBT_BASELINE)).toStrictEqual([]);
   });
 
-  it("targets sum to 300 across 90/75/75/60, and the outstanding table nets out", () => {
+  it("targets sum to 300 across 90/75/75/60, and the measured debt nets out per type", () => {
     // Two properties the rebalance cannot break without noticing: the grid
-    // is still the same library (no workout changes TYPE), and OUTSTANDING
-    // is a redistribution within each type, never a change to its size.
+    // is still the same library (no workout changes TYPE), and the debt is
+    // a redistribution within each type, never a change to its size.
+    const got: Record<string, number> = {};
+    for (const w of LIBRARY_WORKOUTS) {
+      const { minutes } = estimateMinutes(w.steps, BASELINES);
+      const key = `${w.type}|${band(minutes)}`;
+      got[key] = (got[key] ?? 0) + 1;
+    }
     const perType: Record<string, number> = { O2: 90, AT: 75, TR: 75, AN: 60 };
     for (const [type, bands] of Object.entries(TARGETS)) {
       const sum = Object.values(bands).reduce((a, b) => a + b, 0);
       expect(sum, `${type} targets`).toBe(perType[type]);
-      const owed = Object.values(OUTSTANDING[type as WorkoutType]).reduce(
+      const debt = Object.entries(bands).reduce(
+        (a, [b, target]) => a + ((got[`${type}|${b}`] ?? 0) - target),
+        0,
+      );
+      expect(debt, `${type} debt`).toBe(0);
+      const owed = Object.values(DEBT_BASELINE[type as WorkoutType]).reduce(
         (a, b) => a + b,
         0,
       );
-      expect(owed, `${type} outstanding`).toBe(0);
+      expect(owed, `${type} baseline`).toBe(0);
     }
+  });
+
+  it("the phase is done when the ratchet reaches zero — and it has not yet", () => {
+    // A live marker of where the rebalance stands. When every entry in
+    // DEBT_BASELINE can be replaced by 0 and this test inverted, the
+    // library matches the grid and §8's exit condition is met.
+    const outstanding = Object.values(DEBT_BASELINE)
+      .flatMap((row) => Object.values(row))
+      .reduce((a, b) => a + Math.abs(b), 0);
+    expect(outstanding).toBe(108);
   });
 
   it("keeps every work step's spm inside its type's band", () => {

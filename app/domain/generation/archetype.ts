@@ -71,13 +71,67 @@ function isPyramid(values: number[]): boolean {
   return false;
 }
 
+/** One sequence, classified on its own terms. Returns null for an empty
+ *  sequence; every other input gets an archetype. */
+function classifySequence(workSteps: WorkStep[]): Archetype | null {
+  if (workSteps.length === 0) return null;
+  if (workSteps.length === 1) return "continuous";
+  const allTime = workSteps.every((s) => s.duration.kind === "time");
+  const allDistance = workSteps.every((s) => s.duration.kind === "distance");
+  if (!allTime && !allDistance) return "mixed";
+  const values = workSteps.map(workDurationValue);
+  if (new Set(values).size === 1) return allTime ? "nxtime" : "nxdistance";
+  if (isStrictlyMonotonic(values)) return "ladder";
+  if (isPyramid(values)) return "pyramid";
+  return "mixed";
+}
+
+/** The length of the shortest block this sequence is a whole number of
+ *  repetitions of, or null when it does not repeat. Read off the sequence
+ *  itself, NOT off the `reps` marker: `3× [3', 2']` and the same six pieces
+ *  typed out flat are the same session and must classify the same way. */
+export function smallestPeriod(values: number[]): number | null {
+  const n = values.length;
+  for (let p = 1; p < n; p++) {
+    if (n % p !== 0) continue;
+    if (values.every((v, i) => v === values[i % p]!)) return p;
+  }
+  return null;
+}
+
 /**
- * Classifies a workout's structural archetype over its liveSteps-expanded
- * signature (reps blocks expanded, so a 4x[A,B] repeated pair is judged as
- * the full 8-step sequence, not the 2-step authored block — the same
- * expansion `phases()`/`estimateMinutes` use everywhere else in the
- * codebase, so "how many pieces" never disagrees between the timer, the
- * seed gate, and this classifier).
+ * Classifies a workout's structural archetype.
+ *
+ * FIRST over the liveSteps-expanded signature (reps blocks expanded — the
+ * same expansion `phases()`/`estimateMinutes` use everywhere else, so "how
+ * many pieces" never disagrees between the timer, the seed gate and this
+ * classifier).
+ *
+ * **§5b BLOCK REVIEW AMENDMENT (2026-08-10).** The expanded reading alone
+ * COLLAPSES two structures the library really has, because a sequence that
+ * restarts is never globally monotonic:
+ *
+ *   - `15' then 4× 3'` (AT Katabatic Wind) expands to [15,3,3,3,3] — a lead
+ *     piece in front of a flat block — and reads `mixed`.
+ *   - `4× [75 s, 30 s]` (AN Giant Hail) expands to [1.25,.5,1.25,.5,…] and
+ *     reads `mixed`, as do an ASCENDING 2×[4 rungs] and a DESCENDING one.
+ *
+ * The block review found the second collapse doing real damage: it is what
+ * made `AN|20-30`'s three "near-duplicates" (Giant Hail / Flash Flood /
+ * Bomb Cyclone), which a content reviewer would never call the same
+ * workout, and that manufactured debt was on its way to James's gate-2
+ * table dressed as content debt.
+ *
+ * So the reading is now: the expansion FIRST, and only where the expansion
+ * says `mixed` do two reductions apply, in order — set the lead aside and
+ * read the body; then read the repeated block's OWN shape instead of its
+ * expansion. A workout that already classified cannot be reclassified by
+ * either reduction, which is what keeps the amendment from disturbing the
+ * 27 hand-labels that were right the first time.
+ *
+ * The lead itself is not lost: `structureSignature` records it, and the
+ * near-duplicate key reads it (a "flat block with a lead" and a bare flat
+ * block are both `nxtime` and are not duplicates of each other).
  *
  * rateChange is a MODIFIER, not a seventh archetype (adversarial M1): true
  * whenever two or more live work steps carry different `spm` values,
@@ -91,21 +145,63 @@ export function classifyArchetype(steps: Step[]): ArchetypeResult {
     .filter((spm): spm is number => spm !== undefined);
   const rateChange = new Set(spms).size > 1;
 
-  if (workSteps.length === 0) return { archetype: "mixed", rateChange };
-  if (workSteps.length === 1) return { archetype: "continuous", rateChange };
-
-  const allTime = workSteps.every((s) => s.duration.kind === "time");
-  const allDistance = workSteps.every((s) => s.duration.kind === "distance");
-  if (!allTime && !allDistance) return { archetype: "mixed", rateChange };
-
-  const values = workSteps.map(workDurationValue);
-  const uniform = new Set(values).size === 1;
-  if (uniform) {
-    return { archetype: allTime ? "nxtime" : "nxdistance", rateChange };
+  const whole = classifyBody(workSteps);
+  if (whole !== null && whole !== "mixed") {
+    return { archetype: whole, rateChange };
   }
-  if (isStrictlyMonotonic(values)) return { archetype: "ladder", rateChange };
-  if (isPyramid(values)) return { archetype: "pyramid", rateChange };
+  // Set a LEAD aside and read what follows. The opening piece only counts
+  // as a lead if it stands outside the body's own range — otherwise every
+  // [2,2,3] would become "a 2-rung ladder with a lead", which is not a
+  // lead, it is a plateau, and the strictness that separates ladder from
+  // mixed would be gone.
+  if (workSteps.length >= 3) {
+    const body = workSteps.slice(1);
+    const values = body.map(workDurationValue);
+    const head = workDurationValue(workSteps[0]!);
+    const standsApart =
+      workSteps[0]!.duration.kind === body[0]!.duration.kind &&
+      (head > Math.max(...values) || head < Math.min(...values));
+    const tail = standsApart ? classifyBody(body) : null;
+    if (tail !== null && tail !== "mixed") {
+      return { archetype: tail, rateChange };
+    }
+  }
   return { archetype: "mixed", rateChange };
+}
+
+/** A sequence read directly, and — only if that says `mixed` — read again
+ *  as the block it repeats. */
+function classifyBody(workSteps: WorkStep[]): Archetype | null {
+  const direct = classifySequence(workSteps);
+  if (direct === null || direct !== "mixed") return direct;
+  const period = smallestPeriod(workSteps.map(workDurationValue));
+  // period 1 is a uniform sequence, which `classifySequence` already named.
+  if (period !== null && period > 1) {
+    return classifySequence(workSteps.slice(0, period));
+  }
+  return "mixed";
+}
+
+/** The SHAPE of a workout's session, as a comparable string: the sequence
+ *  of rung-to-rung directions over the expanded live work steps ("+" longer,
+ *  "-" shorter, "=" the same). A single-piece workout signs as "".
+ *
+ *  This is the block review's own remedy for the collapse
+ *  `classifyArchetype` now avoids ("add the authored block signature to the
+ *  near-duplicate key"), taken over the EXPANSION rather than the authored
+ *  block so that it stays a property of the session and not of how the
+ *  session was typed. Two workouts that share an archetype, a piece count
+ *  and a duration but ascend where the other descends — AN Flash Flood
+ *  ("+++-+++") against AN Bomb Cyclone ("---+---") — are not near-
+ *  duplicates, and before this key they were counted as such. */
+export function structureSignature(steps: Step[]): string {
+  const values = liveSteps(steps)
+    .filter((s): s is WorkStep => s.k === "w")
+    .map(workDurationValue);
+  return values
+    .slice(1)
+    .map((v, i) => (v > values[i]! ? "+" : v < values[i]! ? "-" : "="))
+    .join("");
 }
 
 // ---------------------------------------------------------------------
@@ -117,6 +213,8 @@ export interface DuplicatePair {
   b: string;
   archetype: Archetype;
   pieceCount: number;
+  /** `structureSignature` — the authored build both sides share. */
+  build: string;
   totalA: number;
   totalB: number;
 }
@@ -181,16 +279,21 @@ function effortBucket(share: number): number {
  * Near-duplicate pairs within the given workout list (callers pass one
  * type x band cell — "near-duplicate" is a within-cell concept, §5b).
  *
- * Key (§5b): same archetype + same piece count + total within 10% of each
- * other + a same-ness arm keyed on ref kind — same offset band for a
+ * Key (§5b): same archetype + same piece count + **same authored build**
+ * (`structureSignature`, the block review amendment) + total within 10% of
+ * each other + a same-ness arm keyed on ref kind — same offset band for a
  * SplitRef-bearing workout (M3's fix: EffortRef workouts have no offset to
  * band, so they never compare on this arm), same effort-share bucket for
  * an EffortRef-bearing workout instead (adversarial M3 / this task's
- * brief: "the EffortRef arm (effort share + archetype + duration)"). A
- * workout that carries BOTH ref kinds compares on BOTH arms (it must match
- * on whichever arms apply to it AND the other workout); a workout with
- * only one kind never collides with a workout that only has the other,
- * even if every other key element matches — comparing an effort-only and a
+ * brief: "the EffortRef arm (effort share + archetype + duration)").
+ *
+ * The ref-kind arm is an OR, not an AND (block review m3 — the previous
+ * wording of this paragraph said "AND" and the code has always said `if
+ * (!offsetMatch && !effortMatch) continue`): a workout carrying both ref
+ * kinds is a near-duplicate of another if it matches on EITHER arm, which
+ * is the stricter reading and flags more pairs. A workout with only one
+ * kind never collides with a workout that only has the other, even if
+ * every other key element matches — comparing an effort-only and a
  * split-only workout would only ever produce a degenerate always-equal
  * key on the arm neither carries.
  */
@@ -205,6 +308,7 @@ export function nearDuplicates(
       title: w.title,
       archetype,
       pieces: pieceCount(w.steps),
+      build: structureSignature(w.steps),
       total: minutes,
       offsetKey: offsetBandKey(w.steps),
       effortKey:
@@ -219,6 +323,7 @@ export function nearDuplicates(
       const b = rows[j]!;
       if (a.archetype !== b.archetype) continue;
       if (a.pieces !== b.pieces) continue;
+      if (a.build !== b.build) continue;
       const bigger = Math.max(a.total, b.total);
       if (bigger === 0) continue;
       if (Math.abs(a.total - b.total) / bigger > 0.1) continue;
@@ -238,6 +343,7 @@ export function nearDuplicates(
         b: b.title,
         archetype: a.archetype,
         pieceCount: a.pieces,
+        build: a.build,
         totalA: a.total,
         totalB: b.total,
       });
