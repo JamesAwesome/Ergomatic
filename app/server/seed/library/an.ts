@@ -8,9 +8,14 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // Revised at James's content review (2026-08-03): nothing faster than
 // 2k-4 as a split ref (beyond that is {effort:"max"}), variety by
 // structure (ladders, pyramids, stroke-builds, paired reps, waves)
-// instead of rep-count tweaks, and every time-computable total lands on
-// a 0/5 minute. Distance sets estimate from the nominal 2k baseline and
-// are exempt from the round-total rule.
+// instead of rep-count tweaks. Retuned or newly generated totals land on
+// a 0 or 5 WHERE THE 0:15 GRID ALLOWS; every time value a retune CREATES
+// (every rest, and any piece a retune scales) stays on the 0:15 grid
+// always — a value inherited unchanged from the pre-retune workout
+// stands as it was, on-grid or not; a total that cannot be round with
+// grid values stands as its pieces sum. Distance sets remain exempt
+// (2026-08-10 library-rebalance spec, §2/the zero-five audit; rest-grid
+// pin, James 2026-08-10, extended to created work pieces the same day).
 export const AN_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------- medium, pain 3 (1–11)
   {
@@ -224,7 +229,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 8×200 m at 2k-4 with ~1:2 rest — distance reps where the last two decide the session.
+    // AN: 8×250 m at 2k-4 with ~1:1.7 rest — distance reps where the last two decide the session.
     title: "Wall Cloud",
     type: "AN",
     difficulty: "medium",
@@ -233,15 +238,18 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 8 },
       {
         k: "w",
-        duration: { kind: "distance", meters: 200 },
+        duration: { kind: "distance", meters: 250 },
         ref: { base: "2k", off: -4 },
         spm: 28,
-        restMinutes: 1.5,
+        restMinutes: 1.75,
       },
     ],
   },
   {
-    // AN: 45/60/90/60/45 s pyramid at 2k-3 with generous rest — a minute and a half at the apex.
+    // AN: 45/75/105/75/45 s pyramid at 2k-3 with generous rest — a minute and three-quarters at the apex.
+    // (grid pin, 2026-08-10: the plan's own scaled values — 0:50/1:10/1:50
+    // pieces, a 2:20 rest — sat off the 0:15 grid; grown to the nearest
+    // grid values that hold the 20-30 band, landing exactly on 20:00.)
     title: "Mammatus",
     type: "AN",
     difficulty: "medium",
@@ -252,35 +260,35 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 0.75 },
         ref: { base: "2k", off: -3 },
         spm: 30,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 1.25 },
         ref: { base: "2k", off: -3 },
         spm: 28,
-        restMinutes: 2.5,
+        restMinutes: 3.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1.5 },
+        duration: { kind: "time", minutes: 1.75 },
         ref: { base: "2k", off: -3 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 3.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 1.25 },
         ref: { base: "2k", off: -3 },
         spm: 28,
-        restMinutes: 2.5,
+        restMinutes: 3.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.75 },
         ref: { base: "2k", off: -3 },
         spm: 30,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
     ],
   },
@@ -441,13 +449,13 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 6×250 m at 2k-4 with ~1:2.2 rest — six fast quarter-Ks on real recovery.
+    // AN: 7×250 m at 2k-4 with ~1:2.2 rest — seven fast quarter-Ks on real recovery.
     title: "Bow Echo",
     type: "AN",
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "reps", count: 6 },
+      { k: "reps", count: 7 },
       {
         k: "w",
         duration: { kind: "distance", meters: 250 },
@@ -495,50 +503,34 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 30/45/60/90 s ascending from a max start to 2k-3 — each piece longer, each rest longer with it.
-    title: "Updraft",
+    // AN: 10×3' at 2k-4 with 2' rest — steady anaerobic volume, thirty minutes of it.
+    // (replacement — Updraft's slot: medium/4, 45-60. Updraft could not
+    // stretch into any unfilled seat, spec §3/move-plan residual;
+    // generated fresh against book cell AN|60+, §6's translation rule for
+    // a replacement with no historical warm-up.)
+    title: "Meso Low",
     type: "AN",
     difficulty: "medium",
     pain: 4,
     steps: [
+      { k: "reps", count: 10 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.5 },
-        ref: { effort: "max" },
-        spm: 32,
-        restMinutes: 2,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.75 },
+        duration: { kind: "time", minutes: 3 },
         ref: { base: "2k", off: -4 },
         spm: 30,
-        restMinutes: 2.5,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 1 },
-        ref: { base: "2k", off: -4 },
-        spm: 28,
-        restMinutes: 3,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 1.5 },
-        ref: { base: "2k", off: -3 },
-        spm: 26,
-        restMinutes: 3.75,
+        restMinutes: 2,
       },
     ],
   },
   {
-    // AN: 2 rounds of 4×45 s at 2k-3 — quick rest inside the round, a real one between.
+    // AN: 3 rounds of 4×45 s at 2k-3 — quick rest inside the round, a real one between.
     title: "Wind Gust",
     type: "AN",
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "reps", count: 2 },
+      { k: "reps", count: 3 },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.75 },
@@ -572,69 +564,65 @@ export const AN_WORKOUTS: WorkoutInput[] = [
 
   // -------------------------------------------------- hard, pain 4 (21–33)
   {
-    // AN: 5×45 s at 2k-4 with the rate building 28→32 — the front arrives two strokes at a time.
-    title: "Gust Front",
+    // AN: 5 rounds of a 1-2-3' ladder all out — the rear flank climbs and climbs.
+    // (replacement — Gust Front's slot: hard/4, 45-60. Gust Front could
+    // not stretch into any unfilled seat, spec §3/move-plan residual;
+    // generated fresh against book cell AN|60+.)
+    title: "Rear Flank",
     type: "AN",
     difficulty: "hard",
     pain: 4,
     steps: [
+      { k: "reps", count: 5 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { base: "2k", off: -4 },
-        spm: 28,
-        restMinutes: 1.25,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { base: "2k", off: -4 },
-        spm: 30,
-        restMinutes: 1.25,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { base: "2k", off: -4 },
-        spm: 30,
-        restMinutes: 1.25,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { base: "2k", off: -4 },
-        spm: 32,
-        restMinutes: 1.25,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { base: "2k", off: -4 },
-        spm: 32,
-        restMinutes: 1.25,
-      },
-    ],
-  },
-  {
-    // AN: 6×100 m all out with ~1:3.4 rest — twenty-second starts at the top of the rate band.
-    title: "Dust Storm",
-    type: "AN",
-    difficulty: "hard",
-    pain: 4,
-    steps: [
-      { k: "reps", count: 6 },
-      {
-        k: "w",
-        duration: { kind: "distance", meters: 100 },
+        duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1.25,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 3 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2,
       },
     ],
   },
   {
-    // AN: 4×30 s all out with 1:3 rest — the shortest max-effort set here; no split to hide behind.
-    title: "Heat Burst",
+    // AN: 12×1:30 all out with 1:1.5 rest — twelve honest minutes of maximal work.
+    // (replacement — Dust Storm's slot: hard/4, 45-60. Dust Storm could
+    // not stretch into any unfilled seat, spec §3/move-plan residual;
+    // generated fresh against book cell AN|60+.)
+    title: "Scud Run",
+    type: "AN",
+    difficulty: "hard",
+    pain: 4,
+    steps: [
+      { k: "reps", count: 12 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2.25,
+      },
+    ],
+  },
+  {
+    // AN: 4 rounds of 1:30/3/1/2:30 all out — the long ones bracket the short ones.
+    // (replacement — Heat Burst's slot: hard/4, 45-60. Heat Burst could
+    // not stretch into any unfilled seat, spec §3/move-plan residual;
+    // generated fresh against book cell AN|60+.)
+    title: "Cloud to Ground",
     type: "AN",
     difficulty: "hard",
     pain: 4,
@@ -642,27 +630,77 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.5 },
+        duration: { kind: "time", minutes: 1.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 3 },
+        ref: { effort: "max" },
+        spm: 30,
+        restMinutes: 2.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
         restMinutes: 1.5,
       },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2.5 },
+        ref: { effort: "max" },
+        spm: 30,
+      },
     ],
   },
   {
-    // AN: 8×30 s all out with 1:2.5 rest — a broad flat flicker of a set; every rep the same, none of them cheap.
-    title: "Sheet Lightning",
+    // AN: 3 rounds of a 1-2-3-2-1' pyramid all out — climb to three minutes and straight back down, three times.
+    // (replacement — Sheet Lightning's slot: hard/4, 45-60. Sheet
+    // Lightning could not stretch into any unfilled seat, spec §3/
+    // move-plan residual; generated fresh against book cell AN|60+.)
+    title: "Bolt from the Blue",
     type: "AN",
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "reps", count: 8 },
+      { k: "reps", count: 3 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.5 },
+        duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1.25,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 3 },
+        ref: { effort: "max" },
+        spm: 30,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 1.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1 },
+        ref: { effort: "max" },
+        spm: 32,
       },
     ],
   },
@@ -691,7 +729,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 10×150 m all out with ~1:2.2 rest — max effort scored by the metre, so the fade is visible.
+    // AN: 10×150 m all out with 1:1.8 rest — max effort scored by the metre, so the fade is visible.
     title: "Heat Lightning",
     type: "AN",
     difficulty: "hard",
@@ -703,24 +741,27 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "distance", meters: 150 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1.25,
+        restMinutes: 1.5,
       },
     ],
   },
   {
-    // AN: 6×60 s at 2k-4 with 1:1.5 rest — full-minute reps on deliberately short recovery.
-    title: "Dry Lightning",
+    // AN: 11×90 s all out with ~1:2.3 rest — the longest flat max-effort set here.
+    // (replacement — Dry Lightning's slot: hard/4, 45-60. Dry Lightning
+    // could not stretch into any unfilled seat, spec §3/move-plan
+    // residual; generated fresh against book cell AN|60+.)
+    title: "Ground Flash",
     type: "AN",
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "reps", count: 6 },
+      { k: "reps", count: 11 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
-        ref: { base: "2k", off: -4 },
-        spm: 30,
-        restMinutes: 1.5,
+        duration: { kind: "time", minutes: 1.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 3.5,
       },
     ],
   },
@@ -742,7 +783,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 2 volleys of 5×250 m at 2k-4 — 90 s inside the volley, 4' between them.
+    // AN: 2 volleys of 5×300 m at 2k-4 — 90 s inside the volley, 3:45 between them.
     title: "Hailstorm",
     type: "AN",
     difficulty: "hard",
@@ -751,38 +792,38 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 2 },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { base: "2k", off: -4 },
         spm: 30,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { base: "2k", off: -4 },
         spm: 30,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { base: "2k", off: -4 },
         spm: 30,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { base: "2k", off: -4 },
         spm: 30,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { base: "2k", off: -4 },
         spm: 30,
-        restMinutes: 4,
+        restMinutes: 3.75,
       },
     ],
   },
@@ -911,24 +952,48 @@ export const AN_WORKOUTS: WorkoutInput[] = [
 
   // -------------------------------------------------- hard, pain 5 (34–60)
   {
-    // AN: 3×45 s all out with 1:3 rest — three strikes, every one emptied to ground.
-    title: "Lightning Strike",
+    // AN: 4 rounds of a 1-2-3-4' ladder all out — a full hour of climbing bolts.
+    // (replacement — Lightning Strike's slot: hard/5, 60+. Lightning
+    // Strike could not stretch into any unfilled seat, spec §3/move-plan
+    // residual; generated fresh against book cell AN|60+.)
+    title: "Positive Strike",
     type: "AN",
     difficulty: "hard",
     pain: 5,
     steps: [
-      { k: "reps", count: 3 },
+      { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.75 },
+        duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2.25,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 3 },
+        ref: { effort: "max" },
+        spm: 30,
+        restMinutes: 1,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "max" },
+        spm: 30,
+        restMinutes: 2,
       },
     ],
   },
   {
-    // AN: 4×90 s all out with 1:2 rest — four long bolts, each one grounded completely.
+    // AN: 4×90 s all out with 1:2.3 rest — four long bolts, each one grounded completely.
     title: "Ground Strike",
     type: "AN",
     difficulty: "hard",
@@ -940,12 +1005,12 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 1.5 },
         ref: { effort: "max" },
         spm: 30,
-        restMinutes: 3,
+        restMinutes: 3.5,
       },
     ],
   },
   {
-    // AN: 45/60/90/60/45 s all-out pyramid — the column is widest in the middle, and so is the damage.
+    // AN: 60/90/120/90/60 s all-out pyramid — the column is widest in the middle, and so is the damage.
     title: "Downburst",
     type: "AN",
     difficulty: "hard",
@@ -953,47 +1018,11 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { effort: "max" },
-        spm: 32,
-        restMinutes: 2.5,
-      },
-      {
-        k: "w",
         duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
-        spm: 30,
-        restMinutes: 3,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 1.5 },
-        ref: { effort: "max" },
-        spm: 30,
-        restMinutes: 3,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 1 },
-        ref: { effort: "max" },
-        spm: 30,
-        restMinutes: 2.5,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { effort: "max" },
         spm: 32,
+        restMinutes: 3,
       },
-    ],
-  },
-  {
-    // AN: 90/60/45/30 s descending, all of it max — the reps shrink faster than the rest does.
-    title: "Dry Microburst",
-    type: "AN",
-    difficulty: "hard",
-    pain: 5,
-    steps: [
       {
         k: "w",
         duration: { kind: "time", minutes: 1.5 },
@@ -1003,29 +1032,75 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 2 },
+        ref: { effort: "max" },
+        spm: 30,
+        restMinutes: 3.5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1.5 },
         ref: { effort: "max" },
         spm: 30,
         restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.75 },
+        duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2.5,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.5 },
-        ref: { effort: "max" },
-        spm: 32,
-        restMinutes: 2.25,
       },
     ],
   },
   {
-    // AN: 6×200 m all out with ~1:2.7 rest — max effort with a distance to answer for.
+    // AN: 3 rounds of a 1:30-3-4:30-3-1:30' pyramid all out — the column widens three times over.
+    // (replacement — Dry Microburst's slot: hard/5, 60+. Dry Microburst
+    // could not stretch into any unfilled seat, spec §3/move-plan
+    // residual; generated fresh against book cell AN|60+.)
+    title: "Downburst Line",
+    type: "AN",
+    difficulty: "hard",
+    pain: 5,
+    steps: [
+      { k: "reps", count: 3 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 3 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4.5 },
+        ref: { effort: "max" },
+        spm: 30,
+        restMinutes: 2,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 3 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 2,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1.5 },
+        ref: { effort: "max" },
+        spm: 32,
+      },
+    ],
+  },
+  {
+    // AN: 6×250 m all out with 1:3 rest — max effort with a distance to answer for.
     title: "Wet Microburst",
     type: "AN",
     difficulty: "hard",
@@ -1034,15 +1109,15 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 6 },
       {
         k: "w",
-        duration: { kind: "distance", meters: 200 },
+        duration: { kind: "distance", meters: 250 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },
   {
-    // AN: 12×30 s all out with 1:2 rest — the reps arrive faster than the recovery can.
+    // AN: 12×30 s all out with 1:2.5 rest — the reps arrive faster than the recovery can.
     title: "Landspout",
     type: "AN",
     difficulty: "hard",
@@ -1054,7 +1129,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
     ],
   },
@@ -1076,7 +1151,12 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 3 volleys of 3×30 s all out — a minute of rest inside the volley, a long sit between them.
+    // AN: 3 volleys of 3×30 s all out — 1:15 inside the volley, 3' between them.
+    // (grid pin, 2026-08-10: the plan's own scaled rests — 1:10, 1:10, 2:50
+    // — sat off the 0:15 grid; the last rest grown past its nearest grid
+    // value, to 3', to land exactly on 21:00 rather than the 20:15 the
+    // nearest value alone would leave — still inside the retune's own
+    // ±25% envelope.)
     title: "Ball Lightning",
     type: "AN",
     difficulty: "hard",
@@ -1088,26 +1168,26 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
     ],
   },
   {
-    // AN: 4 rounds of 75 s + 30 s all out — empty the long one, then answer the short one.
+    // AN: 4 rounds of 90 s + 30 s all out — empty the long one, then answer the short one.
     title: "Giant Hail",
     type: "AN",
     difficulty: "hard",
@@ -1116,17 +1196,17 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1.25 },
+        duration: { kind: "time", minutes: 1.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
     ],
   },
@@ -1148,7 +1228,11 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 2 rounds of a 30/45/60/90 s ascending ladder, all out — the water rises twice.
+    // AN: 2 rounds of a 30/45/75/105 s ascending ladder, all out — the water rises twice.
+    // (grid pin, 2026-08-10: the plan's own scaled pieces/rests — 0:50,
+    // 1:10, 1:40, and rests 1:40/2:10/2:50/4:10 — sat off the 0:15 grid;
+    // regrown to grid values that hold the same 4-rung ladder and land
+    // exactly on 30:00.)
     title: "Flash Flood",
     type: "AN",
     difficulty: "hard",
@@ -1171,22 +1255,26 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 1.25 },
         ref: { effort: "max" },
         spm: 30,
-        restMinutes: 2.5,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1.5 },
+        duration: { kind: "time", minutes: 1.75 },
         ref: { effort: "max" },
         spm: 30,
-        restMinutes: 3.75,
+        restMinutes: 4.5,
       },
     ],
   },
   {
-    // AN: 90/75/60/45/30 s descending, targets sharpening 2k-3 → all out — everything that comes loose ends up at the bottom.
+    // AN: 105/90/75/60/30 s descending, targets sharpening 2k-3 → all out — everything that comes loose ends up at the bottom.
+    // (grid pin, 2026-08-10: the plan's own scaled pieces/rests — 1:40,
+    // 1:20, 1:10, 0:50, and rests 4:30/3:50/3:20/2:50 — sat off the 0:15
+    // grid; regrown to grid values that hold the same descending shape and
+    // land exactly on 20:00.)
     title: "Debris Flow",
     type: "AN",
     difficulty: "hard",
@@ -1194,31 +1282,31 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 1.5 },
+        duration: { kind: "time", minutes: 1.75 },
         ref: { base: "2k", off: -3 },
         spm: 28,
-        restMinutes: 4,
+        restMinutes: 4.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1.5 },
+        ref: { base: "2k", off: -4 },
+        spm: 30,
+        restMinutes: 3.75,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 1.25 },
         ref: { base: "2k", off: -4 },
         spm: 30,
-        restMinutes: 3.5,
+        restMinutes: 3.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 1 },
         ref: { base: "2k", off: -4 },
-        spm: 30,
-        restMinutes: 3,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { base: "2k", off: -4 },
         spm: 32,
-        restMinutes: 2.5,
+        restMinutes: 2.75,
       },
       {
         k: "w",
@@ -1263,7 +1351,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 5 rounds of 60 s + 30 s all out — a full minute emptied, then a sprint on top of it.
+    // AN: 5 rounds of 60 s + 30 s all out on 2'/2:30 rest — a full minute emptied, then a sprint on top of it.
     title: "Wedge Tornado",
     type: "AN",
     difficulty: "hard",
@@ -1275,14 +1363,14 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 1.5,
+        restMinutes: 2,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },
@@ -1330,7 +1418,7 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 8×60 s all out with 1:2 rest — spun off the side of the session and just as destructive.
+    // AN: 8×75 s all out with 1:2 rest — spun off the side of the session and just as destructive.
     title: "Gustnado",
     type: "AN",
     difficulty: "hard",
@@ -1339,15 +1427,15 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 8 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 1 },
+        duration: { kind: "time", minutes: 1.25 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },
   {
-    // AN: 2 rounds of a 45/60/90 s ascending build, all out — the fire column assembles itself twice.
+    // AN: 2 rounds of a 60/90/120 s ascending build, all out — the fire column assembles itself twice.
     title: "Pyrocumulonimbus",
     type: "AN",
     difficulty: "hard",
@@ -1356,24 +1444,24 @@ export const AN_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 2 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 0.75 },
-        ref: { effort: "max" },
-        spm: 32,
-        restMinutes: 2,
-      },
-      {
-        k: "w",
         duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
-        spm: 30,
-        restMinutes: 2.75,
+        spm: 32,
+        restMinutes: 2.5,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 1.5 },
         ref: { effort: "max" },
         spm: 30,
-        restMinutes: 4,
+        restMinutes: 3.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { effort: "max" },
+        spm: 30,
+        restMinutes: 4.75,
       },
     ],
   },
@@ -1510,13 +1598,24 @@ export const AN_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AN: 2 rounds of 75/60/45/30 s all out — the reps shrink and the rest shrinks with them.
+    // AN: 2 rounds of 90/75/60/45 s all out — the reps shrink and the rest shrinks with them.
+    // (grid pin, 2026-08-10: the plan's own scaled pieces/rests — 1:10,
+    // 0:50, 0:40, and rests 3:40/3'/2:20/1:50 — sat off the 0:15 grid;
+    // regrown to grid values that hold the same descending shape and land
+    // exactly on 30:00.)
     title: "Bomb Cyclone",
     type: "AN",
     difficulty: "hard",
     pain: 5,
     steps: [
       { k: "reps", count: 2 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 1.5 },
+        ref: { effort: "max" },
+        spm: 32,
+        restMinutes: 3.75,
+      },
       {
         k: "w",
         duration: { kind: "time", minutes: 1.25 },
@@ -1529,18 +1628,11 @@ export const AN_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 1 },
         ref: { effort: "max" },
         spm: 32,
-        restMinutes: 2.5,
+        restMinutes: 2.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 0.75 },
-        ref: { effort: "max" },
-        spm: 32,
-        restMinutes: 2,
-      },
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 0.5 },
         ref: { effort: "max" },
         spm: 32,
         restMinutes: 1.5,

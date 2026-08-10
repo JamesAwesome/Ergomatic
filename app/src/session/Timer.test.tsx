@@ -612,18 +612,23 @@ describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT 
   // itself a rest. Pinned here so nothing about this task's own domain
   // guard-loosening silently degrades an EXISTING library workout's timer
   // display.
-  it("still shows TOTAL LEFT and the phase bar throughout a real shipped effort-only library workout (Dust Storm) under null baselines", async () => {
+  // (Fixture swapped from "Dust Storm" to "Scud Run": the 2026-08-10
+  // library-rebalance's Task 4 replaced Dust Storm — no sketch could
+  // stretch it into an unfilled seat; Scud Run is generated fresh with
+  // the same property this test needs [effort-ref reps block, a real
+  // rest after every occurrence including the last].)
+  it("still shows TOTAL LEFT and the phase bar throughout a real shipped effort-only library workout (Scud Run) under null baselines", async () => {
     mockKeepAwake();
-    const dustStorm = library("Dust Storm");
+    const dustStorm = library("Scud Run");
     const draft = buildDraft({
-      id: "id-dust-storm",
+      id: "id-scud-run",
       title: dustStorm.title,
       type: dustStorm.type as WorkoutType,
       steps: dustStorm.steps,
     });
     const run = buildAndSaveRun(draft, FIXED_NOW, null);
     // Phases: [0 work, 1 rest, 2 work, 3 rest, ... last=rest] — index 0 is
-    // the FIRST work (effort-distance) occurrence, immediately followed by
+    // the FIRST work (effort-time) occurrence, immediately followed by
     // a real, priceable rest phase.
     runAtIndex(run, 0);
     await renderTimer();

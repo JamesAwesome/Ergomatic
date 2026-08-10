@@ -29,27 +29,27 @@ import type { PaceRef, Step, WorkDuration, WorkoutInput } from "../types.js";
 // | Sleet               | O2 | o2.ts:2123 | [65]                          | continuous, rc=false  | one live work step |
 // | Morning Mist        | O2 | o2.ts:1481 | [15000] (distance)            | continuous, rc=false  | one live work step, kind irrelevant at n=1 |
 // | Occluded Front      | AT | at.ts:16   | [10]                          | continuous, rc=false  | one live work step |
-// | Beam Sea            | TR | tr.ts:16   | [2000] (distance)             | continuous, rc=false  | one live work step |
+// | Beam Sea            | TR | tr.ts:22   | [2000] (distance)             | continuous, rc=false  | one live work step |
 // | Sea Fret            | O2 | o2.ts:21   | [4,4] (reps 2)                | nxtime, rc=false      | equal time durations, spm 22 both |
 // | Petrichor           | O2 | o2.ts:38   | [3,3,3]                       | nxtime, rc=TRUE       | equal durations, spm 20/22/24 |
 // | Thermal Low         | AT | at.ts:939  | [5,5,5,5]                     | nxtime, rc=false      | equal durations, spm 24 throughout |
-// | Scud Cloud          | AN | an.ts:18   | [.5]x5 (reps 5)               | nxtime, rc=false      | equal durations, spm 28 throughout |
+// | Scud Cloud          | AN | an.ts:22   | [.5]x5 (reps 5)               | nxtime, rc=false      | equal durations, spm 28 throughout |
 // | Laminar             | O2 | o2.ts:67   | [1000,1000,1000] (distance)   | nxdistance, rc=TRUE   | equal distances, spm 20/22/24 |
-// | Hail Shaft          | AN | an.ts:1135 | [300]x10 (reps 10, distance)  | nxdistance, rc=false  | equal distances, spm 32 throughout |
+// | Hail Shaft          | AN | an.ts:1214 | [300]x10 (reps 10, distance)  | nxdistance, rc=false  | equal distances, spm 32 throughout |
 // | Tule Fog            | O2 | o2.ts:459  | [6,9,12]                      | ladder, rc=TRUE       | strictly increasing, spm 20/22/24 |
 // | Ice Fog             | O2 | o2.ts:488  | [12,9,6,3]                    | ladder, rc=TRUE       | strictly decreasing, spm 18/20/22/24 |
 // | Barometric Low      | AT | at.ts:120  | [4,3,2]                       | ladder, rc=TRUE       | strictly decreasing, spm 22/24/26 |
-// | Line Squall         | TR | tr.ts:558  | [500,750,1000,1250] (distance)| ladder, rc=TRUE       | strictly increasing, spm 28/26/26/24 |
+// | Line Squall         | TR | tr.ts:564  | [500,750,1000,1250] (distance)| ladder, rc=TRUE       | strictly increasing, spm 28/26/26/24 |
 // | Millpond            | O2 | o2.ts:128  | [2,3,4,3,2]                   | pyramid, rc=false     | strict up then strict down, spm 22 constant |
 // | Pressure Ridge      | AT | at.ts:60   | [1,2,3,2,1]                   | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
-// | Benguela Current    | TR | tr.ts:176  | [250,500,750,500,250] (dist)  | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
-// | Beaver Tail         | AN | an.ts:86   | [.5,.75,1,.75,.5]             | pyramid, rc=TRUE      | strict up-down, spm 30/28/26/28/30 |
+// | Benguela Current    | TR | tr.ts:182  | [250,500,750,500,250] (dist)  | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
+// | Beaver Tail         | AN | an.ts:90   | [.5,.75,1,.75,.5]             | pyramid, rc=TRUE      | strict up-down, spm 30/28/26/28/30 |
 // | Baroclinic Zone     | AT | at.ts:457  | [3,2,3,2,3,2] (reps 3 x [3,2])| ladder, rc=TRUE (RE-ADJUDICATED, block review) | the expansion is up-down-up-down, but it is exactly 3 repetitions of a 2-rung descending block |
-// | Giant Hail          | AN | an.ts:1111 | [1.25,.5]x4 (reps 4, effort)  | ladder, rc=false (RE-ADJUDICATED) | 4 repetitions of a 2-rung descending block — the comment's own "rounds of a ladder" |
-// | Flash Flood         | AN | an.ts:1152 | [.5,.75,1,1.5]x2 (reps 2)     | ladder, rc=TRUE (RE-ADJUDICATED)  | 2 repetitions of a 4-rung ASCENDING block |
-// | Bomb Cyclone        | AN | an.ts:1514 | [1.25,1,.75,.5]x2 (reps 2)    | ladder, rc=false (RE-ADJUDICATED) | 2 repetitions of a 4-rung DESCENDING block |
-// | Sundowner           | TR | tr.ts:1388 | [1000,500,250,500,1000] (dist)| MIXED (disagreement — see below), rc=TRUE | a VALLEY (down-then-up), not a peak — §5b's pyramid is "strictly up then strictly down" only |
-// | Debris Flow         | AN | an.ts:1190 | [1.5,1.25,1,.75,.5], last=effort | ladder, rc=TRUE    | strictly decreasing durations; ref kind (4 split + 1 effort) does not affect archetype |
+// | Giant Hail          | AN | an.ts:1190 | [1.5,.5]x4 (reps 4, effort)   | ladder, rc=false (RE-ADJUDICATED) | 4 repetitions of a 2-rung descending block — the comment's own "rounds of a ladder" (2026-08-10 library-rebalance Task 4 retune: durations were [1.25,.5]) |
+// | Flash Flood         | AN | an.ts:1231 | [.5,.75,1.25,1.75]x2 (reps 2) | ladder, rc=TRUE (RE-ADJUDICATED)  | 2 repetitions of a 4-rung ASCENDING block (2026-08-10 library-rebalance Task 4 retune, grid-corrected: durations were [.5,.75,1,1.5]) |
+// | Bomb Cyclone        | AN | an.ts:1601 | [1.5,1.25,1,.75]x2 (reps 2)   | ladder, rc=false (RE-ADJUDICATED) | 2 repetitions of a 4-rung DESCENDING block (2026-08-10 library-rebalance Task 4 retune, grid-corrected: durations were [1.25,1,.75,.5]) |
+// | Sundowner           | TR | tr.ts:1425 | [1150,550,300,550,1150] (dist)| MIXED (disagreement — see below), rc=TRUE | a VALLEY (down-then-up), not a peak — §5b's pyramid is "strictly up then strictly down" only (2026-08-10 library-rebalance Task 4 retune: distances were [1000,500,250,500,1000]) |
+// | Debris Flow         | AN | an.ts:1273 | [1.75,1.5,1.25,1,.5], last=effort | ladder, rc=TRUE | strictly decreasing durations; ref kind (4 split + 1 effort) does not affect archetype (2026-08-10 library-rebalance Task 4 retune, grid-corrected: durations were [1.5,1.25,1,.75,.5]) |
 //
 // RE-ADJUDICATED under the §5b BLOCK REVIEW AMENDMENT (2026-08-10). The
 // four rows above marked RE-ADJUDICATED were originally labelled `mixed`
@@ -110,7 +110,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Beam Sea (tr.ts:16): single TR distance step", () => {
+    it("Beam Sea (tr.ts:22): single TR distance step", () => {
       const steps = [w(d(2000), { base: "2k", off: 6 }, 24)];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "continuous",
@@ -153,7 +153,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Scud Cloud (an.ts:18): reps 5 x 30s, expands to 5 equal live steps", () => {
+    it("Scud Cloud (an.ts:22): reps 5 x 30s, expands to 5 equal live steps", () => {
       const steps = [reps(5), w(t(0.5), { base: "2k", off: -3 }, 28, 1.5)];
       const { archetype } = classifyArchetype(steps);
       expect(archetype).toBe("nxtime");
@@ -173,7 +173,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Hail Shaft (an.ts:1135): reps 10 x 300m all-out, constant spm", () => {
+    it("Hail Shaft (an.ts:1214): reps 10 x 300m all-out, constant spm", () => {
       const steps = [reps(10), w(d(300), { effort: "max" }, 32, 2)];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "nxdistance",
@@ -208,7 +208,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Line Squall (tr.ts:558): 500/750/1000/1250m ascending distance ladder", () => {
+    it("Line Squall (tr.ts:564): 500/750/1000/1250m ascending distance ladder", () => {
       const steps = [
         w(d(500), { base: "2k", off: 0 }, 28, 2),
         w(d(750), { base: "2k", off: 1 }, 26, 2.5),
@@ -243,12 +243,12 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Debris Flow (an.ts:1190): strictly decreasing durations, mixed ref kinds — the split/effort split does not change the archetype", () => {
+    it("Debris Flow (an.ts:1273): strictly decreasing durations, mixed ref kinds — the split/effort split does not change the archetype", () => {
       const steps = [
-        w(t(1.5), { base: "2k", off: -3 }, 28, 4),
-        w(t(1.25), { base: "2k", off: -4 }, 30, 3.5),
-        w(t(1), { base: "2k", off: -4 }, 30, 3),
-        w(t(0.75), { base: "2k", off: -4 }, 32, 2.5),
+        w(t(1.75), { base: "2k", off: -3 }, 28, 4.25),
+        w(t(1.5), { base: "2k", off: -4 }, 30, 3.75),
+        w(t(1.25), { base: "2k", off: -4 }, 30, 3.25),
+        w(t(1), { base: "2k", off: -4 }, 32, 2.75),
         w(t(0.5), { effort: "max" }, 32),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
@@ -346,7 +346,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Benguela Current (tr.ts:176): 250-500-750-500-250m distance pyramid", () => {
+    it("Benguela Current (tr.ts:182): 250-500-750-500-250m distance pyramid", () => {
       const steps = [
         w(d(250), { base: "2k", off: 3 }, 26, 1),
         w(d(500), { base: "2k", off: 3 }, 24, 1),
@@ -360,7 +360,7 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("Beaver Tail (an.ts:86): 30/45/60/45/30s all-out pyramid", () => {
+    it("Beaver Tail (an.ts:90): 30/45/60/45/30s all-out pyramid", () => {
       const steps = [
         w(t(0.5), { base: "2k", off: -4 }, 30, 1),
         w(t(0.75), { base: "2k", off: -4 }, 28, 1.5),
@@ -416,11 +416,15 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("AMENDED: Giant Hail (an.ts:1111) is 4 rounds of a 2-rung descending block — its comment's own 'ladder', now computable", () => {
+    // (2026-08-10 library-rebalance Task 4 retune, grid-corrected: durations
+    // were [1.25,.5]; the shape and both bracketed axes this test guards —
+    // 4 repetitions, a descending 2-rung block, rc=false — are unchanged,
+    // per `shapeIssues`'s own archetype/rate-change gate at retune time.)
+    it("AMENDED: Giant Hail (an.ts:1190) is 4 rounds of a 2-rung descending block — its comment's own 'ladder', now computable", () => {
       const steps = [
         reps(4),
-        w(t(1.25), { effort: "max" }, 32, 2),
-        w(t(0.5), { effort: "max" }, 32, 2.5),
+        w(t(1.5), { effort: "max" }, 32, 2.5),
+        w(t(0.5), { effort: "max" }, 32, 3),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "ladder",
@@ -428,13 +432,16 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("AMENDED: Flash Flood (an.ts:1152) is an ASCENDING 4-rung block played twice -> ladder", () => {
+    // (2026-08-10 library-rebalance Task 4 retune, grid-corrected: durations
+    // were [.5,.75,1,1.5]; the shape this test guards — 2 repetitions of an
+    // ascending 4-rung block, rc=true — is unchanged.)
+    it("AMENDED: Flash Flood (an.ts:1231) is an ASCENDING 4-rung block played twice -> ladder", () => {
       const steps = [
         reps(2),
         w(t(0.5), { effort: "max" }, 32, 1.5),
         w(t(0.75), { effort: "max" }, 32, 2),
-        w(t(1), { effort: "max" }, 30, 2.5),
-        w(t(1.5), { effort: "max" }, 30, 3.75),
+        w(t(1.25), { effort: "max" }, 30, 2.75),
+        w(t(1.75), { effort: "max" }, 30, 4.5),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "ladder",
@@ -442,13 +449,16 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("AMENDED: Bomb Cyclone (an.ts:1514) is a DESCENDING 4-rung block played twice -> ladder", () => {
+    // (2026-08-10 library-rebalance Task 4 retune, grid-corrected: durations
+    // were [1.25,1,.75,.5]; the shape this test guards — 2 repetitions of a
+    // descending 4-rung block, rc=false — is unchanged.)
+    it("AMENDED: Bomb Cyclone (an.ts:1601) is a DESCENDING 4-rung block played twice -> ladder", () => {
       const steps = [
         reps(2),
+        w(t(1.5), { effort: "max" }, 32, 3.75),
         w(t(1.25), { effort: "max" }, 32, 3),
-        w(t(1), { effort: "max" }, 32, 2.5),
-        w(t(0.75), { effort: "max" }, 32, 2),
-        w(t(0.5), { effort: "max" }, 32, 1.5),
+        w(t(1), { effort: "max" }, 32, 2.25),
+        w(t(0.75), { effort: "max" }, 32, 1.5),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "ladder",
@@ -456,13 +466,16 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("DISAGREEMENT: Sundowner (tr.ts:1388) is a VALLEY (down-then-up), the mirror of a pyramid, not an instance of one", () => {
+    // (2026-08-10 library-rebalance Task 4 retune: distances were
+    // [1000,500,250,500,1000]; the VALLEY shape this disagreement test
+    // guards — mixed, rc=true — is unchanged.)
+    it("DISAGREEMENT: Sundowner (tr.ts:1425) is a VALLEY (down-then-up), the mirror of a pyramid, not an instance of one", () => {
       const steps = [
-        w(d(1000), { base: "2k", off: 2 }, 26, 3),
-        w(d(500), { base: "2k", off: 1 }, 28, 3),
-        w(d(250), { base: "2k", off: 0 }, 28, 3),
-        w(d(500), { base: "2k", off: 1 }, 28, 3),
-        w(d(1000), { base: "2k", off: 2 }, 26),
+        w(d(1150), { base: "2k", off: 2 }, 26, 4),
+        w(d(550), { base: "2k", off: 1 }, 28, 4),
+        w(d(300), { base: "2k", off: 0 }, 28, 4),
+        w(d(550), { base: "2k", off: 1 }, 28, 4),
+        w(d(1150), { base: "2k", off: 2 }, 26),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "mixed",

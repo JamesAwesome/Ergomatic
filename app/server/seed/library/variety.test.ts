@@ -200,8 +200,27 @@ const KNOWN_DEBT: Partial<Record<string, number>> = {
   // alongside the two pre-existing residents (Alaska Current, Roaring
   // Forties) — checked as a generation gate before landing, zero pairs,
   // no entry needed.
-  "AN|<20": 3,
+  // AN|<20: 3 -> 1. Several AN workouts that carried the original three
+  // pairs retuned OUT of <20 this task (Wall Cloud, Mammatus, Bow Echo,
+  // Wind Gust, Heat Lightning, Ground Strike, Downburst, Wet Microburst,
+  // Landspout, Ball Lightning all left); one pair (Dust Whirl <> Snow
+  // Devil, both untouched by this task) survives.
+  "AN|<20": 1,
+  // AN|20-30: 0 -> 1. Downburst's retune (16' -> 20', still a pyramid,
+  // same piece count) landed it close enough to the untouched Rope
+  // Tornado (also a pyramid of a comparable total) to pair — retune debt,
+  // not a replacement creating it.
+  "AN|20-30": 1,
   "AN|30-45": 1,
+  // AN|45-60: gained six fresh replacements (Meso Low, Rear Flank, Scud
+  // Run, Cloud to Ground, Bolt from the Blue, Ground Flash) alongside the
+  // one pre-existing resident (Explosive Cyclogenesis) — checked as a
+  // generation gate before landing, zero pairs, no entry needed.
+  // AN|60+: gained two fresh replacements (Positive Strike, Downburst
+  // Line) alongside the two pre-existing residents. The one pair below is
+  // the SAME pre-existing pair Task 1's baseline named (Typhoon <>
+  // Violent Tornado, both untouched by this task) — neither replacement
+  // appears in it, confirmed by re-measuring, not assumed.
   "AN|60+": 1,
 };
 

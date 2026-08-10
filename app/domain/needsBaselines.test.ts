@@ -75,14 +75,18 @@ describe("needsBaselines — true unless EVERY work step is an effort ref", () =
   });
 
   // Finding (not a defect): the seeded AN library already contains
-  // real, shipped effort-ref-only sprint workouts ("Dust Storm", "Heat
-  // Burst", etc. — all-out reps with no split ref anywhere). This
+  // real, shipped effort-ref-only sprint workouts ("Scud Run", "Ground
+  // Flash", etc. — all-out reps with no split ref anywhere). This
   // predicate correctly reads them as needing no baselines too — the
   // guards it feeds (Task 2) aren't gating just the two NEW onboarding
   // workouts, they change behavior for this pre-existing AN content as
   // well. Pinned here so that consequence is explicit, not implicit.
+  // (Fixture swapped from "Dust Storm" to "Scud Run": the 2026-08-10
+  // library-rebalance's Task 4 replaced Dust Storm — no sketch could
+  // stretch it into an unfilled seat — with Scud Run, generated fresh
+  // with the same property this test needs [effort-ref-only].)
   it("is false for real, shipped AN sprint workouts that are already effort-ref-only", () => {
-    const dustStorm = LIBRARY_WORKOUTS.find((w) => w.title === "Dust Storm");
+    const dustStorm = LIBRARY_WORKOUTS.find((w) => w.title === "Scud Run");
     expect(dustStorm).toBeDefined();
     expect(needsBaselines(dustStorm!.steps)).toBe(false);
   });

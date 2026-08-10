@@ -93,16 +93,23 @@ describe("compileProgram: real-starter pinned tables", () => {
     });
   });
 
-  // AN "Dry Microburst": 4 descending ALL-OUT reps (90/60/45/30s,
-  // each with its own rest) (server/seed/library/an.ts). The named
-  // "Microburst" real-starter test the brief calls for. This is the H8
-  // pin: `estimationSplit` resolves every one of these effort phases to a
-  // real number (100, `baselines.k2Seconds` for "max") that a naive
-  // `targetSplit === undefined` check would let through as a hard target;
-  // asserting `targetSplit: null` here fails against that bug even though
-  // the input's `targetSplit` is never undefined.
-  it("Dry Microburst: effort phases compile to null targetSplit despite a real estimated value on the input", () => {
-    const input = realWorkoutPhases("Dry Microburst");
+  // AN "Wet Microburst": 6×250 m all-out with 2:30 rest
+  // (server/seed/library/an.ts). The named "Microburst" real-starter test
+  // the brief calls for. This is the H8 pin: `estimationSplit` resolves
+  // every one of these effort phases to a real number (100,
+  // `baselines.k2Seconds` for "max") that a naive `targetSplit ===
+  // undefined` check would let through as a hard target; asserting
+  // `targetSplit: null` here fails against that bug even though the
+  // input's `targetSplit` is never undefined.
+  // (Fixture swapped from "Dry Microburst" to "Wet Microburst": the
+  // 2026-08-10 library-rebalance's Task 4 replaced Dry Microburst — no
+  // sketch could stretch it into an unfilled seat — with a fresh
+  // workout; Wet Microburst is untouched by that replacement, keeps the
+  // "Microburst" naming this test's own comment calls out, and is still
+  // real, shipped, all-effort-ref content, just distance- rather than
+  // time-prescribed and uniform rather than descending.)
+  it("Wet Microburst: effort phases compile to null targetSplit despite a real estimated value on the input", () => {
+    const input = realWorkoutPhases("Wet Microburst");
     expect(
       input.some(
         (p) => p.targetKind === "effort" && p.targetSplit !== undefined,
@@ -112,32 +119,46 @@ describe("compileProgram: real-starter pinned tables", () => {
     expect(result).toStrictEqual({
       intervals: [
         {
-          kind: "time",
-          value: 90,
-          targetSplit: null,
-          displaySpm: 30,
-          restSeconds: 210,
-        },
-        {
-          kind: "time",
-          value: 60,
-          targetSplit: null,
-          displaySpm: 30,
-          restSeconds: 180,
-        },
-        {
-          kind: "time",
-          value: 45,
+          kind: "distance",
+          value: 250,
           targetSplit: null,
           displaySpm: 32,
           restSeconds: 150,
         },
         {
-          kind: "time",
-          value: 30,
+          kind: "distance",
+          value: 250,
           targetSplit: null,
           displaySpm: 32,
-          restSeconds: 135,
+          restSeconds: 150,
+        },
+        {
+          kind: "distance",
+          value: 250,
+          targetSplit: null,
+          displaySpm: 32,
+          restSeconds: 150,
+        },
+        {
+          kind: "distance",
+          value: 250,
+          targetSplit: null,
+          displaySpm: 32,
+          restSeconds: 150,
+        },
+        {
+          kind: "distance",
+          value: 250,
+          targetSplit: null,
+          displaySpm: 32,
+          restSeconds: 150,
+        },
+        {
+          kind: "distance",
+          value: 250,
+          targetSplit: null,
+          displaySpm: 32,
+          restSeconds: 150,
         },
       ],
     });
