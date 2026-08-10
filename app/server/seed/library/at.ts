@@ -5,12 +5,15 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // (app/domain/generation/patterns.json), then revised after James's content
 // review: variety comes from structure (rep counts, rest schemes, pyramids,
 // rate-change pieces), not ±1' tweaks; continuous threshold singles stay
-// rare. Retuned or newly generated totals land on a 0 or 5 WHERE GRID
-// RESTS ALLOW; rests stay on the 0:30 grid always; a total that cannot be
-// round with grid rests stands as its pieces sum. Distance sets remain
-// exempt (2026-08-10 library-rebalance spec, §2/the zero-five audit;
-// rest-grid pin, James 2026-08-10). Ordering here IS the library browsing
-// order within the type block.
+// rare. Retuned or newly generated totals land on a 0 or 5 WHERE THE
+// 0:15 GRID ALLOWS; every time value a retune CREATES (every rest, and
+// any piece a retune scales) stays on the 0:15 grid always — a value
+// inherited unchanged from the pre-retune workout stands as it was,
+// on-grid or not; a total that cannot be round with grid values stands
+// as its pieces sum. Distance sets remain exempt (2026-08-10
+// library-rebalance spec, §2/the zero-five audit; rest-grid pin, James
+// 2026-08-10, extended to created work pieces the same day). Ordering
+// here IS the library browsing order within the type block.
 export const AT_WORKOUTS: WorkoutInput[] = [
   {
     // AT: 10' continuous at 6k+4 — one short threshold piece, in and out.

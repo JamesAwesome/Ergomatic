@@ -10,10 +10,13 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // own (James's offset calibration, 2026-08-03); spm 22 is the mode with
 // 20–24 the steady range, 18 only as a ladder's bottom rung and 26
 // only as a ladder's top. Retuned or newly generated totals land on a 0
-// or 5 WHERE GRID RESTS ALLOW; rests stay on the 0:30 grid always; a
-// total that cannot be round with grid rests stands as its pieces sum.
-// Distance sets remain exempt (2026-08-10 library-rebalance spec, §2/the
-// zero-five audit; rest-grid pin, James 2026-08-10).
+// or 5 WHERE THE 0:15 GRID ALLOWS; every time value a retune CREATES
+// (every rest, and any piece a retune scales) stays on the 0:15 grid
+// always — a value inherited unchanged from the pre-retune workout
+// stands as it was, on-grid or not; a total that cannot be round with
+// grid values stands as its pieces sum. Distance sets remain exempt
+// (2026-08-10 library-rebalance spec, §2/the zero-five audit; rest-grid
+// pin, James 2026-08-10, extended to created work pieces the same day).
 // Ordering here IS the library browsing order within the type block.
 export const O2_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------- easy / pain 1
@@ -312,11 +315,15 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 6×2:10 at 6k+8 with 1:15 rest — brisk touches, never long enough to hurt.
-    // (James's rest-grid ruling, 2026-08-10: the retune's own 1:10 rest was
-    // off the 0:15 grid; reverted to the nearest grid rest (1:15), which
-    // holds the 20-30 band on its own (20:30) — the piece itself is
-    // untouched. Total is no longer a 0/5 minute — stands as its pieces
+    // O2: 6×2:15 at 6k+8 with 1:15 rest — brisk touches, never long enough to hurt.
+    // (James's rest-grid ruling, 2026-08-10, extended to CREATED time
+    // values, 2026-08-10: the retune's own 1:10 rest was off the 0:15
+    // grid, reverted to 1:15 first. The retune's own 2:10 piece (scaled up
+    // from the original 2') was ALSO created off-grid — this rule applies
+    // to any value a retune produces, not only rests — so it grows again
+    // to the nearest grid value, 2:15 (still inside the retune's own ±25%
+    // envelope off the original 2'). Holds the 20-30 band comfortably
+    // (21:00). Total is no longer a 0/5 minute — stands as its pieces
     // sum.)
     title: "Ground Swell",
     type: "O2",
@@ -326,7 +333,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 6 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 13 / 6 },
+        duration: { kind: "time", minutes: 2.25 },
         ref: { base: "6k", off: 8 },
         spm: 24,
         restMinutes: 1.25,
@@ -1542,12 +1549,16 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 12×1:20 at 6k+4 with 1:15 rest — tempo in the smallest possible doses.
-    // (James's rest-grid ruling, 2026-08-10: the retune's own 1:10 rest was
-    // off the 0:15 grid; reverted to the nearest grid rest (1:15), which
-    // holds the 30-45 band comfortably (31:00) — the piece itself is
-    // untouched. Total is no longer a 0/5 minute — stands as its pieces
-    // sum.)
+    // O2: 12×1:15 at 6k+4 with 1:15 rest — tempo in the smallest possible doses.
+    // (James's rest-grid ruling, 2026-08-10, extended to CREATED time
+    // values, 2026-08-10: the retune's own 1:10 rest was off the 0:15
+    // grid, reverted to 1:15 first. The retune's own 1:20 piece (scaled up
+    // from the original 1') was ALSO created off-grid — this rule applies
+    // to any value a retune produces, not only rests — so it shrinks to
+    // the nearest grid value, 1:15 (exactly the retune's own +25% cap off
+    // the original 1'). Lands the total exactly at the 30-45 floor
+    // (30:00) — no longer a 0/5-in-spirit coincidence, just where the
+    // grid pieces sum.)
     title: "Crepuscular Rays",
     type: "O2",
     difficulty: "medium",
@@ -1556,7 +1567,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 12 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 / 3 },
+        duration: { kind: "time", minutes: 1.25 },
         ref: { base: "6k", off: 4 },
         spm: 24,
         restMinutes: 1.25,
