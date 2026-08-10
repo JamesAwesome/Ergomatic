@@ -195,6 +195,11 @@ function classifyBody(workSteps: WorkStep[]): Archetype | null {
  *  ("+++-+++") against AN Bomb Cyclone ("---+---") — are not near-
  *  duplicates, and before this key they were counted as such. */
 export function structureSignature(steps: Step[]): string {
+  // workDurationValue yields raw minutes for timed steps and raw meters for
+  // distance steps, so for a mixed-kind session the +/-/= comparisons cross
+  // units. The signs are only ever compared signature-to-signature, never
+  // interpreted as magnitudes — do not reuse this array for anything that
+  // needs commensurable values.
   const values = liveSteps(steps)
     .filter((s): s is WorkStep => s.k === "w")
     .map(workDurationValue);

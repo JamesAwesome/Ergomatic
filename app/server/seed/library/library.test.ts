@@ -133,10 +133,12 @@ describe("LIBRARY_WORKOUTS", () => {
     }
   });
 
-  it("the phase is done when the ratchet reaches zero — and it has not yet", () => {
-    // A live marker of where the rebalance stands. When every entry in
-    // DEBT_BASELINE can be replaced by 0 and this test inverted, the
-    // library matches the grid and §8's exit condition is met.
+  it("the frozen baseline still says 108 — the phase closed by moving content, not by editing this table", () => {
+    // The rebalance's exit condition (§8) is met: live debt is zero in all
+    // 20 cells, pinned by library-balance.test.ts's ACCEPTANCE test. This
+    // pin guards the other half of the ratchet: the STARTING debt stays
+    // frozen at its measured 108, so nobody can retroactively shrink what
+    // the phase owed.
     const outstanding = Object.values(DEBT_BASELINE)
       .flatMap((row) => Object.values(row))
       .reduce((a, b) => a + Math.abs(b), 0);
