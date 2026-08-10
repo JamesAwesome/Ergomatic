@@ -123,18 +123,38 @@ const SHARE_CEILING = 0.6;
 // different and this whole table must be RE-MEASURED, not patched: a cell
 // whose debt looks unchanged may be carrying an entirely different pair.
 // Re-measure by running the audit and reading the failures.
+// RE-MEASURED after Task 3 (2026-08-10 library-rebalance) landed O2's
+// retunes: O2|30-45 and O2|60+ moved (comments below say how and why);
+// every other cell's count held (AT is not yet retuned — Task 3 lands it
+// second, in its own commit). Per this table's own rule, this is a
+// re-measurement, not a bid — the numbers are what `nearDuplicates`
+// actually reports over the retuned content, read from the failures this
+// task's own run produced, not adjusted by hand.
 const KNOWN_DEBT: Partial<Record<string, number>> = {
   "O2|20-30": 2,
-  "O2|30-45": 5,
+  // O2|30-45: 5 -> 6. Retuning stretched several workouts into this now-
+  // largest O2 cell, and two of them landed close enough to an existing
+  // occupant to pair: Advection Fog <> Mirage, Following Sea <> Freezing
+  // Fog, Following Sea <> Diamond Dust, Freezing Fog <> Diamond Dust,
+  // Ground Fog <> Meltemi (all pre-existing, untouched by this task) plus
+  // ONE new pair from the retune itself, Silver Thaw <> Halo Ring — both
+  // retuned into 30-45 this task, both mixed cutdowns of comparable total
+  // and piece count.
+  "O2|30-45": 6,
   "O2|45-60": 2,
   // O2|60+: the sharpest cluster in the library and the adversarial
-  // review's own headline example (M2/M6) — four near-identical 6k+12
+  // review's own headline example (M2/M6) — was four near-identical 6k+12
   // continuous singles (Fair Wind 70', Morning Mist 67' [15000m], Sleet
   // 65', Glass Sea 60'), pairwise within 10% except the two extremes (60'
-  // vs 70', a 14.3% gap). THE named pre-existing variety debt this whole
-  // task was built to surface — fix-now-or-accept goes to James's gate-2
-  // review table, not decided here.
-  "O2|60+": 4,
+  // vs 70', a 14.3% gap); 4 -> 6 this task, because Altostratus's retune
+  // (50' -> 60', reaching its own new 60+ target) lands it as a FIFTH
+  // 6k+11 continuous single at exactly Glass Sea's 60', adding two more
+  // within-10% pairs (Glass Sea <> Altostratus, Altostratus <> Sleet)
+  // without displacing any of the original four. Still THE named pre-
+  // existing variety debt this whole task was built to surface —
+  // fix-now-or-accept goes to James's gate-2 review table, not decided
+  // here.
+  "O2|60+": 6,
   "AT|20-30": 3,
   "AT|30-45": 2,
   "TR|<20": 1,

@@ -30,13 +30,15 @@ import type { SessionRun } from "./run";
 //   (Meltemi used to hold this role; the library rewrite turned it into a
 //   5-phase TIME workout with no distance step at all, so this suite
 //   re-anchored to Calm Sea — same 10,000 m distance, matching draft.test.ts.)
-// - Diamond Dust (O2): 8'/8'/8' rate-change (spm 22/24/26, all at 6k+10) —
+// - Diamond Dust (O2): 10'/10'/10' rate-change (spm 22/24/26, all at 6k+10) —
 //   three SEQUENTIAL time work phases with no reps and no
 //   auto-rest, ideal for the catch-up walk (each phase's boundary is
 //   unambiguous). (Moderate Breeze used to hold this role; the rewrite
 //   turned it into a reps x8 workout — 17 phases instead of 4 — which broke
 //   every test here that pinned "index 3/4 is the last phase," so this
-//   suite re-anchored to Diamond Dust, the new library's equivalent shape.)
+//   suite re-anchored to Diamond Dust, the new library's equivalent shape.
+//   The 2026-08-10 library-rebalance retuned each piece from 8' to 10' to
+//   reach its new 30-45 band; the phase COUNT stayed 3, only the seconds.)
 // - Fork Lightning (AN): the effort-ref fixture (ref: {effort: "max"}).
 //
 // 2026-08-09 (the warmup setting): none of these carries a warm-up any
@@ -430,12 +432,12 @@ describe("warmupDisplayMinutes", () => {
 
 describe("remainingSeconds", () => {
   it("returns the full phase duration at the instant a phase starts", () => {
-    expect(remainingSeconds(diamondDustRun(), t0)).toBe(480);
+    expect(remainingSeconds(diamondDustRun(), t0)).toBe(600);
   });
 
   it("decreases by elapsed time within the phase", () => {
     expect(remainingSeconds(diamondDustRun(), addSeconds(t0, 120))).toBe(
-      360, // 480 (the first 8' work phase) - 120
+      480, // 600 (the first 10' work phase) - 120
     );
   });
 
@@ -475,7 +477,7 @@ describe("tick — the catch-up walk", () => {
     const now = addSeconds(t0, 120);
     const result = tick(run, now);
     expect(result).toBe(run); // same reference: nothing needed to advance
-    expect(remainingSeconds(result, now)).toBe(360); // 480 - 120
+    expect(remainingSeconds(result, now)).toBe(480); // 600 - 120
   });
 
   it("does not advance while paused, even long past the phase boundary", () => {
@@ -506,7 +508,7 @@ describe("tick — the catch-up walk", () => {
     // a version that stamps `now` here would silently misreport when the
     // session actually ended.
     const run = diamondDustRun();
-    const finishBoundary = addSeconds(t0, 480 + 480 + 480); // 1440s
+    const finishBoundary = addSeconds(t0, 600 + 600 + 600); // 1800s
     const wakesUpMuchLater = addSeconds(finishBoundary, 3600); // +1h suspend
     const result = tick(run, wakesUpMuchLater);
     expect(result.index).toBe(run.phases.length);
@@ -593,19 +595,19 @@ describe("resilience — reload and pause accounting across reloads", () => {
     const now = addSeconds(t0, 120);
     const before = remainingSeconds(run, now);
     const after = remainingSeconds(reload(run), now);
-    expect(before).toBe(360); // 480 - 120
-    expect(after).toBe(360);
+    expect(before).toBe(480); // 600 - 120
+    expect(after).toBe(480);
   });
 
   it("resilience 2: reload while paused keeps the same remaining time", () => {
     const paused = pause(diamondDustRun(), addSeconds(t0, 50));
     const now = addSeconds(t0, 99_999);
-    expect(remainingSeconds(paused, now)).toBe(430); // 480 - 50
-    expect(remainingSeconds(reload(paused), now)).toBe(430);
+    expect(remainingSeconds(paused, now)).toBe(550); // 600 - 50
+    expect(remainingSeconds(reload(paused), now)).toBe(550);
     expect(reload(paused).pausedAt).toBe(paused.pausedAt);
   });
 
-  it("pause -> reload -> resume yields remaining identical to never reloading (hand-computed: 480 - 50 = 430)", () => {
+  it("pause -> reload -> resume yields remaining identical to never reloading (hand-computed: 600 - 50 = 550)", () => {
     const run = diamondDustRun();
     const paused = pause(run, addSeconds(t0, 50));
     const resumeAt = addSeconds(t0, 9_000); // a long gap while "closed"
@@ -613,7 +615,7 @@ describe("resilience — reload and pause accounting across reloads", () => {
     const neverReloaded = resume(paused, resumeAt);
     const reloadedThenResumed = resume(reload(paused), resumeAt);
 
-    const expected = 430; // hand-computed: 480s phase, paused after 50s
+    const expected = 550; // hand-computed: 600s phase, paused after 50s
     expect(remainingSeconds(neverReloaded, resumeAt)).toBe(expected);
     expect(remainingSeconds(reloadedThenResumed, resumeAt)).toBe(expected);
   });
@@ -695,7 +697,7 @@ describe("nextDistance", () => {
   });
 
   it("is a no-op on a non-distance (time) phase", () => {
-    const run = diamondDustRun(); // index 0: an 8' work phase, time-based
+    const run = diamondDustRun(); // index 0: a 10' work phase, time-based
     const result = nextDistance(run, addSeconds(t0, 50));
     expect(result).toBe(run);
   });
@@ -724,9 +726,9 @@ describe("isComplete", () => {
 describe("totalRemainingSeconds", () => {
   it("sums remaining time-phase seconds across the current and all upcoming phases (Diamond Dust)", () => {
     const run = diamondDustRun();
-    const now = addSeconds(t0, 50); // 50s into the first 480s work phase
-    // 430 (remaining in phase 0) + 480 + 480 = 1390
-    expect(totalRemainingSeconds(run, now)).toBe(1390);
+    const now = addSeconds(t0, 50); // 50s into the first 600s work phase
+    // 550 (remaining in phase 0) + 600 + 600 = 1750
+    expect(totalRemainingSeconds(run, now)).toBe(1750);
   });
 
   it("prices upcoming distance phases via meters/target-split — the same per-phase arithmetic estimateMinutes uses (Filling Low)", () => {

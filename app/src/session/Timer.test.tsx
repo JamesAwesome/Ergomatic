@@ -1282,12 +1282,14 @@ describe("Timer — the repaint loop", () => {
   // `visibilitychange`, not only from the next 1s interval tick.
   it("catches up multiple phases on visibilitychange (a simulated lock)", async () => {
     mockKeepAwake();
-    // Diamond Dust: 8'/8'/8' rate-change, no reps/rest — three
+    // Diamond Dust: 10'/10'/10' rate-change, no reps/rest — three
     // SEQUENTIAL time work phases, ideal for the catch-up walk (each
     // phase's boundary is unambiguous). (Moderate Breeze used to hold this
     // role; the library rewrite turned it into a reps x8 workout — 17
     // phases instead of 4 — so this suite re-anchored to Diamond Dust, per
-    // engine.test.ts's own re-anchor for the same reason.)
+    // engine.test.ts's own re-anchor for the same reason. The 2026-08-10
+    // library-rebalance retuned each piece from 8' to 10' to reach its new
+    // 30-45 band — the phase count stayed 3, only the seconds.)
     const diamondDust = library("Diamond Dust");
     const draft = buildDraft({
       id: "id-diamond-dust",
@@ -1296,8 +1298,8 @@ describe("Timer — the repaint loop", () => {
       steps: diamondDust.steps,
     });
     const run = buildAndSaveRun(draft);
-    // work1 480s + work2 480s = 960s boundary; 130s into work3 (index 2).
-    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 1_090_000));
+    // work1 600s + work2 600s = 1200s boundary; 130s into work3 (index 2).
+    runAtIndex(run, 0, new Date(FIXED_NOW.getTime() - 1_330_000));
     await renderTimer();
 
     // Before any tick fires, the stale phase 0 is still what renders.
