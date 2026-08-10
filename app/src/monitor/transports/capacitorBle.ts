@@ -13,8 +13,13 @@
 // it talks to a real PM5. The one live-hardware verification the design
 // spec's own exit criterion requires happens on James's laptop/device,
 // post-merge (interface-notes.md §17) — never as a CI assertion. Nothing
-// in this file (or its test suite, if one exists) may claim to test real
-// radio behavior; "compile-tested shapes" is the ceiling for 7A.
+// in this file or its test suite may claim to test real radio behavior.
+// What the suite DOES pin (phone-BLE spec §9's row for this file) is the
+// half that is ours rather than the radio's: the request options we
+// build, the order we build them in, the timeout race, the plugin prose
+// we translate, the memo, the subscribe route. Two requirements stay
+// beyond any mock and live as comments below instead — the no-double-init
+// rule (REVIEW B2) and the BleClient queue invariant (REVIEW B3.3).
 
 import {
   BleClient,
@@ -66,17 +71,132 @@ function serviceFor(characteristicId: string): string {
   return service;
 }
 
+// The whole scan pipeline is raced against this, not just `requestDevice`
+// (spec §3.3, REVIEW I6): `initialize()` settles NOTHING on a `.resetting`
+// or `.unknown` central (`DeviceManager.swift:58-59`, `:66-67`), so a race
+// scoped to the plugin's picker call would let `picking` hang with no
+// sheet ever drawn.
+const SCAN_TIMEOUT_MS = 35_000;
+
+// Spec §7, verbatim. House copy: no em-dash. `noDeviceFound` names Cancel
+// because Cancel is the sheet's only control once the plugin's own 30s
+// scan has stopped (REVIEW M4).
+const DISPLAY_STRINGS = {
+  scanning: "Looking for your PM5",
+  availableDevices: "Choose your monitor",
+  noDeviceFound:
+    "No monitor found. Wake the PM5, then tap Cancel and try again.",
+  cancel: "Cancel",
+} as const;
+
+// The failure vocabulary travels by NAME (spec §3.4). The classifier
+// upstairs keys on `err.name` and never imports from this file — the
+// layering rule that keeps a radio adapter out of the hook's import graph.
+class BluetoothOffError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BluetoothOffError";
+  }
+}
+
+class BluetoothPermissionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BluetoothPermissionError";
+  }
+}
+
+class ScanTimeoutError extends Error {
+  constructor() {
+    super("The scan pipeline did not settle within 35s.");
+    this.name = "ScanTimeoutError";
+  }
+}
+
+/** Plugin prose in, our vocabulary out. POSITIVE MATCHES ONLY (REVIEW I1):
+ *  `initialize()` rejects with exactly two strings — `"BLE permission
+ *  denied"` for both `.unauthorized` cases, denied AND restricted
+ *  (`DeviceManager.swift:60-62`), and `"BLE unsupported"`
+ *  (`DeviceManager.swift:63-65`). Anything else falls through UNTYPED on
+ *  purpose: the Capacitor bridge's own `"BluetoothLe" plugin is not
+ *  implemented on ios` is a wiring defect, and it must surface as a link
+ *  failure rather than wear the permission card. */
+function translateInitializeFailure(err: unknown): unknown {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/permission denied/i.test(message)) {
+    return new BluetoothPermissionError(message);
+  }
+  // Simulator / no BLE hardware: the nearest honest surface we have.
+  // "powered off" in the message is what routes it to `bluetooth-off` in
+  // `mapRadioFailure`'s existing regex arm.
+  if (/unsupported/i.test(message)) {
+    return new BluetoothOffError(
+      `Bluetooth is powered off or unsupported (${message}).`,
+    );
+  }
+  return err;
+}
+
+/** Races the scan pipeline against `SCAN_TIMEOUT_MS`, handling BOTH
+ *  outcomes of the abandoned loser explicitly (spec §3.3).
+ *  `Promise.race` would not do: it leaves the loser's late rejection
+ *  unhandled, so the rower's eventual Cancel tap
+ *  (`"requestDevice cancelled."`) fires `unhandledrejection` inside the
+ *  WKWebView (REVIEW B3.2). A late RESOLUTION has to be dropped too
+ *  (REVIEW I4): rows stay tappable after the plugin's own 30s scan stop
+ *  (`DeviceManager.swift:195-210`), so a rower can pick their PM5 at
+ *  t=36s. Dropping that pick is safe — `requestDevice` only PICKS, no
+ *  connect was issued, and the retry card the rower is looking at scans
+ *  fresh. */
+function raceScanTimeout<T>(pipeline: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new ScanTimeoutError());
+      }
+    }, SCAN_TIMEOUT_MS);
+    pipeline.then(
+      (value) => {
+        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+        // Else: a late pick, deliberately dropped (REVIEW I4).
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+        // Else: the rower's eventual Cancel, deliberately swallowed. THIS
+        // ATTACHED HANDLER is the no-unhandledrejection guarantee.
+      },
+    );
+  });
+}
+
 /**
  * Builds a `Transport` backed by `@capacitor-community/bluetooth-le`'s
- * module-level `BleClient`. `scan()` opens the OS's native device picker
- * (`BleClient.requestDevice`, filtered to the C2 Rowing service) rather
- * than a background scan — the same single-result shape
- * `webBluetooth.ts`'s `navigator.bluetooth.requestDevice` has, so callers
- * above `Transport` see one consistent picker-style flow regardless of
- * which adapter is live. `write`/`subscribe` both throw synchronously (via
- * `serviceFor`) on an unrecognized characteristic id or a call before
- * `connect()` — a programming error in the caller, not a runtime radio
- * condition, so failing loudly beats a silent no-op.
+ * module-level `BleClient`. `scan()` does not open an OS picker: the
+ * plugin draws its OWN in-process list sheet (`displayMode: 'list'`,
+ * `DeviceListView.swift`) carrying our copy from `setDisplayStrings`
+ * (spec §7), and the sheet is modal (`isModalInPresentation`) — nothing
+ * of ours is reachable while it is up. The filter is the DEVICE NAME
+ * only, never a service UUID (spec §3.1): the rowing service 0x0030 is
+ * not advertised (`docs/monitor/pm5-interface-notes.md:4319-4321`, the
+ * same lesson `webBluetooth.ts:181-202` carries) and this plugin ANDs
+ * `services` with `namePrefix` down at CoreBluetooth, so a service filter
+ * here makes the PM5 undiscoverable. The single-result shape still
+ * matches `webBluetooth.ts`'s, so callers above `Transport` see one
+ * consistent picker-style flow regardless of which adapter is live.
+ * `write`/`subscribe` both throw synchronously (via `serviceFor`) on an
+ * unrecognized characteristic id or a call before `connect()` — a
+ * programming error in the caller, not a runtime radio condition, so
+ * failing loudly beats a silent no-op.
  */
 export function createCapacitorBleTransport(): Transport {
   let deviceId: string | null = null;
@@ -93,6 +213,27 @@ export function createCapacitorBleTransport(): Transport {
   // `connect()` also resets it, so a stale `true` can never survive into a
   // NEW connection's own genuine drop.
   let callerInitiatedDisconnect = false;
+  let initPromise: Promise<void> | null = null;
+
+  // NOT idempotent upstream (spec §3.5, REVIEW B2): every
+  // `BleClient.initialize()` constructs a new `DeviceManager`
+  // (`Plugin.swift:62-72`) and with it a new `CBCentralManager`
+  // (`DeviceManager.swift:35-41`), so a scan->connect double-init hands
+  // the picked `CBPeripheral` to a central that never discovered it —
+  // cross-central use CoreBluetooth does not define. Memoize the
+  // in-flight/settled success; CLEAR the memo on rejection so a
+  // denied-then-re-allowed rower gets a fresh prompt path instead of a
+  // cached refusal. A mocked `BleClient` cannot catch a regression here
+  // (it hides the manager swap entirely) — this comment, the spec §, and
+  // the review checklist are where the requirement lives; the test suite
+  // can only pin the call COUNT.
+  function ensureInitialized(): Promise<void> {
+    initPromise ??= BleClient.initialize().catch((err: unknown) => {
+      initPromise = null;
+      throw translateInitializeFailure(err);
+    });
+    return initPromise;
+  }
 
   function requireConnected(characteristicId: string): {
     id: string;
@@ -113,24 +254,74 @@ export function createCapacitorBleTransport(): Transport {
   }
 
   return {
+    // THE QUEUE INVARIANT (spec §3.3, REVIEW B3.3): `BleClient` serializes
+    // EVERY call through one promise queue (`bleClient.js`'s constructor,
+    // `queue.js`), and after a `ScanTimeoutError` the NATIVE
+    // `requestDevice` is still pending — the sheet is modal and no API
+    // dismisses it, only the rower's Cancel or a row tap does. So any
+    // BleClient call issued in that window silently waits behind the
+    // sheet, forever if the rower walks away. NO BleClient CALL MAY BE
+    // ISSUED BETWEEN `ScanTimeoutError` AND THE SHEET'S DISMISSAL. The
+    // timeout path conforms today because `disconnect()` below no-ops on
+    // `deviceId === null`; that is now deliberate, not luck. Mocks cannot
+    // see the queue, so no test guards this — new code in the `picking`
+    // phase gets read against this comment.
     async scan(): Promise<DiscoveredMonitor[]> {
-      await BleClient.initialize();
-      const device = await BleClient.requestDevice({
-        services: [ROWING_SERVICE_UUID],
-        optionalServices: [CONTROL_SERVICE_UUID, ROWING_SERVICE_UUID],
-        namePrefix: "PM5",
-      });
-      return [{ id: device.deviceId, name: device.name ?? "PM5" }];
+      // Order is load-bearing, not style (REVIEW I2): `isEnabled` REJECTS
+      // if ever called uninitialized (`Plugin.swift:74-80`, `:598-604`)
+      // with a message no classifier arm matches, and `initialize`
+      // RESOLVES when the radio is off (`DeviceManager.swift:54-56`) — so
+      // `isEnabled` AFTER `ensureInitialized` is the only Bluetooth-off
+      // detector this path has.
+      const pipeline = (async (): Promise<DiscoveredMonitor[]> => {
+        await ensureInitialized();
+        if (!(await BleClient.isEnabled())) {
+          throw new BluetoothOffError("Bluetooth is powered off.");
+        }
+        await BleClient.setDisplayStrings(DISPLAY_STRINGS);
+        const device = await BleClient.requestDevice({
+          // No `services` key: 0x0030 is not advertised and the plugin
+          // ANDs `services` with `namePrefix` at CoreBluetooth (spec
+          // §3.1, and the factory doc above). An absent key reaches
+          // `scanForPeripherals` as an EMPTY array, i.e. scan-all
+          // (`Plugin.swift:606-612`) — the plugin's universal name-only
+          // pattern, though not Apple-documented; walk step 2 settles it.
+          optionalServices: [CONTROL_SERVICE_UUID, ROWING_SERVICE_UUID],
+          namePrefix: "PM5",
+          displayMode: "list",
+        }).catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          if (/cancel/i.test(message)) {
+            // The ONE place plugin prose is read, quarantined here (spec
+            // §3.4) and re-thrown in the web picker's own cancel
+            // vocabulary, which the classifier already sorts.
+            const cancelled = new Error(message);
+            cancelled.name = "NotFoundError";
+            throw cancelled;
+          }
+          throw err;
+        });
+        return [{ id: device.deviceId, name: device.name ?? "PM5" }];
+      })();
+      return raceScanTimeout(pipeline);
     },
 
     async connect(id: string): Promise<void> {
       // A fresh connection never inherits a stale flag from a PRIOR one
       // (M-2's own comment on the variable above).
       callerInitiatedDisconnect = false;
+      // `connect()` no longer assumes `scan()` ran first (spec §3.5): a
+      // reconnect path calls it cold. Memoized, so the normal
+      // scan->connect flow still initializes exactly once.
+      await ensureInitialized();
       await BleClient.connect(id, handleDisconnect);
       deviceId = id;
     },
 
+    // RECORDED DIVERGENCE (spec §1's non-goals): this is an ACKED write
+    // where `webBluetooth.ts` writes without response. The two transports
+    // are deliberately not unified this phase; revisited only if the
+    // hardware walk shows chunked-CSAFE failures.
     async write(characteristicId: string, bytes: Uint8Array): Promise<void> {
       const { id, service } = requireConnected(characteristicId);
       await BleClient.write(
@@ -146,19 +337,33 @@ export function createCapacitorBleTransport(): Transport {
       cb: (bytes: Uint8Array) => void,
     ): () => void {
       const { id, service } = requireConnected(characteristicId);
-      // Fire-and-forget, same idiom driver.ts's own sample-rate write uses
-      // for a call this synchronous `Transport.subscribe` signature cannot
-      // itself await: `startNotifications` resolves once registration
-      // completes, well after this function must already have returned an
-      // unsubscribe closure.
-      void BleClient.startNotifications(
-        id,
-        service,
-        characteristicId,
-        (value) => {
-          cb(toUint8Array(value) ?? new Uint8Array(0));
-        },
-      );
+      // Registration is asynchronous where this `Transport.subscribe`
+      // signature is synchronous — `startNotifications` resolves well
+      // after this function must already have returned an unsubscribe
+      // closure — but the rejection is NOT discarded any more (spec §3.5,
+      // REVIEW I5).
+      BleClient.startNotifications(id, service, characteristicId, (value) => {
+        const bytes = toUint8Array(value);
+        // Never hand the reassembler a manufactured empty frame: a
+        // zero-length "packet" is a decode the wire never sent.
+        if (bytes === undefined) return;
+        cb(bytes);
+      }).catch((err: unknown) => {
+        // A dead subscription IS a dead link for this driver: the plugin
+        // rejects on a missing service/characteristic
+        // (`Plugin.swift:544-565`), CSAFE responses can then never
+        // arrive, and the silent alternative is the driver waiting below
+        // its ready gate forever — the hang class ruling 2 exists to
+        // kill. Routing it through `onDisconnect` ends the session
+        // `link-failed` instead. The M-2 guard is CHECKED, not consumed:
+        // a subscription failure racing a deliberate teardown stays
+        // quiet, and the real disconnect callback still gets its flag.
+        if (callerInitiatedDisconnect) return;
+        const message = err instanceof Error ? err.message : String(err);
+        disconnectCb?.(
+          `capacitorBle: subscription to ${characteristicId} failed: ${message}`,
+        );
+      });
       return () => {
         void BleClient.stopNotifications(id, service, characteristicId);
       };
