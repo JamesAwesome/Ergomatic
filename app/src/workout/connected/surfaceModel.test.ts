@@ -2,7 +2,9 @@
 // workout compiled through the real assembly (`buildDraft` -> `buildRun` ->
 // `compileProgram`) — the repo's realistic-fixture rule. "Filling Low" is
 // the same fixture `ConnectedInterstitial.test.tsx` uses: an 8:00 warm-up
-// then 3 × 2000 m with 3:00 rest between, which gives this file everything
+// then 4 × 2000 m with 3:00 rest between (retuned from 3 reps in Task 3,
+// 2026-08-10 library-rebalance, to reach its new 45-60 band), which gives
+// this file everything
 // it needs in one shape — a warm-up phase with no target, work phases with
 // a real resolved split and a pace ref, folded rest phases (so the
 // interval->phase walk has something real to walk), and a DISTANCE
@@ -115,8 +117,8 @@ function firstWorkPhase(): EnginePhase {
 }
 
 describe("the fixture is the shape this file claims", () => {
-  it("Filling Low compiles to a warm-up plus three distance intervals", () => {
-    expect(FIXTURE.program.intervals).toHaveLength(4);
+  it("Filling Low compiles to a warm-up plus four distance intervals", () => {
+    expect(FIXTURE.program.intervals).toHaveLength(5);
     expect(FIXTURE.program.intervals[0]!.kind).toBe("time");
     expect(FIXTURE.program.intervals[1]!.kind).toBe("distance");
     expect(FIXTURE.phases.some((p) => p.type === "rest")).toBe(true);
@@ -259,8 +261,8 @@ describe("staleFor / surfaceStatusFor", () => {
 describe("live", () => {
   it("names the machine's interval out of the program's own count", () => {
     const m = model({ frame: frame({ intervalIndex: 1 }) });
-    expect(m.intervalLabel).toBe("INTERVAL 2 OF 4 · WORK");
-    expect(m.intervalLabelShort).toBe("2 OF 4 · WORK");
+    expect(m.intervalLabel).toBe("INTERVAL 2 OF 5 · WORK");
+    expect(m.intervalLabelShort).toBe("2 OF 5 · WORK");
   });
 
   it("says ROWING in ink, and RESTING when the machine is resting", () => {
@@ -566,17 +568,17 @@ describe("degenerate inputs", () => {
     expect(m.pace.display).toBe("—");
     expect(m.intervalClockValue).toBe("—");
     expect(m.intervalProgressPct).toBe(0);
-    expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WARM-UP");
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WARM-UP");
   });
 
   it("clamps an interval index the machine ran past the program", () => {
     const m = model({ frame: frame({ intervalIndex: 99 }) });
-    expect(m.intervalLabel).toBe("INTERVAL 4 OF 4 · WORK");
+    expect(m.intervalLabel).toBe("INTERVAL 5 OF 5 · WORK");
   });
 
   it("treats a null interval index as the first, never as a crash", () => {
     const m = model({ frame: frame({ intervalIndex: null }) });
-    expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WARM-UP");
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WARM-UP");
   });
 
   it("never renders the `PM5` placeholder unless the picker gave us nothing", () => {
@@ -603,7 +605,7 @@ describe("degenerate inputs", () => {
     });
     expect(m.targetSplit.main).toBe("—");
     expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
-    expect(m.intervalLabel).toBe("INTERVAL 2 OF 4 · WORK");
+    expect(m.intervalLabel).toBe("INTERVAL 2 OF 5 · WORK");
   });
 
   it("says so when a phase carries no split target of its own", () => {

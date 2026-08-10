@@ -723,11 +723,16 @@ describe("shape preservation (block review C1)", () => {
 
 describe("describeSteps (block review M1)", () => {
   it("keeps a lead piece OUT of the repeated block", () => {
-    // AT Gap Wind: a 10' lead then 3× 3'. The old renderer swept the lead
+    // AT Gap Wind: a 12' lead then 3× 3:30. The old renderer swept the lead
     // into the block and printed a 39' workout in the artifact James signs.
+    // (Retuned in Task 3, 2026-08-10 library-rebalance: 10'/3' -> 12'/3:30
+    // to reach its new 30-45 band — the lead/block SHAPE this test guards
+    // is unchanged, only its numbers moved with it.)
     const gapWind = LIBRARY_WORKOUTS.find((w) => w.title === "Gap Wind")!;
     const rendered = describeSteps(gapWind.steps);
-    expect(rendered).toBe("10' @6k+3 spm24 r3' + 3× [3' @6k-2 spm26 r1']");
+    expect(rendered).toBe(
+      "12' @6k+3 spm24 r3:45 + 3× [3:30 @6k-2 spm26 r1:15]",
+    );
     expect(rendered.startsWith("3×")).toBe(false);
   });
 

@@ -7,9 +7,11 @@ import { saveRun, loadRun, clearRun, RUN_KEY, type SessionRun } from "./run";
 import { saveDraft, loadDraft, DRAFT_KEY } from "./draft";
 
 // Realistic fixture, per repo convention: Filling Low (AT) —
-// 3x2000m @ 6k+4 with 3' rest — the same reps-expanded distance workout
-// engine.test.ts uses, so a run built from it exercises actuals, set
-// numbering, and originalIndex in one realistic shape.
+// 4x2000m @ 6k+4 with 3' rest (retuned from 3 reps in Task 3, 2026-08-10
+// library-rebalance, to reach its new 45-60 band) — the same reps-
+// expanded distance workout engine.test.ts uses, so a run built from it
+// exercises actuals, set numbering, and originalIndex in one realistic
+// shape.
 function fillingLowDraft(id: string) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
   if (!w) throw new Error("missing library fixture: Filling Low");
@@ -67,8 +69,8 @@ describe("saveRun / loadRun / clearRun", () => {
   });
 
   it("round-trips a completed run", () => {
-    // Filling Low: 3x(work,rest) = 6 phases, indices 0..5.
-    const run = { ...freshRun(), index: 5 }; // the last phase
+    // Filling Low: 4x(work,rest) = 8 phases, indices 0..7.
+    const run = { ...freshRun(), index: 7 }; // the last phase
     const completed = advance(run, addSeconds(t0, 1000));
     expect(saveRun(completed)).toBe(true);
     const loaded = loadRun();

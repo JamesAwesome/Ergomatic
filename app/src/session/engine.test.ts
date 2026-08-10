@@ -22,9 +22,12 @@ import {
 import type { SessionRun } from "./run";
 
 // Realistic fixtures, per repo convention (draft.test.ts's own pattern):
-// - Filling Low (AT): 3x2000m @ 6k+4 with 3' rest — the reps-expanded,
+// - Filling Low (AT): 4x2000m @ 6k+4 with 3' rest — the reps-expanded,
 //   auto-rest, DISTANCE fixture. Its 2000m work step is also the exact
-//   shape the brief's own hand-pinned example describes.
+//   shape the brief's own hand-pinned example describes. (The
+//   2026-08-10 library-rebalance retuned this from 3 reps to 4 to reach
+//   its new 45-60 band; every phase count/sum below that depended on the
+//   old 3-rep shape moved with it.)
 // - Calm Sea (O2): 10,000m @ 6k+12 — a single, non-repeated distance work
 //   step, for the second hand-pinned nextDistance case.
 //   (Meltemi used to hold this role; the library rewrite turned it into a
@@ -95,10 +98,10 @@ function hoarfrostRun(now = t0): SessionRun {
 describe("buildRun", () => {
   it("freezes phases from the draft's effective steps, attributing originalIndex across a reps-expanded distance workout with auto-inserted rest (Filling Low)", () => {
     const run = fillingLowRun();
-    // Filling Low: reps(0), w(1){2000m @ 6k+4, restMinutes 3} x3 —
-    // 3 * (work + rest) = 6 phases. No warm-up: the setting is OFF here
+    // Filling Low: reps(0), w(1){2000m @ 6k+4, restMinutes 3} x4 —
+    // 4 * (work + rest) = 8 phases. No warm-up: the setting is OFF here
     // (no fourth argument), and the workout itself carries none any more.
-    expect(run.phases).toHaveLength(6);
+    expect(run.phases).toHaveLength(8);
     expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
     expect(run.phases[0]).toMatchObject({
       type: "work",
@@ -106,23 +109,23 @@ describe("buildRun", () => {
       targetKind: "split",
       targetSplit: 124, // 120 (k6Seconds) + 4 (off)
       spm: 22,
-      set: { index: 1, of: 3 },
+      set: { index: 1, of: 4 },
       originalIndex: 1, // the ORIGINAL draft index of the "w" step
     });
     expect(run.phases[1]).toMatchObject({
       type: "rest",
       seconds: 180,
-      set: { index: 1, of: 3 },
+      set: { index: 1, of: 4 },
       originalIndex: 1, // shares its work phase's originalIndex
     });
-    // Every one of the 3 reps' work/rest pair carries the same originalIndex
+    // Every one of the 4 reps' work/rest pair carries the same originalIndex
     // (they all came from the ONE authored "w" step at index 1).
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       expect(run.phases[i]!.originalIndex).toBe(1);
     }
-    expect(run.phases[5]).toMatchObject({
+    expect(run.phases[7]).toMatchObject({
       type: "rest",
-      set: { index: 3, of: 3 },
+      set: { index: 4, of: 4 },
     });
     expect(run.v).toBe(1);
     expect(run.index).toBe(0);
@@ -248,7 +251,7 @@ describe("buildRun and the warm-up setting", () => {
     expect(buildRun(d, baselines, t0)).toStrictEqual(
       buildRun(d, baselines, t0, null),
     );
-    expect(buildRun(d, baselines, t0, null).phases).toHaveLength(6);
+    expect(buildRun(d, baselines, t0, null).phases).toHaveLength(8);
   });
 
   it("prepends a time warm-up as the run's first phase, before every authored step (Filling Low)", () => {
@@ -256,7 +259,7 @@ describe("buildRun and the warm-up setting", () => {
       kind: "time",
       minutes: 10,
     });
-    expect(run.phases).toHaveLength(7);
+    expect(run.phases).toHaveLength(9);
     expect(run.phases[0]).toStrictEqual({
       type: "warmup",
       seconds: 600,
@@ -264,7 +267,7 @@ describe("buildRun and the warm-up setting", () => {
       originalIndex: -1,
     });
     // The workout's own phases follow, unshifted and unchanged: the same
-    // six Filling Low produces with the setting OFF, in the same order.
+    // eight Filling Low produces with the setting OFF, in the same order.
     expect(run.phases.slice(1)).toStrictEqual(
       buildRun(fillingLowDraft(), baselines, t0).phases,
     );
@@ -290,7 +293,7 @@ describe("buildRun and the warm-up setting", () => {
       label: "Rest",
       originalIndex: -1,
     });
-    expect(run.phases).toHaveLength(8);
+    expect(run.phases).toHaveLength(10);
   });
 
   it("emits no rest phase for a restSeconds of 0", () => {
@@ -299,7 +302,7 @@ describe("buildRun and the warm-up setting", () => {
       minutes: 10,
       restSeconds: 0,
     });
-    expect(run.phases).toHaveLength(7);
+    expect(run.phases).toHaveLength(9);
     expect(run.phases[1]!.type).toBe("work");
   });
 
@@ -372,7 +375,7 @@ describe("buildRun and the warm-up setting", () => {
     // The setting is not an authored step, so it points at none.
     expect(run.phases[0]!.originalIndex).toBe(-1);
     expect(run.phases[1]!.originalIndex).toBe(-1);
-    // Filling Low's own six phases still all trace to its "w" step at raw
+    // Filling Low's own eight phases still all trace to its "w" step at raw
     // index 1 — the prepend must not shift attribution the way an inserted
     // STEP would have.
     for (const phase of run.phases.slice(2)) {
@@ -733,16 +736,16 @@ describe("totalRemainingSeconds", () => {
 
   it("prices upcoming distance phases via meters/target-split — the same per-phase arithmetic estimateMinutes uses (Filling Low)", () => {
     const run = fillingLowRun();
-    // 3 * ((2000/500 * 124) + 180) = 3*676 = 2028
-    expect(totalRemainingSeconds(run, t0)).toBe(2028);
+    // 4 * ((2000/500 * 124) + 180) = 4*676 = 2704
+    expect(totalRemainingSeconds(run, t0)).toBe(2704);
   });
 
   it("gives partial credit for the CURRENT distance phase, subtracting its own elapsed (Filling Low)", () => {
     const run = fillingLowRun(); // index 0: the first 2000m work phase
     const now = addSeconds(t0, 200);
     // current: (2000/500*124) - 200 = 496 - 200 = 296
-    // remaining phases 1..5: 3*180 + 2*496 = 540 + 992 = 1532
-    expect(totalRemainingSeconds(run, now)).toBe(1828);
+    // remaining phases 1..7: 4*180 + 3*496 = 720 + 1488 = 2208
+    expect(totalRemainingSeconds(run, now)).toBe(2504);
   });
 
   it("an open-ended 'test' phase contributes nothing to the estimate", () => {

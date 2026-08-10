@@ -505,11 +505,13 @@ function stubRadio(over: Partial<Transport> = {}): Transport {
 }
 
 describe("useMonitorSession: the happy walk, on a real library workout", () => {
-  /** Filling Low: 8:00 warmup (no rest) then 3 x 2000 m with 3:00 rest.
-   *  Session-cumulative numbers throughout, the way the machine reports
-   *  them; each boundary for an interval WITH a trailing rest is delivered
-   *  while the machine already reads `resting`, because that is what the
-   *  hardware does (interface-notes.md §18 #3, enforced by the fake). */
+  /** Filling Low: 8:00 warmup (no rest) then 4 x 2000 m with 3:00 rest
+   *  (retuned from 3 reps in Task 3, 2026-08-10 library-rebalance, to
+   *  reach its new 45-60 band). Session-cumulative numbers throughout, the
+   *  way the machine reports them; each boundary for an interval WITH a
+   *  trailing rest is delivered while the machine already reads `resting`,
+   *  because that is what the hardware does (interface-notes.md §18 #3,
+   *  enforced by the fake). */
   function fillingLowTimeline(): FakeTimelineEvent[] {
     return [
       status(100, { elapsedSeconds: 240, distanceMeters: 800 }),
@@ -609,13 +611,44 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
         cumulativeElapsedSeconds: 2460,
         cumulativeDistanceMeters: 7600,
       },
+      // The fourth rep (index 4), following the same per-rep pattern every
+      // earlier rep used: +240s/+1000m into the work, +520s/+2000m into the
+      // trailing rest, +660s/+2000m cumulative at the boundary (480s work +
+      // 180s rest, 2000m of it banked).
       status(900, {
-        workoutState: WORKOUTSTATE_WORKOUTEND,
-        elapsedSeconds: 2460,
-        distanceMeters: 7600,
+        elapsedSeconds: 2700,
+        distanceMeters: 8600,
+        programIntervalIndex: 4,
+      }),
+      status(1000, {
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 2980,
+        distanceMeters: 9600,
         spm: 0,
         currentSplit: 0,
-        programIntervalIndex: 3,
+        programIntervalIndex: 4,
+      }),
+      {
+        atMs: 1050,
+        kind: "boundary",
+        actual: {
+          index: 4,
+          elapsedSeconds: 480,
+          distanceMeters: 2000,
+          avgSplit: 120,
+          avgSpm: 24,
+          avgHeartRateBpm: 161,
+        },
+        cumulativeElapsedSeconds: 3120,
+        cumulativeDistanceMeters: 9600,
+      },
+      status(1100, {
+        workoutState: WORKOUTSTATE_WORKOUTEND,
+        elapsedSeconds: 3120,
+        distanceMeters: 9600,
+        spm: 0,
+        currentSplit: 0,
+        programIntervalIndex: 4,
       }),
     ];
   }
@@ -918,25 +951,25 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
       completedAt: null,
       terminated: false,
     });
-    expect(opened?.program.intervals).toHaveLength(4);
+    expect(opened?.program.intervals).toHaveLength(5);
     // 7C Task 1: `identity.logSeed` (the caller's `RunIdentity`) is threaded
     // straight through onto the record `createMonitorRun` writes — not
     // dropped, not re-derived from the program.
     expect(opened?.v).toBe(2);
     expect(opened?.logSeed).toStrictEqual(LIBRARY_IDENTITY.logSeed);
 
-    for (let i = 0; i < 8; i += 1) tick(fake, 100);
+    for (let i = 0; i < 10; i += 1) tick(fake, 100);
 
     expect(result.current.phase).toBe("ended");
     expect(result.current.endedBy).toBe("machine");
-    expect(result.current.actuals).toHaveLength(4);
+    expect(result.current.actuals).toHaveLength(5);
 
     const closed = loadMonitorRun();
     expect(closed?.completedAt).toBe(t0.toISOString());
     // An honest WORKOUTEND, not a rower cutting it short — the distinction
-    // 7C needs ("logged 4 of 4" vs "abandoned at 2").
+    // 7C needs ("logged 5 of 5" vs "abandoned at 2").
     expect(closed?.terminated).toBe(false);
-    expect(closed?.actuals).toHaveLength(4);
+    expect(closed?.actuals).toHaveLength(5);
     expect(closed?.actuals[0]).toMatchObject({
       elapsedSeconds: 480,
       distanceMeters: 1600,
@@ -950,7 +983,7 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     // housekeeping, which the driver still emits (it never goes deaf) and
     // the record must still refuse.
     timeline.push({
-      atMs: 1000,
+      atMs: 1200,
       kind: "boundary",
       // Interval 0 (the warmup, no trailing rest) — the one index the fake
       // will deliver in a non-`resting` state, which is what a post-run
@@ -963,8 +996,8 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
         avgSpm: 18,
         avgHeartRateBpm: 90,
       },
-      cumulativeElapsedSeconds: 2472,
-      cumulativeDistanceMeters: 7640,
+      cumulativeElapsedSeconds: 3132,
+      cumulativeDistanceMeters: 9640,
     });
     const { result, fake } = harness({
       program: LIBRARY.program,
@@ -973,11 +1006,11 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
 
     await connect(result);
     await programAndArm(result, fake, LIBRARY.program, LIBRARY_IDENTITY);
-    for (let i = 0; i < 11; i += 1) tick(fake, 100);
+    for (let i = 0; i < 13; i += 1) tick(fake, 100);
 
     expect(result.current.phase).toBe("ended");
-    expect(result.current.actuals).toHaveLength(4);
-    expect(loadMonitorRun()?.actuals).toHaveLength(4);
+    expect(result.current.actuals).toHaveLength(5);
+    expect(loadMonitorRun()?.actuals).toHaveLength(5);
   });
 });
 

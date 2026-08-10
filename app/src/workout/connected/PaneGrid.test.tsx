@@ -275,9 +275,10 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("the fixtures are what this file says they are", () => {
-  it("Filling Low is a time warm-up then three distance reps", () => {
+  it("Filling Low is a time warm-up then four distance reps", () => {
     expect(kindsOf(FILLING_LOW)).toStrictEqual([
       "time",
+      "distance",
       "distance",
       "distance",
       "distance",
@@ -303,7 +304,7 @@ describe("the fixtures are what this file says they are", () => {
 describe("row states (handoff §3's three treatments)", () => {
   it("draws completed actuals, the active card and upcoming programmed values", () => {
     renderGrid({ actuals: [actualFor(0, FILLING_LOW.program)] });
-    expect(rows()).toHaveLength(4);
+    expect(rows()).toHaveLength(5);
 
     // 1 — COMPLETED: the machine's own numbers, over a solid rule.
     expect(row(1).className).toContain("connected-grid-completed");
@@ -320,8 +321,8 @@ describe("row states (handoff §3's three treatments)", () => {
     expect(row(2)).toHaveAttribute("aria-current", "step");
     expect(row(2).textContent).toContain("REMAINING · TARGET 2:06.0 · 6K +4");
 
-    // 3 and 4 — UPCOMING: the PROGRAMMED values, never an actual.
-    for (const n of [3, 4]) {
+    // 3, 4 and 5 — UPCOMING: the PROGRAMMED values, never an actual.
+    for (const n of [3, 4, 5]) {
       expect(row(n).className).toContain("connected-grid-upcoming");
       const next = cells(row(n));
       expect(next.meters).toBe("2000");
@@ -502,7 +503,7 @@ describe("distance intervals (handoff §3's distance rules)", () => {
   it("names the distance rows IN WORDS under the grid, never a glyph", () => {
     const many = renderGrid();
     expect(
-      screen.getByText("ROWS 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
+      screen.getByText("ROWS 2, 3, 4, 5 ARE 2000 M PIECES · METERS COUNT DOWN"),
     ).toBeInTheDocument();
     many.unmount();
 

@@ -14,7 +14,9 @@
 //   real interval-index normalization, not values a test typed in.
 //
 // Every fixture in this file is "Filling Low" from the seeded 300 (8:00
-// warm-up, then 3 × 2000 m with 3:00 rest), never a hand-built minimum.
+// warm-up, then 4 × 2000 m with 3:00 rest — retuned from 3 reps in Task 3,
+// 2026-08-10 library-rebalance, to reach its new 45-60 band), never a
+// hand-built minimum.
 
 import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
@@ -354,7 +356,7 @@ describe("pane A — the connected timer", () => {
   it("names the monitor, the interval and the state, all in ink", () => {
     renderSurface();
     expect(screen.getByText(DEVICE)).toBeInTheDocument();
-    expect(screen.getByText("INTERVAL 2 OF 4 · WORK")).toBeInTheDocument();
+    expect(screen.getByText("INTERVAL 2 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.getByText("ROWING")).toBeInTheDocument();
     expect(document.querySelector(".connected-line-mark-hollow")).toBeNull();
   });
@@ -996,9 +998,9 @@ describe("the connected walk, fake-driven", () => {
       "1:57.8",
     );
     // And the interval count is the PROGRAM's, normalized by the driver —
-    // interval 1 of Filling Low's 4 is its 8:00 warm-up, which is why the
+    // interval 1 of Filling Low's 5 is its 8:00 warm-up, which is why the
     // kind word is WARM-UP and not WORK.
-    expect(screen.getByText("1 OF 4 · WARM-UP")).toBeInTheDocument();
+    expect(screen.getByText("1 OF 5 · WARM-UP")).toBeInTheDocument();
 
     // THE PIN FOR THE ORDINAL ABOVE (task-7 review, L4). Pane A carries the
     // status word, and it is the one thing on this surface that reads the

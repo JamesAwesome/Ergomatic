@@ -123,11 +123,10 @@ const SHARE_CEILING = 0.6;
 // different and this whole table must be RE-MEASURED, not patched: a cell
 // whose debt looks unchanged may be carrying an entirely different pair.
 // Re-measure by running the audit and reading the failures.
-// RE-MEASURED after Task 3 (2026-08-10 library-rebalance) landed O2's
-// retunes: O2|30-45 and O2|60+ moved (comments below say how and why);
-// every other cell's count held (AT is not yet retuned — Task 3 lands it
-// second, in its own commit). Per this table's own rule, this is a
-// re-measurement, not a bid — the numbers are what `nearDuplicates`
+// RE-MEASURED after Task 3 (2026-08-10 library-rebalance) landed O2's and
+// AT's retunes: O2|30-45, O2|60+ and AT|30-45 moved (comments below say how
+// and why); every other cell's count held. Per this table's own rule, this
+// is a re-measurement, not a bid — the numbers are what `nearDuplicates`
 // actually reports over the retuned content, read from the failures this
 // task's own run produced, not adjusted by hand.
 const KNOWN_DEBT: Partial<Record<string, number>> = {
@@ -155,8 +154,24 @@ const KNOWN_DEBT: Partial<Record<string, number>> = {
   // fix-now-or-accept goes to James's gate-2 review table, not decided
   // here.
   "O2|60+": 6,
-  "AT|20-30": 3,
-  "AT|30-45": 2,
+  // AT|20-30: 3 -> 1. Every AT workout that used to sit in this cell and
+  // carried a debt pair retuned UP and out of it this task (into 30-45 and
+  // beyond); the 8 formerly-<20 AT workouts retuned INTO 20-30 to fill
+  // the seats they left brought no new pair with them. What remains is
+  // the one pair neither side of, untouched by this task: Frontal Wave <>
+  // Trough Axis (both 5-piece pyramids of the same total).
+  "AT|20-30": 1,
+  // AT|30-45: 2 -> 5. Retuning moved several AT workouts into this now-
+  // largest AT cell, landing five pairs against occupants close enough in
+  // shape/total: Anticyclone <> Jet Streak (both ~30' continuous singles
+  // at a 6k+ pace), Inversion Layer <> Gap Wind (both a long lead into a
+  // short repeated block, comparable total), Deepening Low <> Thermal
+  // Wind (both three/four-piece sets of comparable total), Thermal Low <>
+  // Heat Low (both flat reps sets landing at the same total this task's
+  // retune gave Heat Low), Occlusion Point <> Zonda (both five-piece
+  // pyramids of comparable total, pre-existing and now sharing this cell
+  // with the retunes above).
+  "AT|30-45": 5,
   "TR|<20": 1,
   "TR|20-30": 1,
   "TR|30-45": 1,
