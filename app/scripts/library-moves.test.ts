@@ -754,14 +754,21 @@ describe("the §6 fallback (block review M5)", () => {
     // exact case §6's dash rule governs ("fall back to the nearest populated
     // band of the same type"), and it was implemented nowhere. A flag that
     // borrows a range has to name where the range came from.
-    const groundSwell = LIBRARY_WORKOUTS.find(
-      (w) => w.title === "Ground Swell",
-    )!;
-    const sketch = buildSketch(groundSwell, "20-30", 8, BASELINES)!;
+    //
+    // Fixture note (Task 3, 2026-08-10 library-rebalance): this used to run
+    // on Ground Swell, but Ground Swell's own content was RETUNED this
+    // task (and then rest-grid- and created-value-corrected), which moved
+    // where its fresh sketch into 20-30 lands (`minutes` 20 -> 25) and so
+    // which book cell `bookCell()` computes (O2|20-30, no reps observation
+    // -> O2|30-45, which HAS one directly) — the fallback this test exists
+    // to prove no longer fires for that fixture. Slack Tide is untouched by
+    // this task's retunes and reproduces the same fallback shape.
+    const slackTide = LIBRARY_WORKOUTS.find((w) => w.title === "Slack Tide")!;
+    const sketch = buildSketch(slackTide, "20-30", 8, BASELINES)!;
     expect(sketch).not.toBeNull();
     const borrowed = sketch.issues.filter((i) => i.includes("§6 fallback"));
     expect(borrowed).toStrictEqual([
-      "reps 6 outside the cell's 2–4 [O2|30-45, §6 fallback] (inherited)",
+      "reps 5 outside the cell's 2–4 [O2|30-45, §6 fallback] (inherited)",
     ]);
   });
 
