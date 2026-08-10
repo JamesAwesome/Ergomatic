@@ -157,7 +157,45 @@ is single-archetype where it holds ≥4 workouts and no archetype exceeds
 (same archetype + same piece count + total within 10% + same offset
 band = near-duplicate) asserting zero pairs within a cell. These run in
 the seed test suite PERMANENTLY — variety becomes a pinned property of
-the library, not a one-time check. Thresholds are this spec's opening
+the library, not a one-time check.
+
+**(block review amendment, 2026-08-10)** The archetype is read over the
+expanded signature FIRST, and only where that says `mixed` do two
+reductions apply, in order: (1) set a LEAD piece aside — an opening piece
+whose duration stands outside the range of everything after it — and read
+the body; (2) read the BLOCK the sequence repeats, where the sequence is a
+whole number of repetitions of one, rather than the repetition. Both
+reductions are structural, read off the expansion itself and never off the
+`reps` marker, so the same session typed two ways classifies the same way.
+A workout the first reading already classified can never be reclassified
+by a reduction. Rationale: without this, a sequence that restarts is never
+globally monotonic, so every repeated block collapsed to `mixed` — which
+both mislabelled the content (`15' then 4× 3'` is a flat block with a
+lead, not "mixed"; `4× [75 s, 30 s]` is its own comment's "rounds of a
+ladder") and MANUFACTURED near-duplicate debt: AN|20-30's three flagged
+pairs were an artifact of the collapse, not content, and were on their way
+to James's §5 table dressed as content debt. The near-duplicate key gains
+the session's SHAPE for the same reason — the string of rung-to-rung
+directions over the expansion — so an ascending block and a descending one
+of the same length and total are not near-duplicates. Measured effect on
+today's library: 36 pairs → 26, no cell up, AN|20-30 3 → 0, and the
+O2|60+ cluster this audit exists to surface untouched at 4.
+
+**(block review pin, 2026-08-10)** §6's translation rule is ambiguous
+between "the cell the workout's CURRENT duration plus its warm-up occupies"
+and "the cell its RETUNED duration plus its warm-up occupies"; the rule's
+own worked example ("a retuned 27' workout that was 32' with its warm-up
+obeys the 30-45 cell's ranges") states the second, and the second is the
+one that matches how the book cells were bucketed in the first place — a
+book entry sits in the cell ITS OWN warm-up-inclusive duration falls in.
+So: **a retuned or replaced workout consults the cell that
+`band(its new work total + the warm-up it historically carried)` names**,
+with `band()`'s lower-inclusive edges (`library-balance.ts`'s own
+comparison, `m < 30 ? "20-30" : …`, so 30' bands as 30-45). A replacement,
+having no historical warm-up, consults the cell one band above its target
+(§m3's fix), which is the same rule with the nominal warm-up standing in.
+`library-moves.ts`'s `bookCell()` implements exactly this and its test
+quotes the worked example. Thresholds are this spec's opening
 bid; the implementation task calibrates them against the CURRENT
 library first (they must pass on today's content outside the deficient
 bands — a threshold today's library fails is a wrong threshold, flagged

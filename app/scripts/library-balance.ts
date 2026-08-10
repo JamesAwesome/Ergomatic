@@ -185,6 +185,40 @@ export function gridMismatches(
   return out;
 }
 
+/** The rebalance RATCHET (block review §7). `debt` is measured − target per
+ *  cell; `baseline` is the debt this branch started from, frozen. A cell
+ *  regresses if its distance from the target GREW, or if it overshot past
+ *  zero into the opposite sign — content that walked straight through the
+ *  cell it was aimed at.
+ *
+ *  This replaces an equality against a hand-maintained `OUTSTANDING`
+ *  constant, which could not tell content landing on target from content
+ *  landing in the wrong band with the constant edited to match: the only
+ *  invariants that form pinned were the per-type sum and "nets to zero",
+ *  and a compensating ∓1 pair survives both. Measuring the debt live and
+ *  holding each cell's |debt| non-increasing makes the phase's end state
+ *  (all zeros) a property instead of a promise. */
+export function debtRegressions(
+  counts: Record<string, number>,
+  target: Record<WorkoutType, Record<Band, number>>,
+  baseline: Record<WorkoutType, Record<Band, number>>,
+): string[] {
+  const out: string[] = [];
+  for (const type of TYPES) {
+    for (const b of BANDS) {
+      const cell = `${type}|${b}`;
+      const debt = (counts[cell] ?? 0) - target[type][b];
+      const was = baseline[type][b];
+      if (Math.abs(debt) > Math.abs(was)) {
+        out.push(`${cell}: debt ${debt}, worse than the baseline ${was}`);
+      } else if (debt !== 0 && Math.sign(debt) !== Math.sign(was)) {
+        out.push(`${cell}: debt ${debt} overshot the baseline ${was}`);
+      }
+    }
+  }
+  return out;
+}
+
 // One table per type: rows are BEFORE (optional) / AFTER / TARGET / DRIFT,
 // columns are the five bands plus a TOTAL column. Far more legible in a
 // PR body than one 20-column row.

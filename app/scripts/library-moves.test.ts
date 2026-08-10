@@ -2,13 +2,25 @@ import { describe, it, expect } from "vitest";
 import type { Step } from "../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import { BANDS, BASELINES, type Band } from "./library-balance.js";
+import patterns from "../domain/generation/patterns.json";
+import { classifyArchetype } from "../domain/generation/archetype.js";
 import {
   ANCHOR_TITLES,
   assignToGrid,
   bookCell,
   buildSketch,
   candidateGrids,
+  describeSteps,
+  landsLegally,
+  RATIO_FAMILY,
+  shapeIssues,
   DRAFT_GRID,
+  fmtClock,
+  libraryItems,
+  pieceFactors,
+  rawMinutes,
+  reviewReplay,
+  solveLibrary,
   type Grid,
   hallDeficit,
   reachable,
@@ -542,5 +554,300 @@ describe("DRAFT_GRID", () => {
         sum: BANDS.reduce((a, b) => a + row[b], 0),
       }).toStrictEqual({ type, sum: sums[type as keyof typeof sums] });
     }
+  });
+});
+
+// ---------------------------------------------------------------------
+// PHASE TRIPWIRES (block review M4)
+// ---------------------------------------------------------------------
+// Both tests below are tied to TODAY's seed content, deliberately. Nothing
+// currently connects `patterns.json`'s committed grid — which drives the
+// balance script AND the seed quota gate — to the solver that produced it,
+// and nothing pins the review replay the module's own header calls its
+// trustworthiness check ("If this stops matching … every number below it is
+// suspect"). Mutating the one-rep arm out of `reachable` used to kill two
+// unit tests and leave the committed grid and the committed move plan
+// silently stale.
+//
+// WHEN TASK 3/4 CONTENT LANDS THESE WILL FIRE. That is the signal, not a
+// regression: re-run `scripts/library-moves.ts`, re-read the move plan, and
+// then REPLACE these two with the phase's actual exit condition (§8 — the
+// library MATCHES `targets`), which is a statement about content rather
+// than about what the solver would still recommend.
+describe("phase tripwires", () => {
+  it("patterns.json's committed targets are the grid this solver produces", () => {
+    const solved = solveLibrary(
+      libraryItems().map((r) => r.item),
+      DRAFT_GRID,
+    );
+    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+      expect({ type, grid: solved[type].grid }).toStrictEqual({
+        type,
+        grid: patterns.targets[type],
+      });
+    }
+  });
+
+  it("the adversarial review's published numbers still replay", () => {
+    // docs/superpowers/specs/2026-08-10-rebalance-adversarial-review.md B1.
+    const replay = reviewReplay();
+    expect(replay.crossers).toBe(144);
+    expect(replay.unreachable).toBe(40);
+    expect(replay.deficits).toStrictEqual({ O2: 3, AT: 4, TR: 6, AN: 8 });
+  });
+});
+
+describe("the real clock (block review M2)", () => {
+  it("rawMinutes is the unrounded total estimateMinutes rounds", () => {
+    // 3 × 250 m at 2k+0 = 3 × 56 s = 2:48, which estimateMinutes calls 3'.
+    const steps: Step[] = [
+      { k: "reps", count: 3 },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 250 },
+        ref: { base: "2k", off: 0 },
+        spm: 26,
+      },
+    ];
+    expect(rawMinutes(steps, BASELINES)).toBeCloseTo(2.8, 6);
+    expect(fmtClock(rawMinutes(steps, BASELINES))).toBe("2:48");
+    expect(fmtClock(30)).toBe("30'");
+  });
+
+  it("refuses a sketch that only reaches its band after rounding", () => {
+    // TR Head Sea: 15:48 on the clock, 16' rounded. The solve may assign it
+    // to 20-30 on the rounded clock, but +25% of 15:48 is 19:45 and no
+    // sketch can be built — it belongs in the replacement residual.
+    const headSea = LIBRARY_WORKOUTS.find((w) => w.title === "Head Sea")!;
+    expect(rawMinutes(headSea.steps, BASELINES)).toBeLessThan(16);
+    expect(buildSketch(headSea, "20-30", 5, BASELINES)).toBeNull();
+  });
+
+  it("every sketch it does build lands on a 0/5 minute of REAL time", () => {
+    const cirrus = LIBRARY_WORKOUTS.find((w) => w.title === "Cirrus")!;
+    const sketch = buildSketch(cirrus, "45-60", 5, BASELINES)!;
+    expect(sketch).not.toBeNull();
+    expect(sketch.raw).toBe(45);
+    expect(sketch.raw % 5).toBeCloseTo(0, 9);
+    // Its one flag is a book-range observation on the destination cell that
+    // the sketch inherits without touching (reps 5 vs O2|45-60's 2–3), not a
+    // house-rule breach.
+    expect(
+      sketch.issues.filter((i) => !i.includes("(inherited)")),
+    ).toStrictEqual([]);
+  });
+});
+
+describe("shape preservation (block review C1)", () => {
+  it("keeps a pyramid a pyramid, with its peak where it was", () => {
+    // AN Downburst: 45/60/90/60/45 s all out. The old builder made it
+    // 1 / 1.5 / 1.4167 / 1.5 / 1 — the middle rung stopped being the peak.
+    const downburst = LIBRARY_WORKOUTS.find((w) => w.title === "Downburst")!;
+    const sketch = buildSketch(downburst, "20-30", 6, BASELINES)!;
+    expect(sketch).not.toBeNull();
+    expect(classifyArchetype(sketch.steps).archetype).toBe("pyramid");
+    const lengths = sketch.steps
+      .filter((s) => s.k === "w")
+      .map((s) => (s.duration.kind === "time" ? s.duration.minutes : 0));
+    const peak = lengths.indexOf(Math.max(...lengths));
+    expect(peak).toBe(2);
+    expect(lengths[0]).toBe(lengths[4]);
+    expect(lengths[1]).toBe(lengths[3]);
+  });
+
+  it("keeps a uniform block uniform, and never shrinks a piece inside a stretch", () => {
+    // AT Confluence Zone: a flat 6× 2'. The old builder opened it with a
+    // 1:40 piece — shorter than before — in a workout being stretched.
+    const cz = LIBRARY_WORKOUTS.find((w) => w.title === "Confluence Zone")!;
+    const sketch = buildSketch(cz, "20-30", 6, BASELINES)!;
+    expect(sketch).not.toBeNull();
+    expect(classifyArchetype(sketch.steps).archetype).toBe("nxtime");
+    const factors = pieceFactors(cz.steps, sketch.steps);
+    expect(new Set(factors).size).toBe(1);
+    expect(Math.min(...factors)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps a uniform distance set uniform", () => {
+    // TR Gulf Stream: 8× 500 m. The old builder made one piece 750 m.
+    const gs = LIBRARY_WORKOUTS.find((w) => w.title === "Gulf Stream")!;
+    const sketch = buildSketch(gs, "30-45", 5, BASELINES)!;
+    expect(sketch).not.toBeNull();
+    const metres = sketch.steps
+      .filter((s) => s.k === "w")
+      .map((s) => (s.duration.kind === "distance" ? s.duration.meters : 0));
+    expect(new Set(metres).size).toBe(1);
+  });
+
+  it("reports the per-piece factors it actually applied, not one nominal number", () => {
+    const cz = LIBRARY_WORKOUTS.find((w) => w.title === "Confluence Zone")!;
+    const sketch = buildSketch(cz, "20-30", 6, BASELINES)!;
+    const [lo, hi] = sketch.pieceFactorRange;
+    expect(lo).toBeLessThanOrEqual(hi);
+    expect(
+      pieceFactors(cz.steps, sketch.steps).every((f) => f >= lo && f <= hi),
+    ).toBe(true);
+  });
+});
+
+describe("describeSteps (block review M1)", () => {
+  it("keeps a lead piece OUT of the repeated block", () => {
+    // AT Gap Wind: a 10' lead then 3× 3'. The old renderer swept the lead
+    // into the block and printed a 39' workout in the artifact James signs.
+    const gapWind = LIBRARY_WORKOUTS.find((w) => w.title === "Gap Wind")!;
+    const rendered = describeSteps(gapWind.steps);
+    expect(rendered).toBe("10' @6k+3 spm24 r3' + 3× [3' @6k-2 spm26 r1']");
+    expect(rendered.startsWith("3×")).toBe(false);
+  });
+
+  it("still wraps a bare repeated block, and renders a flat workout unwrapped", () => {
+    const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret")!;
+    expect(describeSteps(seaFret.steps)).toBe("2× [4' @6k+12 spm22 r1']");
+    const haar = LIBRARY_WORKOUTS.find((w) => w.title === "Haar")!;
+    expect(describeSteps(haar.steps)).not.toContain("×");
+  });
+
+  it("renders seconds, because 29:45 is not 30 minutes", () => {
+    expect(describeSteps([work(4.25)])).toContain("4:15");
+  });
+});
+
+describe("the §6 fallback (block review M5)", () => {
+  it("borrows the nearest populated band when this cell saw no observation", () => {
+    // O2|20-30's book row carries no `repsCount` observation at all — the
+    // exact case §6's dash rule governs ("fall back to the nearest populated
+    // band of the same type"), and it was implemented nowhere. A flag that
+    // borrows a range has to name where the range came from.
+    const groundSwell = LIBRARY_WORKOUTS.find(
+      (w) => w.title === "Ground Swell",
+    )!;
+    const sketch = buildSketch(groundSwell, "20-30", 8, BASELINES)!;
+    expect(sketch).not.toBeNull();
+    const borrowed = sketch.issues.filter((i) => i.includes("§6 fallback"));
+    expect(borrowed).toStrictEqual([
+      "reps 6 outside the cell's 2–4 [O2|30-45, §6 fallback] (inherited)",
+    ]);
+  });
+
+  it("says nothing about an axis the book never observed anywhere in the type", () => {
+    // The fallback walks outward and stops; it never invents a range.
+    const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret")!;
+    const sketch = buildSketch(seaFret, "<20", 5, BASELINES);
+    expect(sketch?.issues.some((i) => i.includes("undefined"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------
+// The two predicates the sketch search is BUILT on, tested directly.
+// The search only ever offers them candidates a uniform scale produced, so
+// exercising them through `buildSketch` cannot reach their failing arms —
+// and a guard whose failing arm no test reaches is a guard that can be
+// deleted without anyone noticing. These are the arms.
+// ---------------------------------------------------------------------
+describe("shapeIssues", () => {
+  const flat = [work(4), work(4), work(4)];
+
+  it("passes a uniform stretch of a uniform block", () => {
+    expect(
+      shapeIssues(flat, [work(5), work(5), work(5)], true, BASELINES),
+    ).toStrictEqual([]);
+  });
+
+  it("catches an archetype change", () => {
+    const pyramid = [work(2), work(4), work(2)];
+    const wrecked = [work(3), work(4), work(5)];
+    expect(shapeIssues(pyramid, wrecked, true, BASELINES).join("; ")).toContain(
+      "archetype pyramid → ladder",
+    );
+  });
+
+  it("catches a shape change the archetype label survives", () => {
+    // Both are ladders. One climbs, the other falls. Same label, opposite
+    // workout — this is the arm that only the shape string can see.
+    const up = [work(2), work(4)];
+    const down = [work(4), work(2)];
+    expect(shapeIssues(up, down, true, BASELINES).join("; ")).toContain(
+      "piece-to-piece shape changed",
+    );
+  });
+
+  it("catches a piece moving against the tide", () => {
+    // Both ascending ladders, both signing "+", but the opening piece
+    // SHRANK inside a stretch — the exact thing the block review found in
+    // AT Confluence Zone.
+    const before = [work(2), work(4)];
+    const after = [work(1), work(6)];
+    expect(shapeIssues(before, after, true, BASELINES).join("; ")).toContain(
+      "against the tide",
+    );
+  });
+
+  it("catches the recovery being scaled out of the same ratio family", () => {
+    const before = [work(5, 5), work(5)];
+    const after = [work(5, 0.5), work(5)];
+    expect(shapeIssues(before, after, true, BASELINES).join("; ")).toContain(
+      "work:rest left its family",
+    );
+    // …and tolerates a drift inside it.
+    const nudged = [work(5, 5 * (1 + RATIO_FAMILY / 2)), work(5)];
+    expect(shapeIssues(before, nudged, true, BASELINES)).toStrictEqual([]);
+  });
+
+  it("catches a recovery appearing where there was none", () => {
+    expect(
+      shapeIssues(
+        [work(5), work(5)],
+        [work(5, 2), work(5)],
+        true,
+        BASELINES,
+      ).join("; "),
+    ).toContain("recovery appeared or vanished");
+  });
+
+  it("lets the one-rep arm add a cycle without calling it a shape change", () => {
+    const before: Step[] = [{ k: "reps", count: 2 }, work(5, 1)];
+    const after: Step[] = [{ k: "reps", count: 3 }, work(5, 1)];
+    expect(
+      shapeIssues(before, after, true, BASELINES, "one-rep"),
+    ).toStrictEqual([]);
+    // The same pair judged as a scaling sketch IS a shape change.
+    expect(
+      shapeIssues(before, after, true, BASELINES, "scale").join("; "),
+    ).toContain("piece-to-piece shape changed");
+  });
+});
+
+describe("landsLegally", () => {
+  // 4 × [4' + 1'] = 20' exactly; window [15, 25].
+  const r = reachable(
+    [{ k: "reps", count: 4 }, work(4, 1)] as Step[],
+    BASELINES,
+  );
+
+  it("holds a time-computable total to an EXACT 0/5 minute of real time", () => {
+    expect(landsLegally(20, "20-30", r, false)).toBe(true);
+    // 20:15. Rounds to 20', which is what the old check saw and accepted.
+    expect(landsLegally(20.25, "20-30", r, false)).toBe(false);
+    expect(landsLegally(22, "20-30", r, false)).toBe(false);
+  });
+
+  it("bands on the real clock, not on the rounded minute", () => {
+    // 19:45 rounds to 20' and is NOT in 20-30.
+    expect(landsLegally(19.75, "20-30", r, false)).toBe(false);
+    expect(landsLegally(19.75, "<20", r, false)).toBe(false); // not 0/5
+    expect(landsLegally(19.75, "<20", r, true)).toBe(true); // exempt
+    expect(landsLegally(15, "<20", r, false)).toBe(true);
+  });
+
+  it("refuses anything outside the ±25% window", () => {
+    // The window is [15, 25]: 25 is the last legal total, 30 is past it and
+    // 10 is under the floor.
+    expect(landsLegally(25, "20-30", r, false)).toBe(true);
+    expect(landsLegally(30, "30-45", r, false)).toBe(false);
+    expect(landsLegally(10, "<20", r, false)).toBe(false);
+  });
+
+  it("exempts a distance-involved workout from the 0/5 rule, not from the band", () => {
+    expect(landsLegally(20.25, "20-30", r, true)).toBe(true);
+    expect(landsLegally(19.75, "20-30", r, true)).toBe(false);
   });
 });

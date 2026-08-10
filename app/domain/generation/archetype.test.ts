@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { classifyArchetype, nearDuplicates } from "./archetype.js";
+import {
+  classifyArchetype,
+  nearDuplicates,
+  smallestPeriod,
+  structureSignature,
+} from "./archetype.js";
 import type { PaceRef, Step, WorkDuration, WorkoutInput } from "../types.js";
 
 // ---------------------------------------------------------------------
@@ -39,27 +44,28 @@ import type { PaceRef, Step, WorkDuration, WorkoutInput } from "../types.js";
 // | Pressure Ridge      | AT | at.ts:57   | [1,2,3,2,1]                   | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
 // | Benguela Current    | TR | tr.ts:176  | [250,500,750,500,250] (dist)  | pyramid, rc=TRUE      | strict up-down, spm 26/24/24/24/26 |
 // | Beaver Tail         | AN | an.ts:86   | [.5,.75,1,.75,.5]             | pyramid, rc=TRUE      | strict up-down, spm 30/28/26/28/30 |
-// | Baroclinic Zone     | AT | at.ts:454  | [3,2,3,2,3,2] (reps 3 x [3,2])| MIXED, rc=TRUE        | expanded seq is up-down-up-down-up-down, not a single up-then-down arc — not monotonic, not a pyramid shape either |
-// | Giant Hail          | AN | an.ts:1111 | [1.25,.5]x4 (reps 4, effort)  | MIXED (disagreement — see below), rc=false | expanded is a repeated 2-cycle, non-monotonic |
-// | Flash Flood         | AN | an.ts:1152 | [.5,.75,1,1.5]x2 (reps 2)     | MIXED (disagreement — see below), rc=TRUE | expanded ascending-block-x2 is non-monotonic overall |
-// | Bomb Cyclone        | AN | an.ts:1514 | [1.25,1,.75,.5]x2 (reps 2)    | MIXED (disagreement — see below), rc=false | expanded descending-block-x2 is non-monotonic overall |
+// | Baroclinic Zone     | AT | at.ts:454  | [3,2,3,2,3,2] (reps 3 x [3,2])| ladder, rc=TRUE (RE-ADJUDICATED, block review) | the expansion is up-down-up-down, but it is exactly 3 repetitions of a 2-rung descending block |
+// | Giant Hail          | AN | an.ts:1111 | [1.25,.5]x4 (reps 4, effort)  | ladder, rc=false (RE-ADJUDICATED) | 4 repetitions of a 2-rung descending block — the comment's own "rounds of a ladder" |
+// | Flash Flood         | AN | an.ts:1152 | [.5,.75,1,1.5]x2 (reps 2)     | ladder, rc=TRUE (RE-ADJUDICATED)  | 2 repetitions of a 4-rung ASCENDING block |
+// | Bomb Cyclone        | AN | an.ts:1514 | [1.25,1,.75,.5]x2 (reps 2)    | ladder, rc=false (RE-ADJUDICATED) | 2 repetitions of a 4-rung DESCENDING block |
 // | Sundowner           | TR | tr.ts:1388 | [1000,500,250,500,1000] (dist)| MIXED (disagreement — see below), rc=TRUE | a VALLEY (down-then-up), not a peak — §5b's pyramid is "strictly up then strictly down" only |
 // | Debris Flow         | AN | an.ts:1190 | [1.5,1.25,1,.75,.5], last=effort | ladder, rc=TRUE    | strictly decreasing durations; ref kind (4 split + 1 effort) does not affect archetype |
 //
-// DISAGREEMENTS resolved in the classifier's favor (documented, not
-// silently absorbed):
-//  - Giant Hail/Flash Flood/Bomb Cyclone: their own seed comments call
-//    these "rounds of a ladder"/"ascending"/"descending" — a human
-//    skimming the comment reaches for "ladder". But the classifier
-//    operates over the FULL liveSteps-expanded signature (this task's own
-//    interface contract), and repeating a 2-4 step block via a `reps`
-//    marker makes the whole sequence non-monotonic the moment the block
-//    repeats (up-down-up-down, never a single monotonic run). "mixed" is
-//    the computably correct answer; it also happens to be the reading
-//    that makes `nearDuplicates` group these three together on
-//    (archetype, pieceCount, ~total, effortShare) — see the M3 test below,
-//    which asserts that grouping explicitly rather than treating it as an
-//    accident.
+// RE-ADJUDICATED under the §5b BLOCK REVIEW AMENDMENT (2026-08-10). The
+// four rows above marked RE-ADJUDICATED were originally labelled `mixed`
+// and the classifier agreed, because the first reading of §5b judged only
+// the fully expanded sequence and a sequence that restarts is never
+// globally monotonic. The block review found that collapse doing real
+// damage: it is what manufactured `AN|20-30`'s three "near-duplicates"
+// (Giant Hail / Flash Flood / Bomb Cyclone), three sessions no content
+// reviewer would call the same. The amended definition reads the expansion
+// FIRST and, only where that says `mixed`, reads the block the sequence
+// repeats — so these four now classify as what their own seed comments
+// always called them. The hand labels here are the AMENDED spec, and the
+// classifier earns them; the human reading and the computable one now
+// agree, which is the whole point of the amendment.
+//
+// One disagreement SURVIVES the amendment, unchanged:
 //  - Sundowner: the seed comment itself calls it "the pyramid upside
 //    down" — but a valley is the mirror image of the shape §5b defines
 //    ("strictly up then strictly down"), not an instance of it. The
@@ -267,11 +273,42 @@ describe("classifyArchetype", () => {
       });
     });
 
-    it("a tied rung then a fall (synthetic) is NOT a ladder — the same strictness guard on the decreasing side", () => {
+    it("a plateau the lead reduction cannot rescue (synthetic) is NOT a ladder — the strictness guard on the decreasing side", () => {
+      // [6,4,4,3]: the head stands apart, so the amendment does read the
+      // body — and the body [4,4,3] has a tie, so it is still not a ladder.
       const steps = [
         w(t(6), { base: "6k", off: 10 }, 20),
         w(t(4), { base: "6k", off: 10 }, 20),
         w(t(4), { base: "6k", off: 10 }, 20),
+        w(t(3), { base: "6k", off: 10 }, 20),
+      ];
+      expect(classifyArchetype(steps)).toStrictEqual({
+        archetype: "mixed",
+        rateChange: false,
+      });
+    });
+
+    it("RE-ADJUDICATED: [6,4,4] is a lead piece in front of a flat pair, not a plateau -> nxtime", () => {
+      // Originally labelled `mixed` on the whole-expansion reading. Under
+      // the amendment the 6' head stands outside the body's range, so the
+      // body [4,4] is read on its own: two equal pieces after a longer
+      // opener — Katabatic Wind's shape in miniature.
+      const steps = [
+        w(t(6), { base: "6k", off: 10 }, 20),
+        w(t(4), { base: "6k", off: 10 }, 20),
+        w(t(4), { base: "6k", off: 10 }, 20),
+      ];
+      expect(classifyArchetype(steps)).toStrictEqual({
+        archetype: "nxtime",
+        rateChange: false,
+      });
+    });
+
+    it("a head INSIDE the body's range is a plateau, not a lead: [2,2,3] stays mixed", () => {
+      const steps = [
+        w(t(2), { base: "6k", off: 10 }, 20),
+        w(t(2), { base: "6k", off: 10 }, 20),
+        w(t(3), { base: "6k", off: 10 }, 20),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
         archetype: "mixed",
@@ -352,31 +389,46 @@ describe("classifyArchetype", () => {
   });
 
   describe("mixed — the fallback bucket, including two documented disagreements", () => {
-    it("Baroclinic Zone (at.ts:454): reps 3 x [3',2'] expands to a repeating up-down-up-down sequence", () => {
+    it("Baroclinic Zone (at.ts:454): reps 3 x [3',2'] is a 2-rung descending block played three times -> ladder", () => {
       const steps = [
         reps(3),
         w(t(3), { base: "6k", off: 4 }, 22, 1),
         w(t(2), { base: "6k", off: -1 }, 26, 1),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
-        archetype: "mixed",
+        archetype: "ladder",
         rateChange: true,
       });
     });
 
-    it("DISAGREEMENT: Giant Hail (an.ts:1111) reads as 'a ladder' in its own comment but expands to a non-monotonic repeated 2-cycle -> mixed", () => {
+    it("…and the SAME six pieces typed out flat classify identically — the period is read off the sequence, not off the marker", () => {
+      const flat = [
+        w(t(3), { base: "6k", off: 4 }, 22, 1),
+        w(t(2), { base: "6k", off: -1 }, 26, 1),
+        w(t(3), { base: "6k", off: 4 }, 22, 1),
+        w(t(2), { base: "6k", off: -1 }, 26, 1),
+        w(t(3), { base: "6k", off: 4 }, 22, 1),
+        w(t(2), { base: "6k", off: -1 }, 26, 1),
+      ];
+      expect(classifyArchetype(flat)).toStrictEqual({
+        archetype: "ladder",
+        rateChange: true,
+      });
+    });
+
+    it("AMENDED: Giant Hail (an.ts:1111) is 4 rounds of a 2-rung descending block — its comment's own 'ladder', now computable", () => {
       const steps = [
         reps(4),
         w(t(1.25), { effort: "max" }, 32, 2),
         w(t(0.5), { effort: "max" }, 32, 2.5),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
-        archetype: "mixed",
+        archetype: "ladder",
         rateChange: false,
       });
     });
 
-    it("DISAGREEMENT: Flash Flood (an.ts:1152) 'ascending' block x2 is non-monotonic across the whole expansion -> mixed", () => {
+    it("AMENDED: Flash Flood (an.ts:1152) is an ASCENDING 4-rung block played twice -> ladder", () => {
       const steps = [
         reps(2),
         w(t(0.5), { effort: "max" }, 32, 1.5),
@@ -385,12 +437,12 @@ describe("classifyArchetype", () => {
         w(t(1.5), { effort: "max" }, 30, 3.75),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
-        archetype: "mixed",
+        archetype: "ladder",
         rateChange: true,
       });
     });
 
-    it("DISAGREEMENT: Bomb Cyclone (an.ts:1514) 'descending' block x2 is non-monotonic across the whole expansion -> mixed", () => {
+    it("AMENDED: Bomb Cyclone (an.ts:1514) is a DESCENDING 4-rung block played twice -> ladder", () => {
       const steps = [
         reps(2),
         w(t(1.25), { effort: "max" }, 32, 3),
@@ -399,7 +451,7 @@ describe("classifyArchetype", () => {
         w(t(0.5), { effort: "max" }, 32, 1.5),
       ];
       expect(classifyArchetype(steps)).toStrictEqual({
-        archetype: "mixed",
+        archetype: "ladder",
         rateChange: false,
       });
     });
@@ -529,7 +581,40 @@ describe("nearDuplicates", () => {
     expect(pairs[0]!.pieceCount).toBe(6);
   });
 
-  it("the EffortRef arm (effort share + archetype + duration) groups Giant Hail/Bomb Cyclone despite neither having an offset to band (M3's original gap)", () => {
+  it("the EffortRef arm (effort share + archetype + duration) pairs two all-out sets with no offset to band (M3's original gap)", () => {
+    const giantHail = workout(
+      "Giant Hail",
+      [
+        reps(4),
+        w(t(1.25), { effort: "max" }, 32, 2),
+        w(t(0.5), { effort: "max" }, 32, 2.5),
+      ],
+      "AN",
+    );
+    // Same build, same shape, nothing to band an offset on — the arm has to
+    // catch this pair or it catches nothing.
+    const twin = workout(
+      "Giant Hail's Twin",
+      [
+        reps(4),
+        w(t(1.5), { effort: "max" }, 32, 2),
+        w(t(0.5), { effort: "max" }, 32, 2.25),
+      ],
+      "AN",
+    );
+    const pairs = nearDuplicates([giantHail, twin], BASELINES);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]!.archetype).toBe("ladder");
+    expect(pairs[0]!.pieceCount).toBe(8);
+    expect(pairs[0]!.build).toBe("-+-+-+-");
+  });
+
+  it("BLOCK REVIEW: Giant Hail and Bomb Cyclone are NOT near-duplicates — same archetype and piece count, opposite builds", () => {
+    // The manufactured debt the amendment removes. Both are 8-piece all-out
+    // ladders at 25', and under the pre-amendment key (which had no build
+    // component and called both `mixed`) they were counted as a pair in
+    // AN|20-30. A 2-rung block played four times is not a 4-rung block
+    // played twice, and neither is a descending block an ascending one.
     const giantHail = workout(
       "Giant Hail",
       [
@@ -550,10 +635,24 @@ describe("nearDuplicates", () => {
       ],
       "AN",
     );
-    const pairs = nearDuplicates([giantHail, bombCyclone], BASELINES);
-    expect(pairs).toHaveLength(1);
-    expect(pairs[0]!.archetype).toBe("mixed");
-    expect(pairs[0]!.pieceCount).toBe(8);
+    const flashFlood = workout(
+      "Flash Flood",
+      [
+        reps(2),
+        w(t(0.5), { effort: "max" }, 32, 1.5),
+        w(t(0.75), { effort: "max" }, 32, 2),
+        w(t(1), { effort: "max" }, 30, 2.5),
+        w(t(1.5), { effort: "max" }, 30, 3.75),
+      ],
+      "AN",
+    );
+    expect(
+      nearDuplicates([giantHail, bombCyclone, flashFlood], BASELINES),
+    ).toStrictEqual([]);
+    // …and the three builds are what separate them.
+    expect(structureSignature(giantHail.steps)).toBe("-+-+-+-");
+    expect(structureSignature(bombCyclone.steps)).toBe("---+---");
+    expect(structureSignature(flashFlood.steps)).toBe("+++-+++");
   });
 
   it("an effort-only workout never collides with a split-only workout even when archetype/pieces/total all match", () => {
@@ -678,5 +777,52 @@ describe("nearDuplicates", () => {
     const a = workout("A", [w(t(20), { base: "6k", off: 12 }, 20)]);
     const b = workout("B", [w(t(25), { base: "6k", off: 12 }, 20)]);
     expect(nearDuplicates([a, b], BASELINES)).toHaveLength(0);
+  });
+});
+
+describe("smallestPeriod (the §5b block review amendment's own instrument)", () => {
+  it("finds the shortest block a sequence repeats, and nothing else", () => {
+    expect(smallestPeriod([3, 2, 3, 2, 3, 2])).toBe(2);
+    expect(smallestPeriod([1, 2, 3, 4, 1, 2, 3, 4])).toBe(4);
+    expect(smallestPeriod([5, 5, 5, 5])).toBe(1);
+    // A period must divide the length AND actually repeat: three cycles of
+    // [3,2] plus a stray 3 is not periodic at all.
+    expect(smallestPeriod([3, 2, 3, 2, 3, 2, 3])).toBeNull();
+    expect(smallestPeriod([1, 2, 3])).toBeNull();
+    // The whole sequence is never its own period — that would make every
+    // sequence "repeating" and the reduction a no-op that always fires.
+    expect(smallestPeriod([4])).toBeNull();
+    expect(smallestPeriod([4, 7])).toBeNull();
+  });
+});
+
+describe("structureSignature", () => {
+  it("signs the expansion's rung-to-rung directions, so authoring form drops out", () => {
+    const block = [
+      reps(3),
+      w(t(3), { base: "6k", off: 4 }, 22, 1),
+      w(t(2), { base: "6k", off: -1 }, 26, 1),
+    ];
+    const flat = [
+      w(t(3), { base: "6k", off: 4 }, 22, 1),
+      w(t(2), { base: "6k", off: -1 }, 26, 1),
+      w(t(3), { base: "6k", off: 4 }, 22, 1),
+      w(t(2), { base: "6k", off: -1 }, 26, 1),
+      w(t(3), { base: "6k", off: 4 }, 22, 1),
+      w(t(2), { base: "6k", off: -1 }, 26, 1),
+    ];
+    expect(structureSignature(block)).toBe("-+-+-");
+    expect(structureSignature(flat)).toBe(structureSignature(block));
+    // A single piece has no rung-to-rung anything.
+    expect(structureSignature([w(t(60), { base: "6k", off: 12 }, 20)])).toBe(
+      "",
+    );
+    // Equal rungs sign as "=", which is how a flat block stays flat.
+    expect(
+      structureSignature([
+        w(t(4), { base: "6k", off: 12 }, 20),
+        w(t(4), { base: "6k", off: 12 }, 20),
+      ]),
+    ).toBe("=");
   });
 });
