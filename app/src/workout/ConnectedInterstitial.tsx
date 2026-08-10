@@ -287,7 +287,12 @@ export default function ConnectedInterstitial({
   if (session.phase === "picking") {
     // The chooser (plugin sheet on iOS, browser chrome on web) floats over
     // this quiet backdrop — before phone-BLE this branch returned null and
-    // iOS drew its sheet over blank white (spec §5).
+    // iOS drew its sheet over blank white (spec §5). Deliberate side effect:
+    // mounting `.connected-interstitial` also trips `index.css`'s
+    // `.app-shell:has(.connected-interstitial)` rule, hiding the tab bar
+    // for the duration of the chooser too, same as every other connected
+    // state — the chooser is modal, and this is a monitor-flow screen like
+    // the rest of them, not a moment to show tab navigation underneath.
     return (
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">
@@ -424,7 +429,12 @@ export default function ConnectedInterstitial({
               <button
                 type="button"
                 className="button-l1"
-                onClick={() => void openAppSettings()}
+                // Best-effort, the same idiom `keepAwake.ts`'s own catches
+                // use: a rejected `BleClient.openAppSettings()` never
+                // breaks the card — there's nothing more useful to do with
+                // a plugin failure here, and Try again still stands either
+                // way.
+                onClick={() => void openAppSettings().catch(() => undefined)}
               >
                 Open Settings
               </button>
