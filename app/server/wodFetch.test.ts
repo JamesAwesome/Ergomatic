@@ -6,6 +6,7 @@ import {
   appendNew,
   extractWod,
   fetchRange,
+  parseCliArgs,
 } from "../../scripts/wod/fetch-wods.mjs";
 
 const FIXTURE = readFileSync(
@@ -143,5 +144,98 @@ describe("fetchRange", () => {
     expect(lines[0].error).toMatch(/404/);
     expect(lines[1].title).toBe("6 x 500m / 1 min easy");
     expect(res.appended).toBe(2);
+  });
+});
+
+describe("parseCliArgs", () => {
+  it("parses a valid --date into a same-day range", () => {
+    expect(parseCliArgs(["--date", "2026-08-10"])).toStrictEqual({
+      mode: "date",
+      from: "2026-08-10",
+      to: "2026-08-10",
+      out: undefined,
+    });
+  });
+
+  it("parses a valid --range in order", () => {
+    expect(parseCliArgs(["--range", "2026-08-01", "2026-08-10"])).toStrictEqual(
+      {
+        mode: "range",
+        from: "2026-08-01",
+        to: "2026-08-10",
+        out: undefined,
+      },
+    );
+  });
+
+  it("carries --out through for both modes", () => {
+    expect(
+      parseCliArgs(["--date", "2026-08-10", "--out", "/tmp/x.jsonl"]),
+    ).toMatchObject({ out: "/tmp/x.jsonl" });
+    expect(
+      parseCliArgs([
+        "--range",
+        "2026-08-01",
+        "2026-08-10",
+        "--out",
+        "/tmp/x.jsonl",
+      ]),
+    ).toMatchObject({ out: "/tmp/x.jsonl" });
+  });
+
+  it("rejects a missing --date argument, not a silent no-op", () => {
+    const r = parseCliArgs(["--date"]);
+    expect(r.mode).toBeUndefined();
+    expect(r.error).toMatch(/--date/);
+  });
+
+  it("rejects a malformed --date (bad calendar date), not a silent no-op", () => {
+    const r = parseCliArgs(["--date", "2026-13-45"]);
+    expect(r.mode).toBeUndefined();
+    expect(r.error).toMatch(/--date/);
+  });
+
+  it("rejects a --date that round-trips to a different calendar date (Feb 31)", () => {
+    const r = parseCliArgs(["--date", "2026-02-31"]);
+    expect(r.mode).toBeUndefined();
+    expect(r.error).toMatch(/--date/);
+  });
+
+  it("rejects a --range with a malformed FROM", () => {
+    const r = parseCliArgs(["--range", "not-a-date", "2026-08-10"]);
+    expect(r.mode).toBeUndefined();
+    expect(r.error).toMatch(/--range/);
+  });
+
+  it("rejects a --range with a missing TO", () => {
+    const r = parseCliArgs(["--range", "2026-08-01"]);
+    expect(r.mode).toBeUndefined();
+    expect(r.error).toMatch(/--range/);
+  });
+
+  it("rejects a --range with reversed bounds (FROM after TO)", () => {
+    const r = parseCliArgs(["--range", "2026-08-10", "2026-08-01"]);
+    expect(r.mode).toBeUndefined();
+    expect(r.error).toMatch(/2026-08-10/);
+    expect(r.error).toMatch(/2026-08-01/);
+  });
+
+  it("accepts a --range with equal bounds (single day via --range)", () => {
+    expect(parseCliArgs(["--range", "2026-08-10", "2026-08-10"])).toStrictEqual(
+      {
+        mode: "range",
+        from: "2026-08-10",
+        to: "2026-08-10",
+        out: undefined,
+      },
+    );
+  });
+
+  it("rejects no mode given, with a usage message", () => {
+    const r = parseCliArgs([]);
+    expect(r.mode).toBeUndefined();
+    expect(r.error).toMatch(/usage/i);
+    expect(r.error).toMatch(/--date/);
+    expect(r.error).toMatch(/--range/);
   });
 });

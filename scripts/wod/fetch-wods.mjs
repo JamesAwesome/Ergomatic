@@ -72,6 +72,65 @@ export function appendNew(records, jsonlPath) {
   return { appended, skipped };
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** True only for a real calendar date in strict YYYY-MM-DD shape: the
+ *  regex alone accepts `2026-13-45`, so this round-trips the string
+ *  through `Date` and rejects anything that normalizes to a different
+ *  day (Feb 31, month 13, and so on) or fails to parse at all. */
+function isValidDate(s) {
+  if (typeof s !== "string" || !DATE_RE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+const USAGE =
+  "usage: fetch-wods.mjs --date YYYY-MM-DD | --range FROM TO [--out PATH]";
+
+/** Parses argv (already sliced past the node/script path) into a fetch
+ *  request or an error, never a silent no-op: a missing/malformed date,
+ *  a reversed --range, or no mode at all all come back as `{ error }`
+ *  instead of a mode that quietly fetches nothing. Pure and CLI-only;
+ *  `fetchRange` itself is unchanged and still takes raw date strings. */
+export function parseCliArgs(argv) {
+  const out = argv.includes("--out")
+    ? argv[argv.indexOf("--out") + 1]
+    : undefined;
+
+  if (argv[0] === "--date") {
+    const date = argv[1];
+    if (!isValidDate(date)) {
+      return {
+        error: `--date requires a valid YYYY-MM-DD calendar date, got: ${date ?? "(missing)"}`,
+      };
+    }
+    return { mode: "date", from: date, to: date, out };
+  }
+
+  if (argv[0] === "--range") {
+    const from = argv[1];
+    const to = argv[2];
+    if (!isValidDate(from)) {
+      return {
+        error: `--range requires a valid FROM date (YYYY-MM-DD), got: ${from ?? "(missing)"}`,
+      };
+    }
+    if (!isValidDate(to)) {
+      return {
+        error: `--range requires a valid TO date (YYYY-MM-DD), got: ${to ?? "(missing)"}`,
+      };
+    }
+    if (from > to) {
+      return {
+        error: `--range FROM must not be after TO: ${from} is after ${to}`,
+      };
+    }
+    return { mode: "range", from, to, out };
+  }
+
+  return { error: USAGE };
+}
+
 function* dates(from, to) {
   // Date-only ISO strings, UTC arithmetic — no TZ drift.
   for (
@@ -115,17 +174,14 @@ export async function fetchRange(fromDate, toDate, opts = {}) {
 const invokedDirectly =
   process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop());
 if (invokedDirectly) {
-  const args = process.argv.slice(2);
-  const out = args.includes("--out")
-    ? args[args.indexOf("--out") + 1]
-    : DEFAULT_OUT;
-  const run = async () => {
-    if (args[0] === "--date") return fetchRange(args[1], args[1], { out });
-    if (args[0] === "--range") return fetchRange(args[1], args[2], { out });
-    console.error(
-      "usage: fetch-wods.mjs --date YYYY-MM-DD | --range FROM TO [--out PATH]",
+  const parsed = parseCliArgs(process.argv.slice(2));
+  if (parsed.error) {
+    console.error(parsed.error);
+    process.exit(1);
+  } else {
+    const out = parsed.out ?? DEFAULT_OUT;
+    fetchRange(parsed.from, parsed.to, { out }).then((r) =>
+      console.log(`appended ${r.appended}, skipped ${r.skipped}`),
     );
-    process.exit(2);
-  };
-  run().then((r) => console.log(`appended ${r.appended}, skipped ${r.skipped}`));
+  }
 }

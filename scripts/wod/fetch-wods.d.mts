@@ -32,3 +32,13 @@ export declare function fetchRange(
     sleep?: (ms: number) => Promise<void>;
   },
 ): Promise<{ appended: number; skipped: number }>;
+
+export interface ParsedCliArgs {
+  mode?: "date" | "range";
+  from?: string;
+  to?: string;
+  out?: string;
+  error?: string;
+}
+
+export declare function parseCliArgs(argv: string[]): ParsedCliArgs;
