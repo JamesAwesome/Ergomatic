@@ -372,47 +372,54 @@ describe("buildLogSteps", () => {
     ]);
   });
 
-  // Phase 6I: the 5G drop rule's own amendment. Dust Storm (AN) is a REAL,
-  // shipped effort-only library workout (6x100m all out, `ref: {effort:
-  // "max"}`, needsBaselines() false) — run with NULL baselines, exactly the
-  // production shape Task 2's guard loosening actually reaches. Before this
-  // task, `run.actuals[i]`'s measured stopwatch reading was dropped for
-  // EVERY effort phase unconditionally (wrapped in `if (!isEffort)`); now a
-  // genuine measurement survives regardless of `isEffort` — only the
-  // ASSUMED case (nothing recorded, "held the target") stays effort-gated,
-  // since there's no `targetSplit` to assume held.
+  // Phase 6I: the 5G drop rule's own amendment. Heat Lightning (AN) is a
+  // REAL, shipped effort-only library workout (10x150m all out, `ref:
+  // {effort: "max"}`, needsBaselines() false) — run with NULL baselines,
+  // exactly the production shape Task 2's guard loosening actually
+  // reaches. Before this task, `run.actuals[i]`'s measured stopwatch
+  // reading was dropped for EVERY effort phase unconditionally (wrapped
+  // in `if (!isEffort)`); now a genuine measurement survives regardless
+  // of `isEffort` — only the ASSUMED case (nothing recorded, "held the
+  // target") stays effort-gated, since there's no `targetSplit` to
+  // assume held.
+  // (Fixture swapped from "Dust Storm" to "Heat Lightning": the
+  // 2026-08-10 library-rebalance's Task 4 replaced Dust Storm — no
+  // sketch could stretch it into an unfilled seat; Heat Lightning is
+  // untouched by that replacement [only its rest retuned] and keeps the
+  // same shape this test needs [effort-ref, distance-prescribed, spm
+  // 32] — 150m instead of 100m, elapsed/split scaled to match.)
   it("Phase 6I: an effort DISTANCE phase's MEASURED stopwatch actual survives into the log under null baselines — targetSplit stays omitted (no target to compare it against)", () => {
-    const w = library("Dust Storm");
+    const w = library("Heat Lightning");
     const draft = buildDraft({
-      id: "id-dust-storm",
+      id: "id-heat-lightning",
       title: w.title,
       type: w.type as WorkoutType,
       steps: w.steps,
     });
     const built = buildRun(draft, null, NOW);
-    // Elapsed 52s on the 100m piece -> splitSeconds = (52/100)*500 = 260.0.
+    // Elapsed 78s on the 150m piece -> splitSeconds = (78/150)*500 = 260.0.
     const run: SessionRun = {
       ...built,
       index: built.phases.length,
-      completedAt: new Date(NOW.getTime() + 52 * 1000).toISOString(),
+      completedAt: new Date(NOW.getTime() + 78 * 1000).toISOString(),
       actuals: {
-        0: { elapsedSeconds: 52, splitSeconds: 260, actualSource: "stopwatch" },
+        0: { elapsedSeconds: 78, splitSeconds: 260, actualSource: "stopwatch" },
       },
     };
     expect(run.phases[0]).toMatchObject({
       type: "work",
       targetKind: "effort",
-      meters: 100,
+      meters: 150,
     });
     expect(run.phases[0]!.targetSplit).toBeUndefined();
 
     const steps = buildLogSteps(run, draft);
     expect(steps[0]).toStrictEqual({
-      label: "100 m @ MAX",
+      label: "150 m @ MAX",
       actualSplit: 260,
       actualSource: "stopwatch",
       spm: 32,
-      meters: 100,
+      meters: 150,
       // No `targetSplit` key at all — `validateLogStepEntry` already
       // accepts this exact paired-actual-without-target shape (the 6C
       // amendment).
@@ -420,9 +427,9 @@ describe("buildLogSteps", () => {
   });
 
   it("an effort DISTANCE phase with NO recorded actual still logs nothing at all — a discarded suspect split, effort or split-ref alike", () => {
-    const w = library("Dust Storm");
+    const w = library("Heat Lightning");
     const draft = buildDraft({
-      id: "id-dust-storm-discarded",
+      id: "id-heat-lightning-discarded",
       title: w.title,
       type: w.type as WorkoutType,
       steps: w.steps,
@@ -436,9 +443,9 @@ describe("buildLogSteps", () => {
     };
     const steps = buildLogSteps(run, draft);
     expect(steps[0]).toStrictEqual({
-      label: "100 m @ MAX",
+      label: "150 m @ MAX",
       spm: 32,
-      meters: 100,
+      meters: 150,
     });
   });
 
@@ -882,9 +889,11 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
   });
 
   it("the symmetric F1 case: a 2k-only workout captures k2 and OMITS k6 entirely (not just present-but-undefined)", () => {
-    // Cross Sea: four sequential distance steps at 2k+4/2k+2/2k+0/2k-2 —
-    // every work step references "2k", none reference "6k".
-    const { run } = runFor("Cross Sea");
+    // Beam Reach (Cross Sea's replacement, 2026-08-10 library-rebalance
+    // Task 4 — same shape, same offset sequence): four sequential
+    // distance steps at 2k+4/2k+2/2k+0/2k-2 — every work step references
+    // "2k", none reference "6k".
+    const { run } = runFor("Beam Reach");
     const seed = buildLogSeed(run.phases, BASELINES);
     expect(seed.paces).toStrictEqual({ k2: BASELINES.k2Seconds });
     expect(Object.keys(seed.paces)).toStrictEqual(["k2"]);
@@ -1807,41 +1816,48 @@ describe("buildManualLogSteps", () => {
     }
   });
 
-  it("Cross Sea: no reps marker, four sequential steps cover all three refLabel sign branches (+4, +2, ±0, -2)", () => {
-    const w = library("Cross Sea");
+  // (Fixture swapped from "Cross Sea" to "Beam Reach": the 2026-08-10
+  // library-rebalance's Task 4 replaced Cross Sea — no sketch could
+  // stretch it into an unfilled seat — with Beam Reach, generated fresh
+  // but keeping Cross Sea's own offset sequence [+4,+2,0,-2] and spm
+  // progression [24,26,28,28] on purpose, since this is the fixture that
+  // exercises them; only the distance grew, 500 m -> 750 m, to reach the
+  // 20-30 band.)
+  it("Beam Reach: no reps marker, four sequential steps cover all three refLabel sign branches (+4, +2, ±0, -2)", () => {
+    const w = library("Beam Reach");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
     expect(steps).toStrictEqual([
       {
-        label: "500 m @ 2k +4",
+        label: "750 m @ 2k +4",
         targetSplit: 104, // 100 + 4
         actualSplit: 104,
         actualSource: "assumed",
         spm: 24,
-        meters: 500,
+        meters: 750,
       },
       {
-        label: "500 m @ 2k +2",
+        label: "750 m @ 2k +2",
         targetSplit: 102, // 100 + 2
         actualSplit: 102,
         actualSource: "assumed",
         spm: 26,
-        meters: 500,
+        meters: 750,
       },
       {
-        label: "500 m @ 2k",
+        label: "750 m @ 2k",
         targetSplit: 100, // off 0 -> refLabel drops the sign entirely
         actualSplit: 100,
         actualSource: "assumed",
         spm: 28,
-        meters: 500,
+        meters: 750,
       },
       {
-        label: "500 m @ 2k −2", // U+2212 MINUS SIGN, matching refLabel/StepRow's convention
+        label: "750 m @ 2k −2", // U+2212 MINUS SIGN, matching refLabel/StepRow's convention
         targetSplit: 98, // 100 - 2
         actualSplit: 98,
         actualSource: "assumed",
         spm: 28,
-        meters: 500,
+        meters: 750,
       },
     ]);
   });

@@ -129,6 +129,14 @@ const SHARE_CEILING = 0.6;
 // is a re-measurement, not a bid — the numbers are what `nearDuplicates`
 // actually reports over the retuned content, read from the failures this
 // task's own run produced, not adjusted by hand.
+// RE-MEASURED AGAIN after Task 4 (2026-08-10 library-rebalance) landed TR's
+// and AN's retunes plus all 11 replacements: TR|<20, TR|30-45, AN|<20 and
+// AN|20-30 moved (comments below say how and why); every other TR/AN cell's
+// count held, INCLUDING both cells that gained replacements outright
+// (TR|60+, AN|45-60, AN|60+ — every one of Task 4's 11 fresh workouts was
+// checked as a GENERATION GATE, not just measured after the fact, and none
+// of them appears in any pair below). O2/AT are untouched by this task and
+// their rows above stand exactly as Task 3 left them.
 const KNOWN_DEBT: Partial<Record<string, number>> = {
   "O2|20-30": 2,
   // O2|30-45: 5 -> 6. Retuning stretched several workouts into this now-
@@ -172,9 +180,26 @@ const KNOWN_DEBT: Partial<Record<string, number>> = {
   // pyramids of comparable total, pre-existing and now sharing this cell
   // with the retunes above).
   "AT|30-45": 5,
-  "TR|<20": 1,
+  // TR|<20: 1 -> 0. The one pair this cell carried retuned OUT of <20 this
+  // task (one of its two members moved bands), leaving the cell clean — no
+  // entry needed (the "clean cell" test below fails on a stale 0/nonzero
+  // entry, so this row is REMOVED, not set to 0).
   "TR|20-30": 1,
-  "TR|30-45": 1,
+  // TR|30-45: 1 -> 3. The one pre-existing pair (Mistral <> Equatorial
+  // Countercurrent, both untouched by this task) still stands; two NEW
+  // pairs appeared because retunes landed existing TR workouts close to
+  // each other in this now-larger cell: Gulf Stream <> Piteraq (both
+  // retuned this task, both nxdistance 8-piece sets of the same total) and
+  // Southerly Buster <> Cold Snap (Southerly Buster retuned this task,
+  // Cold Snap untouched, both 5-rung ladders of the same total). Neither
+  // new pair involves a REPLACEMENT — this is retune-vs-retune and
+  // retune-vs-untouched debt, the kind this table exists to re-measure,
+  // not the kind the generation gate forbids.
+  "TR|30-45": 3,
+  // TR|60+: gained two fresh replacements (Following Seas, Tidal Race)
+  // alongside the two pre-existing residents (Alaska Current, Roaring
+  // Forties) — checked as a generation gate before landing, zero pairs,
+  // no entry needed.
   "AN|<20": 3,
   "AN|30-45": 1,
   "AN|60+": 1,

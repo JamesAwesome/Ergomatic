@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Step } from "../domain/types.js";
+import type { Step, WorkoutInput } from "../domain/types.js";
 import { estimateMinutes } from "../domain/expand.js";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 import { BANDS, BASELINES, bucket, type Band } from "./library-balance.js";
@@ -575,35 +575,50 @@ describe("DRAFT_GRID", () => {
 // exit condition (§8), so O2 is replaced below with that direct measure
 // (which now holds). AT's solved grid still happens to reproduce the
 // committed one even after its retune, so it stays on the original
-// solver-parity check for now — Task 4 (TR/AN) will find out whether AT
-// needs the same swap when its own content lands, since a second type's
-// solve can perturb another type's Hall computation only if they share
-// state, which `solveLibrary` doesn't (it solves each type from its own
-// filtered item list, ruling B applied per type). TR/AN are untouched by
-// Task 3 and still reproduce their committed grid via the solver exactly
-// as before.
+// solver-parity check.
+//
+// Task 4 (2026-08-10 library-rebalance) landed TR and AN. AN's solved grid
+// still reproduces the committed one (verified, not assumed — the same
+// re-run below), so it stays on the solver-parity check too. TR's does
+// NOT: re-solving from TR's now-current content (16 retunes + 3
+// replacements, including two brand-new workouts — Beam Reach, Following
+// Seas, Tidal Race — the solver's original 2026-08-10 run never saw) picks
+// a slightly different optimal assignment (20-30:22/30-45:30 vs the
+// committed 23/29) even though the ACTUAL library measures exactly onto
+// the committed grid (verified directly below) — the solver is a proxy
+// for "does this content admit a perfect assignment", not a claim that
+// ANY particular workout must sit in ANY particular cell, and TR's fresh
+// content (new workouts, a rounding-licensed replacement) simply admits
+// more than one optimum. TR moves to O2's direct-measure form for the
+// same reason O2 did in Task 3: once a type's content lands, measuring
+// the library itself against the target IS the exit condition (§8).
 describe("phase tripwires", () => {
-  it("O2 (Task 3 content) now measures exactly onto its target — the real §8 exit condition, not the solver proxy", () => {
-    const stats = LIBRARY_WORKOUTS.filter((w) => w.type === "O2").map((w) => ({
-      type: w.type,
-      minutes: estimateMinutes(w.steps, BASELINES).minutes,
-    }));
-    const counts = bucket(stats);
-    for (const b of BANDS) {
-      const key = `O2|${b}`;
-      expect({ key, n: counts[key] ?? 0 }).toStrictEqual({
-        key,
-        n: patterns.targets.O2[b],
-      });
-    }
-  });
+  it.each(["O2", "TR"] as const)(
+    "%s (content landed) now measures exactly onto its target — the real §8 exit condition, not the solver proxy",
+    (type) => {
+      const stats = LIBRARY_WORKOUTS.filter((w) => w.type === type).map(
+        (w) => ({
+          type: w.type,
+          minutes: estimateMinutes(w.steps, BASELINES).minutes,
+        }),
+      );
+      const counts = bucket(stats);
+      for (const b of BANDS) {
+        const key = `${type}|${b}`;
+        expect({ key, n: counts[key] ?? 0 }).toStrictEqual({
+          key,
+          n: patterns.targets[type][b],
+        });
+      }
+    },
+  );
 
-  it("AT/TR/AN's committed targets are still the grid this solver produces", () => {
+  it("AT/AN's committed targets are still the grid this solver produces", () => {
     const solved = solveLibrary(
       libraryItems().map((r) => r.item),
       DRAFT_GRID,
     );
-    for (const type of ["AT", "TR", "AN"] as const) {
+    for (const type of ["AT", "AN"] as const) {
       expect({ type, grid: solved[type].grid }).toStrictEqual({
         type,
         grid: patterns.targets[type],
@@ -649,8 +664,40 @@ describe("the real clock (block review M2)", () => {
   it("refuses a sketch that only reaches its band after rounding", () => {
     // TR Head Sea: 15:48 on the clock, 16' rounded. The solve may assign it
     // to 20-30 on the rounded clock, but +25% of 15:48 is 19:45 and no
-    // sketch can be built — it belongs in the replacement residual.
-    const headSea = LIBRARY_WORKOUTS.find((w) => w.title === "Head Sea")!;
+    // sketch can be built — it belongs in the replacement residual. This
+    // is the EXACT phenomenon that forced Head Sea out of the library (the
+    // 2026-08-10 library-rebalance's James addendum, Gate 1) — Task 4
+    // replaced it with "Following Seas", so its steps are frozen here as a
+    // literal fixture (no longer reachable via LIBRARY_WORKOUTS) rather
+    // than lost along with the row.
+    const headSea: WorkoutInput = {
+      title: "Head Sea",
+      type: "TR",
+      difficulty: "medium",
+      pain: 3,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 4 },
+          ref: { base: "2k", off: 3 },
+          spm: 24,
+          restMinutes: 3,
+        },
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 1000 },
+          ref: { base: "2k", off: 2 },
+          spm: 26,
+          restMinutes: 3,
+        },
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 2 },
+          ref: { base: "2k", off: 1 },
+          spm: 28,
+        },
+      ],
+    };
     expect(rawMinutes(headSea.steps, BASELINES)).toBeLessThan(16);
     expect(buildSketch(headSea, "20-30", 5, BASELINES)).toBeNull();
   });

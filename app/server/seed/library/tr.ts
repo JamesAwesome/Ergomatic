@@ -8,8 +8,15 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // deliberately tight, with the pace eased to pay for it. Authored in Task 7
 // against the pattern digest (app/domain/generation/patterns.json) and
 // restructured at James's review (2026-08-03) for variety by shape rather
-// than by a minute here or there; ordering here IS the library browsing
-// order within the type block.
+// than by a minute here or there. Retuned or newly generated totals land
+// on a 0 or 5 WHERE THE 0:15 GRID ALLOWS; every time value a retune
+// CREATES (every rest, and any piece a retune scales) stays on the 0:15
+// grid always — a value inherited unchanged from the pre-retune workout
+// stands as it was, on-grid or not; a total that cannot be round with
+// grid values stands as its pieces sum. Distance sets remain exempt
+// (2026-08-10 library-rebalance spec, §2/the zero-five audit; rest-grid
+// pin, James 2026-08-10, extended to created work pieces the same day).
+// Ordering here IS the library browsing order within the type block.
 export const TR_WORKOUTS: WorkoutInput[] = [
   {
     // TR: 2000 m continuous at 2k+6 — race distance rehearsed just off pace.
@@ -389,13 +396,13 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 2×(3' + 500 m) — the same effort measured two ways, twice over.
+    // TR: 3×(3' + 500 m) — the same effort measured two ways, three times over.
     title: "Leveche",
     type: "TR",
     difficulty: "easy",
     pain: 2,
     steps: [
-      { k: "reps", count: 2 },
+      { k: "reps", count: 3 },
       {
         k: "w",
         duration: { kind: "time", minutes: 3 },
@@ -430,7 +437,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 4×2' at 2k+4 with 2:30 rest — long recovery, so every rep starts fresh.
+    // TR: 4×2' at 2k+4 with 3' rest — long recovery, so every rep starts fresh.
     title: "Norte",
     type: "TR",
     difficulty: "easy",
@@ -442,7 +449,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 2 },
         ref: { base: "2k", off: 4 },
         spm: 24,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
     ],
   },
@@ -590,36 +597,44 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 4×500 m descending 2k+4 → 2k-2 on fixed rest — each one faster than the last.
-    title: "Cross Sea",
+    // TR: 4×750 m descending 2k+4 → 2k-2 with 3' rest — each one faster than the last.
+    // (replacement — Cross Sea's slot: medium/3, 20-30. Cross Sea could not
+    // stretch into any unfilled seat, spec §3/move-plan residual; generated
+    // fresh against book cell TR|30-45, §6's translation rule for a
+    // replacement with no historical warm-up. Kept Cross Sea's own offset
+    // sequence [+4,+2,0,-2] and spm progression on purpose — it is the
+    // fixture `src/session/logDraft.test.ts` names for covering all three
+    // `refLabel` sign branches, only scaled up in distance to reach the
+    // 20-30 band.)
+    title: "Beam Reach",
     type: "TR",
     difficulty: "medium",
     pain: 3,
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 750 },
         ref: { base: "2k", off: 4 },
         spm: 24,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 750 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 750 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 750 },
         ref: { base: "2k", off: -2 },
         spm: 28,
       },
@@ -637,28 +652,28 @@ export const TR_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 1 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
         ref: { base: "2k", off: 1 },
         spm: 26,
-        restMinutes: 2.5,
+        restMinutes: 2.75,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 3 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 3.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
         ref: { base: "2k", off: 1 },
         spm: 26,
-        restMinutes: 2.5,
+        restMinutes: 2.75,
       },
       {
         k: "w",
@@ -669,7 +684,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 1000 m / 3' / 500 m / 1' cut-down — every piece shorter and a second quicker.
+    // TR: 1100 m / 3' / 550 m / 1' cut-down — every piece shorter and a second quicker.
     title: "Quartering Sea",
     type: "TR",
     difficulty: "medium",
@@ -677,24 +692,24 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1100 },
         ref: { base: "2k", off: 3 },
         spm: 24,
-        restMinutes: 4,
+        restMinutes: 4.25,
       },
       {
         k: "w",
         duration: { kind: "time", minutes: 3 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 3.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 1 },
         spm: 28,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
       {
         k: "w",
@@ -705,36 +720,49 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 4' / 1000 m / 2' — three pieces, each closing on race pace.
-    title: "Head Sea",
+    // TR: 10-12-14-16' time ladder at 2k+6 easing to flat 2k, 6' rest — a long broken race, building.
+    // (replacement — Head Sea's slot: medium/3, 60+. Head Sea is 15:48 on
+    // the real clock; reachability that assigned it 20-30 ran on the
+    // rounded minute, and +25% of the real total tops out at 19:45, short
+    // of any band's floor — the seat was licensed by rounding, so no
+    // sketch exists (James's Head Sea addendum, Gate 1). Generated fresh
+    // against book cell TR|60+.)
+    title: "Following Seas",
     type: "TR",
     difficulty: "medium",
     pain: 3,
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
-        ref: { base: "2k", off: 3 },
+        duration: { kind: "time", minutes: 10 },
+        ref: { base: "2k", off: 6 },
         spm: 24,
-        restMinutes: 3,
+        restMinutes: 6,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "time", minutes: 12 },
+        ref: { base: "2k", off: 4 },
+        spm: 24,
+        restMinutes: 6,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 14 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 6,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
-        ref: { base: "2k", off: 1 },
+        duration: { kind: "time", minutes: 16 },
+        ref: { base: "2k", off: 0 },
         spm: 28,
       },
     ],
   },
   {
-    // TR: two 5' pieces around a 500 m at flat 2k — the sprint sits in the middle.
+    // TR: two 5:30 pieces around a 550 m at flat 2k — the sprint sits in the middle.
     title: "Monsoon Trough",
     type: "TR",
     difficulty: "medium",
@@ -742,59 +770,69 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 5.5 },
         ref: { base: "2k", off: 4 },
         spm: 24,
-        restMinutes: 3,
+        restMinutes: 4.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 2,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 5.5 },
         ref: { base: "2k", off: 3 },
         spm: 24,
       },
     ],
   },
   {
-    // TR: 3×2' at 2k+1, then 500 m all out — the session ends louder than it started.
-    title: "Monsoon Surge",
+    // TR: 5-10-15-10-5' pyramid at 2k+6 into flat 2k and back out, 5' rest — the middle rung is the test.
+    // (replacement — Monsoon Surge's slot: medium/4, 60+. Monsoon Surge
+    // could not stretch into any unfilled seat, spec §3/move-plan
+    // residual; generated fresh against book cell TR|60+.)
+    title: "Tidal Race",
     type: "TR",
     difficulty: "medium",
     pain: 4,
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
-        ref: { base: "2k", off: 1 },
-        spm: 26,
-        restMinutes: 2,
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "2k", off: 6 },
+        spm: 24,
+        restMinutes: 5,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
-        ref: { base: "2k", off: 1 },
+        duration: { kind: "time", minutes: 10 },
+        ref: { base: "2k", off: 4 },
         spm: 26,
-        restMinutes: 2,
+        restMinutes: 5,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
-        ref: { base: "2k", off: 1 },
-        spm: 26,
-        restMinutes: 2,
-      },
-      {
-        k: "w",
-        duration: { kind: "distance", meters: 500 },
-        ref: { effort: "max" },
+        duration: { kind: "time", minutes: 15 },
+        ref: { base: "2k", off: 2 },
         spm: 28,
+        restMinutes: 5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 10 },
+        ref: { base: "2k", off: 4 },
+        spm: 26,
+        restMinutes: 5,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { base: "2k", off: 6 },
+        spm: 24,
       },
     ],
   },
@@ -816,13 +854,13 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 8×250 m at flat 2k with 1:1.6 rest — eight bursts at exactly race pace.
+    // TR: 9×250 m at flat 2k with 1:1.6 rest — nine bursts at exactly race pace.
     title: "Easterly Wave",
     type: "TR",
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "reps", count: 8 },
+      { k: "reps", count: 9 },
       {
         k: "w",
         duration: { kind: "distance", meters: 250 },
@@ -833,7 +871,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 8×500 m in pairs — one at 2k+3 on short rest, one at race pace with more.
+    // TR: 8×550 m in pairs — one at 2k+3 on short rest, one at race pace with more.
     title: "Gulf Stream",
     type: "TR",
     difficulty: "medium",
@@ -841,56 +879,56 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 3 },
         spm: 26,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
         restMinutes: 2.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 3 },
         spm: 26,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
         restMinutes: 2.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 3 },
         spm: 26,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
         restMinutes: 2.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 3 },
         spm: 26,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
       },
@@ -914,7 +952,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 4×1000 m descending 2k+4 → 2k+1 with 3:30 rest — the 1k repeat as a negative split.
+    // TR: 4×1050 m descending 2k+4 → 2k+1 with 4:45 rest — the 1k repeat as a negative split.
     title: "Humboldt Current",
     type: "TR",
     difficulty: "medium",
@@ -922,28 +960,28 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1050 },
         ref: { base: "2k", off: 4 },
         spm: 24,
-        restMinutes: 3.5,
+        restMinutes: 4.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1050 },
         ref: { base: "2k", off: 3 },
         spm: 26,
-        restMinutes: 3.5,
+        restMinutes: 4.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1050 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3.5,
+        restMinutes: 4.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1050 },
         ref: { base: "2k", off: 1 },
         spm: 28,
       },
@@ -967,7 +1005,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 12×250 m at flat 2k with 1:1.6 rest — a dozen race-pace bursts for rate control.
+    // TR: 12×300 m at flat 2k with ~1:1.4 rest — a dozen race-pace bursts for rate control.
     title: "Labrador Current",
     type: "TR",
     difficulty: "medium",
@@ -976,7 +1014,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 12 },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { base: "2k", off: 0 },
         spm: 26,
         restMinutes: 1.5,
@@ -1042,7 +1080,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 500-1000-1500-1000-500 m pyramid at 2k+2 on 3' rest — the middle rung is the test.
+    // TR: 550-1100-1700-1100-550 m pyramid at 2k+2 on 2:45 rest — the middle rung is the test.
     title: "Khamsin",
     type: "TR",
     difficulty: "medium",
@@ -1050,48 +1088,48 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1100 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1500 },
+        duration: { kind: "distance", meters: 1700 },
         ref: { base: "2k", off: 2 },
         spm: 24,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1100 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 2 },
         spm: 28,
       },
     ],
   },
   {
-    // TR: 3×(1000 m + 250 m) — a kilometre at 2k+3, then a burst at race pace, three times.
+    // TR: 4×(1000 m + 250 m) — a kilometre at 2k+3, then a burst at race pace, four times.
     title: "Libeccio",
     type: "TR",
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "reps", count: 3 },
+      { k: "reps", count: 4 },
       {
         k: "w",
         duration: { kind: "distance", meters: 1000 },
@@ -1109,7 +1147,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 5-4-3-2-1' ladder with constant rest, pace tightening one second a rung.
+    // TR: 6-5-3:30-2:30-1' ladder with constant rest, pace tightening one second a rung.
     title: "Southerly Buster",
     type: "TR",
     difficulty: "medium",
@@ -1117,31 +1155,31 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "2k", off: 5 },
         spm: 24,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "2k", off: 4 },
         spm: 24,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 3 },
+        duration: { kind: "time", minutes: 3.5 },
         ref: { base: "2k", off: 3 },
         spm: 26,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 2.5,
+        restMinutes: 3,
       },
       {
         k: "w",
@@ -1174,7 +1212,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 2×(6' + 2') — a long piece off pace, a short one at it, twice through.
+    // TR: 2×(7' + 2:30) — a long piece off pace, a short one at it, twice through.
     title: "Elephanta",
     type: "TR",
     difficulty: "medium",
@@ -1183,17 +1221,17 @@ export const TR_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 2 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 6 },
+        duration: { kind: "time", minutes: 7 },
         ref: { base: "2k", off: 3 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 3.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
     ],
   },
@@ -1241,7 +1279,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: two broken 2ks — 4×500 m on 1' rest, 5' between sets, the first set at race pace.
+    // TR: two broken 2.2ks — 4×550 m on 1:15 rest, 6' between sets, the first set at race pace.
     title: "Piteraq",
     type: "TR",
     difficulty: "medium",
@@ -1249,56 +1287,56 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 5,
+        restMinutes: 6,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 2 },
         spm: 26,
       },
@@ -1384,7 +1422,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: 1000-500-250-500-1000 m — the pyramid upside down, quickest in the middle.
+    // TR: 1150-550-300-550-1150 m — the pyramid upside down, quickest in the middle.
     title: "Sundowner",
     type: "TR",
     difficulty: "medium",
@@ -1392,35 +1430,35 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1150 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 4,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 1 },
         spm: 28,
-        restMinutes: 3,
+        restMinutes: 4,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 3,
+        restMinutes: 4,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "2k", off: 1 },
         spm: 28,
-        restMinutes: 3,
+        restMinutes: 4,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1150 },
         ref: { base: "2k", off: 2 },
         spm: 26,
       },
@@ -1749,7 +1787,7 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // TR: four 4' pieces stepping 2k+2 → 2k-1, then 250 m all out — the tank empties on the last one.
+    // TR: four 4:30 pieces stepping 2k+2 → 2k-1, then 300 m all out — the tank empties on the last one.
     title: "Antarctic Drift",
     type: "TR",
     difficulty: "hard",
@@ -1757,35 +1795,35 @@ export const TR_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.5 },
         ref: { base: "2k", off: 2 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.5 },
         ref: { base: "2k", off: 1 },
         spm: 26,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.5 },
         ref: { base: "2k", off: 0 },
         spm: 28,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.5 },
         ref: { base: "2k", off: -1 },
         spm: 28,
-        restMinutes: 3,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 250 },
+        duration: { kind: "distance", meters: 300 },
         ref: { effort: "max" },
         spm: 28,
       },
