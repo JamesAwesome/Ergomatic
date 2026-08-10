@@ -34,8 +34,12 @@ const TARGETS = patterns.targets as Record<WorkoutType, Record<Band, number>>;
 // cell — a FROZEN BASELINE, never edited again. The warmup-setting spec
 // (Task 3, 2026-08-09) deleted the 302 `{ k: "wu", ... }` seed lines — the
 // same content, 4-20 fewer minutes each — and a meaningful slice of the
-// library crossed a band boundary downward; the rebalance is the answer and
-// its content tasks have not landed yet.
+// library crossed a band boundary downward; the 2026-08-10 library-
+// rebalance (below) is the answer, and its content tasks have since landed
+// (93 retunes + 11 replacements; every cell measures exactly onto TARGETS,
+// 0 debt). This table stays frozen at its non-zero starting values — that
+// is the point of a ratchet baseline — even though today's live debt is
+// zero everywhere.
 //
 // The gate below is a RATCHET against this table, not an equality against a
 // hand-maintained copy of reality (block review §7): the previous form
