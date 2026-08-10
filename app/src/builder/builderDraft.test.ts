@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BUILDER_DRAFT_KEY,
   clearBuilderDraft,
@@ -109,6 +109,31 @@ describe("save/load/clear round trip", () => {
     );
     // edit mode without a workoutId string is invalid
     expect(loadBuilderDraft()).toBeNull();
+  });
+});
+
+describe("localStorage error handling", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("saveBuilderDraft returns false when localStorage.setItem throws", () => {
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("QuotaExceededError");
+      });
+    const d = draftOf();
+    expect(saveBuilderDraft(d)).toBe(false);
+    spy.mockRestore();
+  });
+
+  it("clearBuilderDraft swallows and does not throw when localStorage.removeItem throws", () => {
+    const spy = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw new Error("QuotaExceededError");
+      });
+    expect(() => clearBuilderDraft()).not.toThrow();
+    spy.mockRestore();
   });
 });
 
