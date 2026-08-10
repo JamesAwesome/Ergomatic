@@ -9,10 +9,11 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // beside work at least 6 s/500m faster, never a prescription of its
 // own (James's offset calibration, 2026-08-03); spm 22 is the mode with
 // 20–24 the steady range, 18 only as a ladder's bottom rung and 26
-// only as a ladder's top. Retuned or newly generated time-computable
-// totals land on a 0 or 5; structure-driven totals inherited from the
-// library stand as their pieces sum. Distance sets remain exempt
-// (2026-08-10 library-rebalance spec, §2/the zero-five audit).
+// only as a ladder's top. Retuned or newly generated totals land on a 0
+// or 5 WHERE GRID RESTS ALLOW; rests stay on the 0:30 grid always; a
+// total that cannot be round with grid rests stands as its pieces sum.
+// Distance sets remain exempt (2026-08-10 library-rebalance spec, §2/the
+// zero-five audit; rest-grid pin, James 2026-08-10).
 // Ordering here IS the library browsing order within the type block.
 export const O2_WORKOUTS: WorkoutInput[] = [
   // ------------------------------------------------------- easy / pain 1
@@ -240,7 +241,13 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 4×4' at 6k+10 with 1:20 rest, the rate climbing 20→26 — same pace, more life each rep.
+    // O2: 4×4:15 at 6k+10 with 1:15 rest, the rate climbing 20→26 — same pace, more life each rep.
+    // (James's rest-grid ruling, 2026-08-10: the rest-only stretch that
+    // reached this workout's original 20' target used an off-grid 1:20
+    // rest; reverted to the nearest 0:15-grid rest (1:15), which alone
+    // dropped the total under the 20-30 floor, so the piece itself grows
+    // 4' -> 4:15 (well inside the retune's own ±25% envelope) to hold the
+    // band. Total is no longer a 0/5 minute — stands as its pieces sum.)
     title: "Slack Water",
     type: "O2",
     difficulty: "easy",
@@ -248,28 +255,28 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.25 },
         ref: { base: "6k", off: 10 },
         spm: 20,
-        restMinutes: 4 / 3,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.25 },
         ref: { base: "6k", off: 10 },
         spm: 22,
-        restMinutes: 4 / 3,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.25 },
         ref: { base: "6k", off: 10 },
         spm: 24,
-        restMinutes: 4 / 3,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.25 },
         ref: { base: "6k", off: 10 },
         spm: 26,
       },
@@ -305,7 +312,12 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 6×2:10 at 6k+8 with 1:10 rest — brisk touches, never long enough to hurt.
+    // O2: 6×2:10 at 6k+8 with 1:15 rest — brisk touches, never long enough to hurt.
+    // (James's rest-grid ruling, 2026-08-10: the retune's own 1:10 rest was
+    // off the 0:15 grid; reverted to the nearest grid rest (1:15), which
+    // holds the 20-30 band on its own (20:30) — the piece itself is
+    // untouched. Total is no longer a 0/5 minute — stands as its pieces
+    // sum.)
     title: "Ground Swell",
     type: "O2",
     difficulty: "easy",
@@ -317,7 +329,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 13 / 6 },
         ref: { base: "6k", off: 8 },
         spm: 24,
-        restMinutes: 7 / 6,
+        restMinutes: 1.25,
       },
     ],
   },
@@ -1530,7 +1542,12 @@ export const O2_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // O2: 12×1:20 at 6k+4 with 1:10 rest — tempo in the smallest possible doses.
+    // O2: 12×1:20 at 6k+4 with 1:15 rest — tempo in the smallest possible doses.
+    // (James's rest-grid ruling, 2026-08-10: the retune's own 1:10 rest was
+    // off the 0:15 grid; reverted to the nearest grid rest (1:15), which
+    // holds the 30-45 band comfortably (31:00) — the piece itself is
+    // untouched. Total is no longer a 0/5 minute — stands as its pieces
+    // sum.)
     title: "Crepuscular Rays",
     type: "O2",
     difficulty: "medium",
@@ -1542,7 +1559,7 @@ export const O2_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 4 / 3 },
         ref: { base: "6k", off: 4 },
         spm: 24,
-        restMinutes: 7 / 6,
+        restMinutes: 1.25,
       },
     ],
   },
