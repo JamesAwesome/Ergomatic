@@ -4,9 +4,12 @@ import type { WorkoutInput } from "../../../domain/types.js";
 // easy→hard. Authored in Task 7 against the pattern digest
 // (app/domain/generation/patterns.json), then revised after James's content
 // review: variety comes from structure (rep counts, rest schemes, pyramids,
-// rate-change pieces), not ±1' tweaks; every time-computable total lands on
-// a 0 or 5; continuous threshold singles stay rare. Ordering here IS the
-// library browsing order within the type block.
+// rate-change pieces), not ±1' tweaks; continuous threshold singles stay
+// rare. Retuned or newly generated time-computable totals land on a 0 or
+// 5; structure-driven totals inherited from the library stand as their
+// pieces sum. Distance sets remain exempt (2026-08-10 library-rebalance
+// spec, §2/the zero-five audit). Ordering here IS the library browsing
+// order within the type block.
 export const AT_WORKOUTS: WorkoutInput[] = [
   {
     // AT: 10' continuous at 6k+4 — one short threshold piece, in and out.
@@ -202,7 +205,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 500/1000/1500 m ascending distance ladder, pace easing 6k+0→+4.
+    // AT: 600/1200/1750 m ascending distance ladder, pace easing 6k+0→+4.
     title: "Isobaric Ridge",
     type: "AT",
     difficulty: "easy",
@@ -210,28 +213,28 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 600 },
         ref: { base: "6k", off: 0 },
         spm: 26,
-        restMinutes: 1.5,
+        restMinutes: 2,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1200 },
         ref: { base: "6k", off: 2 },
         spm: 24,
-        restMinutes: 2.5,
+        restMinutes: 3.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1500 },
+        duration: { kind: "distance", meters: 1750 },
         ref: { base: "6k", off: 4 },
         spm: 22,
       },
     ],
   },
   {
-    // AT: rate-change 3×5' at 6k+5 — the pace holds while the rate climbs.
+    // AT: rate-change 3×6' at 6k+5 — the pace holds while the rate climbs.
     title: "Upper Ridge",
     type: "AT",
     difficulty: "easy",
@@ -239,28 +242,28 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 5 },
         spm: 22,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 5 },
         spm: 24,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 5 },
         spm: 26,
       },
     ],
   },
   {
-    // AT: 8' at 6k+6 then 2×2' at 6k+1 — one long piece, two sharp ones after.
+    // AT: 9' at 6k+6 then 2×2' at 6k+1 — one long piece, two sharp ones after.
     title: "Frontal Boundary",
     type: "AT",
     difficulty: "easy",
@@ -268,10 +271,10 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 8 },
+        duration: { kind: "time", minutes: 9 },
         ref: { base: "6k", off: 6 },
         spm: 22,
-        restMinutes: 3,
+        restMinutes: 3.5,
       },
       { k: "reps", count: 2 },
       {
@@ -279,12 +282,12 @@ export const AT_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "time", minutes: 2 },
         ref: { base: "6k", off: 1 },
         spm: 26,
-        restMinutes: 1.5,
+        restMinutes: 1.75,
       },
     ],
   },
   {
-    // AT: 1000 m / 5' / 1000 m sandwich at 6k+4 and 6k+2 — distance either side.
+    // AT: 1050 m / 5:30 / 1050 m sandwich at 6k+4 and 6k+2 — distance either side.
     title: "Marine Layer",
     type: "AT",
     difficulty: "easy",
@@ -292,34 +295,34 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1050 },
         ref: { base: "6k", off: 4 },
         spm: 22,
+        restMinutes: 3.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5.5 },
+        ref: { base: "6k", off: 2 },
+        spm: 24,
         restMinutes: 2.5,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
-        ref: { base: "6k", off: 2 },
-        spm: 24,
-        restMinutes: 2,
-      },
-      {
-        k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1050 },
         ref: { base: "6k", off: 4 },
         spm: 22,
       },
     ],
   },
   {
-    // AT: 4×3' at 6k+1 with 1' rest — honest threshold reps, short breaks.
+    // AT: 5×3' at 6k+1 with 1' rest — honest threshold reps, short breaks.
     title: "Trough",
     type: "AT",
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "reps", count: 4 },
+      { k: "reps", count: 5 },
       {
         k: "w",
         duration: { kind: "time", minutes: 3 },
@@ -474,7 +477,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: rate-change 6×2' at 6k+1 — spm steps 22/22/24/24/26/26, 1' rests.
+    // AT: rate-change 6×2:30 at 6k+1 — spm steps 22/22/24/24/26/26, 1' rests.
     title: "Confluence Zone",
     type: "AT",
     difficulty: "medium",
@@ -482,55 +485,55 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 1 },
         spm: 22,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 1 },
         spm: 22,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 1 },
         spm: 24,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 1 },
         spm: 24,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 1 },
         spm: 26,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 1 },
         spm: 26,
       },
     ],
   },
   {
-    // AT: 4×750 m at 6k+2 with 1.5' rest — the short threshold distance rep.
+    // AT: 5×750 m at 6k+2 with 1.5' rest — the short threshold distance rep.
     title: "Diffluence Zone",
     type: "AT",
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "reps", count: 4 },
+      { k: "reps", count: 5 },
       {
         k: "w",
         duration: { kind: "distance", meters: 750 },
@@ -584,7 +587,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 3×4' with the pace stepping 6k+4 / +1 / -2 — equal rungs, rising cost.
+    // AT: 3×5' with the pace stepping 6k+4 / +1 / -2 — equal rungs, rising cost.
     title: "Ridge Axis",
     type: "AT",
     difficulty: "medium",
@@ -592,21 +595,21 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: 4 },
         spm: 22,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: 1 },
         spm: 24,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: -2 },
         spm: 26,
       },
@@ -637,13 +640,13 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 2×(2'-3'-2' mini pyramid) at 6k+0/+2 — two peaks, 1' rests throughout.
+    // AT: 3×(2'-3'-2' mini pyramid) at 6k+0/+2 — three peaks, 1' rests throughout.
     title: "Comma Cloud",
     type: "AT",
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "reps", count: 2 },
+      { k: "reps", count: 3 },
       {
         k: "w",
         duration: { kind: "time", minutes: 2 },
@@ -699,7 +702,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 4×4' at 6k+2 with 2' rest — the C2 workhorse threshold set.
+    // AT: 4×5' at 6k+2 with 2:30 rest — the C2 workhorse threshold set.
     title: "Blocking High",
     type: "AT",
     difficulty: "medium",
@@ -708,15 +711,15 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: 2 },
         spm: 24,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },
   {
-    // AT: 25' continuous at 6k+4 — sustained threshold with nowhere to hide.
+    // AT: 30' continuous at 6k+4 — sustained threshold with nowhere to hide.
     title: "Anticyclone",
     type: "AT",
     difficulty: "medium",
@@ -724,14 +727,14 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 25 },
+        duration: { kind: "time", minutes: 30 },
         ref: { base: "6k", off: 4 },
         spm: 22,
       },
     ],
   },
   {
-    // AT: 2'-4'-6'-4'-2' pyramid at 6k+3, each rest sized to the rung it follows — 18' of work.
+    // AT: 2:30-5'-8'-5'-2:30 pyramid at 6k+3, each rest sized to the rung it follows — 23' of work.
     title: "Long Wave",
     type: "AT",
     difficulty: "medium",
@@ -739,42 +742,42 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 3 },
         spm: 26,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: 3 },
         spm: 24,
-        restMinutes: 1.5,
+        restMinutes: 1.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 6 },
+        duration: { kind: "time", minutes: 8 },
         ref: { base: "6k", off: 3 },
         spm: 22,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: 3 },
         spm: 24,
-        restMinutes: 1.5,
+        restMinutes: 1.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 3 },
         spm: 26,
       },
     ],
   },
   {
-    // AT: 6×3' at 6k+3 with 1' rest — more reps, less recovery each.
+    // AT: 6×3:30 at 6k+3 with 1:30 rest — more reps, less recovery each.
     title: "Omega Block",
     type: "AT",
     difficulty: "medium",
@@ -783,10 +786,10 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 6 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 3 },
+        duration: { kind: "time", minutes: 3.5 },
         ref: { base: "6k", off: 3 },
         spm: 24,
-        restMinutes: 1,
+        restMinutes: 1.5,
       },
     ],
   },
@@ -891,7 +894,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 12' at 6k+2 then 3×2' at 6k+0 — long sustained block, sharp coda.
+    // AT: 15' at 6k+2 then 3×2:30 at 6k+0 — long sustained block, sharp coda.
     title: "Inversion Layer",
     type: "AT",
     difficulty: "medium",
@@ -899,18 +902,18 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 12 },
+        duration: { kind: "time", minutes: 15 },
         ref: { base: "6k", off: 2 },
         spm: 24,
-        restMinutes: 3,
+        restMinutes: 3.75,
       },
       { k: "reps", count: 3 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 2 },
+        duration: { kind: "time", minutes: 2.5 },
         ref: { base: "6k", off: 0 },
         spm: 26,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
     ],
   },
@@ -932,7 +935,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 4×5' at 6k+1 with the rest CUT each time — 3'/2'/1'.
+    // AT: 4×6' at 6k+1 with the rest CUT each time — 3'/2'/1'.
     title: "Thermal Low",
     type: "AT",
     difficulty: "medium",
@@ -940,35 +943,35 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 1 },
         spm: 24,
         restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 1 },
         spm: 24,
         restMinutes: 2,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 1 },
         spm: 24,
         restMinutes: 1,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 5 },
+        duration: { kind: "time", minutes: 6 },
         ref: { base: "6k", off: 1 },
         spm: 24,
       },
     ],
   },
   {
-    // AT: rate-change 3×8' at 6k+3 — 24' of work, spm stepping 22→24→26.
+    // AT: rate-change 3×9' at 6k+3 — 27' of work, spm stepping 22→24→26.
     title: "Thermal Wind",
     type: "AT",
     difficulty: "medium",
@@ -976,34 +979,34 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 8 },
+        duration: { kind: "time", minutes: 9 },
         ref: { base: "6k", off: 3 },
         spm: 22,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 8 },
+        duration: { kind: "time", minutes: 9 },
         ref: { base: "6k", off: 3 },
         spm: 24,
         restMinutes: 1.5,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 8 },
+        duration: { kind: "time", minutes: 9 },
         ref: { base: "6k", off: 3 },
         spm: 26,
       },
     ],
   },
   {
-    // AT: 2×(8' at 6k+4 + 4' at 6k+0) — a hard back half to each long set.
+    // AT: 3×(8' at 6k+4 + 4' at 6k+0) — a hard back half to each long set.
     title: "Coastal Jet",
     type: "AT",
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "reps", count: 2 },
+      { k: "reps", count: 3 },
       {
         k: "w",
         duration: { kind: "time", minutes: 8 },
@@ -1038,13 +1041,13 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 3×2000 m at 6k+4 with 3' rest — threshold volume by the 2k marker.
+    // AT: 4×2000 m at 6k+4 with 3' rest — threshold volume by the 2k marker.
     title: "Filling Low",
     type: "AT",
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "reps", count: 3 },
+      { k: "reps", count: 4 },
       {
         k: "w",
         duration: { kind: "distance", meters: 2000 },
@@ -1072,13 +1075,13 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 2×3000 m at 6k+5 with 4' rest — two long pieces, honest pacing test.
+    // AT: 3×3000 m at 6k+5 with 4' rest — three long pieces, honest pacing test.
     title: "Short Wave",
     type: "AT",
     difficulty: "medium",
     pain: 3,
     steps: [
-      { k: "reps", count: 2 },
+      { k: "reps", count: 3 },
       {
         k: "w",
         duration: { kind: "distance", meters: 3000 },
@@ -1273,7 +1276,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 5×6' at 6k+3 with 2' rest — 30' of threshold, no frills.
+    // AT: 5×7' at 6k+3 with 2' rest — 35' of threshold, no frills.
     title: "Santa Ana",
     type: "AT",
     difficulty: "medium",
@@ -1282,7 +1285,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 5 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 6 },
+        duration: { kind: "time", minutes: 7 },
         ref: { base: "6k", off: 3 },
         spm: 24,
         restMinutes: 2,
@@ -1290,7 +1293,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 3×10' at 6k+5 with 2' rest — long reps, recovery that never repays.
+    // AT: 3×12:30 at 6k+5 with 2:30 rest — long reps, recovery that never repays.
     title: "Foehn",
     type: "AT",
     difficulty: "medium",
@@ -1299,15 +1302,15 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 3 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 10 },
+        duration: { kind: "time", minutes: 12.5 },
         ref: { base: "6k", off: 5 },
         spm: 22,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },
   {
-    // AT: 4×8' at 6k+4 with 2' rest — 32' of threshold in one session.
+    // AT: 4×9' at 6k+4 with 2:15 rest — 36' of threshold in one session.
     title: "Maestro",
     type: "AT",
     difficulty: "medium",
@@ -1316,15 +1319,15 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 8 },
+        duration: { kind: "time", minutes: 9 },
         ref: { base: "6k", off: 4 },
         spm: 22,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
     ],
   },
   {
-    // AT: 12'/10'/8'/6' descending ladder, 6k+6 down to 6k+0 — 36' of work.
+    // AT: 12:30/10:30/8:30/6:30 descending ladder, 6k+6 down to 6k+0 — 38' of work.
     title: "Buran",
     type: "AT",
     difficulty: "medium",
@@ -1332,41 +1335,41 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 12 },
+        duration: { kind: "time", minutes: 12.5 },
         ref: { base: "6k", off: 6 },
         spm: 22,
         restMinutes: 3,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 10 },
+        duration: { kind: "time", minutes: 10.5 },
         ref: { base: "6k", off: 4 },
         spm: 24,
         restMinutes: 2,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 8 },
+        duration: { kind: "time", minutes: 8.5 },
         ref: { base: "6k", off: 2 },
         spm: 24,
         restMinutes: 2,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 6 },
+        duration: { kind: "time", minutes: 6.5 },
         ref: { base: "6k", off: 0 },
         spm: 26,
       },
     ],
   },
   {
-    // AT: 8×1000 m at 6k+2 with 1' rest — the C2 WOD staple, all business.
+    // AT: 9×1000 m at 6k+2 with 1' rest — the C2 WOD staple, all business.
     title: "Ostro",
     type: "AT",
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "reps", count: 8 },
+      { k: "reps", count: 9 },
       {
         k: "w",
         duration: { kind: "distance", meters: 1000 },
@@ -1377,13 +1380,13 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 3×2500 m at 6k+5 with 4' rest — long distance reps, modest recovery.
+    // AT: 4×2500 m at 6k+5 with 4' rest — long distance reps, modest recovery.
     title: "Chinook",
     type: "AT",
     difficulty: "medium",
     pain: 4,
     steps: [
-      { k: "reps", count: 3 },
+      { k: "reps", count: 4 },
       {
         k: "w",
         duration: { kind: "distance", meters: 2500 },
@@ -1394,7 +1397,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 4×4' at 6k-2 with 2' rest — top of the band, paid for with rest.
+    // AT: 4×5' at 6k-2 with 2:30 rest — top of the band, paid for with rest.
     title: "Heat Low",
     type: "AT",
     difficulty: "hard",
@@ -1403,15 +1406,15 @@ export const AT_WORKOUTS: WorkoutInput[] = [
       { k: "reps", count: 4 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 5 },
         ref: { base: "6k", off: -2 },
         spm: 26,
-        restMinutes: 2,
+        restMinutes: 2.5,
       },
     ],
   },
   {
-    // AT: 2000/1500/1000/500 m descending ladder, 6k+2 sharpening to 6k-4.
+    // AT: 2150/1600/1050/550 m descending ladder, 6k+2 sharpening to 6k-4.
     title: "Squall Line",
     type: "AT",
     difficulty: "hard",
@@ -1419,28 +1422,28 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 2000 },
+        duration: { kind: "distance", meters: 2150 },
         ref: { base: "6k", off: 2 },
         spm: 24,
-        restMinutes: 3,
+        restMinutes: 3.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1500 },
+        duration: { kind: "distance", meters: 1600 },
         ref: { base: "6k", off: 0 },
         spm: 24,
-        restMinutes: 2.5,
+        restMinutes: 2.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 1000 },
+        duration: { kind: "distance", meters: 1050 },
         ref: { base: "6k", off: -2 },
         spm: 26,
-        restMinutes: 2,
+        restMinutes: 2.25,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 500 },
+        duration: { kind: "distance", meters: 550 },
         ref: { base: "6k", off: -4 },
         spm: 26,
       },
@@ -1507,7 +1510,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 2×12' at 6k pace with 4' between — the long threshold rep, undiluted.
+    // AT: 2×13' at 6k pace with 4' between — the long threshold rep, undiluted.
     title: "Cyclogenesis",
     type: "AT",
     difficulty: "hard",
@@ -1515,14 +1518,14 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 12 },
+        duration: { kind: "time", minutes: 13 },
         ref: { base: "6k", off: 0 },
         spm: 26,
         restMinutes: 4,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 12 },
+        duration: { kind: "time", minutes: 13 },
         ref: { base: "6k", off: 0 },
         spm: 26,
       },
@@ -1589,13 +1592,13 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 5×4' at 6k-1 with 1' rest — long fast reps, no room to settle.
+    // AT: 6×4' at 6k-1 with 1' rest — long fast reps, no room to settle.
     title: "Cutoff Low",
     type: "AT",
     difficulty: "hard",
     pain: 4,
     steps: [
-      { k: "reps", count: 5 },
+      { k: "reps", count: 6 },
       {
         k: "w",
         duration: { kind: "time", minutes: 4 },
@@ -1606,7 +1609,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 10' at 6k+3 then 3×3' at 6k-2 — the long piece is only the setup.
+    // AT: 12' at 6k+3 then 3×3:30 at 6k-2 — the long piece is only the setup.
     title: "Gap Wind",
     type: "AT",
     difficulty: "hard",
@@ -1614,23 +1617,23 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "time", minutes: 10 },
+        duration: { kind: "time", minutes: 12 },
         ref: { base: "6k", off: 3 },
         spm: 24,
-        restMinutes: 3,
+        restMinutes: 3.75,
       },
       { k: "reps", count: 3 },
       {
         k: "w",
-        duration: { kind: "time", minutes: 3 },
+        duration: { kind: "time", minutes: 3.5 },
         ref: { base: "6k", off: -2 },
         spm: 26,
-        restMinutes: 1,
+        restMinutes: 1.25,
       },
     ],
   },
   {
-    // AT: 500/1000/1500/1000/500 m distance pyramid, all at 6k pace.
+    // AT: 500/1000/1550/1000/500 m distance pyramid, all at 6k pace.
     title: "Triple Point",
     type: "AT",
     difficulty: "hard",
@@ -1641,20 +1644,6 @@ export const AT_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "distance", meters: 500 },
         ref: { base: "6k", off: 0 },
         spm: 26,
-        restMinutes: 2,
-      },
-      {
-        k: "w",
-        duration: { kind: "distance", meters: 1000 },
-        ref: { base: "6k", off: 0 },
-        spm: 24,
-        restMinutes: 2.5,
-      },
-      {
-        k: "w",
-        duration: { kind: "distance", meters: 1500 },
-        ref: { base: "6k", off: 0 },
-        spm: 24,
         restMinutes: 2.5,
       },
       {
@@ -1662,7 +1651,21 @@ export const AT_WORKOUTS: WorkoutInput[] = [
         duration: { kind: "distance", meters: 1000 },
         ref: { base: "6k", off: 0 },
         spm: 24,
-        restMinutes: 2,
+        restMinutes: 3.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 1550 },
+        ref: { base: "6k", off: 0 },
+        spm: 24,
+        restMinutes: 3.25,
+      },
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 1000 },
+        ref: { base: "6k", off: 0 },
+        spm: 24,
+        restMinutes: 2.5,
       },
       {
         k: "w",
@@ -1673,7 +1676,7 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     ],
   },
   {
-    // AT: 2000 m at 6k+5, 2000 m at 6k+3, then 4' at 6k pace — descending.
+    // AT: 2150 m at 6k+5, 2150 m at 6k+3, then 4:30 at 6k pace — descending.
     title: "Cold Core",
     type: "AT",
     difficulty: "hard",
@@ -1681,21 +1684,21 @@ export const AT_WORKOUTS: WorkoutInput[] = [
     steps: [
       {
         k: "w",
-        duration: { kind: "distance", meters: 2000 },
+        duration: { kind: "distance", meters: 2150 },
         ref: { base: "6k", off: 5 },
         spm: 22,
-        restMinutes: 4,
+        restMinutes: 3.75,
       },
       {
         k: "w",
-        duration: { kind: "distance", meters: 2000 },
+        duration: { kind: "distance", meters: 2150 },
         ref: { base: "6k", off: 3 },
         spm: 24,
-        restMinutes: 4,
+        restMinutes: 3.75,
       },
       {
         k: "w",
-        duration: { kind: "time", minutes: 4 },
+        duration: { kind: "time", minutes: 4.5 },
         ref: { base: "6k", off: 0 },
         spm: 26,
       },

@@ -443,13 +443,15 @@ describe("buildLogSteps", () => {
   });
 
   it("Filling Low: the auto-inserted rest phases never become LogSteps, even inside a reps-marker block; kept and discarded actuals interleave correctly by position", () => {
-    // reps(3) x [w{2000m @ 6k+4, spm 22, rest 3'}] -> 3*(work+rest) = 6
-    // phases; work at 0,2,4. draft's real ref {base:"6k", off:4} ->
-    // refLabel "6k +4" for every occurrence (same authored step, repeated
-    // by the reps marker — originalIndex is identical for all 3).
+    // reps(4) x [w{2000m @ 6k+4, spm 22, rest 3'}] -> 4*(work+rest) = 8
+    // phases; work at 0,2,4,6 (retuned from 3 reps / 6 phases in Task 3,
+    // 2026-08-10 library-rebalance, to reach Filling Low's new 45-60
+    // band). draft's real ref {base:"6k", off:4} -> refLabel "6k +4" for
+    // every occurrence (same authored step, repeated by the reps marker —
+    // originalIndex is identical for all 4).
     // Reps 1 & 3 (positions 0 & 4) kept: 850/2000*500 = 212.5,
-    // 800/2000*500 = 200.0. Rep 2 (position 2) discarded (no actuals
-    // entry).
+    // 800/2000*500 = 200.0. Reps 2 & 4 (positions 2 & 6) discarded (no
+    // actuals entry).
     const { draft, run } = runFor("Filling Low", {
       completedAt: new Date(NOW.getTime() + 35 * 60 * 1000).toISOString(),
       actuals: {
@@ -465,8 +467,10 @@ describe("buildLogSteps", () => {
         },
       },
     });
-    expect(run.phases).toHaveLength(6);
+    expect(run.phases).toHaveLength(8);
     expect(run.phases.map((p) => p.type)).toStrictEqual([
+      "work",
+      "rest",
       "work",
       "rest",
       "work",
@@ -493,6 +497,7 @@ describe("buildLogSteps", () => {
         spm: 22,
         meters: 2000,
       },
+      { label, targetSplit: 124, spm: 22, meters: 2000 },
     ]);
   });
 
@@ -1767,11 +1772,12 @@ describe("buildManualLogSteps", () => {
   });
 
   it("Filling Low: a reps-expanded distance split ref resolves at CURRENT baselines, all actuals 'assumed' at the same value as targetSplit", () => {
-    // 3x2000m @ 6k+4: resolveSplit(120, +4) = 124, refLabel({base:"6k",
+    // 4x2000m @ 6k+4 (retuned from 3 reps in Task 3, 2026-08-10 library-
+    // rebalance): resolveSplit(120, +4) = 124, refLabel({base:"6k",
     // off:4}) = "6k +4" (off > 0 -> "+4").
     const w = library("Filling Low");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
-    expect(steps).toHaveLength(3);
+    expect(steps).toHaveLength(4);
     for (const step of steps) {
       expect(step).toStrictEqual({
         label: "2000 m @ 6k +4",
