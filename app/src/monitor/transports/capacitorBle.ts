@@ -16,8 +16,10 @@
 // in this file or its test suite may claim to test real radio behavior.
 // What the suite DOES pin (phone-BLE spec §9's row for this file) is the
 // half that is ours rather than the radio's: the request options we
-// build, the order we build them in, the timeout race, the plugin prose
-// we translate, the memo, the subscribe route. Two requirements stay
+// build, the order we build them in, the timeout race AND ITS SCOPE (a
+// hang at ANY pipeline step, not merely at the picker call — REVIEW I6's
+// own regression), the plugin prose we translate, the memo, the
+// subscribe route. Two requirements stay
 // beyond any mock and live as comments below instead — the no-double-init
 // rule (REVIEW B2) and the BleClient queue invariant (REVIEW B3.3).
 
@@ -108,7 +110,10 @@ class BluetoothPermissionError extends Error {
 
 class ScanTimeoutError extends Error {
   constructor() {
-    super("The scan pipeline did not settle within 35s.");
+    // Derived, so the diagnostic can never drift from the constant.
+    super(
+      `The scan pipeline did not settle within ${SCAN_TIMEOUT_MS / 1000}s.`,
+    );
     this.name = "ScanTimeoutError";
   }
 }
@@ -147,7 +152,17 @@ function translateInitializeFailure(err: unknown): unknown {
  *  (`DeviceManager.swift:195-210`), so a rower can pick their PM5 at
  *  t=36s. Dropping that pick is safe — `requestDevice` only PICKS, no
  *  connect was issued, and the retry card the rower is looking at scans
- *  fresh. */
+ *  fresh.
+ *
+ *  About the `settled` flag: it is INTENT-DOCUMENTATION on all three
+ *  arms, not an observable guard, and no test covers it — because none
+ *  can. The outer promise itself enforces at-most-one settle (a second
+ *  `resolve`/`reject` on a settled promise is a no-op), the timer is
+ *  always cleared before either late arm runs, and what actually
+ *  prevents the unhandled rejection is the ATTACHED handler, not the
+ *  flag. It stays because it makes the at-most-one-settle intent legible
+ *  at the seam where a future edit — a log line, a metric, an
+ *  `onScanAbandoned` hook — would make it load-bearing overnight. */
 function raceScanTimeout<T>(pipeline: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let settled = false;
@@ -164,7 +179,8 @@ function raceScanTimeout<T>(pipeline: Promise<T>): Promise<T> {
           settled = true;
           resolve(value);
         }
-        // Else: a late pick, deliberately dropped (REVIEW I4).
+        // Else: a late pick, deliberately dropped (REVIEW I4) — dropped
+        // by the settled promise itself; the flag only says so out loud.
       },
       (err: unknown) => {
         clearTimeout(timer);
@@ -172,8 +188,10 @@ function raceScanTimeout<T>(pipeline: Promise<T>): Promise<T> {
           settled = true;
           reject(err);
         }
-        // Else: the rower's eventual Cancel, deliberately swallowed. THIS
-        // ATTACHED HANDLER is the no-unhandledrejection guarantee.
+        // Else: the rower's eventual Cancel, deliberately swallowed.
+        // THIS ATTACHED HANDLER — not the flag — is the
+        // no-unhandledrejection guarantee; mutating it is what turns the
+        // suite red.
       },
     );
   });
