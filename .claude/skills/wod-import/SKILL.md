@@ -64,8 +64,12 @@ cannot verify its own state write stops and says so.
    - VALIDATE before presenting: write the block to a temp file and run
      `WOD_BLOCK_FILE=/tmp/block.txt pnpm --dir app exec vitest run
      --project unit server/wodBlockValidation.harness.test.ts --reporter=verbose`
-     with the block's text in that file. A block that does not print OK
-     never reaches James; fix it or drop the candidate.
+     with the block's text in that file. The exit code is the gate: 0
+     means valid, nonzero means invalid. A block whose run does not
+     exit 0 never reaches James; fix it or drop the candidate. The
+     printed `OK: n block(s)` line, or the line-numbered `INVALID`
+     lines, are human-readable detail for you to read while curating,
+     not the verdict itself; judge the candidate by the exit code.
 5. Scaling, only when James asks (in the original request or per
    candidate): produce a variant block beside the faithful one, delta
    stated in one line ("original 6x500m; scaled 8x500m" or "original

@@ -70,22 +70,43 @@ describe("wod block validation harness reader (always-on)", () => {
   // against both a valid and an invalid block, so a change to
   // `runBlockFile` has a falsifying line in the normal CI gate even
   // though the harness test above only runs on demand.
+  //
+  // Its console output is captured, not printed. A real invocation's
+  // exit code is the gate (see SKILL.md); the printed OK/INVALID lines
+  // are just human-readable detail. If this test let its own two calls
+  // print, an invalid real block's run would show this test's "OK: 1
+  // block(s)" on stdout right beside the real INVALID lines (and the
+  // mirror for a valid real block), so nobody could read the verdict
+  // off the console alone. Asserting on the captured strings is a
+  // stricter check than letting them print anyway.
   it("reads WOD_BLOCK_FILE and reports parseBulk's verdict, both directions", () => {
     const dir = mkdtempSync(join(tmpdir(), "wod-block-"));
     const path = join(dir, "block.txt");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    writeFileSync(path, "WOD Smoke | O2 | easy | 2\nw 30' 6k @20\n");
-    vi.stubEnv("WOD_BLOCK_FILE", path);
-    const ok = runBlockFile();
-    expect(ok.errors).toStrictEqual([]);
-    expect(ok.workouts).toHaveLength(1);
-    expect(ok.droppedWarmups).toBe(0);
+    try {
+      writeFileSync(path, "WOD Smoke | O2 | easy | 2\nw 30' 6k @20\n");
+      vi.stubEnv("WOD_BLOCK_FILE", path);
+      const ok = runBlockFile();
+      expect(ok.errors).toStrictEqual([]);
+      expect(ok.workouts).toHaveLength(1);
+      expect(ok.droppedWarmups).toBe(0);
+      expect(log).toHaveBeenCalledExactlyOnceWith("OK: 1 block(s)");
+      expect(error).not.toHaveBeenCalled();
 
-    writeFileSync(path, "WOD Smoke | O2 | easy | 2\nw 10' 9k\n");
-    const invalid = runBlockFile();
-    expect(invalid.errors.length).toBeGreaterThan(0);
-    expect(invalid.errors[0].line).toBe(2);
-
-    vi.unstubAllEnvs();
+      log.mockClear();
+      writeFileSync(path, "WOD Smoke | O2 | easy | 2\nw 10' 9k\n");
+      const invalid = runBlockFile();
+      expect(invalid.errors.length).toBeGreaterThan(0);
+      expect(invalid.errors[0].line).toBe(2);
+      expect(log).not.toHaveBeenCalled();
+      expect(error).toHaveBeenNthCalledWith(1, "INVALID:");
+      expect(error).toHaveBeenNthCalledWith(2, "  line 2: bad pace ref: 9k");
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });
