@@ -92,7 +92,7 @@ test("News at rest: 6 UNREAD, two pinned rows, four latest rows, WHAT'S NEW v0.5
 
   await expect(page.getByRole("heading", { name: "WHAT'S NEW" })).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.5.1",
+    "v0.7.0",
   );
 });
 
@@ -155,7 +155,7 @@ test("reader NEXT footer names the next unread article from workout-types", asyn
   await expect(next).toContainText(BASELINES_TITLE);
 });
 
-test("/news/releases lists all three versions", async ({ page }) => {
+test("/news/releases lists all four versions", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: `news-releases-${RUN_ID}@e2e.test`,
     name: "News Releases",
@@ -166,10 +166,11 @@ test("/news/releases lists all three versions", async ({ page }) => {
     page.getByRole("heading", { name: "Release notes" }),
   ).toBeVisible();
   const versions = page.locator(".news-release-version");
-  await expect(versions).toHaveCount(3);
-  await expect(versions.nth(0)).toContainText("v0.5.1");
-  await expect(versions.nth(1)).toContainText("v0.5.0");
-  await expect(versions.nth(2)).toContainText("v0.4.0");
+  await expect(versions).toHaveCount(4);
+  await expect(versions.nth(0)).toContainText("v0.7.0");
+  await expect(versions.nth(1)).toContainText("v0.5.1");
+  await expect(versions.nth(2)).toContainText("v0.5.0");
+  await expect(versions.nth(3)).toContainText("v0.4.0");
 });
 
 test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller, and ← BACK now restores News's own scroll position (CL item: News scroll memory)", async ({
