@@ -607,13 +607,25 @@ test.describe("new controls this phase introduced", () => {
   // impossible (2026-08-09 warmup-setting spec): bulk import DROPS `wu`
   // lines rather than turning them into a step, and migration 0008 already
   // stripped every existing stored `wu`. Repurposed into the import walk's
-  // own wu-strip notice case (block2-review's plan hole): a paste with one
-  // dropped `wu` line, kept on-screen by a second block's unrelated error
-  // so the notice actually has a chance to render (a CLEAN import navigates
-  // away immediately — BulkImport.tsx's own `onImported` — before any
-  // notice could ever be seen), then confirms the surviving workout really
-  // has no wu row to edit.
-  test("a paste with one wu line shows the drop notice, and the created workout has no wu row to edit", async ({
+  // own wu-strip notice case (block2-review's plan hole).
+  //
+  // Two passes, because the composed import contract (`domain/bulk.ts`'s
+  // header, written when this branch rebased onto Phase CL's all-or-nothing
+  // import) makes it impossible to see both halves in ONE paste: **`wu`
+  // lines are never "bad"; everything else is all-or-nothing.** The notice
+  // only stays on screen when something ELSE errored (a clean import
+  // navigates away immediately — BulkImport.tsx's own `onImported`), and
+  // any such error now means ZERO rows are created, so there is nothing to
+  // open and edit from that same paste. The earlier single-paste version of
+  // this test asserted "1 created" beside an error, which was the
+  // pre-transaction partial-success contract.
+  //
+  // Pass 1 is the notice itself, and doubles as the composed contract's own
+  // e2e pin: the dropped `wu` is NOT counted as an error (the error list
+  // names only the bad pace ref) yet the paste still creates nothing.
+  // Pass 2 is the strip's real consequence, through a CLEAN paste: the
+  // created workout has no wu row to edit and Save never PUTs one back.
+  test("a paste with one wu line shows the drop notice beside an unrelated error and still creates nothing; a clean one creates a workout with no wu row to edit", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -624,10 +636,9 @@ test.describe("new controls this phase introduced", () => {
     await page.goto("/library/import");
 
     const title = "WU Strip Row";
+    const blockLines = [`${title} | O2 | easy | 2`, "wu 5", "w 10' 6k @20"];
     const text = [
-      `${title} | O2 | easy | 2`,
-      "wu 5",
-      "w 10' 6k @20",
+      ...blockLines,
       "",
       "WU Strip Bad | O2 | easy | 2",
       "w 10' 9k @20",
@@ -635,20 +646,27 @@ test.describe("new controls this phase introduced", () => {
     await page.getByLabel("Bulk import text").fill(text);
     await page.getByRole("button", { name: "Import", exact: true }).click();
 
-    // A partial result keeps the rower on this panel (the second block's
-    // bad pace ref is the only error), which is exactly what lets the
-    // dropped-warm-ups notice actually render.
+    // All-or-nothing: the second block's bad pace ref rejects the WHOLE
+    // paste, which is also what keeps the rower on this panel long enough
+    // for the dropped-warm-ups notice to render at all.
     await expect(page.locator(".bulk-import-result .mono-status")).toHaveText(
-      "1 created",
+      "0 created",
     );
     await expect(page.locator(".bulk-import-notice")).toHaveText(
       "1 warm-up line dropped. Warm-ups are a setting now.",
     );
+    // The `wu 5` on line 2 contributes NO entry here — the drop is not an
+    // error. Only the bad ref on line 6 is.
     await expect(page.locator(".bulk-import-errors li")).toHaveText(
       "line 6: bad pace ref: 9k",
     );
 
-    await page.goto("/library");
+    // Pass 2: the same first block on its own. Clean, so it lands (proving
+    // the wu line never blocked it) and navigates away.
+    await page.getByLabel("Bulk import text").fill(blockLines.join("\n"));
+    await page.getByRole("button", { name: "Import", exact: true }).click();
+    await expect(page).toHaveURL(/\/library$/);
+
     await page.locator(".workout-row").filter({ hasText: title }).click();
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Edit" }).click();
@@ -682,7 +700,6 @@ test.describe("new controls this phase introduced", () => {
 
     await expect(page).toHaveURL(/\/library\/[^/]+$/);
     await cleanupByTitle(page, title);
-    await cleanupByTitle(page, "WU Strip Bad");
   });
 
   test("editing a stored workout's rest, then tapping REST once, still saves — the seam that used to write NaN", async ({
