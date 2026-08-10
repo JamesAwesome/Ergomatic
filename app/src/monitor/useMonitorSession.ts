@@ -873,7 +873,7 @@ export function useMonitorSession(
    *  reached by every OTHER way off the interstitial: a tab-bar tap, the
    *  back gesture, an iOS process kill. Before this fix those exits left
    *  the PM5 armed holding a workout nobody was going to row — DEVIATIONS
-   *  row 64's own documented harm ("the rower find[s] someone else's
+   *  row 63's own documented harm ("the rower find[s] someone else's
    *  intervals waiting on the monitor"), reachable from everywhere except
    *  the one button that happened to call `cancel()`. Fire-and-forget
    *  either way: nothing above this can act on a failed hang-up, and a

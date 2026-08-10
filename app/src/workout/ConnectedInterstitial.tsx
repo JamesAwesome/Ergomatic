@@ -440,7 +440,7 @@ export default function ConnectedInterstitial({
               "Cancel is present in every state, always last." Its absence
               here left the erg ARMED with no clean way back once
               programmed; `handleCancel` already runs `useMonitorSession`'s
-              `ready`-phase terminate (DEVIATIONS row 64). */}
+              `ready`-phase terminate (DEVIATIONS row 63). */}
           <button type="button" className="button-l2" onClick={handleCancel}>
             Cancel
           </button>

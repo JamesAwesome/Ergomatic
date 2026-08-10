@@ -694,7 +694,7 @@ describe("state 7: ready", () => {
     ]);
   });
 
-  it("Cancel calls session.cancel() (the ready-phase terminate, DEVIATIONS row 64) and hands back to the caller", async () => {
+  it("Cancel calls session.cancel() (the ready-phase terminate, DEVIATIONS row 63) and hands back to the caller", async () => {
     const { session: s, onExit } = renderInterstitial({
       phase: "ready",
       deviceName: DEVICE_NAME,

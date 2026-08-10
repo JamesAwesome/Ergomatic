@@ -1856,7 +1856,7 @@ describe("useMonitorSession: teardown", () => {
 
   // Task 5 review, Probe D: before this fix, unmounting while ARMED
   // (programming/ready) hung up the radio with no terminate at all, leaving
-  // the PM5 holding a workout nobody was going to row — DEVIATIONS row 64's
+  // the PM5 holding a workout nobody was going to row — DEVIATIONS row 63's
   // own documented harm, reachable from every exit except a Cancel press.
   it("unmount while armed (ready) terminates BEFORE hanging up — the erg is not left with an orphan workout", async () => {
     const { result, fake, transport, unmount } = harness({
