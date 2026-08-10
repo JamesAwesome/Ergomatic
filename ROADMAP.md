@@ -1350,6 +1350,40 @@ connected PM5 saves a log indistinguishable in shape from a phone-timer
 session, with real monitor-measured splits. The same walk on real hardware
 is still owed.
 
+## Phase 7D — Phone BLE
+
+**Status:** In flight (2026-08-10). Tasks 1-4 (transport rework, the
+`permission-denied`/`picking` surface, the Bluetooth capability
+adapter, iOS wiring) are done on the `phone-ble` branch; Task 5, the
+hardware walk, is what remains before merge.
+**Goal:** The PM5 connects, programs, rows, and saves on an iPhone
+through the existing transport seam, closing 7B/7C's owed hardware
+walk on a real device instead of the fake transport.
+**Design authority:**
+`docs/superpowers/specs/2026-08-10-phone-ble-design.md` (plan:
+`docs/superpowers/plans/2026-08-10-phone-ble.md`).
+
+- [x] `capacitorBle.ts`'s scan pipeline, typed errors at the seam, and
+      the abandoned-sheet queue invariant (spec §3)
+- [x] `permission-denied` end to end and the `picking` backdrop
+      (`phase` gains no `"choosing"`; the sheet is the plugin's own,
+      not an OS picker on iOS — spec §4/§5)
+- [x] The Bluetooth capability adapter; `WorkoutDetail`'s Connect
+      probe moves onto it (spec §6)
+- [x] `cap sync ios` wires `@capacitor-community/bluetooth-le` into
+      the Swift package for the first time (spec §8)
+- [ ] The hardware walk: spec §10's 8 steps on James's iPhone,
+      James-operated at the erg, one question per step
+
+**Release gate:** the v0.7.0 tag and TestFlight build wait on this
+phase (James, 2026-08-10: "phone side testing matters for the first
+users") — not on the library rebalance or Phase CL2's debt pay-down,
+neither of which touches the transport.
+
+**Exit:** the hardware walk (spec §10, all 8 steps) passes on a real
+PM5 from a dev build on James's iPhone, and James gives the merge
+word.
+
 ## Phase 8 — Plan & Progress
 
 **Status:** Not started
@@ -1493,9 +1527,10 @@ testers meet the rebalanced library).
 
 ## Phase CL2 — Post-release authoring parity
 
-**Status:** Not started. **Scheduled AFTER the end-of-CL TestFlight
-release (James, 2026-08-10) — must not block getting the app into
-testers' hands.**
+**Status:** Not started. **Scheduled AFTER the v0.7.0 TestFlight
+release, which the gate ruling (James, 2026-08-10) ties to Phase 7D
+landing and walking, not to Phase CL or the library rebalance —
+this phase must not block getting the app into testers' hands.**
 **Goal:** The builder can author what the domain, the import, and a
 third of the library already are: N lead lines, then a repeated block.
 
