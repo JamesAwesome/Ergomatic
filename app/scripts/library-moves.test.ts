@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { Step } from "../domain/types.js";
+import { estimateMinutes } from "../domain/expand.js";
 import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
-import { BANDS, BASELINES, type Band } from "./library-balance.js";
+import { BANDS, BASELINES, bucket, type Band } from "./library-balance.js";
 import patterns from "../domain/generation/patterns.json";
 import { classifyArchetype } from "../domain/generation/archetype.js";
 import {
@@ -19,7 +20,6 @@ import {
   libraryItems,
   pieceFactors,
   rawMinutes,
-  reviewReplay,
   solveLibrary,
   type Grid,
   hallDeficit,
@@ -560,27 +560,50 @@ describe("DRAFT_GRID", () => {
 // ---------------------------------------------------------------------
 // PHASE TRIPWIRES (block review M4)
 // ---------------------------------------------------------------------
-// Both tests below are tied to TODAY's seed content, deliberately. Nothing
-// currently connects `patterns.json`'s committed grid — which drives the
-// balance script AND the seed quota gate — to the solver that produced it,
-// and nothing pins the review replay the module's own header calls its
-// trustworthiness check ("If this stops matching … every number below it is
-// suspect"). Mutating the one-rep arm out of `reachable` used to kill two
-// unit tests and leave the committed grid and the committed move plan
-// silently stale.
+// Both tests below were tied to TODAY's (pre-content) seed content,
+// deliberately, to catch the solver and the committed grid drifting apart
+// before any retune landed. WHEN TASK 3/4 CONTENT LANDS THESE FIRE — that
+// is the signal, not a regression, per this block's own original comment.
 //
-// WHEN TASK 3/4 CONTENT LANDS THESE WILL FIRE. That is the signal, not a
-// regression: re-run `scripts/library-moves.ts`, re-read the move plan, and
-// then REPLACE these two with the phase's actual exit condition (§8 — the
-// library MATCHES `targets`), which is a statement about content rather
-// than about what the solver would still recommend.
+// Task 3 (2026-08-10 library-rebalance) landed O2 and AT. Re-running the
+// solver over O2's now-current content no longer reproduces the grid it
+// produced against the PRE-retune library (`<20`/`60+` off by one each) —
+// expected: retuning moves workouts INTO their target band, which changes
+// their `current`/`reach` inputs to the solve. That identity was only ever
+// a PROXY for "the library doesn't yet match its target"; once a type's
+// content lands, measuring the library itself against the target IS the
+// exit condition (§8), so O2 is replaced below with that direct measure
+// (which now holds). AT's solved grid still happens to reproduce the
+// committed one even after its retune, so it stays on the original
+// solver-parity check for now — Task 4 (TR/AN) will find out whether AT
+// needs the same swap when its own content lands, since a second type's
+// solve can perturb another type's Hall computation only if they share
+// state, which `solveLibrary` doesn't (it solves each type from its own
+// filtered item list, ruling B applied per type). TR/AN are untouched by
+// Task 3 and still reproduce their committed grid via the solver exactly
+// as before.
 describe("phase tripwires", () => {
-  it("patterns.json's committed targets are the grid this solver produces", () => {
+  it("O2 (Task 3 content) now measures exactly onto its target — the real §8 exit condition, not the solver proxy", () => {
+    const stats = LIBRARY_WORKOUTS.filter((w) => w.type === "O2").map((w) => ({
+      type: w.type,
+      minutes: estimateMinutes(w.steps, BASELINES).minutes,
+    }));
+    const counts = bucket(stats);
+    for (const b of BANDS) {
+      const key = `O2|${b}`;
+      expect({ key, n: counts[key] ?? 0 }).toStrictEqual({
+        key,
+        n: patterns.targets.O2[b],
+      });
+    }
+  });
+
+  it("AT/TR/AN's committed targets are still the grid this solver produces", () => {
     const solved = solveLibrary(
       libraryItems().map((r) => r.item),
       DRAFT_GRID,
     );
-    for (const type of ["O2", "AT", "TR", "AN"] as const) {
+    for (const type of ["AT", "TR", "AN"] as const) {
       expect({ type, grid: solved[type].grid }).toStrictEqual({
         type,
         grid: patterns.targets[type],
@@ -588,13 +611,22 @@ describe("phase tripwires", () => {
     }
   });
 
-  it("the adversarial review's published numbers still replay", () => {
-    // docs/superpowers/specs/2026-08-10-rebalance-adversarial-review.md B1.
-    const replay = reviewReplay();
-    expect(replay.crossers).toBe(144);
-    expect(replay.unreachable).toBe(40);
-    expect(replay.deficits).toStrictEqual({ O2: 3, AT: 4, TR: 6, AN: 8 });
-  });
+  // "the adversarial review's published numbers still replay" (crossers
+  // 144 / unreachable 40 / deficits {O2:3, AT:4, TR:6, AN:8}) is RETIRED
+  // here, not re-pinned to a new number. `reviewReplay()` measures
+  // `estimateMinutes` over LIVE `LIBRARY_WORKOUTS` content — a whole-
+  // library aggregate, not a per-type one — so it was always going to
+  // move the instant ANY workout's content changed, the same way a
+  // workout stops being a "crosser" once it actually reaches its assigned
+  // band. It served its purpose: a one-time faithfulness check, verified
+  // in Task 1 against the then-untouched library, that the solve's
+  // arithmetic matched the adversarial review's own instrument (the
+  // numbers above are reproduced and cited in the committed move plan,
+  // docs/superpowers/specs/2026-08-10-library-rebalance-move-plan.md,
+  // "Method, and its reconciliation with the adversarial review"). Content
+  // landing is exactly the point past which re-pinning a new frozen number
+  // here would just be a second stale tripwire waiting to fire again for
+  // Task 4.
 });
 
 describe("the real clock (block review M2)", () => {
