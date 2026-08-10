@@ -5,6 +5,10 @@ import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { usePreferences } from "../api/usePreferences";
+import {
+  probeBluetoothStatus,
+  type BluetoothCapability,
+} from "../adapters/bluetoothCapability";
 import { estimateMinutes } from "../../domain/expand.js";
 import {
   compileProgram,
@@ -33,67 +37,23 @@ import TypeBadge from "../components/TypeBadge";
 import StepRow from "./StepRow";
 import ConnectedInterstitial, { loadLastDevice } from "./ConnectedInterstitial";
 
-// `navigator.bluetooth`'s own type comes from `monitor/transports/
-// webBluetooth.ts`'s ambient `declare global { interface Navigator {...} }`
-// augmentation — a MODULE-PRIVATE `Bluetooth` interface (that file has no
-// `export`, so its name isn't reachable here to extend by declaration
-// merging). Rather than fight that with a second global augmentation of a
-// name this file cannot see, this probes for `getAvailability` at runtime
-// and types the result narrowly, right where it's used — TypeScript's DOM
-// lib ships no Web Bluetooth types at all (`webBluetooth.ts`'s own header
-// comment: verified, nothing in lib.dom.d.ts), and `getAvailability` is
-// Chromium-only, genuinely absent on older Chromium/other engines.
-interface BluetoothAvailabilityProbe {
-  getAvailability?(): Promise<boolean>;
-}
-
 /** The Connect button's own three states (handoff §1): a real, available
  *  radio; the adapter present but switched off (Chromium can tell us this
  *  via `getAvailability()`); and no Web Bluetooth API on this
  *  platform/browser at all (`navigator.bluetooth` undefined — Safari,
  *  Firefox, a non-secure context). `"unknown"` is the brief instant before
  *  the async probe resolves — rendered identically to `"available"` so the
- *  button never flashes a dashed state it may not deserve. */
-type BluetoothStatus = "unknown" | "available" | "off" | "absent";
+ *  button never flashes a dashed state it may not deserve. The probe lives
+ *  in the bluetoothCapability adapter now. */
+type BluetoothStatus = "unknown" | BluetoothCapability;
 
 function useBluetoothStatus(): BluetoothStatus {
   const [status, setStatus] = useState<BluetoothStatus>("unknown");
   useEffect(() => {
     let cancelled = false;
-    const bt = navigator.bluetooth;
-    if (bt === undefined) {
-      // Routed through a resolved microtask, same idiom `Countdown.tsx`'s
-      // own build effect uses — react-hooks' set-state-in-effect rule
-      // flags a setState call made directly, synchronously, in an effect
-      // body; a microtask has no perceptible delay and reads as "setState
-      // in a callback" to the rule.
-      void Promise.resolve().then(() => {
-        if (!cancelled) setStatus("absent");
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-    const probe = bt as unknown as BluetoothAvailabilityProbe;
-    if (typeof probe.getAvailability !== "function") {
-      // Can't tell — fail open rather than dashing a button that may work
-      // fine; a genuinely-off adapter still surfaces honestly once pressed
-      // (`useMonitorSession.ts`'s own `mapRadioFailure`).
-      void Promise.resolve().then(() => {
-        if (!cancelled) setStatus("available");
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-    probe
-      .getAvailability()
-      .then((available) => {
-        if (!cancelled) setStatus(available ? "available" : "off");
-      })
-      .catch(() => {
-        if (!cancelled) setStatus("available");
-      });
+    void probeBluetoothStatus().then((result) => {
+      if (!cancelled) setStatus(result);
+    });
     return () => {
       cancelled = true;
     };
