@@ -1248,11 +1248,14 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     };
   }
 
-  it("THE WALK DAY 2 SEQUENCE: the hand-off is HELD after the finish, the late split lands in the RECORD, and only then does the log screen get to look", async () => {
-    // Against the pre-fix hook this fails twice over: `handoffHeld` is not a
-    // field at all, and by the time the boundary arrives the caller has
-    // already navigated (the surface fires `onEnded` on the ended render),
-    // so the record the log screen reads still says zero.
+  it("THE WALK DAY 3 SEQUENCE, replayed: finished -> the PM's own repeat ticks -> the split -> recorded, with the hand-off held across all of it", async () => {
+    // The device stash, event for event (2026-08-11, PM5 432331249): the
+    // terminal frame, the machine's own repeat `finished` samples, THEN the
+    // split pair — and under either of the two tick-keyed bounds this used
+    // to carry (the hook's next-tick release, the driver's next-sample grace
+    // expiry) the run's own actual was refused with `index=null` while the
+    // bytes sat in the trace. Both bounds are clocks now, and the repeat
+    // ticks below are the regression: they must move nothing.
     const timer = manualSchedule();
     const { result, fake } = harness(
       {
@@ -1260,9 +1263,13 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
         events: [
           status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
           finishedAt(200),
-          // ~1 ms on the wire; a separate scripted moment here so the test
-          // can observe the held state in between.
-          finalBoundary(300),
+          // The PM5 keeps reporting `finished` while it sits in
+          // WorkoutLogged (§19.4) — the frames that used to end the wait.
+          finishedAt(250),
+          finishedAt(300),
+          finishedAt(350),
+          // ...and only now the pair the whole chain exists for.
+          finalBoundary(400),
         ],
       },
       { schedule: timer.schedule },
@@ -1280,10 +1287,21 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(result.current.handoffHeld).toBe(true);
     expect(result.current.actuals).toHaveLength(0);
     expect(loadMonitorRun()?.actuals).toHaveLength(0);
-    expect(timer.pending()?.ms).toBe(250);
+    expect(timer.pending()?.ms).toBe(3000);
 
-    // The split the PM5 always sends at the finish.
-    tick(fake, 100);
+    // Three more `finished` samples from the machine. THE REGRESSION: each
+    // of these used to release the hold (and, one layer down, expire the
+    // driver's grace) on the premise that the split shared the terminal
+    // frame's sample instant.
+    tick(fake, 50);
+    tick(fake, 50);
+    tick(fake, 50);
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.actuals).toHaveLength(0);
+
+    // The split the PM5 always sends at the finish, arriving when it
+    // actually arrives.
+    tick(fake, 50);
 
     expect(result.current.actuals).toHaveLength(1);
     expect(loadMonitorRun()?.actuals).toHaveLength(1);
@@ -1339,7 +1357,11 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(loadMonitorRun()?.actuals).toHaveLength(0);
   });
 
-  it("a further status tick releases the hold early — the driver's own finish grace ends at that same tick", async () => {
+  it("a further status tick does NOT release the hold (walk day 3): the machine's cadence is not the split's schedule", async () => {
+    // The exact pin this file used to carry, inverted by measurement. Every
+    // affected device session logged `handoff-released: next-tick` with not
+    // one `split-half` entry behind it — the door shut before the split
+    // existed. Ten repeat samples here; the hold outlasts all of them.
     const timer = manualSchedule();
     const { result, fake } = harness(
       {
@@ -1347,10 +1369,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
         events: [
           status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
           finishedAt(200),
-          // The PM5 keeps reporting "finished" while it sits in
-          // WorkoutLogged (§19.4). `driver.ts`'s grace is bounded by exactly
-          // this tick, so nothing more is coming for this run.
-          finishedAt(300),
+          ...Array.from({ length: 10 }, (_, i) => finishedAt(250 + i * 50)),
         ],
       },
       { schedule: timer.schedule },
@@ -1362,10 +1381,10 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     tick(fake, 100);
     expect(result.current.handoffHeld).toBe(true);
 
-    tick(fake, 100);
+    for (let i = 0; i < 10; i += 1) tick(fake, 50);
 
-    expect(result.current.handoffHeld).toBe(false);
-    expect(timer.pending()).toBeNull(); // released on the tick, not on the clock
+    expect(result.current.handoffHeld).toBe(true);
+    expect(timer.pending()).not.toBeNull(); // still the backstop's to end
   });
 
   it("the DESKTOP order pays nothing: a run whose final interval is already measured hands off on the finish itself", async () => {

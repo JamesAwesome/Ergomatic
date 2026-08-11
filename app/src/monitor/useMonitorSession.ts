@@ -213,31 +213,35 @@ function bestEffort(work: Promise<unknown>): void {
 /**
  * How long the ended hand-off waits for the final interval's split before
  * giving up on it — the BACKSTOP, not the expected path (hardware walk day
- * 2, 2026-08-11; `docs/monitor/pm5-interface-notes.md` §21 item 4).
+ * 2, 2026-08-11, `docs/monitor/pm5-interface-notes.md` §22 item 1; the
+ * number itself is walk day 3's, §22 item 5).
  *
- * (`docs/monitor/pm5-interface-notes.md` §22 item 1 carries the corrected
- * chain; §21 item 4 is where the 1 ms figure was captured, and its own
- * attribution of the LAYER was the thing walk day 2 disproved.)
- *
- * What went wrong without it: the machine's `finished` tick flips this hook
- * to `ended`, `ConnectedSurface` fires `onEnded` on that very render, the
- * caller navigates, the interstitial unmounts, and `teardown` unsubscribes
- * the driver listener and hangs up the radio — all inside the microtask
- * flush that follows the tick. The PM5's split pair arrives ~1 ms later, as
- * a new task. There was no race to win: teardown always got there first, so
+ * What went wrong without any hold: the machine's `finished` tick flips this
+ * hook to `ended`, `ConnectedSurface` fires `onEnded` on that very render,
+ * the caller navigates, the interstitial unmounts, and `teardown`
+ * unsubscribes the driver listener and hangs up the radio — all inside the
+ * microtask flush that follows the tick, while the PM5's split pair is still
+ * in flight. There was no race to win: teardown always got there first, so
  * walk 5's driver-side finish grace never saw the boundary it was built for,
  * and the save screen read "0 OF 1 INTERVALS MEASURED" with the split bytes
- * still on the wire behind it.
+ * on the wire behind it.
  *
- * 250 ms is ~100x the observed 1 ms gap, and it is a CEILING that the real
- * path never reaches: the hold releases on the boundary itself (~1 ms), on
- * the machine's next status tick (~90 ms on iOS, where `driver.ts`'s own
- * finish grace expires anyway), or on a disconnect. A quarter second on the
- * "SESSION ENDED" frame — a frame that used to flash past in one render — is
- * the entire cost, and only for a run that is actually missing its last
- * interval's actual.
+ * 3000 ms, from walk day 3's MEASUREMENT rather than day 1's inference. The
+ * first version of this hold was 250 ms with a "next status tick" exit,
+ * because the day-1 capture showed the pair 1 ms behind the terminal frame
+ * and the app inferred "the same sample instant" from it. Day 3's stash
+ * measured the real gap: the PM5 keeps ticking identical `finished` frames,
+ * and the split lands LATER than one of them (terminal at seq 19, the pair
+ * at seq 21-24, all inside 3 s) — so the tick exit shut the door before the
+ * split existed, and every affected session logged `handoff-released:
+ * next-tick` with not one `split-half` entry behind it. That exit is gone;
+ * this ceiling is what remains, and the real path still does not reach it:
+ * the boundary itself releases the hold as soon as it lands, and only a run
+ * actually missing its last interval's actual holds at all. A few seconds on
+ * the "SESSION ENDED" frame in the pathological case is a frame the rower is
+ * reading anyway; a lost measurement is not recoverable.
  */
-const FINISH_HANDOFF_HOLD_MS = 250;
+const FINISH_HANDOFF_HOLD_MS = 3000;
 
 export interface MonitorSession {
   phase: ConnectedPhase;
@@ -746,9 +750,7 @@ export function useMonitorSession(
    *  A no-op when nothing is held, so every release site can call it
    *  unconditionally. */
   const releaseHandoff = useCallback(
-    (
-      reason: "final-boundary" | "next-tick" | "backstop" | "teardown",
-    ): void => {
+    (reason: "final-boundary" | "backstop" | "teardown"): void => {
       const cancel = handoffHoldRef.current;
       if (cancel === null) return;
       handoffHoldRef.current = null;
@@ -964,11 +966,15 @@ export function useMonitorSession(
     (event: MonitorEvent, driver: MonitorDriver): void => {
       if (event.kind === "frame") {
         handleFrame(event.frame, driver);
-        // A status tick AFTER the machine's own finish ends the hand-off
-        // hold: `driver.ts`'s finish grace is bounded by exactly this tick,
-        // so no boundary belonging to the run that just ended can still be
-        // coming. (A no-op at every other moment — nothing is held.)
-        releaseHandoff("next-tick");
+        // NOTHING about a frame touches the hand-off hold (walk day 3). A
+        // status tick after the machine's finish used to release it, on the
+        // premise that `driver.ts`'s finish grace expired at that same tick
+        // and so nothing could still be coming. Day 3's stash disproved the
+        // premise at both layers at once: the PM5 keeps ticking identical
+        // `finished` frames and the split pair arrives LATER than one of
+        // them, so a tick-keyed release measures the machine's cadence and
+        // shuts the door on the data. The hold now ends on the boundary
+        // itself, or on its own bounded backstop, and on nothing else.
         return;
       }
       if (event.kind === "armed") {
