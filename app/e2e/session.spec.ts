@@ -982,13 +982,29 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
     await cleanupByTitle(page, title);
   });
 
-  test("two browser BACKs after session completion never resurrect the countdown or wipe completedAt", async ({
+  // Fix round 1 (M-1): this test used to drive two real `page.goBack()`
+  // presses and check neither resurrected the countdown. Fast-follow Task 4
+  // shortened the history stack (Start pushes straight from the workout's
+  // own detail page to `/session/countdown`, no ConfirmTargets hop in
+  // between), so a real back-walk from Session Complete now reaches the
+  // detail page in ONE hop and never passes through Countdown at all — see
+  // the "BACK mid-session" test above for that proof. A `page.goBack()`
+  // repeat of the old shape would therefore assert something true but
+  // vacuous here (Countdown never mounts, so of course it never rebuilds
+  // anything). The property this describe block actually exists to pin —
+  // `hasRunProgress` never lets a completed run be silently rebuilt — still
+  // has one real way in: a stale deep link or bookmark landing directly on
+  // `/session/countdown`. Drives that instead: Countdown's own guard bounces
+  // it to `/session/run`, and Timer's own already-complete check immediately
+  // bounces THAT to `/session/complete` — completedAt must survive both
+  // hops byte-identical, not get wiped by an accidental rebuild in between.
+  test("a stale deep link to /session/countdown after completion never rebuilds or wipes the completed run", async ({
     page,
   }) => {
-    const title = "Back Twice From Complete";
+    const title = "Deep Link After Complete";
     await signInViaBackdoor(page, {
-      email: "session-back-complete@e2e.test",
-      name: "Back Complete Tester",
+      email: "session-deep-link-complete@e2e.test",
+      name: "Deep Link Complete Tester",
     });
     await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
     await importBulk(
@@ -1012,25 +1028,19 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
     });
     expect(completedAtBefore).not.toBeNull();
 
-    await page.goBack();
-    await expect(page.getByText("GET ON THE HANDLE")).not.toBeVisible();
-    const completedAtAfterFirstBack = await page.evaluate(() => {
-      const raw = localStorage.getItem("ergomatic.sessionRun");
-      return raw === null
-        ? null
-        : (JSON.parse(raw) as { completedAt: string | null }).completedAt;
-    });
-    expect(completedAtAfterFirstBack).toBe(completedAtBefore);
+    await page.goto("/session/countdown");
 
-    await page.goBack();
+    // Both bounces land: Countdown -> /session/run -> /session/complete —
+    // never stalled mid-chain, never resurrecting "GET ON THE HANDLE".
+    await expect(page).toHaveURL(/\/session\/complete$/);
     await expect(page.getByText("GET ON THE HANDLE")).not.toBeVisible();
-    const completedAtAfterSecondBack = await page.evaluate(() => {
+    const completedAtAfter = await page.evaluate(() => {
       const raw = localStorage.getItem("ergomatic.sessionRun");
       return raw === null
         ? null
         : (JSON.parse(raw) as { completedAt: string | null }).completedAt;
     });
-    expect(completedAtAfterSecondBack).toBe(completedAtBefore);
+    expect(completedAtAfter).toBe(completedAtBefore);
 
     await cleanupByTitle(page, title);
   });
