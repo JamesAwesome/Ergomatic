@@ -250,9 +250,14 @@ export function createMonitorRun(
  *     post-run housekeeping re-reporting a filed boundary must not double
  *     it.
  *
- *  A refusal here is not silent: the driver logged the boundary either way
- *  (`interval-complete` with the FINISH GRACE detail, or
- *  `boundary-out-of-run`), so the wire trace still carries what happened. */
+ *  A refusal here is not silent: the driver logged the boundary whichever
+ *  path produced it — `interval-complete` with the FINISH GRACE detail, or
+ *  `boundary-out-of-run`, or (since the fast-follow summary fallback)
+ *  `summary-reconciled: filled-from-summary` for a boundary synthesized
+ *  from 0x0039 rather than received on 0x0037/0x0038. That third entry is
+ *  deliberately NOT an `interval-complete` one: no split pair arrived, and
+ *  the driver refuses to say one did (`driver.ts`'s `reconcileSummary`).
+ *  Either way the wire trace still carries what happened. */
 function acceptableFinalBoundary(
   run: MonitorRun,
   actual: IntervalActual,
@@ -297,10 +302,16 @@ function acceptableFinalBoundary(
  * the record. A 1-interval workout rowed to the finish therefore logged
  * `0 OF 1 INTERVALS MEASURED` with the split data sitting in the wire trace.
  * `opts.finalBoundary` is the driver VOUCHING that this boundary belongs to
- * the run that just finished — it is set on exactly the one event the
- * driver's own grace produces (never on an ordinary in-run boundary, never
- * after a `terminated` close, never for an interval the run already has) —
- * and a closed record accepts that one actual. The immutability rule is
+ * the run that just finished. TWO producers set it since the fast-follow
+ * summary fallback, and the vouch means the same thing from both: the
+ * finish grace's own late 0x0037/0x0038 pair (`driver.ts`'s
+ * `emitIntervalComplete`), and a final interval SYNTHESIZED from the
+ * end-of-workout summary when that pair was dropped entirely
+ * (`reconcileSummary`, at the grace's expiry — design spec §5). Neither
+ * sets it on an ordinary in-run boundary, after a `terminated` close, or
+ * for an interval the run already has, and there is still at most ONE
+ * flagged event per run across both. A closed record accepts that one
+ * actual. The immutability rule is
  * otherwise unchanged, and the vouch is not taken on trust: a flagged
  * actual is still refused unless it names this program's LAST interval and
  * that interval is not already held — see `acceptableFinalBoundary` below

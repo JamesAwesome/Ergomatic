@@ -777,7 +777,7 @@ const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
  *  schedules its backstop inside that emit), so the hook's backstop can
  *  only fire after this grace has expired: a vouched boundary can never
  *  land AFTER the hand-off already released. Shorten THIS constant and that
- *  stays true; lengthen it past the hold and a boundary can be accepted
+ *  stays true; lengthen it to or past the hold and a boundary can be accepted
  *  into a record the log screen has already snapshotted — change the two
  *  together or not at all (clock-grace review, scrutiny 5).
  *
@@ -1002,6 +1002,19 @@ export function createPm5Driver(
      *  all — it is logged `out-of-window` and dropped, which is what makes
      *  the ~1-minute HRM re-fire inert (ecosystem review:420-422). */
     summaryInGrace: WorkoutSummary | null;
+    /** Has a boundary already CLAIMED this run's finish grace? (fix round
+     *  1, review Minor-2.) Set wherever `finishGraceUntil` is consumed —
+     *  the split path's vouched emit and the summary gate's own fill —
+     *  and never unset, because a grace is claimed once per run.
+     *
+     *  Purely diagnostic: nothing branches on it. It exists because
+     *  `finishGraceUntil === null` has TWO causes that a stash reader must
+     *  tell apart and the field alone cannot — a run that ended by
+     *  `terminated` (which opens no grace at all, footnote 12) and a run
+     *  whose grace a boundary consumed — and the discrimination is exactly
+     *  what a walk needs when a 0x0039 turns up to a shut gate
+     *  (`describeClosedGrace`). */
+    graceClaimed: boolean;
   } | null = null;
   /** The live reconcile deadline's canceller, or `null` when none is armed
    *  — one at a time, because a run finishes once (`armSummaryReconcile`).
@@ -1479,6 +1492,19 @@ export function createPm5Driver(
         }),
       );
     }
+    // THE SUMMARY GATE's deadline, cancelled here for the same reason
+    // `disconnect()` cancels it (fix round 1, review Minor-5): the radio is
+    // gone, so no 0x0039 can still arrive to change the verdict, and a
+    // driver that leaves live timers behind is a driver a test cannot
+    // finish cleanly. Above the `activeRun.closed` early-return below, not
+    // after it — a drop AFTER a natural finish is exactly the case with a
+    // deadline still standing, and it is the one that return skips.
+    // Cancelling costs the run nothing it still had: whatever evidence
+    // arrived before the drop is already in the trace, and a fill after the
+    // link died could no longer be released to a screen that is being torn
+    // down.
+    pendingSummaryReconcile?.();
+    pendingSummaryReconcile = null;
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
       // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited
@@ -1901,9 +1927,17 @@ export function createPm5Driver(
   function noteSummary(bytes: Uint8Array): void {
     const summary = parseEndOfWorkoutSummary(bytes);
     if (summary === null) {
+      // A RECEIPT-LEVEL note, under its own kind, NOT a `summary-reconciled`
+      // verdict (fix round 1, review Minor-7). `summary-reconciled` carries
+      // exactly the four words spec §5 names — `split-won`,
+      // `filled-from-summary`, `declined`, `out-of-window` — and `declined`
+      // is the DEADLINE's verdict on a run. A parse failure happens at
+      // arrival, before any window question is even asked, and a run whose
+      // 0x0039 was garbled would otherwise log `declined` twice for one
+      // failure: a reader counting verdicts would double-count it.
       log.record(
-        "summary-reconciled",
-        `declined — 0x0039 arrived with ${bytes.length} byte(s) and could not be decoded (the layout is 20, interface-notes.md §23); nothing stored, nothing filed`,
+        "summary-undecodable",
+        `0x0039 arrived with ${bytes.length} byte(s) and could not be decoded (the layout is 20, interface-notes.md §23); nothing stored, and the deadline will report its own verdict on the run`,
       );
       return;
     }
@@ -1934,15 +1968,22 @@ export function createPm5Driver(
 
   /** WHY the summary gate was shut when a 0x0039 turned up — four genuinely
    *  different situations that a single "out of window" would flatten into
-   *  one unreadable entry. The last two are the ones a walk has to tell
-   *  apart: a grace that a boundary already CLAIMED (the split won, and the
-   *  summary is redundant) reads nothing like a grace that EXPIRED (the
-   *  ~1-minute HRM re-fire, or a summary that took longer than 3 s to
-   *  arrive — which would be a real finding). */
+   *  one unreadable entry. The last three are the ones a walk has to tell
+   *  apart, and they are genuinely distinguishable here (fix round 1,
+   *  review Minor-2 — an earlier version collapsed the middle two into one
+   *  disjunction, because both leave `finishGraceUntil === null`, and
+   *  `graceClaimed` exists to separate them): a grace a boundary already
+   *  CLAIMED (the split won, and the summary is redundant), a run that
+   *  ended by TERMINATE (no grace was ever opened), and a grace that
+   *  EXPIRED — the ~1-minute HRM re-fire, or a summary that took longer
+   *  than 3 s to arrive, which would be a real finding. */
   function describeClosedGrace(run: NonNullable<typeof activeRun>): string {
     if (!run.closed) return "the run is still open — no finish has happened";
+    if (run.graceClaimed) {
+      return "a boundary has already claimed this run's grace — the final interval is recorded and this summary is redundant";
+    }
     if (run.finishGraceUntil === null) {
-      return "no grace is open: this run either ended by terminate (which opens none, footnote 12) or a boundary has already claimed it";
+      return "this run ended by terminate, which opens no grace at all (CSAFE-DEF footnote 12)";
     }
     return `the grace expired ${now() - run.finishGraceUntil}ms ago (${FINISH_GRACE_MS}ms window) — the ~1 minute HRM re-fire lands here`;
   }
@@ -1957,6 +1998,19 @@ export function createPm5Driver(
    * longer one would answer after the hand-off hold released
    * (`useMonitorSession.ts`'s `FINISH_HANDOFF_HOLD_MS`, the coupled
    * constant this ordering depends on).
+   *
+   * NATURAL-FINISH-ONLY is enforced at THIS call site — the one call is
+   * inside the `frame.state === "finished"` branch, itself behind
+   * `if (!runIsOpen()) return`, so this arms at most once per run and
+   * never on a terminate (test (f) pins it). One residual path exists and
+   * is CORRECT, not a defect (fix round 1, the reviewer's own ruling): a
+   * natural finish, a summary held, and then a `terminated` arriving
+   * inside the 3 s (the rower presses Menu, or the caller issues
+   * `terminate()`). Nothing cancels, and the fill happens at the deadline
+   * — rightly so. The finish was real, the evidence arrived inside its own
+   * grace, and a later terminate says nothing about a workout that already
+   * ended naturally. No guard is wanted here; this paragraph exists so the
+   * next reader does not have to re-derive that.
    */
   function armSummaryReconcile(run: NonNullable<typeof activeRun>): void {
     pendingSummaryReconcile?.();
@@ -1973,52 +2027,81 @@ export function createPm5Driver(
   }
 
   /**
-   * DERIVATION, AND ITS ONE PREMISE (design spec §5's B3 ruling).
+   * DERIVATION, AND ITS TWO PREMISES (design spec §5's B3 ruling).
    *
-   * **PREMISE: 0x0039's Elapsed Time and Distance are WHOLE-WORKOUT
+   * **PREMISE 1: 0x0039's Elapsed Time and Distance are WHOLE-WORKOUT
    * CUMULATIVE totals** — `docs/monitor/pm5-interface-notes.md` §23's walk
    * item 2, which records the premise as UNCONFIRMED ON THE WIRE: "whether
    * 0x0039's Elapsed Time/Distance are genuinely whole-workout cumulative
-   * or share 0x0031's per-interval-reset trap (hardware walk 4)". The
-   * parser's own field names stay neutral (`elapsedSeconds`/`meters`, not
-   * `total*`) for exactly this reason.
+   * totals, or could exhibit some other reset the way 0x0031's
+   * identically-scaled, identically-named fields surprised hardware walk
+   * 4". The parser's own field names stay neutral
+   * (`elapsedSeconds`/`meters`, not `total*`) for exactly this reason.
    *
-   * **THIS FUNCTION IS THE ONLY PLACE THE PREMISE IS USED. If the walk
-   * falsifies it, this function alone changes** — the caller below files
-   * whatever this returns and knows nothing about where the numbers came
-   * from, and no other call site reads `WorkoutSummary.elapsedSeconds` or
-   * `.meters` at all.
+   * **PREMISE 2: 0x0039's totals and 0x0037's per-interval values MEASURE
+   * THE SAME SPAN with respect to REST** — §23 walk item 4. The
+   * subtraction below is `summary_total − Σ(recorded per-interval
+   * values)`, which is only arithmetic if both sides either include each
+   * interval's trailing rest or both exclude it. A MISMATCH (0x0039
+   * counting rest while 0x0037's Split/Interval Time does not, or the
+   * reverse) makes the derived final interval wrong by the workout's whole
+   * rest allowance. §23 item 4 records why it is plausible either way: the
+   * fact that 0x003A carries Total Rest Distance and Interval Rest Time as
+   * SEPARATE fields argues 0x0039's numbers are work-only, and nothing on
+   * the wire has confirmed it.
    *
-   * Two cases, and only the second one rests on the premise:
-   *   - **SINGLE INTERVAL** (`intervalCount === 1`): cumulative and
-   *     per-interval READINGS COINCIDE — one interval's own totals are the
-   *     workout's totals under either reading. This case is correct
-   *     whatever the walk finds, and it is the tester-common shape (walk
-   *     5's own 1-interval piece, `WALK_5_PROGRAM` in the driver tests).
+   * **WHY PREMISE 2 IS THE MORE DANGEROUS OF THE TWO.** Premise 1 fails
+   * LOUDLY: under a per-interval reading the summary carries the last
+   * interval's own (smaller) numbers, the subtraction goes non-positive,
+   * and the guard below declines with the premise named. Premise 2 fails
+   * QUIETLY: a rest-inclusive total over rest-exclusive priors yields a
+   * final interval that is too LONG by the total rest — positive,
+   * plausible, and invisible to that guard. That is precisely the
+   * "plausible-looking, wrong, and silent" shape B3 exists to refuse, so
+   * it is answered the only way an unobserved premise can be: the `how`
+   * string below states the program's own rest allowance, so the erg
+   * stash shows the exact number the fill would be wrong by, and the walk
+   * settles it by rowing a MULTI-INTERVAL piece WITH REST (§23 item 4 says
+   * so in the notes; the driver tests carry both readings of the same
+   * fixture, one as the pin and one as the documented discriminator).
+   *
+   * **THIS FUNCTION IS THE ONLY PLACE EITHER PREMISE IS USED. If the walk
+   * falsifies either, this function alone changes** — the caller below
+   * files whatever this returns and knows nothing about where the numbers
+   * came from, and no other call site reads `WorkoutSummary.elapsedSeconds`
+   * or `.meters` at all.
+   *
+   * Two cases, and only the second rests on either premise:
+   *   - **SINGLE INTERVAL** (`priors.length === 0`): cumulative and
+   *     per-interval READINGS COINCIDE, and there is no prior whose rest
+   *     could be double-counted or missed — one interval's own totals are
+   *     the workout's totals under every reading of both premises. This
+   *     arm is correct whatever the walk finds, and it is the
+   *     tester-common shape (walk 5's own 1-interval piece,
+   *     `WALK_5_PROGRAM` in the driver tests).
    *   - **MULTI-INTERVAL**: the final interval = the summary MINUS every
    *     recorded prior, and ONLY when every prior interval is recorded.
    *     The evidence says it is the FINAL split that drops (the ecosystem
    *     review's failure mode), so a run missing an EARLIER interval is a
    *     different, unexplained loss — subtracting over that gap would file
-   *     the missing interval's meters into the last one, "plausible-looking,
-   *     wrong, and silent" (B3's own words, the D4 corruption shape). It
-   *     declines instead, with the missing indices named.
-   *
-   * A subtraction that goes non-positive is the cheapest test of the
-   * premise there is, and it DECLINES rather than clamps: under a
-   * per-interval reading the summary would carry the last interval's own
-   * (smaller) numbers and the subtraction would go negative on any real
-   * multi-interval piece. The rower gets nothing rather than nonsense, and
-   * the walk gets a log entry naming the premise.
+   *     the missing interval's meters into the last one, the same D4
+   *     corruption shape one door over. It declines instead, with the
+   *     missing indices named.
    *
    * Averages are absent by construction — see the caller. A workout's
    * average pace/rate/HR is not the final interval's, and nothing in this
    * function could make it so.
+   *
+   * `programmedRestSeconds` is the ARMED PROGRAM's own total rest, not a
+   * wire reading — it never enters the arithmetic (adding or subtracting
+   * it would be picking a side of premise 2 on no evidence) and exists
+   * solely so the `how` string can name it.
    */
   function deriveFinalIntervalFromSummary(
     summary: WorkoutSummary,
     priors: { elapsedSeconds: number; distanceMeters: number }[],
     missingPriors: number[],
+    programmedRestSeconds: number,
   ):
     | { ok: true; elapsedSeconds: number; distanceMeters: number; how: string }
     | { ok: false; why: string } {
@@ -2033,7 +2116,7 @@ export function createPm5Driver(
         ok: true,
         elapsedSeconds: summary.elapsedSeconds,
         distanceMeters: summary.meters,
-        how: `the SINGLE interval's own totals, taken from 0x0039 verbatim (elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m) — with one interval the cumulative and per-interval readings coincide, so this arm holds whatever §23 walk item 2 finds`,
+        how: `the SINGLE interval's own totals, taken from 0x0039 verbatim (elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m) — with one interval there is no prior to subtract and no prior rest to mis-count, so this arm holds whatever §23 walk items 2 and 4 find`,
       };
     }
     const priorElapsed = priors.reduce((a, p) => a + p.elapsedSeconds, 0);
@@ -2050,7 +2133,17 @@ export function createPm5Driver(
       ok: true,
       elapsedSeconds,
       distanceMeters,
-      how: `0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) MINUS ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m) = ${elapsedSeconds}s/${distanceMeters}m`,
+      // THE REST NUMBER IS PART OF THE ANSWER, not decoration (§23 walk
+      // item 4). Premise 2 cannot be checked by this code, so it is
+      // checked by the reader: if 0x0039 counts rest and 0x0037 does not,
+      // this fill is exactly `restSeconds` too long, and the entry states
+      // that number beside the result so an erg-side hand-check is one
+      // subtraction rather than a trip back to the program.
+      how: `0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) MINUS ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m) = ${elapsedSeconds}s/${distanceMeters}m${
+        programmedRestSeconds > 0
+          ? `. UNVERIFIED PREMISE (§23 walk item 4): this program's own rest totals ${programmedRestSeconds}s — if 0x0039's Elapsed Time counts rest and 0x0037's Split/Interval Time does not, this elapsed is up to ${programmedRestSeconds}s too long and no guard here can tell`
+          : ". This program has no programmed rest, so §23 walk item 4's rest premise cannot bite on this run"
+      }`,
     };
   }
 
@@ -2101,7 +2194,7 @@ export function createPm5Driver(
     if (run.recordedActuals.has(lastIndex)) {
       log.record(
         "summary-reconciled",
-        `split-won — interval ${lastIndex} was already recorded when the ${FINISH_GRACE_MS}ms finish grace closed${run.summaryInGrace === null ? " (no 0x0039 was held)" : " (a 0x0039 was held and is discarded unread: the split is authoritative, review I4)"}`,
+        `split-won — interval ${lastIndex} was already recorded when the ${FINISH_GRACE_MS}ms finish grace closed${run.summaryInGrace === null ? ' (no 0x0039 was being held — one may still have ARRIVED and been refused storage; check for an out-of-window entry above before reading this as "the summary never came")' : " (a 0x0039 was held and is discarded unread: the split is authoritative, review I4)"}`,
       );
       return;
     }
@@ -2120,10 +2213,21 @@ export function createPm5Driver(
       if (prior === undefined) missingPriors.push(i);
       else priors.push(prior);
     }
+    // The ARMED PROGRAM's own rest allowance — a fact about what we asked
+    // the machine for, never a wire reading, and never part of the
+    // arithmetic (§23 walk item 4: choosing to add or subtract it would be
+    // picking a side of an unobserved premise). It travels only into the
+    // `how` string, where a reader at the erg can hand-check the fill
+    // against it.
+    const programmedRestSeconds = run.program.intervals.reduce(
+      (total, interval) => total + interval.restSeconds,
+      0,
+    );
     const derived = deriveFinalIntervalFromSummary(
       summary,
       priors,
       missingPriors,
+      programmedRestSeconds,
     );
     if (!derived.ok) {
       log.record(
@@ -2162,6 +2266,7 @@ export function createPm5Driver(
     // 5 of `finishGraceIndex` now refuses a split naming this index, and
     // `acceptableFinalBoundary` re-derives the same refusal in the record.
     run.finishGraceUntil = null;
+    run.graceClaimed = true;
     run.summaryInGrace = null;
     log.record(
       "summary-reconciled",
@@ -2364,8 +2469,12 @@ export function createPm5Driver(
       });
     }
     // One boundary per grace, consumed here — a second notification arriving
-    // in the same gap cannot also claim it.
-    if (graceIndex !== null) activeRun!.finishGraceUntil = null;
+    // in the same gap cannot also claim it. `graceClaimed` records WHICH
+    // way it closed, for the stash alone (`graceClaimed`'s own comment).
+    if (graceIndex !== null) {
+      activeRun!.finishGraceUntil = null;
+      activeRun!.graceClaimed = true;
+    }
     emit(
       graceIndex === null
         ? { kind: "intervalComplete", actual }
@@ -3531,6 +3640,7 @@ export function createPm5Driver(
           lastActiveState: null,
           finishGraceUntil: null,
           summaryInGrace: null,
+          graceClaimed: false,
         };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });
