@@ -215,6 +215,10 @@ function bestEffort(work: Promise<unknown>): void {
  * giving up on it — the BACKSTOP, not the expected path (hardware walk day
  * 2, 2026-08-11; `docs/monitor/pm5-interface-notes.md` §21 item 4).
  *
+ * (`docs/monitor/pm5-interface-notes.md` §22 item 1 carries the corrected
+ * chain; §21 item 4 is where the 1 ms figure was captured, and its own
+ * attribution of the LAYER was the thing walk day 2 disproved.)
+ *
  * What went wrong without it: the machine's `finished` tick flips this hook
  * to `ended`, `ConnectedSurface` fires `onEnded` on that very render, the
  * caller navigates, the interstitial unmounts, and `teardown` unsubscribes
@@ -742,7 +746,9 @@ export function useMonitorSession(
    *  A no-op when nothing is held, so every release site can call it
    *  unconditionally. */
   const releaseHandoff = useCallback(
-    (reason: "final-boundary" | "next-tick" | "backstop"): void => {
+    (
+      reason: "final-boundary" | "next-tick" | "backstop" | "teardown",
+    ): void => {
       const cancel = handoffHoldRef.current;
       if (cancel === null) return;
       handoffHoldRef.current = null;
@@ -863,8 +869,12 @@ export function useMonitorSession(
           streak.frames >= ROWING_ACTIVE_FALLBACK_FRAMES;
         if (declared || fallback) {
           if (fallback) {
-            // The hook reaches the wire log only through the ref it owns;
-            // this is the one entry the hook itself writes, and it is what
+            // The hook reaches the wire log only through the ref it owns.
+            // This was the ONE entry it wrote until walk day 2 added three
+            // more (`handoff-hold`/`handoff-released` around the ended
+            // hand-off, and `record-actual` for every actual the record is
+            // offered) — hook-side observability lives at those four
+            // `logRef.current?.record` sites and nowhere else. This one
             // answers "did the machine ever say Active?" from a stashed
             // trace after the fact.
             logRef.current?.record(
@@ -1094,6 +1104,16 @@ export function useMonitorSession(
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
     (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
+      // FIRST, above the stash below (review M-1): a teardown IS the hand-off
+      // completing, or the rower leaving — either way nothing is left to wait
+      // for. Releasing rather than silently cancelling buys two things: the
+      // exported trace shows a `handoff-hold` with a matching release instead
+      // of an open hold and no explanation (the one case the walk-day-2
+      // entries could not account for from a stash alone), and `handoffHeld`
+      // cannot be left `true` in a state a future "stay mounted past ended"
+      // change would then find stuck. A no-op when nothing is held, which is
+      // every teardown but one.
+      releaseHandoff("teardown");
       // THE LOG SURVIVES THE SESSION (2026-08-08, hardware walk 2): the
       // ended hand-off frame navigates away on its first render, so the
       // in-memory trace died exactly when the operator wanted to copy it.
@@ -1120,13 +1140,6 @@ export function useMonitorSession(
           // Quota or privacy mode: diagnostics never break a teardown.
         }
       }
-      // The hand-off hold's backstop dies with the session (walk day 2): a
-      // teardown IS the hand-off completing (or the rower leaving), so there
-      // is nothing left to wait for and nothing left to update. Cancelled,
-      // never fired — a timer that outlived its component would call
-      // `update` on an unmounted hook.
-      handoffHoldRef.current?.();
-      handoffHoldRef.current = null;
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       const driver = claimed ?? driverRef.current;
@@ -1144,7 +1157,7 @@ export function useMonitorSession(
       }
       bestEffort(driver.disconnect());
     },
-    [],
+    [releaseHandoff],
   );
 
   const fail = useCallback(

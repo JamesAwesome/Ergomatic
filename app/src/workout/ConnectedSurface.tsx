@@ -18,8 +18,21 @@
 //    what it deliberately does NOT do is drop the radio, because the
 //    teardown path already does exactly that and doing it twice would make
 //    "best effort" mean two different things in one flow.
-//  - The ended state needs no live radio. Nothing on it reads a frame; the
-//    next screen is the log, which reads the closed `MonitorRun` record.
+//  - The ended state needs no live radio ONCE THE HAND-OFF RELEASES — and
+//    not one moment before (hardware walk day 2, 2026-08-11; the effect
+//    below and `useMonitorSession`'s `FINISH_HANDOFF_HOLD_MS` carry the
+//    capture). This bullet used to read "the ended state needs no live
+//    radio. Nothing on it reads a frame; the next screen is the log, which
+//    reads the closed `MonitorRun` record," and that is the exact premise
+//    the walk falsified: at a natural finish the PM5 sends the final
+//    interval's split pair ~1 ms AFTER the frame that ends the workout, so
+//    for that ~1 ms the ended state needs both the radio and the driver
+//    subscription, and the record the log screen reads is not finished
+//    until the pair lands. Hanging up on the `ended` render cost the rower
+//    the measurement ("0 OF 1 INTERVALS MEASURED" over a rowed-out piece).
+//    The hang-up is now deferred behind `session.handoffHeld`, below: it is
+//    the HAND-OFF that waits, never the rower, who sees this frame the
+//    instant the machine finishes.
 //  - Staying mounted would mean holding a GATT connection open for as long
 //    as the rower takes to write up their session — on iOS, across
 //    backgrounding — for no reader at all.

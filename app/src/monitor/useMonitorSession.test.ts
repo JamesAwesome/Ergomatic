@@ -1548,6 +1548,19 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     expect(timer.calls).toHaveLength(1);
     expect(timer.calls[0]!.cancelled).toBe(true);
+    // ...and it says so IN THE STASH: the release runs as teardown's first
+    // statement, above the export, so a session torn down mid-hold leaves a
+    // trace that accounts for the hold instead of one that just stops
+    // (review M-1). This is the ordering, asserted through the artifact the
+    // operator actually reads at the erg.
+    const stashed = sessionStorage.getItem("ergomatic:last-rowed-log") ?? "[]";
+    const kinds = (JSON.parse(stashed) as { kind: string; detail: string }[])
+      .filter((e) => e.kind.startsWith("handoff"))
+      .map((e) => `${e.kind}:${e.detail.slice(0, 8)}`);
+    expect(kinds).toStrictEqual([
+      "handoff-hold:machine ",
+      "handoff-released:teardown",
+    ]);
   });
 
   it("the wire log answers the question the device stash could not: split receipt, the record's verdict, and the hold's own fate", async () => {
