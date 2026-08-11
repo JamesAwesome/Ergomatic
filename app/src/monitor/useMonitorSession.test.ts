@@ -455,6 +455,27 @@ describe("useMonitorSession: connect", () => {
     });
   });
 
+  it("the plugin's own native connect timeout ('Connection timeout.', 10s, Plugin.swift CONNECTION_TIMEOUT): link-failed with the retry, never a hang and never mis-binned by the regexes (ecosystem review R2)", async () => {
+    const nativeTimeout = new Error("Connection timeout.");
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () =>
+          stubRadio({ connect: () => Promise.reject(nativeTimeout) }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(result.current.error).toStrictEqual({
+      reason: "link-failed",
+      detail: "The link to the monitor failed.",
+      raw: "Connection timeout.",
+    });
+    expect(result.current.phase).toBe("failed");
+  });
+
   it("Bluetooth switched off: bluetooth-off, even though the adapter throws the same NotFoundError name", async () => {
     const off = new Error("Bluetooth adapter not available.");
     off.name = "NotFoundError";
