@@ -107,6 +107,7 @@ import {
   type AdditionalStatus2,
   type GeneralStatus,
   type SplitIntervalData,
+  type WorkoutSummary,
 } from "../../../domain/monitor/pm5/parse.js";
 import {
   buildAckFrame,
@@ -119,6 +120,7 @@ import {
   buildAdditionalSplitIntervalDataBytes,
   buildAdditionalStatus1Bytes,
   buildAdditionalStatus2Bytes,
+  buildEndOfWorkoutSummaryBytes,
   buildGeneralStatusBytes,
   buildSplitIntervalDataBytes,
   EMPTY_ARM_STRUCTURE,
@@ -129,6 +131,7 @@ import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
@@ -460,6 +463,19 @@ export interface FakeControls {
    *  notification RIGHT NOW, regardless of the script/clock — exercises
    *  `pm5/parse.ts`'s length-guard `Pm5ParseError` path end-to-end. */
   injectGarbledFrame(): void;
+  /** Delivers one END-OF-WORKOUT SUMMARY (0x0039) RIGHT NOW, regardless of
+   *  the script/clock — the 20 real bytes a PM5 sends after a natural
+   *  finish, built through `buildEndOfWorkoutSummaryBytes` so the driver's
+   *  own `parseEndOfWorkoutSummary` does the decoding (fast-follow Task 2,
+   *  design spec §5). `elapsedSeconds`/`meters` are required; every average
+   *  field defaults to a real non-zero reading and may be overridden — see
+   *  the implementation's own comment for why the defaults are NOT the
+   *  convenient zeros. */
+  deliverSummary(
+    totals: { elapsedSeconds: number; meters: number } & Partial<
+      Omit<WorkoutSummary, "elapsedSeconds" | "meters">
+    >,
+  ): void;
   /** Clears the disconnected flag and immediately flushes the fake's
    *  current (possibly time-jumped) state as a fresh status/boundary
    *  notification — "the machine's next status frame" the driver's
@@ -1712,6 +1728,52 @@ export function createFakeTransport(
     injectDisconnect(): void {
       linkDown = true;
       disconnectCb?.("fake transport: injected disconnect");
+    },
+    /**
+     * The END-OF-WORKOUT SUMMARY (0x0039) the PM5 sends once a workout has
+     * finished — fast-follow Task 2's summary-fallback gate is the only
+     * consumer, and this is how a test hands it real 20 bytes through the
+     * real decoder.
+     *
+     * On demand rather than on the timeline (`FakeTimelineEvent`), because
+     * unlike a status tick or a boundary this is not a reading the machine
+     * produces on a cadence: it fires once at the end, and every test that
+     * cares about it cares about exactly WHEN, relative to the finish and
+     * to the driver's own reconcile deadline. Putting it in the caller's
+     * hands is the same choice `injectGarbledFrame`/`deliverArmedNow`
+     * already make for their own one-shot events.
+     *
+     * **The averages default to real, non-zero readings on purpose.** The
+     * gate's job is to DROP them (0x0039's averages are the whole
+     * workout's, never the final interval's — design spec §5's B3), and a
+     * fake that defaulted them to zero or to a null sentinel would make
+     * that impossible to disprove: a test asserting "the synthesized actual
+     * carries no average" would pass against a driver that copied them
+     * straight across. A caller wanting the beltless machine passes `0` for
+     * the heart rates explicitly, the way this file's other heart-rate
+     * models do (`HEARTRATE_NO_BELT`).
+     */
+    deliverSummary(
+      totals: { elapsedSeconds: number; meters: number } & Partial<
+        Omit<WorkoutSummary, "elapsedSeconds" | "meters">
+      >,
+    ): void {
+      if (linkDown) return;
+      notify(
+        END_OF_WORKOUT_SUMMARY_UUID,
+        buildEndOfWorkoutSummaryBytes({
+          avgStrokeRate: 24,
+          endingHeartRateBpm: 168,
+          avgHeartRateBpm: 152,
+          minHeartRateBpm: 96,
+          maxHeartRateBpm: 175,
+          dragFactorAverage: 128,
+          recoveryHeartRateBpm: 120,
+          workoutType: 8,
+          avgPaceSecondsPer500m: 125,
+          ...totals,
+        }),
+      );
     },
     injectGarbledFrame(): void {
       // Two bytes where 0x0031 (General Status) requires 19 — always too

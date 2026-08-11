@@ -3,6 +3,7 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
 } from "./parse.js";
@@ -10,6 +11,7 @@ import {
   buildAdditionalSplitIntervalDataBytes,
   buildAdditionalStatus1Bytes,
   buildAdditionalStatus2Bytes,
+  buildEndOfWorkoutSummaryBytes,
   buildGeneralStatusBytes,
   buildSplitIntervalDataBytes,
 } from "./statusFrames.js";
@@ -176,5 +178,63 @@ describe("buildAdditionalSplitIntervalDataBytes: round-trips through parseAdditi
         buildAdditionalSplitIntervalDataBytes(status),
       ),
     ).toStrictEqual(status);
+  });
+});
+
+describe("buildEndOfWorkoutSummaryBytes: round-trips through parseEndOfWorkoutSummary", () => {
+  it("a finished 2x4' piece's summary, every field present", () => {
+    const summary = {
+      elapsedSeconds: 600.5,
+      meters: 2400.3,
+      avgStrokeRate: 24,
+      endingHeartRateBpm: 168,
+      avgHeartRateBpm: 152,
+      minHeartRateBpm: 96,
+      maxHeartRateBpm: 175,
+      dragFactorAverage: 128,
+      recoveryHeartRateBpm: 120,
+      workoutType: 8,
+      avgPaceSecondsPer500m: 125.1,
+    };
+    expect(
+      parseEndOfWorkoutSummary(buildEndOfWorkoutSummaryBytes(summary)),
+    ).toStrictEqual(summary);
+  });
+
+  it("is exactly 20 bytes — the notify ceiling that pushed the rest of the summary onto 0x003A (§23)", () => {
+    expect(
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 0,
+        meters: 0,
+        avgStrokeRate: 0,
+        endingHeartRateBpm: null,
+        avgHeartRateBpm: null,
+        minHeartRateBpm: null,
+        maxHeartRateBpm: null,
+        dragFactorAverage: 0,
+        recoveryHeartRateBpm: null,
+        workoutType: 0,
+        avgPaceSecondsPer500m: 0,
+      }),
+    ).toHaveLength(20);
+  });
+
+  it("no belt: every heart-rate field round-trips null through the 255 sentinel", () => {
+    const summary = {
+      elapsedSeconds: 61.23,
+      meters: 250.4,
+      avgStrokeRate: 20,
+      endingHeartRateBpm: null,
+      avgHeartRateBpm: null,
+      minHeartRateBpm: null,
+      maxHeartRateBpm: null,
+      dragFactorAverage: 110,
+      recoveryHeartRateBpm: null,
+      workoutType: 1,
+      avgPaceSecondsPer500m: 0,
+    };
+    expect(
+      parseEndOfWorkoutSummary(buildEndOfWorkoutSummaryBytes(summary)),
+    ).toStrictEqual(summary);
   });
 });
