@@ -7201,6 +7201,16 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
             e.detail.includes("THE FINISH GRACE"),
         ),
     ).toBe(true);
+    // RECEIPT, pinned next to the code that writes it (walk day 2, review
+    // M-5): both halves are logged as they arrive, with the run's state at
+    // that moment — the entry whose absence made the day-2 stash readable
+    // only as ordering evidence.
+    const halves = log.entries().filter((e) => e.kind === "split-half");
+    expect(halves.map((e) => e.detail.slice(0, 6))).toStrictEqual([
+      "0x0037",
+      "0x0038",
+    ]);
+    expect(halves[0]!.detail).toContain("run closed");
   });
 
   it("a REAL library workout's final interval too: Sea Fret's boundary 3 after the finish files as interval 2", async () => {
