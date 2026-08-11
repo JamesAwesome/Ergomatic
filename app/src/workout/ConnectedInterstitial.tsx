@@ -31,6 +31,7 @@ import {
 } from "../monitor/useMonitorSession";
 import type { EnginePhase } from "../session/engine";
 import ConnectedSurface from "./ConnectedSurface";
+import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 
 /** localStorage key for the `LAST USED · <name>` caption (handoff §1) — a
  *  plain string, not a versioned record: there is nothing here to migrate,
@@ -217,6 +218,18 @@ export default function ConnectedInterstitial({
   // to `null` (a fresh `connect()` cycle, including a "no device known"
   // Try Again), so the SAME device re-pairing later fires it again.
   const programmedForDeviceRef = useRef<string | null>(null);
+
+  // Keep-awake spans the WHOLE connected flow: on at mount, off at
+  // unmount — the same lifetime idiom Countdown/Timer use, absent here
+  // since 7B because the flow was desktop-born. On a phone the rower's
+  // hands are on the handle, nothing touches the screen, and iOS slept
+  // mid-row (James, first tester row after phone-BLE, 2026-08-11). The
+  // platform split lives in the adapter; this component never calls
+  // isNative() itself.
+  useEffect(() => {
+    void keepAwakeOn();
+    return () => void keepAwakeOff();
+  }, []);
 
   // Mount-once: opens the monitor chooser the instant this screen exists. Not
   // gated on `session.phase` — this hook's own initial phase is always

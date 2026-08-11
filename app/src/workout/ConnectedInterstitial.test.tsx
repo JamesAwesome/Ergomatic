@@ -49,10 +49,16 @@ import {
   type RunIdentity,
 } from "../monitor/useMonitorSession";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
+import { keepAwakeOn, keepAwakeOff } from "../adapters/keepAwake";
 import ConnectedInterstitial, {
   loadLastDevice,
   saveLastDevice,
 } from "./ConnectedInterstitial";
+
+vi.mock("../adapters/keepAwake", () => ({
+  keepAwakeOn: vi.fn(async () => {}),
+  keepAwakeOff: vi.fn(async () => {}),
+}));
 
 vi.mock("../monitor/useMonitorSession", async () => {
   const actual = await vi.importActual<
@@ -252,6 +258,18 @@ describe("state picking: the backdrop floats under the platform chooser", () => 
   it("phase picking renders the quiet backdrop, not nothing", () => {
     renderInterstitial({ phase: "picking" });
     expect(screen.getByText("Choosing your monitor")).toBeInTheDocument();
+  });
+
+  it("holds the wake lock for the WHOLE connected flow: on at mount, off at unmount (the phone slept mid-row on the first tester row, 2026-08-11)", () => {
+    // Module-level mocks accumulate across this file's other renders —
+    // clear first, assert deltas.
+    vi.mocked(keepAwakeOn).mockClear();
+    vi.mocked(keepAwakeOff).mockClear();
+    const { unmount } = renderInterstitial({ phase: "picking" });
+    expect(keepAwakeOn).toHaveBeenCalledTimes(1);
+    expect(keepAwakeOff).not.toHaveBeenCalled();
+    unmount();
+    expect(keepAwakeOff).toHaveBeenCalledTimes(1);
   });
 
   // The `.app-shell:has(.connected-interstitial)` CSS rule (`index.css:5006`,
