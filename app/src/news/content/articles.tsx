@@ -5,6 +5,7 @@ import { PickingAWorkoutBody } from "./bodies/pickingAWorkout";
 import { PainScaleBody } from "./bodies/painScale";
 import { YourFirstRowBody } from "./bodies/yourFirstRow";
 import { ConnectTheMonitorBody } from "./bodies/connectTheMonitor";
+import { NotationBody } from "./bodies/notation";
 
 // Registry order is display order (pins first, then latest — within a tie
 // on `publishedAt`, `latestArticles`' stable sort falls back to THIS array
@@ -88,6 +89,18 @@ export const ARTICLES: NewsArticle[] = [
     pinned: false,
     publishedAt: "2026-08-08",
     body: <ConnectTheMonitorBody />,
+  },
+  // Appended per the registry-order rule above: nextUnreadSlug's walk and
+  // the pinned adjacencies stay untouched, and the newest publishedAt
+  // sorts this to the top of LATEST on its own. 292 words -> 2 min.
+  {
+    slug: "reading-the-shorthand",
+    title: "Reading the shorthand: splits, offsets, and 8 × 500m",
+    minutes: 2,
+    kind: "first-party",
+    pinned: false,
+    publishedAt: "2026-08-10",
+    body: <NotationBody />,
   },
 ];
 

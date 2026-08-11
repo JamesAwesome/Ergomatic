@@ -180,6 +180,7 @@ describe("Reader", () => {
         "pain-scale",
         "your-first-row",
         "connect-the-monitor",
+        "reading-the-shorthand",
       ]),
     );
     renderReader("/news/baselines");
