@@ -31,10 +31,14 @@
 //   that kills that pin is exactly the tempting wrong answer: gating the
 //   run's own writes on "is a phone session on record?".
 //
-// NO WALL CLOCK ANYWHERE (the plan's own constraint, inherited from the
-// driver): the paused hold below counts FRAMES, not seconds; `now` is a
-// dependency, used only to stamp the record's ISO timestamps. There is no
-// `setTimeout`/`setInterval`/`Date.now()` in this file.
+// NO WALL CLOCK ANYWHERE IN THIS FILE (the plan's own constraint): the
+// paused hold below counts FRAMES, not seconds; `now` is a dependency, used
+// only to stamp the record's ISO timestamps. There is no
+// `setTimeout`/`setInterval`/`Date.now()` here. This is the hook's own
+// property, no longer one inherited from the driver — since hardware walk 5
+// the driver reads a clock in exactly one place (`DriverOptions.now`, for
+// the structure gate's persistence window), and nothing about that reaches
+// this file.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";

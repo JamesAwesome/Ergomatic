@@ -228,12 +228,31 @@ export function createMonitorRun(
 }
 
 /** The record's OWN half of the finish-grace rule (`recordActual`'s doc
- *  comment): a closed record accepts a late actual only when the driver
- *  vouched for it AND it names an interval this record does not already
- *  hold. Both halves are checked here rather than trusted from the flag —
- *  the record outlives the driver instance that set it (it is in
- *  localStorage, and 7C reads it back on a later screen), which is the same
- *  reason `recordActual` guards at all. */
+ *  comment). The flag says the driver vouched; these three questions are
+ *  the record deciding for itself, from its own program and its own
+ *  actuals, because it outlives the driver instance that set the flag (it
+ *  is in localStorage, and 7C reads it back on a later screen) — the same
+ *  reason `recordActual` guards at all:
+ *
+ *  1. the actual names an interval at all (`index !== null` — a boundary
+ *     with no identity has nothing to be the final one OF);
+ *  2. it names **the program's LAST interval**, which is what "the finish
+ *     grace" MEANS: the data of the interval a naturally-finished workout
+ *     just completed. This is also how the record re-derives CONSUMED-ONCE
+ *     without storing a "already took one" bit — exactly one index can ever
+ *     satisfy it, and (3) refuses that index the second time. A second
+ *     flagged actual naming a DIFFERENT interval is a driver bug (the
+ *     driver clears `finishGraceTick` after the first, `driver.ts`), and a
+ *     driver bug is something this record surfaces by refusing, never
+ *     something it files (fix round 1, review M-3 — the doc comment used to
+ *     claim an independence the code did not have);
+ *  3. the record does not already hold that interval — the PM's own
+ *     post-run housekeeping re-reporting a filed boundary must not double
+ *     it.
+ *
+ *  A refusal here is not silent: the driver logged the boundary either way
+ *  (`interval-complete` with the FINISH GRACE detail, or
+ *  `boundary-out-of-run`), so the wire trace still carries what happened. */
 function acceptableFinalBoundary(
   run: MonitorRun,
   actual: IntervalActual,
@@ -241,6 +260,7 @@ function acceptableFinalBoundary(
 ): boolean {
   if (opts.finalBoundary !== true) return false;
   if (actual.index === null) return false;
+  if (actual.index !== run.program.intervals.length - 1) return false;
   return !run.actuals.some((a) => a.index === actual.index);
 }
 
@@ -279,9 +299,12 @@ function acceptableFinalBoundary(
  * driver's own grace produces (never on an ordinary in-run boundary, never
  * after a `terminated` close, never for an interval the run already has) —
  * and a closed record accepts that one actual. The immutability rule is
- * otherwise unchanged, and this function keeps its own independent guard:
- * a flagged actual whose index is already present, or has no index at all,
- * is still refused, because the record outlives the driver that vouched.
+ * otherwise unchanged, and the vouch is not taken on trust: a flagged
+ * actual is still refused unless it names this program's LAST interval and
+ * that interval is not already held — see `acceptableFinalBoundary` below
+ * for what each of those re-derives, and why "the last interval" is also
+ * how the record bounds this to ONE late actual without keeping a bit for
+ * it.
  *
  * Returns a NEW record rather than mutating in place, matching
  * `session/engine.ts`'s own idiom for `SessionRun` updates — the caller
