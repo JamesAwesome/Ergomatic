@@ -99,6 +99,9 @@ export default function Library() {
   // doc comment for the BACK-with-sheet-open decision this implements.
   const [draftFilters, setDraftFilters] = useState<Filters>(filters);
   const restoredScrollRef = useRef(false);
+  // This screen's own root, read by the scroll listener's disconnected-root
+  // guard below (News.tsx's `rootRef` twin, same reason).
+  const rootRef = useRef<HTMLElement | null>(null);
   // The list only has HEIGHT once both hooks land on "ready" — the same
   // condition every render branch below keys off (loading/error branches
   // never render the `<ul>`). Gating restoration on this, rather than on
@@ -132,6 +135,19 @@ export default function Library() {
       saveLibraryScroll(lastKnownY);
     };
     const onScroll = () => {
+      // Ignore a scroll event delivered after THIS screen's root has left
+      // the document — the disconnected-root echo News.tsx already guards
+      // against, and the cause of main's CI failure on 2026-08-11 (twice,
+      // through the retry). When a row tap navigates away, React commits
+      // the detail screen's much shorter DOM, the browser CLAMPS
+      // window.scrollY to ~0, and delivers that clamp as a scroll event.
+      // This listener is removed in a PASSIVE effect cleanup, which runs
+      // after paint, so under load the clamp arrives first, poisons
+      // `lastKnownY`, and both the trailing save and the unmount flush
+      // write 0 over the position the rower actually left at. Reproduced
+      // 1-in-8 at 15x CPU throttle; storage read 0 while a CDP scrollY
+      // read said 2868.
+      if (!rootRef.current?.isConnected) return;
       lastKnownY = window.scrollY;
       const elapsed = Date.now() - lastSavedAt;
       if (elapsed >= SCROLL_SAVE_THROTTLE_MS) {
@@ -178,7 +194,7 @@ export default function Library() {
 
   if (workoutsState.state === "loading" || baselinesState.state === "loading") {
     return (
-      <main className="screen">
+      <main className="screen" ref={rootRef}>
         <Header />
         <p className="mono-status">LOADING…</p>
       </main>
@@ -187,7 +203,7 @@ export default function Library() {
 
   if (workoutsState.state === "error") {
     return (
-      <main className="screen">
+      <main className="screen" ref={rootRef}>
         <Header />
         <p className="mono-status">Couldn't load your library.</p>
         <button
@@ -203,7 +219,7 @@ export default function Library() {
 
   if (baselinesState.state === "error") {
     return (
-      <main className="screen">
+      <main className="screen" ref={rootRef}>
         <Header />
         <p className="mono-status">Couldn't load your baselines.</p>
         <button
@@ -265,7 +281,7 @@ export default function Library() {
   }
 
   return (
-    <main className="screen">
+    <main className="screen" ref={rootRef}>
       <Header />
       <div className="library-filter-bar">
         <div className="library-filter-row">
