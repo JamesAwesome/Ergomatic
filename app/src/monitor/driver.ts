@@ -1942,6 +1942,20 @@ export function createPm5Driver(
       return;
     }
     const run = activeRun;
+    // THE WALK'S OWN INSTRUMENT (final review IMP-1), logged BEFORE any
+    // window question so it fires on every path a 0x0039 can take: stored,
+    // redundant-because-the-split-already-won, out-of-window, re-fire.
+    //
+    // Why it has to be here and not in the verdict. Until this entry
+    // existed, the only place 0x0039's decoded totals reached the stash was
+    // `filled-from-summary` — which fires only when the final split
+    // genuinely DROPS, a radio flake nobody can arrange at the erg. So on
+    // the healthy row the walk was asked to settle §23's walk items 2 and
+    // 4 from a trace containing no number to settle them with, and the
+    // ROADMAP's exit line promised more than the row could deliver. This is
+    // the briefing's `rowingActive` pattern: an unobserved premise ships
+    // with the log line that lets the next hardware session settle it.
+    logSummaryTotals(summary, run);
     if (run === null) {
       log.record(
         "summary-reconciled",
@@ -1964,6 +1978,43 @@ export function createPm5Driver(
       return;
     }
     run.summaryInGrace = summary;
+  }
+
+  /**
+   * 0x0039's DECODED TOTALS in the stash, with the comparison already set
+   * up (final review IMP-1) — the entry that makes a walk able to settle
+   * `docs/monitor/pm5-interface-notes.md` §23's walk items 2 and 4 from an
+   * ORDINARY row, instead of needing the final split to drop first.
+   *
+   * It states three numbers and the rule that reads them: 0x0039's own
+   * elapsed/distance, what this run has recorded from 0x0037/0x0038 so far,
+   * and the program's own rest allowance. On a healthy multi-interval row
+   * with rest, every interval is already recorded by the time the summary
+   * lands, so the three-way comparison below settles both premises in one
+   * read — which is exactly what neither the verdict entries nor a
+   * PM5-screen photograph could do on their own.
+   *
+   * Diagnostics only: nothing here decides anything, and the numbers are
+   * reported, never reconciled. `deriveFinalIntervalFromSummary` remains
+   * the only place either premise is USED.
+   */
+  function logSummaryTotals(
+    summary: WorkoutSummary,
+    run: typeof activeRun,
+  ): void {
+    const recorded = [...(run?.recordedActuals.values() ?? [])];
+    const recordedElapsed = recorded.reduce((a, r) => a + r.elapsedSeconds, 0);
+    const recordedMeters = recorded.reduce((a, r) => a + r.distanceMeters, 0);
+    const programmedRest =
+      run?.program.intervals.reduce((t, i) => t + i.restSeconds, 0) ?? 0;
+    const against =
+      run === null
+        ? "no run of ours is open, so there is nothing here to compare these totals against"
+        : `this run has recorded ${recorded.length} interval(s) totalling ${recordedElapsed}s/${recordedMeters}m from 0x0037/0x0038, over a program with ${programmedRest}s of rest`;
+    log.record(
+      "summary-totals",
+      `0x0039 decoded: elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m workoutType=${summary.workoutType} (${against}). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus ${programmedRest}s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)`,
+    );
   }
 
   /** WHY the summary gate was shut when a 0x0039 turned up — four genuinely

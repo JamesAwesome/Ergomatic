@@ -8218,6 +8218,98 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdict[0]!.detail).toContain("nothing filed");
   });
 
+  it("THE WALK'S OWN INSTRUMENT (final review IMP-1): a HEALTHY multi-interval row with rest puts 0x0039's decoded totals in the stash, next to what the splits recorded", async () => {
+    // The row Task 7 actually rows: nothing drops, the final split claims
+    // the grace, and the summary is redundant to the RECORD. It is not
+    // redundant to the WALK — §23's walk items 2 and 4 can only be settled
+    // by comparing 0x0039's own numbers against the splits', and before
+    // this entry existed those numbers reached the stash on exactly one
+    // path (`filled-from-summary`), which requires the radio to misbehave.
+    const g = primedGate();
+    await seaFretWithTwoPriorsRecorded(g, SEA_FRET_WORK_ONLY_PRIORS);
+
+    // The final split arrives the ordinary way, inside the grace, and wins.
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(3, 240, 1150));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(3, 26));
+    expect(boundaries(g.events)).toHaveLength(3);
+
+    // ...and 0x0039 lands afterwards, as the ecosystem's own ordering says
+    // it does (splits-then-summaries).
+    g.clock.advance(200);
+    g.transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      summaryBytes(SEA_FRET_REST_EXCLUSIVE_ELAPSED, SEA_FRET_TOTAL_METERS),
+    );
+
+    const totals = g.log.entries().filter((e) => e.kind === "summary-totals");
+    expect(totals).toHaveLength(1);
+    // 0x0039's own decoded numbers — the thing the walk hand-checks against
+    // the PM5's own end-of-workout screen.
+    expect(totals[0]!.detail).toContain("elapsed=780s");
+    expect(totals[0]!.detail).toContain("distance=3350m");
+    expect(totals[0]!.detail).toContain("workoutType=8");
+    // ...beside what the SPLITS recorded, so the comparison needs no
+    // arithmetic off-screen: 300 + 240 + 240 = 780, and 120s of rest sits
+    // between them.
+    expect(totals[0]!.detail).toContain(
+      "recorded 3 interval(s) totalling 780s/3350m",
+    );
+    expect(totals[0]!.detail).toContain("120s of rest");
+    // ...and the rule that reads them, so the verdict is reached at the erg
+    // rather than carried home.
+    expect(totals[0]!.detail).toContain("§23 walk items 2 and 4 settle HERE");
+
+    // The record is untouched by any of this: the split won, and the entry
+    // is diagnostics.
+    expect(boundaries(g.events)).toHaveLength(3);
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+    expect(boundaries(g.events)).toHaveLength(3);
+    expect(verdicts(g.log).map((e) => e.detail.split(" ")[0])).toStrictEqual([
+      "out-of-window",
+      "split-won",
+    ]);
+  });
+
+  it("...and it fires on EVERY path a 0x0039 can take, including with no run at all and on the minute-later re-fire", async () => {
+    // One entry, before the window question, so no reachable ordering
+    // leaves the walk without its numbers (final review IMP-1).
+    const noRun = primedGate();
+    noRun.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 250));
+    const orphan = noRun.log
+      .entries()
+      .filter((e) => e.kind === "summary-totals");
+    expect(orphan).toHaveLength(1);
+    expect(orphan[0]!.detail).toContain("elapsed=60s");
+    expect(orphan[0]!.detail).toContain("nothing here to compare");
+
+    // The stored path and the re-fire path, on one run.
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+    g.clock.advance(60_000);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-totals"),
+    ).toHaveLength(2);
+    // A garbled 0x0039 is the ONE path with no totals to state — it has no
+    // decoded values to report, and says so under its own kind instead.
+    const garbled = primedGate();
+    await rowToFinish(garbled);
+    garbled.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(19));
+    expect(
+      garbled.log.entries().filter((e) => e.kind === "summary-totals"),
+    ).toHaveLength(0);
+    expect(
+      garbled.log.entries().filter((e) => e.kind === "summary-undecodable"),
+    ).toHaveLength(1);
+  });
+
   it("(e) THE RE-FIRE IS INERT: 0x0039 again a minute later logs out-of-window and files nothing", async () => {
     const g = primedGate();
     await rowToFinish(g);
