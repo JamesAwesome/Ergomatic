@@ -6,6 +6,10 @@ import { BaselinesBody } from "./bodies/baselines";
 import { PickingAWorkoutBody } from "./bodies/pickingAWorkout";
 import { PainScaleBody } from "./bodies/painScale";
 import { YourFirstRowBody } from "./bodies/yourFirstRow";
+import { NotationBody } from "./bodies/notation";
+import { LIBRARY_EXAMPLES } from "./bodies/notationExamples";
+import { structureLine } from "../../../domain/display/stepDetail.js";
+import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index.js";
 import { ConnectTheMonitorBody } from "./bodies/connectTheMonitor";
 import { PyramidFigure } from "./bodies/PyramidFigure";
 
@@ -190,6 +194,44 @@ describe("PyramidFigure (item 5)", () => {
 
     for (const label of ["AN", "TR", "AT", "O2"]) {
       expect(screen.getByText(label, { selector: "text" })).toBeInTheDocument();
+    }
+  });
+});
+
+describe("NotationBody's library examples (drift pins)", () => {
+  // The article decodes four REAL library rows. The library regenerates
+  // from time to time (Phase CL's rebalance retuned 93 workouts), and an
+  // example that drifts from what the Library actually shows teaches a
+  // lie. Each pin recomputes the line from the live seed through the
+  // same structureLine the Library row renders with — a failing case
+  // here means the ARTICLE needs its example (and its decode prose)
+  // updated, not that the code is wrong.
+  it("every LIBRARY_EXAMPLES entry names a real workout and quotes its exact structure line", () => {
+    for (const ex of LIBRARY_EXAMPLES) {
+      const workout = LIBRARY_WORKOUTS.find((w) => w.title === ex.title);
+      expect(
+        workout,
+        `"${ex.title}" is no longer in the library`,
+      ).toBeDefined();
+      expect(
+        structureLine(workout!.steps),
+        `"${ex.title}"'s line drifted — update the article's example and decode prose`,
+      ).toBe(ex.line);
+    }
+  });
+
+  it("the rendered body shows all four example lines verbatim", () => {
+    render(
+      <MemoryRouter>
+        <NotationBody />
+      </MemoryRouter>,
+    );
+    for (const ex of LIBRARY_EXAMPLES) {
+      expect(
+        screen.getByText(
+          new RegExp(ex.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+        ),
+      ).toBeInTheDocument();
     }
   });
 });

@@ -51,15 +51,15 @@ describe("article registry invariants", () => {
     expect(connectTheMonitor.minutes).toBe(2);
   });
 
-  it("launch shelf: the two permanent pins plus five latest stories (reading-the-shorthand lands newest of all)", () => {
+  it("launch shelf: the two permanent pins plus five latest stories (the pin swap: shorthand pinned, baselines back in LATEST)", () => {
     expect(pinnedArticles().map((a) => a.slug)).toStrictEqual([
       "workout-types",
-      "baselines",
+      "reading-the-shorthand",
     ]);
     expect(latestArticles().map((a) => a.slug)).toStrictEqual([
-      "reading-the-shorthand",
       "your-first-row",
       "connect-the-monitor",
+      "baselines",
       "picking-a-workout",
       "pain-scale",
     ]);

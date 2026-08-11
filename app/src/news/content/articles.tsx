@@ -9,12 +9,14 @@ import { NotationBody } from "./bodies/notation";
 
 // Registry order is display order (pins first, then latest — within a tie
 // on `publishedAt`, `latestArticles`' stable sort falls back to THIS array
-// order, which is why the two Phase 6I articles are appended after
-// pain-scale rather than inserted earlier: workout-types/baselines must
-// stay adjacent for the pinned rows, and baselines/picking-a-workout must
-// stay adjacent for `nextUnreadSlug`'s existing registry-order walk). All
-// six are original prose — structurally informed by the source literature,
-// never verbatim (Phase 6E's content discipline, binding per the 6H spec).
+// order, which is why new articles are appended after the existing ones:
+// baselines/picking-a-workout must stay adjacent for `nextUnreadSlug`'s
+// registry-order walk. Pinned rows are `pinnedArticles()`'s FILTER over
+// this same order, so pins need not be adjacent — the PR #81 swap left
+// workout-types at index 0 and pinned the appended shorthand article.)
+// All seven are original prose — structurally informed by the source
+// literature, never verbatim (Phase 6E's content discipline, binding per
+// the 6H spec).
 //
 // `minutes` = ceil(rendered word count / 180) — 180 wpm is a deliberately
 // unhurried silent-reading rate for this app's short-form prose, not a
@@ -46,11 +48,17 @@ export const ARTICLES: NewsArticle[] = [
     body: <WorkoutTypesBody />,
   },
   {
+    // Unpinned 2026-08-11 (James, PR #81): reading-the-shorthand takes
+    // this slot — scanning the Library is the skill the pin teaches now,
+    // and baselines stays one tap away via the shorthand article's own
+    // crosslink. Registry POSITION is unchanged (nextUnreadSlug's walk
+    // and the baselines/picking-a-workout adjacency both key off order,
+    // not the pinned flag).
     slug: "baselines",
     title: "What a baseline is, and why every pace comes from one",
     minutes: 3,
     kind: "first-party",
-    pinned: true,
+    pinned: false,
     publishedAt: "2026-08-07",
     body: <BaselinesBody />,
   },
@@ -90,15 +98,18 @@ export const ARTICLES: NewsArticle[] = [
     publishedAt: "2026-08-08",
     body: <ConnectTheMonitorBody />,
   },
-  // Appended per the registry-order rule above: nextUnreadSlug's walk and
-  // the pinned adjacencies stay untouched, and the newest publishedAt
-  // sorts this to the top of LATEST on its own. 292 words -> 2 min.
+  // Appended per the registry-order rule above: nextUnreadSlug's walk
+  // stays untouched, and pinned rows render in registry order, so this
+  // pin displays after workout-types. PINNED per James (PR #81, in
+  // baselines' old slot): the Library-scanning skill is what the pinned
+  // shelf teaches now. Persona round (novice/expert/PM, 2026-08-11):
+  // 509 words -> 3 min.
   {
     slug: "reading-the-shorthand",
-    title: "Reading the shorthand: splits, offsets, and 8 × 500m",
-    minutes: 2,
+    title: "Reading the shorthand: scan the Library without opening a workout",
+    minutes: 3,
     kind: "first-party",
-    pinned: false,
+    pinned: true,
     publishedAt: "2026-08-10",
     body: <NotationBody />,
   },

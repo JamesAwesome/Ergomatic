@@ -88,7 +88,9 @@ describe("News", () => {
       screen.getByText("Connect the monitor, and it drives the piece"),
     ).toBeVisible();
     expect(
-      screen.getByText("Reading the shorthand: splits, offsets, and 8 × 500m"),
+      screen.getByText(
+        "Reading the shorthand: scan the Library without opening a workout",
+      ),
     ).toBeVisible();
 
     expect(screen.getByText("7 UNREAD")).toBeVisible();

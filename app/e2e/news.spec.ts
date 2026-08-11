@@ -42,7 +42,7 @@ test("tab order: TODAY · NEWS · LIBRARY · PLAN · YOU, TREND gone", async ({
   expect(labels).toEqual(["TODAY", "NEWS", "LIBRARY", "PLAN", "YOU"]);
 });
 
-test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW v0.5.1", async ({
+test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW shows the latest version", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
@@ -53,21 +53,25 @@ test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW v0.5
 
   await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
 
-  // PINNED: workout-types (with type chips), then baselines — registry
-  // order, both permanently pinned (articles.tsx's own `pinned: true`).
+  // PINNED: workout-types (with type chips), then reading-the-shorthand —
+  // registry order (the PR #81 pin swap: baselines moved back to LATEST).
   const pinnedRows = page.locator(".news-pinned .news-row");
   await expect(pinnedRows).toHaveCount(2);
   await expect(pinnedRows.nth(0)).toHaveAttribute(
     "href",
     "/news/workout-types",
   );
-  await expect(pinnedRows.nth(1)).toHaveAttribute("href", "/news/baselines");
+  await expect(pinnedRows.nth(1)).toHaveAttribute(
+    "href",
+    "/news/reading-the-shorthand",
+  );
   await expect(pinnedRows.nth(0).locator(".news-row-chips")).toBeVisible();
   await expect(pinnedRows.nth(1).locator(".news-row-chips")).toHaveCount(0);
 
-  // LATEST: your-first-row and connect-the-monitor sort first (Phase 6I
-  // Task 6, published 2026-08-08), then picking-a-workout and pain-scale
-  // (published 2026-08-07, registry order wins that date's sort tie).
+  // LATEST: your-first-row and connect-the-monitor sort first (published
+  // 2026-08-08), then the 2026-08-07 three in registry order — baselines,
+  // picking-a-workout, pain-scale (baselines rejoined LATEST in the PR #81
+  // pin swap; registry order wins the date tie).
   // Minor #3 (Phase 6I Task 7): scoped to the LATEST section's own
   // `.news-latest` class now, rather than a negation locator — Task 7 added
   // a third row kind to News.tsx (the Start-here pin, inside `.news-pinned`,
@@ -78,16 +82,13 @@ test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW v0.5
   await expect(latestRows).toHaveCount(5);
   await expect(latestRows.nth(0)).toHaveAttribute(
     "href",
-    "/news/reading-the-shorthand",
+    "/news/your-first-row",
   );
   await expect(latestRows.nth(1)).toHaveAttribute(
     "href",
-    "/news/your-first-row",
-  );
-  await expect(latestRows.nth(2)).toHaveAttribute(
-    "href",
     "/news/connect-the-monitor",
   );
+  await expect(latestRows.nth(2)).toHaveAttribute("href", "/news/baselines");
   await expect(latestRows.nth(3)).toHaveAttribute(
     "href",
     "/news/picking-a-workout",
