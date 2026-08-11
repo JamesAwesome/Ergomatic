@@ -1534,6 +1534,22 @@ this phase must not block getting the app into testers' hands.**
 **Goal:** The builder can author what the domain, the import, and a
 third of the library already are: N lead lines, then a repeated block.
 
+- [x] ~~Unify the nudge: drop the post-Start secondary nudge screen,
+      put every adjustment on the Connect-card experience both paths
+      share~~ — **PULLED FORWARD and shipped in the fast-follow phase**
+      (James, 2026-08-11, at the v0.7.0 tag). Resolved as **rate
+      display + pace only**: the unified card nudges pace exclusively;
+      rate stays read-only display, and the old screen's duration/reps/
+      SPM steppers and per-row REMOVE/RESTORE died with it uncompensated
+      (a James-approved casualty list, not a deferral). Structural
+      changes route through Edit. Detail: Phase FF below.
+- [x] ~~The Ostro roll-up's DISPLAY side~~ — **shipped early**, ahead of
+      this phase's own builder work (PR #83, 2026-08-11, main `ea3dec6`):
+      consecutive identical runs already collapse to one "N× the block
+      below" line on Today and Library via a display-only rule (the
+      Ostro spec's own erratum: consecutive runs roll via rule 1). This
+      phase's own goal — the BUILDER learning to author that shape, not
+      just render it — is still open below.
 - [ ] Builder: positional repeat-block authoring. Today the repeat is
       hoisted into a single form field (`builderState.ts`'s `f.reps`),
       so lead-piece-then-block workouts (the Katabatic Wind shape;
@@ -1573,6 +1589,68 @@ the builder; the same workout pastes in via import; both render as
 "N× the block below" exactly as the seeded library does. The O2|60+
 cluster reads as five different workouts, and testers can rate what
 they row.
+
+## Phase FF — Fast-follow: finish authority, one door to start
+
+**Status:** Implementation complete on the `fast-follow` branch
+(Tasks 1-6 of 7); the erg confirmation walk (Task 7) is the only
+step left before the PR and James's merge word.
+**Goal:** three tester-facing hardenings, first post-release wave
+after v0.7.0 (build 564, on TestFlight): (a) a dropped final split
+can no longer cost the last interval's data; (b) no connect path
+anywhere can hang unbounded; (c) starting a workout has ONE nudge
+model and ONE visual hierarchy, the Connect card's, on both the
+timer and PM5 paths.
+**Design authority:**
+`docs/superpowers/specs/2026-08-11-fast-follow-design.md` (plan:
+`docs/superpowers/plans/2026-08-11-fast-follow.md`).
+
+- [x] R1 — the finish-line summary pair (0x0039/0x003A) becomes a
+      driver-side FALLBACK, never a replacement: the split stays
+      authoritative and immediate inside the grace window; the
+      summary fills only at grace expiry, only when every prior
+      interval is recorded, with per-interval avg fields honestly
+      omitted rather than faked
+- [x] R2-web — `webBluetooth.ts`'s `connect()` races `gatt.connect()`
+      against the same 10s bound the iOS plugin already enforces, and
+      disconnects the zombie link on a late resolve instead of just
+      dropping the reference
+- [x] ConfirmTargets (642 lines, its own route) removed outright; its
+      five entry points rewire directly onto the countdown, with
+      `startedAt` restamped at every one so the in-progress guard
+      keeps working
+- [x] Connect becomes the screen's single primary: new
+      `--action-connect` blue token, L1 geometry, positioned above
+      Start; "Start" renames to "Start Timer" and demotes to L2
+- [ ] The erg confirmation row (James, one step at a time): a nudged
+      MULTI-INTERVAL workout that CARRIES REST, rowed start to save
+      on the phone, discriminating both premises the R1 subtraction
+      rests on (cumulative-vs-per-interval totals, and whether the
+      totals include rest) — `pm5-interface-notes.md` §23 walk items
+      2 and 4. Plus one timer-path start: card nudge -> Start Timer
+      -> countdown directly, nudged target visible in the session.
+
+**Ruling recorded (James, 2026-08-11):** the nudge unification was
+CL2 filing, pulled forward into this wave; rate stays read-only
+display, pace is the only nudgeable field (Phase CL2's own line
+above records the same resolution).
+
+**Remaining ecosystem follow-ons** (from
+`docs/monitor/pm5-ble-ecosystem-review.md`'s ranked list; R1/R2
+close in this phase, R5/R6 are no-action/design-input already) —
+explicitly NOT this wave's scope:
+- **R3** — switch `webBluetooth.ts`'s CSAFE writes from
+  without-response to acked `writeValue`, matching every surveyed
+  client and our own iOS path; cheap insurance against a chunk
+  silently dropping on the web/desktop dev path. Trivial effort.
+- **R4** — try `services: [CE060000]` (the C2 base service) in
+  discovery at the next hardware walk, alongside the existing
+  `namePrefix: "PM5"` filter, to shrink the picker sheet to ergs;
+  revert instantly if the sheet goes empty.
+
+**Exit:** the erg row (multi-interval, carrying rest, both premise
+discriminators settled on the wire) and the timer-path row both pass
+on James's iPhone against a real PM5, and James gives the merge word.
 
 ## Bugfix rounds
 
@@ -1768,3 +1846,16 @@ next phase. One line per round, newest first.
   James wants WODs pushed instead of pulled. Then: a cron job runs the
   fetcher on a schedule and an ntfy notification surfaces new unruled
   candidates without a skill invocation.
+- **Abandoned-start draft janitor** — the fast-follow phase's
+  `startedAt`-stamps-immediately design (spec §3, ruling B1) means a
+  rower who taps Start then browser-BACKs away, instead of pressing
+  CANCEL, leaves a started draft plus a live run behind that
+  `Today.tsx`'s existing janitor can no longer reap: it only discards
+  drafts with `startedAt === null`, a state the app can no longer
+  produce. Every later Start anywhere then costs a two-press "A
+  session is in progress. Replace it?" confirm instead of a silent
+  replace. Spec-intended (CANCEL is the documented clean exit),
+  surfaced to James rather than fixed silently (Task 4 review, M-2).
+  **Trigger:** James accepts the residue as everyday behavior
+  (pending) — then a time-based janitor reaps a stamped-but-untouched
+  draft a few hours after it starts.
