@@ -214,7 +214,8 @@ button:disabled {
 .button-l2,
 .button-l3,
 .button-l4,
-.button-l4-armed {
+.button-l4-armed,
+.button-connect {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -226,8 +227,13 @@ button:disabled {
   cursor: pointer;
 }
 
-/* 1 · primary — solid accent, cream label. One per screen (Start, Looks
-   right start, Save to library, Log this session). */
+/* 1 · primary — solid accent, cream label. One per screen (Save to library,
+   Log this session, and every other screen's own single L1 action).
+   Fast-follow spec §4: WorkoutDetail's own primary is no longer this class
+   — Connect (`.button-connect`, immediately below) took the L1 geometry
+   and the screen's single-primary slot; Start Timer moved to L2. BaselineCard
+   keeps a genuine `.button-l1` Start (spec §3 entry 3: its own baseline
+   workout is effort-only by construction, no Connect door, no guard). */
 .button-l1 {
   min-height: 56px;
   background: var(--accent);
@@ -246,6 +252,27 @@ button:disabled {
 .button-l1:disabled:hover {
   background: var(--rule);
   cursor: not-allowed;
+}
+
+/* Connect — the flagship hardware path's own primary. L1 geometry (56px,
+   from the shared base above) but its own token, `--action-connect`
+   (tokens.css), never `--accent`: two reds on one screen would compete for
+   the eye (tokens.css's amended "accent means exactly four things"
+   comment, attached to --type-tr, names this exact reasoning). Fast-follow
+   spec §4. Used ONLY by `ConnectAction.tsx` — not part of the numbered
+   L1-L4 system, a screen-specific one-off primary. */
+.button-connect {
+  min-height: 56px;
+  background: var(--action-connect);
+  border: none;
+  color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.button-connect:hover {
+  background: var(--action-connect-hover);
 }
 
 /* 2 · secondary — surface fill, ink border/label, same type as L1. May
@@ -4903,8 +4930,12 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* -- Connect + the interstitial (Phase 7B Task 5, handoff §§1-2) --------
    Tokens only — reuses --ink/--ink-3/--surface/--surface-sunken/--rule-3/
-   --accent, the mono/serif families, and the house .button-l1/.button-l2/
-   .action-stack/.mono-status classes; no new hex, no new custom property. */
+   --accent, the mono/serif families, and the house .action-stack/
+   .mono-status classes. Fast-follow spec §4 amendment: the trigger itself
+   moved off `.button-l2` onto its own `.button-connect` class (defined
+   with the rest of the level system above) carrying the ONE new custom
+   property this block ever introduces, `--action-connect` (tokens.css) —
+   everything else here is still unchanged reuse. */
 
 .connect-block {
   display: flex;
@@ -4934,10 +4965,31 @@ section:not(.news-pinned) .news-row:last-of-type {
    background; this treatment never sits on --page) — the one time this
    exact literal was tried on live text before (see this file's Live-timer
    comment block), nowhere close either way. DEVIATIONS row (added this fix
-   round) records the substitution itself. */
-.connect-block-dashed .button-l2 {
-  border-style: dashed;
-  border-color: var(--rule-3);
+   round) records the substitution itself.
+
+   Fast-follow spec §4 (adversarial I9): retargeted from `.button-l2` to
+   `.button-connect` in the SAME edit that swapped `ConnectAction.tsx`'s
+   own class. NOT a bare rename: `.button-l2`'s own resting fill was
+   already `--surface` (unfilled), so the original rule only had to touch
+   border-style/color and text color. `.button-connect` is filled
+   (`--action-connect`, a solid blue) — reapplying only those two overrides
+   would leave dark `--ink-3` text sitting on a solid blue fill, which is
+   both visually wrong (this idiom reads as "inert", not "still the
+   primary, just dashed") and a real contrast failure (`--ink-3` on
+   `--action-connect` computes well under 4.5:1). `background: var(--surface)`
+   joins the override so the dashed state reverts to the SAME unfilled
+   look the idiom has always had, keeping the same measured 7.432:1
+   ratio above. `border: 1px dashed var(--rule-3)` (shorthand, not a
+   style/color-only override) because `.button-connect`'s own base rule is
+   `border: none` — no explicit width to inherit — so the width must be
+   stated here too, same as the shorthand this file's other dashed rule
+   (`.workout-detail-actions .button-l2:disabled`, below) already uses.
+   `WorkoutDetail.test.tsx` pins that the wrapper's `connect-block-dashed`
+   class and the trigger's `button-connect` class still land on the same
+   pair of elements this selector assumes. */
+.connect-block-dashed .button-connect {
+  background: var(--surface);
+  border: 1px dashed var(--rule-3);
   color: var(--ink-3);
 }
 
@@ -4947,15 +4999,23 @@ section:not(.news-pinned) .news-row:last-of-type {
    genuinely `:disabled` — there is no confirm screen left to defer the
    guard to, so an actual click would have nowhere honest to go. The dashed
    border is the SAME idiom anyway ("inert, explained by the caption below
-   it"); `.button-l1:disabled`'s own base rule already supplies the muted
-   fill/cursor and the global `button:disabled` rule supplies --ink-5 text
-   (both pre-existing, unmodified by this addition — the contrast sweep's
-   own standing rule already covers --ink-5 on a disabled control). Scoped
-   to `.workout-detail-actions` so no OTHER disabled `.button-l1` elsewhere
-   in the app (there are none today, but nothing stops one) picks up a
-   border it never asked for. */
-.workout-detail-actions .button-l1:disabled {
-  border: 1px dashed var(--rule-3);
+   it").
+
+   Fast-follow spec §4: Start moved from `.button-l1` to `.button-l2` (this
+   screen's action stack now leads with Connect, spec §4's own primary),
+   so this rule retargets in the same edit. `.button-l2:disabled`'s own
+   base rule (above) already supplies `border-color: var(--rule-3)` at the
+   class's own 1px width — the SAME color and width the old L1 rule had to
+   spell out via the full shorthand, already correct here for free — so
+   only `border-style` needs overriding, solid to dashed. The global
+   `button:disabled` rule still supplies --ink-5 text (pre-existing,
+   unmodified — the contrast sweep's own standing rule already covers
+   --ink-5 on a disabled control). Scoped to `.workout-detail-actions` so
+   no OTHER disabled `.button-l2` elsewhere in the app (Edit is never
+   disabled; nothing stops a future one) picks up a border-style it never
+   asked for. */
+.workout-detail-actions .button-l2:disabled {
+  border-style: dashed;
 }
 
 /* Full screen, "borrowing Countdown's geometry" (handoff §2) — a sheet was

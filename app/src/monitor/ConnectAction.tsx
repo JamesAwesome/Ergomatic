@@ -14,11 +14,20 @@ import { connectGuardStage, type ConnectGuardStage } from "./monitorRun";
  * COMPLETE and proven — the predicate, both staged sentences, both confirm
  * paths, both cancel paths — for Task 5 to mount as-is. **Shipped (Task
  * 5):** `<ConnectAction onProceed={…} />` is now mounted in
- * `WorkoutDetail`'s `.action-stack` (second in the stack, after Start, per
- * the handoff's §1); the `LAST USED · <name>` caption and the Bluetooth-off
- * dashed treatment live in `ConnectedInterstitial.tsx`/`WorkoutDetail.tsx`,
- * applied from OUTSIDE this component's own markup — **the guard logic
- * below was not re-derived or moved.**
+ * `WorkoutDetail`'s `.action-stack`; the `LAST USED · <name>` caption and
+ * the Bluetooth-off dashed treatment live in
+ * `ConnectedInterstitial.tsx`/`WorkoutDetail.tsx`, applied from OUTSIDE
+ * this component's own markup — **the guard logic below was not
+ * re-derived or moved.**
+ *
+ * **Fast-follow spec §4 amendment (unrelated "Task 5" — the fast-follow
+ * plan's own Task 5, not 7B's above):** Connect is now the screen's SINGLE
+ * primary, FIRST in the stack, ahead of Start Timer — the handoff's old
+ * "second in the stack, after Start" ordering above is superseded. The
+ * trigger's own class also moved off `.button-l2` onto `.button-connect`
+ * (below): L1 geometry, its own `--action-connect` token, never `--accent`
+ * (one red, one blue, never two reds — tokens.css's amended "accent means
+ * exactly four things" comment).
  *
  * What the lock is for: `onProceed` (Task 5's `handleConnectProceed`)
  * compiles the workout and mounts the interstitial, which calls
@@ -98,10 +107,12 @@ export default function ConnectAction({
     );
   }
 
-  // "Connect" — one word, per the handoff's §1 ruling ("it must not compete
-  // with Start"), L2 like the rest of the stack's secondary blocks.
+  // "Connect" — one word. Fast-follow spec §4: no longer L2 ("it must not
+  // compete with Start" is the OLD handoff §1 ruling this supersedes) —
+  // Connect is now the screen's single primary, L1 geometry via its own
+  // `.button-connect` class and `--action-connect` token.
   return (
-    <button type="button" className="button-l2" onClick={handleConnect}>
+    <button type="button" className="button-connect" onClick={handleConnect}>
       Connect
     </button>
   );

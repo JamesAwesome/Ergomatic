@@ -399,7 +399,9 @@ describe("WorkoutDetail", () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    expect(screen.getByRole("button", { name: "Start" })).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Start Timer" }),
+    ).not.toBeDisabled();
     const logItAfter = screen.getByRole("link", { name: "Log it after" });
     expect(logItAfter).toHaveAttribute("href", "/library/w1/log");
   });
@@ -458,7 +460,7 @@ describe("WorkoutDetail", () => {
     mockHooks(BASELINES);
     await renderDetailWithCountdownRoute("/library/w1");
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
 
     expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const draft = loadDraft();
@@ -485,8 +487,10 @@ describe("WorkoutDetail", () => {
     mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT]);
     await renderDetailWithCountdownRoute("/library/w-effort");
 
-    expect(screen.getByRole("button", { name: "Start" })).not.toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    expect(
+      screen.getByRole("button", { name: "Start Timer" }),
+    ).not.toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
 
     expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const draft = loadDraft();
@@ -503,7 +507,7 @@ describe("WorkoutDetail", () => {
     mockHooks(NO_BASELINES);
     await renderDetailWithCountdownRoute("/library/w1");
 
-    const startButton = screen.getByRole("button", { name: "Start" });
+    const startButton = screen.getByRole("button", { name: "Start Timer" });
     expect(startButton).toBeDisabled();
     expect(loadDraft()).toBeNull();
     // The caption sits immediately beside Start itself, not just anywhere
@@ -521,7 +525,7 @@ describe("WorkoutDetail", () => {
     mockHooks(BASELINES);
     await renderDetail();
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
 
     const draft = loadDraft();
     expect(draft!.steps).not.toBe(WORKOUT.steps);
@@ -536,7 +540,7 @@ describe("WorkoutDetail", () => {
     mockHooks(BASELINES);
     await renderDetailWithCountdownRoute("/library/w1");
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
 
     expect(
       screen.getByText("Couldn't start this session. Try again."),
@@ -564,7 +568,7 @@ describe("WorkoutDetail", () => {
     saveDraft(inProgress);
     await renderDetail();
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
 
     expect(
       screen.getByText("A session is in progress. Replace it?"),
@@ -586,10 +590,12 @@ describe("WorkoutDetail", () => {
     saveDraft(inProgress);
     await renderDetail();
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start Timer" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("A session is in progress. Replace it?"),
     ).not.toBeInTheDocument();
@@ -609,7 +615,7 @@ describe("WorkoutDetail", () => {
     saveDraft(inProgress);
     await renderDetailWithCountdownRoute("/library/w1");
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Replace session" }),
     );
@@ -634,7 +640,7 @@ describe("WorkoutDetail", () => {
     saveDraft(notStarted);
     await renderDetailWithCountdownRoute("/library/w1");
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "Start Timer" }));
 
     expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     expect(
@@ -676,7 +682,9 @@ describe("WorkoutDetail", () => {
       const { draftA, runA } = saveCompletedSessionA();
       await renderDetail();
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
 
       expect(
         screen.getByText(
@@ -696,10 +704,14 @@ describe("WorkoutDetail", () => {
       const { draftA, runA } = saveCompletedSessionA();
       await renderDetail();
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-      expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Start Timer" }),
+      ).toBeInTheDocument();
       expect(loadDraft()).toStrictEqual(draftA);
       expect(loadRun()).toStrictEqual(runA);
     });
@@ -709,7 +721,9 @@ describe("WorkoutDetail", () => {
       saveCompletedSessionA();
       await renderDetailWithCountdownRoute("/library/w1");
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
       await userEvent.click(
         screen.getByRole("button", { name: "Replace session" }),
       );
@@ -777,7 +791,9 @@ describe("WorkoutDetail", () => {
       saveMonitorRun(connected);
       await renderDetail();
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
 
       // Survival asserted FIRST, deliberately: without the widening this
       // line is what fails, and it fails saying the record is gone — the
@@ -797,10 +813,14 @@ describe("WorkoutDetail", () => {
       saveMonitorRun(connected);
       await renderDetail();
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-      expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Start Timer" }),
+      ).toBeInTheDocument();
       expect(loadMonitorRun()).toStrictEqual(connected);
       expect(loadDraft()).toBeNull();
     });
@@ -810,7 +830,9 @@ describe("WorkoutDetail", () => {
       saveMonitorRun(monitorRunFor(FINISHED_AT));
       await renderDetailWithCountdownRoute("/library/w1");
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
       await userEvent.click(
         screen.getByRole("button", { name: "Replace session" }),
       );
@@ -828,7 +850,9 @@ describe("WorkoutDetail", () => {
       saveMonitorRun(live);
       await renderDetail();
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
 
       expect(
         screen.getByText("A session is in progress. Replace it?"),
@@ -847,11 +871,15 @@ describe("WorkoutDetail", () => {
       saveMonitorRun(live);
       await renderDetailWithCountdownRoute("/library/w1");
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(loadMonitorRun()).toStrictEqual(live);
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
       await userEvent.click(
         screen.getByRole("button", { name: "Replace session" }),
       );
@@ -877,7 +905,9 @@ describe("WorkoutDetail", () => {
       saveMonitorRun(monitorRunFor(FINISHED_AT));
       await renderDetailWithCountdownRoute("/library/w1");
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
       expect(
         screen.getByText(
           "You have an unlogged session. Starting a new one discards it.",
@@ -896,7 +926,9 @@ describe("WorkoutDetail", () => {
       mockHooks(BASELINES);
       await renderDetailWithCountdownRoute("/library/w1");
 
-      await userEvent.click(screen.getByRole("button", { name: "Start" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Start Timer" }),
+      );
 
       expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
       expect(loadMonitorRun()).toBeNull();
@@ -1308,7 +1340,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     delete (navigator as { bluetooth?: unknown }).bluetooth;
   });
 
-  it("available: a plain L2 'Connect' trigger, no dashed treatment", async () => {
+  it("available: a plain 'Connect' primary trigger, no dashed treatment", async () => {
     const restore = stubBluetooth({
       getAvailability: () => Promise.resolve(true),
     });
@@ -1316,9 +1348,31 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     await renderDetail();
 
     const button = await screen.findByRole("button", { name: "Connect" });
-    expect(button).toHaveClass("button-l2");
+    expect(button).toHaveClass("button-connect");
     expect(button).not.toHaveClass("connect-block-dashed");
     expect(screen.queryByText("BLUETOOTH IS OFF")).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("Connect precedes Start Timer in the action stack (fast-follow spec §4: Connect is the screen's single primary, first)", async () => {
+    const restore = stubBluetooth({
+      getAvailability: () => Promise.resolve(true),
+    });
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const connectButton = await screen.findByRole("button", {
+      name: "Connect",
+    });
+    const startTimerButton = screen.getByRole("button", {
+      name: "Start Timer",
+    });
+    // DOCUMENT_POSITION_FOLLOWING on this call means startTimerButton comes
+    // AFTER connectButton in document order — i.e. Connect renders first.
+    expect(
+      connectButton.compareDocumentPosition(startTimerButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     restore();
   });
 
@@ -1332,6 +1386,13 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     expect(await screen.findByText("BLUETOOTH IS OFF")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Connect" });
     expect(button.closest(".connect-block-dashed")).not.toBeNull();
+    // Fast-follow spec §4 (adversarial I9): the dashed CSS selector
+    // retargeted from `.connect-block-dashed .button-l2` to
+    // `.connect-block-dashed .button-connect` in the same edit that
+    // swapped the trigger's own class — this proves BOTH halves of that
+    // selector still land on the same pair of elements post-swap, not
+    // just that the wrapper carries the dashed class.
+    expect(button).toHaveClass("button-connect");
     expect(button).not.toBeDisabled();
     restore();
   });
@@ -1346,6 +1407,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     ).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Connect" });
     expect(button.closest(".connect-block-dashed")).not.toBeNull();
+    expect(button).toHaveClass("button-connect");
     expect(button).not.toBeDisabled();
   });
 
@@ -1578,7 +1640,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(
-      await screen.findByRole("button", { name: "Start" }),
+      await screen.findByRole("button", { name: "Start Timer" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
   });

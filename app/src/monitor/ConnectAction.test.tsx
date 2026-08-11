@@ -258,10 +258,13 @@ describe("ConnectAction: the guard", () => {
     );
   });
 
-  it("the trigger is an L2 block (handoff §1: Connect must not compete with Start)", () => {
+  // Fast-follow spec §4 supersedes the old handoff §1 ruling named in this
+  // test's title history ("Connect must not compete with Start") — Connect
+  // is now the screen's single primary, its own `.button-connect` class.
+  it("the trigger is Connect's own L1-geometry primary (fast-follow spec §4: the screen's single primary)", () => {
     renderConnect();
     expect(screen.getByRole("button", { name: "Connect" })).toHaveClass(
-      "button-l2",
+      "button-connect",
     );
   });
 

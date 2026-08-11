@@ -434,27 +434,46 @@ function WorkoutDetailView({
         )}
       </div>
       {/* Task 1 (ui-fix round): one `.action-stack` for every screen-level
-          action — Start / Log it after / Edit / a rule / Delete workout —
-          not two separate divs the way this used to split Start/Log it
-          after from OwnerActions' own Edit/Delete. OwnerActions still owns
-          its own wrapping element below (`.workout-owner-actions`, kept for
-          e2e/builder.spec.ts's existing "absent for a global workout"
-          check) but renders `display: contents` (index.css) so its children
-          are this stack's own direct flex items, not a nested box breaking
-          the 12px gap rhythm. */}
+          action — Connect / Start Timer / Log it after / Edit / a rule /
+          Delete workout — not two separate divs the way this used to split
+          Start/Log it after from OwnerActions' own Edit/Delete. OwnerActions
+          still owns its own wrapping element below (`.workout-owner-actions`,
+          kept for e2e/builder.spec.ts's existing "absent for a global
+          workout" check) but renders `display: contents` (index.css) so its
+          children are this stack's own direct flex items, not a nested box
+          breaking the 12px gap rhythm. */}
       <div className="action-stack workout-detail-actions">
+        {/* Fast-follow spec §4 (James's ruling 3, §2): Connect is the
+            screen's SINGLE primary now — L1 geometry, its own
+            `--action-connect` blue, FIRST in the stack, ahead of Start
+            Timer. Supersedes the old "second in the stack, after Start"
+            ordering (`ConnectAction.tsx`'s own doc comment carries the
+            history). `ConnectAction` still owns the trigger AND the staged
+            confirm guard end to end; this block adds only presentation
+            around it: the caption and the Bluetooth-off/absent dashed
+            treatment — both travel with it to its new position, unchanged. */}
+        <ConnectBlock
+          bluetoothStatus={bluetoothStatus}
+          lastDevice={lastDevice}
+          onProceed={handleConnectProceed}
+        />
+        {connectError && <p className="baseline-error">{connectError}</p>}
+        {/* Start Timer — spec §4: renamed from "Start" and demoted from L1
+            to L2 now that Connect holds the screen's one L1 primary. Still
+            the SAME `handleStart`/`startBlocked`/`replaceStage` logic,
+            unmoved and unmodified — only the copy and the class changed. */}
         {startBlocked ? (
           <>
-            <button type="button" className="button-l1" disabled>
-              Start
+            <button type="button" className="button-l2" disabled>
+              Start Timer
             </button>
             <span className="step-row-no-target">
               <em>no target</em> <Link to="/you">Set baselines</Link>
             </span>
           </>
         ) : replaceStage === null ? (
-          <button type="button" className="button-l1" onClick={handleStart}>
-            Start
+          <button type="button" className="button-l2" onClick={handleStart}>
+            Start Timer
           </button>
         ) : (
           <div className="baseline-confirm">
@@ -484,17 +503,6 @@ function WorkoutDetailView({
         {(startError ?? rowInsteadError) && (
           <p className="baseline-error">{startError ?? rowInsteadError}</p>
         )}
-        {/* PHASE 7B TASK 5 — second in the stack (handoff §1: an L2 below
-            Start, "it must not compete with Start"). `ConnectAction` (Task
-            2) owns the trigger AND the staged confirm guard end to end;
-            this block adds only presentation around it: the caption and
-            the Bluetooth-off/absent dashed treatment. */}
-        <ConnectBlock
-          bluetoothStatus={bluetoothStatus}
-          lastDevice={lastDevice}
-          onProceed={handleConnectProceed}
-        />
-        {connectError && <p className="baseline-error">{connectError}</p>}
         {/* Task 3 (the manual door), Phase 6I amendment: gated on the SAME
             `needsBaselines` predicate every other coupled guard site
             shares, not bare `baselines` — an effort-only workout has
@@ -542,8 +550,10 @@ function WorkoutDetailView({
  *  OUTSIDE (its own doc comment: "add only presentation around it") rather
  *  than reaching into its markup, so the guard logic stays untouched. The
  *  dashed treatment is a CSS descendant rule (`.connect-block-dashed
- *  .button-l2`) reskinning `ConnectAction`'s own `<button>`, not a second
- *  button — "still tappable" (handoff) means the SAME control, restyled. */
+ *  .button-connect`, fast-follow spec §4 — retargeted from `.button-l2` in
+ *  the same edit that swapped `ConnectAction`'s own class) reskinning
+ *  `ConnectAction`'s own `<button>`, not a second button — "still tappable"
+ *  (handoff) means the SAME control, restyled. */
 function ConnectBlock({
   bluetoothStatus,
   lastDevice,

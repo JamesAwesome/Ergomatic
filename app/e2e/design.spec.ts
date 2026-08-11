@@ -550,27 +550,185 @@ test.describe("workout detail screen", () => {
     await assertNoFailingInk4Labels(page);
   });
 
-  // Task 1 (ui-fix round): Start is the screen's one L1, at the level
-  // system's own 56px — not the pre-Task-1 `.button-primary`'s 52px (which
-  // itself under-rendered further still, DEVIATIONS.md's IMP-6 row: a real
-  // `<button>`'s UA chrome added ~6px on top of THAT). `.button-l1` zeroes
-  // padding/border explicitly so this is the first button in the app whose
-  // rendered height actually equals its own spec.
-  test("Start is the screen's one L1 action, rendered at 56px", async ({
+  // Task 1 (ui-fix round) originally pinned Start as this screen's one L1
+  // at 56px. Fast-follow spec §4 (James's ruling 3) retargets it: Connect
+  // is now the screen's single primary — L1 geometry (56px) but its own
+  // `.button-connect` class and `--action-connect` token, never
+  // `.button-l1`/`--accent` (tokens.css's amended "accent means exactly
+  // four things" comment: one red, one blue, never two reds). Start
+  // renamed to "Start Timer" and demoted to `.button-l2` (52px) — the
+  // companion pin below. `.button-l1` zeroes padding/border explicitly so
+  // Connect is still the first button in the app whose rendered height
+  // actually equals its own spec (DEVIATIONS.md's IMP-6 row).
+  test("Connect is the screen's one primary action at 56px; Start Timer sits at L2", async ({
     page,
   }) => {
-    const l1 = page.locator(".button-l1");
-    await expect(l1).toHaveCount(1);
-    await expect(l1).toHaveText("Start");
-    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
-    expect(height).toBe(56);
+    const connect = page.locator(".button-connect");
+    await expect(connect).toHaveCount(1);
+    await expect(connect).toHaveText("Connect");
+    const connectHeight = await connect.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(connectHeight).toBe(56);
+    // Palette sweep: --action-connect is a NEW token this task introduces —
+    // pinned here alongside the geometry, the same "match the token
+    // palette" idiom every other screen's own primary color gets. Same
+    // computed rgb this file already asserts for --type-o2 elsewhere
+    // (identical hex, #2a6275 — a deliberately separate token, tokens.css).
+    const connectBg = await connect.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(connectBg).toBe("rgb(42, 98, 117)"); // --action-connect
+
+    const startTimer = page.getByRole("button", { name: "Start Timer" });
+    await expect(startTimer).toBeVisible();
+    await expect(startTimer).toHaveClass(/button-l2/);
+    const startHeight = await startTimer.evaluate(
+      (el) => el.getBoundingClientRect().height,
+    );
+    expect(startHeight).toBe(52);
 
     // Fix round 1 (F2, reviewer finding): the one-L1 count alone couldn't
     // tell a genuine L1 migration from a screen that ALSO still rendered a
     // legacy `.button-primary` block sitting outside the level system
     // entirely (WorkoutDetail's own staged-delete panel did exactly this
-    // until F2). Asserted on every one-L1 screen's sweep now.
+    // until F2). Asserted on every one-primary screen's sweep now; extended
+    // here to `.button-l1` too, now that WorkoutDetail's own primary lives
+    // on `.button-connect` instead and should never ALSO render a stray
+    // `.button-l1`.
+    await expect(page.locator(".button-l1")).toHaveCount(0);
     await expect(page.locator(".button-primary")).toHaveCount(0);
+  });
+});
+
+// M-3 (Task 4 review, routed here): the disabled/dashed Start Timer state
+// (the needsBaselines guard, WorkoutDetail.tsx's own `startBlocked`) never
+// got a design sweep or a capture — every OTHER WorkoutDetail describe in
+// this file either calls `setBaselines` or (the default "workout detail
+// screen" describe above) opens whichever `.workout-row` happens to sort
+// first, neither of which reliably exercises the guarded render. This
+// describe forces it on purpose: a fresh account that never calls
+// `setBaselines`, viewing a personal workout with a plain distance work
+// step (no explicit effort pace — the same construction "workout detail
+// screen (personal workout, owner actions)" above uses for its own owned
+// workout) — `needsBaselines()` reads true for a plain distance/duration
+// row, so Start Timer renders disabled with the dashed idiom every time.
+test.describe("workout detail screen (no baselines, guarded Start Timer)", () => {
+  const title = "Design No Baselines Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-detail-noBaselines-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design No Baselines Tester",
+    });
+    await page.goto("/library/new");
+    await page.getByLabel("Title").fill(title);
+    await page.getByRole("button", { name: "Pain 3" }).click();
+    await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+    await page.getByRole("button", { name: "Save to library" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("Start Timer renders disabled/dashed and the screen still clears the tap-target/a11y/ink4 sweeps", async ({
+    page,
+  }) => {
+    const startTimer = page.getByRole("button", { name: "Start Timer" });
+    await expect(startTimer).toBeDisabled();
+    await expect(startTimer).toHaveClass(/button-l2/);
+
+    const startStyles = await startTimer.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { borderStyle: s.borderStyle, color: s.color };
+    });
+    expect(startStyles.borderStyle).toBe("dashed");
+    // The global `button:disabled` rule's --ink-5 text on --surface
+    // computes 2.754:1 (verified independently, WCAG relative-luminance
+    // formula, and already documented at this exact figure elsewhere in
+    // index.css's own connect-block-dashed comment) — well under 4.5:1,
+    // but WCAG 1.4.3 exempts disabled controls (axe-core's own
+    // color-contrast rule skips them too, which `assertNoA11yViolations`
+    // below proves empirically rather than just by exemption).
+    expect(startStyles.color).toBe("rgb(160, 154, 140)"); // --ink-5
+
+    // `needsBaselines()` reading true with no baselines set makes BOTH
+    // Start Timer's own caption AND the "Log it after" fallback below it
+    // render this exact class (WorkoutDetail.test.tsx's own comment: "the
+    // step rows and 'Log it after' grow their own 'no target' idiom too")
+    // — `.first()`, scoped to the action stack, picks Start Timer's own,
+    // the one adjacent to it in document order (StepRow's own copy, if
+    // any, lives inside `.step-list`, a sibling of the action stack, so
+    // the `>` direct-child scope never reaches it).
+    const caption = page
+      .locator(".workout-detail-actions > .step-row-no-target")
+      .first();
+    await expect(caption).toBeVisible();
+    const captionColor = await caption.evaluate(
+      (el) => getComputedStyle(el).color,
+    );
+    // --ink-4 on --page (the screen's own body background, not --surface —
+    // this caption sits directly on `.screen`, which sets no background of
+    // its own) computes 4.76:1, independently verified against the same
+    // WCAG formula — clears the 4.5:1 AA floor for real (non-exempt) text,
+    // matching the figure design.spec.ts's own assertNoFailingInk4Labels
+    // doc comment already cites for this exact pairing.
+    expect(captionColor).toBe("rgb(111, 106, 95)"); // --ink-4
+
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+    await assertNoFailingInk4Labels(page);
+  });
+});
+
+// Fast-follow spec §4 (adversarial I9), the real bug the mechanical
+// selector retarget alone would have missed: `.button-l2`'s own resting
+// fill was `--surface` (unfilled), so the OLD dashed rule only had to
+// override border-style/color. `.button-connect` fills solid blue by
+// default — a bare selector rename would leave dark `--ink-3` text sitting
+// on that solid fill, both visually wrong and a real contrast failure.
+// This forces the dashed state on a REAL browser (no Web Bluetooth API,
+// same `addInitScript` idiom `design.spec.ts`'s own FAILED-state test
+// above and `screenshots.spec.ts`'s `stubNoBluetooth` use) and asserts the
+// fill actually reverted, not just that the border went dashed.
+test.describe("workout detail screen (Connect, no Bluetooth API)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, "bluetooth", {
+        value: undefined,
+        configurable: true,
+      });
+    });
+    await signInViaBackdoor(page, {
+      email: "design-detail-no-bt@e2e.test",
+      name: "Design No Bluetooth Tester",
+    });
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator(".workout-detail-title")).toBeVisible();
+  });
+
+  test("Connect's dashed state reverts the blue fill to --surface, keeping the same measured ink-3 contrast", async ({
+    page,
+  }) => {
+    await expect(page.getByText("NO BLUETOOTH ON THIS DEVICE")).toBeVisible();
+    const connect = page.getByRole("button", { name: "Connect" });
+    const styles = await connect.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        background: s.backgroundColor,
+        borderStyle: s.borderStyle,
+        color: s.color,
+      };
+    });
+    expect(styles.background).toBe("rgb(255, 253, 247)"); // --surface, NOT --action-connect
+    expect(styles.borderStyle).toBe("dashed");
+    expect(styles.color).toBe("rgb(87, 84, 76)"); // --ink-3, 7.432:1 on --surface
+
+    await assertNoA11yViolations(page);
   });
 });
 

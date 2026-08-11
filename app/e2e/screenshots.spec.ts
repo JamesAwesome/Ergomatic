@@ -656,6 +656,38 @@ test("workout-detail", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// Fast-follow Task 5 (M-3, Task 4 review): the reordered action stack's
+// normal state is `workout-detail.png` above (Connect, LAST USED-capable,
+// leads; Start Timer, enabled, at L2). This is the OTHER state that used
+// to have no capture at all: a never-baselined account, where Start Timer
+// renders disabled with the dashed idiom and the "no target · Set
+// baselines" caption. A plain distance/duration row (no explicit effort
+// pace) is enough — `needsBaselines()` reads true for it, and this
+// account never calls the baselines API.
+test("workout-detail-no-target", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-detail-no-target@e2e.test",
+    name: "Screenshot No Target Tester",
+  });
+
+  const title = "Screenshot No Target Workout";
+  await page.goto("/library/new");
+  await page.getByLabel("Title").fill(title);
+  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByLabel("Row 1 duration", { exact: true }).fill("2000");
+  await page.getByRole("button", { name: "Save to library" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+$/);
+  await page.locator(".workout-detail-title").waitFor();
+  await expect(
+    page.getByRole("button", { name: "Start Timer" }),
+  ).toBeDisabled();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "workout-detail-no-target.png"),
+  });
+
+  await cleanupByTitle(page, title);
+});
+
 /** Fills the top-level fields plus a seven-step body so the committed
  *  screenshot shows the whole point of the accordion redesign
  *  (docs/design/builder-redesign/README.md): only the LAST step ends up
