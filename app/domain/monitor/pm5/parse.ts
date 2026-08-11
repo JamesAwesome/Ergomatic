@@ -306,14 +306,20 @@ export function parseAdditionalSplitIntervalData(
  * analogy alike.
  */
 export interface WorkoutSummary {
-  /** Whole-workout-total reading is UNCONFIRMED on the wire (§23 walk item
-   *  2) — flagged by analogy to 0x0031's identically-scaled, identically-
-   *  named field, which hardware walk 4 proved PER-INTERVAL, not
-   *  session-cumulative. */
-  totalElapsedSeconds: number;
-  /** Same cumulative-vs-per-interval flag as `totalElapsedSeconds` (§23
-   *  walk item 2). */
-  totalMeters: number;
+  /** Deliberately named WITHOUT a "total"/"session" prefix — this
+   *  codebase reserves those words for a CONFIRMED accumulated reading
+   *  (`GeneralStatus.elapsedSeconds`/`distanceMeters` above are neutral
+   *  for the identical reason: hardware walk 4 proved 0x0031's own
+   *  identically-scaled, identically-named fields PER-INTERVAL, not
+   *  cumulative, and `driver.ts`'s `sessionElapsedSeconds`/
+   *  `sessionDistanceMeters` only earns the "session" word once its own
+   *  accumulator has done the summing). Whether THIS field is genuinely a
+   *  whole-workout total is UNCONFIRMED on the wire (§23 walk item 2) —
+   *  a "total"-prefixed name would assert what the walk hasn't. */
+  elapsedSeconds: number;
+  /** Same unconfirmed-cumulative flag as `elapsedSeconds`, same reason for
+   *  the neutral name (§23 walk item 2). */
+  meters: number;
   avgStrokeRate: number;
   /** By-analogy sentinel (§23 walk item 3), not document-stated for this
    *  field. */
@@ -343,8 +349,8 @@ export function parseEndOfWorkoutSummary(
 ): WorkoutSummary | null {
   if (bytes.length < 20) return null;
   return {
-    totalElapsedSeconds: readU24LE(bytes, 4) / 100,
-    totalMeters: readU24LE(bytes, 7) / 10,
+    elapsedSeconds: readU24LE(bytes, 4) / 100,
+    meters: readU24LE(bytes, 7) / 10,
     avgStrokeRate: readU8(bytes, 10),
     endingHeartRateBpm: heartRate(readU8(bytes, 11)),
     avgHeartRateBpm: heartRate(readU8(bytes, 12)),

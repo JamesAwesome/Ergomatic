@@ -18,6 +18,16 @@ Page counts match the adversarial review's independent fetch exactly
 the same document revisions. All facts below were re-extracted independently
 from the fetched PDFs (via `pdftotext -layout`), not copied from the review.
 
+**§23's own fetch (2026-08-11) is the one exception to the `.nl` mirror
+above**: it used `concept2.it` for the Bluetooth Smart Interface Definition
+PDF instead (`concept2.co.in` still fails TLS, same as this table's own
+note). Not a different document: the Task 1 review independently re-fetched
+the SAME `.it` URL and re-extracted pp.20-22 via `pdftotext -layout`,
+confirming byte-identical Revision 1.30 content — same printed page
+footers, same field tables, word-for-word matching quotes. Recorded here
+rather than silently switching this table to `.it`, since every other
+section's citations were pulled from the `.nl` fetch and stay that way.
+
 ## 1. Frame structure (CSAFE doc, standard frame — no extended addressing)
 
 ```
@@ -4496,7 +4506,7 @@ BLE doc p.21):**
 | 5-6    | Split/Interval Size    | Lo/Hi, "(meters or seconds)" per the doc's own note — unit depends on Split/Interval Type (offset 4), whole units, no lsb scale given                |
 | 7      | Split/Interval Count   | whole; same base (0- vs 1-based) ambiguity as 0x0033 offset 3 / 0x0037 offset 17 (§10, §15 #1)                                                       |
 | 8-9    | Total Calories         | whole cals                                                                                                                                              |
-| 10-11  | Watts                  | whole watts — average power for the WHOLE workout (distinct from 0x0033's per-tick Average Power, §10). Doc's own note: "max=65.534 kW", the same max-value annotation style as 0x0038's Speed/Power fields (§10)                                                                                 |
+| 10-11  | Watts                  | whole watts, no scale/max annotation stated on THIS page (unlike 0x0038's Split/Interval Power, which DOES carry "max = 65.534 kW" on p.20 — Task 1 review's own independent re-fetch caught an earlier draft of this row borrowing that quote for the wrong characteristic; corrected) — average power for the WHOLE workout (distinct from 0x0033's per-tick Average Power, §10)                |
 | 12-14  | Total Rest Distance    | 1 m/lsb — explicitly annotated on this page                                                                                                          |
 | 15-16  | Interval Rest Time     | whole seconds — explicitly annotated on this page                                                                                                    |
 | 17-18  | Avg Calories           | whole cals/hr — explicitly annotated on this page, same unit as 0x0033's Split/Interval Avg Calories (§10)                                            |
