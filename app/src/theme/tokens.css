@@ -30,6 +30,15 @@
   --rule-3: #c9c3b2;
   --accent: #b5341f;
   --accent-hover: #9c2c19;
+  /* Fast-follow spec §4: Connect becomes the screen's single primary — its
+     own action token, not a repaint of --accent. The value intentionally
+     echoes --type-o2 immediately below, but stays a SEPARATE token:
+     type-badge semantics and action semantics must be free to change
+     independently of each other. See the amended "accent means exactly
+     four things" comment below (attached to --type-tr) for why Connect is
+     the fifth candidate that does NOT become accent's fifth thing. */
+  --action-connect: #2a6275;
+  --action-connect-hover: #224f5e;
   --type-o2: #2a6275;
   --type-at: #8a5f18;
   --type-an: #5c4382;
@@ -41,7 +50,17 @@
      (TypeBadge's `.type-badge` pairs it with --on-color text, the identical
      17.1:1 pairing TEST badges already prove safe) — a deliberate,
      app-wide repaint of every TR badge/chip (Library rows, LAST THREE,
-     Plan, Today's type-swap chip, Builder's TYPE chip), not collateral. */
+     Plan, Today's type-swap chip, Builder's TYPE chip), not collateral.
+
+     Fast-follow spec §4 (amendment, naming the fifth): the Connect action —
+     the workout detail screen's new single primary — is the first serious
+     candidate to reach for accent since this rule shipped. It does NOT
+     become the rule's fifth thing. It gets its own token,
+     --action-connect above, so the rule still holds exactly as written
+     (accent still means only its original four things) and the screen
+     gains its own separate blue instead: the flagship hardware path earns
+     its own color, so the screen reads with one red and one blue, never
+     two reds competing for the rower's eye. */
   --type-tr: var(--ink);
   --type-test: #1b1a17;
   --on-color: #fffdf7;
