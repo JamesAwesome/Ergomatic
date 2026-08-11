@@ -1,7 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import AppRoutes, { hidesTabBar } from "./AppRoutes";
+import { buildDraft, saveDraft, startDraft } from "../session/draft";
+import { buildRun } from "../session/engine";
+import { saveRun } from "../session/run";
 
 vi.mock("../library/Library", () => ({
   default: () => <h1>Library</h1>,
@@ -21,6 +24,9 @@ vi.mock("../plan/Plan", () => ({
 vi.mock("../session/Countdown", () => ({
   default: () => <h1>Countdown</h1>,
 }));
+vi.mock("../session/Timer", () => ({
+  default: () => <h1>Timer</h1>,
+}));
 vi.mock("../session/LogSession", () => ({
   default: () => <h1>Log Session</h1>,
 }));
@@ -39,6 +45,10 @@ vi.mock("../You", () => ({
 vi.mock("../you/LearningTheApp", () => ({
   default: () => <h1>Learning The App</h1>,
 }));
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 describe("AppRoutes", () => {
   // NOT a proof of declaration order: react-router-dom 7.18.2 ranks a
@@ -264,6 +274,67 @@ describe("AppRoutes", () => {
     expect(
       screen.getByRole("navigation", { name: "Main" }),
     ).toBeInTheDocument();
+  });
+});
+
+// Fast-follow spec §3, entry 6: `/session/confirm` is a redirect shim now —
+// ConfirmTargets is deleted, but stale deep links and browser back-swipes to
+// this URL are documented real (`monitorRun.ts`'s own doc comment). Three
+// arms, each keyed on what's actually sitting in storage — never on the URL
+// itself, since nothing hits this route on purpose any more.
+describe("/session/confirm redirect shim", () => {
+  it("a SessionRun on record (the session genuinely got past the countdown) redirects to /session/run", async () => {
+    const draft = startDraft(
+      buildDraft({
+        id: "w1",
+        title: "Shim Test Workout",
+        type: "AN",
+        steps: [{ k: "r", minutes: 5 }],
+      }),
+    );
+    saveDraft(draft);
+    saveRun(buildRun(draft, null, new Date("2026-08-11T12:00:00.000Z")));
+
+    render(
+      <MemoryRouter initialEntries={["/session/confirm"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Timer" })).toBeVisible();
+  });
+
+  it("a draft with no run yet (queued, the count hasn't run) redirects to /session/countdown", async () => {
+    saveDraft(
+      startDraft(
+        buildDraft({
+          id: "w1",
+          title: "Shim Test Workout",
+          type: "AN",
+          steps: [{ k: "r", minutes: 5 }],
+        }),
+      ),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/session/confirm"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Countdown" }),
+    ).toBeVisible();
+  });
+
+  it("nothing at all in storage redirects to /today, the same fallback every other dead deep link uses", async () => {
+    render(
+      <MemoryRouter initialEntries={["/session/confirm"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
   });
 });
 

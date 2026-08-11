@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Step, WorkoutType } from "../../domain/types.js";
-import { buildDraft, loadDraft, saveDraft } from "./draft";
+import { buildNudgedDraft, loadDraft, saveDraft, startDraft } from "./draft";
 import { clearRun, loadRun } from "./run";
 import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
 
@@ -32,8 +32,8 @@ export interface UseStartWorkoutResult {
    *  staged replace-confirmation panel has taken over. */
   replaceStage: StartReplaceStage;
   /** Set only when `saveDraft` itself fails (quota, private-mode Safari) —
-   *  surfaced inline rather than navigating to a confirm screen with
-   *  nothing behind it. */
+   *  surfaced inline rather than navigating to the countdown with nothing
+   *  behind it. */
   startError: string | null;
   /** Start's own click handler: checks for a stale record (an unlogged
    *  `SessionRun`, an unlogged or live `MonitorRun`, or a started-but-not-
@@ -42,8 +42,9 @@ export interface UseStartWorkoutResult {
   handleStart: () => void;
   /** The "Replace session" press: builds and saves a fresh draft, cross-
    *  clears both the phone-side `SessionRun` and the monitor-side
-   *  `MonitorRun` records, and navigates to Confirm. Also what `handleStart`
-   *  itself calls when there is nothing to stage a confirmation for. */
+   *  `MonitorRun` records, and navigates straight to the countdown. Also
+   *  what `handleStart` itself calls when there is nothing to stage a
+   *  confirmation for. */
   confirmReplace: () => void;
   /** The "Cancel" press: dismisses the staged panel, touching nothing. */
   cancelReplace: () => void;
@@ -57,28 +58,43 @@ export interface UseStartWorkoutResult {
  *  data-loss class this flow exists to prevent. Deliberately NOT extended
  *  to cover WorkoutDetail's OWN Connect/nudge paths (`handleConnectProceed`,
  *  `handleRowInstead`) — those stay in WorkoutDetail.tsx, out of this task's
- *  scope. */
+ *  scope.
+ *
+ *  `nudges` (fast-follow spec §3, entry 1): the caller's own live preview
+ *  nudge state, baked into the draft via `buildNudgedDraft` — WorkoutDetail
+ *  passes its card's real state, BaselineCard passes `{}` (no preview
+ *  surface there). Closing over the CURRENT `nudges` value on every render
+ *  is deliberate, not a bug: a fresh closure captures whatever the caller's
+ *  own state holds at the moment Start is actually pressed, the same way
+ *  every other per-render event handler in this codebase already works. */
 export function useStartWorkout(
   workout: StartableWorkout,
+  nudges: Record<number, number>,
 ): UseStartWorkoutResult {
   const [startError, setStartError] = useState<string | null>(null);
   const [replaceStage, setReplaceStage] = useState<StartReplaceStage>(null);
   const navigate = useNavigate();
 
-  // Builds and saves the session draft, then hands off to the confirm
-  // screen. `saveDraft` can fail (quota, private-mode Safari) without
-  // throwing; that's surfaced inline rather than navigating to a confirm
-  // screen with nothing behind it. `clearRun`/`clearMonitorRun` run only
-  // AFTER a successful `saveDraft` — never before — so a save failure never
+  // Builds and saves the session draft, then hands off straight to the
+  // countdown — ConfirmTargets (the old intermediate stop) is gone
+  // (fast-follow spec §3). `startDraft` stamps `startedAt` at this exact
+  // moment (adversarial B1: the field's real readers — this hook's own
+  // live-session guard below, `Today.tsx`'s stale-draft janitor, and the
+  // `/session/confirm` redirect shim's "started" arm — all need it stamped
+  // from here on, now that no later screen stamps it for them). `saveDraft`
+  // can fail (quota, private-mode Safari) without throwing; that's
+  // surfaced inline rather than navigating to a countdown screen with
+  // nothing behind it. `clearRun`/`clearMonitorRun` run only AFTER a
+  // successful `saveDraft` — never before — so a save failure never
   // destroys a prior run record for nothing (the reviewer's F5 finding,
   // Phase 6B Task 4 fix round, and its Phase 7B Task 2 mirror for
   // `MonitorRun`).
   function confirmReplace() {
-    const draft = buildDraft(workout);
+    const draft = startDraft(buildNudgedDraft(workout, nudges));
     if (saveDraft(draft)) {
       clearRun();
       clearMonitorRun();
-      navigate("/session/confirm");
+      navigate("/session/countdown");
     } else {
       setStartError("Couldn't start this session. Try again.");
     }

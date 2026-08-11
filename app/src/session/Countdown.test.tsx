@@ -23,7 +23,7 @@ import { buildRun } from "./engine";
 import { hasRunProgress } from "./Countdown";
 import { loadRun, saveRun, type SessionRun } from "./run";
 
-// Realistic fixture, matching Timer.test.tsx/ConfirmTargets.test.tsx:
+// Realistic fixture, matching Timer.test.tsx:
 // Hoarfrost (O2) — a reps×2 marker + one split-ref work step (12' @
 // 6k+12, spm 22, 5' rest). Its first phase is that work step, labelled
 // with the resolved split ("2:12.0" against this file's BASELINES).
@@ -45,8 +45,7 @@ function hoarfrostDraft(id = "id-hoarfrost"): SessionDraft {
 // reads false — Task 1's own review finding: this pre-existing AN sprint
 // content, not just the future onboarding pair, is what the guard
 // loosening opens up) — the realistic fixture the repo convention
-// requires, matching ConfirmTargets.test.tsx's own choice for the
-// identical predicate.
+// requires.
 function heatLightningDraft(id = "id-heat-lightning"): SessionDraft {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === "Heat Lightning");
   if (!w) throw new Error("missing library fixture: Heat Lightning");
@@ -97,7 +96,7 @@ async function renderCountdown(initialPath = "/session/countdown") {
       <Routes>
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/today" element={<p>TODAY SCREEN</p>} />
-        <Route path="/session/confirm" element={<p>CONFIRM SCREEN</p>} />
+        <Route path="/library/:id" element={<p>DETAIL SCREEN</p>} />
         <Route path="/session/run" element={<p>RUN SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
@@ -198,9 +197,10 @@ describe("Countdown", () => {
   });
 
   // Phase 6I: `needsBaselines()` (domain/needsBaselines.ts) is the SAME
-  // predicate ConfirmTargets.tsx's own footer uses — an effort-only draft
+  // predicate WorkoutDetail's own Start guard uses (fast-follow spec §3
+  // moved it there from ConfirmTargets' old footer) — an effort-only draft
   // (a REAL shipped library workout, Heat Lightning) must build and save a
-  // real run and proceed to "GET ON THE HANDLE," never bounce to Confirm,
+  // real run and proceed to "GET ON THE HANDLE," never bounce to /today,
   // even though `resolvedBaselines` is null.
   //
   // Regression pin for the redirect loop the brief warns about: this
@@ -213,9 +213,9 @@ describe("Countdown", () => {
   // redirects); gate only the build effect (leave the render redirecting
   // unconditionally) and this test's "GET ON THE HANDLE" assertion fails
   // instead (a run WOULD be written, but the rower never sees it — bounced
-  // straight back to Confirm, which would send them right back here,
-  // building a SECOND run, forever). Both assertions together are what
-  // actually catches a one-sided fix.
+  // straight back to /today, which would send them right back here on the
+  // next Start, building a SECOND run, forever). Both assertions together
+  // are what actually catches a one-sided fix.
   it("builds and saves a run for an effort-only workout with null baselines, and proceeds to GET ON THE HANDLE (no redirect loop)", async () => {
     saveDraft(heatLightningDraft());
     mockAdapters({
@@ -224,7 +224,7 @@ describe("Countdown", () => {
     await renderCountdown();
 
     expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
-    expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
     const run = loadRun();
     expect(run).not.toBeNull();
     // Heat Lightning's first phase is its effort work step, labelled with
@@ -249,16 +249,17 @@ describe("Countdown", () => {
   });
 
   // Phase 6B Task 3 superseded the old `{0,0}` fallback (Task 2's own review
-  // flagged it): ConfirmTargets.tsx now blocks START whenever baselines are
-  // unset AND the draft needs one (Phase 6I narrowed "whenever" to that
-  // condition), so the only way to reach Countdown with `resolvedBaselines
-  // === null` for a SPLIT-REF draft is a direct/deep navigation that
-  // skipped Confirm's own guard. Rather than build a run against a dummy
-  // pair, Countdown bounces back to Confirm — the same place a rower
-  // trying to START without baselines lands anyway. Regression pin: this
+  // flagged it): WorkoutDetail's own Start button now blocks (disabled +
+  // caption, fast-follow spec §3 relocated the guard from ConfirmTargets'
+  // old footer) whenever baselines are unset AND the draft needs one
+  // (Phase 6I narrowed "whenever" to that condition), so the only way to
+  // reach Countdown with `resolvedBaselines === null` for a SPLIT-REF draft
+  // is a direct/deep navigation that skipped that guard entirely. Rather
+  // than build a run against a dummy pair, Countdown bounces to /today —
+  // where BaselineCard, the no-baselines door, lives. Regression pin: this
   // must stay true even though the identical predicate now lets an
   // effort-only draft (the test above) through.
-  it("still redirects to /session/confirm without building a run for a SPLIT-REF workout when baselines are ready but unset", async () => {
+  it("still redirects to /today without building a run for a SPLIT-REF workout when baselines are ready but unset", async () => {
     saveDraft(hoarfrostDraft());
     mockAdapters({
       baselinesState: {
@@ -268,7 +269,7 @@ describe("Countdown", () => {
     });
     await renderCountdown();
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(screen.queryByText("GET ON THE HANDLE")).not.toBeInTheDocument();
     expect(loadRun()).toBeNull();
   });
@@ -333,15 +334,17 @@ describe("Countdown", () => {
     expect(saveRunSpy).toHaveBeenCalledTimes(1);
   });
 
-  // Ledger item 1 (routed from Task 2's own report): CANCEL must not just
-  // navigate — it has to un-start the draft AND clear the run it already
-  // built, or ConfirmTargets' own `startedAt !== null` guard would bounce
-  // the rower straight back to the timer instead of letting them re-edit.
-  it("CANCEL un-starts the draft, clears the run, and navigates back to /session/confirm", async () => {
-    // startDraft first — the real flow (ConfirmTargets' handleStart) always
-    // stamps startedAt BEFORE navigating here; a never-started draft
-    // wouldn't distinguish "CANCEL un-starts it" from "it was never
-    // started."
+  // Ledger item 1 (routed from Task 2's own report), revised by fast-follow
+  // spec §3 item 4 (adversarial I3): CANCEL must not just navigate — it has
+  // to clear the draft AND the run it already built, or `connectGuardStage`
+  // would stage a bogus "session in progress" confirm on the very screen
+  // CANCEL just landed on. ConfirmTargets used to un-start the draft
+  // instead of clearing it (so its own editable form could reopen); that
+  // screen is gone, so CANCEL clears the draft outright and lands on the
+  // workout's own detail page instead.
+  it("CANCEL clears the draft, clears the run, and navigates back to the workout's own detail page", async () => {
+    // startDraft first — the real flow (every rewired entry point) always
+    // stamps startedAt BEFORE navigating here.
     saveDraft(startDraft(hoarfrostDraft()));
     mockAdapters();
     await renderCountdown();
@@ -351,8 +354,22 @@ describe("Countdown", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "CANCEL" }));
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
-    expect(loadDraft()!.startedAt).toBeNull();
+    expect(await screen.findByText("DETAIL SCREEN")).toBeInTheDocument();
+    expect(loadDraft()).toBeNull();
+    expect(loadRun()).toBeNull();
+  });
+
+  it("CANCEL falls back to /today when the draft carries no workoutId", async () => {
+    const draft = startDraft(hoarfrostDraft());
+    saveDraft({ ...draft, workoutId: null });
+    mockAdapters();
+    await renderCountdown();
+    await screen.findByText("GET ON THE HANDLE");
+
+    await userEvent.click(screen.getByRole("button", { name: "CANCEL" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
   });
 

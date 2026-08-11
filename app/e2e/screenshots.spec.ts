@@ -43,8 +43,9 @@ async function setBaselines(page: Page): Promise<void> {
 /** Sets the warm-up preference via the real `PUT /api/prefs` route
  *  (2026-08-09 warmup-setting spec §2) — same real-networking reasoning as
  *  `setBaselines` above. Used by the captures whose whole point is to show
- *  the setting ON (the "confirm"/"countdown" screens' own WARM-UP chrome,
- *  and the "you-warmup-on" capture), since the setting defaults OFF. */
+ *  the setting ON (the "countdown" screen's own next-phase line, and the
+ *  "you-warmup-on" capture — ConfirmTargets' own WARM-UP row died with the
+ *  screen, fast-follow Task 4), since the setting defaults OFF. */
 async function setWarmup(
   page: Page,
   warmup: { kind: "time"; minutes: number; restSeconds?: number },
@@ -112,9 +113,9 @@ async function markArticleRead(page: Page, slug: string): Promise<void> {
  *  scrolled content doesn't land underneath it; with the bar no longer
  *  fixed that padding would just leave a blank gap above it, so this drops
  *  it too. Call right before any `fullPage: true` screenshot whose content
- *  can exceed one viewport — "builder" and "confirm" (see the other tests
- *  in this file: neither of the rest sets `fullPage`, so neither of those
- *  is exposed to this). */
+ *  can exceed one viewport — "builder" (see the other tests in this file:
+ *  none of the rest sets `fullPage`, so none of those is exposed to
+ *  this). */
 async function neutralizeFixedTabBarForFullPageCapture(
   page: Page,
 ): Promise<void> {
@@ -446,8 +447,6 @@ test("today-unlogged", async ({ page }) => {
   await setBaselines(page);
   await importBulk(page, [`${title} | AN | easy | 1`, "w 0:03 6k"].join("\n"));
   await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
   await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
@@ -652,70 +651,6 @@ test("workout-detail", async ({ page }) => {
   await expect(page.getByText("ALL OUT")).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "workout-detail.png"),
-  });
-
-  await cleanupByTitle(page, title);
-});
-
-// Confirm targets (Phase 6A Task 4/5; refreshed 2026-08-09 for the
-// warmup-setting spec): a personal workout authored via bulk import (the
-// only way to land a standalone REST row and a reps marker in the same
-// workout — `+ REST` isn't authorable from a blank create-mode builder,
-// per docs/design/DEVIATIONS.md's "+ ADD ROW" row) PLUS the warm-up
-// preference turned ON, so the committed capture shows every row shape
-// Confirm targets renders: the preference-sourced WARM-UP row (DUR only,
-// un-numbered, outside Row-N — spec §4's aria ruling), REPEAT xN (REPS
-// stepper, no remove/restore — the binding decision from Task 1's review),
-// a work row (DUR + SPM + resolved TARGET + nudges), and a standalone REST
-// row (DUR only) — plus one row struck, so the removed-row treatment
-// (sunken background, struck label) is part of the visual record too, not
-// just the "everything present" state "confirm" would otherwise only ever
-// show.
-test("confirm", async ({ page }) => {
-  await signInViaBackdoor(page, {
-    email: "screenshots-confirm@e2e.test",
-    name: "Screenshot Tester",
-  });
-  await setBaselines(page);
-  await setWarmup(page, { kind: "time", minutes: 5 });
-
-  const title = "Screenshot Confirm Workout";
-  await page.goto("/library/import");
-  const text = [`${title} | AT | medium | 3`, "x3", "w 1' 6k @22", "r 2"].join(
-    "\n",
-  );
-  await page.getByLabel("Bulk import text").fill(text);
-  await page.getByRole("button", { name: "Import", exact: true }).click();
-  await expect(page).toHaveURL(/\/library$/);
-
-  await page.locator(".workout-row").filter({ hasText: title }).click();
-  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
-  await page.getByRole("button", { name: "Start" }).click();
-  await expect(page).toHaveURL(/\/session\/confirm$/);
-  await page.locator(".confirm-recount").waitFor();
-  await expect(page.locator(".confirm-warmup-row")).toBeVisible();
-
-  // Strike the REST row (Row 3: reps marker, w, r — the WARM-UP row above
-  // is preference chrome, outside this numbering entirely) — the ordinary
-  // removed-row case, distinct from the marker row's own no-remove-control
-  // treatment covered by the design sweep instead of a screenshot.
-  await page.getByRole("button", { name: "Remove Row 3" }).click();
-  await expect(
-    page.getByRole("button", { name: "Restore Row 3" }),
-  ).toBeVisible();
-
-  // Fix (final whole-branch review): four step-editor rows plus the header
-  // push `.confirm-footer` (the recount + "Looks right, start" — the
-  // screen's one L1) below the 390×844 viewport, so a viewport-only
-  // capture used to cut it off entirely. Same fullPage + fixed-tabbar
-  // neutralizer as "builder" above, for the same reason: a fullPage
-  // capture on a document taller than the viewport stitches the fixed
-  // `.tabbar` into the middle of the image unless it's made non-fixed
-  // first.
-  await neutralizeFixedTabBarForFullPageCapture(page);
-  await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "confirm.png"),
-    fullPage: true,
   });
 
   await cleanupByTitle(page, title);
@@ -1130,12 +1065,13 @@ async function importBulk(page: Page, text: string): Promise<void> {
 }
 
 /** Opens `title`'s detail page from the library list and presses Start,
- *  landing on Confirm. */
+ *  landing directly on the countdown (fast-follow Task 4: ConfirmTargets is
+ *  deleted, Start is the one door now). */
 async function startFromLibrary(page: Page, title: string): Promise<void> {
   await page.locator(".workout-row").filter({ hasText: title }).click();
   await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   await page.getByRole("button", { name: "Start" }).click();
-  await expect(page).toHaveURL(/\/session\/confirm$/);
+  await expect(page).toHaveURL(/\/session\/countdown$/);
 }
 
 test("countdown", async ({ page }) => {
@@ -1159,8 +1095,6 @@ test("countdown", async ({ page }) => {
     ),
   );
   await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "countdown.png"),
@@ -1189,8 +1123,6 @@ test("timer", async ({ page }) => {
     ),
   );
   await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
   await expect(page.getByText(/^STEP 1 OF 3/)).toBeVisible();
@@ -1218,8 +1150,6 @@ test("timer-landscape", async ({ page }) => {
     ),
   );
   await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
   await expect(page.getByText(/^STEP 1 OF 3/)).toBeVisible();
@@ -1248,8 +1178,6 @@ test("session-complete", async ({ page }) => {
     [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
   );
   await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
   await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
@@ -1294,8 +1222,6 @@ test("session-complete-landscape", async ({ page }) => {
     [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
   );
   await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
   await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
@@ -1351,8 +1277,6 @@ test("log-session", async ({ page }) => {
     [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
   );
   await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
   await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();

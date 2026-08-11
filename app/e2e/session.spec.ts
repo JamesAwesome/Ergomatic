@@ -118,22 +118,21 @@ async function importBulk(page: Page, text: string): Promise<void> {
 }
 
 /** Opens `title`'s detail page from the library list and presses Start,
- *  landing on Confirm — the same click sequence builder.spec.ts's own
- *  bulk-import tests use to get from a fresh import to the workout's own
- *  detail screen. */
+ *  landing directly on the countdown (fast-follow Task 4: ConfirmTargets is
+ *  deleted, Start is the one door now) — the same click sequence
+ *  builder.spec.ts's own bulk-import tests use to get from a fresh import
+ *  to the workout's own detail screen. */
 async function startFromLibrary(page: Page, title: string): Promise<void> {
   await page.locator(".workout-row").filter({ hasText: title }).click();
   await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   await page.getByRole("button", { name: "Start" }).click();
-  await expect(page).toHaveURL(/\/session\/confirm$/);
+  await expect(page).toHaveURL(/\/session\/countdown$/);
 }
 
-/** START on Confirm, then SKIP the countdown — the same handoff flows.spec.ts's
- *  own Phase 6A/6B test already proves against a real seeded workout;
- *  reused here verbatim for this file's own tiny bulk-imported fixtures. */
+/** SKIP the countdown — the same handoff flows.spec.ts's own Phase 6A/6B
+ *  test already proves against a real seeded workout; reused here verbatim
+ *  for this file's own tiny bulk-imported fixtures. */
 async function startAndSkipCountdown(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
@@ -523,7 +522,7 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("the full loop: Today → confirm → countdown → tiny timer session → complete → Log → Held + pain + notes → Save → Today shows it in LAST THREE and the plan's session counter advanced", async ({
+  test("the full loop: Today → detail → countdown → tiny timer session → complete → Log → Held + pain + notes → Save → Today shows it in LAST THREE and the plan's session counter advanced", async ({
     page,
   }) => {
     title = "Tiny E2E Log Session";
@@ -905,8 +904,21 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
   // instead of rebuilding whenever the existing run already shows real
   // progress. These two tests drive the real browser's own history stack
   // (`page.goBack()`), not a simulated one.
+  //
+  // Fast-follow Task 4 shortened the history stack: Start now pushes
+  // straight from the workout's own detail page to `/session/countdown`
+  // (no ConfirmTargets hop in between), and SKIP still REPLACES that entry
+  // with `/session/run`. One BACK from a live session therefore lands on
+  // the detail page itself now, not on a screen that bounces back to the
+  // timer — `hasRunProgress`'s own guard still exists (Countdown.tsx) and
+  // still protects a DEEPER back-walk or a stale deep link, but a single
+  // BACK from `/session/run` no longer passes through Countdown at all.
+  // The property this describe block actually cares about — nothing
+  // silently destroyed — still holds: the run record sits untouched (the
+  // detail page's own Start button, pressed again, must stage the
+  // "in-progress" replace-confirm rather than overwrite it).
 
-  test("BACK mid-session (after real progress) never lands on the countdown and never resets the run", async ({
+  test("BACK mid-session (after real progress) lands on the workout's own detail page and never resets the run", async ({
     page,
   }) => {
     const title = "Back Mid Session";
@@ -941,10 +953,11 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
 
     // Never the countdown screen — the whole point of the fix.
     await expect(page.getByText("GET ON THE HANDLE")).not.toBeVisible();
-    // Settles back on the live timer, same progressed phase — not reset to
-    // phase 1, not bounced anywhere that lost the run.
-    await expect(page).toHaveURL(/\/session\/run$/);
-    await expect(page.getByText(/^STEP 2 OF 2/)).toBeVisible();
+    // Lands on the workout's own detail page (the entry Start pushed from,
+    // one hop away now that ConfirmTargets no longer sits in between) —
+    // the run record itself is simply untouched, not "recovered" by a
+    // redirect.
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
     const runAfter = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
     );
@@ -952,6 +965,19 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
     expect(JSON.parse(runAfter ?? "null").startedAt).toBe(
       JSON.parse(runBefore ?? "null").startedAt,
     );
+
+    // The actual safety property: a second Start press from here must not
+    // silently overwrite the progressed run — WorkoutDetail's own
+    // `useStartWorkout` guard stages the same "in-progress" replace-confirm
+    // any other stale-draft Start press gets, never a bare rebuild.
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(
+      page.getByText("A session is in progress. Replace it?"),
+    ).toBeVisible();
+    const runStillAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.sessionRun"),
+    );
+    expect(runStillAfter).toBe(runAfter);
 
     await cleanupByTitle(page, title);
   });
@@ -1090,7 +1116,7 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
     expect(await monitorRunRaw(page)).toBe(before);
   });
 
-  test("Replace session clears the connected record and proceeds to Confirm", async ({
+  test("Replace session clears the connected record and proceeds to the countdown", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -1104,7 +1130,7 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
     await page.getByRole("button", { name: "Start" }).click();
     await page.getByRole("button", { name: "Replace session" }).click();
 
-    await expect(page).toHaveURL(/\/session\/confirm$/);
+    await expect(page).toHaveURL(/\/session\/countdown$/);
     // The reverse cross-clear, through the real browser's own storage.
     expect(await monitorRunRaw(page)).toBeNull();
   });

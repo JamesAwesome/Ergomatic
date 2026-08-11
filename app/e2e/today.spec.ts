@@ -129,11 +129,10 @@ async function importBulk(page: Page, text: string): Promise<void> {
   await expect(page).toHaveURL(/\/library$/);
 }
 
-/** START on Confirm, then SKIP the countdown — copied from session.spec.ts's
- *  own `startAndSkipCountdown`. */
+/** SKIP the countdown — copied from session.spec.ts's own
+ *  `startAndSkipCountdown` (fast-follow Task 4: Start lands directly on the
+ *  countdown now, ConfirmTargets is deleted). */
 async function startAndSkipCountdown(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
@@ -546,7 +545,7 @@ test.describe("Today enhancements: the type-swap loop", () => {
     await card.click();
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
     await page.getByRole("button", { name: "Start" }).click();
-    await expect(page).toHaveURL(/\/session\/confirm$/);
+    await expect(page).toHaveURL(/\/session\/countdown$/);
     await startAndSkipCountdown(page);
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
     await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
@@ -638,7 +637,7 @@ test.describe("Today enhancements: the swap x outside-plan composition seam", ()
     await card.click();
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
     await page.getByRole("button", { name: "Start" }).click();
-    await expect(page).toHaveURL(/\/session\/confirm$/);
+    await expect(page).toHaveURL(/\/session\/countdown$/);
     await startAndSkipCountdown(page);
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
     await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });

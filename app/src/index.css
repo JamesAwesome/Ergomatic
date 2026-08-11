@@ -1252,8 +1252,8 @@ button:disabled {
 /* WorkoutDetail's own top margin under the step list — kept as a second,
    page-scoped class alongside the shared `.action-stack` (WorkoutDetail.tsx:
    `className="action-stack workout-detail-actions"`) rather than folded
-   into `.action-stack` itself, since SessionComplete's/ConfirmTargets' own
-   `.action-stack` usages need their own spacing, not this screen's 20px. */
+   into `.action-stack` itself, since SessionComplete's own `.action-stack`
+   usage needs its own spacing, not this screen's 20px. */
 .workout-detail-actions {
   margin-top: 20px;
 }
@@ -1477,10 +1477,11 @@ button:disabled {
 
 /* The expanded WARM-UP editor (WarmupRow.tsx) — reuses `.step-editor`/
    `.step-editor-row`/`.step-editor-row-label`/`.step-editor-header`/
-   `.step-editor-header-label` wholesale (same visual family ConfirmTargets'
-   own `.confirm-warmup-row` already established for this exact word), just
-   this margin so it sits in the same 12px-ish rhythm `.you-settings-row`'s
-   own padding gave the collapsed row it replaces. */
+   `.step-editor-header-label` wholesale (the same visual family
+   ConfirmTargets' own `.confirm-warmup-row` used to reuse for this exact
+   word, before fast-follow Task 4 deleted that screen), just this margin
+   so it sits in the same 12px-ish rhythm `.you-settings-row`'s own padding
+   gave the collapsed row it replaces. */
 .warmup-editor {
   margin: 12px 0;
 }
@@ -2360,10 +2361,10 @@ button:disabled {
 /* Draft-restore notice (CL remainder Task 2) — a one-line row shown only
    when a stored draft was restored on mount, sitting between the header
    and the form (Builder.tsx). Renders directly on `.screen`'s own --page
-   background, not a --surface card, the same context
-   `.confirm-legacy-notice`/`.bulk-import-notice` already use: --ink-3 on
-   --page measures 6.69:1 (already computed for that exact pairing in this
-   file), clear of the 4.5:1 AA floor. `.button-l4`/`.button-l4-armed`
+   background, not a --surface card, the same context `.bulk-import-notice`
+   already uses: --ink-3 on --page measures 6.69:1 (already computed for
+   that exact pairing in this file), clear of the 4.5:1 AA floor.
+   `.button-l4`/`.button-l4-armed`
    are normally full-width block buttons (the shared `.button-l1`-
    `.button-l4-armed` rule's own `width: 100%`) — overridden to size to
    their own label here so START OVER sits beside the text instead of
@@ -2731,11 +2732,9 @@ button:disabled {
 
 /* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — 10px mono,
    inside the blanket "no small mono label reads --ink-4" rule (DESIGN.md's
-   contrast note). Shared by both Builder's StepEditor.tsx and Confirm's own
-   ConfirmStepRow, which reuses this exact class. The struck-row override
-   immediately below (`.confirm-step-removed .step-editor-header-label`)
-   already set --ink-3 for the removed state; this base rule now matches it,
-   so a struck row's own colour no longer differs from the base label's. */
+   contrast note). Shared by Builder's StepEditor.tsx and (until fast-follow
+   Task 4 deleted the screen) ConfirmTargets' own ConfirmStepRow, which
+   reused this exact class. */
 .step-editor-header-label {
   flex: 1;
   font-family: var(--font-mono);
@@ -2744,11 +2743,7 @@ button:disabled {
   color: var(--ink-3);
 }
 
-/* .confirm-toggle-btn (ConfirmTargets.tsx's REMOVE/RESTORE control) shares
-   this exact pill styling rather than duplicating it — same visual
-   language (a secondary text-pill button), different screen. */
-.step-editor-duplicate,
-.confirm-toggle-btn {
+.step-editor-duplicate {
   min-height: var(--tap);
   padding: 0 12px;
   background: var(--surface);
@@ -2763,8 +2758,7 @@ button:disabled {
   cursor: pointer;
 }
 
-.step-editor-duplicate:hover,
-.confirm-toggle-btn:hover {
+.step-editor-duplicate:hover {
   border-color: var(--ink-4);
 }
 
@@ -2792,8 +2786,8 @@ button:disabled {
 }
 
 /* Task 1 (ui-fix round) contrast sweep: same --ink-4 -> --ink-3 rule as
-   `.step-editor-header-label` above (also shared by Builder and Confirm),
-   and same "now matches the struck-row override" note. */
+   `.step-editor-header-label` above (also shared by Builder's
+   StepEditor.tsx). */
 .step-editor-row-label {
   flex: 0 0 34px;
   width: 34px;
@@ -3135,12 +3129,13 @@ button:disabled {
 }
 
 /* The dropped-warm-ups notice (warmup-setting spec §6) — informational, not
-   an error, so it reads in the same muted small-mono voice as
-   ConfirmTargets.tsx's own `.confirm-legacy-notice` for the identical fact
-   on the other door a stray `wu` line can arrive from. Renders directly on
-   `.screen`'s own --page background (same context, not a --surface card):
-   --ink-3 on --page measures 6.69:1, the same pairing `.confirm-legacy-
-   notice`'s own comment already computed. */
+   an error, so it reads in a muted small-mono voice (fast-follow spec §3:
+   ConfirmTargets' own `.confirm-legacy-notice` used to carry the identical
+   fact on the other door a stray `wu` line can arrive from — that screen
+   and the notice it rendered are gone; the strip itself is silent now,
+   `draft.ts`'s own `loadDraft` comment). Renders directly on `.screen`'s
+   own --page background (same context, not a --surface card): --ink-3 on
+   --page measures 6.69:1, clear of the 4.5:1 AA floor. */
 .bulk-import-notice {
   margin: 4px 0 0;
   font-family: var(--font-mono);
@@ -3373,91 +3368,6 @@ button:disabled {
 
 .step-card-confirm-no:hover {
   background: var(--surface-sunken);
-}
-
-/* -- Confirm targets (Phase 6A Task 4) -----------------------------------
-   Reuses the builder-redesign's own `.step-editor`/`.step-editor-row`/
-   `.step-editor-target`/`.step-row-nudges`/`.nudge-btn` families wholesale
-   (ConfirmTargets.tsx) — every one of those is already contrast-audited and
-   tap-target-sized; only the pieces with no existing analog (the removed-
-   row treatment, the sticky recount+START footer) get new rules here. */
-
-.confirm-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-/* 2026-08-09's warmup setting: the preference-sourced WARM-UP row sits
-   above `.confirm-steps` (ConfirmTargets.tsx's own render order — reads as
-   an implicit step 0, same "above the list" placement Builder's own hint
-   line settled on) — reuses `.step-editor`/`.step-editor-row`/
-   `.step-editor-row-label`/`.step-editor-target-value` wholesale (no new
-   value/label styling needed), just the top margin `.confirm-steps` would
-   otherwise have supplied against the title above it. */
-.confirm-warmup-row {
-  margin-top: 16px;
-}
-
-/* The legacy local-draft strip's notice (draft.ts's `loadDraftWithNotice`,
-   the same shared copy `domain/bulk.ts`'s `droppedWarmupNotice` states for
-   the import door) — informational, not an error, so it reads in the
-   house's muted small-mono voice rather than `.field-error`'s accent
-   colour. --ink-3 on --page measures 6.69:1 (already computed for this
-   exact pairing, Countdown's own countdown-next/-cancel rule above). */
-.confirm-legacy-notice {
-  margin: 16px 0 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
-/* Struck rows stay visible rather than disappearing (binding decision,
-   ConfirmTargets.tsx's toggleRemoved comment: only removal has to be
-   reversible without surprise, not undiscoverable) — sunken background plus
-   a struck label reads as "excluded" without relying on opacity (which
-   would otherwise put every child's own already-audited contrast pairing
-   back in question at some fractional value). ink-3 on --surface-sunken
-   measures 6.3:1. Task 1 (ui-fix round): `.step-editor-header-label`'s own
-   base rule (above) moved to --ink-3 too as part of the app-wide small-
-   mono-label sweep, so this override's own job is now ONLY the strikethrough
-   — the colour was a struck-row-specific fix (Phase 6A Task 5) before this
-   task made it the label's default everywhere. */
-.confirm-step-removed {
-  background: var(--surface-sunken);
-}
-
-.confirm-step-removed .step-editor-header-label {
-  text-decoration: line-through;
-}
-
-.confirm-toggle-btn.is-removed {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* Task 1 (ui-fix round): column, not a row — the recount sits on its own
-   line, the L1 button (`.button-l1`, ConfirmTargets.tsx) full-width BELOW
-   it, matching DESIGN.md's "below the TOTAL line" (was a row with the
-   recount left and a small `.confirm-start` button pinned right). */
-.confirm-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid var(--rule);
-}
-
-/* ink on --surface measures 17.11:1 — the house "totals keep unit labels"
-   convention (domain/duration.ts's own house-format comment), matching
-   WorkoutDetail's "43 MIN" reading exactly, including its "— MIN" (U+2014
-   EM DASH) at null. */
-.confirm-recount {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  color: var(--ink);
 }
 
 /* -- Countdown (Phase 6B Task 2) -----------------------------------------
@@ -5029,6 +4939,23 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-style: dashed;
   border-color: var(--rule-3);
   color: var(--ink-3);
+}
+
+/* Fast-follow spec §3 (adversarial I1): the needsBaselines guard, relocated
+   from ConfirmTargets' own footer onto Start itself now that screen is
+   gone. UNLIKE the Bluetooth-off dashed treatment above, this button IS
+   genuinely `:disabled` — there is no confirm screen left to defer the
+   guard to, so an actual click would have nowhere honest to go. The dashed
+   border is the SAME idiom anyway ("inert, explained by the caption below
+   it"); `.button-l1:disabled`'s own base rule already supplies the muted
+   fill/cursor and the global `button:disabled` rule supplies --ink-5 text
+   (both pre-existing, unmodified by this addition — the contrast sweep's
+   own standing rule already covers --ink-5 on a disabled control). Scoped
+   to `.workout-detail-actions` so no OTHER disabled `.button-l1` elsewhere
+   in the app (there are none today, but nothing stops one) picks up a
+   border it never asked for. */
+.workout-detail-actions .button-l1:disabled {
+  border: 1px dashed var(--rule-3);
 }
 
 /* Full screen, "borrowing Countdown's geometry" (handoff §2) — a sheet was

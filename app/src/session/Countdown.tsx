@@ -6,18 +6,13 @@ import { usePreferences } from "../api/usePreferences";
 import { needsBaselines } from "../../domain/needsBaselines.js";
 import type { Baselines } from "../../domain/types.js";
 import { buildRun } from "./engine";
-import {
-  cancelStart,
-  draftSteps,
-  loadDraft,
-  saveDraft,
-  type SessionDraft,
-} from "./draft";
+import { clearDraft, draftSteps, loadDraft, type SessionDraft } from "./draft";
 import { clearRun, loadRun, saveRun, type SessionRun } from "./run";
 
-// Phase 6I: the SAME predicate ConfirmTargets.tsx's own `isStartBlocked`
-// uses, applied to the two places Countdown itself must agree with it —
-// the build effect's own gate (below) and the render's redirect (further
+// Phase 6I: the SAME predicate WorkoutDetail.tsx's own Start guard uses
+// (fast-follow spec §3 moved it there from ConfirmTargets' old footer),
+// applied to the two places Countdown itself must agree with it — the
+// build effect's own gate (below) and the render's redirect (further
 // down). Missing either one reintroduces the exact bug a mismatched pair
 // would produce: gate the effect but not the redirect, and an effort-only
 // workout would render "Couldn't load…"-style limbo behind a redirect
@@ -105,8 +100,8 @@ interface Built {
 export default function Countdown() {
   const navigate = useNavigate();
   // Lazy initializer: read the draft fresh from storage exactly once, the
-  // same idiom ConfirmTargets.tsx/Timer.tsx already use, so a real browser
-  // reload lands here exactly as if this were the first render.
+  // same idiom Timer.tsx already uses, so a real browser reload lands here
+  // exactly as if this were the first render.
   const [draft] = useState<SessionDraft | null>(() => loadDraft());
   // Same lazy-read-once idiom, for the F1 guard: whatever run record (if
   // any) was ALREADY sitting in storage the instant this component mounted
@@ -119,12 +114,12 @@ export default function Countdown() {
   // Resolved once baselines are READY — `null` covers both "not ready yet"
   // (loading/error; the render below returns before this matters) and the
   // genuine case this exists to catch: ready, but the rower has never set
-  // baselines. ConfirmTargets.tsx's own footer blocks START in that case
+  // baselines. WorkoutDetail.tsx's own Start guard blocks in that case
   // ONLY when `needsBaselines()` reads true for the draft's effective steps
-  // (Phase 6I — before this task it blocked unconditionally); an
+  // (Phase 6I — before that task it blocked unconditionally); an
   // effort-only workout's `resolvedBaselines === null` is therefore a
   // GENUINE, expected case reaching this screen now, not just a
-  // direct/deep-link that skipped Confirm's guard. `blocksWithoutBaselines`
+  // direct/deep-link that skipped that guard. `blocksWithoutBaselines`
   // (module scope, above) is what actually decides whether this null value
   // blocks the build effect/render below — see its own comment.
   // useMemo, not a plain `const`: `baselinesState` itself is a STABLE
@@ -190,7 +185,7 @@ export default function Countdown() {
     if (preferencesState.state !== "ready") return;
     // Ready but unset AND the draft actually needs baselines to resolve
     // (Phase 6I: `blocksWithoutBaselines`, module scope) — never build
-    // here; the render below redirects to Confirm instead. `builtRef` is
+    // here; the render below redirects to /today instead. `builtRef` is
     // deliberately NOT flipped in this branch: this isn't "built once,
     // never rebuild," it's "nothing to build yet," so a hypothetical future
     // render with real baselines (there isn't one today; nothing here
@@ -319,18 +314,18 @@ export default function Countdown() {
   if (blocksWithoutBaselines(draft, resolvedBaselines)) {
     // Both hooks are READY by this point (every loading/error branch above
     // already returned), so this means baselines resolved to genuinely
-    // unset AND this draft's effective steps need one — ConfirmTargets.tsx
-    // blocks START in that exact case (Phase 6I: its footer shows the
-    // no-target/`/you` idiom instead of a clickable START), so the only way
-    // to land here with this true is a direct/deep navigation to
-    // /session/countdown that skipped Confirm entirely. Bouncing back to
-    // Confirm (rather than building a run against a dummy pair) puts the
-    // rower exactly where they'd land had they tried to START from Confirm
-    // in the first place. An effort-only draft never reaches this branch,
-    // even with `resolvedBaselines === null` — see the build effect's own
-    // identical gate above, and `blocksWithoutBaselines`'s own comment for
-    // why BOTH must share this exact predicate.
-    return <Navigate to="/session/confirm" replace />;
+    // unset AND this draft's effective steps need one — WorkoutDetail's own
+    // Start button blocks in that exact case (fast-follow spec §3: disabled
+    // + caption, the needsBaselines guard relocated from ConfirmTargets'
+    // old footer), so the only way to land here with this true is a
+    // direct/deep navigation to /session/countdown that skipped that guard
+    // entirely. Bouncing to /today (where BaselineCard — the no-baselines
+    // door — lives) rather than building a run against a dummy pair, same
+    // as the shim's own "no draft" arm. An effort-only draft never reaches
+    // this branch, even with `resolvedBaselines === null` — see the build
+    // effect's own identical gate above, and `blocksWithoutBaselines`'s own
+    // comment for why BOTH must share this exact predicate.
+    return <Navigate to="/today" replace />;
   }
 
   if (built === null) {
@@ -365,24 +360,32 @@ export default function Countdown() {
   // the fallback keeps this defensive rather than crash-on-empty.
   const nextLabel = run.phases[0]?.label ?? "";
 
-  // Un-start the draft AND drop the run this screen already built — both,
-  // together, are what makes CANCEL coherent (Phase 6B Task 2's own report
-  // flagged the loop without this: ConfirmTargets redirects a STARTED draft
-  // straight past its editable form, so navigating there with `startedAt`
-  // still set would bounce right back here/to the timer instead of letting
-  // the rower re-edit). Clearing the run too keeps the two keys from
-  // disagreeing about whether a session is in progress — draft.ts's own
-  // `cancelStart` doc comment carries the same reasoning. A named function
-  // (not an inline arrow closing over `draft` directly), with its own
-  // defensive re-check, same reasoning as `ConfirmTargets.tsx`'s
-  // `handleStart`: TS's control-flow narrowing of `draft` from the guard
-  // clause above doesn't propagate into a closure defined this much later
-  // in the same function body.
+  // Clear the draft AND drop the run this screen already built — both,
+  // together, are what makes CANCEL coherent. Fast-follow spec §3 item 4
+  // (adversarial I3): a leftover run would make `connectGuardStage` stage a
+  // bogus "session in progress" confirm on the very screen CANCEL just
+  // landed on — clearing both keeps the two keys from disagreeing about
+  // whether a session is in progress. ConfirmTargets used to un-start the
+  // draft instead of clearing it (so its own editable-targets form could
+  // reopen on it) — that screen is gone, so there is nothing left to
+  // re-edit; `clearDraft` removes it outright rather than leaving a
+  // never-started draft sitting in storage for `Today.tsx`'s own janitor to
+  // find later. Lands on the workout's own detail page (so a cancelled
+  // rower can immediately re-nudge and try again), `/today` if the draft
+  // somehow carries no `workoutId` (never true for a real entry point, but
+  // the field's own type is nullable). A named function (not an inline
+  // arrow closing over `draft` directly), with its own defensive re-check,
+  // same reasoning as `WorkoutDetail.tsx`'s own `handleStart`: TS's
+  // control-flow narrowing of `draft` from the guard clause above doesn't
+  // propagate into a closure defined this much later in the same function
+  // body.
   function handleCancel() {
     if (draft === null) return;
-    saveDraft(cancelStart(draft));
+    clearDraft();
     clearRun();
-    navigate("/session/confirm");
+    navigate(
+      draft.workoutId !== null ? `/library/${draft.workoutId}` : "/today",
+    );
   }
 
   return (

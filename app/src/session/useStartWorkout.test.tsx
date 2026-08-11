@@ -44,7 +44,7 @@ function wrapper({ children }: { children: ReactNode }) {
     <MemoryRouter initialEntries={["/start"]}>
       <Routes>
         <Route path="/start" element={<>{children}</>} />
-        <Route path="/session/confirm" element={<p>CONFIRM SCREEN</p>} />
+        <Route path="/session/countdown" element={<p>COUNTDOWN SCREEN</p>} />
       </Routes>
     </MemoryRouter>
   );
@@ -90,19 +90,46 @@ beforeEach(() => {
 });
 
 describe("useStartWorkout", () => {
-  it("starts clean: handleStart builds and saves a draft, cross-clears, and navigates to /session/confirm", async () => {
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+  it("starts clean: handleStart builds and saves a STARTED draft, cross-clears, and navigates to /session/countdown", async () => {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
 
     act(() => result.current.handleStart());
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     expect(result.current.replaceStage).toBeNull();
     const draft = loadDraft();
     expect(draft).not.toBeNull();
     expect(draft!.workoutId).toBe("w1");
-    expect(draft!.startedAt).toBeNull();
+    // Fast-follow spec §3 (adversarial B1): every rewired entry point stamps
+    // `startedAt` at this exact moment — ConfirmTargets used to be the sole
+    // stamper, and it's gone.
+    expect(draft!.startedAt).not.toBeNull();
+    expect(new Date(draft!.startedAt!).toISOString()).toBe(draft!.startedAt);
+  });
+
+  it("threads the live nudge map into the saved draft (fast-follow spec §3, entry 1)", async () => {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, { 0: 2 }), {
+      wrapper,
+    });
+
+    act(() => result.current.handleStart());
+
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
+    const draft = loadDraft();
+    expect(draft!.nudges).toStrictEqual({ 0: 2 });
+  });
+
+  it("an empty nudge map ({} — BaselineCard's own call, no preview surface) saves an un-nudged draft", async () => {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
+      wrapper,
+    });
+
+    act(() => result.current.handleStart());
+
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
+    expect(loadDraft()!.nudges).toStrictEqual({});
   });
 
   it("stages 'unlogged' for a completed-but-unlogged SessionRun and touches nothing on the first call", () => {
@@ -120,7 +147,7 @@ describe("useStartWorkout", () => {
     const runA = completedRunFor(draftA);
     saveDraft(draftA);
     saveRun(runA);
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
 
@@ -144,7 +171,7 @@ describe("useStartWorkout", () => {
       }),
     );
     saveDraft(notStarted);
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
 
@@ -155,7 +182,7 @@ describe("useStartWorkout", () => {
 
   it("stages 'unlogged' for a finished-but-unlogged MonitorRun, ranked above a live one", () => {
     saveMonitorRun(monitorRunFor("2026-08-05T12:41:00.000Z"));
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
 
@@ -166,7 +193,7 @@ describe("useStartWorkout", () => {
 
   it("stages 'in-progress' for a LIVE MonitorRun (completedAt null)", () => {
     saveMonitorRun(monitorRunFor(null));
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
 
@@ -178,7 +205,7 @@ describe("useStartWorkout", () => {
   it("cancelReplace clears the staged panel and touches no storage", () => {
     const live = monitorRunFor(null);
     saveMonitorRun(live);
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
     act(() => result.current.handleStart());
@@ -205,7 +232,7 @@ describe("useStartWorkout", () => {
     saveDraft(draftA);
     saveRun(completedRunFor(draftA));
     saveMonitorRun(monitorRunFor("2026-08-05T12:41:00.000Z"));
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
     act(() => result.current.handleStart());
@@ -213,23 +240,23 @@ describe("useStartWorkout", () => {
 
     act(() => result.current.confirmReplace());
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     expect(loadRun()).toBeNull();
     expect(loadMonitorRun()).toBeNull();
     const draft = loadDraft();
     expect(draft).not.toBeNull();
     expect(draft!.workoutId).toBe("w1");
-    expect(draft!.startedAt).toBeNull();
+    expect(draft!.startedAt).not.toBeNull();
   });
 
   it("no MonitorRun at all: the cross-clear inside confirmReplace is a no-op removeItem, not an error", async () => {
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
 
     act(() => result.current.confirmReplace());
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     expect(loadMonitorRun()).toBeNull();
   });
 
@@ -240,7 +267,7 @@ describe("useStartWorkout", () => {
       .mockImplementation(() => {
         throw new DOMException("quota exceeded", "QuotaExceededError");
       });
-    const { result } = renderHook(() => useStartWorkout(WORKOUT), {
+    const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });
 
@@ -249,7 +276,7 @@ describe("useStartWorkout", () => {
     expect(result.current.startError).toBe(
       "Couldn't start this session. Try again.",
     );
-    expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("COUNTDOWN SCREEN")).not.toBeInTheDocument();
     spy.mockRestore();
   });
 });

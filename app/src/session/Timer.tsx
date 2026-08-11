@@ -397,11 +397,12 @@ export default function Timer() {
 
   // Assigning to new `const`s (rather than reading `draft`/`run` directly
   // inside the closures below) is deliberate, same reasoning as
-  // ConfirmTargets.tsx's own `handleStart` comment: a nested function
-  // declared later in this body shouldn't have to re-prove what the guard
-  // above already established. `title`/`currentRun` are typed non-nullable
-  // from the moment they're declared, not narrowed-and-hoping the closure
-  // remembers it.
+  // WorkoutDetail.tsx's own `handleStart` comment (a rewiring
+  // ConfirmTargets.tsx used to carry before fast-follow Task 4 deleted it):
+  // a nested function declared later in this body shouldn't have to
+  // re-prove what the guard above already established. `title`/
+  // `currentRun` are typed non-nullable from the moment they're declared,
+  // not narrowed-and-hoping the closure remembers it.
   const title = draft.title;
   const currentRun: SessionRun = run;
   const phase = currentRun.phases[currentRun.index]!;

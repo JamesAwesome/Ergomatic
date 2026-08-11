@@ -647,8 +647,8 @@ describe("LogSession: prefill from a real completed run", () => {
         },
       ],
     });
-    // +5s nudge on the work step (index 0) — the same confirm-time
-    // adjustment ConfirmTargets.tsx's own nudge buttons apply.
+    // +5s nudge on the work step (index 0) — the same shape a WorkoutDetail
+    // preview nudge bakes in via `buildNudgedDraft` (fast-follow Task 4).
     const nudged = withNudge(base, 0, 5);
     const started = startDraft(nudged);
     saveDraft(started);

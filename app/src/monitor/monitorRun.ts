@@ -444,9 +444,12 @@ function monitorRunState(): RecordState {
  * though** (Task 2's review, M-2 — an earlier draft of this comment said
  * none did, which was wrong): the cross-clears guard DESTRUCTION, and
  * `Countdown.tsx` CREATES a `SessionRun` with no clear of its own, reachable
- * by deep link (`/session/confirm`, `/session/countdown`) or from
- * `ConfirmTargets`. A rower who takes that route mid-connected-session
- * leaves both records live. Nothing is destroyed by it, and no clear was
+ * by deep link (`/session/confirm` — a redirect shim as of fast-follow
+ * Task 4, `AppRoutes.tsx`'s `ConfirmRedirect` — or `/session/countdown`
+ * directly) or from any of Start's own rewired entry points
+ * (`WorkoutDetail.tsx`, `BaselineCard.tsx`, both via `useStartWorkout.ts`).
+ * A rower who takes that route mid-connected-session leaves both records
+ * live. Nothing is destroyed by it, and no clear was
  * added at Countdown on purpose (that would be a new unguarded destruction
  * path, the exact thing this phase closed) — the two record types own their
  * own sides, and `useMonitorSession` deliberately does not consult this

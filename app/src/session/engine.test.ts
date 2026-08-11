@@ -17,7 +17,6 @@ import {
   nextDistance,
   isComplete,
   totalRemainingSeconds,
-  warmupDisplayMinutes,
 } from "./engine";
 import type { SessionRun } from "./run";
 
@@ -391,45 +390,6 @@ describe("buildRun and the warm-up setting", () => {
     // @ts-expect-error a WarmupSetting with no kind is not assignable
     const restOnly: WarmupSetting = { restSeconds: 90 };
     expect(restOnly).toBeDefined();
-  });
-});
-
-describe("warmupDisplayMinutes", () => {
-  it("returns 0 for null/absent — the OFF default", () => {
-    expect(warmupDisplayMinutes(null, baselines)).toBe(0);
-    expect(warmupDisplayMinutes(undefined, baselines)).toBe(0);
-  });
-
-  it("prices a time warm-up in exact minutes", () => {
-    expect(warmupDisplayMinutes({ kind: "time", minutes: 10 }, baselines)).toBe(
-      10,
-    );
-  });
-
-  it("adds the rest, converted from seconds to minutes", () => {
-    expect(
-      warmupDisplayMinutes(
-        { kind: "time", minutes: 10, restSeconds: 90 },
-        baselines,
-      ),
-    ).toBe(10 + 90 / 60);
-  });
-
-  it("prices a distance warm-up with the same estimate buildRun's own phase carries", () => {
-    // 2000m at the easy band (k6Seconds + 20 = 140 s/500m) -> 560s = 9.3333min.
-    expect(
-      warmupDisplayMinutes({ kind: "distance", meters: 2000 }, baselines),
-    ).toBeCloseTo(560 / 60, 5);
-  });
-
-  it("prices a distance warm-up at 0 (never null) when baselines are unset — no fake number", () => {
-    // Same "no estimate at all" rule buildRun's own phase follows (the
-    // `targetSplit: undefined` case above) — here that phase prices via
-    // `phaseSeconds` as `null`, which this function folds to 0 rather than
-    // propagating, so a display total never has to null-check a warm-up.
-    expect(warmupDisplayMinutes({ kind: "distance", meters: 2000 }, null)).toBe(
-      0,
-    );
   });
 });
 

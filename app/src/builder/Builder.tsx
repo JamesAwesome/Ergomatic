@@ -97,9 +97,9 @@ function pluralStep(n: number): string {
 // your preferences`, time or meters, plus the rest when set). Time uses the
 // house `fmtDuration` (domain/duration.ts); distance uses a lowercase "m"
 // (this is running prose, matching StepRow.tsx's own Detail-screen
-// convention for the same unit — ConfirmTargets.tsx's structured WARM-UP
-// row uses an uppercase "M" instead, that row's own established convention
-// for a value cell, not this sentence's).
+// convention for the same unit — ConfirmTargets.tsx's own structured
+// WARM-UP row used an uppercase "M" instead, before fast-follow Task 4
+// deleted it; that was a value-cell convention, not this sentence's).
 function warmupHintText(warmup: WarmupSetting): string {
   const duration =
     warmup.kind === "time" ? fmtDuration(warmup.minutes) : `${warmup.meters} m`;

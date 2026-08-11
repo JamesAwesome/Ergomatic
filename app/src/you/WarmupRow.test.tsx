@@ -95,8 +95,8 @@ describe("WarmupRow", () => {
     await renderWarmupRow();
     // fmtDuration(30/60) is "0:30" (the house elastic-positional format
     // always keeps the leading group), not the spec prose's elided ":30" —
-    // matching ConfirmTargets.tsx/Builder.tsx's own existing rendering of
-    // this exact quantity, see WarmupRow.tsx's own warmupValueText comment.
+    // matching Builder.tsx's own existing rendering of this exact
+    // quantity, see WarmupRow.tsx's own warmupValueText comment.
     expect(screen.getByText("10:00 + 0:30 REST")).toBeVisible();
   });
 

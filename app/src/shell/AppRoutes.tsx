@@ -13,8 +13,9 @@ import News from "../news/News";
 import Reader from "../news/Reader";
 import Releases from "../news/Releases";
 import Plan from "../plan/Plan";
-import ConfirmTargets from "../session/ConfirmTargets";
 import Countdown from "../session/Countdown";
+import { loadDraft } from "../session/draft";
+import { loadRun } from "../session/run";
 import LogSession from "../session/LogSession";
 import SessionComplete from "../session/SessionComplete";
 import Timer from "../session/Timer";
@@ -54,6 +55,25 @@ export function hidesTabBar(pathname: string): boolean {
 function BulkImportRoute() {
   const navigate = useNavigate();
   return <BulkImport onImported={() => navigate("/library")} />;
+}
+
+/** `/session/confirm`'s replacement (fast-follow spec §3, entry 6):
+ *  ConfirmTargets is deleted and the route itself carries no screen of its
+ *  own any more, but the URL survives as a stale deep link or a browser
+ *  back-swipe target — `monitorRun.ts`'s own doc comment documents both as
+ *  real, reachable cases. This element renders no UI, only a redirect to
+ *  wherever the rower's actual session state now lives: a `SessionRun`
+ *  already on record means the session genuinely got past the countdown
+ *  (Countdown builds and saves it on mount) → the live timer; a draft with
+ *  no run yet means a session is queued but the count hasn't run →
+ *  Countdown itself, so it can build one; nothing at all → `/today`, the
+ *  same fallback every other dead deep link in this file's own catch-all
+ *  uses. */
+function ConfirmRedirect() {
+  const draft = loadDraft();
+  if (draft === null) return <Navigate to="/today" replace />;
+  if (loadRun() !== null) return <Navigate to="/session/run" replace />;
+  return <Navigate to="/session/countdown" replace />;
 }
 
 // `user`/`onSignedOut` are optional so tests can render <AppRoutes /> without
@@ -110,7 +130,7 @@ export default function AppRoutes({
         <Route path="/news/releases" element={<Releases />} />
         <Route path="/news/:slug" element={<Reader />} />
         <Route path="/plan" element={<Plan />} />
-        <Route path="/session/confirm" element={<ConfirmTargets />} />
+        <Route path="/session/confirm" element={<ConfirmRedirect />} />
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<Timer />} />
         <Route path="/session/complete" element={<SessionComplete />} />

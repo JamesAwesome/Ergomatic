@@ -63,6 +63,28 @@ export function buildDraft(w: {
   };
 }
 
+/** Bakes a cumulative per-index nudge map into a fresh draft — the shared
+ *  builder every rewired entry point uses now that ConfirmTargets (the
+ *  screen that used to let a rower adjust targets AFTER committing to a
+ *  draft) is gone (fast-follow spec §3). `withNudge` takes a cumulative
+ *  DELTA against a zeroed draft, so applying the whole stored preview
+ *  value once (WorkoutDetail's own live `nudges` state, or `{}` for a
+ *  caller with no preview surface, e.g. BaselineCard) reproduces the exact
+ *  cumulative nudge the preview showed. Moved here from
+ *  `workout/WorkoutDetail.tsx` (previously the Connect door's own local
+ *  helper) so `useStartWorkout.ts` — a second, sibling caller — can share
+ *  the one implementation rather than growing a duplicate. */
+export function buildNudgedDraft(
+  w: { id: string; title: string; type: WorkoutType; steps: Step[] },
+  nudges: Record<number, number>,
+): SessionDraft {
+  let draft = buildDraft(w);
+  for (const [key, value] of Object.entries(nudges)) {
+    if (value !== 0) draft = withNudge(draft, Number(key), value);
+  }
+  return draft;
+}
+
 // Loose on purpose (see loadDraft's own comment): not full domain
 // validation of every step, just "is this shaped enough to not crash the
 // screens that immediately read it" — a plain object, not an array.
@@ -71,11 +93,11 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Checks `v` plus every field a screen reads unconditionally on load:
-// ConfirmTargets maps over `steps` and indexes into `nudges`/`spmOverrides`,
-// Timer/ConfirmTargets both read `title`, and `removed.includes`
-// requires an array. A record with only `{"v":1}` used to satisfy this
-// check and then throw downstream the moment a screen touched any of those
-// fields — malformed now fails here instead, same as an unknown version.
+// Countdown/Timer map over `steps` and index into `nudges`/`spmOverrides`,
+// both read `title`, and `removed.includes` requires an array. A record
+// with only `{"v":1}` used to satisfy this check and then throw downstream
+// the moment a screen touched any of those fields — malformed now fails
+// here instead, same as an unknown version.
 function isSessionDraft(value: unknown): value is SessionDraft {
   if (!isPlainRecord(value)) return false;
   return (
@@ -154,39 +176,31 @@ function stripLegacyWarmups(d: SessionDraft): {
 /** Loads the draft. Garbage JSON or an unrecognized version is discarded
  *  (the key is cleared) rather than crashing the caller — an expand-only
  *  shape means a stale build's `v` is the only thing that ever needs this
- *  escape hatch. Delegates to `loadDraftWithNotice` (below) and drops its
- *  strip count — every caller except ConfirmTargets (the one screen that
- *  needs to tell the rower anything changed) just wants a clean draft. */
+ *  escape hatch. Strips any legacy `wu` step (`stripLegacyWarmups` above)
+ *  SILENTLY — fast-follow spec §3: ConfirmTargets was the one screen that
+ *  used to surface `droppedWarmupNotice` when this fired (its own
+ *  `loadDraftWithNotice` variant, since retired with the screen); every
+ *  caller left is happy with an already-clean draft and no ceremony. A
+ *  non-zero strip is still persisted back immediately (`saveDraft`) so the
+ *  fix stays one-time: a second `loadDraft()` on the same key re-reads the
+ *  already-clean value rather than re-stripping on every call. Pre-#71
+ *  drafts are a month stale by now — the strip itself remains as data
+ *  hygiene, just with nothing left to announce it. */
 export function loadDraft(): SessionDraft | null {
-  return loadDraftWithNotice().draft;
-}
-
-/** Same as `loadDraft`, plus how many legacy `wu` steps `stripLegacyWarmups`
- *  just removed (0 for every draft saved after 2026-08-09, and for "nothing
- *  stored"/malformed alike) — what ConfirmTargets needs to surface the
- *  shared `droppedWarmupNotice` (`domain/bulk.ts`) copy once, the same
- *  fact the bulk-import door states in its own words. A non-zero strip is
- *  persisted back immediately (`saveDraft`) so the fix is one-time: every
- *  OTHER caller's own `loadDraft()` on the same key re-reads the already-
- *  clean value rather than re-stripping on every mount. */
-export function loadDraftWithNotice(): {
-  draft: SessionDraft | null;
-  strippedWarmups: number;
-} {
   const raw = localStorage.getItem(DRAFT_KEY);
-  if (raw === null) return { draft: null, strippedWarmups: 0 };
+  if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
     if (isSessionDraft(parsed)) {
       const { draft, strippedCount } = stripLegacyWarmups(parsed);
       if (strippedCount > 0) saveDraft(draft);
-      return { draft, strippedWarmups: strippedCount };
+      return draft;
     }
   } catch {
     // fall through: garbage JSON is handled the same as an unknown shape
   }
   clearDraft();
-  return { draft: null, strippedWarmups: 0 };
+  return null;
 }
 
 export function clearDraft(): void {
@@ -204,7 +218,7 @@ export function clearDraft(): void {
  *  (via domain/expand.ts's `phases()`) included. Folding it here, once, is
  *  what makes `draftMinutes` price a nudge instead of silently ignoring it
  *  (the bug this fixes: nudging a distance step's split used to leave the
- *  Confirm footer's minute recount unchanged). Effort refs have no `off` to
+ *  minute recount unchanged). Effort refs have no `off` to
  *  nudge and are passed through untouched (`withNudge` already refuses to
  *  record a nudge against one). The reps marker (and every other non-work
  *  step) passes through untouched unless its own index was removed, so
@@ -257,29 +271,22 @@ export function draftMinutes(
 }
 
 /** Stamps `startedAt` — the one field 6B requires non-null before it will
- *  consume a draft (spec: "Session draft"). Pure, like `withNudge`: the
- *  caller still owns calling `saveDraft` with the result, so the module
- *  stays the only thing that ever writes the storage key while every
- *  mutation shape (this, `withNudge`) lives here rather than in a
- *  component. */
+ *  consume a draft (spec: "Session draft"), and (fast-follow spec §3,
+ *  adversarial B1) the field `useStartWorkout.ts`'s own live-session guard
+ *  and `Today.tsx`'s stale-draft janitor both key on. ConfirmTargets used
+ *  to be the sole stamper (its own Start button, the one moment a rower
+ *  committed to a session); now that it's gone, EVERY rewired entry point
+ *  stamps here at the same moment it navigates to `/session/countdown` —
+ *  the session is "started" from countdown on, not from some later
+ *  screen. Pure, like `withNudge`: the caller still owns calling
+ *  `saveDraft` with the result, so the module stays the only thing that
+ *  ever writes the storage key while every mutation shape (this,
+ *  `withNudge`) lives here rather than in a component. `cancelStart` (this
+ *  function's old reverse) is gone: Countdown's CANCEL now clears the
+ *  draft outright (`clearDraft`) rather than un-starting it for a re-edit
+ *  screen that no longer exists. */
 export function startDraft(d: SessionDraft): SessionDraft {
   return { ...d, startedAt: new Date().toISOString() };
-}
-
-/** Reverses `startDraft` — clears `startedAt`, returning the draft to its
- *  pre-start, editable state. This is what makes the countdown screen's
- *  CANCEL button coherent (Phase 6B Task 2's report flagged the loop this
- *  closes): `ConfirmTargets` redirects a STARTED draft straight to the live
- *  timer (so a back-swipe mid-session resumes the action instead of
- *  re-showing stale editable targets), so CANCEL navigating to
- *  `/session/confirm` with `startedAt` still set would immediately bounce
- *  the rower right back to the timer instead of letting them re-edit. The
- *  caller (`Countdown.tsx`) pairs this with `run.ts`'s `clearRun()` — an
- *  un-started draft coexisting with a live run record would leave the two
- *  keys disagreeing about whether a session is in progress. Pure, like
- *  `startDraft`/`withNudge`: the caller still owns `saveDraft`. */
-export function cancelStart(d: SessionDraft): SessionDraft {
-  return { ...d, startedAt: null };
 }
 
 /** Nudges a split step's target by `delta` seconds (cumulative). No-ops
