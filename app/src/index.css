@@ -1088,6 +1088,7 @@ button:disabled {
   display: block;
   font-family: var(--font-mono);
   font-size: 11px;
+  letter-spacing: 0.02em;
   color: var(--ink-2);
   margin-top: 6px;
   overflow: hidden;
