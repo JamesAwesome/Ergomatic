@@ -66,13 +66,30 @@ describe("pieceList", () => {
     expect(rows[1].split).toBe("2:11.0");
   });
 
-  it("DEVIATION: a trailing rest on the last piece is SHOWN — and since these two pieces are otherwise identical with equal rest, they roll into one run (2026-08-11 spec rule 1)", () => {
+  it("DEVIATION: the trailing rest on the workout's TRUE FINAL piece is SHOWN — masking-immune fixture (final piece differs by duration, so it is a hard split and cannot roll under either rolling rule)", () => {
+    // Review finding (2026-08-11 fix loop): a fixture where the final
+    // piece is otherwise IDENTICAL (rest included) to its predecessor
+    // joins via rule 1's ordinary equality — that masks a future
+    // regression that suppresses the trailing rest specifically on the
+    // true-final phase, because rule 2's exception would silently
+    // reinterpret the suppressed (null) rest as a legitimate "no rest of
+    // its own" join and carry the predecessor's rest forward, keeping
+    // this assertion green either way. Differing by duration forces
+    // `joinsRun`'s `sameCore` check to fail outright, so the final piece
+    // is guaranteed to be its OWN row — its restText can only come from
+    // this piece's own rest attachment, not from a neighbor's.
+    const rows = pieceList([w(5, 4, undefined, 2), w(3, 4, undefined, 2)], B);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].restText).toBe("2′ r");
+  });
+
+  it("two fully identical pieces (rest included) roll into one run, keeping the shared rest (rule 1 rest equality)", () => {
     const rows = pieceList([w(5, 4, undefined, 2), w(5, 4, undefined, 2)], B);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ count: 2, restText: "2′ r" });
   });
 
-  it("expands a reps block into per-piece rows, then rolls the identical run into one (James's ruling + 2026-08-11 rolling spec)", () => {
+  it("a reps block expands into per-piece rows, then rolls the identical run into one (James's ruling + rule 1 rest equality)", () => {
     const steps: Step[] = [{ k: "reps", count: 3 }, w(5, 10, 24, 2)];
     const rows = pieceList(steps, B);
     expect(rows).toHaveLength(1);
