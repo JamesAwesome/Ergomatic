@@ -2389,6 +2389,238 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
   });
 });
 
+// Task 2 (2026-08-10 workout-step-detail spec §2): the piece region between
+// `.today-card-meta` and the reason foot. Every fixture below is a REAL
+// `LIBRARY_WORKOUTS` entry (repo convention — a hand-built minimum hid a
+// shipped defect before) picked via `libraryEntry` + a single-item
+// `workouts` array under FREESTYLE_PLAN, which makes it the deterministic
+// pick without needing filter narrowing (suggest()'s own "one candidate,
+// one pick" behavior). Expected strings/numbers were read once from
+// `pieceList`/`peakIndex`/`workAndTotal` run against the exact `BASELINES`
+// fixture (k2Seconds:112, k6Seconds:122) this file's `mockReady` defaults
+// to, not re-derived by hand.
+describe("Today (piece region)", () => {
+  it("renders two-line rows with full refs and no PIECES count in the foot for a real 2-piece workout, with foot arithmetic from workAndTotal (Sun Pillar)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Sun Pillar", "w-sunpillar", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Sun Pillar" }),
+    ).toBeVisible();
+
+    const rows = document.querySelectorAll(".today-piece-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector(".today-piece-numeral")?.textContent).toBe(
+      "01",
+    );
+    expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
+      "18:00",
+    );
+    expect(rows[0].querySelector(".today-piece-ref")?.textContent).toBe(
+      "at 6k +10,",
+    );
+    expect(rows[0].querySelector(".today-piece-rest")?.textContent).toBe(
+      "3′ r",
+    );
+    expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
+      "2:12.0",
+    );
+    expect(rows[0].querySelector(".today-piece-spm-line")?.textContent).toBe(
+      "22 SPM",
+    );
+
+    // Last piece: no rest in the data (Sun Pillar's second step authors
+    // none) — the comma-joined "ref, rest" form must not appear either.
+    expect(rows[1].querySelector(".today-piece-ref")?.textContent).toBe(
+      "at 6k +6",
+    );
+    expect(rows[1].querySelector(".today-piece-rest")).toBeNull();
+    expect(rows[1].querySelector(".today-piece-split")?.textContent).toBe(
+      "2:08.0",
+    );
+
+    expect(document.querySelector(".today-piece-more")).toBeNull();
+    expect(document.querySelector(".today-piece-foot-work")?.textContent).toBe(
+      "27′ WORK",
+    );
+    expect(document.querySelector(".today-piece-foot-total")?.textContent).toBe(
+      "30′ TOTAL",
+    );
+    expect(document.querySelector(".today-piece-foot-count")).toBeNull();
+  });
+
+  it("shows the trailing rest on the LAST piece when the data carries one — the approved deviation (Sea Fret)", async () => {
+    mockReady({ plan: FREESTYLE_PLAN, workouts: [ZEPHYR] });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Sea Fret" }),
+    ).toBeVisible();
+    const rows = document.querySelectorAll(".today-piece-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].querySelector(".today-piece-rest")?.textContent).toBe(
+      "1′ r",
+    );
+    expect(rows[1].querySelector(".today-piece-rest")?.textContent).toBe(
+      "1′ r",
+    );
+    expect(document.querySelector(".today-piece-foot-work")?.textContent).toBe(
+      "8′ WORK",
+    );
+    expect(document.querySelector(".today-piece-foot-total")?.textContent).toBe(
+      "10′ TOTAL",
+    );
+  });
+
+  it("renders distance pieces with metres in the duration text and a split target; a piece the data never authors a rest for shows none (Sun Dog)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Sun Dog", "w-sundog", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Sun Dog" }),
+    ).toBeVisible();
+    const rows = document.querySelectorAll(".today-piece-row");
+    expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
+      "2100m",
+    );
+    expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
+      "2:10.0",
+    );
+    expect(rows[0].querySelector(".today-piece-rest")?.textContent).toBe(
+      "2′ r",
+    );
+    expect(rows[1].querySelector(".today-piece-rest")).toBeNull();
+  });
+
+  it("shows ALL OUT in the pace slot for effort pieces and renders zero tint when no row carries an offset (Ground Strike, all-MAX)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Ground Strike", "w-groundstrike", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Ground Strike" }),
+    ).toBeVisible();
+    const rows = document.querySelectorAll(".today-piece-row");
+    expect(rows).toHaveLength(4);
+    rows.forEach((row) => {
+      expect(row.querySelector(".today-piece-split")?.textContent).toBe(
+        "ALL OUT",
+      );
+      expect(row.querySelector(".today-piece-ref")).toBeNull();
+      expect(row.querySelector(".today-piece-rest")?.textContent).toBe(
+        "3:30 r",
+      );
+    });
+    expect(document.querySelector(".today-piece-peak")).toBeNull();
+  });
+
+  it("compresses to one-line rows at 5+ pieces, caps at 4 with a non-interactive +N-more row naming the first three unseen durations, and adds the PIECES count to the foot (Outflow Boundary, 7 real pieces)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Outflow Boundary", "w-outflow", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Outflow Boundary" }),
+    ).toBeVisible();
+
+    expect(document.querySelectorAll(".today-piece-row")).toHaveLength(0);
+    const rows = document.querySelectorAll(".today-piece-row-compact");
+    expect(rows).toHaveLength(4);
+    // A comma joins ref+rest when both are present (same convention as the
+    // two-line rows above) — row 1 carries a "2′ r" rest too.
+    expect(rows[0].querySelector(".today-piece-ref")?.textContent).toBe(
+      "at −4,",
+    );
+    expect(rows[0].querySelector(".today-piece-spm")?.textContent).toBe("32");
+    expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
+      "1:48.0",
+    );
+
+    const more = document.querySelector(".today-piece-more");
+    expect(more).not.toBeNull();
+    expect(more?.querySelector(".today-piece-more-title")?.textContent).toBe(
+      "3 more pieces",
+    );
+    expect(more?.querySelector(".today-piece-more-sub")?.textContent).toBe(
+      "1:00 · 0:45 · 0:30",
+    );
+    // Visual only — no nested interactive element inside the card's own Link.
+    expect(more?.querySelector("a, button, [role=button]")).toBeNull();
+
+    expect(document.querySelector(".today-piece-foot-work")?.textContent).toBe(
+      "6′ WORK",
+    );
+    expect(document.querySelector(".today-piece-foot-total")?.textContent).toBe(
+      "23′ TOTAL",
+    );
+    expect(document.querySelector(".today-piece-foot-count")?.textContent).toBe(
+      "· 7 PIECES",
+    );
+
+    // peak: |off| ties at 3 between rows index2/index3; the tie resolves to
+    // the LATER row — index3, the 4th visible row — and it alone tints.
+    const tinted = document.querySelectorAll(".today-piece-peak");
+    expect(tinted).toHaveLength(1);
+    expect(tinted[0]).toBe(rows[3]);
+  });
+
+  it("appends an ellipsis to the +more sub-line when more than three durations are hidden (Rime Ice, 8 real pieces)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Rime Ice", "w-rimeice", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Rime Ice" }),
+    ).toBeVisible();
+    const more = document.querySelector(".today-piece-more");
+    expect(more?.querySelector(".today-piece-more-title")?.textContent).toBe(
+      "4 more pieces",
+    );
+    expect(more?.querySelector(".today-piece-more-sub")?.textContent).toBe(
+      "3:00 · 3:00 · 3:00 …",
+    );
+  });
+
+  it("renders no tint at all when the true peak sits behind the cap (Rossby Wave: every piece shares the same offset, so the whole-set tie resolves past row 4)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Rossby Wave", "w-rossby", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Rossby Wave" }),
+    ).toBeVisible();
+    expect(document.querySelector(".today-piece-peak")).toBeNull();
+  });
+
+  it("replaces the reason line with a foot strip carrying the full reason text plus a no-shrink OPEN chip, and the card stays a single link", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Sun Pillar", "w-sunpillar", null)],
+    });
+    await renderToday();
+    const heading = await screen.findByRole("heading", {
+      name: "Sun Pillar",
+    });
+    expect(heading).toBeVisible();
+    expect(screen.getByText("OPEN ›")).toBeVisible();
+    // The card element itself IS the one link (an `<a>` via react-router's
+    // Link) — `within` queries only its DESCENDANTS, so zero here is what
+    // "no nested anchor, nothing nests" actually asserts, not "exactly
+    // one" (that count would look for a second link inside the first).
+    const card = document.querySelector(".today-card") as HTMLElement;
+    expect(card.tagName).toBe("A");
+    expect(within(card).queryAllByRole("link")).toHaveLength(0);
+    expect(within(card).queryAllByRole("button")).toHaveLength(0);
+  });
+});
+
 describe("elapsedSinceStart", () => {
   it("computes whole seconds since startedAt, rounded (not floored)", () => {
     const run = {

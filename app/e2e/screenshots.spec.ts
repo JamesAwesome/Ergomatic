@@ -294,6 +294,66 @@ test("today", async ({ page }) => {
   });
 });
 
+// Task 2 (2026-08-10 workout-step-detail spec §2/§7.1): the capped
+// (5+ piece) state of the piece region — "today.png" above never shows it,
+// since whichever real global workout the sprint plan happens to recommend
+// there is never guaranteed to carry 5+ pieces. Determinism: a single
+// custom 7-piece import, narrowed to via SOURCE=CUSTOM (this account's only
+// personal workout) — no recency race against the 300 seeded globals
+// needed, and no plan/type coupling either (freestyle, the account's
+// default). §7.1 pins the viewport at 375×812 (narrower than this file's
+// default 390×844) specifically to check the card + LAST THREE heading
+// still fit the first screenful at the tightest common width; if they
+// don't, spec §7.1 calls for a cap-of-three media query at that width.
+test("today-capped", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const title = "Screenshot Today Capped Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-capped@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  // §7.1 is about the CARD's own height at 375px, not the unrelated
+  // Phase 6I START HERE block (an every-fresh-account onboarding panel
+  // that already pushes the card down in "today.png" above, before this
+  // task) — dismissed here so the check isn't confounded by it.
+  await dismissStartHere(page);
+  // The mock's own "Long Fetch" pyramid (Workout steps final.dc.html):
+  // 2-4-6-8-6-4-2' at 6k+6→6k+0→6k+6, 2' rest between — 32' work / 44'
+  // total, matching the design handoff's own printed numbers exactly.
+  await importBulk(
+    page,
+    [
+      `${title} | O2 | hard | 4`,
+      "w 2' 6k+6 @22 r2",
+      "w 4' 6k+4 @24 r2",
+      "w 6' 6k+2 @26 r2",
+      "w 8' 6k+0 @28 r2",
+      "w 6' 6k+2 @26 r2",
+      "w 4' 6k+4 @24 r2",
+      "w 2' 6k+6 @22",
+    ].join("\n"),
+  );
+  await page.goto("/today");
+  await page.locator(".today-card").waitFor();
+
+  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("group", { name: "SOURCE" })
+    .getByRole("button", { name: "CUSTOM", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Apply Filter" }).click();
+  await expect(page.locator(".today-card-title")).toHaveText(title);
+  await expect(page.locator(".today-piece-more")).toBeVisible();
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-capped.png"),
+  });
+
+  await cleanupByTitle(page, title);
+});
+
 // Phase 6I Task 8: the fresh-user state "today.png" above never shows —
 // that capture deliberately sets baselines first (line ~234) so it can
 // exercise FILTER/SHUFFLE. This is the OTHER state a brand-new account

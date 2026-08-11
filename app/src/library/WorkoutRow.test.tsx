@@ -1,9 +1,35 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import WorkoutRow from "./WorkoutRow";
+
+/** Builds a renderable LibraryWorkout from a real seed entry by title
+ *  (task-3 brief: "pick one per format from the seeds"), rather than
+ *  hand-building steps — the recurring-fixture-defect history (CLAUDE.md
+ *  item 3) is exactly a hand-built/empty fixture passing while the real
+ *  300-workout library exposes a defect a synthetic case never would. */
+function fromSeed(
+  title: string,
+  overrides: Partial<LibraryWorkout> = {},
+): LibraryWorkout {
+  const seed = LIBRARY_WORKOUTS.find((w) => w.title === title);
+  if (!seed) throw new Error(`no seed workout titled "${title}"`);
+  return {
+    id: `w-${title}`,
+    title: seed.title,
+    type: seed.type,
+    difficulty: seed.difficulty,
+    pain: seed.pain,
+    steps: seed.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+    ...overrides,
+  };
+}
 
 // Real seeded workout ("Hoarfrost", app/server/seed/library/o2.ts) —
 // WorkoutRow doesn't compute duration itself (that's Library.tsx's job, via
@@ -138,5 +164,99 @@ describe("WorkoutRow", () => {
 
     await userEvent.click(screen.getByRole("link"));
     expect(await screen.findByText("PROBE from=/library")).toBeVisible();
+  });
+});
+
+// Task 3 (workout-step-detail): line 2 of 3, `structureLine(workout.steps)`
+// (app/domain/display/stepDetail.ts, Task 1). Renders for EVERY row
+// regardless of baselines — the function takes none — so the assertions
+// below hold with durationMinutes both a number and null (Library.tsx
+// passes null whenever the signed-in user has no baselines set, exactly
+// the HOARFROST case below). Expected strings are hand-computed against
+// structureLine's own precedence rules (see task-3-report.md), not
+// produced by calling structureLine itself — a self-check would pass even
+// if WorkoutRow stopped calling the real function and hardcoded its own
+// wrong string that happened to match a stale expectation.
+describe("structure line (line 2 of 3)", () => {
+  it("shows the verbatim line for a real single-piece workout (format 1)", () => {
+    // "Fine Weather" (server/seed/library/o2.ts): one 45:00 piece at
+    // 6k+12, no rest — no reps marker, no chain.
+    render(
+      <MemoryRouter>
+        <WorkoutRow workout={fromSeed("Fine Weather")} durationMinutes={45} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("45:00 @ 6K+12")).toBeInTheDocument();
+  });
+
+  it("shows the verbatim line for a real uniform-repeat workout (format 2)", () => {
+    // "Sea Fret" (server/seed/library/o2.ts): 2×4:00 at 6k+12, 1' rest,
+    // authored via the reps marker.
+    render(
+      <MemoryRouter>
+        <WorkoutRow workout={fromSeed("Sea Fret")} durationMinutes={9} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("2 × 4:00 @ 6K+12 · 1′ REST")).toBeInTheDocument();
+  });
+
+  it("shows the verbatim line for a real chained workout (format 4)", () => {
+    // "Millpond" (server/seed/library/o2.ts): 2-3-4-3-2 minutes, all at
+    // 6k+12, 1' interior rest, no trailing rest on the last piece —
+    // authored as five distinct "w" steps, no reps marker.
+    render(
+      <MemoryRouter>
+        <WorkoutRow workout={fromSeed("Millpond")} durationMinutes={18} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("2-3-4-3-2 @ 6K+12 · 1′ REST")).toBeInTheDocument();
+  });
+
+  it("still shows the line when durationMinutes is null (no baselines set)", () => {
+    // HOARFROST above: 2×12:00 at 6k+12, 3' rest — same reps-marker shape
+    // as "Sea Fret". Library.tsx passes durationMinutes={null} for every
+    // row exactly when the signed-in user has no baselines yet
+    // (Library.tsx:337-343) — structureLine must not gate on that.
+    render(
+      <MemoryRouter>
+        <WorkoutRow workout={HOARFROST} durationMinutes={null} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("2 × 12:00 @ 6K+12 · 3′ REST")).toBeInTheDocument();
+    // and the row's OWN duration fallback still renders alongside it —
+    // proves the structure line isn't secretly swallowing/replacing the
+    // existing line 1 duration slot.
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+});
+
+describe("index.css: .workout-row-structure carries the ellipsis contract", () => {
+  it("is single-line, IBM Plex Mono 11px, --ink-2, with overflow hidden + ellipsis + nowrap", () => {
+    // jsdom never loads index.css as real stylesheet rules (no browser
+    // layout engine backs getComputedStyle here — TimerTargets.test.tsx's
+    // own comment documents the same empirically-verified limitation), so
+    // this reads the CSS source text straight off disk (node:fs, not an
+    // ESM import: Vitest mocks every .css import to an empty string for
+    // this project) rather than rendering and measuring. 15 real library
+    // workouts produce lines up to 101 chars (task-3 brief) — ellipsis is
+    // the only handling, so these three properties are the structural
+    // contract, not decoration.
+    const indexCssPath = import.meta.url
+      .replace(/^file:\/\//, "")
+      .replace(/library\/[^/]+\.test\.tsx$/, "index.css");
+    const indexCss = readFileSync(indexCssPath, "utf-8");
+    const match = /\.workout-row-structure\s*\{([^}]*)\}/.exec(indexCss);
+    expect(match).not.toBeNull();
+    const body = match![1];
+    expect(body).toContain("var(--font-mono)");
+    expect(body).toContain("11px");
+    expect(body).toContain("var(--ink-2)");
+    expect(body).toContain("overflow: hidden");
+    expect(body).toContain("text-overflow: ellipsis");
+    expect(body).toContain("white-space: nowrap");
   });
 });

@@ -107,6 +107,22 @@ test.describe("library list", () => {
     );
   });
 
+  // Task 3 (workout-step-detail spec §3): line 2 of 3, the generated
+  // structure line (structureLine(), domain/display/stepDetail.ts). This
+  // hits the real compose stack seeded with the actual 300-workout
+  // library (server/seed/library/index.ts) — not a hand-built fixture —
+  // so a workout whose steps somehow can't be expanded (structureLine
+  // throwing, or falling through to an empty string) would show up here
+  // as an empty/missing line, unlike a unit test built on one chosen shape.
+  test("the first row's structure line (line 2 of 3) is non-empty", async ({
+    page,
+  }) => {
+    await waitForLibraryLoaded(page);
+    const structureLine = page.locator(".workout-row-structure").first();
+    await expect(structureLine).toBeVisible();
+    await expect(structureLine).not.toHaveText("");
+  });
+
   test("opening a row navigates to /library/:id and shows that workout's title", async ({
     page,
   }) => {

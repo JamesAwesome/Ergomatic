@@ -877,3 +877,98 @@ test.describe("Today enhancements: sheet dismiss discards the draft", () => {
     ).toHaveAttribute("aria-pressed", "false");
   });
 });
+
+// Task 2 (2026-08-10 workout-step-detail spec §2/§6): the piece region
+// between the card's meta line and its reason foot. Determinism: a single
+// custom 7-piece import (the design mock's own "Long Fetch" pyramid —
+// 2-4-6-8-6-4-2' at 6k+6→6k+0→6k+6, 2' rest between, 32' work / 44' total),
+// narrowed to via SOURCE=CUSTOM (this account's only personal workout) —
+// the known-good shape named in this task's brief: no recency race against
+// the 300 seeded globals, no plan/type coupling with a freshly-created
+// (freestyle-by-default) account either.
+test.describe("Today enhancements: the piece region", () => {
+  const title = "Today Piece Region E2E";
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, title);
+  });
+
+  test("shows compressed rows, the peak tint, the +N-more cutoff, and the PIECES-count foot on a real 7-piece custom workout", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-pieces@e2e.test",
+      name: "Today Pieces Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await importBulk(
+      page,
+      [
+        `${title} | O2 | hard | 4`,
+        "w 2' 6k+6 @22 r2",
+        "w 4' 6k+4 @24 r2",
+        "w 6' 6k+2 @26 r2",
+        "w 8' 6k+0 @28 r2",
+        "w 6' 6k+2 @26 r2",
+        "w 4' 6k+4 @24 r2",
+        "w 2' 6k+6 @22",
+      ].join("\n"),
+    );
+    await page.goto("/today");
+    await expect(page.locator(".today-card")).toBeVisible();
+
+    await openFilterSheet(page);
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByRole("group", { name: "SOURCE" })
+      .getByRole("button", { name: "CUSTOM", exact: true })
+      .click();
+    await expect(filterSheetCount(page)).toHaveText("1 OPTION");
+    await applyFilterSheet(page);
+    await expect(page.locator(".today-card-title")).toHaveText(title);
+
+    // Compressed one-line rows (5+ pieces), capped at four.
+    await expect(page.locator(".today-piece-row-compact")).toHaveCount(4);
+    // A real split target ("2:xx.0") is visible in the region.
+    await expect(page.locator(".today-piece-split").first()).toContainText(
+      "2:",
+    );
+    // The 4th visible row (offset 0, "at 6k pace") is the tie-broken peak —
+    // the pyramid's symmetric offsets (6,4,2,0,…) make it the whole set's
+    // one true minimum |off|, and it's visible (not behind the cap).
+    await expect(page.locator(".today-piece-peak")).toHaveCount(1);
+
+    // The cutoff row: non-interactive, first three unseen durations, ›.
+    const more = page.locator(".today-piece-more");
+    await expect(more).toBeVisible();
+    await expect(more).toContainText("3 more pieces");
+    await expect(more).toContainText("6:00 · 4:00 · 2:00");
+    await expect(more.locator("a, button, [role=button]")).toHaveCount(0);
+
+    // The summary foot: work/total arithmetic and the capped PIECES count.
+    await expect(page.locator(".today-piece-foot-work")).toHaveText("32′ WORK");
+    await expect(page.locator(".today-piece-foot-total")).toHaveText(
+      "44′ TOTAL",
+    );
+    await expect(page.locator(".today-piece-foot-count")).toHaveText(
+      "· 7 PIECES",
+    );
+
+    // The reason foot's OPEN chip — the card's own tap is still the only
+    // interactive surface (no nested link/button anywhere in the region).
+    await expect(page.getByText("OPEN ›")).toBeVisible();
+
+    // spec §7.2: the detail screen for a 7-piece workout scrolls normally
+    // (the workout detail screen is unchanged by this task — plain page
+    // scroll, no nested/pinned scroller) rather than clipping or breaking.
+    await page.locator(".today-card").click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    const scrollHeight = await page.evaluate(
+      () => document.documentElement.scrollHeight,
+    );
+    const viewportHeight = await page.evaluate(() => window.innerHeight);
+    expect(scrollHeight).toBeGreaterThan(viewportHeight);
+    await page.mouse.wheel(0, scrollHeight);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  });
+});
