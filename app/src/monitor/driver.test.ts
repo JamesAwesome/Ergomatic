@@ -342,7 +342,13 @@ async function programViaStub(
   // status delivered before that merges into `raw` and is never counted,
   // which would hang this helper rather than fail it.
   for (let i = 0; i < 50; i += 1) await Promise.resolve();
-  transport.notify(GENERAL_STATUS_UUID, ARMED_GENERAL_STATUS);
+  // The armed readback for `p` ITSELF (`armedStatusFor`), not the shared
+  // `ARMED_GENERAL_STATUS` constant: every caller before walk 5 happened to
+  // pass a program whose interval 0 is 60s (so the two are the same bytes),
+  // and a caller that passes anything else — Sea Fret's 300s warm-up, say —
+  // would otherwise hang here waiting for a structure the machine was never
+  // told to hold.
+  transport.notify(GENERAL_STATUS_UUID, armedStatusFor(p));
   await pending;
 }
 
@@ -401,6 +407,29 @@ function asSplitHalf(boundary: number, avgSpm: number) {
     splitIntervalNumber: boundary,
     ergMachineType: 1,
   });
+}
+
+/**
+ * A hand-advanced millisecond clock for `DriverOptions.now` — the driver's
+ * one wall-clock reading (hardware walk 5, 2026-08-10:
+ * `STRUCTURE_MISMATCH_WINDOW_MS`, driver.ts). Time does not pass on its own
+ * in these tests, which is the point: a test that fires three status
+ * notifications in one synchronous burst is a test of the TICK STREAK, and
+ * the walk's whole finding is that a tick streak is not a duration. Only a
+ * test that means "the machine held the wrong structure for longer than its
+ * own transition takes" advances this.
+ */
+function manualClock(startMs = 0): {
+  now: () => number;
+  advance(by: number): void;
+} {
+  let ms = startMs;
+  return {
+    now: (): number => ms,
+    advance(by: number): void {
+      ms += by;
+    },
+  };
 }
 
 function harness(
@@ -5906,13 +5935,18 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     // (`STRUCTURE_MISMATCH_TICKS`, driver.ts) needs three CONSECUTIVE
     // stable mismatched ARMED ticks, and an empty-armed machine's own
     // steady state holds still exactly like this (session 4a's ledger:
-    // "fields refresh while merely ARMED").
+    // "fields refresh while merely ARMED"). Walk 5 added the second half of
+    // the rule: those three ticks must also SPAN the persistence window
+    // (`STRUCTURE_MISMATCH_WINDOW_MS`), so this clock is advanced between
+    // them — an empty arm is a machine that keeps saying the wrong thing,
+    // not one caught mid-transition.
+    const clock = manualClock();
     const { fake, driver, events } = harness(
       {
         program,
         events: [rowingAt(0, 10), stillArmedEmpty(1), stillArmedEmpty(2)],
       },
-      { prepareSettleTicks: 0 },
+      { prepareSettleTicks: 0, now: clock.now },
     );
 
     fake.tick(0); // the machine is genuinely mid-piece at dispatch
@@ -5921,9 +5955,11 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     for (let i = 0; i < 100; i += 1) await Promise.resolve();
     fake.tick(0); // flushes the empty arm's own WAITTOBEGIN bundle — mismatch #1
     await Promise.resolve();
+    clock.advance(1200);
     fake.tick(1); // stillArmedEmpty(1) — mismatch #2, same wrong structure
     await Promise.resolve();
-    fake.tick(1); // stillArmedEmpty(2) — mismatch #3: the streak fires
+    clock.advance(1200); // 2400ms of the SAME wrong structure: past the window
+    fake.tick(1); // stillArmedEmpty(2) — mismatch #3: the rule fires
     await Promise.resolve();
 
     const err = await pending.then(
@@ -6284,7 +6320,11 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     // today's code, which is the point of tracking settlement by flag.
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -6295,6 +6335,10 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     transport.notify(GENERAL_STATUS_UUID, empty);
     await drain();
     expect(outcome.settled).toBe(false); // one tick is the OBSERVED lag — never a reject
+    // The wrong structure is still there 2.4 s later — past the walk-5
+    // persistence window, so this is a machine holding a workout, not one
+    // mid-transition. The STREAK is what is still missing.
+    clock.advance(2400);
     transport.notify(GENERAL_STATUS_UUID, empty);
     await drain();
     expect(outcome.settled).toBe(false); // two is still not evidence
@@ -6403,7 +6447,14 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("the 3-consecutive counter RESETS on a tick that is not a mismatched armed tick — the streak must be CONSECUTIVE, not cumulative", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    // A slow machine: 2.5 s between every tick, so the walk-5 persistence
+    // window is never what holds this back — the STREAK is the whole
+    // subject, and it has to survive being the only thing under test.
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -6411,19 +6462,23 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     );
 
     const empty = statusWithStructure(EMPTY_ARM);
-    transport.notify(GENERAL_STATUS_UUID, empty);
-    transport.notify(GENERAL_STATUS_UUID, empty);
+    const slowTick = (bytes: Uint8Array): void => {
+      clock.advance(2500);
+      transport.notify(GENERAL_STATUS_UUID, bytes);
+    };
+    slowTick(empty);
+    slowTick(empty);
     // A NON-armed tick — the machine is mid-cycle, not making a claim about
     // the armed workout at all. The streak restarts from here.
-    transport.notify(GENERAL_STATUS_UUID, generalStatusIn(WORKOUTSTATE_REARM));
-    transport.notify(GENERAL_STATUS_UUID, empty);
-    transport.notify(GENERAL_STATUS_UUID, empty);
+    slowTick(generalStatusIn(WORKOUTSTATE_REARM));
+    slowTick(empty);
+    slowTick(empty);
     await drain();
     // Five ticks, FOUR of them mismatched-and-armed: a cumulative counter
     // would already have rejected.
     expect(outcome.settled).toBe(false);
 
-    transport.notify(GENERAL_STATUS_UUID, empty); // third CONSECUTIVE since the reset
+    slowTick(empty); // third CONSECUTIVE since the reset
     await drain();
     expect(outcome.settled).toBe(true);
     expect(rejection(outcome).reason).toBe("structure-mismatch");
@@ -6433,7 +6488,16 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("the counter also resets when the mismatched payload CHANGES — 'stable' is part of the rule (session 4a's mid-cycle transients)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    // Again slow ticks (2.5 s apart), so the persistence window is satisfied
+    // throughout and the PAYLOAD's stability is the only thing being tested.
+    // Note what this proves about the window itself: it restarts with the
+    // streak, so five wrong ticks spanning 12 s still do not reject while
+    // the payload keeps changing.
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -6442,14 +6506,18 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
 
     const empty = statusWithStructure(EMPTY_ARM);
     const transient = statusWithStructure(MID_CYCLE_TRANSIENT);
-    transport.notify(GENERAL_STATUS_UUID, empty);
-    transport.notify(GENERAL_STATUS_UUID, empty);
-    transport.notify(GENERAL_STATUS_UUID, transient); // a DIFFERENT wrong payload
-    transport.notify(GENERAL_STATUS_UUID, transient);
+    const slowTick = (bytes: Uint8Array): void => {
+      clock.advance(2500);
+      transport.notify(GENERAL_STATUS_UUID, bytes);
+    };
+    slowTick(empty);
+    slowTick(empty);
+    slowTick(transient); // a DIFFERENT wrong payload
+    slowTick(transient);
     await drain();
     expect(outcome.settled).toBe(false);
 
-    transport.notify(GENERAL_STATUS_UUID, transient); // third stable transient
+    slowTick(transient); // third stable transient
     await drain();
     expect(outcome.settled).toBe(true);
     expect(rejection(outcome).reason).toBe("structure-mismatch");
@@ -6459,7 +6527,11 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("the rejection detail carries OBSERVED and EXPECTED for all three fields — a trace that says only 'mismatch' cannot be diagnosed at the erg", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -6467,7 +6539,10 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     );
 
     const empty = statusWithStructure(EMPTY_ARM);
-    for (let i = 0; i < 3; i += 1) transport.notify(GENERAL_STATUS_UUID, empty);
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1500); // three ticks spanning 4.5 s — past the window
+      transport.notify(GENERAL_STATUS_UUID, empty);
+    }
     await drain();
 
     const detail = rejection(outcome).hexTrace;
@@ -6531,7 +6606,11 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("the TYPE check is IN: durations correct but workoutType=1 still rejects (session 4a: the type is STABLE at 8 across TIME, DISTANCE and rest-0 — a 1 is a real signal, not normalization)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -6543,8 +6622,10 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
       workoutDurationRaw: 6000, // MINIMAL_PROGRAM's own 60s, correct
       workoutDurationType: 0, // correct
     });
-    for (let i = 0; i < 3; i += 1)
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1500);
       transport.notify(GENERAL_STATUS_UUID, typeOnly);
+    }
     await drain();
     expect(outcome.settled).toBe(true);
     expect(rejection(outcome).reason).toBe("structure-mismatch");
@@ -6554,7 +6635,11 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("the DURATION TYPE check is IN: 500 read back as a TIME duration rejects, even though the number matches", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -6566,8 +6651,10 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
       workoutDurationRaw: 500,
       workoutDurationType: 0, // Time, not the confirmed 128 for distance
     });
-    for (let i = 0; i < 3; i += 1)
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1500);
       transport.notify(GENERAL_STATUS_UUID, wrongUnit);
+    }
     await drain();
     expect(outcome.settled).toBe(true);
     expect(rejection(outcome).reason).toBe("structure-mismatch");
@@ -6577,7 +6664,11 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
   it("the rest-0 shape still expects type 8 and the plain TIME duration (session 4a: 2×60s r0 read back type=8 dur=6000 durType=0 — no normalization)", async () => {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log, { verifyTicks: 20 });
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
     const { pending, outcome } = await driveToVerify(
       driver,
       transport,
@@ -6599,8 +6690,10 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
       workoutDurationRaw: 6000,
       workoutDurationType: 0,
     });
-    for (let i = 0; i < 3; i += 1)
+    for (let i = 0; i < 3; i += 1) {
+      clock.advance(1500);
       transport.notify(GENERAL_STATUS_UUID, normalizedType);
+    }
     await drain();
     expect(outcome.settled).toBe(true);
     expect(rejection(outcome).reason).toBe("structure-mismatch");
@@ -6668,6 +6761,559 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     await expect(pending).resolves.toBeUndefined();
     expect(rejectionsLogged(log)).toBe(0);
     expect(structureEntries(log)).toBe(1); // the near-miss, seen and survived
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HARDWARE WALK 5 (2026-08-10, phone BLE at the erg — PM5 432331249;
+// `docs/monitor/pm5-interface-notes.md` §21, items 2-4). Two
+// findings, both of them races the desktop transport's slower timing hid:
+// the structure gate striking out inside the PM5's own two-step structure
+// update, and the final interval's split pair arriving one notification
+// AFTER the frame that ends the workout.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its own transition", () => {
+  /** The walk's INTERMEDIATE reading, verbatim: the type has flipped to the
+   *  programmed value, the duration has not caught up yet, and the duration
+   *  type still reads the idle `0x80`. Stable, wrong, and entirely healthy —
+   *  ~180 ms later the same machine reports `6000`/`0` and keeps doing so. */
+  const TWO_STEP_INTERMEDIATE = statusWithStructure({
+    workoutType: 8,
+    workoutDurationRaw: 0,
+    workoutDurationType: 128,
+  });
+
+  async function drainHops(hops = 30): Promise<void> {
+    for (let i = 0; i < hops; i += 1) await Promise.resolve();
+  }
+
+  /** The fix-3 block's own three read-outs, repeated here because they live
+   *  inside that block's closure: the typed error, how many rejections the
+   *  trace holds (a healthy arm leaves none), and how many
+   *  `"structure-mismatch"` entries it holds (a lagging-but-healthy arm
+   *  leaves exactly one — the observation, never the verdict). */
+  function rejectionOf(outcome: { error: unknown }): ProgramRejectionError {
+    expect(outcome.error).toBeInstanceOf(ProgramRejectionError);
+    return outcome.error as ProgramRejectionError;
+  }
+
+  function rejectionsIn(log: ReturnType<typeof createEventLog>): number {
+    return log.entries().filter((e) => e.kind === "program-rejection").length;
+  }
+
+  function structureEntriesIn(log: ReturnType<typeof createEventLog>): number {
+    return log.entries().filter((e) => e.kind === "structure-mismatch").length;
+  }
+
+  /** Session 4a's captured empty arm, for the changing-payload row below —
+   *  the same triple the fix-3 block's own `EMPTY_ARM` carries. */
+  const EMPTY_ARM_STATUS = statusWithStructure({
+    workoutType: 1,
+    workoutDurationRaw: 0,
+    workoutDurationType: 128,
+  });
+
+  function verifyOutcome(pending: Promise<void>): {
+    settled: boolean;
+    error: unknown;
+  } {
+    const outcome = { settled: false, error: undefined as unknown };
+    void pending.then(
+      () => {
+        outcome.settled = true;
+      },
+      (e: unknown) => {
+        outcome.settled = true;
+        outcome.error = e;
+      },
+    );
+    return outcome;
+  }
+
+  /** Drives `program()` up to (and no further than) its verification phase —
+   *  the stub twin of the fix-3 block's own `driveToVerify`, repeated here so
+   *  this block reads on its own. */
+  async function toVerify(
+    driver: ReturnType<typeof createPm5Driver>,
+    transport: ReturnType<typeof stubTransport>,
+    p: WorkoutProgram,
+  ): Promise<{
+    pending: Promise<void>;
+    outcome: ReturnType<typeof verifyOutcome>;
+  }> {
+    const sent = (): number =>
+      transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+        .length;
+    const start = sent();
+    const pending = driver.program(p);
+    const outcome = verifyOutcome(pending);
+    await waitUntil(() => sent() > start);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "reject" }),
+    );
+    await waitUntil(() => sent() > start + prepareChunkCount);
+    transport.notify(
+      TRANSMIT_CHARACTERISTIC_UUID,
+      buildAckFrame({ frameStatus: "ok" }),
+    );
+    await drainHops(50);
+    return { pending, outcome };
+  }
+
+  it("iOS cadence, the walk's own shape: FOUR ~90ms ticks of the stale structure then the real one — program() RESOLVES (today: rejects on the third)", async () => {
+    // THE REGRESSION. Against the tick-count-only rule this test fails on
+    // the third notification with reason "structure-mismatch" — `observed
+    // workoutType=8 durationRaw=0 durationType=128; expected workoutType=8
+    // durationRaw=6000 durationType=0`, the exact string the phone produced
+    // at the erg. Nothing about the machine is wrong in this timeline; only
+    // the radio is faster than the one the rule was tuned on.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 20,
+      now: clock.now,
+    });
+    const { pending, outcome } = await toVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    // The transition window, at the phone's measured cadence.
+    for (let i = 0; i < 4; i += 1) {
+      transport.notify(GENERAL_STATUS_UUID, TWO_STEP_INTERMEDIATE);
+      await drainHops();
+      expect(outcome.settled).toBe(false);
+      clock.advance(90);
+    }
+
+    // ...and the duration populates, as it did on every one of the walk's
+    // connects, and stays correct.
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM));
+    await expect(pending).resolves.toBeUndefined();
+    expect(rejectionsIn(log)).toBe(0);
+    // Seen and recorded once — the observation survives, only the verdict
+    // is withdrawn.
+    expect(structureEntriesIn(log)).toBe(1);
+  });
+
+  it("the gate did NOT die: the same stale structure held past the 2000ms window still rejects 'structure-mismatch'", async () => {
+    // The other side of the same rule. `verifyTicks: 100` keeps the OUTER
+    // bound out of the way so it is unambiguously the streak-plus-window
+    // rule firing, not the timeout wearing its reason.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 100,
+      now: clock.now,
+    });
+    const { pending, outcome } = await toVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    // Four ticks over 1.5 s: the streak is long past 3, the window is not.
+    for (const at of [0, 500, 1000, 1500]) {
+      clock.advance(at === 0 ? 0 : 500);
+      transport.notify(GENERAL_STATUS_UUID, TWO_STEP_INTERMEDIATE);
+      await drainHops();
+      expect(outcome.settled).toBe(false);
+    }
+
+    clock.advance(500); // 2000 ms of one unchanging wrong answer
+    transport.notify(GENERAL_STATUS_UUID, TWO_STEP_INTERMEDIATE);
+    await drainHops();
+    expect(outcome.settled).toBe(true);
+    const err = rejectionOf(outcome);
+    expect(err.reason).toBe("structure-mismatch");
+    expect(err.hexTrace).toContain(
+      "observed workoutType=8 durationRaw=0 durationType=128",
+    );
+    // The trace says how long, not just how many — the number a future walk
+    // needs in order to argue about this window at all.
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "program-rejection" && e.detail.includes("over 2000ms"),
+        ),
+    ).toBe(true);
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+
+  it("a wrong payload that keeps CHANGING restarts the window too — 12 seconds of settling is still not a verdict", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 100,
+      now: clock.now,
+    });
+    const { pending, outcome } = await toVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    const a = EMPTY_ARM_STATUS;
+    const b = TWO_STEP_INTERMEDIATE;
+    for (let i = 0; i < 6; i += 1) {
+      clock.advance(2500); // each tick alone is past the window
+      transport.notify(GENERAL_STATUS_UUID, i % 2 === 0 ? a : b);
+      await drainHops();
+    }
+    expect(outcome.settled).toBe(false);
+
+    // A healthy readback still resolves after all of that.
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM));
+    await expect(pending).resolves.toBeUndefined();
+    expect(rejectionsIn(log)).toBe(0);
+  });
+
+  it("the window RESTARTS with the payload: a long-standing wrong answer that changes buys the new one its own 2000ms", async () => {
+    // The two halves have to measure the SAME claim. A machine that sat on
+    // one wrong structure for three seconds and then moved to a different
+    // one is still settling — the new payload has been up for 200 ms, and a
+    // window that kept counting from the OLD one would convict on its third
+    // tick. (This is the mutant a test that only alternates payloads cannot
+    // catch: there, the streak alone is already enough to hold the verdict
+    // back, so the clock's own reset is never load-bearing.)
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, {
+      verifyTicks: 100,
+      now: clock.now,
+    });
+    const { pending, outcome } = await toVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    // Three seconds of payload A — long past the window, but only two ticks
+    // of it, so no verdict yet.
+    transport.notify(GENERAL_STATUS_UUID, EMPTY_ARM_STATUS);
+    await drainHops();
+    clock.advance(3000);
+    transport.notify(GENERAL_STATUS_UUID, EMPTY_ARM_STATUS);
+    await drainHops();
+    expect(outcome.settled).toBe(false);
+
+    // Payload B arrives and holds for three CONSECUTIVE ticks — but only
+    // 200 ms of them.
+    for (const step of [100, 100, 100]) {
+      clock.advance(step);
+      transport.notify(GENERAL_STATUS_UUID, TWO_STEP_INTERMEDIATE);
+      await drainHops();
+    }
+    expect(outcome.settled).toBe(false);
+
+    // ...and once B has held for its own 2000 ms, it is a verdict.
+    clock.advance(2000);
+    transport.notify(GENERAL_STATUS_UUID, TWO_STEP_INTERMEDIATE);
+    await drainHops();
+    expect(outcome.settled).toBe(true);
+    expect(rejectionOf(outcome).reason).toBe("structure-mismatch");
+    // Measured from B's own first tick (2200 ms), never from A's.
+    expect(rejectionOf(outcome).hexTrace).toContain(
+      "observed workoutType=8 durationRaw=0 durationType=128",
+    );
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "program-rejection" && e.detail.includes("over 2200ms"),
+        ),
+    ).toBe(true);
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
+  });
+});
+
+describe("createPm5Driver: walk 5 — the last split always lands (the end-of-workout split race)", () => {
+  /** The walk's own workout: a single 1:00 interval, rowed to completion.
+   *  The PM5 delivered 0x0037 and 0x0038 at the finish, 1 ms apart
+   *  (02:23:12.491/.492), AFTER the general-status frame that reported the
+   *  end — and the log screen said "0 OF 1 INTERVALS MEASURED". */
+  const WALK_5_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  function primed(): {
+    transport: ReturnType<typeof stubTransport>;
+    log: ReturnType<typeof createEventLog>;
+    driver: ReturnType<typeof createPm5Driver>;
+    events: MonitorEvent[];
+  } {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    // AS1/AS2 once, so status ticks actually produce frames.
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    return { transport, log, driver, events };
+  }
+
+  function boundaries(events: MonitorEvent[]) {
+    return events.filter((e) => e.kind === "intervalComplete");
+  }
+
+  it("THE WALK: the split pair arrives AFTER the finished tick and still records — index 0, finalBoundary, no out-of-run", async () => {
+    // Against today's driver this test fails on `actual.index`: the run is
+    // already closed when the pair lands, so the boundary takes the
+    // out-of-run path and is emitted with `index: null` — which
+    // `buildMonitorLogSteps` drops, which is the "0 OF 1" the rower saw.
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
+
+    // 1 ms later on the wire, and in the same gap before the next status
+    // sample: the machine's Split/Interval Number for a 1-interval piece is
+    // 1 (§19.8's minus-one offset lands it on interval 0).
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    expect(boundaries(events)).toHaveLength(1);
+    expect(boundaries(events)[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, avgSpm: 24, elapsedSeconds: 60, distanceMeters: 200 },
+      finalBoundary: true,
+    });
+    // The ORDER the record depends on is still terminal-then-boundary: the
+    // fix is that the boundary is still the run's, not that it overtakes.
+    const kinds = events.map((e) => e.kind);
+    expect(kinds.lastIndexOf("workoutComplete")).toBeLessThan(
+      kinds.lastIndexOf("intervalComplete"),
+    );
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      false,
+    );
+    expect(
+      log
+        .entries()
+        .some(
+          (e) =>
+            e.kind === "interval-complete" &&
+            e.detail.includes("THE FINISH GRACE"),
+        ),
+    ).toBe(true);
+  });
+
+  it("a REAL library workout's final interval too: Sea Fret's boundary 3 after the finish files as interval 2", async () => {
+    // The briefing's realistic-fixture rule, and a non-clamped index: a
+    // 3-interval program whose machine Split/Interval Number 3 normalizes to
+    // our interval 2 through the ordinary minus-one offset, not through the
+    // low-edge clamp `WALK_5_PROGRAM` exercises above.
+    const program = seaFretProgram();
+    expect(program.intervals).toHaveLength(3);
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, program);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 200, 700),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 240, 900),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(3, 240, 900));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(3, 26));
+
+    expect(boundaries(events)).toHaveLength(1);
+    expect(boundaries(events)[0]).toMatchObject({
+      actual: { index: 2, avgSpm: 26 },
+      finalBoundary: true,
+    });
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      false,
+    );
+  });
+
+  it("the DESKTOP order is untouched: a split BEFORE the finished tick records exactly as it always did, with no finalBoundary flag", async () => {
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+
+    expect(boundaries(events)).toHaveLength(1);
+    const only = boundaries(events)[0]!;
+    expect(only).toMatchObject({ actual: { index: 0, avgSpm: 24 } });
+    // No flag at all on an ordinary in-run boundary — the record's late-actual
+    // door stays shut for everything but the grace.
+    expect("finalBoundary" in only).toBe(false);
+    expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      false,
+    );
+  });
+
+  it("the grace is BOUNDED by the machine's next sample: one more status tick and the same pair is out-of-run again", async () => {
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    // The PM keeps reporting "finished" for as long as it sits in
+    // WorkoutLogged (§19.4). That next sample ends the instant the finish
+    // grace covers.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    expect(boundaries(events)).toHaveLength(1);
+    expect(boundaries(events)[0]).toMatchObject({ actual: { index: null } });
+    expect("finalBoundary" in boundaries(events)[0]!).toBe(false);
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      true,
+    );
+  });
+
+  it("a TERMINATED close opens no grace — footnote 12's unstable Split/Interval Number keeps the out-of-run path", async () => {
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+    expect(events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 40, 130));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    expect(boundaries(events)).toHaveLength(1);
+    expect(boundaries(events)[0]).toMatchObject({ actual: { index: null } });
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      true,
+    );
+  });
+
+  it("post-run HOUSEKEEPING is still refused: an index this run already filed does not come back through the grace", async () => {
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    // The whole boundary, in-run, the desktop way — interval 0 is now filed.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    // ...and the machine's own post-run housekeeping repeats it, inside the
+    // very gap the grace covers. The run is not missing this interval, so it
+    // is not this run's to take.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    expect(boundaries(events)).toHaveLength(2);
+    expect(boundaries(events)[0]).toMatchObject({ actual: { index: 0 } });
+    expect(boundaries(events)[1]).toMatchObject({ actual: { index: null } });
+    expect(
+      log.entries().filter((e) => e.kind === "boundary-out-of-run"),
+    ).toHaveLength(1);
+  });
+
+  it("a run that never reported a rowing interval has nothing to normalize against — the grace declines rather than guess", async () => {
+    // The third of the grace's five conditions, on its own: a run whose
+    // machine went straight from armed to finished (nobody rowed) has no
+    // observed active state, and `toActualIndex` will not name an interval
+    // from the terminal word. Declining is the honest answer — the same one
+    // `IntervalActual.index`'s `null` contract exists to express.
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 0, 0),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 0, 0));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 0));
+
+    expect(boundaries(events)).toHaveLength(1);
+    expect(boundaries(events)[0]).toMatchObject({ actual: { index: null } });
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      true,
+    );
+  });
+
+  it("the grace is consumed ONCE: a second, different boundary in the same gap is still out-of-run", async () => {
+    const program = seaFretProgram();
+    const { transport, log, driver, events } = primed();
+    await programViaStub(driver, transport, program);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 200, 700),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 240, 900),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(3, 240, 900));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(3, 26));
+    // A second pair in the same gap, naming a different interval: whatever
+    // that is, it is not one more piece of this run's finish.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 120, 400));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 20));
+
+    expect(boundaries(events)).toHaveLength(2);
+    expect(boundaries(events)[0]).toMatchObject({ actual: { index: 2 } });
+    expect(boundaries(events)[1]).toMatchObject({ actual: { index: null } });
+    expect(
+      log.entries().filter((e) => e.kind === "boundary-out-of-run"),
+    ).toHaveLength(1);
   });
 });
 

@@ -854,9 +854,23 @@ export function useMonitorSession(
         // post-terminate housekeeping — the driver emits those with
         // `index: null` and a `boundary-out-of-run` log) belongs to no
         // program and must never be filed against one.
+        //
+        // THE FINISH GRACE (hardware walk 5, 2026-08-10): the ONE boundary
+        // that legitimately arrives after this hook already closed the
+        // record. At a natural finish the PM5 sends the final interval's
+        // 0x0037/0x0038 pair one notification AFTER the general-status frame
+        // that ended the workout — `workoutComplete` (and `closeRecord`
+        // under it) has therefore already run by the time the actual gets
+        // here, which is why a rowed-out 1-interval piece prefilled the log
+        // screen with "0 OF 1 INTERVALS MEASURED". The driver marks exactly
+        // that event `finalBoundary` and `recordActual` accepts exactly that
+        // one late actual (both functions' own doc comments carry the rule);
+        // nothing else about the closed record's immutability moves.
         const run = runRef.current;
         if (run === null) return;
-        const next = recordActual(run, event.actual);
+        const next = recordActual(run, event.actual, {
+          finalBoundary: event.finalBoundary === true,
+        });
         // `recordActual` returns the SAME object when the record is closed
         // (its own immutability guard) — nothing to persist, nothing to
         // re-render.

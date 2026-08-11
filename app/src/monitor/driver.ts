@@ -141,11 +141,14 @@ import type { MonitorEventLog } from "./eventLog";
  *    supplied `ackTimeout` policy's tick budget elapsed with no response —
  *    a genuinely different failure mode than a disconnect (the spec's own
  *    "mid-sequence timeout" injection, distinct from "disconnect mid-
- *    write"; fix-round HIGH-2). There is no wall clock anywhere in this
- *    driver for either "no response is coming" signal: `"disconnected"`
- *    is learned from the transport's own event, `"timeout"` is counted in
- *    general-status TICKS (see `createPm5Driver`'s `ackTimeout` option),
- *    never `Date.now()`/`setTimeout`.
+ *    write"; fix-round HIGH-2). Neither "no response is coming" signal
+ *    reads a wall clock: `"disconnected"` is learned from the transport's
+ *    own event, `"timeout"` is counted in general-status TICKS (see
+ *    `createPm5Driver`'s `ackTimeout` option), never `Date.now()`/
+ *    `setTimeout`. (Hardware walk 5 added the file's ONE clock reading, for
+ *    the structure gate alone — `DriverOptions.now` and
+ *    `STRUCTURE_MISMATCH_WINDOW_MS`. Nothing on this path reads it, and
+ *    there is still no timer anywhere in the driver.)
  *  - `"not-observed"`: plan Task 2 (interface-notes.md §18, progress.md's
  *    D2) — the ack said "ok", but `options.verifyTicks` GENERAL_STATUS
  *    ticks elapsed without the machine ever reporting `state === "armed"`.
@@ -162,8 +165,10 @@ import type { MonitorEventLog } from "./eventLog";
  *    second one is the failure hardware has actually produced — three
  *    separate `:00` empty arms (§19.13's two, plus 4a's captured repro)
  *    every one of which passed the old state-only check. See
- *    `verifyArmed`'s own doc comment for the predicate and the
- *    N-consecutive rule.
+ *    `verifyArmed`'s own doc comment for the predicate, and
+ *    `STRUCTURE_MISMATCH_TICKS`/`STRUCTURE_MISMATCH_WINDOW_MS` for the
+ *    two-part rule (a stable wrong payload AND a wall-clock window) a
+ *    rejection has needed since hardware walk 5.
  *
  *  `atFrame` is the 0-based index into the ack-gated sequence
  *  (`buildProgrammingSequence`'s outer array, or 0 for `buildTerminate`'s
@@ -495,6 +500,32 @@ export interface DriverOptions {
    */
   errorTypeTicks?: number;
   /**
+   * **THE ONE WALL CLOCK IN THIS FILE** (hardware walk 5, 2026-08-10, phone
+   * BLE at the erg — PM5 432331249; interface-notes.md §21 items 2-3, whose
+   * item 3 states the rule directly: "Tick-count-calibrated logic is
+   * transport-relative; wall-clock windows are not"), and the one place the "ticks, never a
+   * clock" rule stated on every budget above is deliberately broken. It
+   * exists for exactly one predicate: the post-program structure gate's
+   * persistence window (`STRUCTURE_MISMATCH_WINDOW_MS`, whose own doc
+   * comment carries the reading that forced it). Everything else here still
+   * counts ticks.
+   *
+   * Why a clock had to appear at all: every other budget in this file bounds
+   * something whose meaning does not change with the notification rate ("how
+   * many samples am I willing to wait?"). The structure gate is different —
+   * it decides that a machine is holding the WRONG WORKOUT, and walk 5
+   * caught it deciding that DURING the PM5's own two-step structure update,
+   * purely because iOS delivers status notifications 3-6x faster than the
+   * desktop radio the rule was tuned on. A verdict a faster radio can win is
+   * not a verdict about the machine.
+   *
+   * Injectable so tests can hold or advance it deterministically (the driver
+   * tests' own `manualClock()`); defaults to `Date.now`. Only ever read for
+   * DIFFERENCES between two readings, never for absolute time, so any
+   * monotonically non-decreasing millisecond source will do.
+   */
+  now?: () => number;
+  /**
    * The advertised name `Transport.scan()` returned for the device the
    * caller connected to (`DiscoveredMonitor.name`, `domain/monitor/
    * types.ts` — e.g. "PM5 432331249") — 7B's scan/connect flow is expected
@@ -562,8 +593,57 @@ const DEFAULT_VERIFY_TICKS = 20;
  *  Three is comfortably above a single-tick lag of any origin, and far
  *  below `DEFAULT_VERIFY_TICKS` so the streak (not the outer bound) is what
  *  normally reports a genuine empty arm — the outer bound stays the
- *  backstop for a machine whose wrong payload never stabilizes at all. */
+ *  backstop for a machine whose wrong payload never stabilizes at all.
+ *
+ *  **NO LONGER SUFFICIENT ON ITS OWN (hardware walk 5, 2026-08-10 —
+ *  interface-notes.md §21 items 2-3).** Three ticks is a duration only if
+ *  you know the tick rate, and the phone's is 3-6x the desktop's (§21 item
+ *  3: "Status ticks arrive at ~90-180ms spacing on iOS") — three of them fit inside the PM5's own two-step
+ *  structure update, which is exactly the false `"structure-mismatch"` the
+ *  walk produced. This count now carries only the STABILITY half of the
+ *  verdict ("the payload held still"); `STRUCTURE_MISMATCH_WINDOW_MS`
+ *  carries the DURATION half ("...for longer than any transition anyone has
+ *  recorded"), and a rejection needs both. */
 const STRUCTURE_MISMATCH_TICKS = 3;
+
+/** How long the SAME wrong structure must persist, in WALL-CLOCK
+ *  milliseconds, before `verifyArmed` rejects — the second half of the
+ *  mismatch verdict, and the reason the tick streak above is no longer
+ *  sufficient on its own.
+ *
+ *  RECORDED (hardware walk 5, 2026-08-10, phone BLE, PM5 432331249, 0x0031
+ *  read tick by tick — interface-notes.md §21 item 2: "The PM5 updates its
+ *  0x0031 structure report in TWO steps after programming... Verification
+ *  gates must tolerate the transition by wall clock, not tick count"): after the program ack the PM5's general-status frames
+ *  update the armed structure in **TWO STEPS**. First `workoutType` flips to
+ *  the programmed value while `workoutDurationRaw` stays `0` at
+ *  `workoutDurationType` `0x80` — the idle pattern, i.e. the machine reports
+ *  the new TYPE before it reports the new DURATION. Roughly 180 ms (~2
+ *  ticks) later the duration populates (`70 17 00`, type `0`) and stays
+ *  correct for the rest of the session. The intermediate reading is a
+ *  perfectly stable, perfectly wrong structure: `observed workoutType=8
+ *  durationRaw=0 durationType=128` against `expected workoutType=8
+ *  durationRaw=6000 durationType=0`.
+ *
+ *  Why the tick streak alone was WINNABLE BY TICK RATE. On iOS the CCCD
+ *  setup completes in milliseconds, so status ticks arrive every ~90-180 ms
+ *  and the transport SEES the transition window: three of them can elapse
+ *  INSIDE the PM5's own two-step update, and `program()` fails
+ *  `"structure-mismatch"` on a machine that armed correctly. It fired
+ *  intermittently on the phone — some connects showed 2 stale ticks (pass),
+ *  some 3 or more (fail). The desktop transport has never produced it, for a
+ *  reason that is an accident rather than a defence: CCCD setup there takes
+ *  >1.5 s, so the FIRST status notification the driver ever sees already
+ *  arrives after the transition has completed.
+ *
+ *  2000 ms is ~10x the observed 180 ms transition and still an order of
+ *  magnitude short of a rower noticing. A CORRECT observation still resolves
+ *  on the tick it arrives — nothing about the success path waits — so this
+ *  window only ever delays a REJECTION, and only for a machine that keeps
+ *  saying the same wrong thing. The outer `verifyTicks` bound is unchanged
+ *  and still ends the phase either way, so a slow radio cannot turn this
+ *  into a hang. */
+const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
 
 /** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc
  *  comment for the full citation. `10`, not `3` (`DEFAULT_SETTLE_TICKS`
@@ -614,6 +694,11 @@ export function createPm5Driver(
   // "PM5 432331249"). Falls back to the literal `"PM5"` placeholder ONLY
   // when no name was given at all — never fabricated from anything else,
   // and never shown to a screen that had a real name available.
+  /** The only clock reading this driver ever takes — see `DriverOptions.now`
+   *  for why one exists at all, and `STRUCTURE_MISMATCH_WINDOW_MS` for the
+   *  single predicate that reads it. */
+  const now = options.now ?? ((): number => Date.now());
+
   const capabilities: MonitorCapabilities = {
     canProgram: true,
     hasStrokeRate: true,
@@ -668,7 +753,60 @@ export function createPm5Driver(
      *  the single in-run `intervalComplete` emission; out-of-run
      *  boundaries belong to no run and are counted nowhere. */
     actuals: number;
+    /** WHICH of this run's own program indices already have an actual —
+     *  `actuals` above is the count, this is the identity. Read by the
+     *  finish grace (`finishGraceTick`, below), which only ever attributes a
+     *  post-close boundary to an interval this run is still MISSING: the
+     *  PM's own post-run housekeeping re-reports an index that has already
+     *  been filed, and that is the discriminator between "the final
+     *  interval's data, one notification late" and "the machine talking
+     *  again about a boundary we already have". */
+    recordedIndices: Set<number>;
+    /** The last `"rowing"`/`"resting"` state observed while this run was
+     *  open, or `null` if it never reported one. The finish grace normalizes
+     *  its boundary against THIS rather than the terminal state word the
+     *  machine is showing by then — see `finishGraceIndex`'s own comment on
+     *  why (`toActualIndex` declines to name an interval while the machine
+     *  reads `finished`, a business rule about which interval is CURRENT,
+     *  and the boundary belongs to the one that just ended). */
+    lastActiveState: MonitorFrame["state"] | null;
+    /** THE FINISH GRACE (hardware walk 5, 2026-08-10 — the end-of-workout
+     *  split race; interface-notes.md §21 item 4: "0x0037 (18B) and 0x0038
+     *  (19B) delivered 1ms apart at the finish of a 1-interval piece. The 7C
+     *  capture path still recorded 0 of 1 intervals — a driver/record-layer
+     *  ordering race, not a transport loss"). The value of `statusTicks` at the general-status tick
+     *  that closed this run with a natural `"finished"`, or `null` when no
+     *  grace is open (never opened, already consumed, or a later tick has
+     *  moved past it).
+     *
+     *  WHY: at the finish the PM5 delivers the final interval's 0x0037 and
+     *  0x0038 **after** the general-status frame that says the workout
+     *  ended. The walk captured all three — the two split frames 1 ms apart
+     *  (02:23:12.491/.492), the ended tick already processed — and every
+     *  gate downstream keys on "the run is over", so a 1-interval piece
+     *  rowed to completion logged `0 OF 1 INTERVALS MEASURED`: the boundary
+     *  took the out-of-run path, lost its index, and the record (closed by
+     *  the terminal event a moment earlier) would have refused it anyway.
+     *  The data is the run's; only its arrival order says otherwise.
+     *
+     *  BOUNDED BY THE NEXT TICK, not by a clock or a count: the split pair
+     *  belongs to the same sample instant as the terminal reading, and the
+     *  machine's next status sample (~90 ms on iOS, ~500 ms on the desktop
+     *  radio — both three orders of magnitude past the observed 1 ms gap) is
+     *  the natural end of that instant. `terminated` never opens one —
+     *  CSAFE-DEF footnote 12 (p.25, via interface-notes.md §19.8) says the
+     *  Split/Interval Number "will change depending on where you are in the
+     *  interval when the workout is terminated", so a mid-terminate boundary
+     *  has no stable identity to attribute and keeps the out-of-run path it
+     *  has always taken. */
+    finishGraceTick: number | null;
   } | null = null;
+  /** DECODED GENERAL_STATUS_UUID arrivals since this driver was created —
+   *  the tick ordinal `finishGraceTick` compares against, and nothing else.
+   *  Incremented at the top of 0x0031's own merge handler, so it already
+   *  reads THIS tick's number by the time anything that tick does (closing a
+   *  run included) looks at it. */
+  let statusTicks = 0;
   let reconnectPending = false;
   /** This task's single-flight gate (`ProgramBusyError`'s own doc comment,
    *  ROADMAP's "a second `program()` call ... strands the first"): `true`
@@ -857,6 +995,15 @@ export function createPm5Driver(
      *  1 by a mismatched armed tick whose payload differs from the last
      *  one. */
     mismatchStreak: number;
+    /** `now()` at the tick that STARTED the current streak (the reading
+     *  `mismatchStreak` counted as `1`), or `null` while no streak is
+     *  running — the wall-clock half of the verdict
+     *  (`STRUCTURE_MISMATCH_WINDOW_MS`, walk 5's two-step structure update).
+     *  Reset in lockstep with `mismatchStreak`, so the window is always
+     *  measured over the SAME payload the streak is counting: a changed
+     *  payload restarts both, because a machine whose wrong answer keeps
+     *  changing is settling, not holding. */
+    mismatchSince: number | null;
     /** Whether the ONE `"structure-mismatch"` log entry for this verify
      *  phase has already been written — the entry fires at FIRST sighting,
      *  never per tick (0x0031 notifies ~2/second; a per-tick entry is the
@@ -927,7 +1074,14 @@ export function createPm5Driver(
    *  index normalization asks before it normalizes anything). `false` both
    *  before the first `program()` of a driver's life and after the current
    *  run's terminal state; the two are distinguished where it matters by
-   *  reading `activeRun` directly (the disconnect classification below). */
+   *  reading `activeRun` directly (the disconnect classification below).
+   *
+   *  Since hardware walk 5 the boundary path asks ONE further question
+   *  after this one answers `false`: `finishGraceIndex`, the bounded window
+   *  in which the just-finished run still owns the split pair the PM5 sends
+   *  a notification later. This predicate is unchanged — a run in its
+   *  finish grace is CLOSED, and everything else that reads this still sees
+   *  it that way. */
   function runIsOpen(): boolean {
     return activeRun !== null && !activeRun.closed;
   }
@@ -1330,6 +1484,12 @@ export function createPm5Driver(
     // its own contract — informative about nothing, since there is no
     // program to diverge FROM yet.
     const intervalActive = base.state === "rowing" || base.state === "resting";
+    // The last state in which an interval was genuinely current — what the
+    // finish grace normalizes its boundary against once the machine has
+    // moved on to `finished` (`activeRun.lastActiveState`'s own comment).
+    if (intervalActive && activeRun !== null && !activeRun.closed) {
+      activeRun.lastActiveState = base.state;
+    }
     if (p && intervalActive && intervalIndex === null) {
       log.record(
         "divergence",
@@ -1398,6 +1558,13 @@ export function createPm5Driver(
     // 7C has to tell "logged 12 of 12" from "abandoned at 8"
     // (`domain/monitor/types.ts`'s own note on why the pair exists).
     if (frame.state === "finished") {
+      // THE FINISH GRACE opens here and nowhere else (walk 5 —
+      // `activeRun.finishGraceTick`'s own doc comment carries the capture).
+      // Opened BEFORE the terminal event goes out, because the boundary it
+      // exists for arrives while this same tick's listeners have already
+      // been told the workout ended: the grace decides which RUN the next
+      // notification belongs to, not when the consumer hears the news.
+      activeRun!.finishGraceTick = statusTicks;
       log.record("terminal", "finished");
       emit({ kind: "workoutComplete" });
     } else {
@@ -1459,11 +1626,64 @@ export function createPm5Driver(
     );
   }
 
+  /**
+   * THE FINISH GRACE's own predicate (hardware walk 5, 2026-08-10,
+   * interface-notes.md §21 item 4 — the end-of-workout split race; `activeRun.finishGraceTick`'s doc comment
+   * carries the capture). Answers "does this boundary belong to the run that
+   * just finished?" and, if so, to WHICH of that run's interval indices —
+   * `null` means "no, take the out-of-run path", which is every case that
+   * existed before this function did.
+   *
+   * All five conditions must hold, and each rules out a boundary a looser
+   * rule would misfile:
+   *   1. a run exists and is CLOSED — an open run needs no grace, it is the
+   *      ordinary in-run path below;
+   *   2. it was closed by a natural `"finished"` on THIS tick
+   *      (`finishGraceTick === statusTicks`), so the boundary arrived in the
+   *      gap between the terminal reading and the machine's next sample —
+   *      where the walk's two split frames landed, 1 ms later. A
+   *      `terminated` close never opens a grace at all (footnote 12, cited
+   *      on `finishGraceTick`), and the grace is consumed by the first
+   *      boundary that uses it;
+   *   3. the run actually saw an interval RUNNING, so there is a real
+   *      observed state to normalize against rather than the terminal word
+   *      `toActualIndex` (correctly) refuses to name an interval from;
+   *   4. the offset rule explains the machine's Split/Interval Number
+   *      against THIS program's length — an unexplainable number is exactly
+   *      as unexplainable at the finish as anywhere else;
+   *   5. **the run is still MISSING that interval's actual.** This is the
+   *      discriminator between the final interval's data arriving one
+   *      notification late and the PM's own post-run housekeeping
+   *      re-reporting a boundary already filed (`recordedIndices`) — the
+   *      hazard `runIsOpen()` alone used to cover, and the one this grace
+   *      must not reopen.
+   */
+  function finishGraceIndex(rawIndex: number): number | null {
+    const run = activeRun;
+    if (run === null || !run.closed) return null;
+    if (run.finishGraceTick !== statusTicks) return null;
+    if (run.lastActiveState === null) return null;
+    const index = toActualIndex(
+      rawIndex,
+      run.lastActiveState,
+      run.program.intervals.length,
+    );
+    if (index === null || run.recordedIndices.has(index)) return null;
+    return index;
+  }
+
   function emitIntervalComplete(): void {
     announceReconnectIfPending();
     const status = raw as RawPm5Status;
     const rawActual = toIntervalActual(status);
     const state = toMonitorFrame(status).state;
+    // The finish grace, decided BEFORE the out-of-run gate below: this is
+    // the one boundary a CLOSED run still owns. `rawActual.index` is
+    // `number | null` on the type and never `null` in fact — `pm5/parse.ts`
+    // always assigns 0x0037/38's own decoded byte — so it is asserted past
+    // the type here exactly as the in-run path below already does (see that
+    // call's own comment for the full reasoning).
+    const graceIndex = finishGraceIndex(rawActual.index as number);
 
     // OUT-OF-RUN BOUNDARIES (Task 4, spec §4). 0x0037/0x0038 are not
     // ours: a PM5 auto-splits a user-started JustRow piece and reports
@@ -1482,11 +1702,14 @@ export function createPm5Driver(
     // - and it is identifiable as such by a consumer: `index: null` plus
     //   this `boundary-out-of-run` log entry (the `MonitorEvent` contract
     //   comment in `domain/monitor/types.ts` states this pairing).
-    // A closed run's `actuals` can therefore never grow: the only actual
-    // this path produces carries no interval identity to file under, and
-    // `monitorRun.ts`'s own `recordActual` refuses a completed record
-    // outright.
-    if (!runIsOpen()) {
+    // A closed run's `actuals` can therefore never grow THIS WAY: the only
+    // actual this path produces carries no interval identity to file under,
+    // and `monitorRun.ts`'s own `recordActual` refuses a completed record.
+    // The single exception is the finish grace above — a boundary belonging
+    // to the run that ended one notification ago, emitted with its real
+    // index and `finalBoundary: true` so the record can tell it apart from
+    // everything this branch handles.
+    if (!runIsOpen() && graceIndex === null) {
       log.record(
         "boundary-out-of-run",
         `machine reported Split/Interval Number ${rawActual.index} (state=${state}) with no open run — emitted with index=null, normalized against nothing, never added to a closed run's actuals`,
@@ -1524,11 +1747,14 @@ export function createPm5Driver(
     // the same unreachable-by-construction shape the `activeRun!` on the
     // `programLength` line above has) — same established pattern as this
     // file's own `raw as RawPm5Status` casts elsewhere.
-    const normalizedIndex = toActualIndex(
-      rawActual.index as number,
-      state,
-      programLength,
-    );
+    // `graceIndex` (walk 5) is the SAME `toActualIndex` call, already made
+    // by `finishGraceIndex` against the run's last ACTIVE state — the one
+    // substitution the finish grace makes, and what lets it name an interval
+    // on a tick whose state word reads `finished`. With no grace open this
+    // is exactly the call it has always been.
+    const normalizedIndex =
+      graceIndex ??
+      toActualIndex(rawActual.index as number, state, programLength);
     // DEVIATION from design spec §2's verbatim `IntervalActual.index:
     // number` (Task 3 review; recorded in `docs/design/DEVIATIONS.md`'s
     // "Domain spec deviations (non-UI)" table and on the type itself,
@@ -1542,10 +1768,22 @@ export function createPm5Driver(
     };
     log.record(
       "interval-complete",
-      `index=${actual.index} (machine reported ${rawActual.index})`,
+      graceIndex === null
+        ? `index=${actual.index} (machine reported ${rawActual.index})`
+        : `index=${actual.index} (machine reported ${rawActual.index}) — THE FINISH GRACE: this boundary arrived after the run's own "finished" tick, inside the gap before the machine's next sample, and is the final interval's own data (walk 5). Normalized against the run's last active state "${activeRun!.lastActiveState}", since the machine itself now reads "${state}"`,
     );
     activeRun!.actuals += 1;
-    emit({ kind: "intervalComplete", actual });
+    if (normalizedIndex !== null) {
+      activeRun!.recordedIndices.add(normalizedIndex);
+    }
+    // One boundary per grace, consumed here — a second notification arriving
+    // in the same gap cannot also claim it.
+    if (graceIndex !== null) activeRun!.finishGraceTick = null;
+    emit(
+      graceIndex === null
+        ? { kind: "intervalComplete", actual }
+        : { kind: "intervalComplete", actual, finalBoundary: true },
+    );
 
     // Fix-round MED-2 (UNCHANGED by this task, deliberately still comparing
     // RAW values): 0x0033's Interval Count (tracked in the machine's own
@@ -1654,6 +1892,10 @@ export function createPm5Driver(
     parseGeneralStatus,
     (decoded, bytes) => {
       seen.general = true;
+      // This tick's ordinal, established before anything below can read it —
+      // the finish grace (`activeRun.finishGraceTick`) is opened by this same
+      // tick's terminal branch and must carry THIS number, not the last one.
+      statusTicks += 1;
       // Task 1 (fix-3): the machine's idea of the armed workout's structure,
       // already decoded by `parseGeneralStatus` (interface-notes.md §10) —
       // recorded ON CHANGE ONLY, comparing the three DECODED fields rather
@@ -1786,11 +2028,16 @@ export function createPm5Driver(
           // workout at all and restarts the count; so does a mismatched
           // armed tick whose payload differs from the previous one.
           if (armed) {
-            pendingVerify.mismatchStreak =
+            const continues =
               pendingVerify.lastMismatch !== null &&
-              sameStructure(structure, pendingVerify.lastMismatch)
-                ? pendingVerify.mismatchStreak + 1
-                : 1;
+              sameStructure(structure, pendingVerify.lastMismatch);
+            pendingVerify.mismatchStreak = continues
+              ? pendingVerify.mismatchStreak + 1
+              : 1;
+            // The wall clock starts with the streak and restarts with it
+            // (`mismatchSince`'s own comment): a new payload is a new claim,
+            // and the window measures how long ONE claim has held.
+            if (!continues) pendingVerify.mismatchSince = now();
             pendingVerify.lastMismatch = structure;
             // The OBSERVATION (what the outer bound's typed reason reads)
             // and the TRACE (written once, at first sighting) are recorded
@@ -1806,15 +2053,30 @@ export function createPm5Driver(
           } else {
             pendingVerify.mismatchStreak = 0;
             pendingVerify.lastMismatch = null;
+            pendingVerify.mismatchSince = null;
           }
           pendingVerify.ticks += 1;
-          const { ticks, mismatchStreak, sawArmedMismatch } = pendingVerify;
+          const { ticks, mismatchStreak, sawArmedMismatch, mismatchSince } =
+            pendingVerify;
           const bounded =
             ticks >= (options.verifyTicks ?? DEFAULT_VERIFY_TICKS);
-          if (mismatchStreak >= STRUCTURE_MISMATCH_TICKS) {
+          // BOTH halves, or no verdict (walk 5 —
+          // `STRUCTURE_MISMATCH_WINDOW_MS`'s own doc comment carries the
+          // two-step structure update this second condition exists for). The
+          // streak says the machine is holding STILL; the window says it has
+          // held still for longer than any transition anyone has recorded.
+          // Three ticks alone was a verdict a faster radio could win: iOS's
+          // ~90-180 ms cadence fits three of them inside the PM5's own
+          // ~180 ms two-step update, and did, intermittently, at the erg.
+          const heldMs = mismatchSince === null ? null : now() - mismatchSince;
+          if (
+            mismatchStreak >= STRUCTURE_MISMATCH_TICKS &&
+            heldMs !== null &&
+            heldMs >= STRUCTURE_MISMATCH_WINDOW_MS
+          ) {
             settleVerifyFailure(
               "structure-mismatch",
-              `${mismatchStreak} consecutive armed tick(s) reporting the same wrong structure — ${describeStructureMismatch(structure, pendingVerify.expected)}`,
+              `${mismatchStreak} consecutive armed tick(s) over ${heldMs}ms reporting the same wrong structure — ${describeStructureMismatch(structure, pendingVerify.expected)}`,
             );
           } else if (bounded) {
             // Which reason the OUTER bound reports depends on what was
@@ -1912,8 +2174,9 @@ export function createPm5Driver(
   /** Settles `pendingVerify` with a typed rejection: the general-status
    *  tick handler above calls this on `verifyTicks` expiry
    *  (`reason: "not-observed"`, or `"structure-mismatch"` once an armed
-   *  tick has disagreed about the structure) and on the N-consecutive
-   *  stable-mismatch rule firing; `onDisconnect` calls it with
+   *  tick has disagreed about the structure) and on the stable-mismatch
+   *  rule firing (N consecutive ticks AND the wall-clock window — walk 5,
+   *  `STRUCTURE_MISMATCH_WINDOW_MS`); `onDisconnect` calls it with
    *  `reason: "disconnected"` so a real link drop during verification fails
    *  loudly instead of waiting on ticks that will now never arrive. Always
    *  logs the failure (design spec §1: "the full trace in the event log")
@@ -1945,8 +2208,9 @@ export function createPm5Driver(
    * D2). This instead waits for the machine's OWN reported state to reach
    * "armed" (WAITTOBEGIN/COUNTDOWNPAUSE, `pm5/parse.ts`'s `toMonitorFrame`)
    * **AND for 0x0031's own structure fields to describe the workout we just
-   * sent** (fix-3 Task 4 — the predicate, the N-consecutive rule and the
-   * hardware that forced both are all spelled out further down).
+   * sent** (fix-3 Task 4 — the predicate, the stable-mismatch rule and the
+   * hardware that forced both are all spelled out further down; walk 5 added
+   * the wall-clock half of that rule, `STRUCTURE_MISMATCH_WINDOW_MS`).
    *
    * NEVER checks the already-cached `raw` value at call time — it always
    * registers `pendingVerify` and waits for the NEXT GENERAL_STATUS_UUID
@@ -2065,13 +2329,16 @@ export function createPm5Driver(
    * Task 1's `"structure"` log entry takes, so no consumer's type changes
    * for a check that is entirely the driver's business.
    *
-   * Bounded by `options.verifyTicks` GENERAL_STATUS_UUID ticks — no wall
-   * clock, ever (same tick pulse as `ackTimeout`, tracked as its own
-   * budget; see `DriverOptions.verifyTicks`'s doc comment for why).
+   * Bounded by `options.verifyTicks` GENERAL_STATUS_UUID ticks — the BOUND
+   * is still ticks and only ticks (same tick pulse as `ackTimeout`, tracked
+   * as its own budget; see `DriverOptions.verifyTicks`'s doc comment for
+   * why). The mismatch VERDICT inside that bound is the one thing here that
+   * also reads a clock, since walk 5 proved a tick count cannot express "the
+   * machine held still for longer than its own transition takes".
    * **Omitting it means `DEFAULT_VERIFY_TICKS` (20), NOT "no bound"**
    * (semantics changed by this task, for the reason that field's doc
    * comment gives: unbounded + a structure predicate = a hang exactly where
-   * detection was wanted). On expiry, on the N-consecutive rule firing, or
+   * detection was wanted). On expiry, on the stable-mismatch rule firing, or
    * on a disconnect first, rejects with `ProgramRejectionError({ reason:
    * "not-observed" | "structure-mismatch" | "disconnected", atFrame: -1 })`
    * — verification has no frames of its own, only ticks.
@@ -2085,6 +2352,7 @@ export function createPm5Driver(
         expected: expectedArmedStructure(p),
         lastMismatch: null,
         mismatchStreak: 0,
+        mismatchSince: null,
         mismatchLogged: false,
         sawArmedMismatch: false,
       };
@@ -2642,7 +2910,14 @@ export function createPm5Driver(
         // against the last frame of the old one and fold its whole elapsed
         // in as a phantom interval.
         session = { offsetElapsed: 0, offsetDistance: 0, prev: null };
-        activeRun = { program: p, closed: false, actuals: 0 };
+        activeRun = {
+          program: p,
+          closed: false,
+          actuals: 0,
+          recordedIndices: new Set<number>(),
+          lastActiveState: null,
+          finishGraceTick: null,
+        };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });
       } finally {

@@ -1041,6 +1041,81 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     });
   });
 
+  it("WALK 5: the final interval's split pair arrives AFTER the finish and still reaches the record", async () => {
+    // The end-to-end shape of the walk's own defect (2026-08-10, phone BLE,
+    // PM5 432331249 — interface-notes.md §21 item 4): a single 1:00 interval rowed to completion, both split
+    // frames delivered 1 ms apart AFTER the general-status frame that ended
+    // the workout — and 7C's log screen prefilled "0 OF 1 INTERVALS
+    // MEASURED" with the actual sitting in the wire trace. Against the
+    // pre-walk-5 code this test fails on `actuals`: the hook has already
+    // closed the record by the time the boundary arrives, and the driver has
+    // already stripped its index.
+    const oneInterval: WorkoutProgram = {
+      intervals: [
+        {
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const { result, fake } = harness({
+      program: oneInterval,
+      events: [
+        status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+        // The finish...
+        status(200, {
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+        }),
+        // ...and the interval's own data, in the same gap before the
+        // machine's next sample, exactly as the capture has it.
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSplit: 120,
+            avgSpm: 24,
+            avgHeartRateBpm: 142,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+      ],
+    });
+
+    await connect(result);
+    await programAndArm(result, fake, oneInterval, {
+      workoutId: "walk-5",
+      title: "1:00",
+      ...TEST_SEED,
+    });
+    for (let i = 0; i < 3; i += 1) tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(result.current.actuals).toHaveLength(1);
+    expect(result.current.actuals[0]).toMatchObject({
+      index: 0,
+      avgSpm: 24,
+      distanceMeters: 200,
+    });
+    // The RECORD is what 7C prefills from — "1 of 1", not "0 of 1".
+    const closed = loadMonitorRun();
+    expect(closed?.completedAt).toBe(t0.toISOString());
+    expect(closed?.terminated).toBe(false);
+    expect(closed?.actuals).toHaveLength(1);
+    expect(closed?.actuals[0]).toMatchObject({ index: 0, avgSpm: 24 });
+  });
+
   it("a boundary the machine reports after the run closed is never appended", async () => {
     const timeline = fillingLowTimeline();
     // One more boundary, after WORKOUTEND — the PM's own post-run

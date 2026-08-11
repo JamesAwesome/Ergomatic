@@ -159,8 +159,20 @@ export interface IntervalActual {
  * - `workoutComplete`/`terminated` fires AT MOST ONCE per run, and the
  *   run's record is immutable afterwards.
  * - **`intervalComplete` for a run never arrives after that run's
- *   `workoutComplete`/`terminated`.** A completed run's actuals are the
- *   whole set; nothing is ever appended later.
+ *   `workoutComplete`/`terminated` — with ONE bounded exception, the FINISH
+ *   GRACE.** A completed run's actuals are otherwise the whole set.
+ *   Hardware walk 5 (2026-08-10, phone BLE, PM5 432331249 —
+ *   `docs/monitor/pm5-interface-notes.md` §21 item 4) caught the exception
+ *   on the wire: at a natural finish the PM5 sends the final
+ *   interval's 0x0037/0x0038 pair AFTER the general-status frame that says
+ *   the workout ended (1 ms after, in the capture). That boundary is the
+ *   run's own final interval, so the driver still emits it with a real
+ *   `index` and marks it `finalBoundary: true`; the run's record accepts
+ *   exactly that one late actual and nothing else
+ *   (`src/monitor/monitorRun.ts`'s `recordActual`). The grace lasts only
+ *   until the machine's next status sample, never covers a `terminated`
+ *   close, and never re-files an interval the run already recorded — so
+ *   every case in the bullet below is unaffected.
  * - A boundary the machine reports OUTSIDE any open run (a rower's own
  *   JustRow auto-splits, post-terminate housekeeping) is still emitted —
  *   the driver never goes deaf — but it is identifiable as such:
@@ -183,7 +195,17 @@ export interface IntervalActual {
 export type MonitorEvent =
   | { kind: "frame"; frame: MonitorFrame }
   | { kind: "armed" } // programming done, PM waits for stroke one
-  | { kind: "intervalComplete"; actual: IntervalActual }
+  // `finalBoundary` is present (and `true`) on exactly one event per run at
+  // most: the FINISH GRACE boundary described in the run contract above —
+  // the final interval's own data, delivered by the machine one
+  // notification AFTER the run's `workoutComplete`. Absent everywhere else,
+  // including every ordinary in-run boundary. A consumer that ignores it
+  // behaves exactly as it did before the field existed; the run's record
+  // reads it to decide whether a CLOSED record may still accept the actual
+  // (`src/monitor/monitorRun.ts`). DEVIATION from design spec §2's verbatim
+  // event union, alongside `IntervalActual.index`'s own — recorded in
+  // `docs/design/DEVIATIONS.md`.
+  | { kind: "intervalComplete"; actual: IntervalActual; finalBoundary?: true }
   | { kind: "workoutComplete" }
   | { kind: "terminated" }
   | { kind: "disconnected"; reason: string }
