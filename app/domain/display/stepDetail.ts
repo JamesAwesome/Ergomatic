@@ -212,7 +212,8 @@ export function peakIndex(
 /** The summary foot's numbers. TOTAL is estimateMinutes' own number
  *  (the duration chip's); WORK is the work phases alone. With the
  *  trailing-rest deviation, WORK plus every displayed rest equals
- *  TOTAL by construction. */
+ *  TOTAL by construction — where a rolled row's rest counts once per
+ *  piece in its run (`count` × rest), not once per row. */
 export function workAndTotal(
   steps: Step[],
   baselines: Baselines,

@@ -549,7 +549,9 @@ function UnloggedRow({ run }: { run: SessionRun }) {
 }
 
 // Task 2 (2026-08-10 workout-step-detail spec §2): the Today card's piece
-// region — a row per piece between the meta line and the reason foot, built
+// region — a row per RUN of pieces (identical consecutive pieces roll into
+// one row with a count, 2026-08-11 spec) between the meta line and the
+// reason foot, built
 // on Task 1's pure domain/display/stepDetail.ts exports. Four rows visible
 // at most; beyond that the rows compress to one line each (spec: "5+
 // pieces") and a non-interactive "+N more pieces" row replaces the rest —

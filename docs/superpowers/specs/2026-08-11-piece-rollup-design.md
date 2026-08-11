@@ -54,6 +54,18 @@ line (structureLine already rolls), the detail screen, or any API.
    both two-line and compressed forms; everything else about the row
    (ref text, rest, spm, split) is the run's shared values.
 
+## ERRATUM (final review, 2026-08-11)
+
+Rule 2's parenthetical "(Ostro's ninth piece)" and the Evidence line
+"ninth restless" are FALSE against the real seed: Ostro
+(`server/seed/library/at.ts:1371`) authors `restMinutes: 1` on the
+repeated step, and `phases()` (`expand.ts:195`) attaches that rest to
+EVERY repetition including the last — so Ostro's nine pieces are fully
+identical and roll under rule 1's ordinary equality. Rule 2 itself
+stands unchanged and is covered by its own dedicated test (a genuinely
+restless final piece joins the run before it); it simply is not what
+Ostro exercises.
+
 ## Evidence base
 
 - Ostro's own shape (screenshot, 2026-08-11): 9 identical 1000m pieces,
