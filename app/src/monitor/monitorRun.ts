@@ -77,7 +77,10 @@ export interface MonitorRun {
   // afterwards". A boundary the machine reports after this run closed is
   // not this run's (`domain/monitor/types.ts`'s `MonitorEvent` contract:
   // it arrives with `index: null` plus a `boundary-out-of-run` log), and
-  // never lands here.
+  // never lands here. ONE bounded exception since hardware walk 5: the
+  // FINISH GRACE boundary — the final interval's own data, which the PM5
+  // sends one notification AFTER the frame that ends the workout, and which
+  // the driver vouches for with `finalBoundary: true`. See `recordActual`.
   actuals: IntervalActual[];
   deviceName: string;
   startedAt: string;
@@ -224,6 +227,23 @@ export function createMonitorRun(
   return run;
 }
 
+/** The record's OWN half of the finish-grace rule (`recordActual`'s doc
+ *  comment): a closed record accepts a late actual only when the driver
+ *  vouched for it AND it names an interval this record does not already
+ *  hold. Both halves are checked here rather than trusted from the flag —
+ *  the record outlives the driver instance that set it (it is in
+ *  localStorage, and 7C reads it back on a later screen), which is the same
+ *  reason `recordActual` guards at all. */
+function acceptableFinalBoundary(
+  run: MonitorRun,
+  actual: IntervalActual,
+  opts: { finalBoundary?: boolean },
+): boolean {
+  if (opts.finalBoundary !== true) return false;
+  if (actual.index === null) return false;
+  return !run.actuals.some((a) => a.index === actual.index);
+}
+
 /**
  * Appends one interval boundary's actual to a live run, persisting the
  * result — the record-side half of Task 4's run scoping (spec §4: "within
@@ -231,8 +251,9 @@ export function createMonitorRun(
  * afterwards"), and the function 7B's event wiring appends through when it
  * sees a `MonitorEvent` of kind `intervalComplete`.
  *
- * **A CLOSED run is immutable: this returns it UNCHANGED and persists
- * nothing.** `completedAt !== null` is what "closed" means on this record
+ * **A CLOSED run is immutable — with ONE exception, the FINISH GRACE:
+ * otherwise this returns it UNCHANGED and persists nothing.**
+ * `completedAt !== null` is what "closed" means on this record
  * (the same "live" vs "finished but not yet logged" boundary
  * `MonitorRun.completedAt`'s own comment draws, and the one
  * `monitorRunState` below already keys off). The driver's own run scoping
@@ -245,6 +266,23 @@ export function createMonitorRun(
  * on a later screen), so "which run is open" cannot be a fact only the
  * driver holds.
  *
+ * **THE FINISH GRACE** (hardware walk 5, 2026-08-10, `docs/monitor/pm5-interface-notes.md`
+ * §21 item 4 — `driver.ts`'s `activeRun.finishGraceTick` and the run
+ * contract in `domain/monitor/types.ts` carry the capture too): a PM5 sends the final
+ * interval's 0x0037/0x0038 pair one notification AFTER the general-status
+ * frame that ends the workout, so the actual that completes a rowed-out
+ * piece arrives at this function a beat after `completeMonitorRun` closed
+ * the record. A 1-interval workout rowed to the finish therefore logged
+ * `0 OF 1 INTERVALS MEASURED` with the split data sitting in the wire trace.
+ * `opts.finalBoundary` is the driver VOUCHING that this boundary belongs to
+ * the run that just finished — it is set on exactly the one event the
+ * driver's own grace produces (never on an ordinary in-run boundary, never
+ * after a `terminated` close, never for an interval the run already has) —
+ * and a closed record accepts that one actual. The immutability rule is
+ * otherwise unchanged, and this function keeps its own independent guard:
+ * a flagged actual whose index is already present, or has no index at all,
+ * is still refused, because the record outlives the driver that vouched.
+ *
  * Returns a NEW record rather than mutating in place, matching
  * `session/engine.ts`'s own idiom for `SessionRun` updates — the caller
  * holds the result; nothing here reaches back into a caller's copy.
@@ -252,6 +290,7 @@ export function createMonitorRun(
 export function recordActual(
   run: MonitorRun,
   actual: IntervalActual,
+  opts: { finalBoundary?: boolean } = {},
 ): MonitorRun {
   // OBLIGATION DISCHARGED (7B Task 4): the completion writer the fix
   // round's A2 note promised is `completeMonitorRun` below, and its one
@@ -261,7 +300,9 @@ export function recordActual(
   // program failure with a run still open, design spec's own Decisions
   // row); a boundary the machine reports after any of those lands here
   // and is refused.
-  if (run.completedAt !== null) return run;
+  if (run.completedAt !== null && !acceptableFinalBoundary(run, actual, opts)) {
+    return run;
+  }
   const next: MonitorRun = { ...run, actuals: [...run.actuals, actual] };
   saveMonitorRun(next);
   return next;

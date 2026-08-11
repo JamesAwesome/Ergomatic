@@ -514,6 +514,84 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
     };
     expect(recordActual(terminated, actual1).actuals).toStrictEqual([]);
   });
+
+  // -------------------------------------------------------------------
+  // THE FINISH GRACE (hardware walk 5, 2026-08-10, phone BLE at the erg —
+  // `docs/monitor/pm5-interface-notes.md` §21 item 4).
+  // A PM5 sends the final interval's 0x0037/0x0038 pair one notification
+  // AFTER the general-status frame that ends the workout, so the actual
+  // that completes a rowed-out piece reaches this function a beat after
+  // `completeMonitorRun` closed the record: a 1-interval workout rowed to
+  // the finish prefilled the log screen "0 OF 1 INTERVALS MEASURED" with
+  // the split bytes sitting in the wire trace. `opts.finalBoundary` is the
+  // driver vouching for that one boundary; everything above still applies
+  // to everything else.
+  // -------------------------------------------------------------------
+
+  it("a CLOSED run accepts the FINISH GRACE actual the driver vouched for — the walk's own 0 OF 1", () => {
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    saveMonitorRun(closed);
+
+    const after = recordActual(closed, actual1, { finalBoundary: true });
+
+    expect(after).not.toBe(closed);
+    expect(after.actuals).toStrictEqual([actual1]);
+    // Persisted, not merely returned: 7C's log screen reads the RECORD.
+    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
+    // And nothing else about the closed record moved.
+    expect(after.completedAt).toBe(closed.completedAt);
+    expect(after.terminated).toBe(false);
+  });
+
+  it("...but only for an interval it does not already hold — the flag is not a skeleton key", () => {
+    // The record's own half of the rule, independent of the driver's: post-run
+    // housekeeping re-reporting a boundary already filed must not double it,
+    // even if it somehow arrived flagged (the record outlives the driver
+    // instance that set the flag).
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: [actual1],
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    saveMonitorRun(closed);
+
+    const repeat: IntervalActual = { ...actual2, index: actual1.index };
+    const after = recordActual(closed, repeat, { finalBoundary: true });
+
+    expect(after).toBe(closed);
+    expect(after.actuals).toStrictEqual([actual1]);
+  });
+
+  it("...and never an actual with no interval identity at all — index null stays refused, flagged or not", () => {
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+
+    const anonymous: IntervalActual = { ...actual1, index: null };
+
+    expect(recordActual(closed, anonymous, { finalBoundary: true })).toBe(
+      closed,
+    );
+  });
+
+  it("a LIVE run is unaffected by the flag either way — the grace is a rule about CLOSED records", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+
+    const after = recordActual(run, actual1, { finalBoundary: true });
+
+    expect(after.actuals).toStrictEqual([actual1]);
+    // Even a repeat index lands while the run is open: a live run's actuals
+    // are the driver's to decide, and nothing here dedupes them.
+    expect(recordActual(after, actual1).actuals).toStrictEqual([
+      actual1,
+      actual1,
+    ]);
+  });
 });
 
 describe("completeMonitorRun: the completion writer (7B Task 4's own first caller)", () => {
