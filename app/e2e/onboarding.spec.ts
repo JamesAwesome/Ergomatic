@@ -148,7 +148,7 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     //    advances the SAME count Today's block shows (the spec's own
     //    "linking rather than restating" principle) — no restating needed.
     await page.goto("/news");
-    await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
+    await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
     await page.locator('a.news-row[href="/news/baselines"]').click();
     await expect(page).toHaveURL(/\/news\/baselines$/);
     await expect(page.locator(".reader-body")).toBeVisible();
@@ -381,7 +381,7 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     // from 5 (after the earlier read) to 6 (this account's full, untouched
     // registry) — a real reversal, not merely "still shows 6 because
     // nothing else was ever read."
-    await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
+    await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
     await expect(
       page.locator('a.news-row[href="/news/baselines"]'),
     ).toHaveAttribute("data-read", "false");

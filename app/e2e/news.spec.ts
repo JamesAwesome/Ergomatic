@@ -10,14 +10,14 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // `server/stores/articleReads.ts`), and the compose stack this suite runs
 // against is left running between back-to-back `pnpm e2e` invocations
 // (`E2E_KEEP=1` default, `scripts/e2e.sh`), so a fixed email string would
-// carry read state from one run into the next and make "6 UNREAD" a lie on
+// carry read state from one run into the next and make "7 UNREAD" a lie on
 // the second pass. `RUN_ID` is computed once per test PROCESS (i.e. once
 // per `pnpm e2e` invocation, however many times this file itself re-runs
 // inside a single process) and folded into every email below, so each
 // invocation gets its own never-before-seen users regardless of what a
 // prior run left in the database — the "fresh user" half of the brief's
 // own suggested fix, not the "assert deltas" half, since the brief's own
-// literal assertions ("6 UNREAD", "5 UNREAD" — Phase 6I Task 6 shifted
+// literal assertions ("7 UNREAD", "6 UNREAD" — Phase 6I Task 6 shifted
 // these up by 2 from the original "4 UNREAD"/"3 UNREAD" once
 // your-first-row/connect-the-monitor joined the registry) are absolute
 // counts.
@@ -42,7 +42,7 @@ test("tab order: TODAY · NEWS · LIBRARY · PLAN · YOU, TREND gone", async ({
   expect(labels).toEqual(["TODAY", "NEWS", "LIBRARY", "PLAN", "YOU"]);
 });
 
-test("News at rest: 6 UNREAD, two pinned rows, four latest rows, WHAT'S NEW v0.5.1", async ({
+test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW shows the latest version", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
@@ -51,23 +51,27 @@ test("News at rest: 6 UNREAD, two pinned rows, four latest rows, WHAT'S NEW v0.5
   });
   await page.goto("/news");
 
-  await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
+  await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
 
-  // PINNED: workout-types (with type chips), then baselines — registry
-  // order, both permanently pinned (articles.tsx's own `pinned: true`).
+  // PINNED: workout-types (with type chips), then reading-the-shorthand —
+  // registry order (the PR #81 pin swap: baselines moved back to LATEST).
   const pinnedRows = page.locator(".news-pinned .news-row");
   await expect(pinnedRows).toHaveCount(2);
   await expect(pinnedRows.nth(0)).toHaveAttribute(
     "href",
     "/news/workout-types",
   );
-  await expect(pinnedRows.nth(1)).toHaveAttribute("href", "/news/baselines");
+  await expect(pinnedRows.nth(1)).toHaveAttribute(
+    "href",
+    "/news/reading-the-shorthand",
+  );
   await expect(pinnedRows.nth(0).locator(".news-row-chips")).toBeVisible();
   await expect(pinnedRows.nth(1).locator(".news-row-chips")).toHaveCount(0);
 
-  // LATEST: your-first-row and connect-the-monitor sort first (Phase 6I
-  // Task 6, published 2026-08-08), then picking-a-workout and pain-scale
-  // (published 2026-08-07, registry order wins that date's sort tie).
+  // LATEST: your-first-row and connect-the-monitor sort first (published
+  // 2026-08-08), then the 2026-08-07 three in registry order — baselines,
+  // picking-a-workout, pain-scale (baselines rejoined LATEST in the PR #81
+  // pin swap; registry order wins the date tie).
   // Minor #3 (Phase 6I Task 7): scoped to the LATEST section's own
   // `.news-latest` class now, rather than a negation locator — Task 7 added
   // a third row kind to News.tsx (the Start-here pin, inside `.news-pinned`,
@@ -75,7 +79,7 @@ test("News at rest: 6 UNREAD, two pinned rows, four latest rows, WHAT'S NEW v0.5
   // whatsnew)` selector would still correctly skip, but a named positive
   // selector is the more robust contract going forward.
   const latestRows = page.locator(".news-latest .news-row");
-  await expect(latestRows).toHaveCount(4);
+  await expect(latestRows).toHaveCount(5);
   await expect(latestRows.nth(0)).toHaveAttribute(
     "href",
     "/news/your-first-row",
@@ -84,11 +88,12 @@ test("News at rest: 6 UNREAD, two pinned rows, four latest rows, WHAT'S NEW v0.5
     "href",
     "/news/connect-the-monitor",
   );
-  await expect(latestRows.nth(2)).toHaveAttribute(
+  await expect(latestRows.nth(2)).toHaveAttribute("href", "/news/baselines");
+  await expect(latestRows.nth(3)).toHaveAttribute(
     "href",
     "/news/picking-a-workout",
   );
-  await expect(latestRows.nth(3)).toHaveAttribute("href", "/news/pain-scale");
+  await expect(latestRows.nth(4)).toHaveAttribute("href", "/news/pain-scale");
 
   await expect(page.getByRole("heading", { name: "WHAT'S NEW" })).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
@@ -104,7 +109,7 @@ test("opening the baselines article marks it read, and the read survives BACK an
     name: "News Reader",
   });
   await page.goto("/news");
-  await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
+  await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
 
   const baselinesRow = page.locator('a.news-row[href="/news/baselines"]');
   await expect(baselinesRow).toHaveAttribute("data-read", "false");
@@ -121,7 +126,7 @@ test("opening the baselines article marks it read, and the read survives BACK an
   await page.getByRole("link", { name: "← BACK" }).click();
   await expect(page).toHaveURL(/\/news$/);
 
-  await expect(page.locator(".news-unread-count")).toHaveText("5 UNREAD");
+  await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
   await expect(baselinesRow).toHaveAttribute("data-read", "true");
   await expect(baselinesRow.locator(".news-row-meta")).toContainText("READ");
 
@@ -129,7 +134,7 @@ test("opening the baselines article marks it read, and the read survives BACK an
   // navigation (same SPA session) but not a hard reload — this is the one
   // assertion no client test can give, the entire point of this phase.
   await page.reload();
-  await expect(page.locator(".news-unread-count")).toHaveText("5 UNREAD");
+  await expect(page.locator(".news-unread-count")).toHaveText("6 UNREAD");
   await expect(baselinesRow).toHaveAttribute("data-read", "true");
   await expect(baselinesRow.locator(".news-row-meta")).toContainText("READ");
 });

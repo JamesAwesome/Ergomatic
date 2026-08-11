@@ -51,14 +51,15 @@ describe("article registry invariants", () => {
     expect(connectTheMonitor.minutes).toBe(2);
   });
 
-  it("launch shelf: the two permanent pins plus four latest stories (Phase 6I Task 6: your-first-row/connect-the-monitor land newest, sorting ahead of the two 6H stories)", () => {
+  it("launch shelf: the two permanent pins plus five latest stories (the pin swap: shorthand pinned, baselines back in LATEST)", () => {
     expect(pinnedArticles().map((a) => a.slug)).toStrictEqual([
       "workout-types",
-      "baselines",
+      "reading-the-shorthand",
     ]);
     expect(latestArticles().map((a) => a.slug)).toStrictEqual([
       "your-first-row",
       "connect-the-monitor",
+      "baselines",
       "picking-a-workout",
       "pain-scale",
     ]);
@@ -119,6 +120,7 @@ describe("selectors", () => {
           "picking-a-workout",
           "your-first-row",
           "connect-the-monitor",
+          "reading-the-shorthand",
         ]),
       ),
     ).toStrictEqual("workout-types");
