@@ -4422,3 +4422,119 @@ One rowed 1:00 piece, the previous day's two fixes on the device, and the app's 
    Between seq 19 and seq 21 the PM5 sends further, identical `finished` status frames (the wire log records a `frame` entry only on a state CHANGE, so they do not appear above — the emit path sees every one). That is what killed both of the previous day's fixes: the driver's finish grace expired "before the machine's next status sample", and the app's hand-off released on "the next status tick", and BOTH bounds are the machine's cadence rather than the split's arrival. Day 1's "1 ms apart" (§21 item 4) is the gap between the two HALVES of the pair, and the app inferred from it that the pair shared the terminal frame's sample instant. It does not. **Anything waiting for the end-of-workout split must wait on a clock — 3000 ms is the measured-safe bound — and must ignore post-finish status ticks entirely.** Housekeeping is discriminated by what it always was: natural-finish-only (never post-terminate, footnote 12), an index the offset rule explains against the armed program, an interval the run is still missing, consumed once, and the record's own independent re-derivation of the last two.
 
 6. **CONFIRMED (2026-08-11 afternoon):** the finding-3 fix's confirming row landed — "ALL 1 INTERVALS MEASURED", with the stash reading exactly the predicted chain: `handoff-hold` → `split-half` x2 → `interval-complete` (THE FINISH GRACE, vouched, normalized against the last active state) → `record-actual index=0 finalBoundary=true recordClosed=true -> accepted (actuals 0 -> 1)` → `handoff-released final-boundary`. The same row re-confirmed the structure window (transition sighted-and-resolved, no card) and handled a stale pre-program "terminated" frame via the out-of-run path. What remains open is one unexplained observation — `localStorage["ergomatic.monitorRun"]` read as `null` on the save screen before saving, which no code path on the ended→log route explains (the record's own loader deletes a record that fails its shape check, which is the first thing to rule out if it recurs). Day 3 confirmed the hand-off hold itself WORKS — the stash above shows the session waiting, the split arriving, and every gate downstream reporting its own verdict, which is the whole reason the remaining valve was findable in one read.
+
+## 23. End-of-workout summary pair byte layout (0x0039/0x003A, BLE doc pp.21-22) — for `pm5/parse.ts`
+
+R1 (`pm5-ble-ecosystem-review.md`'s Recommendations section, "R1. Subscribe
+the end-of-workout summary pair 0x0039/0x003A...") and the fast-follow
+design spec (`2026-08-11-fast-follow-design.md` §5) both require this
+layout land here, cited to the BLE doc, BEFORE any parser pins an offset —
+the adversarial review's finding I6: "no in-repo source currently states
+0x0039/0x003A's byte layout... land the BLE-doc layout excerpt in
+interface-notes BEFORE the plan pins parser offsets, not after the walk."
+Fetched live 2026-08-11 via WebFetch from the `concept2.it` mirror
+(`concept2.co.in` fails TLS verification — the same finding this file's own
+header table already records for the `.nl` mirror's siblings): **Concept2
+PM Bluetooth Smart Communication Interface Definition, Revision 1.30** —
+the identical revision this file's header table cites for §§1-16, confirmed
+by the printed page footers matching exactly (0x0039 on the doc's own p.21,
+0x003A on p.22 — the same pagination the ecosystem review cites, "BLE doc
+pp.21-24").
+
+Cross-checked at the field-NAME level against the ecosystem review's own
+readers of these two characteristics (`pm5-ble-ecosystem-review.md` §1.2,
+§1.4): c2bluetooth's `WorkoutSummary.fromBytes` (Flutter,
+`lib/models/ergometer.dart`) builds its entire workout result from exactly
+these two characteristics and no others; OpenRowingMonitor's own
+`PM5_Interface.md` names 0x0039/0x003A as the pair ErgZone/Kinomap
+subscribe at session stop, sent AFTER the splits ("splits-then-summaries"
+ordering, review line 242). Neither source publishes its own byte-offset
+table (the review's own words: "two new parse tables (BLE doc pp.21-24)...
+no fields") — the offsets below come from the BLE doc's own attribute table
+alone, the same primary source every other table in this file cites.
+
+**Same 20-byte notification ceiling as every other pairing in this file**
+(§4 above: "Up to 20 bytes" per notify/read). **0x0039 is exactly 20
+bytes — the ceiling itself** — so no further end-of-workout field could be
+appended to it without exceeding the documented notify budget.
+**0x003A (19 bytes) carries what would not fit**: Split/Interval
+Type/Size/Count, Total Calories, Watts (average power for the whole
+workout), Total Rest Distance, Interval Rest Time, and Avg Calories/hr.
+This is the identical shape 0x0037 (18 bytes, near the ceiling) forced onto
+0x0038 (19 bytes) for split data (§10 above) — the doc splits every summary
+that needs more than the ~20-byte ceiling into a base characteristic plus
+an "additional" one, and 0x0039/0x003A is the workout-totals instance of
+the same pattern.
+
+**0x0039 — C2 rowing end of workout summary data characteristic (20 bytes,
+BLE doc p.21):**
+
+| Offset | Field                | Scale                                                                                                                                                                                                                                                                                              |
+| ------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0-1    | Log Entry Date         | Lo/Hi, no bit-packing format stated on this page — **UNCERTAIN**, not needed by `parseEndOfWorkoutSummary`'s field list below (walk item 1)                                                                                                                                                       |
+| 2-3    | Log Entry Time         | Lo/Hi, no bit-packing format stated on this page — **UNCERTAIN**, not needed by `parseEndOfWorkoutSummary`'s field list below (walk item 1)                                                                                                                                                       |
+| 4-6    | Elapsed Time           | 0.01 sec/lsb (explicitly annotated). **Whole-workout-total reading is UNCONFIRMED on the wire** — flagged by analogy to 0x0031's identically-scaled, identically-named field, which hardware walk 4 proved is PER-INTERVAL, not session-cumulative (§10 above). This characteristic's own purpose (an END-OF-WORKOUT SUMMARY, not a live per-tick status frame) argues for a whole-session total, and the fast-follow design's §5 derivation is built on that reading, but no walk has read this byte yet — walk item 2 |
+| 7-9    | Distance               | 0.1 m/lsb (explicitly annotated). Same cumulative-vs-per-interval flag as Elapsed Time above, same reasoning — walk item 2                                                                                                                                                                         |
+| 10     | Average Stroke Rate    | strokes/min, whole (unannotated — §10's general rule for un-annotated fields)                                                                                                                                                                                                                       |
+| 11     | Ending Heartrate       | bpm. No sentinel stated on THIS page for this field; `255`=invalid is 0x0032's documented convention (§10), applied here **by analogy only** — the same caution §10/§15 #2 already give 0x0038's Work/Rest Heartrate bytes — walk item 3                                                          |
+| 12     | Average Heartrate      | bpm, same analogy-sentinel caution as Ending Heartrate — walk item 3                                                                                                                                                                                                                                |
+| 13     | Min Heartrate          | bpm, same analogy-sentinel caution — walk item 3                                                                                                                                                                                                                                                    |
+| 14     | Max Heartrate          | bpm, same analogy-sentinel caution — walk item 3                                                                                                                                                                                                                                                    |
+| 15     | Drag Factor Average    | whole units (unannotated — §10's general rule, same convention as 0x0031's own Drag Factor field)                                                                                                                                                                                                    |
+| 16     | Recovery Heart Rate    | bpm; **explicitly documented on this page**, quoted verbatim: "(zero = not valid data. After 1 minute of rest/recovery, PM5 sends this data as a revised End Of Workout summary data characteristic unless the monitor has been turned off or a new workout started)". This is the ecosystem review's own "re-fire wrinkle" (R1): 0x0039 notifies a SECOND time, roughly a minute after the finish, once real recovery-HR data lands — the design spec's §5 I5 finding names the same behavior and requires a consumed-once guard against it |
+| 17     | Workout Type           | enum, the same `OBJ_WORKOUTTYPE_T` field as 0x0031 offset 6 (§10)                                                                                                                                                                                                                                    |
+| 18-19  | Avg Pace               | 0.1 sec/lsb — **explicitly annotated on this page** — the same scale as 0x0038's Split/Interval Avg Pace (§10) and DIFFERENT from 0x0032/0x0033's 0.01 sec/lsb pace fields (§10's own documented trap, recurring here)                                                                             |
+
+**0x003A — C2 rowing end of workout additional summary data characteristic
+(19 bytes, BLE doc p.22):**
+
+| Offset | Field                | Scale                                                                                                                                             |
+| ------ | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0-1    | Log Entry Date         | Lo/Hi, same field as 0x0039 offset 0-1, format **UNCERTAIN** on this page (walk item 1)                                                             |
+| 2-3    | Log Entry Time         | Lo/Hi, same field as 0x0039 offset 2-3, format **UNCERTAIN** on this page (walk item 1)                                                             |
+| 4      | Split/Interval Type    | enum. Footnote on this page, quoted: "This value will change depending on where you are in the interval when the workout is terminated. Use workout type to determine whether the intervals are time or distance intervals" — the same base ambiguity §15 #1 already flags for Split/Interval Type/Number elsewhere |
+| 5-6    | Split/Interval Size    | Lo/Hi, "(meters or seconds)" per the doc's own note — unit depends on Split/Interval Type (offset 4), whole units, no lsb scale given                |
+| 7      | Split/Interval Count   | whole; same base (0- vs 1-based) ambiguity as 0x0033 offset 3 / 0x0037 offset 17 (§10, §15 #1)                                                       |
+| 8-9    | Total Calories         | whole cals                                                                                                                                              |
+| 10-11  | Watts                  | whole watts — average power for the WHOLE workout (distinct from 0x0033's per-tick Average Power, §10). Doc's own note: "max=65.534 kW", the same max-value annotation style as 0x0038's Speed/Power fields (§10)                                                                                 |
+| 12-14  | Total Rest Distance    | 1 m/lsb — explicitly annotated on this page                                                                                                          |
+| 15-16  | Interval Rest Time     | whole seconds — explicitly annotated on this page                                                                                                    |
+| 17-18  | Avg Calories           | whole cals/hr — explicitly annotated on this page, same unit as 0x0033's Split/Interval Avg Calories (§10)                                            |
+
+**`parseEndOfWorkoutSummary` (Task 1 of the fast-follow plan) decodes
+0x0039 only** — the design spec's I5 ruling (§5): "all needed fields ride
+0x0039; pair-gating on 0x003A would recreate the drop fragility." 0x003A is
+subscribed for observability/enrichment only (receipt logged, `summary-half`,
+same as 0x0039) and has no dedicated parser in this task; a later task adds
+one only if the reconciliation gate ever needs one of its fields. Neither
+characteristic's Log Entry Date/Time (offsets 0-3 of both) is decoded by
+`parseEndOfWorkoutSummary` — the bit-packing format is not stated on either
+page, and this file follows its own established practice (`workoutDurationRaw`
+in `parse.ts`, §10 above) of reporting a field unscaled/omitted rather than
+guessing a format no document states.
+
+`parseEndOfWorkoutSummary` reuses `parse.ts`'s own `heartRate()` helper
+(255-and-0-both-null, D5's field-independent reasoning above) for ALL FIVE
+heart-rate fields on 0x0039, including Recovery Heart Rate — even though
+the document states only the `0` sentinel for that one field. D5's own
+argument is why: no heart-rate field on this machine can carry a genuine
+`0` or `255`, so the convention is deliberately the SAME across every field
+this parser touches, documented sentinel or analogy alike.
+
+**Genuine ambiguities recorded here for the walk** (§17-style, not yet
+folded into that numbered runsheet since this pair has never been on this
+project's wire):
+
+1. Log Entry Date/Time's bit-packing format (0x0039 offsets 0-3, 0x003A
+   offsets 0-3) — irrelevant to `parseEndOfWorkoutSummary`'s current field
+   list, but any future consumer needs it decoded first.
+2. Whether 0x0039's Elapsed Time/Distance are genuinely whole-workout
+   cumulative totals, or could exhibit some other reset the way 0x0031's
+   identically-scaled, identically-named fields surprised hardware walk 4
+   (§10 above). The characteristic's own name and the design's §5
+   derivation both argue yes; nothing on the wire has confirmed it yet.
+3. Whether the `255`/`0` heart-rate sentinel convention (§10, D5) genuinely
+   extends to 0x0039's Ending/Average/Min/Max/Recovery Heartrate bytes as
+   cleanly as it does to 0x0032's live Heartrate and 0x0038's Work/Rest
+   Heartrate — applied here by the same by-analogy reasoning, same caution
+   as §15 #2.
