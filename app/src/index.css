@@ -1901,6 +1901,238 @@ button:disabled {
   margin: 0;
 }
 
+/* Task 2 (2026-08-10 workout-step-detail spec §2): the piece region between
+   the meta line and the reason foot, inside `.today-card`'s own Link — no
+   interactive elements anywhere in here, the card's own tap is still the
+   only one. `.today-card` is `display: block` with a flat 16px padding on
+   every side (unchanged, still governs `.today-card-empty` below); this
+   region and `.today-reason-foot` bleed to the card's own border with a
+   matching -16px horizontal margin, then re-inset their own content to
+   16px so row/foot text lines up with the title and meta above it. */
+.today-pieces {
+  margin: 0 -16px;
+  background: var(--step-region);
+  border-top: 1px solid var(--rule);
+}
+
+.today-piece-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px;
+}
+
+.today-piece-row:not(:first-child) {
+  border-top: 1px solid var(--rule-2);
+}
+
+.today-piece-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.today-piece-row-compact {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 16px;
+}
+
+.today-piece-row-compact:not(:first-child) {
+  border-top: 1px solid var(--rule-2);
+}
+
+/* The tinted peak (spec §2's own peakIndex rule) — background only; row
+   text weight comes from `.today-piece-text` below, unaffected by which
+   row class it's nested in. */
+.today-piece-peak {
+  background: var(--step-peak);
+}
+
+.today-piece-numeral {
+  flex: none;
+  width: 15px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.today-piece-text {
+  flex: 1;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.today-piece-row .today-piece-text {
+  font-size: 15px;
+}
+
+.today-piece-row-compact .today-piece-text {
+  font-size: 14px;
+}
+
+.today-piece-peak .today-piece-text {
+  font-weight: 600;
+}
+
+/* Muted inline clauses — explicit weight 400 always wins over the
+   ancestor's peak-tinted 600 (a directly-set property beats an inherited
+   one regardless of the ancestor's own specificity). */
+.today-piece-ref {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.today-piece-rest {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.today-piece-split {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.today-piece-row .today-piece-split {
+  font-size: 14px;
+}
+
+.today-piece-row-compact .today-piece-split {
+  font-size: 13px;
+}
+
+.today-piece-spm-line {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  padding-left: 23px; /* numeral (15) + its gap (8) */
+}
+
+.today-piece-spm {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+/* The cutoff row — 44px floor (contract item 4), dashed top border, visual
+   only (no href/button/role — `assertTapTargets` never sees it, by design;
+   the card's own Link is still the sole tap target). */
+.today-piece-more {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 8px 16px;
+  border-top: 1px dashed var(--rule-3);
+}
+
+.today-piece-more-glyph {
+  flex: none;
+  width: 15px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.today-piece-more-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.today-piece-more-title {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.today-piece-more-sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.today-piece-more-arrow {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--accent);
+}
+
+.today-piece-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-top: 1px solid var(--ink);
+  background: var(--step-foot);
+}
+
+.today-piece-foot-work {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+}
+
+.today-piece-foot-total {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.today-piece-foot-count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* The reason foot (spec §2's own "the .today-card-reason line is absorbed
+   into this strip"): a NEW class, not a `.today-card-reason` restyle —
+   `.today-card-reason` stays exactly as it is below for the no-recommendation
+   `.today-card-empty` branch (plain reason text, no OPEN chip, nothing to
+   open there). Same bleed-then-reinset idiom as `.today-pieces` above. */
+.today-reason-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--ink);
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.today-reason-foot-text {
+  flex: 1;
+}
+
+.today-reason-foot-open {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 .today-card-empty {
   display: flex;
   flex-direction: column;

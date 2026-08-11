@@ -13,7 +13,18 @@ import { fmtDuration } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { suggest, suggestFreestyle } from "../../domain/suggest.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
-import type { Baselines, Difficulty, WorkoutType } from "../../domain/types.js";
+import {
+  pieceList,
+  peakIndex,
+  workAndTotal,
+} from "../../domain/display/stepDetail.js";
+import type { PieceRow } from "../../domain/display/stepDetail.js";
+import type {
+  Baselines,
+  Difficulty,
+  Step,
+  WorkoutType,
+} from "../../domain/types.js";
 import type { PlanCode } from "../../domain/plans.js";
 import {
   ONBOARDING_TITLES,
@@ -533,6 +544,138 @@ function UnloggedRow({ run }: { run: SessionRun }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Task 2 (2026-08-10 workout-step-detail spec §2): the Today card's piece
+// region — a row per piece between the meta line and the reason foot, built
+// on Task 1's pure domain/display/stepDetail.ts exports. Four rows visible
+// at most; beyond that the rows compress to one line each (spec: "5+
+// pieces") and a non-interactive "+N more pieces" row replaces the rest —
+// the card's own Link is still the only tap target in here, nothing nests.
+const PIECE_CAP = 4;
+
+function TodayPieceRow({
+  row,
+  numeral,
+  compact,
+  peak,
+}: {
+  row: PieceRow;
+  numeral: string;
+  compact: boolean;
+  peak: boolean;
+}) {
+  const refText = compact ? row.refTextCompact : row.refTextFull;
+  // Effort pieces carry their word ("ALL OUT"/"EASY") in the SAME slot a
+  // split target would occupy (Task 1's own PieceRow doc comment: "in the
+  // pace slot") — test pieces have neither and the slot renders empty.
+  const rightSlot = row.effortText ?? row.split;
+  const rowClass =
+    (compact ? "today-piece-row-compact" : "today-piece-row") +
+    (peak ? " today-piece-peak" : "");
+
+  const text = (
+    <span className="today-piece-text">
+      {row.duration}
+      {refText !== null && (
+        <>
+          {" "}
+          <span className="today-piece-ref">
+            {refText}
+            {row.restText !== null ? "," : ""}
+          </span>
+        </>
+      )}
+      {row.restText !== null && (
+        <>
+          {" "}
+          <span className="today-piece-rest">{row.restText}</span>
+        </>
+      )}
+    </span>
+  );
+
+  if (compact) {
+    return (
+      <div className={rowClass}>
+        <span className="today-piece-numeral">{numeral}</span>
+        {text}
+        {row.spm !== null && <span className="today-piece-spm">{row.spm}</span>}
+        {rightSlot !== null && (
+          <span className="today-piece-split">{rightSlot}</span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={rowClass}>
+      <div className="today-piece-row-main">
+        <span className="today-piece-numeral">{numeral}</span>
+        {text}
+        {rightSlot !== null && (
+          <span className="today-piece-split">{rightSlot}</span>
+        )}
+      </div>
+      {row.spm !== null && (
+        <span className="today-piece-spm-line">{row.spm} SPM</span>
+      )}
+    </div>
+  );
+}
+
+function PieceRegion({
+  steps,
+  baselines,
+}: {
+  steps: Step[];
+  baselines: Baselines;
+}) {
+  const rows = pieceList(steps, baselines);
+  const peak = peakIndex(rows, PIECE_CAP);
+  const { workMinutes, totalMinutes } = workAndTotal(steps, baselines);
+  const visible = rows.slice(0, PIECE_CAP);
+  const hidden = rows.slice(PIECE_CAP);
+  const compact = rows.length >= 5;
+
+  return (
+    <div className="today-pieces">
+      {visible.map((row, i) => (
+        <TodayPieceRow
+          key={i}
+          row={row}
+          numeral={String(i + 1).padStart(2, "0")}
+          compact={compact}
+          peak={i === peak}
+        />
+      ))}
+      {hidden.length > 0 && (
+        <div className="today-piece-more">
+          <span className="today-piece-more-glyph">+</span>
+          <div className="today-piece-more-text">
+            <span className="today-piece-more-title">
+              {hidden.length} more piece{hidden.length === 1 ? "" : "s"}
+            </span>
+            <span className="today-piece-more-sub">
+              {hidden
+                .slice(0, 3)
+                .map((r) => r.duration)
+                .join(" · ")}
+              {hidden.length > 3 ? " …" : ""}
+            </span>
+          </div>
+          <span className="today-piece-more-arrow">›</span>
+        </div>
+      )}
+      <div className="today-piece-foot">
+        <span className="today-piece-foot-work">{workMinutes}′ WORK</span>
+        <span className="today-piece-foot-total">{totalMinutes}′ TOTAL</span>
+        {rows.length > PIECE_CAP && (
+          <span className="today-piece-foot-count">· {rows.length} PIECES</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1063,7 +1206,15 @@ function TodayView({
                 {recommended.difficulty.toUpperCase()} · PAIN {recommended.pain}
                 /5
               </p>
-              <p className="today-card-reason">{suggestion.reason}</p>
+              {/* `baselines` is never null here — same guarantee `today-card-
+                  duration` above already relies on (`needsBaselineCard`). */}
+              <PieceRegion steps={recommended.steps} baselines={baselines!} />
+              <p className="today-reason-foot">
+                <span className="today-reason-foot-text">
+                  {suggestion.reason}
+                </span>
+                <span className="today-reason-foot-open">OPEN ›</span>
+              </p>
             </Link>
           ) : (
             <div className="today-card today-card-empty">

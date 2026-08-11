@@ -64,6 +64,17 @@
   --pain-ramp-4: #a3491f;
   --pain-ramp-5: #b5341f;
 
+  /* Today card piece region (2026-08-10 workout-step-detail spec §2/§4):
+     three tints for the rows list, the tinted peak row, and the summary
+     foot strip. Computed contrast (not eyeballed) of the two text colors
+     the region actually paints against each — --ink-3 6.93/6.40/6.39,
+     --accent 5.54/5.12/5.11 (region/peak/foot order) — all clear the
+     4.5:1 AA floor; every other new text color in the region (--ink-2,
+     --ink) is darker still. */
+  --step-region: #f8f5ec;
+  --step-peak: #f1ecdd;
+  --step-foot: #efece1;
+
   --radius: 2px;
   --tap: 44px;
 
