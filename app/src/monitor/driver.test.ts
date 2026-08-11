@@ -6413,12 +6413,19 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     expect(structureEntries(log)).toBe(1);
   });
 
-  it("verifyTicks OMITTED is BOUNDED at 20 — under a structure predicate an unbounded verify turns a wrong success into an infinite hang", async () => {
+  it("verifyTicks OMITTED is BOUNDED at 30 — under a structure predicate an unbounded verify turns a wrong success into an infinite hang", async () => {
     // TODAY: `options.verifyTicks === undefined` means NO bound at all, so
     // this never-arming stub leaves `program()` pending forever. Both
     // assertions below are settlement-flag assertions, so today's code
     // fails the `expect(outcome.settled).toBe(true)` line rather than
     // hanging the suite.
+    //
+    // The number is 30 since fix round 1 (review I-1), and it is 30 because
+    // of `STRUCTURE_MISMATCH_WINDOW_MS`, not because of anything about this
+    // bound: at 20 it fired at 1800 ms on iOS's fastest observed cadence and
+    // pre-empted the 2000 ms window entirely (both constants' doc comments
+    // carry the arithmetic). The BOUND itself is still ticks and only ticks,
+    // which is what this test is about.
     const transport = stubTransport();
     const log = createEventLog();
     const driver = createPm5Driver(transport, log); // NO verifyTicks
@@ -6429,12 +6436,12 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     );
 
     const stuck = generalStatusIn(WORKOUTSTATE_REARM);
-    for (let i = 0; i < 19; i += 1)
+    for (let i = 0; i < 29; i += 1)
       transport.notify(GENERAL_STATUS_UUID, stuck);
     await drain();
-    expect(outcome.settled).toBe(false); // 19 ticks: still inside the default
+    expect(outcome.settled).toBe(false); // 29 ticks: still inside the default
 
-    transport.notify(GENERAL_STATUS_UUID, stuck); // the 20th
+    transport.notify(GENERAL_STATUS_UUID, stuck); // the 30th
     await drain();
     expect(outcome.settled).toBe(true);
     // Never armed at all, so the reason stays "not-observed" — a machine
@@ -6974,6 +6981,77 @@ describe("createPm5Driver: walk 5 — the structure gate forgives the PM5 its ow
     transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM));
     await expect(pending).resolves.toBeUndefined();
     expect(rejectionsIn(log)).toBe(0);
+  });
+
+  it("AT THE SHIPPED DEFAULTS, 90ms ticks: the WINDOW decides the healthy case — 20 stale ticks inside 2000ms then the real one resolves", async () => {
+    // Review I-1. Every test above pins the rule with `verifyTicks` passed
+    // explicitly; production passes NOTHING (`useMonitorSession`'s
+    // `driverOptions` sets `settleTicks`/`prepareSettleTicks` only), so this
+    // pair is the only proof about what actually ships. The cadence is §21
+    // item 3's fast end, 90 ms, which is where the old default lost the race:
+    // 20 ticks x 90 ms = 1800 ms, so the tick bound reached its verdict
+    // BEFORE the 2000 ms window could reach its own, and the reason the
+    // rower saw was decided by radio speed again.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, { now: clock.now }); // NO verifyTicks
+    const { pending, outcome } = await toVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    // Far longer than the PM5 has ever taken to finish its two-step update
+    // (~180 ms), and still inside the window: 20 ticks, 1800 ms — the exact
+    // span the old default converted into a rejection.
+    for (let i = 0; i < 20; i += 1) {
+      transport.notify(GENERAL_STATUS_UUID, TWO_STEP_INTERMEDIATE);
+      await drainHops();
+      clock.advance(90);
+    }
+    expect(outcome.settled).toBe(false);
+
+    transport.notify(GENERAL_STATUS_UUID, armedStatusFor(MINIMAL_PROGRAM));
+    await expect(pending).resolves.toBeUndefined();
+    expect(rejectionsIn(log)).toBe(0);
+  });
+
+  it("AT THE SHIPPED DEFAULTS, 90ms ticks: the WINDOW decides the failing case too — the rejection is the rule's, not the tick bound's", async () => {
+    // The other half: a machine that really is holding the wrong workout
+    // still gets convicted, and the conviction must come from the
+    // streak-plus-window RULE (its detail reads "N consecutive armed tick(s)
+    // over Nms") rather than from the outer bound wearing the same typed
+    // reason (whose detail reads "N tick(s) elapsed without a matching armed
+    // structure"). Distinguishing them is the whole point of I-1: at the old
+    // default this assertion would have caught the bound's wording.
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, { now: clock.now }); // NO verifyTicks
+    const { pending, outcome } = await toVerify(
+      driver,
+      transport,
+      MINIMAL_PROGRAM,
+    );
+
+    // 2000 / 90 = 22.2, so tick 24 (t = 2070 ms) is the first that can
+    // convict — comfortably inside the 30-tick bound, which is why 30.
+    let ticks = 0;
+    while (!outcome.settled && ticks < 30) {
+      transport.notify(GENERAL_STATUS_UUID, TWO_STEP_INTERMEDIATE);
+      await drainHops();
+      ticks += 1;
+      if (!outcome.settled) clock.advance(90);
+    }
+
+    expect(outcome.settled).toBe(true);
+    expect(ticks).toBe(24); // the window's tick, not the bound's 30
+    const err = rejectionOf(outcome);
+    expect(err.reason).toBe("structure-mismatch");
+    expect(err.hexTrace).toContain("consecutive armed tick(s) over 2070ms");
+    expect(err.hexTrace).not.toContain("tick(s) elapsed");
+    await expect(pending).rejects.toBeInstanceOf(ProgramRejectionError);
   });
 
   it("the window RESTARTS with the payload: a long-standing wrong answer that changes buys the new one its own 2000ms", async () => {

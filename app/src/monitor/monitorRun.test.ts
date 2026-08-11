@@ -528,17 +528,25 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
   // to everything else.
   // -------------------------------------------------------------------
 
+  /** Filling Low's LAST interval — the only index a finish grace can ever
+   *  name, since the grace exists for the data of the interval a naturally
+   *  finished workout just completed. Derived from the fixture's own
+   *  program so it cannot drift from it. */
+  const lastIndex = freshMonitorRun().program.intervals.length - 1;
+  const finalActual: IntervalActual = { ...actual1, index: lastIndex };
+
   it("a CLOSED run accepts the FINISH GRACE actual the driver vouched for — the walk's own 0 OF 1", () => {
+    expect(lastIndex).toBe(3); // Filling Low: warmup + 3 x 2000m
     const closed: MonitorRun = {
       ...freshMonitorRun(),
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
     saveMonitorRun(closed);
 
-    const after = recordActual(closed, actual1, { finalBoundary: true });
+    const after = recordActual(closed, finalActual, { finalBoundary: true });
 
     expect(after).not.toBe(closed);
-    expect(after.actuals).toStrictEqual([actual1]);
+    expect(after.actuals).toStrictEqual([finalActual]);
     // Persisted, not merely returned: 7C's log screen reads the RECORD.
     expect(loadMonitorRun()).toStrictEqual(viaJson(after));
     // And nothing else about the closed record moved.
@@ -546,23 +554,47 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
     expect(after.terminated).toBe(false);
   });
 
-  it("...but only for an interval it does not already hold — the flag is not a skeleton key", () => {
-    // The record's own half of the rule, independent of the driver's: post-run
-    // housekeeping re-reporting a boundary already filed must not double it,
-    // even if it somehow arrived flagged (the record outlives the driver
-    // instance that set the flag).
+  it("...but ONE of them: a second flagged actual naming a DIFFERENT interval is refused, not filed", () => {
+    // CONSUMED-ONCE, re-derived at the record layer (review M-3). The driver
+    // clears its own grace after the first boundary, so two flagged actuals
+    // is a driver bug — and a record that filed the second would turn that
+    // bug into a wrong saved log. The record answers from its own program:
+    // only the LAST interval can be a finish boundary, so the first one to
+    // arrive is the only one that can ever land.
     const closed: MonitorRun = {
       ...freshMonitorRun(),
-      actuals: [actual1],
+      actuals: [finalActual],
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
     saveMonitorRun(closed);
 
-    const repeat: IntervalActual = { ...actual2, index: actual1.index };
+    // An interval this record does NOT hold, so the not-already-filed check
+    // alone would let it through — it is refused for naming interval 1 of a
+    // 4-interval program at the finish.
+    const second: IntervalActual = { ...actual2, index: 1 };
+    const after = recordActual(closed, second, { finalBoundary: true });
+
+    expect(after).toBe(closed);
+    expect(after.actuals).toStrictEqual([finalActual]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
+  });
+
+  it("...and only for an interval it does not already hold — the flag is not a skeleton key", () => {
+    // Post-run housekeeping re-reporting the very boundary already filed
+    // must not double it, even flagged (the record outlives the driver
+    // instance that set the flag).
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: [finalActual],
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    saveMonitorRun(closed);
+
+    const repeat: IntervalActual = { ...actual2, index: lastIndex };
     const after = recordActual(closed, repeat, { finalBoundary: true });
 
     expect(after).toBe(closed);
-    expect(after.actuals).toStrictEqual([actual1]);
+    expect(after.actuals).toStrictEqual([finalActual]);
   });
 
   it("...and never an actual with no interval identity at all — index null stays refused, flagged or not", () => {
@@ -571,7 +603,7 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
       completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
     };
 
-    const anonymous: IntervalActual = { ...actual1, index: null };
+    const anonymous: IntervalActual = { ...finalActual, index: null };
 
     expect(recordActual(closed, anonymous, { finalBoundary: true })).toBe(
       closed,

@@ -400,8 +400,11 @@ export interface DriverOptions {
    * wrapper question). This settles for the document's own WEAKER
    * fallback instead — "delay sufficiently long (e.g. 1 second or more)"
    * — expressed as a tick
-   * count rather than a literal wall-clock second, same "no wall clock,
-   * ever" rule as every other tick budget in this file.
+   * count rather than a literal wall-clock second, same rule as every other
+   * tick budget in this file. (Every BUDGET here is still ticks and only
+   * ticks. Since hardware walk 5 the file does read a clock in exactly one
+   * place, and it is not a budget: `DriverOptions.now`, for the structure
+   * gate's persistence window — see `STRUCTURE_MISMATCH_WINDOW_MS`.)
    *
    * UNLIKE `ackTimeout`/`verifyTicks`, omitting this is never "no
    * bound" — it means the default, `3`, not an unbounded wait
@@ -545,17 +548,40 @@ export interface DriverOptions {
  *  comment for why "omitted" means this number, not "no bound". */
 const DEFAULT_SETTLE_TICKS = 3;
 
-/** `DriverOptions.verifyTicks`'s own default (fix-3 Task 4) — the number
- *  `scripts/pm5-lab.ts` already reasoned its way to against the OBSERVED
- *  ~2 Hz status cadence (interface-notes.md §18), i.e. ~10 real seconds:
- *  generous enough to absorb the PM's own Appendix-E auto-cycle plus BLE
- *  jitter, still bounded. Promoted from "the lab's local constant" to the
- *  driver's default because verification now carries a STRUCTURE predicate
- *  and an unbounded verify under one is a hang, not a leniency — see
- *  `DriverOptions.verifyTicks`'s own doc comment. The lab's explicit `20`
- *  is now redundant and deliberately left in place: it documents the
- *  reasoning at the call site that first needed it. */
-const DEFAULT_VERIFY_TICKS = 20;
+/** `DriverOptions.verifyTicks`'s own default (fix-3 Task 4) — originally
+ *  `20`, the number `scripts/pm5-lab.ts` reasoned its way to against the
+ *  OBSERVED ~2 Hz status cadence (interface-notes.md §18), i.e. ~10 real
+ *  seconds: generous enough to absorb the PM's own Appendix-E auto-cycle
+ *  plus BLE jitter, still bounded. Promoted from "the lab's local constant"
+ *  to the driver's default because verification now carries a STRUCTURE
+ *  predicate and an unbounded verify under one is a hang, not a leniency —
+ *  see `DriverOptions.verifyTicks`'s own doc comment.
+ *
+ *  **RAISED 20 -> 30 (fix round 1 after hardware walk 5, review I-1), and
+ *  the number is now a FUNCTION of `STRUCTURE_MISMATCH_WINDOW_MS` rather
+ *  than of anything about the bound itself.** This budget and that window
+ *  race each other: whichever fires first decides, and BOTH settle the same
+ *  `"structure-mismatch"` reason once an armed tick has disagreed
+ *  (`settleVerifyFailure`'s two call sites). At `20` the race was already
+ *  lost at the fast end of §21 item 3's recorded cadence — 20 x 90 ms =
+ *  1800 ms, so the bound pre-empted the 2000 ms window and the verdict went
+ *  back to being decided by a tick COUNT, which is the exact defect class
+ *  walk 5 opened. The window can only be the deciding rule while
+ *
+ *      DEFAULT_VERIFY_TICKS x (fastest observed tick spacing)
+ *          > STRUCTURE_MISMATCH_WINDOW_MS
+ *
+ *  i.e. `> 2000 / 90 = 22.2`, so at least 23. `30` takes that with headroom
+ *  (2700 ms at 90 ms/tick) rather than sitting one jittery tick away from
+ *  the boundary. What it costs is latency on the OTHER failure — a machine
+ *  that never arms at all now reports `"not-observed"` after 30 ticks
+ *  instead of 20 (~2.7-5.4 s on iOS, ~15 s at the desktop's ~2 Hz), which
+ *  is a wait on an already-broken program, not a cost any healthy arm pays.
+ *  `scripts/pm5-lab.ts` still passes `20` EXPLICITLY, and that is now a
+ *  real (no longer redundant) choice: the lab runs over the desktop radio,
+ *  where 20 ticks is ~10 s and no cadence anyone has measured can pre-empt
+ *  the window. */
+const DEFAULT_VERIFY_TICKS = 30;
 
 /** How many CONSECUTIVE armed ticks must report the SAME wrong structure
  *  before `verifyArmed` rejects (fix-3 Task 4). Three. What the number
@@ -640,9 +666,21 @@ const STRUCTURE_MISMATCH_TICKS = 3;
  *  magnitude short of a rower noticing. A CORRECT observation still resolves
  *  on the tick it arrives — nothing about the success path waits — so this
  *  window only ever delays a REJECTION, and only for a machine that keeps
- *  saying the same wrong thing. The outer `verifyTicks` bound is unchanged
- *  and still ends the phase either way, so a slow radio cannot turn this
- *  into a hang. */
+ *  saying the same wrong thing.
+ *
+ *  **BOTH DIRECTIONS, because the outer `verifyTicks` bound settles the
+ *  SAME reason** (review I-1 — an earlier version of this comment reasoned
+ *  only about the slow one):
+ *  - SLOW transport: the bound still ends the phase on ticks, so a radio
+ *    that goes quiet cannot turn this window into a hang. That is why the
+ *    bound was left tick-only.
+ *  - FAST transport: the bound must not fire BEFORE this window can, or the
+ *    verdict is a tick count again wearing the same typed reason — the
+ *    defect walk 5 opened, one constant over. `DEFAULT_VERIFY_TICKS` is
+ *    what keeps that from happening, and it is sized off this number (30
+ *    ticks x 90 ms = 2700 ms > 2000 ms; its own doc comment carries the
+ *    arithmetic). **Changing either constant without re-checking the other
+ *    silently hands the verdict back to whichever radio is fastest.** */
 const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
 
 /** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc
@@ -768,7 +806,16 @@ export function createPm5Driver(
      *  machine is showing by then — see `finishGraceIndex`'s own comment on
      *  why (`toActualIndex` declines to name an interval while the machine
      *  reads `finished`, a business rule about which interval is CURRENT,
-     *  and the boundary belongs to the one that just ended). */
+     *  and the boundary belongs to the one that just ended).
+     *
+     *  Only the NULL-vs-not distinction is behavioural: `toActualIndex`
+     *  applies the actuals characteristic's minus-one offset identically for
+     *  `"rowing"` and `"resting"` (`intervalIndex.ts` — the offset is a
+     *  property of 0x0037/38, not of the resting state, §19.8). The state
+     *  WORD is kept anyway because the grace's own log entry reports it, and
+     *  a trace that says which reading the index was normalized against is
+     *  the only way a future walk can argue with this. Do not read the
+     *  rowing/resting distinction here as load-bearing. */
     lastActiveState: MonitorFrame["state"] | null;
     /** THE FINISH GRACE (hardware walk 5, 2026-08-10 — the end-of-workout
      *  split race; interface-notes.md §21 item 4: "0x0037 (18B) and 0x0038
@@ -1678,12 +1725,24 @@ export function createPm5Driver(
     const rawActual = toIntervalActual(status);
     const state = toMonitorFrame(status).state;
     // The finish grace, decided BEFORE the out-of-run gate below: this is
-    // the one boundary a CLOSED run still owns. `rawActual.index` is
-    // `number | null` on the type and never `null` in fact — `pm5/parse.ts`
-    // always assigns 0x0037/38's own decoded byte — so it is asserted past
-    // the type here exactly as the in-run path below already does (see that
-    // call's own comment for the full reasoning).
-    const graceIndex = finishGraceIndex(rawActual.index as number);
+    // the one boundary a CLOSED run still owns.
+    //
+    // `rawActual.index` is `number | null` on the type and never `null` in
+    // fact (`pm5/parse.ts` always assigns 0x0037/38's own decoded byte, and
+    // the in-run path below asserts past the type on exactly that basis) —
+    // but this door does NOT take that assertion, because of where the two
+    // differ if the premise ever breaks (review M-5). `toActualIndex(null,
+    // ...)` computes `candidate = -1` and CLAMPS to `0`, so an unknown index
+    // arriving here would be filed as interval 0 of a finished run — a
+    // fabricated identity through the one door that writes into a closed
+    // record, which is the precise thing `IntervalActual.index`'s `null`
+    // widening exists to prevent. A `null` here therefore opens no grace at
+    // all: the boundary drops through to the out-of-run branch below, which
+    // emits it with `index: null` and logs `boundary-out-of-run` — the same
+    // honest "unknown, and here is the trace" answer every other
+    // unattributable boundary gets.
+    const graceIndex =
+      rawActual.index === null ? null : finishGraceIndex(rawActual.index);
 
     // OUT-OF-RUN BOUNDARIES (Task 4, spec §4). 0x0037/0x0038 are not
     // ours: a PM5 auto-splits a user-started JustRow piece and reports
