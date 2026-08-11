@@ -31,9 +31,11 @@ the step-detail memory's own owed note.**
    five separate rows.
 4. **The finish survives a dropped split (this wave).** If a workout's
    last interval's data ever fails to arrive from a connected PM5, the
-   app now fills it in itself from the monitor's own end-of-workout
-   summary, so a session that finished for real still saves complete
-   instead of missing its last piece.
+   app falls back to the monitor's own end-of-workout summary and
+   recovers that interval's time and meters whenever the numbers add
+   up. When they don't, it says so in the session's trace and leaves
+   the interval blank rather than guessing: a saved session is either
+   right or honest about what is missing.
 5. **Starting a workout is one door now, and your pace adjustment
    sticks (this wave).** The old confirm screen between "Start" and
    your workout is gone. Adjust pace right on the workout page, then
