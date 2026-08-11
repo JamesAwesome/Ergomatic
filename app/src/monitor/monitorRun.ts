@@ -242,7 +242,7 @@ export function createMonitorRun(
  *     without storing a "already took one" bit — exactly one index can ever
  *     satisfy it, and (3) refuses that index the second time. A second
  *     flagged actual naming a DIFFERENT interval is a driver bug (the
- *     driver clears `finishGraceTick` after the first, `driver.ts`), and a
+ *     driver clears `finishGraceUntil` after the first, `driver.ts`), and a
  *     driver bug is something this record surfaces by refusing, never
  *     something it files (fix round 1, review M-3 — the doc comment used to
  *     claim an independence the code did not have);
@@ -287,7 +287,9 @@ function acceptableFinalBoundary(
  * driver holds.
  *
  * **THE FINISH GRACE** (hardware walk 5, 2026-08-10, `docs/monitor/pm5-interface-notes.md`
- * §21 item 4 — `driver.ts`'s `activeRun.finishGraceTick` and the run
+ * §21 item 4 and §22 item 5 — `driver.ts`'s `activeRun.finishGraceUntil` (a wall-clock
+ * deadline since walk day 3; post-finish status ticks neither extend nor
+ * consume it) and the run
  * contract in `domain/monitor/types.ts` carry the capture too): a PM5 sends the final
  * interval's 0x0037/0x0038 pair one notification AFTER the general-status
  * frame that ends the workout, so the actual that completes a rowed-out

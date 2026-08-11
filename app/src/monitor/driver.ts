@@ -732,7 +732,18 @@ const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
  *  a real observed active state to normalize against, an index the offset
  *  rule explains, an interval this run is still MISSING, consumed once, and
  *  the record's own independent re-derivation of the last two
- *  (`monitorRun.ts`'s `acceptableFinalBoundary`). */
+ *  (`monitorRun.ts`'s `acceptableFinalBoundary`).
+ *
+ *  COUPLED CONSTANT: `useMonitorSession.ts`'s `FINISH_HANDOFF_HOLD_MS` is
+ *  also 3000 and NOT by coincidence — both windows open in the same
+ *  synchronous emit (the `finished` branch emits `workoutComplete`, the
+ *  hook's handler schedules its backstop inside that emit), so with equal
+ *  durations on real clocks the hook's backstop can only fire at/after the
+ *  instant this grace has also expired: a vouched boundary can never land
+ *  AFTER the hand-off already released. Shorten THIS constant and that
+ *  stays true; lengthen it past the hold and a boundary can be accepted
+ *  into a record the log screen has already snapshotted — change the two
+ *  together or not at all (clock-grace review, scrutiny 5). */
 const FINISH_GRACE_MS = 3000;
 
 /** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc

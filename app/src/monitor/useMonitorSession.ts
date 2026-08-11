@@ -240,6 +240,13 @@ function bestEffort(work: Promise<unknown>): void {
  * actually missing its last interval's actual holds at all. A few seconds on
  * the "SESSION ENDED" frame in the pathological case is a frame the rower is
  * reading anyway; a lost measurement is not recoverable.
+ *
+ * COUPLED CONSTANT: `driver.ts`'s `FINISH_GRACE_MS` is also 3000, and the
+ * safety is directional — this hold must be >= the grace, so a boundary the
+ * driver still vouches always finds the hand-off still held. Both windows
+ * open in the same synchronous emit, so equality suffices. The full
+ * reasoning lives at `FINISH_GRACE_MS`'s own comment; change the two
+ * together or not at all.
  */
 const FINISH_HANDOFF_HOLD_MS = 3000;
 
