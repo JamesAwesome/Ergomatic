@@ -563,3 +563,102 @@ describe("subscribe hardening (spec §3.5)", () => {
     expect(frames).toStrictEqual([real]);
   });
 });
+
+describe("subscribe multiplexing: one plugin slot, many subscribers (walk-1 finding, 2026-08-10)", () => {
+  /** Replicates the REAL plugin's listener slot (`bleClient.js:293`,
+   *  `eventListeners.get(key)?.remove()` before every add): one callback
+   *  per device+characteristic, a second `startNotifications` REPLACES the
+   *  first. This is the exact semantics that silently unplugged the
+   *  driver's frame pipeline at the erg — the driver double-subscribes
+   *  0x0031 (startup loop + program watcher), Web Bluetooth stacks
+   *  listeners, the plugin does not. A transport that called the plugin
+   *  once per subscriber would strand every earlier callback; these tests
+   *  fire frames through the SLOT and assert every Transport subscriber
+   *  still hears them. */
+  const notifySlots = new Map<string, (value: DataView) => void>();
+
+  beforeEach(() => {
+    notifySlots.clear();
+    vi.mocked(BleClient.startNotifications).mockImplementation(
+      (
+        deviceId: string,
+        _service: string,
+        characteristic: string,
+        cb: (value: DataView) => void,
+      ) => {
+        notifySlots.set(`${deviceId}|${characteristic}`, cb);
+        return Promise.resolve();
+      },
+    );
+  });
+
+  function fireSlot(deviceId: string, characteristicId: string): void {
+    vi.mocked(toUint8Array).mockReturnValue(
+      new Uint8Array([7]) as unknown as Uint8Array<ArrayBuffer>,
+    );
+    notifySlots.get(`${deviceId}|${characteristicId}`)?.(
+      new DataView(new ArrayBuffer(1)),
+    );
+  }
+
+  it("two subscribers to the SAME characteristic both hear a frame, through ONE plugin call", async () => {
+    const transport = createCapacitorBleTransport();
+    await transport.connect("d1");
+    const heard: string[] = [];
+    transport.subscribe(GENERAL_STATUS_UUID, () => heard.push("loop"));
+    transport.subscribe(GENERAL_STATUS_UUID, () => heard.push("watcher"));
+    await Promise.resolve();
+
+    expect(BleClient.startNotifications).toHaveBeenCalledTimes(1);
+    fireSlot("d1", GENERAL_STATUS_UUID);
+    expect(heard).toStrictEqual(["loop", "watcher"]);
+  });
+
+  it("unsubscribing ONE subscriber keeps the other's frames flowing and does NOT stop the plugin", async () => {
+    const transport = createCapacitorBleTransport();
+    await transport.connect("d1");
+    const heard: string[] = [];
+    const offLoop = transport.subscribe(GENERAL_STATUS_UUID, () =>
+      heard.push("loop"),
+    );
+    transport.subscribe(GENERAL_STATUS_UUID, () => heard.push("watcher"));
+    await Promise.resolve();
+
+    offLoop();
+    fireSlot("d1", GENERAL_STATUS_UUID);
+    expect(heard).toStrictEqual(["watcher"]);
+    expect(BleClient.stopNotifications).not.toHaveBeenCalled();
+  });
+
+  it("the LAST unsubscribe stops the plugin exactly once; a double-unsubscribe is a no-op", async () => {
+    const transport = createCapacitorBleTransport();
+    await transport.connect("d1");
+    const offA = transport.subscribe(GENERAL_STATUS_UUID, () => {});
+    const offB = transport.subscribe(GENERAL_STATUS_UUID, () => {});
+    await Promise.resolve();
+
+    offA();
+    offA(); // idempotent: still one live subscriber, nothing stops
+    expect(BleClient.stopNotifications).not.toHaveBeenCalled();
+    offB();
+    expect(BleClient.stopNotifications).toHaveBeenCalledTimes(1);
+    offB(); // idempotent after the stop too
+    expect(BleClient.stopNotifications).toHaveBeenCalledTimes(1);
+  });
+
+  it("a fresh connect() clears the registry: the next subscribe opens a NEW plugin subscription", async () => {
+    const transport = createCapacitorBleTransport();
+    await transport.connect("d1");
+    transport.subscribe(GENERAL_STATUS_UUID, () => {});
+    await Promise.resolve();
+    expect(BleClient.startNotifications).toHaveBeenCalledTimes(1);
+
+    await transport.disconnect();
+    await transport.connect("d1");
+    transport.subscribe(GENERAL_STATUS_UUID, () => {});
+    await Promise.resolve();
+    // A stale set must never satisfy the new connection's subscribe: the
+    // registry was cleared, so the plugin is called again.
+    expect(BleClient.startNotifications).toHaveBeenCalledTimes(2);
+  });
+});
