@@ -4548,3 +4548,44 @@ project's wire):
    cleanly as it does to 0x0032's live Heartrate and 0x0038's Work/Rest
    Heartrate — applied here by the same by-analogy reasoning, same caution
    as §15 #2.
+4. **Whether 0x0039's Elapsed Time/Distance INCLUDE rest, and whether
+   0x0037's Split/Interval Time/Distance do — i.e. whether the two measure
+   the same span.** Added 2026-08-11 (fast-follow Task 2 review): this is
+   the premise the summary-fallback gate's multi-interval subtraction
+   actually rests on, and it is a SEPARATE question from item 2. The gate
+   derives the final interval as `0x0039 total − Σ(recorded 0x0037
+   per-interval values)`, which is only arithmetic if both sides treat rest
+   the same way — both counting each interval's trailing rest, or both
+   excluding it. A mismatch in either direction leaves the derived final
+   interval wrong by the workout's whole rest allowance.
+
+   **Why the silence is the danger, and why this outranks item 2 on the
+   runsheet.** Item 2 fails LOUDLY: under a per-interval reading the
+   summary carries the last interval's own smaller numbers, the
+   subtraction goes non-positive, and the driver declines and says so
+   (`driver.ts`'s `deriveFinalIntervalFromSummary`). This one fails
+   QUIETLY: a rest-inclusive total over rest-exclusive priors yields a
+   final interval too LONG by the total rest — positive, plausible, and
+   invisible to that guard. It is the "plausible-looking, wrong, and
+   silent" corruption shape D4 refuses elsewhere, arriving through the one
+   door no predicate watches. Nothing in the app can settle it; only the
+   wire can.
+
+   **The evidence, suggestive and not conclusive.** 0x003A carries **Total
+   Rest Distance** (offsets 12-14) and **Interval Rest Time** (15-16) as
+   fields of their own, which argues 0x0039's totals are work-only — a
+   machine folding rest into the summary's Elapsed Time would have little
+   reason to report it separately one characteristic over. Against that:
+   walk 4 measured 0x0031's Elapsed Time spanning each interval's work
+   PLUS its trailing rest (§18), so this machine demonstrably does bundle
+   rest into an identically-named field somewhere.
+
+   **How to settle it.** Row a MULTI-INTERVAL piece WITH REST — a 2×1'
+   with 1' rest is enough — and read the stash. The
+   `summary-reconciled: filled-from-summary` entry states the program's own
+   total rest beside the derived numbers for exactly this purpose, so the
+   check is one subtraction: if the derived final interval exceeds its
+   programmed work by about the rest allowance, the two sides disagree and
+   `deriveFinalIntervalFromSummary` is the single function that changes. A
+   single-interval row cannot settle it (no prior to subtract, no rest
+   between anything), and neither can a rest-free one.

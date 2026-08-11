@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { compileProgram } from "../../domain/monitor/program.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -56,6 +56,31 @@ import {
   ProgramRejectionError,
 } from "./driver";
 import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
+
+// TIMER HYGIENE, file-wide (fix round 1, review Minor-4). The driver grew
+// its first real timer with the summary-fallback gate — one `setTimeout` at
+// `FINISH_GRACE_MS`, armed by every natural finish. The gate's own tests
+// inject `DriverOptions.schedule` and fire it by hand, but the ~24 other
+// natural-finish paths in this file do not, and each of those was leaving a
+// live 3-second timer behind: inert today only because the suite finishes
+// long before one is due, which is a property of how fast the tests run
+// rather than of anything the tests assert.
+//
+// Faking the clock file-wide is the cheapest form that is actually correct.
+// Nothing here waits on real time — the whole prepare/send exchange is
+// microtask-hopped (`waitUntil` and `flush` both drain `Promise.resolve()`,
+// which fake timers do not touch) and no test in this file calls
+// `setTimeout` itself — so this changes no behaviour, and
+// `vi.useRealTimers()` discards every pending timer at the end of each
+// test. Tests that need to CONTROL the reconcile deadline still inject
+// their own `schedule` and ignore this entirely.
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // The realistic fixture (briefing: "at least one test per client task
 // starts from a real library workout ... not a hand-built minimum"): Sea
@@ -7891,7 +7916,14 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       "out-of-window",
       "split-won",
     ]);
-    expect(verdicts(g.log)[0]!.detail).toContain("already claimed it");
+    // The SPECIFIC reason, not a disjunction: "a boundary claimed it" and
+    // "this run ended by terminate" both leave `finishGraceUntil === null`,
+    // and a stash reader has to tell them apart (review Minor-2). Test (f)
+    // pins the other side of the same discrimination.
+    expect(verdicts(g.log)[0]!.detail).toContain(
+      "a boundary has already claimed this run's grace",
+    );
+    expect(verdicts(g.log)[0]!.detail).not.toContain("terminate");
   });
 
   it("(a2) PRECEDENCE, THE HARD ORDER: the summary arrives FIRST and a split still beats it — held evidence is discarded unread, never filed ahead of the real thing", async () => {
@@ -7958,36 +7990,93 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdict[0]!.detail).toContain("214");
   });
 
-  it("(c) MULTI-INTERVAL, every prior recorded: the final interval is the summary MINUS the priors, to the exact value (Sea Fret, a real library workout)", async () => {
+  /** Sea Fret rowed with its first two intervals recorded the ordinary way
+   *  and the FINAL split dropped — the shape every multi-interval arm
+   *  below needs, with the two priors' own measured values as the
+   *  parameter, because what those values MEAN (work-only or work plus
+   *  trailing rest) is the whole subject of §23 walk item 4.
+   *
+   *  Sea Fret compiles to three intervals: a 300 s warm-up with no rest,
+   *  then 2x240 s work each carrying a 60 s rest — so the program's own
+   *  total rest allowance is 120 s, verified off `compileProgram`'s output
+   *  for this fixture, and that is the number the two readings below
+   *  differ by. */
+  async function seaFretWithTwoPriorsRecorded(
+    g: ReturnType<typeof primedGate>,
+    priors: { seconds: number; meters: number }[],
+  ): Promise<WorkoutProgram> {
     const program = seaFretProgram();
     expect(program.intervals).toHaveLength(3);
-    const g = primedGate();
+    expect(
+      program.intervals.reduce((total, i) => total + i.restSeconds, 0),
+    ).toBe(120);
     await programViaStub(g.driver, g.transport, program);
 
     // Intervals 0 and 1 arrive the ordinary way, in-run: machine
     // Split/Interval Numbers 1 and 2 normalize to our 0 and 1 through
     // §19.8's minus-one offset.
-    g.transport.notify(
-      GENERAL_STATUS_UUID,
-      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 300, 1000),
-    );
-    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 300, 1000));
-    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
-    g.transport.notify(
-      GENERAL_STATUS_UUID,
-      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 600, 2200),
-    );
-    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 300, 1200));
-    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 26));
-    expect(boundaries(g.events)).toHaveLength(2);
+    let cumulativeSeconds = 0;
+    let cumulativeMeters = 0;
+    priors.forEach((prior, i) => {
+      cumulativeSeconds += prior.seconds;
+      cumulativeMeters += prior.meters;
+      g.transport.notify(
+        GENERAL_STATUS_UUID,
+        generalStatusIn(
+          WORKOUTSTATE_INTERVALWORKTIME,
+          cumulativeSeconds,
+          cumulativeMeters,
+        ),
+      );
+      g.transport.notify(
+        SPLIT_INTERVAL_DATA_UUID,
+        splitHalf(i + 1, prior.seconds, prior.meters),
+      );
+      g.transport.notify(
+        ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+        asSplitHalf(i + 1, 22 + i),
+      );
+    });
+    expect(boundaries(g.events)).toHaveLength(priors.length);
 
     // The piece ends and the LAST split is the one that drops.
     g.transport.notify(
       GENERAL_STATUS_UUID,
       generalStatusIn(WORKOUTSTATE_WORKOUTEND, 900, 3350),
     );
+    return program;
+  }
+
+  /** The two priors as WORK-ONLY readings — 0x0037's Split/Interval Time
+   *  carrying each interval's rowing and none of its trailing rest. Both
+   *  multi-interval arms below use the identical priors; only the SUMMARY
+   *  changes between them, which is what isolates §23 walk item 4's
+   *  question to one number. */
+  const SEA_FRET_WORK_ONLY_PRIORS = [
+    { seconds: 300, meters: 1000 }, // the warm-up, which carries no rest anyway
+    { seconds: 240, meters: 1200 }, // work interval 1, its 60s rest excluded
+  ];
+  /** 300 + 240 + 240: the three intervals' WORK, with the programmed 120 s
+   *  of rest excluded — the reading the derivation assumes. */
+  const SEA_FRET_REST_EXCLUSIVE_ELAPSED = 780;
+  /** The same piece read the OTHER way: work plus the programmed 120 s of
+   *  rest. Distance is deliberately IDENTICAL in both readings — a rower
+   *  sitting through a rest banks no meters, so the disagreement lives in
+   *  elapsed alone, which is also why no meters check could ever catch it. */
+  const SEA_FRET_REST_INCLUSIVE_ELAPSED = 900;
+  const SEA_FRET_TOTAL_METERS = 3350;
+
+  it("(c) MULTI-INTERVAL, every prior recorded: the final interval is the summary MINUS the priors, to the exact value (Sea Fret, a real library workout)", async () => {
+    const g = primedGate();
+    await seaFretWithTwoPriorsRecorded(g, SEA_FRET_WORK_ONLY_PRIORS);
+
+    // THE PREMISE THIS ARM PINS (§23 walk item 4): the summary's totals and
+    // the recorded priors measure the same span — here, both rest-EXCLUSIVE.
     g.clock.advance(500);
-    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(900, 3350));
+    g.transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      summaryBytes(SEA_FRET_REST_EXCLUSIVE_ELAPSED, SEA_FRET_TOTAL_METERS),
+    );
     g.clock.advance(2500);
     g.timer.pending()!.fire();
 
@@ -7995,8 +8084,9 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(boundaries(g.events)[2]).toMatchObject({
       actual: {
         index: 2,
-        // 900 - (300 + 300); 3350 - (1000 + 1200)
-        elapsedSeconds: 300,
+        // 780 - (300 + 240) = 240, the final interval's programmed work
+        // exactly; 3350 - (1000 + 1200) = 1150.
+        elapsedSeconds: 240,
         distanceMeters: 1150,
       },
       finalBoundary: true,
@@ -8004,26 +8094,116 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     const detail = verdicts(g.log)[0]!.detail;
     expect(detail).toContain("filled-from-summary");
     expect(detail).toContain("1150");
+    // ...and the entry NAMES the program's own rest, so an erg-side reader
+    // can hand-check the premise this arm asserts rather than trusting it
+    // (review Important-1, leg 3).
+    expect(detail).toContain("120s");
+    expect(detail).toContain("§23 walk item 4");
   });
 
-  it("(d) A MISSING PRIOR DECLINES: with interval 1 never recorded the subtraction would file someone else's meters, so nothing is written", async () => {
-    const program = seaFretProgram();
+  it("(c2) THE WALK'S DISCRIMINATOR: read the SAME piece rest-inclusively and the fill is 120s too long — positive, plausible, and past every guard", async () => {
+    // This test does not assert desired behaviour. It PINS THE EXPOSURE, so
+    // that the day the wire settles §23 walk item 4 the consequence of the
+    // losing answer is already written down and already measured (review
+    // Important-1, leg 4).
+    //
+    // Same program, same recorded priors, same meters — the ONLY change is
+    // the summary's Elapsed Time, read as work-plus-rest (900) instead of
+    // work-only (780). The subtraction stays positive, so
+    // `elapsedSeconds <= 0` never fires: the rower would be handed a final
+    // interval of 360s for a 240s piece, and nothing in the driver could
+    // tell. That is why the answer is a walk item and a `how` string rather
+    // than a predicate.
     const g = primedGate();
-    await programViaStub(g.driver, g.transport, program);
+    await seaFretWithTwoPriorsRecorded(g, SEA_FRET_WORK_ONLY_PRIORS);
 
-    // Only interval 0 is recorded. Interval 1's boundary was lost too.
+    g.clock.advance(500);
+    g.transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      summaryBytes(SEA_FRET_REST_INCLUSIVE_ELAPSED, SEA_FRET_TOTAL_METERS),
+    );
+    g.clock.advance(2500);
+    g.timer.pending()!.fire();
+
+    // Filled, not declined — the exposure, stated as an assertion.
+    expect(boundaries(g.events)).toHaveLength(3);
+    expect(boundaries(g.events)[2]).toMatchObject({
+      actual: {
+        index: 2,
+        // 900 - 540 = 360. The programmed work is 240; the excess is 120,
+        // which is the program's total rest to the second.
+        elapsedSeconds: 360,
+        // The meters are RIGHT even so — the mismatch is a time-only
+        // failure, which is the other half of why it is silent.
+        distanceMeters: 1150,
+      },
+      finalBoundary: true,
+    });
+    expect(360 - 240).toBe(120);
+
+    // WHAT MAKES IT FINDABLE AT THE ERG: the verdict carries both the
+    // derived number and the program's own rest, so the check James runs on
+    // the stash is one subtraction.
+    const detail = verdicts(g.log)[0]!.detail;
+    expect(detail).toContain("filled-from-summary");
+    expect(detail).toContain("360s");
+    expect(detail).toContain("this program's own rest totals 120s");
+    expect(detail).toContain("too long and no guard here can tell");
+  });
+
+  it("A REST-FREE MULTI-INTERVAL PROGRAM says so: with no rest to mis-count, the entry states that instead of a warning it cannot justify", async () => {
+    // The other side of the `how` string's rest clause. §23 walk item 4's
+    // premise can only bite where there IS rest, so a continuous piece
+    // gets the plain statement rather than a caveat about a hazard its own
+    // program cannot produce — a warning printed on every run is a warning
+    // nobody reads at the erg.
+    const restFree: WorkoutProgram = {
+      intervals: Array.from({ length: 2 }, () => ({
+        kind: "time" as const,
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      })),
+    };
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, restFree);
     g.transport.notify(
       GENERAL_STATUS_UUID,
-      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 300, 1000),
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 250),
     );
-    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 300, 1000));
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 250));
     g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
     g.transport.notify(
       GENERAL_STATUS_UUID,
-      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 900, 3350),
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 120, 505),
     );
     g.clock.advance(500);
-    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(900, 3350));
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(120, 505));
+    g.clock.advance(2500);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)[1]).toMatchObject({
+      actual: { index: 1, elapsedSeconds: 60, distanceMeters: 255 },
+      finalBoundary: true,
+    });
+    const detail = verdicts(g.log)[0]!.detail;
+    expect(detail).toContain("no programmed rest");
+    expect(detail).not.toContain("too long");
+  });
+
+  it("(d) A MISSING PRIOR DECLINES: with interval 1 never recorded the subtraction would file someone else's meters, so nothing is written", async () => {
+    const g = primedGate();
+    // Only interval 0 is recorded. Interval 1's boundary was lost too —
+    // a different, unexplained loss from the final-split drop this gate is
+    // built for, and not one it may paper over.
+    await seaFretWithTwoPriorsRecorded(g, [SEA_FRET_WORK_ONLY_PRIORS[0]!]);
+
+    g.clock.advance(500);
+    g.transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      summaryBytes(SEA_FRET_REST_EXCLUSIVE_ELAPSED, SEA_FRET_TOTAL_METERS),
+    );
     g.clock.advance(2500);
     g.timer.pending()!.fire();
 
@@ -8034,7 +8214,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdict).toHaveLength(1);
     expect(verdict[0]!.detail).toContain("declined");
     // The REASON, named: which interval is missing is the whole diagnosis.
-    expect(verdict[0]!.detail).toContain("1");
+    expect(verdict[0]!.detail).toContain("interval(s) 1 were never recorded");
     expect(verdict[0]!.detail).toContain("nothing filed");
   });
 
@@ -8090,6 +8270,13 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(boundaries(g.events)).toHaveLength(0);
     expect(verdicts(g.log)).toHaveLength(1);
     expect(verdicts(g.log)[0]!.detail).toContain("out-of-window");
+    // The TERMINATE side of Minor-2's discrimination: a run that never had
+    // a grace reads differently from one whose grace a boundary claimed
+    // (test (a) pins that one).
+    expect(verdicts(g.log)[0]!.detail).toContain(
+      "ended by terminate, which opens no grace at all",
+    );
+    expect(verdicts(g.log)[0]!.detail).not.toContain("already claimed");
   });
 
   it("(g) THE AVERAGES ARE NOT DERIVABLE, so they are not invented: the synthesized actual carries null, never a whole-workout average and never zero", async () => {
@@ -8182,7 +8369,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(details.some((d) => d.includes("declined"))).toBe(true);
   });
 
-  it("A TOO-SHORT 0x0039 stores nothing and says so — the parser's null is a verdict, not a silence", async () => {
+  it("A TOO-SHORT 0x0039 stores nothing and says so — under its OWN kind, so one failure is not two declines", async () => {
     const g = primedGate();
     await rowToFinish(g);
     g.clock.advance(400);
@@ -8191,8 +8378,21 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     g.timer.pending()!.fire();
 
     expect(boundaries(g.events)).toHaveLength(0);
-    const details = verdicts(g.log).map((e) => e.detail);
-    expect(details.some((d) => d.includes("could not be decoded"))).toBe(true);
+    // A receipt-level note, not a verdict (review Minor-7): the four words
+    // `summary-reconciled` carries are the spec's four, and `declined` is
+    // the DEADLINE's verdict on the run. A garbled 0x0039 that also logged
+    // `declined` would have a reader counting one run's single failure
+    // twice.
+    const undecodable = g.log
+      .entries()
+      .filter((e) => e.kind === "summary-undecodable");
+    expect(undecodable).toHaveLength(1);
+    expect(undecodable[0]!.detail).toContain("19 byte(s)");
+    expect(undecodable[0]!.detail).toContain("could not be decoded");
+    // Exactly ONE verdict, and it is the deadline's own.
+    expect(verdicts(g.log)).toHaveLength(1);
+    expect(verdicts(g.log)[0]!.detail).toContain("declined");
+    expect(verdicts(g.log)[0]!.detail).toContain("no 0x0039 arrived");
   });
 
   it("A NEGATIVE SUBTRACTION DECLINES: the one cheap on-wire test of the cumulative premise (§23 walk item 2), and it refuses rather than files nonsense", async () => {
@@ -8202,29 +8402,17 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // fires. It is deliberately a DECLINE plus a log entry, not a clamp:
     // the walk needs the evidence, and the rower must not get a fabricated
     // interval either way.
-    const program = seaFretProgram();
+    //
+    // The contrast with (c2) is the point of both tests existing: premise 1
+    // (cumulative-vs-per-interval) fails LOUDLY, right here; premise 2
+    // (rest) fails silently and can only be caught by a reader.
     const g = primedGate();
-    await programViaStub(g.driver, g.transport, program);
-    g.transport.notify(
-      GENERAL_STATUS_UUID,
-      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 300, 1000),
-    );
-    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 300, 1000));
-    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
-    g.transport.notify(
-      GENERAL_STATUS_UUID,
-      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 600, 2200),
-    );
-    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 300, 1200));
-    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 26));
-    g.transport.notify(
-      GENERAL_STATUS_UUID,
-      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 900, 3350),
-    );
+    await seaFretWithTwoPriorsRecorded(g, SEA_FRET_WORK_ONLY_PRIORS);
+
     g.clock.advance(500);
-    // A PER-INTERVAL reading: the final interval's own 300s/1150m, which is
-    // smaller than the priors this gate would subtract from it.
-    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(300, 1150));
+    // A PER-INTERVAL reading: the final interval's own 240s/1150m, which is
+    // far smaller than the 540s of priors this gate would subtract from it.
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(240, 1150));
     g.clock.advance(2500);
     g.timer.pending()!.fire();
 
@@ -8232,6 +8420,30 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     const detail = verdicts(g.log)[0]!.detail;
     expect(detail).toContain("declined");
     expect(detail).toContain("cumulative");
+    expect(detail).toContain("§23 walk item 2");
+  });
+
+  it("A LINK DROP INSIDE THE GRACE takes the deadline with it too — a fill cannot outlive the radio (review Minor-5)", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    expect(g.timer.pending()).not.toBeNull();
+
+    // The radio drops while the deadline is still standing. Cancelled on
+    // the TRANSPORT's own disconnect, not only on a caller-initiated
+    // `disconnect()` — and cancelled ahead of the "after the current run
+    // closed, ignored" early-return, which this case would otherwise skip.
+    g.transport.fireDisconnect("fixture: the radio dropped mid-grace");
+
+    // The CANCELLER was called, which is the whole contract: in production
+    // `schedule`'s default is `setTimeout`/`clearTimeout`, so a cancelled
+    // deadline never reaches its callback at all. (This stub's `fire()`
+    // would still invoke it — deliberately not asserted here, because
+    // firing a cancelled timer by hand tests the stub, not the driver.)
+    expect(g.timer.calls[0]!.cancelled).toBe(true);
+    expect(g.timer.pending()).toBeNull();
+    expect(boundaries(g.events)).toHaveLength(0);
   });
 
   it("A REPLACED RUN takes its deadline with it: the stale reconcile fires into nothing and cannot fill the NEW run's last interval", async () => {

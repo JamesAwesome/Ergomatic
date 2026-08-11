@@ -256,7 +256,23 @@ function harness(
       // the machine is still rowing — which every re-program test below
       // does — otherwise has to walk a ten-status-tick budget that belongs
       // to `driver.test.ts`'s subject, not this file's.
-      driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      //
+      // TIMER HYGIENE (fix round 1, review Minor-4): the driver arms a real
+      // `setTimeout` at `FINISH_GRACE_MS` on every natural finish since the
+      // summary-fallback gate, and most tests in this file finish a workout
+      // without caring about it. This default stub means no test here
+      // leaves a live multi-second timer behind; the deadline simply never
+      // arrives, which is exactly what those tests already assumed. The one
+      // test that DOES care passes its own `driverOptions` (this whole
+      // object is replaced by `...deps` below when a test supplies one) and
+      // fires the deadline by hand. File-wide `vi.useFakeTimers()` was
+      // tried first and is not usable here — React Testing Library's `act`
+      // integration needs the real clock, and 19 tests fail under it.
+      driverOptions: {
+        settleTicks: 0,
+        prepareSettleTicks: 0,
+        schedule: () => (): void => undefined,
+      },
       ...deps,
     }),
   );
