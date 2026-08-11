@@ -354,6 +354,55 @@ test("today-capped", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// 2026-08-11 piece-rollup spec: the rolled (single-row) state of the piece
+// region — the trigger fixture was Ostro's own 9×1000m card, which used to
+// spend the whole cap on four identical rows plus a "+5 more pieces" row.
+// Determinism: a CUSTOM import of Ostro's exact real shape (9 reps ×
+// 1000m at 6k+2, spm 26, 1' rest — server/seed/library/at.ts's own Ostro
+// entry), narrowed via SOURCE=CUSTOM — the same idiom "today-capped" above
+// already uses for exactly the same reason (no recency race against the
+// 300 seeded globals, no plan/type coupling). A custom import rather than
+// filtering the real global Ostro entry itself: with 300 seeded workouts,
+// no combination of TYPE/DURATION/DIFFICULTY/PAIN filters reliably narrows
+// the pool to that one title (many share type+duration+difficulty), so
+// SOURCE=CUSTOM stays the only deterministic pick in this account.
+test("today-rolled", async ({ page }) => {
+  const title = "Screenshot Today Rolled Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-rolled@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await dismissStartHere(page);
+  await importBulk(
+    page,
+    [`${title} | AT | medium | 4`, "x9", "w 1000m 6k+2 @26 r1"].join("\n"),
+  );
+  await page.goto("/today");
+  await page.locator(".today-card").waitFor();
+
+  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("group", { name: "SOURCE" })
+    .getByRole("button", { name: "CUSTOM", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Apply Filter" }).click();
+  await expect(page.locator(".today-card-title")).toHaveText(title);
+  // The whole 9-piece set rolls into ONE row — no more-row, no PIECES
+  // suffix (piece-rollup contract items 1/4).
+  await expect(page.locator(".today-piece-row")).toHaveCount(1);
+  await expect(page.locator(".today-piece-text")).toContainText("9 × 1000m");
+  await expect(page.locator(".today-piece-more")).toHaveCount(0);
+  await expect(page.locator(".today-piece-foot-count")).toHaveCount(0);
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-rolled.png"),
+  });
+
+  await cleanupByTitle(page, title);
+});
+
 // Phase 6I Task 8: the fresh-user state "today.png" above never shows —
 // that capture deliberately sets baselines first (line ~234) so it can
 // exercise FILTER/SHUFFLE. This is the OTHER state a brand-new account

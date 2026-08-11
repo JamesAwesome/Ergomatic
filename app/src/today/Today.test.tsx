@@ -8,6 +8,7 @@ import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanSequenceItem } from "../api/usePlan";
 import type { RecentLog } from "../api/useRecentLogs";
 import type { WorkoutType } from "../../domain/types.js";
+import { phases } from "../../domain/expand.js";
 import { buildDraft, type SessionDraft, DRAFT_KEY } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { RUN_KEY, type SessionRun } from "../session/run";
@@ -2399,6 +2400,18 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
 // `pieceList`/`peakIndex`/`workAndTotal` run against the exact `BASELINES`
 // fixture (k2Seconds:112, k6Seconds:122) this file's `mockReady` defaults
 // to, not re-derived by hand.
+// Golden Hour (O2, medium): a real reps-pyramid whose block boundary rolls
+// (see the "Golden Hour" test below) — kept as its own steps reference
+// (rather than only a `libraryEntry(...)`) so the arithmetic test can also
+// run the real `phases()` function against it independently of
+// `pieceList`, per the piece-rollup contract's item 3 ("assert they agree
+// in a test rather than picking one silently").
+const GOLDEN_HOUR_WORKOUT = LIBRARY_WORKOUTS.find(
+  (w) => w.title === "Golden Hour",
+);
+if (!GOLDEN_HOUR_WORKOUT)
+  throw new Error("missing library fixture: Golden Hour");
+
 describe("Today (piece region)", () => {
   it("renders two-line rows with full refs and no PIECES count in the foot for a real 2-piece workout, with foot arithmetic from workAndTotal (Sun Pillar)", async () => {
     mockReady({
@@ -2451,26 +2464,44 @@ describe("Today (piece region)", () => {
     expect(document.querySelector(".today-piece-foot-count")).toBeNull();
   });
 
-  it("shows the trailing rest on the LAST piece when the data carries one — the approved deviation (Sea Fret)", async () => {
+  it("rolls two identical consecutive pieces into ONE row with an 'N × ' duration prefix and the run's shared rest (Sea Fret — piece-rollup spec rule 1; was 'shows the trailing rest on the LAST piece... the approved deviation' before rolling collapsed its 2 identical pieces to 1 row)", async () => {
     mockReady({ plan: FREESTYLE_PLAN, workouts: [ZEPHYR] });
     await renderToday();
     expect(
       await screen.findByRole("heading", { name: "Sea Fret" }),
     ).toBeVisible();
+    // Sea Fret's own two pieces (4' at 6k+12, spm 22, 1' rest each) are
+    // fully identical including rest — rule 1 rolls them into one row
+    // (count 2) rather than the two separate rows this test asserted
+    // before Task 2's rollup renderer landed.
     const rows = document.querySelectorAll(".today-piece-row");
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
+      "2 × 4:00",
+    );
+    expect(rows[0].querySelector(".today-piece-ref")?.textContent).toBe(
+      "at 6k +12,",
+    );
     expect(rows[0].querySelector(".today-piece-rest")?.textContent).toBe(
       "1′ r",
     );
-    expect(rows[1].querySelector(".today-piece-rest")?.textContent).toBe(
-      "1′ r",
+    expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
+      "2:14.0",
     );
+    expect(rows[0].querySelector(".today-piece-spm-line")?.textContent).toBe(
+      "22 SPM",
+    );
+    // workAndTotal doesn't call pieceList — foot arithmetic is unaffected
+    // by rolling, same numbers as before.
     expect(document.querySelector(".today-piece-foot-work")?.textContent).toBe(
       "8′ WORK",
     );
     expect(document.querySelector(".today-piece-foot-total")?.textContent).toBe(
       "10′ TOTAL",
     );
+    // Only 1 row, well under PIECE_CAP — no more-row, no foot count.
+    expect(document.querySelector(".today-piece-more")).toBeNull();
+    expect(document.querySelector(".today-piece-foot-count")).toBeNull();
   });
 
   it("renders distance pieces with metres in the duration text and a split target; a piece the data never authors a rest for shows none (Sun Dog)", async () => {
@@ -2495,7 +2526,7 @@ describe("Today (piece region)", () => {
     expect(rows[1].querySelector(".today-piece-rest")).toBeNull();
   });
 
-  it("shows ALL OUT in the pace slot for effort pieces and renders zero tint when no row carries an offset (Ground Strike, all-MAX)", async () => {
+  it("rolls four identical all-MAX effort pieces into ONE row, still shows ALL OUT in the pace slot, and renders zero tint since no row carries an offset (Ground Strike; was 4 separate rows before rolling)", async () => {
     mockReady({
       plan: FREESTYLE_PLAN,
       workouts: [libraryEntry("Ground Strike", "w-groundstrike", null)],
@@ -2504,18 +2535,27 @@ describe("Today (piece region)", () => {
     expect(
       await screen.findByRole("heading", { name: "Ground Strike" }),
     ).toBeVisible();
+    // Ground Strike's 4 pieces (1.5' ALL OUT, spm 30, 3:30 rest each) are
+    // fully identical — rule 1 rolls them into one row (count 4).
     const rows = document.querySelectorAll(".today-piece-row");
-    expect(rows).toHaveLength(4);
-    rows.forEach((row) => {
-      expect(row.querySelector(".today-piece-split")?.textContent).toBe(
-        "ALL OUT",
-      );
-      expect(row.querySelector(".today-piece-ref")).toBeNull();
-      expect(row.querySelector(".today-piece-rest")?.textContent).toBe(
-        "3:30 r",
-      );
-    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
+      "4 × 1:30",
+    );
+    expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
+      "ALL OUT",
+    );
+    expect(rows[0].querySelector(".today-piece-ref")).toBeNull();
+    expect(rows[0].querySelector(".today-piece-rest")?.textContent).toBe(
+      "3:30 r",
+    );
+    expect(rows[0].querySelector(".today-piece-spm-line")?.textContent).toBe(
+      "30 SPM",
+    );
+    // Effort rows carry no offset at all — zero tint, same as before rolling.
     expect(document.querySelector(".today-piece-peak")).toBeNull();
+    expect(document.querySelector(".today-piece-more")).toBeNull();
+    expect(document.querySelector(".today-piece-foot-count")).toBeNull();
   });
 
   it("compresses to one-line rows at 5+ pieces, caps at 4 with a non-interactive +N-more row naming the first three unseen durations, and adds the PIECES count to the foot (Outflow Boundary, 7 real pieces)", async () => {
@@ -2569,7 +2609,7 @@ describe("Today (piece region)", () => {
     expect(tinted[0]).toBe(rows[3]);
   });
 
-  it("appends an ellipsis to the +more sub-line when more than three durations are hidden (Rime Ice, 8 real pieces)", async () => {
+  it("rolls all 8 identical pieces into ONE row with an 'N × ' duration prefix, leaving no more-row at all (Rime Ice; was 8 rows compressed behind a +4-more cutoff before rolling)", async () => {
     mockReady({
       plan: FREESTYLE_PLAN,
       workouts: [libraryEntry("Rime Ice", "w-rimeice", null)],
@@ -2578,12 +2618,133 @@ describe("Today (piece region)", () => {
     expect(
       await screen.findByRole("heading", { name: "Rime Ice" }),
     ).toBeVisible();
-    const more = document.querySelector(".today-piece-more");
-    expect(more?.querySelector(".today-piece-more-title")?.textContent).toBe(
-      "4 more pieces",
+    // Rime Ice's 8 pieces (3' at 6k+10, spm 22, 1' rest each) are fully
+    // identical — rule 1 rolls them into one row (count 8), which drops
+    // the row count from 8 (5+, compressed, capped, +more) to 1 (two-line,
+    // uncapped, no more-row) — the exact behavior contract item 1/5
+    // describes for a fully-uniform real set.
+    const rows = document.querySelectorAll(".today-piece-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
+      "8 × 3:00",
     );
+    expect(rows[0].querySelector(".today-piece-ref")?.textContent).toBe(
+      "at 6k +10,",
+    );
+    expect(rows[0].querySelector(".today-piece-rest")?.textContent).toBe(
+      "1′ r",
+    );
+    expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
+      "2:12.0",
+    );
+    expect(document.querySelector(".today-piece-more")).toBeNull();
+    expect(document.querySelector(".today-piece-foot-count")).toBeNull();
+    expect(document.querySelector(".today-piece-foot-work")?.textContent).toBe(
+      "24′ WORK",
+    );
+    expect(document.querySelector(".today-piece-foot-total")?.textContent).toBe(
+      "32′ TOTAL",
+    );
+  });
+
+  it("renders exactly one piece row for Ostro's real 9×1000m shape, with the split and 26 SPM, no more-row, no PIECES suffix (piece-rollup contract item 4 — the trigger fixture)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Ostro", "w-ostro", null)],
+    });
+    await renderToday();
+    expect(await screen.findByRole("heading", { name: "Ostro" })).toBeVisible();
+    // Ostro's real seed data (server/seed/library/at.ts): {k:"reps",count:9}
+    // over a SINGLE 1000m@6k+2/spm26/1' step — expand.ts's phases() emits
+    // the same 1' rest after every repetition including the 9th (Task 1's
+    // own verified finding: the real ninth piece is NOT restless), so all
+    // 9 pieces are fully identical and roll via rule 1 into ONE row.
+    const rows = document.querySelectorAll(".today-piece-row");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
+      "9 × 1000m",
+    );
+    // Only 1 row (< 5) -> two-line, non-compressed layout -> refTextFull,
+    // which includes the base name ("at 6k +2") rather than the
+    // offset-only compact form ("at +2") — see this task's report for why
+    // this diverges from the brief's own illustrative wording.
+    expect(rows[0].querySelector(".today-piece-ref")?.textContent).toBe(
+      "at 6k +2,",
+    );
+    expect(rows[0].querySelector(".today-piece-rest")?.textContent).toBe(
+      "1′ r",
+    );
+    expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
+      "2:04.0",
+    );
+    expect(rows[0].querySelector(".today-piece-spm-line")?.textContent).toBe(
+      "26 SPM",
+    );
+    expect(document.querySelector(".today-piece-more")).toBeNull();
+    expect(document.querySelector(".today-piece-foot-count")).toBeNull();
+    expect(document.querySelector(".today-piece-foot-work")?.textContent).toBe(
+      "37′ WORK",
+    );
+    expect(document.querySelector(".today-piece-foot-total")?.textContent).toBe(
+      "46′ TOTAL",
+    );
+  });
+
+  it("counts remaining PIECES (not rows) in the +more title, renders an 'N × ' token for a rolled hidden row in the sub-line, and names total pieces (sum of every row's count) in the foot suffix — asserted equal to an independent phases-derived count (Golden Hour: a 5-piece pyramid block repeated twice, whose two touching middle pieces roll into one)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Golden Hour", "w-goldenhour", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Golden Hour" }),
+    ).toBeVisible();
+
+    // Golden Hour authors {reps:2} over a 2-3-4-3-2' pyramid at 6k+8 — the
+    // block's own last piece (2') and the repeat's own first piece (2')
+    // are adjacent and fully identical (same duration/ref/spm/rest), so
+    // rule 1 rolls THOSE TWO into one row: 10 raw pieces -> 9 rows, with
+    // exactly one row carrying count 2 (row index 4, the boundary).
+    // 9 rows >= 5 -> compressed one-line rows, capped at 4 visible.
+    expect(document.querySelectorAll(".today-piece-row")).toHaveLength(0);
+    const rows = document.querySelectorAll(".today-piece-row-compact");
+    expect(rows).toHaveLength(4);
+    expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
+      "2:00",
+    );
+
+    const more = document.querySelector(".today-piece-more");
+    expect(more).not.toBeNull();
+    // Item 2: hidden ROWS are 5 (rows 5-9), but hidden PIECES are 6 (the
+    // rolled row among them stands for 2, not 1: 2+1+1+1+1 = 6) — the
+    // title must say 6, not 5.
+    expect(more?.querySelector(".today-piece-more-title")?.textContent).toBe(
+      "6 more pieces",
+    );
+    // Item 2's sub-line: first three unseen ROW tokens, rolled rows use
+    // the "N × " form ("2 × 2:00"), singles are bare ("3:00"/"4:00"), then
+    // an ellipsis (5 hidden rows > 3).
     expect(more?.querySelector(".today-piece-more-sub")?.textContent).toBe(
-      "3:00 · 3:00 · 3:00 …",
+      "2 × 2:00 · 3:00 · 4:00 …",
+    );
+
+    // Item 3: the foot's "· N PIECES" suffix names TOTAL pieces (sum of
+    // every row's count), asserted equal to an INDEPENDENT phases-derived
+    // count — the number of real work phases `phases()` itself emits —
+    // rather than picked from either side silently.
+    const rawPieceCount = phases(GOLDEN_HOUR_WORKOUT.steps, BASELINES).filter(
+      (p) => p.type === "work",
+    ).length;
+    const rowPieceSum = 4 + 6; // 4 visible (all count 1) + 6 hidden pieces
+    expect(rawPieceCount).toBe(rowPieceSum);
+    expect(document.querySelector(".today-piece-foot-count")?.textContent).toBe(
+      `· ${rawPieceCount} PIECES`,
+    );
+    expect(document.querySelector(".today-piece-foot-work")?.textContent).toBe(
+      "28′ WORK",
+    );
+    expect(document.querySelector(".today-piece-foot-total")?.textContent).toBe(
+      "48′ TOTAL",
     );
   });
 

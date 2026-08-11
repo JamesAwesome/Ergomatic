@@ -556,6 +556,18 @@ function UnloggedRow({ run }: { run: SessionRun }) {
 // the card's own Link is still the only tap target in here, nothing nests.
 const PIECE_CAP = 4;
 
+// Task 2 (2026-08-11 piece-rollup spec, rule 7): a rolled row (`count` > 1)
+// prefixes "N × " to its duration in the SAME slot a lone piece's bare
+// duration occupies — everything else about the row (ref text, rest, spm,
+// split) is already the run's shared value by construction (`rollRuns`
+// keeps the first row's fields; the identity check that formed the run
+// guarantees every joined piece agreed on them). U+00D7 with single spaces,
+// exactly the Library line's own idiom (`structureLine`'s
+// `${real.length} × ${pieceToken(...)}` — same character, same spacing).
+function pieceToken(row: PieceRow): string {
+  return row.count > 1 ? `${row.count} × ${row.duration}` : row.duration;
+}
+
 function TodayPieceRow({
   row,
   numeral,
@@ -578,7 +590,7 @@ function TodayPieceRow({
 
   const text = (
     <span className="today-piece-text">
-      {row.duration}
+      {pieceToken(row)}
       {refText !== null && (
         <>
           {" "}
@@ -638,7 +650,20 @@ function PieceRegion({
   const { workMinutes, totalMinutes } = workAndTotal(steps, baselines);
   const visible = rows.slice(0, PIECE_CAP);
   const hidden = rows.slice(PIECE_CAP);
+  // Piece-rollup spec rule 4: the two-line/compressed threshold and the cap
+  // both count ROWS (post-roll `pieceList` output), unchanged from before
+  // this feature — a rolled row already stands for its own N pieces, it
+  // does not inflate the row count that drives this layout decision.
   const compact = rows.length >= 5;
+  // The "+N more pieces" row counts remaining PIECES, not rows (spec rule
+  // 4): a hidden rolled row stands for `count` pieces, not one.
+  const hiddenPieceCount = hidden.reduce((sum, r) => sum + r.count, 0);
+  // The foot's "· N PIECES" suffix (spec rule 5) names TOTAL pieces the
+  // same way — the count it named before rolling existed (one row per
+  // piece, so `rows.length` and this sum agreed by construction); summing
+  // every row's `count` keeps that number true now that rows can stand for
+  // more than one piece each.
+  const totalPieceCount = rows.reduce((sum, r) => sum + r.count, 0);
 
   return (
     <div className="today-pieces">
@@ -656,12 +681,12 @@ function PieceRegion({
           <span className="today-piece-more-glyph">+</span>
           <div className="today-piece-more-text">
             <span className="today-piece-more-title">
-              {hidden.length} more piece{hidden.length === 1 ? "" : "s"}
+              {hiddenPieceCount} more piece{hiddenPieceCount === 1 ? "" : "s"}
             </span>
             <span className="today-piece-more-sub">
               {hidden
                 .slice(0, 3)
-                .map((r) => r.duration)
+                .map((r) => pieceToken(r))
                 .join(" · ")}
               {hidden.length > 3 ? " …" : ""}
             </span>
@@ -673,7 +698,9 @@ function PieceRegion({
         <span className="today-piece-foot-work">{workMinutes}′ WORK</span>
         <span className="today-piece-foot-total">{totalMinutes}′ TOTAL</span>
         {rows.length > PIECE_CAP && (
-          <span className="today-piece-foot-count">· {rows.length} PIECES</span>
+          <span className="today-piece-foot-count">
+            · {totalPieceCount} PIECES
+          </span>
         )}
       </div>
     </div>
