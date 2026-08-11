@@ -61,10 +61,14 @@ piece.
 interface PieceRow {
   duration: string;        // "18:00" (fmtDuration) or "500m"; a test
                            // piece prints its label ("All out") here
-  refText: string | null;  // "at 6k +10" / "at +4" (offset-only when
-                           // every split-ref piece shares one base) /
-                           // "at 6k pace" (offset 0) / null for
-                           // effort and test pieces
+  refTextFull: string | null;    // "at 6k +10" / "at 6k pace"; the
+                                 // two-line rows' form (mocks name the
+                                 // base there even when shared)
+  refTextCompact: string | null; // "at +10" when the set shares one
+                                 // base (the compressed rows' form);
+                                 // "at 6k pace" at offset 0; equals
+                                 // refTextFull for mixed bases; null
+                                 // for effort and test pieces
   effortText: string | null; // "ALL OUT" / "EASY" in the pace slot
                            // for effort pieces; test pieces show
                            // nothing there
@@ -73,8 +77,11 @@ interface PieceRow {
   split: string | null;    // "2:15.0" via resolveSplit+fmtSplit;
                            // null for effort/test pieces
   spm: number | null;
-  isPeak: boolean;         // see §2
+  off: number | null;      // signed offset for split pieces (peak math)
 }
+// The tint is not a row field: `peakIndex(rows, visibleCount)` returns
+// the tinted index or null (peak behind the cap / all-effort), and
+// `workAndTotal(steps, baselines)` feeds the summary foot — see §2.
 ```
 
 **`structureLine(steps: Step[]): string`** — the Library line. Takes
