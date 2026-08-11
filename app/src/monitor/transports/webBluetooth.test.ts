@@ -373,128 +373,126 @@ describe("createWebBluetoothTransport: 0x0039/0x003A join SERVICE_OF (fast-follo
   );
 });
 
+/** Helper to capture promise outcomes for assertion after the event loop
+ *  has processed them (same pattern as capacitorBle.test.ts:267-273). */
+type Settled =
+  | { status: "fulfilled"; value: unknown }
+  | { status: "rejected"; value: unknown };
+
+function settled(promise: Promise<unknown>): Promise<Settled> {
+  return promise.then(
+    (value): Settled => ({ status: "fulfilled", value }),
+    (value: unknown): Settled => ({ status: "rejected", value }),
+  );
+}
+
 describe("createWebBluetoothTransport: connect() timeout race (spec §6, R2-web)", () => {
-  // Use real timers to avoid fake timer microtask issues, since these tests
-  // involve pending promises that need proper async handling (I7, I8).
+  beforeEach(() => {
+    vi.useFakeTimers();
+    return () => {
+      vi.useRealTimers();
+    };
+  });
 
-  it(
-    "gatt.connect() never settles → connect() rejects at 10_000ms with 'Connection timeout.'",
-    {
-      timeout: 15_000,
-    },
-    async () => {
-      const device = new FakeDevice("pm5-timeout-1", "PM5 9991");
-      // Make gatt.connect() hang forever
-      device.gatt.connect = vi.fn(() => new Promise(() => {}));
-      installFakeBluetooth(device);
-      const transport = createWebBluetoothTransport();
+  it("gatt.connect() never settles → connect() rejects at 10_000ms with 'Connection timeout.'", async () => {
+    const device = new FakeDevice("pm5-timeout-1", "PM5 9991");
+    // Make gatt.connect() hang forever
+    device.gatt.connect = vi.fn(() => new Promise(() => {}));
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
 
-      await transport.scan();
-      await expect(transport.connect(device.id)).rejects.toThrow(
-        "Connection timeout.",
-      );
-    },
-  );
+    await transport.scan();
+    const outcome = settled(transport.connect(device.id));
 
-  it(
-    "late RESOLVE after race lost → gatt.disconnect() is CALLED on the zombie before dropping it",
-    {
-      timeout: 15_000,
-    },
-    async () => {
-      const device = new FakeDevice("pm5-timeout-2", "PM5 9992");
-      let resolveConnect: ((value: FakeGattServer) => void) | null = null;
-      device.gatt.connect = vi.fn(
-        () =>
-          new Promise<FakeGattServer>((resolve) => {
-            resolveConnect = resolve as (value: FakeGattServer) => void;
-          }),
-      );
-      installFakeBluetooth(device);
-      const transport = createWebBluetoothTransport();
+    // Nothing fires before 10s
+    await vi.advanceTimersByTimeAsync(9_999);
+    // Nothing fires a moment early
+    expect(vi.getTimerCount()).toBe(1);
 
-      await transport.scan();
-      const connectPromise = transport.connect(device.id);
+    // Advance to the timeout
+    await vi.advanceTimersByTimeAsync(1);
 
-      // Attach a handler immediately to prevent unhandled rejection warnings
-      // if the timeout fires before the test checks the result
-      let timeoutError: Error | unknown = null;
-      connectPromise.catch((err: unknown) => {
-        timeoutError = err;
-      });
+    const settledConnect = await outcome;
+    expect(settledConnect.status).toBe("rejected");
+    expect(settledConnect.value).toBeInstanceOf(Error);
+    expect((settledConnect.value as Error).message).toContain(
+      "Connection timeout.",
+    );
+  });
 
-      // Wait for the timeout to fire (plus margin for event loop)
-      await new Promise((resolve) => setTimeout(resolve, 10_500));
+  it("late RESOLVE after race lost → gatt.disconnect() is CALLED on the zombie before dropping it", async () => {
+    const device = new FakeDevice("pm5-timeout-2", "PM5 9992");
+    let resolveConnect: ((value: FakeGattServer) => void) | null = null;
+    device.gatt.connect = vi.fn(
+      () =>
+        new Promise<FakeGattServer>((resolve) => {
+          resolveConnect = resolve as (value: FakeGattServer) => void;
+        }),
+    );
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
 
-      // Verify the timeout rejection was received
-      expect(timeoutError).not.toBeNull();
-      expect(timeoutError).toBeInstanceOf(Error);
-      expect((timeoutError as Error).message).toContain("Connection timeout.");
+    await transport.scan();
+    const outcome = settled(transport.connect(device.id));
 
-      // Now the late resolve happens — this triggers the .then() handler
-      expect(resolveConnect).not.toBeNull();
-      resolveConnect!(device.gatt);
+    // Advance to timeout
+    await vi.advanceTimersByTimeAsync(10_001);
 
-      // Let microtasks run to ensure the disconnect is called
-      await new Promise((resolve) => {
-        setImmediate(resolve);
-      });
+    const settledConnect = await outcome;
+    expect(settledConnect.status).toBe("rejected");
+    expect((settledConnect.value as Error).message).toContain(
+      "Connection timeout.",
+    );
 
-      // The zombie gatt.disconnect() MUST have been called
-      expect(device.gatt.disconnect).toHaveBeenCalled();
-    },
-  );
+    // Now the late resolve happens — this triggers the .then() handler
+    expect(resolveConnect).not.toBeNull();
+    resolveConnect!(device.gatt);
 
-  it(
-    "late REJECT after race lost → swallowed, no unhandled rejection",
-    {
-      timeout: 15_000,
-    },
-    async () => {
-      const device = new FakeDevice("pm5-timeout-3", "PM5 9993");
-      let rejectConnect: ((err: unknown) => void) | null = null;
-      device.gatt.connect = vi.fn(
-        () =>
-          new Promise<FakeGattServer>((_resolve, reject) => {
-            rejectConnect = reject as (err: unknown) => void;
-          }),
-      );
-      installFakeBluetooth(device);
-      const transport = createWebBluetoothTransport();
+    // Flush microtasks to ensure the disconnect is called
+    await vi.advanceTimersByTimeAsync(0);
 
-      await transport.scan();
-      const connectPromise = transport.connect(device.id);
+    // The zombie gatt.disconnect() MUST have been called
+    expect(device.gatt.disconnect).toHaveBeenCalled();
+  });
 
-      // Attach a handler immediately to prevent unhandled rejection warnings
-      let timeoutError: Error | unknown = null;
-      connectPromise.catch((err: unknown) => {
-        timeoutError = err;
-      });
+  it("late REJECT after race lost → swallowed, no unhandled rejection", async () => {
+    const device = new FakeDevice("pm5-timeout-3", "PM5 9993");
+    let rejectConnect: ((err: unknown) => void) | null = null;
+    device.gatt.connect = vi.fn(
+      () =>
+        new Promise<FakeGattServer>((_resolve, reject) => {
+          rejectConnect = reject as (err: unknown) => void;
+        }),
+    );
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
 
-      // Wait for the timeout to fire
-      await new Promise((resolve) => setTimeout(resolve, 10_500));
+    await transport.scan();
+    const outcome = settled(transport.connect(device.id));
 
-      // Verify the timeout rejection
-      expect(timeoutError).not.toBeNull();
-      expect(timeoutError).toBeInstanceOf(Error);
-      expect((timeoutError as Error).message).toContain("Connection timeout.");
+    // Advance to timeout
+    await vi.advanceTimersByTimeAsync(10_001);
 
-      // Now the late reject happens — this rejection gets caught by the
-      // raceConnectTimeout's .then() handler, which swallows it (the
-      // attached handler prevents unhandled rejection).
-      expect(rejectConnect).not.toBeNull();
-      rejectConnect!(new Error("Late radio error"));
+    const settledConnect = await outcome;
+    // The race already rejected with the timeout (postcondition 1)
+    expect(settledConnect.status).toBe("rejected");
+    expect((settledConnect.value as Error).message).toContain(
+      "Connection timeout.",
+    );
 
-      // Let microtasks run — Vitest detects unhandled rejections in the
-      // runner, so if the rejection leaks, this would fail automatically.
-      await new Promise((resolve) => {
-        setImmediate(resolve);
-      });
+    // Now the late reject happens — this rejection gets caught by the
+    // raceConnectTimeout's .then() handler, which swallows it (the
+    // attached handler prevents unhandled rejection).
+    expect(rejectConnect).not.toBeNull();
+    rejectConnect!(new Error("Late radio error"));
 
-      // Test passes if no unhandled rejection was raised
-      expect(true).toBe(true);
-    },
-  );
+    // Flush microtasks — Vitest detects unhandled rejections in the runner,
+    // so if the rejection leaks, this would fail automatically (postcondition 2)
+    await vi.advanceTimersByTimeAsync(0);
+
+    // If we reach here without Vitest aborting the test, the late rejection
+    // was successfully swallowed.
+  });
 
   it("an in-time connect → behavior unchanged, no new awaits observable", async () => {
     const device = new FakeDevice("pm5-timeout-4", "PM5 9994");
@@ -503,10 +501,43 @@ describe("createWebBluetoothTransport: connect() timeout race (spec §6, R2-web)
     const transport = createWebBluetoothTransport();
 
     await transport.scan();
-    // This should resolve normally without waiting for the timeout
+    // This should resolve immediately without waiting for the timeout
     await expect(transport.connect(device.id)).resolves.toBeUndefined();
 
     // The gatt.connect() was called once
     expect(device.gatt.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("late RESOLVE → zombie disconnect does NOT fire onDisconnect callback (M-2 guard)", async () => {
+    const device = new FakeDevice("pm5-timeout-5", "PM5 9995");
+    let resolveConnect: ((value: FakeGattServer) => void) | null = null;
+    device.gatt.connect = vi.fn(
+      () =>
+        new Promise<FakeGattServer>((resolve) => {
+          resolveConnect = resolve as (value: FakeGattServer) => void;
+        }),
+    );
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
+    const drops: string[] = [];
+    transport.onDisconnect((reason) => drops.push(reason));
+
+    await transport.scan();
+    const outcome = settled(transport.connect(device.id));
+
+    // Advance to timeout
+    await vi.advanceTimersByTimeAsync(10_001);
+    await outcome;
+
+    // The late resolve happens and triggers zombie disconnect
+    expect(resolveConnect).not.toBeNull();
+    resolveConnect!(device.gatt);
+
+    // Flush all microtasks including the gattserverdisconnected event
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The M-2 guard prevented onDisconnect from firing (the guard was set
+    // before the zombie disconnect, so gattserverdisconnected is suppressed)
+    expect(drops).toStrictEqual([]);
   });
 });

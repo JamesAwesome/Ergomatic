@@ -492,6 +492,32 @@ describe("useMonitorSession: connect", () => {
     expect(result.current.phase).toBe("failed");
   });
 
+  it("the web bluetooth connect timeout (R2-web): same literal, same classification as the iOS plugin (one vocabulary)", async () => {
+    // Fast-follow Task 3: webBluetooth.ts wraps gatt.connect() in a 10s race,
+    // rejecting with the SAME literal "Connection timeout." the iOS plugin uses.
+    // This test pins that a web-transport timeout classifies as link-failed,
+    // proving the "one vocabulary" design (spec §6, ecosystem review R2).
+    const webTimeout = new Error("Connection timeout.");
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () =>
+          stubRadio({ connect: () => Promise.reject(webTimeout) }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // Exactly the same classification as the native case above: link-failed.
+    expect(result.current.error).toStrictEqual({
+      reason: "link-failed",
+      detail: "The link to the monitor failed.",
+      raw: "Connection timeout.",
+    });
+    expect(result.current.phase).toBe("failed");
+  });
+
   it("Bluetooth switched off: bluetooth-off, even though the adapter throws the same NotFoundError name", async () => {
     const off = new Error("Bluetooth adapter not available.");
     off.name = "NotFoundError";
