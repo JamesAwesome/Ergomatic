@@ -4581,10 +4581,12 @@ project's wire):
    rest into an identically-named field somewhere.
 
    **How to settle it.** Row a MULTI-INTERVAL piece WITH REST — a 2×1'
-   with 1' rest is enough — and read the stash. The
-   `summary-reconciled: filled-from-summary` entry states the program's own
-   total rest beside the derived numbers for exactly this purpose, so the
-   check is one subtraction: if the derived final interval exceeds its
+   with 1' rest is enough — and read the stash. The `summary-totals`
+   entry (post-final-review IMP-1: fires on EVERY row at 0x0039 receipt,
+   healthy ones included — the `filled-from-summary` entry only exists
+   when a split actually dropped) states 0x0039's own decoded
+   elapsed/meters beside the recorded-splits sum and the program's total
+   rest for exactly this purpose, so the check is one subtraction: if the derived final interval exceeds its
    programmed work by about the rest allowance, the two sides disagree and
    `deriveFinalIntervalFromSummary` is the single function that changes. A
    single-interval row cannot settle it (no prior to subtract, no rest
