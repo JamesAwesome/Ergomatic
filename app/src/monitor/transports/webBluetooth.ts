@@ -129,13 +129,14 @@ function serviceFor(characteristicId: string): string {
  *  RESOLUTION is NOT dropped the way raceScanTimeout does — a gatt.connect()
  *  that resolves after the race lost is a ZOMBIE LIVE LINK, not a harmless
  *  stale pick. The late-resolve arm calls `gatt.disconnect()` on the zombie
- *  before dropping it. A late REJECTION (an error in gatt.connect() that
- *  arrives after the timeout) is swallowed — the outer promise has already
- *  rejected with the timeout, and the attached handler prevents an
- *  unhandled rejection. */
+ *  before dropping it, after arming the M-2 guard via the callback. A late
+ *  REJECTION (an error in gatt.connect() that arrives after the timeout) is
+ *  swallowed — the outer promise has already rejected with the timeout, and
+ *  the attached handler prevents an unhandled rejection. */
 function raceConnectTimeout(
   pipeline: Promise<BluetoothRemoteGATTServer>,
   gatt: BluetoothRemoteGATTServer,
+  beforeZombieDisconnect: () => void,
 ): Promise<BluetoothRemoteGATTServer> {
   return new Promise<BluetoothRemoteGATTServer>((resolve, reject) => {
     let settled = false;
@@ -154,7 +155,10 @@ function raceConnectTimeout(
         } else {
           // Late resolve: the gatt.connect() succeeded after the race lost.
           // This is a live link that needs cleanup, not a harmless stale
-          // pick (spec §6, adversarial I7).
+          // pick (spec §6, adversarial I7). Arm the M-2 caller-initiated-
+          // disconnect guard before the zombie disconnect to prevent
+          // gattserverdisconnected from firing onDisconnect.
+          beforeZombieDisconnect();
           gatt.disconnect();
         }
       },
@@ -295,7 +299,13 @@ export function createWebBluetoothTransport(): Transport {
         "gattserverdisconnected",
         handleGattServerDisconnected,
       );
-      server = await raceConnectTimeout(device.gatt.connect(), device.gatt);
+      server = await raceConnectTimeout(
+        device.gatt.connect(),
+        device.gatt,
+        () => {
+          callerInitiatedDisconnect = true;
+        },
+      );
     },
 
     // L-7 (final-review): prefers `writeValueWithoutResponse` with no
