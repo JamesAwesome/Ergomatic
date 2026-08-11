@@ -144,6 +144,24 @@ describe("createCapacitorBleTransport: onDisconnect contract (M-2)", () => {
 
     expect(drops).toHaveLength(1);
   });
+
+  it("disconnect() clears the device id — a second disconnect() no-ops and write() throws before-connect (final review, minor 2)", async () => {
+    const transport = createCapacitorBleTransport();
+
+    await transport.connect("pm5-5");
+    await transport.disconnect();
+    vi.mocked(BleClient.disconnect).mockClear();
+
+    // The queue invariant, held by the transport itself: with no device on
+    // record there is nothing to disconnect, so no BleClient call may be
+    // queued (it would sit behind a pending sheet on a reused instance).
+    await transport.disconnect();
+    expect(BleClient.disconnect).not.toHaveBeenCalled();
+
+    await expect(
+      transport.write("whatever", new Uint8Array([1])),
+    ).rejects.toThrow("before connect()");
+  });
 });
 
 describe("scan(): the pipeline and its filter (spec §3.1-§3.3)", () => {

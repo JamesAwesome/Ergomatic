@@ -390,7 +390,15 @@ export function createCapacitorBleTransport(): Transport {
     async disconnect(): Promise<void> {
       if (deviceId !== null) {
         callerInitiatedDisconnect = true;
-        await BleClient.disconnect(deviceId);
+        const id = deviceId;
+        // Nulled BEFORE the await so the queue invariant holds inside the
+        // transport itself, not only via the hook's fresh-instance-per-
+        // connect pattern: a reused instance's post-timeout disconnect()
+        // must no-op rather than queue a BleClient call behind a pending
+        // sheet (final review, minor 2 — load-bearing once reconnect
+        // reuses instances).
+        deviceId = null;
+        await BleClient.disconnect(id);
       }
     },
 
