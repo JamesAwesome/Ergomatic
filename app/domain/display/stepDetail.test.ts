@@ -66,17 +66,18 @@ describe("pieceList", () => {
     expect(rows[1].split).toBe("2:11.0");
   });
 
-  it("DEVIATION: a trailing rest on the last piece is SHOWN", () => {
+  it("DEVIATION: a trailing rest on the last piece is SHOWN — and since these two pieces are otherwise identical with equal rest, they roll into one run (2026-08-11 spec rule 1)", () => {
     const rows = pieceList([w(5, 4, undefined, 2), w(5, 4, undefined, 2)], B);
-    expect(rows[1].restText).toBe("2′ r");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ count: 2, restText: "2′ r" });
   });
 
-  it("expands a reps block into per-piece rows (James's ruling)", () => {
+  it("expands a reps block into per-piece rows, then rolls the identical run into one (James's ruling + 2026-08-11 rolling spec)", () => {
     const steps: Step[] = [{ k: "reps", count: 3 }, w(5, 10, 24, 2)];
     const rows = pieceList(steps, B);
-    expect(rows).toHaveLength(3);
-    expect(rows.every((r) => r.duration === "5:00")).toBe(true);
-    expect(rows[2].restText).toBe("2′ r"); // authored on the step; deviation shows it
+    expect(rows).toHaveLength(1);
+    expect(rows[0].duration).toBe("5:00");
+    expect(rows[0]).toMatchObject({ count: 3, restText: "2′ r" }); // authored on the step; deviation shows it, rolling collapses the 3 identical rows
   });
 
   it("offset 0 reads 'at 6k pace' in both forms; fractional rest uses the clock", () => {
@@ -169,6 +170,146 @@ describe("pieceList", () => {
     const rows = pieceList(steps, B);
     expect(rows).toHaveLength(1);
     expect(rows[0].restText).toBe("2′ r");
+  });
+});
+
+describe("pieceList rolls consecutive identical runs (2026-08-11 spec)", () => {
+  const wm = (
+    meters: number,
+    off: number,
+    spm?: number,
+    restMinutes?: number,
+  ): Step => ({
+    k: "w",
+    duration: { kind: "distance", meters },
+    ref: { base: "6k", off },
+    ...(spm !== undefined ? { spm } : {}),
+    ...(restMinutes !== undefined ? { restMinutes } : {}),
+  });
+
+  it("the Ostro shape (real library entry, at.ts:1371): nine identical 1000m pieces roll to ONE row", () => {
+    // CONTROLLER NOTE (verified against the real seed, not the brief's
+    // reconstruction): Ostro's nine pieces come from ONE authored "w" step
+    // repeated via a single "reps" marker, so restMinutes:1 is on EVERY
+    // repetition including the ninth — expand.ts's phases() (the "w" case's
+    // unconditional `if (s.restMinutes) out.push(rest...)`, no last-phase
+    // special-case) emits a rest phase after the 9th work phase exactly as
+    // it does after the first 8, and pieceList's rest-attachment is equally
+    // unconditional (this file's own "DEVIATION: a trailing rest on the
+    // last piece is SHOWN" case above proves the general rule). So the
+    // real ninth row's restText is "1′ r", THE SAME as rows 1-8 — it is
+    // NOT restless. This run therefore joins entirely via rule 1 (every
+    // field, including rest, already equal); the trailing-rest EXCEPTION
+    // (rule 2) is never reached by this fixture. The design spec's own
+    // prose ("ninth restless") does not match the computed model here —
+    // see the task report. Rule 2's positive branch is covered by the
+    // dedicated test below instead.
+    const ostro = LIBRARY_WORKOUTS.find((wk) => wk.title === "Ostro");
+    if (!ostro) throw new Error("fixture: Ostro missing from LIBRARY_WORKOUTS");
+    const rows = pieceList(ostro.steps, B);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      count: 9,
+      duration: "1000m",
+      restText: "1′ r",
+      spm: 26,
+      off: 2,
+    });
+  });
+
+  it("a final piece with NO trailing rest joins the run before it (rule 2, the trailing-rest exception, positive branch)", () => {
+    const steps: Step[] = [
+      wm(500, 4, undefined, 1),
+      wm(500, 4, undefined, 1),
+      wm(500, 4), // final piece, same core, but authored with no rest at all
+    ];
+    const rows = pieceList(steps, B);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ count: 3, restText: "1′ r" });
+  });
+
+  it("a rest boundary splits runs: identical pieces back-to-back then rested", () => {
+    const steps: Step[] = [
+      wm(500, 4),
+      wm(500, 4, undefined, 1),
+      wm(500, 4, undefined, 1),
+    ];
+    // piece 1 has NO rest after it, pieces 2-3 rest 1′ — piece 1 cannot
+    // join the rested run (rule 1); pieces 2 and 3 carry equal rest (1′
+    // each) and join by ordinary equality.
+    const rows = pieceList(steps, B);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].count).toBe(1);
+    expect(rows[0].restText).toBeNull();
+    expect(rows[1]).toMatchObject({ count: 2, restText: "1′ r" });
+  });
+
+  it("a final piece with a DIFFERENT trailing rest does not join", () => {
+    const steps: Step[] = [wm(500, 4, undefined, 1), wm(500, 4, undefined, 3)];
+    const rows = pieceList(steps, B);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].restText).toBe("3′ r");
+  });
+
+  it("lead + repeated block: 2:00 then 3 × 5:00 gives two rows", () => {
+    const steps: Step[] = [
+      w(2, 6, 22, 2),
+      { k: "reps", count: 3 },
+      w(5, 6, 22, 2),
+    ];
+    const rows = pieceList(steps, B);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ count: 1, duration: "2:00" });
+    expect(rows[1]).toMatchObject({ count: 3, duration: "5:00" });
+  });
+
+  it("a pyramid has no runs: seven rows, all count 1", () => {
+    const rows = pieceList(
+      [
+        w(2, 6, 22, 2),
+        w(4, 4, 24, 2),
+        w(6, 2, 26, 2),
+        w(8, 0, 28, 2),
+        w(6, 2, 26, 2),
+        w(4, 4, 24, 2),
+        w(2, 6, 22),
+      ],
+      B,
+    );
+    expect(rows).toHaveLength(7);
+    expect(rows.every((r) => r.count === 1)).toBe(true);
+  });
+
+  it("an effort run rolls; an spm mismatch splits", () => {
+    const eff = (min: number, spm?: number): Step => ({
+      k: "w",
+      duration: { kind: "time", minutes: min },
+      ref: { effort: "max" },
+      ...(spm !== undefined ? { spm } : {}),
+      restMinutes: 1,
+    });
+    expect(pieceList([eff(0.75), eff(0.75), eff(0.75)], B)).toHaveLength(1);
+    expect(pieceList([eff(0.75, 28), eff(0.75, 30)], B)).toHaveLength(2);
+  });
+
+  it("test rows never roll, even when identical", () => {
+    const steps: Step[] = [
+      { k: "test", label: "All out" },
+      { k: "test", label: "All out" },
+    ];
+    const rows = pieceList(steps, B);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.count === 1)).toBe(true);
+  });
+
+  it("peak can land on a rolled row", () => {
+    const steps: Step[] = [
+      w(2, 6, 22, 2),
+      { k: "reps", count: 3 },
+      w(5, 0, 26, 2),
+    ];
+    const rows = pieceList(steps, B);
+    expect(peakIndex(rows, 4)).toBe(1); // the rolled 3×5:00 at offset 0
   });
 });
 
