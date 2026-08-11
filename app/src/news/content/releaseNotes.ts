@@ -7,18 +7,22 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     // Covers everything since v0.5.1: v0.6.0 shipped without an entry, so
     // this one carries the 6I onboarding alongside the warmup setting and
-    // the Phase CL fixes (James's ruling, 2026-08-09). Version and date
-    // get a one-line touch at tag time if either drifts.
+    // the Phase CL fixes (James's ruling, 2026-08-09). The tag-time touch
+    // happened 2026-08-11: the date, and the PM5 line rewritten from
+    // "phone support is on the way" after the phone-BLE phase merged the
+    // same morning the tag was cut. The library also rebalanced between
+    // the entry's drafting and the tag (PR #78), worth its own line.
     version: "v0.7.0",
-    date: "2026-08-10",
+    date: "2026-08-11",
     items: [
+      "Connect a PM5 from a workout's page and row with live splits, on your phone or in a desktop browser.",
       "Today now starts you off: a START HERE guide walks your first week, and a baseline-setting workout appears until your 2k and 6k are in.",
       "Workouts no longer carry their own warm-ups. Set yours once on You and every session includes it automatically.",
+      "The library rebalances around the 30 to 45 minute middle: most workouts got a little longer, and eleven were replaced outright.",
       "New in News: articles on setting baselines and picking a workout, plus a Start here shelf for new rowers.",
       "Reading flows properly now: BACK walks you through the articles you came from, and the close button returns you to where you started.",
       "The News feed remembers your scroll position.",
       "Bulk import is all-or-nothing: a bad line means nothing lands, so fixing and re-pasting never duplicates workouts.",
-      "Connect a PM5 from a workout's page and row with live splits (desktop browsers today; phone support is on the way).",
     ],
   },
   {
