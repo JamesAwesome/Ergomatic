@@ -283,6 +283,81 @@ export function parseAdditionalSplitIntervalData(
 }
 
 /**
+ * 0x0039 — C2 rowing end of workout summary data, 20 bytes
+ * (interface-notes.md §23). Decodes 0x0039 ONLY — the fast-follow design
+ * spec's I5 ruling: "all needed fields ride 0x0039; pair-gating on 0x003A
+ * would recreate the drop fragility" the split path already suffers.
+ * 0x003A carries fields 0x0039 had no room left for (§23's own 20-byte
+ * ceiling note) and has no dedicated parser here; a later task adds one
+ * only if the reconciliation gate ever needs one of its fields.
+ *
+ * Log Entry Date/Time (0x0039 offsets 0-3) are NOT decoded: the doc states
+ * no bit-packing format for them on this page (§23), and this module's own
+ * practice for an unscaled/unstated field is to omit or report it raw
+ * rather than guess (`workoutDurationRaw` above is the precedent) — no
+ * caller needs either field yet.
+ *
+ * Every heart-rate field reuses `heartRate()` (255-and-0-both-null, D5's
+ * field-independent reasoning above) including Recovery Heart Rate, even
+ * though the document states only the `0` sentinel for that one field
+ * (§23): D5's argument is that no heart-rate field on this real machine
+ * ever carries a genuine `0` or `255`, so the convention is deliberately
+ * uniform across every field this parser touches, documented sentinel or
+ * analogy alike.
+ */
+export interface WorkoutSummary {
+  /** Whole-workout-total reading is UNCONFIRMED on the wire (§23 walk item
+   *  2) — flagged by analogy to 0x0031's identically-scaled, identically-
+   *  named field, which hardware walk 4 proved PER-INTERVAL, not
+   *  session-cumulative. */
+  totalElapsedSeconds: number;
+  /** Same cumulative-vs-per-interval flag as `totalElapsedSeconds` (§23
+   *  walk item 2). */
+  totalMeters: number;
+  avgStrokeRate: number;
+  /** By-analogy sentinel (§23 walk item 3), not document-stated for this
+   *  field. */
+  endingHeartRateBpm: number | null;
+  /** By-analogy sentinel (§23 walk item 3). */
+  avgHeartRateBpm: number | null;
+  /** By-analogy sentinel (§23 walk item 3). */
+  minHeartRateBpm: number | null;
+  /** By-analogy sentinel (§23 walk item 3). */
+  maxHeartRateBpm: number | null;
+  dragFactorAverage: number;
+  /** BLE doc p.21: "zero = not valid data" — the one heart-rate field on
+   *  this characteristic with a DOCUMENT-STATED sentinel (§23). Can re-fire
+   *  a real value roughly a minute after the workout ends (the ecosystem
+   *  review's "re-fire wrinkle", §23) — a later task's reconciliation gate
+   *  owns consuming that re-fire once, not this parser. */
+  recoveryHeartRateBpm: number | null;
+  workoutType: number;
+  /** 0.1 sec/lsb — the SAME scale as 0x0038's Split/Interval Avg Pace,
+   *  genuinely different from 0x0032/0x0033's 0.01 sec/lsb pace fields
+   *  (§10/§23's documented trap). */
+  avgPaceSecondsPer500m: number;
+}
+
+export function parseEndOfWorkoutSummary(
+  bytes: Uint8Array,
+): WorkoutSummary | null {
+  if (bytes.length < 20) return null;
+  return {
+    totalElapsedSeconds: readU24LE(bytes, 4) / 100,
+    totalMeters: readU24LE(bytes, 7) / 10,
+    avgStrokeRate: readU8(bytes, 10),
+    endingHeartRateBpm: heartRate(readU8(bytes, 11)),
+    avgHeartRateBpm: heartRate(readU8(bytes, 12)),
+    minHeartRateBpm: heartRate(readU8(bytes, 13)),
+    maxHeartRateBpm: heartRate(readU8(bytes, 14)),
+    dragFactorAverage: readU8(bytes, 15),
+    recoveryHeartRateBpm: heartRate(readU8(bytes, 16)),
+    workoutType: readU8(bytes, 17),
+    avgPaceSecondsPer500m: readU16LE(bytes, 18) / 10,
+  };
+}
+
+/**
  * The merged view of all five status characteristics. A driver (a later
  * task) builds one of these per "tick" by spreading each characteristic's
  * latest decoded value (`{ ...prev, ...parseGeneralStatus(bytes) }`, etc.)

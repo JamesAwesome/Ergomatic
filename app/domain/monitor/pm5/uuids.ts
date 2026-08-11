@@ -62,3 +62,10 @@ export const SPLIT_INTERVAL_DATA_UUID = pm5Uuid(0x0037);
 /** C2 rowing additional split/interval data characteristic, 19 bytes
  *  (interface-notes.md §10, BLE doc p.19-20). */
 export const ADDITIONAL_SPLIT_INTERVAL_DATA_UUID = pm5Uuid(0x0038);
+/** C2 rowing end of workout summary data characteristic, 20 bytes —
+ *  exactly the notify ceiling (interface-notes.md §23, BLE doc p.21). */
+export const END_OF_WORKOUT_SUMMARY_UUID = pm5Uuid(0x0039);
+/** C2 rowing end of workout additional summary data characteristic, 19
+ *  bytes — carries what would not fit in 0x0039's own 20-byte ceiling
+ *  (interface-notes.md §23, BLE doc p.22). */
+export const END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID = pm5Uuid(0x003a);

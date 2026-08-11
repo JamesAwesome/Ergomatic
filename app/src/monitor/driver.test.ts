@@ -20,6 +20,8 @@ import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
@@ -467,6 +469,12 @@ function stubTransport(opts: { sampleRateFails?: boolean } = {}) {
     notify(uuid: string, bytes: Uint8Array): void;
     fireDisconnect(reason: string): void;
     writes: typeof writes;
+    /** Every characteristic with at least one live `subscribe()` callback
+     *  right now — fast-follow Task 1's subscription-list pin needs to
+     *  assert WHICH characteristics the driver subscribed at construction,
+     *  not merely a count (`fake.ts`'s `subscriptionCount()` gives only a
+     *  count, not membership). */
+    subscribedUuids(): string[];
   } = {
     scan(): Promise<DiscoveredMonitor[]> {
       return Promise.resolve([]);
@@ -504,6 +512,11 @@ function stubTransport(opts: { sampleRateFails?: boolean } = {}) {
     },
     fireDisconnect(reason) {
       disconnectCb?.(reason);
+    },
+    subscribedUuids(): string[] {
+      return Array.from(subs.entries())
+        .filter(([, set]) => set.size > 0)
+        .map(([uuid]) => uuid);
     },
     writes,
   };
@@ -7632,5 +7645,94 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
     const last = framesFrom(events).at(-1)!;
     expect(last.sessionElapsedSeconds).toBe(5);
     expect(last.sessionDistanceMeters).toBe(10);
+  });
+});
+
+describe("createPm5Driver: construction-time subscriptions (fast-follow Task 1, design spec §5)", () => {
+  it("subscribes 0x0039 AND 0x003A alongside every existing characteristic — the full pinned list", () => {
+    const transport = stubTransport();
+    createPm5Driver(transport, createEventLog());
+
+    // Every characteristic this driver has ever subscribed at
+    // construction — TRANSMIT (ack stream), the four status
+    // characteristics, the two split-boundary halves, and now the two
+    // summary halves. SAMPLE_RATE_UUID is written, never subscribed, so
+    // it does not belong here. A removal of either new UUID from this
+    // list is exactly the regression this pin exists to catch — see the
+    // task report's self-mutation evidence.
+    expect(transport.subscribedUuids().sort()).toStrictEqual(
+      [
+        TRANSMIT_CHARACTERISTIC_UUID,
+        GENERAL_STATUS_UUID,
+        ADDITIONAL_STATUS_1_UUID,
+        ADDITIONAL_STATUS_2_UUID,
+        SPLIT_INTERVAL_DATA_UUID,
+        ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+        END_OF_WORKOUT_SUMMARY_UUID,
+        END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      ].sort(),
+    );
+  });
+});
+
+describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, design spec §5, mirrors split-half)", () => {
+  it("0x0039 receipt logs summary-half with 'run closed' before any program() ever ran", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
+    const halves = log.entries().filter((e) => e.kind === "summary-half");
+    expect(halves).toHaveLength(1);
+    expect(halves[0]!.detail).toContain("0x0039");
+    expect(halves[0]!.detail).toContain("run closed");
+  });
+
+  it("0x003A receipt logs summary-half too, independently of 0x0039 — no pairing gate (review I5)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    // 0x003A arrives ALONE — no 0x0039 notification at all. If the driver
+    // paired the two the way it pairs 0x0037/0x0038, this would emit
+    // nothing (or worse, hang waiting for a partner); the summary pair is
+    // deliberately unpaired precisely so a dropped 0x0039 or 0x003A never
+    // costs the other's own receipt log.
+    transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      new Uint8Array(19),
+    );
+
+    const halves = log.entries().filter((e) => e.kind === "summary-half");
+    expect(halves).toHaveLength(1);
+    expect(halves[0]!.detail).toContain("0x003A");
+  });
+
+  it("logs 'run open' while a program is armed, and both a re-fire and 0x003A never touch the count or content of the OTHER characteristic's own entries", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+    // The re-fire wrinkle (review I5, ecosystem review): 0x0039 notifies a
+    // SECOND time ~1 minute later when an HRM is active. This task logs
+    // every receipt — consuming the re-fire "once" is a later task's
+    // reconciliation-gate job, not this one's.
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+    transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      new Uint8Array(19),
+    );
+
+    const halves = log.entries().filter((e) => e.kind === "summary-half");
+    expect(halves).toHaveLength(3);
+    expect(halves[0]!.detail).toContain("0x0039");
+    expect(halves[0]!.detail).toContain("run open");
+    expect(halves[1]!.detail).toContain("0x0039");
+    expect(halves[1]!.detail).toContain("run open");
+    expect(halves[2]!.detail).toContain("0x003A");
+    expect(halves[2]!.detail).toContain("run open");
   });
 });
