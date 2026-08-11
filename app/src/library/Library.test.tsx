@@ -805,6 +805,54 @@ describe("Library", () => {
       scrollToSpy.mockRestore();
     });
 
+    // The disconnected-root echo (main-CI failure, 2026-08-11, twice
+    // through the retry): when a row tap navigates away, React commits the
+    // detail screen's much shorter DOM, the browser CLAMPS window.scrollY
+    // to ~0, and delivers that clamp as a scroll event. This screen's save
+    // listener is removed in a PASSIVE effect cleanup (after paint), so
+    // under load the clamp arrives first, poisons `lastKnownY`, and both
+    // the trailing save and the unmount flush write 0 over the real
+    // position. Reproduced 1-in-8 at 15x CPU throttle. News.tsx already
+    // guards this; Library predated the lesson. Simulated the same way as
+    // News.test.tsx's twin: override the root's own `isConnected` (the one
+    // property the guard reads) without physically detaching it, so
+    // React's own bookkeeping stays intact.
+    it("ignores a scroll event that fires after this screen's own root has been removed from the document (a disconnected-root echo, not a real scroll of THIS screen)", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        mockReady();
+        await renderLibrary();
+
+        Object.defineProperty(window, "scrollY", {
+          value: 300,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+        expect(sessionStorage.getItem("ergomatic.libraryScroll")).toBe("300");
+
+        const root = document.querySelector("main.screen")!;
+        Object.defineProperty(root, "isConnected", {
+          value: false,
+          configurable: true,
+        });
+
+        // Past the throttle window, so a mutant without the guard flushes
+        // the echo IMMEDIATELY rather than merely queueing it — without
+        // this advance the throttle alone would keep the assertion green
+        // whether or not the guard exists.
+        vi.advanceTimersByTime(200);
+        Object.defineProperty(window, "scrollY", {
+          value: 0,
+          configurable: true,
+        });
+        window.dispatchEvent(new Event("scroll"));
+
+        expect(sessionStorage.getItem("ergomatic.libraryScroll")).toBe("300");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("saves scrollY to sessionStorage, throttled to ~100ms (the trailing value survives, not just the first tick)", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       try {
