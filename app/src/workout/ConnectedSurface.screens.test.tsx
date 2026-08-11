@@ -184,6 +184,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     frame: liveFrame(options.frame),
     actuals: options.actuals ?? [],
     endedBy: options.endedBy ?? null,
+    handoffHeld: false,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),

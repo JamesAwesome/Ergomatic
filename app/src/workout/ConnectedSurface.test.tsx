@@ -153,6 +153,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     frame: frame(),
     actuals: [],
     endedBy: null,
+    handoffHeld: false,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
@@ -896,6 +897,39 @@ describe("ended: the surface hands off and unmounts", () => {
         phases={FIXTURE.phases}
         program={FIXTURE.program}
         session={s}
+        onEnded={() => onEnded()}
+      />,
+    );
+    expect(onEnded).toHaveBeenCalledTimes(1);
+  });
+
+  it("HOLDS the hand-off while the last split is still coming, then fires it once (walk day 2)", () => {
+    // The device defect this exists for: `onEnded` navigates, navigating
+    // unmounts the interstitial, and unmounting tears down the driver
+    // subscription the final interval's split arrives on ~1 ms later. The
+    // rower is told the session ended immediately either way — only the
+    // HAND-OFF waits.
+    const onEnded = vi.fn();
+    const { rerender, session: held } = renderSurface(
+      { phase: "ended", endedBy: "machine", handoffHeld: true },
+      onEnded,
+    );
+
+    expect(onEnded).not.toHaveBeenCalled();
+    // The ending is on screen regardless — the wait is invisible to the
+    // rower, who is reading this frame while it happens.
+    expect(screen.getByText("SESSION ENDED")).toBeInTheDocument();
+    expect(
+      screen.getByText("The monitor finished it. Your numbers are kept."),
+    ).toBeInTheDocument();
+
+    // The split lands (or the hold's backstop expires) — the hook clears the
+    // flag, and the hand-off goes through, once.
+    rerender(
+      <ConnectedSurface
+        phases={FIXTURE.phases}
+        program={FIXTURE.program}
+        session={{ ...held, handoffHeld: false }}
         onEnded={() => onEnded()}
       />,
     );

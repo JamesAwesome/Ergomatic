@@ -213,12 +213,26 @@ export default function ConnectedSurface({
   // whatever the truth was ("machine" when the PM finished or was stopped
   // at the erg, "user" when End was pressed); nothing here needs to tell
   // them apart, because both land on the same log.
+  //
+  // ...but never while the hand-off is HELD (walk day 2, 2026-08-11 —
+  // `useMonitorSession`'s `FINISH_HANDOFF_HOLD_MS` carries the capture). The
+  // caller's `onEnded` navigates, navigating unmounts the interstitial, and
+  // unmounting tears down the driver subscription the final interval's split
+  // is still ~1 ms away from arriving on. So the ended FRAME renders
+  // immediately (the rower is told at once) and the hand-off waits behind it
+  // — for the boundary, the machine's next tick, a disconnect, or that
+  // hold's own bounded backstop, whichever comes first. `handoffHeld` is
+  // `false` at every other moment in a session's life, including every
+  // ending that has nothing to wait for, so this reads as "fire on ended"
+  // exactly as it always did in all of them.
   const endedRef = useRef(false);
   useEffect(() => {
-    if (session.phase !== "ended" || endedRef.current) return;
+    if (session.phase !== "ended" || session.handoffHeld || endedRef.current) {
+      return;
+    }
     endedRef.current = true;
     onEnded();
-  }, [session.phase, onEnded]);
+  }, [session.phase, session.handoffHeld, onEnded]);
 
   function choosePane(next: PaneId): void {
     setPane(next);

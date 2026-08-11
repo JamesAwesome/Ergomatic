@@ -1642,6 +1642,19 @@ export function createPm5Driver(
    * The log entry is what makes the loss visible instead.
    */
   function noteBoundaryHalf(half: "split" | "asSplit", boundary: number): void {
+    // RECEIPT, logged before anything can decide what to do with it
+    // (hardware walk day 2, 2026-08-11). The device stash from that walk
+    // ended at `terminal finished` with no entry of any kind about a split,
+    // which could not distinguish "the PM5 never sent one" from "it arrived
+    // and every gate downstream dropped it" — two findings with completely
+    // different fixes. Two entries per boundary is nothing against the
+    // 500-entry ring (a boundary is per-interval, not per-tick, unlike the
+    // ~2/second status flood the `frame` log guards against), and they are
+    // the first thing the next stash can be read for.
+    log.record(
+      `split-half`,
+      `${half === "split" ? "0x0037" : "0x0038"} for Split/Interval Number ${boundary} received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state})`,
+    );
     const otherHalf = half === "split" ? "asSplit" : "split";
     const superseded = boundaryHalves[half];
     if (superseded !== null && superseded !== boundary) {
