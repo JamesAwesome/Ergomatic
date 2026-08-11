@@ -42,7 +42,8 @@ const HIDDEN_TABBAR_PREFIXES = [
 ];
 
 // Pure and exported for direct testing, same pattern as ClockInput.tsx's
-// digitsToClock/TabBar.tsx/auth.tsx/ConfirmTargets.tsx's own step helpers.
+// digitsToClock/TabBar.tsx/auth.tsx's own step helpers (and
+// ConfirmTargets.tsx's, before fast-follow Task 4 deleted that screen).
 // eslint-disable-next-line react-refresh/only-export-components
 export function hidesTabBar(pathname: string): boolean {
   return HIDDEN_TABBAR_PREFIXES.some((prefix) => pathname.startsWith(prefix));

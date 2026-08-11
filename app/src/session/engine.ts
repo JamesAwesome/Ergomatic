@@ -111,12 +111,15 @@ function warmupPhases(
   return out;
 }
 
-/** Builds a fresh `SessionRun` from a confirmed draft. Freezes phases from
+/** Builds a fresh `SessionRun` from a started draft. Freezes phases from
  *  the draft's EFFECTIVE steps — `effectiveSteps` folds `spmOverrides` and
  *  nudges into each work step's `ref.off`/`spm` (see draft.ts's own header
  *  comment on why that's the same math as a "real" nudge) — so the run's
- *  targets match exactly what Confirm displayed, not the raw authored
- *  steps. `baselines` resolve every split ONCE, here; the frozen
+ *  targets match exactly what the entry point that built this draft
+ *  previewed (WorkoutDetail's own nudge arrows, `buildNudgedDraft` —
+ *  fast-follow Task 4; ConfirmTargets used to be that entry point, and is
+ *  deleted), not the raw authored steps. `baselines` resolve every split
+ *  ONCE, here; the frozen
  *  `targetSplit`/`label` never change even if the rower's baselines change
  *  mid-run. Pure given `now`: two calls with identical arguments produce
  *  deep-equal records (byte-stable), since nothing here reads the clock or

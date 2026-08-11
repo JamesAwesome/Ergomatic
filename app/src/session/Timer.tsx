@@ -372,9 +372,14 @@ export default function Timer() {
   // Countdown, whose own unconditional rebuild (fixed separately, see
   // Countdown.tsx's `hasRunProgress`) would then overwrite the completed
   // record with a fresh `completedAt: null` one. Replacing here means BACK
-  // from Session Complete lands one level further out (Confirm, which
-  // itself redirects a started draft straight back to this same completed
-  // Timer) instead of resurrecting a stale live-timer frame.
+  // from Session Complete lands one level further out — the workout's own
+  // detail page (fast-follow Task 4 shortened the stack: Start now pushes
+  // straight from there to `/session/countdown`, no ConfirmTargets hop in
+  // between, so there is no intermediate screen left to bounce through) —
+  // instead of resurrecting a stale live-timer frame. A Start press from
+  // there is still safe: `useStartWorkout`'s own guard reads the completed
+  // run's `completedAt !== null` and stages the "unlogged" replace-confirm
+  // rather than silently overwriting it.
   useEffect(() => {
     if (run !== null && isComplete(run)) {
       navigate("/session/complete", { replace: true });

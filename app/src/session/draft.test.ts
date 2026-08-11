@@ -323,7 +323,7 @@ describe("buildNudgedDraft", () => {
     });
   });
 
-  it("applies every entry in the map, in whatever order Object.entries yields", () => {
+  it("refuses an effort-ref entry — the map may carry one, but withNudge is what drops it", () => {
     const heatLightning = library("Heat Lightning");
     const input = draftInputFor("Heat Lightning", "id-nudged-2");
     const repIndex = heatLightning.steps.findIndex((s) => s.k === "w");
@@ -334,6 +334,40 @@ describe("buildNudgedDraft", () => {
     // withNudge refuses to record a nudge against one, the same rule this
     // reuses verbatim.
     expect(draft.nudges).toStrictEqual({});
+  });
+
+  // Fix round 1 (I-2): the test above (previously named "applies every entry
+  // in the map") passed only ONE key, against an effort-ref step — it proved
+  // the REFUSAL, not the iteration. A `buildNudgedDraft` rewritten to apply
+  // just the FIRST entry via a single `withNudge` call would have passed
+  // every test in this describe block until now. Flat Calm (O2) is a REAL
+  // two-work-step library workout, both split-ref (`6k+12`), so this is the
+  // genuine multi-key case: two DIFFERENT nudges on two DIFFERENT original
+  // indices, both landing.
+  it("applies every entry in the map — two distinct nudges on two distinct steps both land at their own original index", () => {
+    const flatCalm = library("Flat Calm");
+    const input = draftInputFor("Flat Calm", "id-nudged-multi");
+    const workIndices = flatCalm.steps
+      .map((s, i) => (s.k === "w" ? i : null))
+      .filter((i): i is number => i !== null);
+    expect(workIndices).toHaveLength(2);
+    const [first, second] = workIndices as [number, number];
+
+    const draft = buildNudgedDraft(input, { [first]: -5, [second]: 3 });
+
+    expect(draft.nudges).toStrictEqual({ [first]: -5, [second]: 3 });
+    // Byte-equal to applying both deltas by hand — proves the loop doesn't
+    // stop after the first entry AND doesn't let a later entry clobber an
+    // earlier one.
+    const manual = withNudge(
+      withNudge(buildDraft(input), first, -5),
+      second,
+      3,
+    );
+    expect({ ...draft, createdAt: "" }).toStrictEqual({
+      ...manual,
+      createdAt: "",
+    });
   });
 
   it("a zero-valued nudge entry is skipped, not recorded as a live no-op nudge", () => {
