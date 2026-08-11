@@ -90,6 +90,13 @@ declare global {
   }
 }
 
+// Spec §6, matching the iOS native bound (Plugin.swift CONNECTION_TIMEOUT).
+// The web path's gatt.connect() has no built-in timeout like the iOS plugin
+// does, so the race wraps it here. On expiry, reject with the SAME literal
+// the iOS plugin uses, so the classifier's existing fall-through to
+// `link-failed` covers both transports with one vocabulary.
+const CONNECT_TIMEOUT_MS = 10_000;
+
 // Same lookup, same duplication rationale, as `capacitorBle.ts`'s own
 // `SERVICE_OF` comment — a real GATT call needs the characteristic's
 // OWNING service, which `Transport.write`/`subscribe`'s bare-id signature
@@ -115,6 +122,54 @@ function serviceFor(characteristicId: string): string {
     );
   }
   return service;
+}
+
+/** Races gatt.connect() against `CONNECT_TIMEOUT_MS`, handling BOTH outcomes
+ *  of the abandoned loser explicitly (spec §6, adversarial I7). A late
+ *  RESOLUTION is NOT dropped the way raceScanTimeout does — a gatt.connect()
+ *  that resolves after the race lost is a ZOMBIE LIVE LINK, not a harmless
+ *  stale pick. The late-resolve arm calls `gatt.disconnect()` on the zombie
+ *  before dropping it. A late REJECTION (an error in gatt.connect() that
+ *  arrives after the timeout) is swallowed — the outer promise has already
+ *  rejected with the timeout, and the attached handler prevents an
+ *  unhandled rejection. */
+function raceConnectTimeout(
+  pipeline: Promise<BluetoothRemoteGATTServer>,
+  gatt: BluetoothRemoteGATTServer,
+): Promise<BluetoothRemoteGATTServer> {
+  return new Promise<BluetoothRemoteGATTServer>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error("Connection timeout."));
+      }
+    }, CONNECT_TIMEOUT_MS);
+    pipeline.then(
+      (server) => {
+        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          resolve(server);
+        } else {
+          // Late resolve: the gatt.connect() succeeded after the race lost.
+          // This is a live link that needs cleanup, not a harmless stale
+          // pick (spec §6, adversarial I7).
+          gatt.disconnect();
+        }
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+        // Else: a late rejection from gatt.connect(), swallowed by the
+        // attached handler — the outer promise already rejected with the
+        // timeout. THIS ATTACHED HANDLER prevents the unhandled rejection.
+      },
+    );
+  });
 }
 
 function toBytes(value: DataView): Uint8Array {
@@ -240,7 +295,7 @@ export function createWebBluetoothTransport(): Transport {
         "gattserverdisconnected",
         handleGattServerDisconnected,
       );
-      server = await device.gatt.connect();
+      server = await raceConnectTimeout(device.gatt.connect(), device.gatt);
     },
 
     // L-7 (final-review): prefers `writeValueWithoutResponse` with no
