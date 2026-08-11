@@ -71,12 +71,14 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
   toIntervalActual,
   toMonitorFrame,
   type Pm5ParseError,
   type RawPm5Status,
+  type WorkoutSummary,
 } from "../../domain/monitor/pm5/parse.js";
 import {
   parseCsafeResponse,
@@ -147,10 +149,12 @@ import type { MonitorEventLog } from "./eventLog";
  *    reads a wall clock: `"disconnected"` is learned from the transport's
  *    own event, `"timeout"` is counted in general-status TICKS (see
  *    `createPm5Driver`'s `ackTimeout` option), never `Date.now()`/
- *    `setTimeout`. (Hardware walk 5 added the file's ONE clock reading, for
- *    the structure gate alone — `DriverOptions.now` and
- *    `STRUCTURE_MISMATCH_WINDOW_MS`. Nothing on this path reads it, and
- *    there is still no timer anywhere in the driver.)
+ *    `setTimeout`. (Hardware walk 5 added the file's ONE clock reading —
+ *    `DriverOptions.now`, now read by three predicates, listed on that
+ *    option — and fast-follow Task 2 added the file's ONE timer,
+ *    `DriverOptions.schedule`, for the summary-fallback gate's single
+ *    deadline. NOTHING ON THIS PATH READS EITHER: every programming budget
+ *    is still ticks and only ticks.)
  *  - `"not-observed"`: plan Task 2 (interface-notes.md §18, progress.md's
  *    D2) — the ack said "ok", but `options.verifyTicks` GENERAL_STATUS
  *    ticks elapsed without the machine ever reporting `state === "armed"`.
@@ -510,15 +514,19 @@ export interface DriverOptions {
    * item 3 states the rule directly: "Tick-count-calibrated logic is
    * transport-relative; wall-clock windows are not"), and the one place the "ticks, never a
    * clock" rule stated on every budget above is deliberately broken. It
-   * exists for exactly two predicates, each forced by its own hardware
-   * reading and neither expressible as a tick count:
+   * exists for exactly three predicates, each forced by its own hardware
+   * reading and none expressible as a tick count:
    *   - the post-program structure gate's persistence window
-   *     (`STRUCTURE_MISMATCH_WINDOW_MS`, walk 5), and
+   *     (`STRUCTURE_MISMATCH_WINDOW_MS`, walk 5),
    *   - the FINISH GRACE's own expiry (`FINISH_GRACE_MS`, walk day 3 — it
    *     used to expire on the machine's next status sample, which measured
    *     the PM's tick rate rather than the split's arrival and was dead
-   *     before the data it existed for arrived).
-   * Every BUDGET here still counts ticks; neither of these is a budget.
+   *     before the data it existed for arrived), and
+   *   - the summary-fallback gate's in-window test on 0x0039 (fast-follow
+   *     Task 2, design spec §5) — the same grace deadline read from the
+   *     other side, which is why it asks `graceIsOpen()` rather than
+   *     keeping a second window of its own.
+   * Every BUDGET here still counts ticks; none of these is a budget.
    *
    * Why a clock had to appear at all: every other budget in this file bounds
    * something whose meaning does not change with the notification rate ("how
@@ -538,6 +546,32 @@ export interface DriverOptions {
    * monotonically non-decreasing millisecond source will do.
    */
   now?: () => number;
+  /**
+   * **THE ONE TIMER IN THIS FILE** (fast-follow Task 2, design spec §5) —
+   * a schedule-and-cancel pair returning the canceller, the same shape and
+   * the same injection reason `useMonitorSession.ts`'s
+   * `MonitorSessionDeps.schedule` has. Defaults to `setTimeout` /
+   * `clearTimeout`.
+   *
+   * It exists for exactly ONE deadline: the summary-fallback gate's
+   * reconcile at `FINISH_GRACE_MS` after a natural finish
+   * (`armSummaryReconcile`). Every budget in this file is still counted in
+   * GENERAL_STATUS ticks and nothing about `program()` reads a timer at
+   * all — the rule stated on `ackTimeout`/`verifyTicks`/`settleTicks`
+   * above is intact for all of them.
+   *
+   * Why the gate could not be a tick count, when every budget here is:
+   * the reconcile's whole job is to decide, at a MOMENT, that a split has
+   * not arrived — and the thing it is waiting for keeps no relationship to
+   * the PM's notification cadence (walk day 3's measurement, cited in full
+   * on `FINISH_GRACE_MS`). A tick-keyed reconcile would fire early on the
+   * fast iOS radio and late on the slow desktop one, i.e. the verdict
+   * would be decided by whichever radio the rower happened to be on. It
+   * also must match `FINISH_GRACE_MS` EXACTLY: the gate fires when the
+   * grace it mirrors has just closed, so the two must be one number read
+   * off one clock, not two approximations of the same instant.
+   */
+  schedule?: (cb: () => void, ms: number) => () => void;
   /**
    * The advertised name `Transport.scan()` returned for the device the
    * caller connected to (`DiscoveredMonitor.name`, `domain/monitor/
@@ -737,15 +771,26 @@ const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
  *  (`monitorRun.ts`'s `acceptableFinalBoundary`).
  *
  *  COUPLED CONSTANT: `useMonitorSession.ts`'s `FINISH_HANDOFF_HOLD_MS` is
- *  also 3000 and NOT by coincidence — both windows open in the same
- *  synchronous emit (the `finished` branch emits `workoutComplete`, the
- *  hook's handler schedules its backstop inside that emit), so with equal
- *  durations on real clocks the hook's backstop can only fire at/after the
- *  instant this grace has also expired: a vouched boundary can never land
- *  AFTER the hand-off already released. Shorten THIS constant and that
+ *  3500 and NOT by coincidence — both windows open in the same synchronous
+ *  emit (the `finished` branch below opens this grace, arms the summary
+ *  reconcile, and then emits `workoutComplete`; the hook's handler
+ *  schedules its backstop inside that emit), so the hook's backstop can
+ *  only fire after this grace has expired: a vouched boundary can never
+ *  land AFTER the hand-off already released. Shorten THIS constant and that
  *  stays true; lengthen it past the hold and a boundary can be accepted
  *  into a record the log screen has already snapshotted — change the two
- *  together or not at all (clock-grace review, scrutiny 5). */
+ *  together or not at all (clock-grace review, scrutiny 5).
+ *
+ *  **THE INEQUALITY IS STRICT SINCE FAST-FOLLOW TASK 2: hold > grace**
+ *  (design spec §5), where `>=` used to do. Equality worked while every
+ *  vouched boundary was a NOTIFICATION arriving strictly inside this
+ *  window. The summary fallback puts an event ON the deadline itself: the
+ *  reconcile (`armSummaryReconcile`) fires at exactly `FINISH_GRACE_MS` and
+ *  synthesizes the final interval right there when the split was dropped.
+ *  Equal constants would make that fill and the hand-off's backstop two
+ *  timers due at the same millisecond, i.e. the fill racing the navigation
+ *  it exists to beat. The hold carries the margin, not this window: this
+ *  one is a measurement (walk day 3) and must not be padded to make room. */
 const FINISH_GRACE_MS = 3000;
 
 /** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc
@@ -798,9 +843,19 @@ export function createPm5Driver(
   // when no name was given at all — never fabricated from anything else,
   // and never shown to a screen that had a real name available.
   /** The only clock reading this driver ever takes — see `DriverOptions.now`
-   *  for why one exists at all, and `STRUCTURE_MISMATCH_WINDOW_MS` for the
-   *  single predicate that reads it. */
+   *  for why one exists at all, and for the three predicates that read it
+   *  (`STRUCTURE_MISMATCH_WINDOW_MS`, the finish grace's own expiry, and
+   *  the summary gate's in-window test). */
   const now = options.now ?? ((): number => Date.now());
+  /** The only timer this driver ever sets — see `DriverOptions.schedule`
+   *  for why one exists at all, and `armSummaryReconcile` for its single
+   *  use. */
+  const schedule =
+    options.schedule ??
+    ((cb: () => void, ms: number): (() => void) => {
+      const id = setTimeout(cb, ms);
+      return () => clearTimeout(id);
+    });
 
   const capabilities: MonitorCapabilities = {
     canProgram: true,
@@ -856,15 +911,29 @@ export function createPm5Driver(
      *  the single in-run `intervalComplete` emission; out-of-run
      *  boundaries belong to no run and are counted nowhere. */
     actuals: number;
-    /** WHICH of this run's own program indices already have an actual —
-     *  `actuals` above is the count, this is the identity. Read by the
-     *  finish grace (`finishGraceUntil`, below), which only ever attributes a
-     *  post-close boundary to an interval this run is still MISSING: the
-     *  PM's own post-run housekeeping re-reports an index that has already
-     *  been filed, and that is the discriminator between "the final
-     *  interval's data, one notification late" and "the machine talking
-     *  again about a boundary we already have". */
-    recordedIndices: Set<number>;
+    /** WHICH of this run's own program indices already have an actual, and
+     *  WHAT each of them measured — `actuals` above is the count, this is
+     *  the identity plus the two fields the summary gate subtracts.
+     *
+     *  Read by the finish grace (`finishGraceUntil`, below), which only ever
+     *  attributes a post-close boundary to an interval this run is still
+     *  MISSING: the PM's own post-run housekeeping re-reports an index that
+     *  has already been filed, and that is the discriminator between "the
+     *  final interval's data, one notification late" and "the machine
+     *  talking again about a boundary we already have".
+     *
+     *  A `Map` rather than the `Set<number>` this was until fast-follow
+     *  Task 2, and deliberately not a Set PLUS a parallel map: the summary
+     *  gate's derivation needs "is every prior interval recorded?" and
+     *  "what did those priors measure?" to be the same question asked of
+     *  the same structure, or the two answers can drift. Only the two
+     *  SUBTRACTABLE fields are kept — an average is not subtractable, which
+     *  is the whole of B3's finding, so storing one here would only invite
+     *  a future caller to try. */
+    recordedActuals: Map<
+      number,
+      { elapsedSeconds: number; distanceMeters: number }
+    >;
     /** The last `"rowing"`/`"resting"` state observed while this run was
      *  open, or `null` if it never reported one. The finish grace normalizes
      *  its boundary against THIS rather than the terminal state word the
@@ -919,7 +988,28 @@ export function createPm5Driver(
      *  has no stable identity to attribute and keeps the out-of-run path it
      *  has always taken. */
     finishGraceUntil: number | null;
+    /** THE SUMMARY-FALLBACK GATE's held evidence (fast-follow Task 2,
+     *  design spec §5): the most recent 0x0039 decoded INSIDE this run's
+     *  finish grace, or `null` if none has arrived. Stored, never acted on
+     *  at receipt — review I4's precedence ruling is that a split is
+     *  authoritative and immediate any time inside the window, and the
+     *  summary may only fill at the deadline, so a value here means "if the
+     *  split never comes, this is what we know", not "this is the answer".
+     *
+     *  The LATEST one wins while the window is open (a second 0x0039 inside
+     *  3 s is the machine refining its own reading, not a different
+     *  workout). A 0x0039 arriving outside the window is never stored at
+     *  all — it is logged `out-of-window` and dropped, which is what makes
+     *  the ~1-minute HRM re-fire inert (ecosystem review:420-422). */
+    summaryInGrace: WorkoutSummary | null;
   } | null = null;
+  /** The live reconcile deadline's canceller, or `null` when none is armed
+   *  — one at a time, because a run finishes once (`armSummaryReconcile`).
+   *  Cancelled when a new `program()` replaces the run it belongs to and
+   *  when the caller hangs up: a deadline whose run is gone has nothing
+   *  left to decide, and firing it anyway would be the timer talking about
+   *  someone else's workout. */
+  let pendingSummaryReconcile: (() => void) | null = null;
   let reconnectPending = false;
   /** This task's single-flight gate (`ProgramBusyError`'s own doc comment,
    *  ROADMAP's "a second `program()` call ... strands the first"): `true`
@@ -1679,6 +1769,16 @@ export function createPm5Driver(
       // been told the workout ended: the grace decides which RUN the next
       // notification belongs to, not when the consumer hears the news.
       activeRun!.finishGraceUntil = now() + FINISH_GRACE_MS;
+      // ...and the SUMMARY-FALLBACK GATE's deadline with it (fast-follow
+      // Task 2, design spec §5). Armed here and only here, for the same
+      // reason the grace is: a natural finish is the one ending whose
+      // missing final interval the summary is allowed to speak for. Armed
+      // BEFORE the `workoutComplete` emit below so it is scheduled ahead of
+      // the hook's own hand-off hold, which is scheduled inside that emit —
+      // the two windows are coupled constants and their ORDER of arming is
+      // what makes "the fill happens before navigation" a fact about the
+      // code rather than about the event loop.
+      armSummaryReconcile(activeRun!);
       log.record("terminal", "finished");
       emit({ kind: "workoutComplete" });
     } else {
@@ -1765,9 +1865,9 @@ export function createPm5Driver(
    * summary pair exists to fix (review I5: "every field the spec's list
    * needs sits on 0x0039 alone... a reconcile that waits for both
    * `summary-half`s dies when 0x003A drops even though 0x0039 arrived
-   * complete"). 0x003A is logged for observability only here; a later
-   * task's reconciliation gate is what actually reads 0x0039's decoded
-   * fields and decides anything.
+   * complete"). 0x003A is logged for observability only — nothing reads
+   * its bytes and nothing gates on its arrival; Task 2's gate
+   * (`noteSummary` below) decodes 0x0039 alone.
    *
    * Mirrors `noteBoundaryHalf`'s own log site and voice deliberately
    * (`split-half`'s "characteristic ... received (run open/closed,
@@ -1782,6 +1882,292 @@ export function createPm5Driver(
       "summary-half",
       `${characteristic} ${label} received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state})`,
     );
+  }
+
+  /**
+   * 0x0039's own handler (fast-follow Task 2, design spec §5) — the
+   * SUMMARY-FALLBACK GATE's entrance, and the only place this driver
+   * decodes an end-of-workout summary.
+   *
+   * It files NOTHING. Its whole job is to decide whether this notification
+   * is evidence about the run that just finished, and if so to hold it
+   * until the deadline — review I4's precedence ruling in one function:
+   * "the split is authoritative and IMMEDIATE, any time inside the grace
+   * window. The summary fills ONLY AT GRACE EXPIRY." A gate that acted
+   * here would displace a split that was merely late, which is the exact
+   * loss R1 exists to prevent (the split carries per-interval averages
+   * that no whole-workout summary can reconstruct).
+   */
+  function noteSummary(bytes: Uint8Array): void {
+    const summary = parseEndOfWorkoutSummary(bytes);
+    if (summary === null) {
+      log.record(
+        "summary-reconciled",
+        `declined — 0x0039 arrived with ${bytes.length} byte(s) and could not be decoded (the layout is 20, interface-notes.md §23); nothing stored, nothing filed`,
+      );
+      return;
+    }
+    const run = activeRun;
+    if (run === null) {
+      log.record(
+        "summary-reconciled",
+        "out-of-window — 0x0039 arrived before any program() ever opened a run (a workout the rower started on the machine itself, or a summary left over from before we connected); nothing filed",
+      );
+      return;
+    }
+    if (!graceIsOpen(run)) {
+      // Every reason lands here and they are all the same answer: no
+      // natural finish of ours is currently waiting on a final interval.
+      // The one that will actually happen at the erg is the re-fire —
+      // 0x0039 notifies a SECOND time roughly a minute after the workout
+      // ends when an HRM is paired (`pm5-ble-ecosystem-review.md:420-422`),
+      // and without this branch the stash would show a spurious divergence
+      // on every walk with a belt on.
+      log.record(
+        "summary-reconciled",
+        `out-of-window — 0x0039 arrived with no open finish grace (${describeClosedGrace(run)}); nothing filed`,
+      );
+      return;
+    }
+    run.summaryInGrace = summary;
+  }
+
+  /** WHY the summary gate was shut when a 0x0039 turned up — four genuinely
+   *  different situations that a single "out of window" would flatten into
+   *  one unreadable entry. The last two are the ones a walk has to tell
+   *  apart: a grace that a boundary already CLAIMED (the split won, and the
+   *  summary is redundant) reads nothing like a grace that EXPIRED (the
+   *  ~1-minute HRM re-fire, or a summary that took longer than 3 s to
+   *  arrive — which would be a real finding). */
+  function describeClosedGrace(run: NonNullable<typeof activeRun>): string {
+    if (!run.closed) return "the run is still open — no finish has happened";
+    if (run.finishGraceUntil === null) {
+      return "no grace is open: this run either ended by terminate (which opens none, footnote 12) or a boundary has already claimed it";
+    }
+    return `the grace expired ${now() - run.finishGraceUntil}ms ago (${FINISH_GRACE_MS}ms window) — the ~1 minute HRM re-fire lands here`;
+  }
+
+  /**
+   * Schedules the summary gate's reconcile for the instant the finish grace
+   * closes (fast-follow Task 2, design spec §5). `FINISH_GRACE_MS` is the
+   * delay for a reason that is not convenience: the reconcile's question is
+   * "did the split fail to arrive before the grace expired?", so it must
+   * ask at exactly the moment the grace stopped accepting one — a shorter
+   * delay would answer while a split could still legitimately land, and a
+   * longer one would answer after the hand-off hold released
+   * (`useMonitorSession.ts`'s `FINISH_HANDOFF_HOLD_MS`, the coupled
+   * constant this ordering depends on).
+   */
+  function armSummaryReconcile(run: NonNullable<typeof activeRun>): void {
+    pendingSummaryReconcile?.();
+    pendingSummaryReconcile = schedule(() => {
+      pendingSummaryReconcile = null;
+      // The run this deadline was armed FOR, captured — never `activeRun`
+      // as it stands when the timer fires. A `program()` that landed in
+      // between cancels this timer outright (see its call site), and this
+      // guard is the belt to that braces: a deadline may only ever speak
+      // about its own workout.
+      if (activeRun !== run) return;
+      reconcileSummary(run);
+    }, FINISH_GRACE_MS);
+  }
+
+  /**
+   * DERIVATION, AND ITS ONE PREMISE (design spec §5's B3 ruling).
+   *
+   * **PREMISE: 0x0039's Elapsed Time and Distance are WHOLE-WORKOUT
+   * CUMULATIVE totals** — `docs/monitor/pm5-interface-notes.md` §23's walk
+   * item 2, which records the premise as UNCONFIRMED ON THE WIRE: "whether
+   * 0x0039's Elapsed Time/Distance are genuinely whole-workout cumulative
+   * or share 0x0031's per-interval-reset trap (hardware walk 4)". The
+   * parser's own field names stay neutral (`elapsedSeconds`/`meters`, not
+   * `total*`) for exactly this reason.
+   *
+   * **THIS FUNCTION IS THE ONLY PLACE THE PREMISE IS USED. If the walk
+   * falsifies it, this function alone changes** — the caller below files
+   * whatever this returns and knows nothing about where the numbers came
+   * from, and no other call site reads `WorkoutSummary.elapsedSeconds` or
+   * `.meters` at all.
+   *
+   * Two cases, and only the second one rests on the premise:
+   *   - **SINGLE INTERVAL** (`intervalCount === 1`): cumulative and
+   *     per-interval READINGS COINCIDE — one interval's own totals are the
+   *     workout's totals under either reading. This case is correct
+   *     whatever the walk finds, and it is the tester-common shape (walk
+   *     5's own 1-interval piece, `WALK_5_PROGRAM` in the driver tests).
+   *   - **MULTI-INTERVAL**: the final interval = the summary MINUS every
+   *     recorded prior, and ONLY when every prior interval is recorded.
+   *     The evidence says it is the FINAL split that drops (the ecosystem
+   *     review's failure mode), so a run missing an EARLIER interval is a
+   *     different, unexplained loss — subtracting over that gap would file
+   *     the missing interval's meters into the last one, "plausible-looking,
+   *     wrong, and silent" (B3's own words, the D4 corruption shape). It
+   *     declines instead, with the missing indices named.
+   *
+   * A subtraction that goes non-positive is the cheapest test of the
+   * premise there is, and it DECLINES rather than clamps: under a
+   * per-interval reading the summary would carry the last interval's own
+   * (smaller) numbers and the subtraction would go negative on any real
+   * multi-interval piece. The rower gets nothing rather than nonsense, and
+   * the walk gets a log entry naming the premise.
+   *
+   * Averages are absent by construction — see the caller. A workout's
+   * average pace/rate/HR is not the final interval's, and nothing in this
+   * function could make it so.
+   */
+  function deriveFinalIntervalFromSummary(
+    summary: WorkoutSummary,
+    priors: { elapsedSeconds: number; distanceMeters: number }[],
+    missingPriors: number[],
+  ):
+    | { ok: true; elapsedSeconds: number; distanceMeters: number; how: string }
+    | { ok: false; why: string } {
+    if (missingPriors.length > 0) {
+      return {
+        ok: false,
+        why: `interval(s) ${missingPriors.join(", ")} were never recorded, so the summary cannot be subtracted down to the final interval without folding a missing interval's work into it`,
+      };
+    }
+    if (priors.length === 0) {
+      return {
+        ok: true,
+        elapsedSeconds: summary.elapsedSeconds,
+        distanceMeters: summary.meters,
+        how: `the SINGLE interval's own totals, taken from 0x0039 verbatim (elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m) — with one interval the cumulative and per-interval readings coincide, so this arm holds whatever §23 walk item 2 finds`,
+      };
+    }
+    const priorElapsed = priors.reduce((a, p) => a + p.elapsedSeconds, 0);
+    const priorMeters = priors.reduce((a, p) => a + p.distanceMeters, 0);
+    const elapsedSeconds = summary.elapsedSeconds - priorElapsed;
+    const distanceMeters = summary.meters - priorMeters;
+    if (elapsedSeconds <= 0 || distanceMeters < 0) {
+      return {
+        ok: false,
+        why: `the subtraction produced elapsed=${elapsedSeconds}s distance=${distanceMeters}m, which is not a workout anyone rowed — 0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) do not exceed the ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m). The cumulative premise (interface-notes.md §23 walk item 2) may not hold on this machine`,
+      };
+    }
+    return {
+      ok: true,
+      elapsedSeconds,
+      distanceMeters,
+      how: `0x0039's totals (${summary.elapsedSeconds}s/${summary.meters}m) MINUS ${priors.length} recorded prior interval(s) (${priorElapsed}s/${priorMeters}m) = ${elapsedSeconds}s/${distanceMeters}m`,
+    };
+  }
+
+  /**
+   * THE RECONCILE (fast-follow Task 2, design spec §5) — fired once, by the
+   * deadline `armSummaryReconcile` set, at the instant the finish grace
+   * closed. It answers one question in the trace, whatever it decides:
+   * WHICH SOURCE FED THE RECORD.
+   *
+   *   - `split-won`: the final interval is already recorded. The summary is
+   *     the fallback and never the authority, so this is the verdict on
+   *     every healthy finish (and, deliberately, the verdict logged even
+   *     when no summary ever arrived to lose — the entry says the split
+   *     path worked, which is worth reading at the erg).
+   *   - `filled-from-summary`: the split was dropped and the derivation
+   *     succeeded. Carries the numbers it derived and how.
+   *   - `declined`: the split was dropped and the summary could not
+   *     honestly stand in. Carries why. Nothing is written.
+   *
+   * The synthesized boundary rides the EXISTING vouched channel — the same
+   * `{kind: "intervalComplete", actual, finalBoundary: true}` event
+   * `emitIntervalComplete` emits, the same hook release, the same
+   * `acceptableFinalBoundary` re-derivation in the record (which passes:
+   * the index is real, it is the program's last, and the record does not
+   * hold it yet). Nothing downstream learns that this one came from a
+   * different characteristic, and nothing downstream needs to: what makes
+   * it acceptable is what has always made a final boundary acceptable.
+   *
+   * It does NOT log `interval-complete`. That entry means "0x0037/0x0038
+   * paired and produced an actual", and no such pair arrived here — the
+   * `summary-reconciled` entry is this boundary's own provenance, and a
+   * stash that claimed a split had landed would be lying about the one
+   * thing this whole gate exists to make honest.
+   */
+  function reconcileSummary(run: NonNullable<typeof activeRun>): void {
+    const lastIndex = run.program.intervals.length - 1;
+    // A program with NO intervals, guarded rather than assumed away — the
+    // one shape where this function could fabricate an identity. With
+    // `lastIndex === -1` the priors loop never runs, the single-interval
+    // arm below would hand back the summary's own totals, and the actual
+    // would be filed under index `-1` — which `acceptableFinalBoundary`
+    // would ACCEPT, since `-1 === program.intervals.length - 1` holds for
+    // an empty program. Unreachable by construction (`compileProgram`'s
+    // no-work guard cannot produce one and `program()` is the only opener),
+    // and therefore uncovered — but the cost of the guard is one line and
+    // the cost of its absence is a fabricated interval in a rower's log.
+    if (lastIndex < 0) return;
+    if (run.recordedActuals.has(lastIndex)) {
+      log.record(
+        "summary-reconciled",
+        `split-won — interval ${lastIndex} was already recorded when the ${FINISH_GRACE_MS}ms finish grace closed${run.summaryInGrace === null ? " (no 0x0039 was held)" : " (a 0x0039 was held and is discarded unread: the split is authoritative, review I4)"}`,
+      );
+      return;
+    }
+    const summary = run.summaryInGrace;
+    if (summary === null) {
+      log.record(
+        "summary-reconciled",
+        `declined — interval ${lastIndex} is still missing and no 0x0039 arrived inside the ${FINISH_GRACE_MS}ms finish grace; nothing filed (this run logs one interval short, and the trace says why)`,
+      );
+      return;
+    }
+    const priors: { elapsedSeconds: number; distanceMeters: number }[] = [];
+    const missingPriors: number[] = [];
+    for (let i = 0; i < lastIndex; i += 1) {
+      const prior = run.recordedActuals.get(i);
+      if (prior === undefined) missingPriors.push(i);
+      else priors.push(prior);
+    }
+    const derived = deriveFinalIntervalFromSummary(
+      summary,
+      priors,
+      missingPriors,
+    );
+    if (!derived.ok) {
+      log.record(
+        "summary-reconciled",
+        `declined — interval ${lastIndex} cannot be derived from 0x0039: ${derived.why}; nothing filed`,
+      );
+      return;
+    }
+    // THE AVERAGES ARE NULL, NOT ZERO, AND NOT THE WORKOUT'S (B3). 0x0039
+    // carries an average pace, stroke rate and heart rate — for the WHOLE
+    // WORKOUT. `IntervalActual`'s three average fields are per-interval and
+    // are typed `number | null` (REQUIRED, not optional —
+    // `domain/monitor/types.ts`), so "omitted" can only be expressed as
+    // `null` here, which is precisely the value every consumer already
+    // reads as "no reading": `logDraft.ts`'s `buildMonitorLogSteps` drops
+    // the field from the log step entirely, and `surfaceModel.ts` renders a
+    // dash. A zero would be a claim (and `avgSplit: 0` specifically is the
+    // wire's own "no reading" sentinel the log builder already filters), a
+    // workout average would be a lie.
+    const actual: IntervalActual = {
+      index: lastIndex,
+      elapsedSeconds: derived.elapsedSeconds,
+      distanceMeters: derived.distanceMeters,
+      avgSplit: null,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+    };
+    run.actuals += 1;
+    run.recordedActuals.set(lastIndex, {
+      elapsedSeconds: derived.elapsedSeconds,
+      distanceMeters: derived.distanceMeters,
+    });
+    // CONSUMED ONCE, ACROSS BOTH SOURCES (design spec §5). The grace's own
+    // clock has just expired anyway, so this is belt to the clock's braces
+    // — but `recordedActuals` above is the bound that actually holds: bound
+    // 5 of `finishGraceIndex` now refuses a split naming this index, and
+    // `acceptableFinalBoundary` re-derives the same refusal in the record.
+    run.finishGraceUntil = null;
+    run.summaryInGrace = null;
+    log.record(
+      "summary-reconciled",
+      `filled-from-summary — the final split never arrived, so interval ${lastIndex} is synthesized from 0x0039: elapsed=${derived.elapsedSeconds}s distance=${derived.distanceMeters}m (${derived.how}). Avg split/spm/HR are OMITTED (null): 0x0039's averages are the whole workout's, not this interval's (design spec §5, B3)`,
+    );
+    emit({ kind: "intervalComplete", actual, finalBoundary: true });
   }
 
   /**
@@ -1814,24 +2200,43 @@ export function createPm5Driver(
    *   5. **the run is still MISSING that interval's actual.** This is the
    *      discriminator between the final interval's data arriving one
    *      notification late and the PM's own post-run housekeeping
-   *      re-reporting a boundary already filed (`recordedIndices`) — the
+   *      re-reporting a boundary already filed (`recordedActuals`) — the
    *      hazard `runIsOpen()` alone used to cover, and the one this grace
    *      must not reopen.
+   *
+   * Conditions 1 and 2 live in `graceIsOpen` below, shared with the summary
+   * gate (fast-follow Task 2). They are one question — "is this run inside
+   * its finish grace right now?" — and two copies of it could drift; the
+   * summary gate answering that question differently from this one is
+   * precisely how a fallback starts filing things the split path would have
+   * refused. Conditions 3-5 stay here: they are about a BOUNDARY's index,
+   * and the summary carries no index to ask about (B2 — its synthesized
+   * index comes from the armed program, never off the wire).
    */
   function finishGraceIndex(rawIndex: number): number | null {
     const run = activeRun;
-    if (run === null || !run.closed) return null;
-    if (run.finishGraceUntil === null || now() >= run.finishGraceUntil) {
-      return null;
-    }
+    if (run === null || !graceIsOpen(run)) return null;
     if (run.lastActiveState === null) return null;
     const index = toActualIndex(
       rawIndex,
       run.lastActiveState,
       run.program.intervals.length,
     );
-    if (index === null || run.recordedIndices.has(index)) return null;
+    if (index === null || run.recordedActuals.has(index)) return null;
     return index;
+  }
+
+  /** Conditions 1 and 2 of the finish grace, extracted so the split path
+   *  (`finishGraceIndex`) and the summary gate (`noteSummary`) ask the
+   *  identical question of the identical clock: the run is CLOSED, it was
+   *  closed by a natural `"finished"` (a `terminated` close never sets
+   *  `finishGraceUntil` at all), the grace has not been consumed, and
+   *  `FINISH_GRACE_MS` has not elapsed on `now()`. Read
+   *  `finishGraceIndex`'s doc comment for the evidence behind each. */
+  function graceIsOpen(run: NonNullable<typeof activeRun>): boolean {
+    if (!run.closed) return false;
+    if (run.finishGraceUntil === null) return false;
+    return now() < run.finishGraceUntil;
   }
 
   function emitIntervalComplete(): void {
@@ -1948,7 +2353,15 @@ export function createPm5Driver(
     );
     activeRun!.actuals += 1;
     if (normalizedIndex !== null) {
-      activeRun!.recordedIndices.add(normalizedIndex);
+      // The two SUBTRACTABLE fields ride along since fast-follow Task 2
+      // (`recordedActuals`'s own doc comment): the summary gate's
+      // multi-interval derivation subtracts the recorded priors, and this
+      // is where a prior becomes recorded. The averages deliberately do
+      // not — an average is not subtractable, which is B3's whole finding.
+      activeRun!.recordedActuals.set(normalizedIndex, {
+        elapsedSeconds: actual.elapsedSeconds,
+        distanceMeters: actual.distanceMeters,
+      });
     }
     // One boundary per grace, consumed here — a second notification arriving
     // in the same gap cannot also claim it.
@@ -2280,12 +2693,18 @@ export function createPm5Driver(
   // NOT routed through `mergeStatus` — 0x0039/0x003A have their own decode
   // (`parseEndOfWorkoutSummary`, not `mergeStatus`'s `Pm5ParseError`-typed
   // idiom) and are never merged into `raw`/`RawPm5Status` (`WorkoutSummary`
-  // is a whole-workout total, not a per-tick status field). This task only
-  // records receipt (`summary-half`, mirroring `noteBoundaryHalf`'s own
-  // site/voice); a later task's reconciliation gate is what decodes 0x0039
-  // and acts on it.
-  t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, () => {
+  // is a whole-workout total, not a per-tick status field).
+  //
+  // Receipt is logged for BOTH (`summary-half`, mirroring
+  // `noteBoundaryHalf`'s own site/voice) and only 0x0039 is decoded
+  // (Task 2's gate, `noteSummary` — review I5: every field the gate needs
+  // rides 0x0039, and waiting on 0x003A would rebuild the drop fragility
+  // R1 exists to fix). Receipt is logged FIRST on purpose: a stash must
+  // show that the bytes arrived even when the verdict below is that they
+  // change nothing.
+  t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (bytes) => {
     noteSummaryHalf("0x0039");
+    noteSummary(bytes);
   });
   t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, () => {
     noteSummaryHalf("0x003A");
@@ -3095,13 +3514,23 @@ export function createPm5Driver(
         // against the last frame of the old one and fold its whole elapsed
         // in as a phantom interval.
         session = { offsetElapsed: 0, offsetDistance: 0, prev: null };
+        // A reconcile deadline still standing belongs to the run being
+        // replaced, and is cancelled here for the same reason a pending
+        // boundary half is dropped above (fast-follow Task 2): both are
+        // the OUTGOING run's unfinished business, and letting either reach
+        // the new run would have it speak about a workout it never saw.
+        // `armSummaryReconcile`'s own identity guard is the second line of
+        // defence; this is the first.
+        pendingSummaryReconcile?.();
+        pendingSummaryReconcile = null;
         activeRun = {
           program: p,
           closed: false,
           actuals: 0,
-          recordedIndices: new Set<number>(),
+          recordedActuals: new Map(),
           lastActiveState: null,
           finishGraceUntil: null,
+          summaryInGrace: null,
         };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });
@@ -3137,6 +3566,13 @@ export function createPm5Driver(
 
     async disconnect(): Promise<void> {
       log.record("disconnect-requested", "caller-initiated");
+      // The caller is done with this driver, so its one timer goes with it
+      // (fast-follow Task 2). No summary can arrive after the radio is
+      // hung up, so a deadline still standing here could only ever fire
+      // into a torn-down session — and a driver that leaves live timers
+      // behind is a driver a test cannot finish cleanly.
+      pendingSummaryReconcile?.();
+      pendingSummaryReconcile = null;
       await t.disconnect();
     },
   };

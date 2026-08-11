@@ -30,6 +30,7 @@ import {
 } from "../../domain/monitor/pm5/uuids.js";
 import {
   buildAdditionalSplitIntervalDataBytes,
+  buildEndOfWorkoutSummaryBytes,
   buildGeneralStatusBytes,
   buildSplitIntervalDataBytes,
 } from "../../domain/monitor/pm5/statusFrames.js";
@@ -39,6 +40,7 @@ import {
 } from "../../domain/monitor/pm5/response.js";
 import type {
   DiscoveredMonitor,
+  IntervalActual,
   MonitorEvent,
   MonitorFrame,
   Transport,
@@ -7734,5 +7736,532 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
     expect(halves[1]!.detail).toContain("run open");
     expect(halves[2]!.detail).toContain("0x003A");
     expect(halves[2]!.detail).toContain("run open");
+  });
+});
+
+describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design spec §5, adversarial B2/B3/I4/I5)", () => {
+  // What this gate is, in one line: when the final 0x0037/0x0038 split is
+  // DROPPED (the ecosystem review's own failure mode), the run's last
+  // interval is synthesized from 0x0039's end-of-workout summary — but only
+  // at grace EXPIRY, only from numbers it can honestly derive, and never
+  // over a split that merely ran late (review I4's precedence ruling).
+  //
+  // Every arm below drives the REAL wire bytes through the REAL decoders
+  // (`buildEndOfWorkoutSummaryBytes` -> `parseEndOfWorkoutSummary`), the
+  // same end-to-end discipline the split-path tests above hold to.
+
+  const ONE_INTERVAL_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  /** A hand-fired stand-in for the driver's reconcile timer
+   *  (`DriverOptions.schedule`) — the same shape and the same reason
+   *  `useMonitorSession.test.ts`'s own `manualSchedule` exists: a test
+   *  FIRES the deadline rather than waiting 3 real seconds, and an
+   *  unfinished test leaves no live timer behind. */
+  function manualSchedule() {
+    const calls: { ms: number; fire: () => void; cancelled: boolean }[] = [];
+    return {
+      calls,
+      schedule: (cb: () => void, ms: number): (() => void) => {
+        const call = { ms, fire: cb, cancelled: false };
+        calls.push(call);
+        return () => {
+          call.cancelled = true;
+        };
+      },
+      pending(): { ms: number; fire: () => void; cancelled: boolean } | null {
+        const live = calls.filter((c) => !c.cancelled);
+        return live[live.length - 1] ?? null;
+      },
+    };
+  }
+
+  const FULL_SUMMARY = {
+    avgStrokeRate: 24,
+    endingHeartRateBpm: 168,
+    avgHeartRateBpm: 152,
+    minHeartRateBpm: 96,
+    maxHeartRateBpm: 175,
+    dragFactorAverage: 128,
+    recoveryHeartRateBpm: 120,
+    workoutType: 8,
+    avgPaceSecondsPer500m: 125,
+  };
+
+  /** 0x0039's real 20 bytes for a workout that covered `elapsedSeconds` /
+   *  `meters`. Every average field is deliberately POPULATED with a
+   *  distinctive value — the gate must drop them, and a fixture that left
+   *  them at zero could not tell "dropped" from "copied a zero". */
+  function summaryBytes(elapsedSeconds: number, meters: number): Uint8Array {
+    return buildEndOfWorkoutSummaryBytes({
+      ...FULL_SUMMARY,
+      elapsedSeconds,
+      meters,
+    });
+  }
+
+  function primedGate(): {
+    transport: ReturnType<typeof stubTransport>;
+    log: ReturnType<typeof createEventLog>;
+    driver: ReturnType<typeof createPm5Driver>;
+    events: MonitorEvent[];
+    clock: ReturnType<typeof manualClock>;
+    timer: ReturnType<typeof manualSchedule>;
+  } {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    const timer = manualSchedule();
+    const driver = createPm5Driver(transport, log, {
+      now: clock.now,
+      schedule: timer.schedule,
+    });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    return { transport, log, driver, events, clock, timer };
+  }
+
+  function boundaries(events: MonitorEvent[]) {
+    return events.filter((e) => e.kind === "intervalComplete");
+  }
+
+  function verdicts(log: ReturnType<typeof createEventLog>) {
+    return log.entries().filter((e) => e.kind === "summary-reconciled");
+  }
+
+  /** Rows the single-interval piece to a natural finish: one rowing tick,
+   *  then WORKOUTEND. Leaves the grace open and the reconcile armed. */
+  async function rowToFinish(
+    g: Awaited<ReturnType<typeof primedGate>>,
+    program: WorkoutProgram = ONE_INTERVAL_PROGRAM,
+  ): Promise<void> {
+    await programViaStub(g.driver, g.transport, program);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+  }
+
+  it("(a) PRECEDENCE: a split at t+200ms wins, and the summary at expiry does not re-fire it — one final boundary per run, across BOTH sources", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+
+    // The split is merely LATE, not lost — the case review I4 says must
+    // never be displaced (its per-interval averages are real data the
+    // summary's whole-workout averages cannot reconstruct).
+    g.clock.advance(200);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    expect(boundaries(g.events)).toHaveLength(1);
+
+    // ...and the summary lands afterwards, inside the same window.
+    g.clock.advance(300);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+
+    // The deadline arrives. Nothing is missing, so nothing is synthesized.
+    g.clock.advance(2500);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      actual: { index: 0, avgSpm: 24, elapsedSeconds: 60, distanceMeters: 200 },
+      finalBoundary: true,
+    });
+    // TWO entries, and the pair is the whole story: the split claimed the
+    // grace, so the summary that followed found the gate already shut
+    // (`out-of-window`, with the reason named), and the deadline then
+    // reported `split-won`. A reader can tell this apart from a run where
+    // no summary ever arrived at all, which is why both are logged.
+    expect(verdicts(g.log).map((e) => e.detail.split(" ")[0])).toStrictEqual([
+      "out-of-window",
+      "split-won",
+    ]);
+    expect(verdicts(g.log)[0]!.detail).toContain("already claimed it");
+  });
+
+  it("(a2) PRECEDENCE, THE HARD ORDER: the summary arrives FIRST and a split still beats it — held evidence is discarded unread, never filed ahead of the real thing", async () => {
+    // The inversion that matters (review I4): the ecosystem's own ordering
+    // evidence says splits-then-summaries, but that is emulation-derived
+    // and has never been read off OUR wire. If 0x0039 can land first, a
+    // gate that filed on receipt would permanently displace the split's
+    // per-interval averages with a workout average — the data loss R1
+    // exists to prevent, caused by R1.
+    const g = primedGate();
+    await rowToFinish(g);
+
+    g.clock.advance(200);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(999, 9999));
+    // Nothing is filed on receipt. Nothing may be.
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(verdicts(g.log)).toHaveLength(0);
+
+    g.clock.advance(300);
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    g.clock.advance(2500);
+    g.timer.pending()!.fire();
+
+    // The SPLIT's numbers, including the averages only it carries.
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      actual: { index: 0, elapsedSeconds: 60, distanceMeters: 200, avgSpm: 24 },
+      finalBoundary: true,
+    });
+    expect(verdicts(g.log)).toHaveLength(1);
+    expect(verdicts(g.log)[0]!.detail).toContain("split-won");
+    expect(verdicts(g.log)[0]!.detail).toContain("discarded unread");
+  });
+
+  it("(b) THE DROPPED SPLIT: no split ever arrives, and at the 3000ms deadline the summary fills the final interval from its own totals", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+
+    // NOT YET. The summary is stored, not filed — a split still has until
+    // the deadline to arrive and win.
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(g.timer.pending()?.ms).toBe(3000);
+
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 62.5, distanceMeters: 214 },
+      finalBoundary: true,
+    });
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("filled-from-summary");
+    // The derivation NUMBERS ride the entry — the stash must answer "which
+    // source fed the record, and from what" in one read.
+    expect(verdict[0]!.detail).toContain("62.5");
+    expect(verdict[0]!.detail).toContain("214");
+  });
+
+  it("(c) MULTI-INTERVAL, every prior recorded: the final interval is the summary MINUS the priors, to the exact value (Sea Fret, a real library workout)", async () => {
+    const program = seaFretProgram();
+    expect(program.intervals).toHaveLength(3);
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, program);
+
+    // Intervals 0 and 1 arrive the ordinary way, in-run: machine
+    // Split/Interval Numbers 1 and 2 normalize to our 0 and 1 through
+    // §19.8's minus-one offset.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 300, 1000),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 300, 1000));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 600, 2200),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 300, 1200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 26));
+    expect(boundaries(g.events)).toHaveLength(2);
+
+    // The piece ends and the LAST split is the one that drops.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 900, 3350),
+    );
+    g.clock.advance(500);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(900, 3350));
+    g.clock.advance(2500);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(3);
+    expect(boundaries(g.events)[2]).toMatchObject({
+      actual: {
+        index: 2,
+        // 900 - (300 + 300); 3350 - (1000 + 1200)
+        elapsedSeconds: 300,
+        distanceMeters: 1150,
+      },
+      finalBoundary: true,
+    });
+    const detail = verdicts(g.log)[0]!.detail;
+    expect(detail).toContain("filled-from-summary");
+    expect(detail).toContain("1150");
+  });
+
+  it("(d) A MISSING PRIOR DECLINES: with interval 1 never recorded the subtraction would file someone else's meters, so nothing is written", async () => {
+    const program = seaFretProgram();
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, program);
+
+    // Only interval 0 is recorded. Interval 1's boundary was lost too.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 300, 1000),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 300, 1000));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 900, 3350),
+    );
+    g.clock.advance(500);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(900, 3350));
+    g.clock.advance(2500);
+    g.timer.pending()!.fire();
+
+    // One boundary in total: interval 0's own, and nothing else.
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({ actual: { index: 0 } });
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("declined");
+    // The REASON, named: which interval is missing is the whole diagnosis.
+    expect(verdict[0]!.detail).toContain("1");
+    expect(verdict[0]!.detail).toContain("nothing filed");
+  });
+
+  it("(e) THE RE-FIRE IS INERT: 0x0039 again a minute later logs out-of-window and files nothing", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+    expect(boundaries(g.events)).toHaveLength(1);
+
+    // The HRM wrinkle (ecosystem review:420-422): 0x0039 notifies a SECOND
+    // time roughly a minute after the finish, carrying late recovery-HR
+    // data. Different numbers, deliberately — if this one were ever filed
+    // the record would show it.
+    g.clock.advance(60_000);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(999, 9999));
+
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      actual: { elapsedSeconds: 62.5, distanceMeters: 214 },
+    });
+    const outOfWindow = verdicts(g.log).filter((e) =>
+      e.detail.includes("out-of-window"),
+    );
+    expect(outOfWindow).toHaveLength(1);
+    // Receipt is still logged for both — the re-fire is inert, not invisible.
+    expect(
+      g.log.entries().filter((e) => e.kind === "summary-half"),
+    ).toHaveLength(2);
+  });
+
+  it("(f) A TERMINATED ending never arms the gate: no reconcile is scheduled, and a summary arriving after it is out-of-window", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+    expect(g.events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+
+    // No grace, therefore no deadline to reconcile at. Footnote 12's
+    // unstable Split/Interval Number is why a terminate opens no grace at
+    // all, and the summary rides the same ruling.
+    expect(g.timer.calls).toHaveLength(0);
+
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(verdicts(g.log)).toHaveLength(1);
+    expect(verdicts(g.log)[0]!.detail).toContain("out-of-window");
+  });
+
+  it("(g) THE AVERAGES ARE NOT DERIVABLE, so they are not invented: the synthesized actual carries null, never a whole-workout average and never zero", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    // The fixture's own averages: spm 24, pace 125s, HR 152. None of them
+    // is THIS interval's — every one is the whole workout's (B3).
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    const only = boundaries(g.events)[0]!;
+    expect(only.kind).toBe("intervalComplete");
+    const actual = (only as { actual: IntervalActual }).actual;
+    // `IntervalActual` types these three as `number | null`, REQUIRED, not
+    // optional (`domain/monitor/types.ts`) — so "omitted" can only mean
+    // `null` here, which is the same value every downstream consumer
+    // already treats as "no reading" (`logDraft.ts` drops the field,
+    // `surfaceModel.ts` renders a dash). See the task report's finding.
+    expect(actual.avgSplit).toBeNull();
+    expect(actual.avgSpm).toBeNull();
+    expect(actual.avgHeartRateBpm).toBeNull();
+    expect(actual.avgSpm).not.toBe(24);
+    expect(actual.avgSpm).not.toBe(0);
+  });
+
+  it("THE DEADLINE IS A CLOCK, NOT A TICK COUNT: the machine's own repeat finished frames never trigger the fill early", async () => {
+    // The walk-day-3 lesson, one layer over (interface-notes.md §22 item 5):
+    // a reconcile keyed to the PM's status cadence is a reconcile keyed to
+    // whichever radio is fastest. Only the timer decides.
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+
+    for (let i = 0; i < 10; i += 1) {
+      g.clock.advance(90);
+      g.transport.notify(
+        GENERAL_STATUS_UUID,
+        generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+      );
+    }
+
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(verdicts(g.log)).toHaveLength(0);
+
+    g.timer.pending()!.fire();
+    expect(boundaries(g.events)).toHaveLength(1);
+  });
+
+  it("NO SUMMARY EITHER: the deadline still reports, and reports honestly — declined, with the run's loss named", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(3000);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(verdicts(g.log)).toHaveLength(1);
+    expect(verdicts(g.log)[0]!.detail).toContain("declined");
+    expect(verdicts(g.log)[0]!.detail).toContain("no 0x0039");
+  });
+
+  it("A SUMMARY ARRIVING WHILE THE RUN IS STILL OPEN is out-of-window too — the gate is armed by the natural finish, never by a characteristic", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(30, 100));
+
+    expect(verdicts(g.log)).toHaveLength(1);
+    expect(verdicts(g.log)[0]!.detail).toContain("out-of-window");
+    expect(g.timer.calls).toHaveLength(0);
+  });
+
+  it("A SUMMARY PAST THE 3000ms WINDOW is not stored: the deadline finds nothing and declines", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    // Exactly at the bound — the grace's own `now() >= until` rule, which
+    // the split path pins the same way one test above.
+    g.clock.advance(3000);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(0);
+    const details = verdicts(g.log).map((e) => e.detail);
+    expect(details.some((d) => d.includes("out-of-window"))).toBe(true);
+    expect(details.some((d) => d.includes("declined"))).toBe(true);
+  });
+
+  it("A TOO-SHORT 0x0039 stores nothing and says so — the parser's null is a verdict, not a silence", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(19));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(0);
+    const details = verdicts(g.log).map((e) => e.detail);
+    expect(details.some((d) => d.includes("could not be decoded"))).toBe(true);
+  });
+
+  it("A NEGATIVE SUBTRACTION DECLINES: the one cheap on-wire test of the cumulative premise (§23 walk item 2), and it refuses rather than files nonsense", async () => {
+    // If 0x0039's Elapsed Time/Distance turn out to be PER-INTERVAL (the
+    // trap 0x0031 sprang on walk 4) rather than whole-workout totals, a
+    // multi-interval subtraction goes negative — and this is the arm that
+    // fires. It is deliberately a DECLINE plus a log entry, not a clamp:
+    // the walk needs the evidence, and the rower must not get a fabricated
+    // interval either way.
+    const program = seaFretProgram();
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, program);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 300, 1000),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 300, 1000));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 600, 2200),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 300, 1200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 26));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 900, 3350),
+    );
+    g.clock.advance(500);
+    // A PER-INTERVAL reading: the final interval's own 300s/1150m, which is
+    // smaller than the priors this gate would subtract from it.
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(300, 1150));
+    g.clock.advance(2500);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(2); // intervals 0 and 1 only
+    const detail = verdicts(g.log)[0]!.detail;
+    expect(detail).toContain("declined");
+    expect(detail).toContain("cumulative");
+  });
+
+  it("A REPLACED RUN takes its deadline with it: the stale reconcile fires into nothing and cannot fill the NEW run's last interval", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    const stale = g.timer.calls[0]!;
+
+    // A second workout on the same driver, no reconnect (the §19.4
+    // regression's own fix): `program()` replaces the run outright.
+    await programViaStub(g.driver, g.transport, seaFretProgram());
+    stale.fire();
+
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(stale.cancelled).toBe(true);
+  });
+
+  it("THE LATEST SUMMARY IN THE WINDOW WINS: two 0x0039s inside the grace, and the second one's numbers are what get filed", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(200);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    g.clock.advance(200);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)[0]).toMatchObject({
+      actual: { elapsedSeconds: 62.5, distanceMeters: 214 },
+    });
   });
 });

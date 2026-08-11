@@ -1308,7 +1308,12 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(result.current.handoffHeld).toBe(true);
     expect(result.current.actuals).toHaveLength(0);
     expect(loadMonitorRun()?.actuals).toHaveLength(0);
-    expect(timer.pending()?.ms).toBe(3000);
+    // 3500, not the driver's 3000: the hold must STRICTLY outlive the
+    // finish grace since fast-follow Task 2, because the summary fallback
+    // fills the final interval AT the grace's expiry and that fill has to
+    // beat the navigation this hold is what delays (`FINISH_HANDOFF_HOLD_MS`
+    // and `FINISH_GRACE_MS` both carry the reasoning).
+    expect(timer.pending()?.ms).toBe(3500);
 
     // Three more `finished` samples from the machine. THE REGRESSION: each
     // of these used to release the hold (and, one layer down, expire the
@@ -1650,6 +1655,119 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     const filed = entries.find((e) => e.kind === "record-actual");
     expect(filed?.detail).toContain("accepted");
     expect(filed?.detail).toContain("index=0");
+  });
+
+  it("THE DROPPED SPLIT, END TO END (fast-follow Task 2, design spec §5): the summary fills the final interval at the deadline, the record accepts it, and the hold releases with 1 measured", async () => {
+    // The failure R1 exists to fix, replayed through the whole stack: the
+    // machine finishes, the final 0x0037/0x0038 pair is DROPPED ENTIRELY
+    // (the ecosystem review's own reported failure mode — this script has
+    // no `finalBoundary` event at all), and 0x0039 arrives instead. Without
+    // the gate this run reaches the log screen reading "0 OF 1 INTERVALS
+    // MEASURED" with the workout's real numbers sitting in the trace.
+    //
+    // Two injected timers, deliberately separate, because the whole ordering
+    // question lives between them: `driverTimer` is the driver's reconcile
+    // deadline (3000, the finish grace), `timer` is this hook's hand-off
+    // hold (3500). The fill has to happen while the hold is still up.
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    // THE STRICT INEQUALITY, as two live timers rather than as two
+    // constants: the fill is due at 3000 and the hand-off cannot release
+    // before 3500.
+    expect(driverTimer.pending()?.ms).toBe(3000);
+    expect(timer.pending()?.ms).toBe(3500);
+
+    // 0x0039 arrives inside the grace. Still nothing filed — the summary is
+    // the fallback, and a split has until the deadline to win.
+    driverMs = 400;
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+    expect(result.current.actuals).toHaveLength(0);
+
+    // The deadline. No split ever came, so the gate synthesizes.
+    driverMs = 3000;
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    expect(result.current.actuals).toHaveLength(1);
+    expect(result.current.actuals[0]).toMatchObject({
+      index: 0,
+      elapsedSeconds: 62.5,
+      distanceMeters: 214,
+      avgSplit: null,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+    });
+    expect(loadMonitorRun()?.actuals).toHaveLength(1);
+    // ...and the hand-off is free, on the fill rather than on its backstop.
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.pending()).toBeNull();
+
+    // WHAT THE ROWER ACTUALLY GETS: the log screen's own prefill, from the
+    // same snapshot `LogSession` takes at mount.
+    const seen = monitorModeRun(
+      new URLSearchParams("from=monitor"),
+      "walk-day-2",
+    );
+    const steps = buildMonitorLogSteps(seen!);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.actualSource).toBe("pm5");
+    expect(steps[0]?.actualSeconds).toBe(62.5);
+    expect(steps[0]?.actualMeters).toBe(214);
+    // The averages are ABSENT from the log step, not zero and not the
+    // workout's: `buildMonitorLogSteps` drops a null average field
+    // entirely, which is exactly what an omitted-average actual is supposed
+    // to produce downstream (design spec §5's B3 — the fake sends real
+    // non-zero averages on 0x0039, so this proves a drop, not an echo).
+    expect(steps[0]).not.toHaveProperty("actualSplit");
+    expect(steps[0]).not.toHaveProperty("spm");
+    expect(steps[0]).not.toHaveProperty("avgHr");
+
+    // ONE READ OF THE STASH ANSWERS "WHICH SOURCE FED THE RECORD".
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entries.filter((e) => e.kind === "split-half")).toHaveLength(0);
+    expect(entries.filter((e) => e.kind === "summary-half")).toHaveLength(1);
+    const verdict = entries.find((e) => e.kind === "summary-reconciled");
+    expect(verdict?.detail).toContain("filled-from-summary");
+    expect(verdict?.detail).toContain("62.5");
+    const filed = entries.find((e) => e.kind === "record-actual");
+    expect(filed?.detail).toContain("accepted");
+    expect(filed?.detail).toContain("finalBoundary=true");
+    expect(
+      entries.find((e) => e.kind === "handoff-released")?.detail,
+    ).toContain("final-boundary");
   });
 });
 

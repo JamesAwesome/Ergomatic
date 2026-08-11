@@ -7,6 +7,7 @@ import {
   HEARTRATE_NO_BELT,
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus2,
+  parseEndOfWorkoutSummary,
   parseGeneralStatus,
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
@@ -25,6 +26,7 @@ import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
@@ -789,6 +791,32 @@ describe("createFakeTransport: disconnect / reconnect", () => {
     fake.injectDisconnect();
     fake.tick(1000); // the 1000ms status event becomes due, but is suppressed
     expect(generals).toHaveLength(0);
+  });
+
+  it("the end-of-workout summary is suppressed while disconnected too — a radio that is down delivers no 0x0039 either", async () => {
+    // `deliverSummary` is an on-demand injection rather than a timeline
+    // event, so it does not inherit `deliverOrCache`'s own `linkDown` gate
+    // and carries its own. Without it a test could hand the driver's
+    // summary gate bytes that no radio could have carried.
+    const fake = createFakeTransport({ program: PROGRAM });
+    const summaries: Uint8Array[] = [];
+    fake.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (b) => summaries.push(b));
+
+    fake.deliverSummary({ elapsedSeconds: 60, meters: 250 });
+    expect(summaries).toHaveLength(1);
+    expect(parseEndOfWorkoutSummary(summaries[0]!)).toMatchObject({
+      elapsedSeconds: 60,
+      meters: 250,
+      // The averages the machine really sends — non-zero by default, so a
+      // consumer that drops them can be proven to have dropped them
+      // (`deliverSummary`'s own doc comment).
+      avgStrokeRate: 24,
+      avgHeartRateBpm: 152,
+    });
+
+    fake.injectDisconnect();
+    fake.deliverSummary({ elapsedSeconds: 60, meters: 250 });
+    expect(summaries).toHaveLength(1);
   });
 
   it("the armed LEVEL is suppressed while disconnected too, and completeReconnect flushes 'still armed' (fix wave F-CRIT)", async () => {

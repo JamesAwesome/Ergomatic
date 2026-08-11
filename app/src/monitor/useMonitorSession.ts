@@ -241,14 +241,28 @@ function bestEffort(work: Promise<unknown>): void {
  * the "SESSION ENDED" frame in the pathological case is a frame the rower is
  * reading anyway; a lost measurement is not recoverable.
  *
- * COUPLED CONSTANT: `driver.ts`'s `FINISH_GRACE_MS` is also 3000, and the
- * safety is directional — this hold must be >= the grace, so a boundary the
- * driver still vouches always finds the hand-off still held. Both windows
- * open in the same synchronous emit, so equality suffices. The full
- * reasoning lives at `FINISH_GRACE_MS`'s own comment; change the two
- * together or not at all.
+ * COUPLED CONSTANT: `driver.ts`'s `FINISH_GRACE_MS` is 3000, and the safety
+ * is directional — this hold must outlive the grace, so a boundary the
+ * driver still vouches always finds the hand-off still held.
+ *
+ * **THE INEQUALITY IS NOW STRICT: hold > grace** (fast-follow Task 2,
+ * design spec §5). It used to be `>=`, and equality sufficed because every
+ * vouched boundary arrived on a NOTIFICATION strictly inside the grace —
+ * whatever landed at the deadline itself was already too late to be
+ * accepted. The summary fallback breaks that: the driver's reconcile fires
+ * AT `FINISH_GRACE_MS`, and when the final split was dropped it synthesizes
+ * the last interval right there, on the deadline. With both numbers equal,
+ * that fill and this backstop would be two timers due at the same
+ * millisecond — the fill would be racing the navigation it exists to beat,
+ * and the rower would get "0 OF 1 MEASURED" on whichever ordering the event
+ * loop happened to pick. 3500 is the grace plus a 500 ms margin for the
+ * fill and the record write it triggers; nothing measured that margin
+ * because nothing needs to — it is one synchronous emit, and the cost of
+ * the extra half-second is half a second on a frame the rower is reading
+ * anyway. The full reasoning for the grace itself lives at
+ * `FINISH_GRACE_MS`'s own comment; change the two together or not at all.
  */
-const FINISH_HANDOFF_HOLD_MS = 3000;
+const FINISH_HANDOFF_HOLD_MS = 3500;
 
 export interface MonitorSession {
   phase: ConnectedPhase;

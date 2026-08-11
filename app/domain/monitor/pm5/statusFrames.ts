@@ -32,6 +32,7 @@ import type {
   AdditionalStatus2,
   GeneralStatus,
   SplitIntervalData,
+  WorkoutSummary,
 } from "./parse.js";
 
 /** BLE doc p.14: "Heartrate (bpm, 255=invalid)" — what this module writes
@@ -255,5 +256,38 @@ export function buildAdditionalSplitIntervalDataBytes(
   writeU8(bytes, 16, s.splitAvgDragFactor);
   writeU8(bytes, 17, s.splitIntervalNumber);
   writeU8(bytes, 18, s.ergMachineType);
+  return bytes;
+}
+
+/** 0x0039 — inverse of `parse.ts`'s `parseEndOfWorkoutSummary`, 20 bytes
+ *  (interface-notes.md §23's layout table, the same section that parser
+ *  cites; BLE Interface Definition rev 1.30 p.21). Added by fast-follow
+ *  Task 2 so the summary-fallback gate can be exercised end-to-end through
+ *  the REAL decoder in CI — same reason every other builder here exists.
+ *
+ *  Log Entry Date/Time (offsets 0-3) are written as ZEROS and nothing
+ *  round-trips them: §23 walk item 1 records that field's bit-packing as
+ *  undecoded, so `WorkoutSummary` carries no value for this encoder to
+ *  write. That is the honest shape — a fake that invented a plausible
+ *  date/time would be asserting a layout nobody has read.
+ *
+ *  Heart-rate `null`s use `HEARTRATE_INVALID` (255), the documented byte
+ *  every other builder here writes, with the same non-inverse caveat that
+ *  constant's own comment carries: `parse.ts` maps BOTH 255 and 0 to
+ *  `null`, so a caller wanting the OBSERVED beltless byte passes `0` as a
+ *  real number rather than `null`. */
+export function buildEndOfWorkoutSummaryBytes(s: WorkoutSummary): Uint8Array {
+  const bytes = new Uint8Array(20);
+  writeU24LE(bytes, 4, Math.round(s.elapsedSeconds * 100));
+  writeU24LE(bytes, 7, Math.round(s.meters * 10));
+  writeU8(bytes, 10, s.avgStrokeRate);
+  writeHeartRate(bytes, 11, s.endingHeartRateBpm);
+  writeHeartRate(bytes, 12, s.avgHeartRateBpm);
+  writeHeartRate(bytes, 13, s.minHeartRateBpm);
+  writeHeartRate(bytes, 14, s.maxHeartRateBpm);
+  writeU8(bytes, 15, s.dragFactorAverage);
+  writeHeartRate(bytes, 16, s.recoveryHeartRateBpm);
+  writeU8(bytes, 17, s.workoutType);
+  writeU16LE(bytes, 18, Math.round(s.avgPaceSecondsPer500m * 10));
   return bytes;
 }
