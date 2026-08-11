@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { signInViaBackdoor } from "./helpers";
+import { signInViaBackdoor, stableBoundingBox } from "./helpers";
 
 /** Deletes a signed-in user's own (non-global) workout by title, so a
  *  design-sweep test that has to create real data via bulk import doesn't
@@ -1664,10 +1664,10 @@ test.describe("builder screen", () => {
     page,
   }) => {
     const chip = page.getByRole("button", { name: "Pain 3" });
-    const before = await chip.boundingBox();
+    const before = await stableBoundingBox(chip);
     await chip.click();
     await expect(page.getByText("WORKING")).toBeVisible();
-    const after = await chip.boundingBox();
+    const after = await stableBoundingBox(chip);
 
     expect(after?.y).toBe(before?.y);
   });
@@ -1687,14 +1687,14 @@ test.describe("builder screen", () => {
     // ("COMFORTABLY HARD"), the widest of the four words.
     const typeChipRow = page.locator(".classification-chip-row").first();
     const difficultyRow = page.locator(".classification-chip-row").nth(1);
-    const beforeType = await typeChipRow.boundingBox();
-    const beforeDifficulty = await difficultyRow.boundingBox();
+    const beforeType = await stableBoundingBox(typeChipRow);
+    const beforeDifficulty = await stableBoundingBox(difficultyRow);
 
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(page.getByText("COMFORTABLY HARD")).toBeVisible();
 
-    const afterType = await typeChipRow.boundingBox();
-    const afterDifficulty = await difficultyRow.boundingBox();
+    const afterType = await stableBoundingBox(typeChipRow);
+    const afterDifficulty = await stableBoundingBox(difficultyRow);
 
     expect(afterType?.y).toBe(beforeType?.y);
     expect(afterDifficulty?.y).toBe(beforeDifficulty?.y);

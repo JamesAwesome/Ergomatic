@@ -45,3 +45,35 @@ export async function signInViaBackdoor(
   }
   await page.goto("/");
 }
+
+/** A boundingBox read that waits out layout settling first (fonts still
+ *  loading, a scroll restore mid-flight, a reflow from the previous
+ *  interaction). The y-stability tests capture a BEFORE box and assert the
+ *  AFTER equals it — if the before read lands mid-settle, the assertion
+ *  fails on drift the test never meant to measure. Two consecutive
+ *  animation-frame-spaced reads must agree before the box is trusted;
+ *  fonts.ready is awaited once up front (an 11px word swapping in late is
+ *  exactly the reflow the pain/type tests exist to bound). Worsened from
+ *  rare to most-runs by main's scroll-restore change (#84); root fix here
+ *  rather than retries that would also swallow real regressions. */
+export async function stableBoundingBox(
+  locator: import("@playwright/test").Locator,
+): Promise<{ x: number; y: number; width: number; height: number } | null> {
+  await locator.page().evaluate(() => document.fonts.ready);
+  let prev = await locator.boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await locator.page().evaluate(() => new Promise(requestAnimationFrame));
+    const next = await locator.boundingBox();
+    if (
+      prev !== null &&
+      next !== null &&
+      prev.y === next.y &&
+      prev.x === next.x &&
+      prev.height === next.height
+    ) {
+      return next;
+    }
+    prev = next;
+  }
+  return prev;
+}
