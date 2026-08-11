@@ -16,6 +16,10 @@ export interface PieceRow {
   split: string | null;
   spm: number | null;
   off: number | null;
+  // How many consecutive identical pieces this row stands for (2026-08-11
+  // spec: pieceList rolls runs before returning). 1 for a lone piece;
+  // `rollRuns` below is the only place this ever exceeds 1.
+  count: number;
 }
 
 const MINUS = "−";
@@ -84,6 +88,7 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
         split: null,
         spm: null,
         off: null,
+        count: 1,
       });
       continue;
     }
@@ -104,6 +109,7 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
         split: null,
         spm: p.spm ?? null,
         off: null,
+        count: 1,
       });
     } else {
       const ref = p.ref as Extract<PaceRef, { base: string }>;
@@ -129,10 +135,58 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
         split: fmtSplit(p.targetSplit as number),
         spm: p.spm ?? null,
         off,
+        count: 1,
       });
     }
   }
-  return rows;
+  return rollRuns(rows);
+}
+
+/** Rolls consecutive identical rows into one (2026-08-11 spec, James's
+ *  consecutive-runs ruling: "any run of 2+ identical consecutive pieces
+ *  collapses to one row, anywhere in the set"). Identity: duration, ref
+ *  rendering, effort, spm, split, off, AND rest all equal — a rest
+ *  boundary breaks a run (rule 1). The workout's FINAL row may join the
+ *  run before it when it differs ONLY by carrying no trailing rest
+ *  (rule 2) — the rolled row keeps the run's inter-piece rest either way.
+ *  Test rows (no split, no effort — `joinsRun`'s `isWork` guard) never
+ *  roll (rule 3): they carry no per-piece identity to compare, and two
+ *  authored test steps are always distinct events even when their label
+ *  happens to match. Only ADJACENT output rows are ever compared — this
+ *  is what makes it a run of CONSECUTIVE pieces, not a fold of every
+ *  matching row in the set (the pyramid's two off-6 ends, five rows
+ *  apart, must never merge). */
+function rollRuns(rows: PieceRow[]): PieceRow[] {
+  const out: PieceRow[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const prev = out[out.length - 1];
+    if (prev !== undefined && joinsRun(prev, row, i === rows.length - 1)) {
+      prev.count += 1;
+      continue;
+    }
+    out.push({ ...row });
+  }
+  return out;
+}
+
+function joinsRun(prev: PieceRow, row: PieceRow, isFinal: boolean): boolean {
+  const isWork = row.split !== null || row.effortText !== null;
+  if (!isWork) return false; // test rows stay single
+  const sameCore =
+    prev.duration === row.duration &&
+    prev.refTextFull === row.refTextFull &&
+    prev.effortText === row.effortText &&
+    prev.spm === row.spm &&
+    prev.split === row.split &&
+    prev.off === row.off;
+  if (!sameCore) return false;
+  if (prev.restText === row.restText) return true;
+  // rule 2: the trailing-rest exception. Only the workout's true final row
+  // may join by differing SOLELY in carrying no rest of its own — a
+  // mid-run row with a different (non-null) rest is a genuine rest-
+  // boundary break (rule 1), never this exception.
+  return isFinal && row.restText === null && prev.restText !== null;
 }
 
 /** The tinted row: min |off| among the VISIBLE split-ref rows, ties to
@@ -158,7 +212,8 @@ export function peakIndex(
 /** The summary foot's numbers. TOTAL is estimateMinutes' own number
  *  (the duration chip's); WORK is the work phases alone. With the
  *  trailing-rest deviation, WORK plus every displayed rest equals
- *  TOTAL by construction. */
+ *  TOTAL by construction — where a rolled row's rest counts once per
+ *  piece in its run (`count` × rest), not once per row. */
 export function workAndTotal(
   steps: Step[],
   baselines: Baselines,
