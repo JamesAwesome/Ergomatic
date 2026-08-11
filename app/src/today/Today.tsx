@@ -288,21 +288,31 @@ export default function Today() {
   // link/reload rules"). A started draft (startedAt set) is left alone even
   // if old; 6B owns what happens to an in-progress session.
   //
+  // Fast-follow Task 4 (spec §3, adversarial B1): `startedAt` is now
+  // stamped at EVERY rewired entry point (`useStartWorkout.ts`'s
+  // `confirmReplace`, `WorkoutDetail.tsx`'s `handleRowInstead`) — the
+  // instant a fresh draft is built and saved, never later. So `draft &&
+  // draft.startedAt === null` can no longer describe a draft the CURRENT
+  // app itself ever writes; the only way to land here is a draft this
+  // client saved BEFORE that stamp moved (a pre-upgrade localStorage
+  // value), which this guard still discards correctly once it's 24h stale.
+  //
   // Phase 6B Task 4 amendment: a completed-but-unlogged run record (`run.ts`
   // — Timer/SessionComplete both deliberately keep it, for 6C's still-
   // unbuilt "log this session" screen) protects its draft from this discard
   // regardless of age, one further exception layered onto the same rule.
-  // In the normal single-session-at-a-time flow this exception is inert (a
-  // draft that reached completion always has `startedAt` set, so the
-  // `startedAt === null` check above already excludes it on its own) — it
-  // only bites for the edge case the rule is actually guarding: the rower
-  // completes session A (leaving draft A + run A both in storage on
-  // purpose), then opens a DIFFERENT workout and taps Start before ever
-  // logging A, which overwrites the draft key with a fresh, unstarted
-  // draft B while run A's own completedAt is still sitting there. This
-  // doesn't try to verify the run actually belongs to the CURRENT draft
-  // (6B has no id linking the two) — same "simplicity over precision" call
-  // ConfirmTargets.tsx's own footer comment makes for the identical reason.
+  // Doubly inert since fast-follow Task 4 (see above): the edge case it
+  // used to guard — the rower completes session A (leaving draft A + run A
+  // both in storage on purpose), then opens a DIFFERENT workout and taps
+  // Start before ever logging A, overwriting the draft key with a fresh
+  // draft B while run A's own completedAt is still sitting there — no
+  // longer produces an UNSTARTED draft B either, so the first condition
+  // already excludes it on its own now, same as the completion case always
+  // did. Left in place rather than removed: it still protects a legacy
+  // pre-upgrade unstarted draft B against the identical race, and deleting
+  // a defensive check because its normal-flow trigger became unreachable
+  // is exactly the kind of "simplicity over precision" tradeoff this
+  // codebase's own convention is to keep, not silently narrow.
   //
   // Phase 7A Task 5 amendment: a LIVE monitor run (`monitorRun.ts` —
   // `completedAt === null`, a workout currently being run by a connected

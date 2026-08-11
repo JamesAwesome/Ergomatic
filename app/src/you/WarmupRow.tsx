@@ -127,12 +127,13 @@ export function parseWarmupRest(value: string): RestResult {
  *  see `WarmupRow()` below). Spec §3's own literal examples write the
  *  prefix in (`WARM-UP · 10:00`), a divergence recorded where the row
  *  itself is rendered. Time uses `fmtDuration` — the same helper
- *  ConfirmTargets.tsx/Builder.tsx already use for this exact quantity,
- *  which renders a sub-minute rest as `0:30`, not the spec prose's elided
- *  `:30`: kept consistent with those two existing call sites rather than
- *  inventing a third rendering for the identical value (see task-6
- *  report). Distance uses a lowercase `m` (Builder.tsx's own prose
- *  convention), not ConfirmTargets' uppercase structured-cell `M`. */
+ *  Builder.tsx already uses for this exact quantity (and ConfirmTargets.tsx
+ *  did too, before fast-follow Task 4 deleted it), which renders a
+ *  sub-minute rest as `0:30`, not the spec prose's elided `:30`: kept
+ *  consistent with that existing call site rather than inventing a second
+ *  rendering for the identical value (see task-6 report). Distance uses a
+ *  lowercase `m` (Builder.tsx's own prose convention), not the uppercase
+ *  structured-cell `M` ConfirmTargets used to. */
 function warmupValueText(warmup: WarmupSetting): string {
   const duration =
     warmup.kind === "time" ? fmtDuration(warmup.minutes) : `${warmup.meters} m`;

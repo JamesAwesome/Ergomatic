@@ -3,16 +3,15 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step, WorkoutType, Baselines } from "../../domain/types.js";
 import {
   buildDraft,
+  buildNudgedDraft,
   saveDraft,
   loadDraft,
-  loadDraftWithNotice,
   clearDraft,
   draftSteps,
   draftMinutes,
   effectiveSteps,
   withNudge,
   startDraft,
-  cancelStart,
   DRAFT_KEY,
   type SessionDraft,
 } from "./draft";
@@ -283,7 +282,7 @@ describe("withNudge", () => {
   });
 });
 
-describe("startDraft / cancelStart", () => {
+describe("startDraft", () => {
   it("startDraft stamps a real ISO startedAt", () => {
     const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-start"));
     expect(d.startedAt).toBeNull();
@@ -292,19 +291,69 @@ describe("startDraft / cancelStart", () => {
     expect(new Date(started.startedAt!).toISOString()).toBe(started.startedAt);
   });
 
-  it("cancelStart reverses startDraft, returning startedAt to null", () => {
-    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-cancel"));
+  it("touches no other field — the same 'one field' discipline the module's other pure mutators follow", () => {
+    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-start-2"));
     const started = startDraft(d);
-    const cancelled = cancelStart(started);
-    expect(cancelled.startedAt).toBeNull();
-    // Every other field survives untouched — this only ever touches
-    // startedAt, the same "one field" discipline startDraft itself follows.
-    expect(cancelled).toStrictEqual({ ...started, startedAt: null });
+    expect(started).toStrictEqual({
+      ...d,
+      startedAt: started.startedAt,
+    });
+  });
+});
+
+// buildNudgedDraft moved here from workout/WorkoutDetail.tsx (fast-follow
+// Task 4): the shared builder every rewired entry point uses now that
+// ConfirmTargets — the screen that used to let a rower adjust targets AFTER
+// committing to a draft — is gone.
+describe("buildNudgedDraft", () => {
+  it("bakes a cumulative nudge map into a fresh draft, matching a manual withNudge sequence", () => {
+    const input = draftInputFor("Calm Sea", "id-nudged-1");
+    const workIndex = LIBRARY_WORKOUTS.find(
+      (w) => w.title === "Calm Sea",
+    )!.steps.findIndex((s) => s.k === "w");
+
+    const nudged = buildNudgedDraft(input, { [workIndex]: -5 });
+
+    const manual = withNudge(buildDraft(input), workIndex, -5);
+    // Different createdAt timestamps are the only expected difference — both
+    // are built independently a moment apart.
+    expect({ ...nudged, createdAt: "" }).toStrictEqual({
+      ...manual,
+      createdAt: "",
+    });
   });
 
-  it("cancelStart on an already-unstarted draft is a no-op value (still null)", () => {
-    const d = buildDraft(draftInputFor("Hoarfrost", "id-hoarfrost-cancel-2"));
-    expect(cancelStart(d).startedAt).toBeNull();
+  it("applies every entry in the map, in whatever order Object.entries yields", () => {
+    const heatLightning = library("Heat Lightning");
+    const input = draftInputFor("Heat Lightning", "id-nudged-2");
+    const repIndex = heatLightning.steps.findIndex((s) => s.k === "w");
+
+    const draft = buildNudgedDraft(input, { [repIndex]: 3 });
+
+    // Heat Lightning's own work step is an effort ref (`{effort:"max"}`) —
+    // withNudge refuses to record a nudge against one, the same rule this
+    // reuses verbatim.
+    expect(draft.nudges).toStrictEqual({});
+  });
+
+  it("a zero-valued nudge entry is skipped, not recorded as a live no-op nudge", () => {
+    const input = draftInputFor("Calm Sea", "id-nudged-3");
+    const workIndex = LIBRARY_WORKOUTS.find(
+      (w) => w.title === "Calm Sea",
+    )!.steps.findIndex((s) => s.k === "w");
+
+    const draft = buildNudgedDraft(input, { [workIndex]: 0 });
+
+    expect(draft.nudges).toStrictEqual({});
+  });
+
+  it("an empty nudge map ({} — BaselineCard's own call, which has no preview surface) builds an un-nudged draft", () => {
+    const input = draftInputFor("Calm Sea", "id-nudged-4");
+
+    const draft = buildNudgedDraft(input, {});
+
+    expect(draft.nudges).toStrictEqual({});
+    expect(draft.steps).toStrictEqual(library("Calm Sea").steps);
   });
 });
 
@@ -458,7 +507,7 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 });
 
-describe("loadDraftWithNotice / legacy wu strip (2026-08-09's warmup setting)", () => {
+describe("loadDraft's legacy wu strip (2026-08-09's warmup setting)", () => {
   beforeEach(() => localStorage.clear());
 
   // No real seeded workout carries a `wu` step any more (Task 3 stripped
@@ -475,6 +524,12 @@ describe("loadDraftWithNotice / legacy wu strip (2026-08-09's warmup setting)", 
     };
   }
 
+  // Fast-follow Task 4: the strip is SILENT now — ConfirmTargets (the one
+  // screen that used to tell the rower anything changed, via its own
+  // `loadDraftWithNotice`) is gone, and `loadDraft` is the strip's only
+  // remaining caller. These pins cover the strip's own mechanics (still
+  // real, still one-time, still data hygiene for a pre-#71 draft), not a
+  // notice that no longer exists.
   it("strips the legacy wu step and reindexes nudges/spmOverrides/removed to the surviving positions", () => {
     const legacy = legacyDraftFor("Calm Sea", "id-legacy-1");
     // Index 1 is Calm Sea's own (only) work step, post-splice — nudge, spm
@@ -488,8 +543,7 @@ describe("loadDraftWithNotice / legacy wu strip (2026-08-09's warmup setting)", 
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
 
-    const { draft, strippedWarmups } = loadDraftWithNotice();
-    expect(strippedWarmups).toBe(1);
+    const draft = loadDraft();
     expect(draft).not.toBeNull();
     expect(draft!.steps).toStrictEqual(legacy.steps.slice(1));
     expect(draft!.nudges).toStrictEqual({ 0: -5 });
@@ -497,11 +551,13 @@ describe("loadDraftWithNotice / legacy wu strip (2026-08-09's warmup setting)", 
     expect(draft!.removed).toStrictEqual([0]);
 
     // Persisted immediately (a one-time strip, not a re-strip on every
-    // read): a second load sees the already-clean draft and has nothing
-    // left to report.
-    const second = loadDraftWithNotice();
-    expect(second.strippedWarmups).toBe(0);
-    expect(second.draft).toStrictEqual(draft);
+    // read): the RAW stored value no longer carries a `wu` step, and a
+    // second load returns the exact same already-clean draft.
+    const rawAfter = JSON.parse(
+      localStorage.getItem(DRAFT_KEY)!,
+    ) as SessionDraft;
+    expect(rawAfter.steps.some((s) => (s.k as string) === "wu")).toBe(false);
+    expect(loadDraft()).toStrictEqual(draft);
   });
 
   it("drops a removed index that named ONLY the wu step itself, rather than mapping it onto a survivor", () => {
@@ -509,7 +565,7 @@ describe("loadDraftWithNotice / legacy wu strip (2026-08-09's warmup setting)", 
     const withState: SessionDraft = { ...legacy, removed: [0] };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
 
-    const { draft } = loadDraftWithNotice();
+    const draft = loadDraft();
     expect(draft!.removed).toStrictEqual([]);
   });
 
@@ -522,33 +578,16 @@ describe("loadDraftWithNotice / legacy wu strip (2026-08-09's warmup setting)", 
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
 
-    const { draft } = loadDraftWithNotice();
+    const draft = loadDraft();
     expect(draft!.nudges).toStrictEqual({});
     expect(draft!.spmOverrides).toStrictEqual({});
   });
 
-  it("loadDraft (the public wrapper every other screen calls) also returns the stripped draft, with no wu step surviving", () => {
-    const legacy = legacyDraftFor("Calm Sea", "id-legacy-3");
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(legacy));
-
-    const loaded = loadDraft();
-    expect(loaded!.steps.some((s) => (s.k as string) === "wu")).toBe(false);
-    expect(loaded!.steps).toStrictEqual(legacy.steps.slice(1));
-  });
-
-  it("reports strippedWarmups: 0 and returns the exact same draft by value when there is nothing to strip", () => {
+  it("returns the exact same draft by value when there is nothing to strip", () => {
     const d = buildDraft(draftInputFor("Calm Sea", "id-clean-1"));
     saveDraft(d);
 
-    const { draft, strippedWarmups } = loadDraftWithNotice();
-    expect(strippedWarmups).toBe(0);
+    const draft = loadDraft();
     expect(draft).toStrictEqual(d);
-  });
-
-  it("reports strippedWarmups: 0 for the no-draft-stored case, matching loadDraft's own null", () => {
-    expect(loadDraftWithNotice()).toStrictEqual({
-      draft: null,
-      strippedWarmups: 0,
-    });
   });
 });

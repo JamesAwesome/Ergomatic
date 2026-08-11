@@ -171,27 +171,24 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
       "START HERE · 1 OF 4 READ",
     );
 
-    // -- card START -> Confirm, UNBLOCKED (needsBaselines() reads false for
-    //    an effort-only workout — the domain change this phase owns) ->
-    //    SKIP the countdown -> the timer.
-    await page.getByRole("button", { name: "Start" }).click();
-    await expect(page).toHaveURL(/\/session\/confirm$/);
-    await expect(page.getByRole("heading", { name: K6_TITLE })).toBeVisible();
-    // Unblocked: the real "Looks right, start" primary renders, never the
-    // "no target/Set baselines" footer block WorkoutDetail's own guard
-    // shows for a workout that DOES need baselines.
-    const startButton = page.getByRole("button", {
-      name: "Looks right, start",
-    });
-    await expect(startButton).toBeVisible();
+    // -- card Start -> the countdown DIRECTLY, UNBLOCKED (needsBaselines()
+    //    reads false for an effort-only workout — the domain change this
+    //    phase owns; BaselineCard's own Start also carries no baselines
+    //    guard at all, fast-follow spec §3 entry 3 — ConfirmTargets, the
+    //    screen that used to sit between them, is deleted) -> SKIP the
+    //    countdown -> the timer.
+    const startButton = page.getByRole("button", { name: "Start" });
     await expect(startButton).toBeEnabled();
-    await expect(page.getByText(/no target/i)).toHaveCount(0);
     await startButton.click();
 
     await expect(page).toHaveURL(/\/session\/countdown$/);
     await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
     await page.getByRole("button", { name: "SKIP ›" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);
+    // The K6 onboarding workout genuinely started, not some other one —
+    // the same proof the old Confirm heading used to carry, now read off
+    // the live timer instead.
+    await expect(page.locator(".timer-name")).toHaveText(K6_TITLE);
 
     // No warm-up (the setting defaults OFF — this arc never turns it on,
     // and First 6k's own seed steps carry no `wu` any more since

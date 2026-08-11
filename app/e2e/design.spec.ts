@@ -163,32 +163,6 @@ async function seedLogs(page: Page, count: number): Promise<void> {
   }
 }
 
-/** Navigates to a workout's detail screen by title via the real API list —
- *  used to reach Heat Lightning (server/seed/library/an.ts), one of the
- *  library's effort-ref AN workouts (`{effort:"max"}`, reps×10, a single
- *  repeated work step per rep, spm 32 — see Task 11's fixture-anchor
- *  mapping; the old 35-workout library had exactly one such workout,
- *  Microburst, but the current 300-workout library has 43. Fork Lightning
- *  used to hold this anchor role, but the content rewrite (a62c33f) turned
- *  its reps block into TWO alternating work steps, which breaks the
- *  "exactly one ALL OUT row" assumption this file's confirm-targets sweep
- *  makes (same reason `ConfirmTargets.test.tsx` re-anchored) — without
- *  hardcoding its seeded id. */
-async function gotoWorkoutByTitle(page: Page, title: string): Promise<void> {
-  const workout = await page.evaluate(async (t) => {
-    const res = await fetch("/api/workouts");
-    const workouts = (await res.json()) as Array<{
-      id: string;
-      title: string;
-    }>;
-    return workouts.find((w) => w.title === t) ?? null;
-  }, title);
-  if (!workout) {
-    throw new Error(`workout not found: ${title}`);
-  }
-  await page.goto(`/library/${workout.id}`);
-}
-
 // Phase 6B (Task 5): the session-route sweeps below (countdown, timer,
 // session complete) all need a tiny bulk-imported workout driven through
 // the real START -> countdown -> timer flow, not a seeded library workout —
@@ -205,18 +179,17 @@ async function importBulk(page: Page, text: string): Promise<void> {
 }
 
 /** Opens `title`'s detail page from the library list and presses Start,
- *  landing on Confirm. */
+ *  landing directly on the countdown (fast-follow Task 4: ConfirmTargets is
+ *  deleted, Start is the one door now). */
 async function startFromLibrary(page: Page, title: string): Promise<void> {
   await page.locator(".workout-row").filter({ hasText: title }).click();
   await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   await page.getByRole("button", { name: "Start" }).click();
-  await expect(page).toHaveURL(/\/session\/confirm$/);
+  await expect(page).toHaveURL(/\/session\/countdown$/);
 }
 
-/** START on Confirm, then SKIP the countdown, landing on the live timer. */
+/** SKIP the countdown, landing on the live timer. */
 async function startAndSkipCountdown(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "START" }).click();
-  await expect(page).toHaveURL(/\/session\/countdown$/);
   await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
@@ -1433,197 +1406,6 @@ test.describe("plan screen (a plan active)", () => {
   });
 });
 
-// The confirm sweep's own fixture: Heat Lightning (server/seed/library/an.ts)
-// is an AN-hard workout with an effort-ref work step (`{effort:"max"}`) AND
-// a reps marker (reps×10) — the no-nudge, no-remove-on-the-marker layout
-// that a split-only workout (e.g. any other library entry) never renders at
-// all. In the old 35-workout library, Microburst was the sole such workout;
-// Task 11 originally anchored this sweep to Fork Lightning (same shape: 0:30
-// work, effort:max, spm 32), but the content rewrite (a62c33f) turned Fork
-// Lightning's reps block into TWO alternating work steps — both rendering
-// their own "ALL OUT" TARGET-strip row — which breaks this test's own
-// `expect(effortWord).toBeVisible()` single-match assumption (strict-mode
-// violation on 2 elements). Re-anchored to Heat Lightning, which still has a
-// single repeated work step (distance-ref 150 m, effort:max, spm 32) — the
-// same re-anchor `ConfirmTargets.test.tsx` made for the identical reason.
-// Sweeping only a split-ref confirm screen would repeat exactly the "every
-// test built the same shape" blind spot this task's brief calls out.
-test.describe("confirm targets screen (effort step present — Heat Lightning)", () => {
-  test.beforeEach(async ({ page }, testInfo) => {
-    await signInViaBackdoor(page, {
-      email: `design-confirm-${testInfo.parallelIndex}@e2e.test`,
-      name: "Design Confirm Tester",
-    });
-    await setBaselines(page);
-    await gotoWorkoutByTitle(page, "Heat Lightning");
-    await expect(page.locator("h1.workout-detail-title")).toHaveText(
-      "Heat Lightning",
-    );
-    await page.getByRole("button", { name: "Start" }).click();
-    await expect(page).toHaveURL(/\/session\/confirm$/);
-    await expect(page.locator(".confirm-recount")).toBeVisible();
-  });
-
-  test("every visible interactive element has a >=44x44 tap target", async ({
-    page,
-  }) => {
-    await assertTapTargets(page);
-  });
-
-  test("zero WCAG 2A/2AA violations", async ({ page }) => {
-    await assertNoA11yViolations(page);
-  });
-
-  test("the effort word, recount, and reps marker (no remove control) match the token palette", async ({
-    page,
-  }) => {
-    const bodyBg = await page.evaluate(
-      () => getComputedStyle(document.body).backgroundColor,
-    );
-    expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
-
-    // The effort-ref row's TARGET strip shows the word, not a resolved
-    // range (docs/design/DEVIATIONS.md's PACE REF/effort row).
-    // Scoped to the TARGET strip's own value cell, not a page-wide text
-    // search: the row's header label also reads "ROW 2 · ALL OUT"
-    // (kindLabel — Heat Lightning's own `wu` step was stripped 2026-08-09,
-    // so the reps marker is Row 1 and this effort work step is Row 2 now),
-    // so an unscoped getByText("ALL OUT") matches both.
-    const effortWord = page.locator(".step-editor-target-value", {
-      hasText: "ALL OUT",
-    });
-    await expect(effortWord).toBeVisible();
-    const effortColor = await effortWord.evaluate(
-      (el) => getComputedStyle(el).color,
-    );
-    expect(effortColor).toBe("rgb(27, 26, 23)"); // --ink
-
-    const recountColor = await page
-      .locator(".confirm-recount")
-      .evaluate((el) => getComputedStyle(el).color);
-    expect(recountColor).toBe("rgb(27, 26, 23)"); // --ink
-
-    // Binding decision (ConfirmTargets.tsx's toggleRemoved comment, Task 1's
-    // review handoff): the reps marker (REPEAT x10) never gets a
-    // remove/restore control, unlike every other row here — removing it
-    // would silently reshape the whole repeated workout. Structural proof
-    // it's the marker row's own kind label rendering, not a coincidence of
-    // row order.
-    const markerRow = page.locator(".step-editor", { hasText: "REPEAT" });
-    await expect(markerRow).toBeVisible();
-    await expect(
-      markerRow.getByRole("button", { name: /remove|restore/i }),
-    ).toHaveCount(0);
-  });
-
-  // Task 5 brief: "the confirm sweep runs with an effort step present ...
-  // also sweep Confirm's struck-row state (a removed step's styling must
-  // survive contrast checks)". Strikes Row 2, Heat Lightning's own effort
-  // work step (guaranteed present and NOT the marker row, which never gets
-  // a remove control — see the reps-marker test above) — this is the
-  // ordinary struck-row case, not the marker's own no-remove-control one.
-  // Row 2, not Row 1: Heat Lightning's `wu` step was stripped 2026-08-09
-  // (the warmup-setting spec), so Row 1 is now the reps marker itself.
-  test.describe("a removed step (struck-row state)", () => {
-    test.beforeEach(async ({ page }) => {
-      await page.getByRole("button", { name: "Remove Row 2" }).click();
-      await expect(
-        page.getByRole("button", { name: "Restore Row 2" }),
-      ).toBeVisible();
-    });
-
-    test("every visible interactive element has a >=44x44 tap target", async ({
-      page,
-    }) => {
-      await assertTapTargets(page);
-    });
-
-    test("zero WCAG 2A/2AA violations, including the struck row's strikethrough label", async ({
-      page,
-    }) => {
-      await assertNoA11yViolations(page);
-    });
-
-    // docs/index.css's own comment: "ink-3 on --surface-sunken measures
-    // 6.3:1" — pin the resolved colors structurally, not just "axe found no
-    // violation" (a struck row's whole background AND text color changed
-    // together, so the axe scan alone can't tell this from an accidental
-    // regression to some other still-passing pair).
-    test("the struck row's sunken background and struck label match the token palette", async ({
-      page,
-    }) => {
-      const row = page.locator(".confirm-step-removed");
-      await expect(row).toHaveCount(1);
-      const rowBg = await row.evaluate(
-        (el) => getComputedStyle(el).backgroundColor,
-      );
-      expect(rowBg).toBe("rgb(239, 234, 222)"); // --surface-sunken
-
-      const label = row.locator(".step-editor-header-label");
-      const labelStyles = await label.evaluate((el) => {
-        const s = getComputedStyle(el);
-        return { color: s.color, decoration: s.textDecorationLine };
-      });
-      expect(labelStyles.color).toBe("rgb(87, 84, 76)"); // --ink-3
-      expect(labelStyles.decoration).toBe("line-through");
-
-      // Pins the fix for a real finding this sweep caught: the DUR field
-      // label used to be ink-4 (5.29:1) on the row's ordinary --surface,
-      // but the SAME class sat at only 4.48:1 on --surface-sunken before
-      // index.css gained a struck-row override — failing axe's
-      // color-contrast rule the first time this test ran. Task 1 (ui-fix
-      // round)'s own blanket small-mono-label sweep since moved
-      // `.step-editor-row-label`'s BASE rule to --ink-3 everywhere, so the
-      // struck-row override that used to carry this colour is gone — this
-      // now just confirms the base rule still resolves the same way here.
-      const durLabelColor = await row
-        .locator(".step-editor-row-label")
-        .first()
-        .evaluate((el) => getComputedStyle(el).color);
-      expect(durLabelColor).toBe("rgb(87, 84, 76)"); // --ink-3
-    });
-  });
-
-  test("no small mono label uses the failing --ink-4 color", async ({
-    page,
-  }) => {
-    await assertNoFailingInk4Labels(page);
-  });
-
-  // Task 1 (ui-fix round): the small bottom-right START becomes a
-  // full-width L1 "Looks right, start" at 56px, below the TOTAL line —
-  // matching Detail and Builder's own L1. REMOVE (the per-row control)
-  // stays the existing 44px text control (`.confirm-toggle-btn`),
-  // unchanged.
-  test("the confirm footer's one L1 action reads 'Looks right, start' at 56px, below the recount", async ({
-    page,
-  }) => {
-    const l1 = page.locator(".button-l1");
-    await expect(l1).toHaveCount(1);
-    await expect(l1).toHaveText("Looks right, start");
-    const height = await l1.evaluate((el) => el.getBoundingClientRect().height);
-    expect(height).toBe(56);
-
-    const recountBox = (await page.locator(".confirm-recount").boundingBox())!;
-    const l1Box = (await l1.boundingBox())!;
-    expect(l1Box.y).toBeGreaterThan(recountBox.y);
-
-    // Row 2, not Row 1 — see the "removed step" describe above: Heat
-    // Lightning's own `wu` step was stripped 2026-08-09, so Row 1 is now
-    // the reps marker, which never grows a REMOVE control at all.
-    const remove = page.getByRole("button", { name: "Remove Row 2" });
-    const removeHeight = await remove.evaluate(
-      (el) => el.getBoundingClientRect().height,
-    );
-    expect(removeHeight).toBe(44);
-
-    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
-    // assertion — the one-L1 count alone doesn't rule out a legacy
-    // `.button-primary` block surviving elsewhere on the same screen.
-    await expect(page.locator(".button-primary")).toHaveCount(0);
-  });
-});
-
 test.describe("builder screen", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
@@ -2348,9 +2130,10 @@ test.describe("you screen with the derivation offer visible (6k-target mirror, r
 });
 
 // Phase 6B (Task 5): the pre-workout countdown (handoff §5). A single
-// 2-minute work step gets a rower to /session/confirm fast; pressing START
-// lands here without ever pressing SKIP — SKIP/CANCEL's own behavior is
-// e2e/session.spec.ts's job, this sweep only needs the screen on-render.
+// 2-minute work step gets a rower here directly off Start (fast-follow
+// Task 4: ConfirmTargets is deleted) without ever pressing SKIP —
+// SKIP/CANCEL's own behavior is e2e/session.spec.ts's job, this sweep only
+// needs the screen on-render.
 test.describe("countdown screen", () => {
   const title = "Design Countdown Sweep";
 
@@ -2365,8 +2148,6 @@ test.describe("countdown screen", () => {
       [`${title} | AN | easy | 1`, "w 2:00 6k @20"].join("\n"),
     );
     await startFromLibrary(page, title);
-    await page.getByRole("button", { name: "START" }).click();
-    await expect(page).toHaveURL(/\/session\/countdown$/);
     await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
   });
 

@@ -44,13 +44,19 @@ function BaselineCardBody({
   showToggle: boolean;
   onToggle: () => void;
 }) {
+  // `{}` — no preview surface on this card (fast-follow spec §3, entry 3);
+  // deliberately no baselines guard either — the card's own workout is
+  // effort-only by construction (it's the onboarding baseline-setter
+  // itself), so `needsBaselines` never blocks it. That exemption lives in
+  // `WorkoutDetail.tsx`'s own predicate, not here — there is nothing to
+  // exempt from in the first place.
   const {
     replaceStage,
     startError,
     handleStart,
     confirmReplace,
     cancelReplace,
-  } = useStartWorkout(workout);
+  } = useStartWorkout(workout, {});
 
   return (
     <div className="baselinecard">

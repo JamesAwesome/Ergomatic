@@ -287,24 +287,24 @@ async function renderDetailWithState(pathname: string, state: unknown) {
   );
 }
 
-// Renders WorkoutDetail alongside a real /session/confirm route (rather
+// Renders WorkoutDetail alongside a real /session/countdown route (rather
 // than just asserting a navigate() call), so the Start test proves the
 // actual route change — and that a real draft is sitting in localStorage
 // when it lands — rather than a mocked useNavigate call.
-async function renderDetailWithConfirmRoute(initialPath: string) {
+async function renderDetailWithCountdownRoute(initialPath: string) {
   const { default: WorkoutDetail } = await import("./WorkoutDetail");
   render(
     <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
         <Route path="/library/:id" element={<WorkoutDetail />} />
-        <Route path="/session/confirm" element={<p>CONFIRM SCREEN</p>} />
+        <Route path="/session/countdown" element={<p>COUNTDOWN SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
 // Task 3: same "render alongside the real destination route" idiom as
-// `renderDetailWithConfirmRoute` above, proving the Log it after link
+// `renderDetailWithCountdownRoute` above, proving the Log it after link
 // actually lands on `/library/:id/log`, not just that it carries the right
 // `href`.
 async function renderDetailWithLogRoute(initialPath: string) {
@@ -454,54 +454,67 @@ describe("WorkoutDetail", () => {
     expect(screen.queryByText("no target")).not.toBeInTheDocument();
   });
 
-  it("Start builds and saves the session draft, then navigates to /session/confirm", async () => {
+  it("Start builds and saves a STARTED session draft, then navigates to /session/countdown", async () => {
     mockHooks(BASELINES);
-    await renderDetailWithConfirmRoute("/library/w1");
+    await renderDetailWithCountdownRoute("/library/w1");
 
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const draft = loadDraft();
     expect(draft).not.toBeNull();
     expect(draft!.workoutId).toBe("w1");
     expect(draft!.title).toBe("Ladder Sets");
     expect(draft!.type).toBe("AT");
     expect(draft!.steps).toStrictEqual(WORKOUT.steps);
-    expect(draft!.startedAt).toBeNull();
+    // Fast-follow spec §3 (adversarial B1): every rewired entry point stamps
+    // `startedAt` at this exact moment now that ConfirmTargets (the old
+    // sole stamper) is gone.
+    expect(draft!.startedAt).not.toBeNull();
   });
 
-  // Phase 6I finding (report, not a code change here): WorkoutDetail's own
-  // Start button has NEVER been gated on baselines at all — it always
-  // builds a draft and navigates to Confirm unconditionally, split-ref or
-  // effort-only, baselines set or not; ConfirmTargets.tsx's own footer
-  // (`isStartBlocked`, this task's other change) is the ONE place that
-  // actually blocks the split-ref case. This test pins that this behavior
-  // is UNCHANGED by this task for an effort-only workout — Start still
-  // reaches Confirm, which (per the ConfirmTargets tests) now lets it
-  // through instead of blocking.
-  it("Start is unconditional regardless of baselines — an effort-only workout with baselines unset still reaches /session/confirm", async () => {
+  // Phase 6I finding, now closed by fast-follow Task 4: WorkoutDetail's own
+  // Start button used to never gate on baselines at all — ConfirmTargets'
+  // own footer (`isStartBlocked`) was the ONE place that actually blocked
+  // the split-ref case. That screen is gone; the SAME predicate
+  // (`needsBaselines`) now lives on Start itself. This test pins the
+  // branch it never blocks: an effort-only workout has nothing to resolve
+  // against baselines at all, so Start stays enabled and reaches the
+  // countdown directly.
+  it("Start proceeds for an effort-only workout even with baselines unset — the guard's own predicate never blocks it", async () => {
     mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT]);
-    await renderDetailWithConfirmRoute("/library/w-effort");
+    await renderDetailWithCountdownRoute("/library/w-effort");
 
+    expect(screen.getByRole("button", { name: "Start" })).not.toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const draft = loadDraft();
     expect(draft).not.toBeNull();
     expect(draft!.workoutId).toBe("w-effort");
   });
 
-  // The split-ref regression companion: unchanged since before this task
-  // (WorkoutDetail's own Start was always unconditional), but pinned here
-  // explicitly so the pair together documents the FULL picture — Start
-  // itself never distinguishes the two cases; ConfirmTargets does.
-  it("Start is unconditional for a split-ref workout too — reaches /session/confirm even with baselines unset (Confirm is what blocks it, not this screen)", async () => {
+  // The split-ref regression companion — the branch the guard NOW blocks,
+  // the exact gap fast-follow Task 4 closes (adversarial I1): before this
+  // task, a split-ref workout's Start reached ConfirmTargets unconditionally
+  // and relied on THAT screen's own footer to block it; that screen is
+  // gone, so the block has to happen here or not at all.
+  it("Start is disabled with a no-target caption for a split-ref workout when baselines are unset — the guard moved here", async () => {
     mockHooks(NO_BASELINES);
-    await renderDetailWithConfirmRoute("/library/w1");
+    await renderDetailWithCountdownRoute("/library/w1");
 
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
-
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    const startButton = screen.getByRole("button", { name: "Start" });
+    expect(startButton).toBeDisabled();
+    expect(loadDraft()).toBeNull();
+    // The caption sits immediately beside Start itself, not just anywhere
+    // on the screen — the step rows and "Log it after" grow their own
+    // "no target" idiom too, so this disambiguates THIS guard's own render
+    // from theirs by DOM adjacency rather than counting matches.
+    const caption = startButton.nextElementSibling as HTMLElement;
+    expect(caption).toHaveTextContent(/no target/i);
+    expect(
+      within(caption).getByRole("link", { name: /set baselines/i }),
+    ).toHaveAttribute("href", "/you");
   });
 
   it("deep-copies the workout's steps into the draft — mutating one never touches the other", async () => {
@@ -521,14 +534,14 @@ describe("WorkoutDetail", () => {
         throw new DOMException("quota exceeded", "QuotaExceededError");
       });
     mockHooks(BASELINES);
-    await renderDetailWithConfirmRoute("/library/w1");
+    await renderDetailWithCountdownRoute("/library/w1");
 
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
     expect(
       screen.getByText("Couldn't start this session. Try again."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("COUNTDOWN SCREEN")).not.toBeInTheDocument();
     spy.mockRestore();
   });
 
@@ -583,7 +596,7 @@ describe("WorkoutDetail", () => {
     expect(loadDraft()).toStrictEqual(inProgress);
   });
 
-  it("Replace session overwrites the in-progress draft and navigates to /session/confirm", async () => {
+  it("Replace session overwrites the in-progress draft and navigates to /session/countdown", async () => {
     mockHooks(BASELINES);
     const inProgress = startDraft(
       buildDraft({
@@ -594,19 +607,20 @@ describe("WorkoutDetail", () => {
       }),
     );
     saveDraft(inProgress);
-    await renderDetailWithConfirmRoute("/library/w1");
+    await renderDetailWithCountdownRoute("/library/w1");
 
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
     await userEvent.click(
       screen.getByRole("button", { name: "Replace session" }),
     );
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const draft = loadDraft();
     expect(draft).not.toBeNull();
     expect(draft!.workoutId).toBe("w1");
     expect(draft!.title).toBe("Ladder Sets");
-    expect(draft!.startedAt).toBeNull(); // the new, un-started draft — not the old one
+    // The new draft, freshly started — not the old in-progress one.
+    expect(draft!.startedAt).not.toBeNull();
   });
 
   it("does not stage a replace confirmation when the existing draft was never started", async () => {
@@ -618,11 +632,11 @@ describe("WorkoutDetail", () => {
       steps: [{ k: "r", minutes: 5 }],
     });
     saveDraft(notStarted);
-    await renderDetailWithConfirmRoute("/library/w1");
+    await renderDetailWithCountdownRoute("/library/w1");
 
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     expect(
       screen.queryByText("A session is in progress. Replace it?"),
     ).not.toBeInTheDocument();
@@ -690,24 +704,24 @@ describe("WorkoutDetail", () => {
       expect(loadRun()).toStrictEqual(runA);
     });
 
-    it("Replace clears the stale run record, builds a fresh draft, and proceeds to Confirm", async () => {
+    it("Replace clears the stale run record, builds a fresh STARTED draft, and proceeds to the countdown", async () => {
       mockHooks(BASELINES);
       saveCompletedSessionA();
-      await renderDetailWithConfirmRoute("/library/w1");
+      await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(screen.getByRole("button", { name: "Start" }));
       await userEvent.click(
         screen.getByRole("button", { name: "Replace session" }),
       );
 
-      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
       // No half-state: the OLD run is gone, not just the old draft.
       expect(loadRun()).toBeNull();
       const draft = loadDraft();
       expect(draft).not.toBeNull();
       expect(draft!.workoutId).toBe("w1");
       expect(draft!.title).toBe("Ladder Sets");
-      expect(draft!.startedAt).toBeNull();
+      expect(draft!.startedAt).not.toBeNull();
     });
   });
 
@@ -794,14 +808,14 @@ describe("WorkoutDetail", () => {
     it("finished but unlogged: Replace session clears it and proceeds — the reverse cross-clear", async () => {
       mockHooks(BASELINES);
       saveMonitorRun(monitorRunFor(FINISHED_AT));
-      await renderDetailWithConfirmRoute("/library/w1");
+      await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(screen.getByRole("button", { name: "Start" }));
       await userEvent.click(
         screen.getByRole("button", { name: "Replace session" }),
       );
 
-      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
       expect(loadMonitorRun()).toBeNull();
       const draft = loadDraft();
       expect(draft).not.toBeNull();
@@ -831,7 +845,7 @@ describe("WorkoutDetail", () => {
       mockHooks(BASELINES);
       const live = monitorRunFor(null);
       saveMonitorRun(live);
-      await renderDetailWithConfirmRoute("/library/w1");
+      await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(screen.getByRole("button", { name: "Start" }));
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -841,7 +855,7 @@ describe("WorkoutDetail", () => {
       await userEvent.click(
         screen.getByRole("button", { name: "Replace session" }),
       );
-      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
       expect(loadMonitorRun()).toBeNull();
     });
 
@@ -861,7 +875,7 @@ describe("WorkoutDetail", () => {
       saveDraft(draftA);
       saveRun(completedRunFor(draftA));
       saveMonitorRun(monitorRunFor(FINISHED_AT));
-      await renderDetailWithConfirmRoute("/library/w1");
+      await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(screen.getByRole("button", { name: "Start" }));
       expect(
@@ -873,18 +887,18 @@ describe("WorkoutDetail", () => {
       await userEvent.click(
         screen.getByRole("button", { name: "Replace session" }),
       );
-      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
       expect(loadRun()).toBeNull();
       expect(loadMonitorRun()).toBeNull();
     });
 
     it("no MonitorRun at all: Start is unaffected — the cross-clear is a no-op removeItem", async () => {
       mockHooks(BASELINES);
-      await renderDetailWithConfirmRoute("/library/w1");
+      await renderDetailWithCountdownRoute("/library/w1");
 
       await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
-      expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+      expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
       expect(loadMonitorRun()).toBeNull();
     });
   });
@@ -1483,7 +1497,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
 
   it("Row on the phone timer instead: a saveDraft failure shows the inline error instead of navigating", async () => {
     mockHooks(BASELINES, [PERSONAL_WORKOUT]);
-    await renderDetailWithConfirmRoute("/library/w3");
+    await renderDetailWithCountdownRoute("/library/w3");
 
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await screen.findByText("This device has no Bluetooth transport.", {
@@ -1502,7 +1516,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     expect(
       screen.getByText("Couldn't start this session. Try again."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("CONFIRM SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("COUNTDOWN SCREEN")).not.toBeInTheDocument();
     spy.mockRestore();
   });
 
@@ -1525,7 +1539,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       <MemoryRouter initialEntries={["/library/w3"]}>
         <Routes>
           <Route path="/library/:id" element={<WorkoutDetail />} />
-          <Route path="/session/confirm" element={<p>CONFIRM SCREEN</p>} />
+          <Route path="/session/countdown" element={<p>COUNTDOWN SCREEN</p>} />
         </Routes>
       </MemoryRouter>,
     );
@@ -1546,7 +1560,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       screen.getByRole("button", { name: "Row on the phone timer instead" }),
     );
 
-    expect(await screen.findByText("CONFIRM SCREEN")).toBeInTheDocument();
+    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
     const draft = loadDraft();
     expect(draft).not.toBeNull();
     expect(draft!.nudges[0]).toBe(-1);

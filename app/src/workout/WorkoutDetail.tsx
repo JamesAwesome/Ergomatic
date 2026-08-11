@@ -18,12 +18,7 @@ import { needsBaselines } from "../../domain/needsBaselines.js";
 import { isEffortRef, resolveSplit } from "../../domain/pace.js";
 import type { Baselines } from "../../domain/types.js";
 import { MIN_SPLIT, MAX_SPLIT } from "../you/baselineDraft";
-import {
-  buildDraft,
-  saveDraft,
-  withNudge,
-  type SessionDraft,
-} from "../session/draft";
+import { buildNudgedDraft, saveDraft, startDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import { buildLogSeed } from "../session/logDraft";
 import { clearRun } from "../session/run";
@@ -60,25 +55,6 @@ function useBluetoothStatus(): BluetoothStatus {
     };
   }, []);
   return status;
-}
-
-/** Bakes the WorkoutDetail preview stack's own cumulative nudges into a
- *  fresh draft — the same shape `useStartWorkout`'s own `confirmReplace`
- *  would build, minus the nudges it currently drops (this screen's "Phase 6
- *  will pass them per-request" comment, still true for the phone-timer
- *  Start button itself; NOT touched here — see this file's own header note
- *  on why Connect gets this and Start does not). `withNudge` takes a cumulative
- *  DELTA against a fresh (zeroed) draft, so applying the whole stored
- *  value once reproduces the same cumulative nudge the preview shows. */
-function buildNudgedDraft(
-  workout: LibraryWorkout,
-  nudges: Record<number, number>,
-): SessionDraft {
-  let draft = buildDraft(workout);
-  for (const [key, value] of Object.entries(nudges)) {
-    if (value !== 0) draft = withNudge(draft, Number(key), value);
-  }
-  return draft;
 }
 
 export default function WorkoutDetail() {
@@ -169,11 +145,12 @@ function WorkoutDetailView({
   // model: one nudge covers a whole repeat block, since we render
   // workout.steps directly rather than the expanded per-repetition list) —
   // never persisted to localStorage. Phase 7B Task 5: Connect (via
-  // `buildNudgedDraft` below) and its own "Row on the phone timer instead"
-  // escape both bake the current value in before committing to a session;
-  // the phone-only `useStartWorkout` path below still does NOT (a
-  // pre-existing gap this task's brief did not ask it to close) — see
-  // `buildNudgedDraft`'s own comment.
+  // `buildNudgedDraft`, `../session/draft`) and its own "Row on the phone
+  // timer instead" escape both bake the current value in before committing
+  // to a session; fast-follow Task 4 closes the gap this comment used to
+  // flag — Start's own `useStartWorkout(workout, nudges)` call below now
+  // threads the SAME live state through, so one nudge model feeds every
+  // door off this screen.
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [connectError, setConnectError] = useState<string | null>(null);
   // The warm-up SETTING, for the CONNECT door's own `buildRun` below
@@ -220,12 +197,11 @@ function WorkoutDetailView({
   );
   const bluetoothStatus = useBluetoothStatus();
   // "Row on the phone timer instead"'s OWN saveDraft failure (below) — kept
-  // separate from `useStartWorkout`'s own `startError`, since this flow's
-  // draft is nudged and never goes through the hook at all (this file's
-  // header note on why Connect gets nudges and Start does not); rendered
-  // into the SAME error slot below because it's the identical message
-  // class, never both truthy at once in practice (one screen, one attempt
-  // at a time).
+  // separate from `useStartWorkout`'s own `startError` since this flow
+  // never goes through the hook at all (Connect's own guard, not Start's,
+  // already cleared before this escape is reachable); rendered into the
+  // SAME error slot below because it's the identical message class, never
+  // both truthy at once in practice (one screen, one attempt at a time).
   const [rowInsteadError, setRowInsteadError] = useState<string | null>(null);
   // Phase 6I Task 4 — extracted into `session/useStartWorkout.ts` so a second
   // caller (the no-baseline `BaselineCard`, per the design spec) gets the
@@ -233,14 +209,16 @@ function WorkoutDetailView({
   // build/save, and cross-clears, rather than a duplicated (or skipped) copy
   // that would reintroduce the F5 data-loss class. The hook's own doc
   // comments carry the staged-confirm/severity-ordering rationale that used
-  // to live here.
+  // to live here. `nudges` (fast-follow spec §3, entry 2): this screen's own
+  // live preview state, so Start bakes in the SAME targets Connect and "Row
+  // instead" already do.
   const {
     replaceStage,
     startError,
     handleStart,
     confirmReplace,
     cancelReplace,
-  } = useStartWorkout(workout);
+  } = useStartWorkout(workout, nudges);
   const navigate = useNavigate();
   // Whatever origin THIS screen was itself entered from (Today's suggestion
   // card, a Library row, or nothing for a deep link) — forwarded onto the
@@ -325,19 +303,19 @@ function WorkoutDetailView({
   }
 
   // State 6's "Row on the phone timer instead" — the existing Start path,
-  // but with the SAME nudged targets Connect was about to send, not the
-  // always-empty ones `useStartWorkout`'s `confirmReplace` builds (its own
-  // header comment names that gap; fixing it for Start itself is out of
-  // this task's scope, but the escape hatch's own copy promises "targets
-  // intact" and must actually keep that promise). Mirrors `confirmReplace`'s
-  // cross-clear exactly — this commits to a phone session just as surely.
+  // but with the SAME nudged targets Connect was about to send (the escape
+  // hatch's own copy promises "targets intact" and must actually keep that
+  // promise). Mirrors `confirmReplace`'s cross-clear AND its `startDraft`
+  // stamp exactly (fast-follow spec §3: every rewired entry point stamps
+  // `startedAt` at the same moment it navigates to the countdown) — this
+  // commits to a phone session just as surely.
   function handleRowInstead() {
     setConnecting(null);
-    const draft = buildNudgedDraft(workout, nudges);
+    const draft = startDraft(buildNudgedDraft(workout, nudges));
     if (saveDraft(draft)) {
       clearRun();
       clearMonitorRun();
-      navigate("/session/confirm");
+      navigate("/session/countdown");
     } else {
       setRowInsteadError("Couldn't start this session. Try again.");
     }
@@ -381,6 +359,17 @@ function WorkoutDetailView({
     workout.lastDoneDaysAgo === null
       ? "NEVER DONE"
       : `LAST DONE ${workout.lastDoneDaysAgo} DAYS AGO`;
+
+  // Fast-follow spec §3 (adversarial I1): ConfirmTargets' own `isStartBlocked`
+  // guard, relocated onto Start itself now that screen is gone — the SAME
+  // per-workout predicate (`needsBaselines`, the single predicate every
+  // coupled guard site in this file already shares: the manual-door Link
+  // just below, and Connect's own `handleConnectProceed` gate above). Start
+  // renders disabled with a caption instead of a click handler; BaselineCard
+  // carries NO equivalent guard at all (spec §3 entry 3) — its own workout
+  // is effort-only by construction, so `needsBaselines` never reads true for
+  // it and the exemption is structural, not a second code path to maintain.
+  const startBlocked = baselines === null && needsBaselines(workout.steps);
 
   // Clamps the RESOLVED split (baseline + off + nudge), not the raw nudge
   // number, to the same 60-240 s/500m range the baseline editor
@@ -454,7 +443,16 @@ function WorkoutDetailView({
           are this stack's own direct flex items, not a nested box breaking
           the 12px gap rhythm. */}
       <div className="action-stack workout-detail-actions">
-        {replaceStage === null ? (
+        {startBlocked ? (
+          <>
+            <button type="button" className="button-l1" disabled>
+              Start
+            </button>
+            <span className="step-row-no-target">
+              <em>no target</em> <Link to="/you">Set baselines</Link>
+            </span>
+          </>
+        ) : replaceStage === null ? (
           <button type="button" className="button-l1" onClick={handleStart}>
             Start
           </button>

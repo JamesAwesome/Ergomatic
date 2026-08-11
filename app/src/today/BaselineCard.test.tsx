@@ -75,7 +75,7 @@ function renderCard(props: {
             />
           }
         />
-        <Route path="/session/confirm" element={<LocationProbe />} />
+        <Route path="/session/countdown" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -133,12 +133,12 @@ describe("BaselineCard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("Start with no stale session commits immediately, landing on Confirm", async () => {
+  it("Start with no stale session commits immediately, landing on the countdown", async () => {
     renderCard({ k6Missing: true, k2Missing: true });
 
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
     expect(
-      await screen.findByText("PROBE path=/session/confirm"),
+      await screen.findByText("PROBE path=/session/countdown"),
     ).toBeVisible();
   });
 
@@ -157,7 +157,7 @@ describe("BaselineCard", () => {
     expect(screen.getByRole("button", { name: "Start" })).toBeVisible();
   });
 
-  it("Replace session, from the staged panel, still lands on Confirm", async () => {
+  it("Replace session, from the staged panel, still lands on the countdown", async () => {
     saveRun(completedRunFor(K6_WORKOUT));
     renderCard({ k6Missing: true, k2Missing: true });
 
@@ -166,7 +166,7 @@ describe("BaselineCard", () => {
       screen.getByRole("button", { name: "Replace session" }),
     );
     expect(
-      await screen.findByText("PROBE path=/session/confirm"),
+      await screen.findByText("PROBE path=/session/countdown"),
     ).toBeVisible();
   });
 
@@ -207,7 +207,7 @@ describe("BaselineCard", () => {
       screen.getByText("Couldn't start this session. Try again."),
     ).toBeVisible();
     expect(
-      screen.queryByText("PROBE path=/session/confirm"),
+      screen.queryByText("PROBE path=/session/countdown"),
     ).not.toBeInTheDocument();
     spy.mockRestore();
   });
