@@ -31,14 +31,17 @@
 //   that kills that pin is exactly the tempting wrong answer: gating the
 //   run's own writes on "is a phone session on record?".
 //
-// NO WALL CLOCK ANYWHERE IN THIS FILE (the plan's own constraint): the
+// NO WALL CLOCK IN ANY DERIVATION HERE (the plan's own constraint): the
 // paused hold below counts FRAMES, not seconds; `now` is a dependency, used
-// only to stamp the record's ISO timestamps. There is no
-// `setTimeout`/`setInterval`/`Date.now()` here. This is the hook's own
-// property, no longer one inherited from the driver — since hardware walk 5
-// the driver reads a clock in exactly one place (`DriverOptions.now`, for
-// the structure gate's persistence window), and nothing about that reaches
-// this file.
+// only to stamp the record's ISO timestamps; nothing in this file reads
+// `Date.now()`.
+//
+// ONE bounded timer exists, and it decides nothing — `FINISH_HANDOFF_HOLD_MS`
+// (walk day 2, 2026-08-11), the backstop under the ended hand-off's wait for
+// the final split. Every other way out of that wait is an EVENT (the boundary
+// itself, the machine's next status tick, a disconnect); the timer only
+// guarantees the wait ends at all when none of them ever comes. Injected as
+// `MonitorSessionDeps.schedule` so tests fire it rather than wait for it.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -207,6 +210,31 @@ function bestEffort(work: Promise<unknown>): void {
   void work.catch(() => undefined);
 }
 
+/**
+ * How long the ended hand-off waits for the final interval's split before
+ * giving up on it — the BACKSTOP, not the expected path (hardware walk day
+ * 2, 2026-08-11; `docs/monitor/pm5-interface-notes.md` §21 item 4).
+ *
+ * What went wrong without it: the machine's `finished` tick flips this hook
+ * to `ended`, `ConnectedSurface` fires `onEnded` on that very render, the
+ * caller navigates, the interstitial unmounts, and `teardown` unsubscribes
+ * the driver listener and hangs up the radio — all inside the microtask
+ * flush that follows the tick. The PM5's split pair arrives ~1 ms later, as
+ * a new task. There was no race to win: teardown always got there first, so
+ * walk 5's driver-side finish grace never saw the boundary it was built for,
+ * and the save screen read "0 OF 1 INTERVALS MEASURED" with the split bytes
+ * still on the wire behind it.
+ *
+ * 250 ms is ~100x the observed 1 ms gap, and it is a CEILING that the real
+ * path never reaches: the hold releases on the boundary itself (~1 ms), on
+ * the machine's next status tick (~90 ms on iOS, where `driver.ts`'s own
+ * finish grace expires anyway), or on a disconnect. A quarter second on the
+ * "SESSION ENDED" frame — a frame that used to flash past in one render — is
+ * the entire cost, and only for a run that is actually missing its last
+ * interval's actual.
+ */
+const FINISH_HANDOFF_HOLD_MS = 250;
+
 export interface MonitorSession {
   phase: ConnectedPhase;
   error: ConnectedError | null;
@@ -214,6 +242,15 @@ export interface MonitorSession {
   frame: MonitorFrame | null;
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
+  /** `true` while the ended hand-off is being HELD for the final interval's
+   *  split (`FINISH_HANDOFF_HOLD_MS`, walk day 2). The phase is already
+   *  `"ended"` — the rower sees that frame immediately — but whoever
+   *  navigates away on the ending (`ConnectedSurface`'s `onEnded`) must WAIT
+   *  while this is true: navigating unmounts the interstitial, and unmounting
+   *  tears down the very subscription the boundary still has to arrive on.
+   *  Always `false` unless a machine FINISH left the run missing its last
+   *  interval's actual. */
+  handoffHeld: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -277,6 +314,12 @@ export interface MonitorSessionDeps {
   createLog?: () => MonitorEventLog;
   /** The only clock in this file, and only for the record's ISO stamps. */
   now?: () => Date;
+  /** The ended hand-off's backstop timer (`FINISH_HANDOFF_HOLD_MS`), as a
+   *  schedule-and-cancel pair: returns the canceller. Injected so a test
+   *  FIRES the backstop instead of waiting 250 real milliseconds (and so an
+   *  unmounted test leaves no live timer). Defaults to `setTimeout` /
+   *  `clearTimeout`. */
+  schedule?: (cb: () => void, ms: number) => () => void;
   /** Passed to `createPm5Driver`. `deviceName` is NOT accepted here — it
    *  comes from the picker result, never from a caller's guess (spec's I5
    *  ruling: no screen ever renders the `"PM5"` placeholder). */
@@ -501,6 +544,7 @@ interface SessionState {
   frame: MonitorFrame | null;
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
+  handoffHeld: boolean;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -510,6 +554,7 @@ const INITIAL_STATE: SessionState = {
   frame: null,
   actuals: [],
   endedBy: null,
+  handoffHeld: false,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -689,6 +734,74 @@ export function useMonitorSession(
     [nowDate],
   );
 
+  /** The live finish hold: its backstop's canceller, or `null` when no hold
+   *  is open. One at a time — a run ends once. */
+  const handoffHoldRef = useRef<(() => void) | null>(null);
+
+  /** Ends the hand-off hold, whatever ended it, and says so in the trace.
+   *  A no-op when nothing is held, so every release site can call it
+   *  unconditionally. */
+  const releaseHandoff = useCallback(
+    (reason: "final-boundary" | "next-tick" | "backstop"): void => {
+      const cancel = handoffHoldRef.current;
+      if (cancel === null) return;
+      handoffHoldRef.current = null;
+      cancel();
+      logRef.current?.record(
+        "handoff-released",
+        `${reason} — the ended hand-off is free to navigate (${stateRef.current.actuals.length} actual(s) measured)`,
+      );
+      update({ handoffHeld: false });
+    },
+    [update],
+  );
+
+  /** Opens the hold if — and only if — this run is still missing the actual
+   *  the machine's own finish is about to deliver (walk day 2,
+   *  `FINISH_HANDOFF_HOLD_MS`). Returns whether it opened, so the caller can
+   *  set `handoffHeld` in the SAME state patch that flips the phase (one
+   *  render, not two: a `handoffHeld: false` frame between them would let
+   *  the surface hand off before the hold ever existed).
+   *
+   *  "Missing" is the record's own question, asked the record's own way: is
+   *  there an actual for the program's LAST interval? That is the only
+   *  boundary the driver's finish grace can still deliver
+   *  (`monitorRun.ts`'s `acceptableFinalBoundary`), so a run that already has
+   *  it — the desktop order, where the split arrives BEFORE the finished tick
+   *  — waits for nothing and pays nothing. */
+  const openHandoffHold = useCallback((): boolean => {
+    // No record, nothing to wait FOR: a program that armed and finished
+    // without the rower ever pulling never reached `live`, so this hook
+    // opened no run (`endByMachine` still ends the session — the driver's
+    // own run was real — it just has no actuals to be missing).
+    const run = runRef.current;
+    if (run === null) return false;
+    // No separate guard for a program with no intervals at all: `lastIndex`
+    // would be `-1`, no actual can carry that index, and the hold would open
+    // and close on its own backstop a quarter second later. `compileProgram`
+    // cannot produce one (its no-work guard) and `createMonitorRun` is only
+    // ever handed a compiled program, so the branch would be unreachable
+    // code wearing a guard's clothes — and its worst case, if the premise
+    // ever broke, is a bounded 250 ms delay rather than anything wrong.
+    const lastIndex = run.program.intervals.length - 1;
+    if (run.actuals.some((a) => a.index === lastIndex)) return false;
+    const schedule =
+      depsRef.current.schedule ??
+      ((cb: () => void, ms: number): (() => void) => {
+        const id = setTimeout(cb, ms);
+        return () => clearTimeout(id);
+      });
+    handoffHoldRef.current = schedule(
+      () => releaseHandoff("backstop"),
+      FINISH_HANDOFF_HOLD_MS,
+    );
+    logRef.current?.record(
+      "handoff-hold",
+      `machine finish with interval ${lastIndex} unmeasured — holding the ended hand-off up to ${FINISH_HANDOFF_HOLD_MS}ms for its split (walk day 2: navigating tears down the subscription the split arrives on)`,
+    );
+    return true;
+  }, [releaseHandoff]);
+
   const handleFrame = useCallback(
     (frame: MonitorFrame, driver: MonitorDriver): void => {
       const phase = stateRef.current.phase;
@@ -822,9 +935,16 @@ export function useMonitorSession(
       // awaits, so a terminal event racing its `terminate()` finds this.
       if (stateRef.current.phase === "ended") return;
       closeRecord(terminated);
-      update({ phase: "ended", endedBy: "machine" });
+      // THE HAND-OFF HOLD (walk day 2). Only a natural FINISH opens one: a
+      // `terminated` close opens no finish grace in the driver either
+      // (CSAFE-DEF footnote 12 — the Split/Interval Number is unstable when
+      // a workout is terminated mid-interval), so there is no boundary to
+      // wait for and nothing to hold. The phase flips either way, in one
+      // patch with the hold flag.
+      const held = terminated ? false : openHandoffHold();
+      update({ phase: "ended", endedBy: "machine", handoffHeld: held });
     },
-    [closeRecord, update],
+    [closeRecord, openHandoffHold, update],
   );
 
   /** `driver` is the one that emitted the event — passed rather than read
@@ -834,6 +954,11 @@ export function useMonitorSession(
     (event: MonitorEvent, driver: MonitorDriver): void => {
       if (event.kind === "frame") {
         handleFrame(event.frame, driver);
+        // A status tick AFTER the machine's own finish ends the hand-off
+        // hold: `driver.ts`'s finish grace is bounded by exactly this tick,
+        // so no boundary belonging to the run that just ended can still be
+        // coming. (A no-op at every other moment — nothing is held.)
+        releaseHandoff("next-tick");
         return;
       }
       if (event.kind === "armed") {
@@ -875,12 +1000,30 @@ export function useMonitorSession(
         const next = recordActual(run, event.actual, {
           finalBoundary: event.finalBoundary === true,
         });
+        // OBSERVABILITY (walk day 2): the fate of every actual this hook is
+        // offered, in one entry — what the machine named, whether the driver
+        // vouched for it as the finish boundary, whether the record was
+        // already closed, and what the record decided. Yesterday's device
+        // stash could not distinguish "the split never arrived" from "it
+        // arrived and was refused"; this is the entry that answers it.
+        logRef.current?.record(
+          "record-actual",
+          `index=${event.actual.index} finalBoundary=${event.finalBoundary === true} recordClosed=${run.completedAt !== null} -> ${next === run ? "REFUSED (the record returned unchanged)" : "accepted"} (actuals ${run.actuals.length} -> ${next.actuals.length})`,
+        );
         // `recordActual` returns the SAME object when the record is closed
-        // (its own immutability guard) — nothing to persist, nothing to
-        // re-render.
-        if (next === run) return;
-        runRef.current = next;
-        update({ actuals: next.actuals });
+        // and this actual is not its one permitted late arrival (its own
+        // immutability guard) — nothing to persist, nothing to re-render.
+        if (next !== run) {
+          runRef.current = next;
+          update({ actuals: next.actuals });
+        }
+        // Whatever the record decided, the boundary the hold was waiting for
+        // has now been and gone — the wait is for the SPLIT, not for a
+        // successful write (whose outcome the entry above records). Released
+        // AFTER the write above so the release's own log entry reports the
+        // count the rower is about to be handed, not the one from a moment
+        // earlier.
+        if (event.finalBoundary === true) releaseHandoff("final-boundary");
         return;
       }
       if (event.kind === "workoutComplete") {
@@ -897,6 +1040,16 @@ export function useMonitorSession(
         // counting, End still works, and the run is still loggable. A
         // session that already ENDED is not dragged back out of `ended` by
         // the drop that follows it.
+        //
+        // Deliberately NOT a hand-off-hold release (walk day 2): a hold only
+        // ever exists after the machine's own finish, and by then the
+        // driver's run is CLOSED — which is exactly the case `driver.ts`'s
+        // `onDisconnect` treats as expected housekeeping and does not
+        // announce at all (Appendix E's auto-cycle; that handler's own
+        // comment). No `disconnected` event can reach a held hand-off, so a
+        // release here would be unreachable code claiming to be a guard.
+        // A link that dies inside the hold is precisely what the backstop
+        // (`FINISH_HANDOFF_HOLD_MS`) is for, and its own test proves it.
         if (stateRef.current.phase === "ended") return;
         update({ phase: "disconnected" });
       }
@@ -906,7 +1059,7 @@ export function useMonitorSession(
       // back by itself, the phase stays `disconnected` and the rower's
       // recovery is End -> log, or leave and re-Connect fresh.
     },
-    [endByMachine, handleFrame, update],
+    [endByMachine, handleFrame, releaseHandoff, update],
   );
 
   /** Drops the driver and the radio. Listener FIRST, so a disconnect
@@ -967,6 +1120,13 @@ export function useMonitorSession(
           // Quota or privacy mode: diagnostics never break a teardown.
         }
       }
+      // The hand-off hold's backstop dies with the session (walk day 2): a
+      // teardown IS the hand-off completing (or the rower leaving), so there
+      // is nothing left to wait for and nothing left to update. Cancelled,
+      // never fired — a timer that outlived its component would call
+      // `update` on an unmounted hook.
+      handoffHoldRef.current?.();
+      handoffHoldRef.current = null;
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       const driver = claimed ?? driverRef.current;
@@ -1216,6 +1376,7 @@ export function useMonitorSession(
     frame: state.frame,
     actuals: state.actuals,
     endedBy: state.endedBy,
+    handoffHeld: state.handoffHeld,
     connect,
     program,
     endSession,

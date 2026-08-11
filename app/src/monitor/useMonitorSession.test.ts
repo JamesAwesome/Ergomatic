@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
+  WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
 import {
@@ -26,6 +27,8 @@ import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
 import { loadMonitorRun } from "./monitorRun";
+import { buildMonitorLogSteps } from "../session/logDraft";
+import { monitorModeRun } from "../session/LogSession";
 import {
   createFakeTransport,
   type FakeControls,
@@ -1150,6 +1153,450 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     expect(result.current.phase).toBe("ended");
     expect(result.current.actuals).toHaveLength(5);
     expect(loadMonitorRun()?.actuals).toHaveLength(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// HARDWARE WALK DAY 2 (2026-08-11, phone BLE, PM5 432331249). Walk 5's
+// driver-level finish grace shipped and the save screen STILL read "0 OF 1
+// INTERVALS MEASURED" after a completed 1:00 piece. The grace never got a
+// chance: the machine's `finished` tick flips this hook to `ended`, the
+// surface fires `onEnded` on that render, the caller navigates, the
+// interstitial unmounts, and `teardown` unsubscribes the driver listener and
+// hangs up the radio — all inside the microtask flush that follows the tick,
+// i.e. before the split pair the PM5 sends ~1 ms later can arrive. The
+// rowed-log stash (exported inside that same `teardown`) proved it by what
+// it did NOT contain: `terminal finished` was its last entry, no split of any
+// kind after it.
+// ---------------------------------------------------------------------------
+
+describe("useMonitorSession: the ended hand-off waits for the last split (walk day 2)", () => {
+  /** The walk's own piece: one 1:00 interval, rowed out. */
+  const ONE_INTERVAL: WorkoutProgram = {
+    intervals: [
+      {
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+  /** A seed whose one WORK step aligns with the program's one interval —
+   *  `TEST_SEED`'s placeholder is a warm-up, and `buildMonitorLogSteps`
+   *  skips warm-ups, so a run seeded with it has no log step for the
+   *  measured interval to land in. The whole point of this block is what
+   *  the log screen ends up showing, so its fixture has to be able to show
+   *  something. */
+  const ONE_IDENTITY: RunIdentity = {
+    workoutId: "walk-day-2",
+    title: "1:00",
+    logSeed: {
+      steps: [{ label: "1:00 at 2k+4", kind: "work" }],
+      paces: { k2: 112 },
+    },
+  };
+
+  /** The final interval's own boundary, as the fake puts it on the wire. */
+  function finalBoundary(atMs: number): FakeTimelineEvent {
+    return {
+      atMs,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 200,
+        avgSplit: 120,
+        avgSpm: 24,
+        avgHeartRateBpm: 142,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 200,
+    };
+  }
+
+  function finishedAt(atMs: number): FakeTimelineEvent {
+    return status(atMs, {
+      workoutState: WORKOUTSTATE_WORKOUTEND,
+      elapsedSeconds: 60,
+      distanceMeters: 200,
+      spm: 0,
+      currentSplit: 0,
+    });
+  }
+
+  /** A hand-driven stand-in for `setTimeout`, so the hold's backstop is a
+   *  thing a test FIRES rather than waits for. Records every schedule so a
+   *  test can assert the delay and whether it was cancelled. */
+  function manualSchedule() {
+    const calls: { ms: number; fire: () => void; cancelled: boolean }[] = [];
+    return {
+      calls,
+      schedule: (cb: () => void, ms: number): (() => void) => {
+        const call = { ms, fire: cb, cancelled: false };
+        calls.push(call);
+        return () => {
+          call.cancelled = true;
+        };
+      },
+      /** The most recent, still-live timer. */
+      pending(): { ms: number; fire: () => void; cancelled: boolean } | null {
+        const live = calls.filter((c) => !c.cancelled);
+        return live[live.length - 1] ?? null;
+      },
+    };
+  }
+
+  it("THE WALK DAY 2 SEQUENCE: the hand-off is HELD after the finish, the late split lands in the RECORD, and only then does the log screen get to look", async () => {
+    // Against the pre-fix hook this fails twice over: `handoffHeld` is not a
+    // field at all, and by the time the boundary arrives the caller has
+    // already navigated (the surface fires `onEnded` on the ended render),
+    // so the record the log screen reads still says zero.
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          // ~1 ms on the wire; a separate scripted moment here so the test
+          // can observe the held state in between.
+          finalBoundary(300),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    // The machine has finished. The session is ENDED — the rower sees that
+    // frame immediately, exactly as before — but the HAND-OFF is held.
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(result.current.handoffHeld).toBe(true);
+    expect(result.current.actuals).toHaveLength(0);
+    expect(loadMonitorRun()?.actuals).toHaveLength(0);
+    expect(timer.pending()?.ms).toBe(250);
+
+    // The split the PM5 always sends at the finish.
+    tick(fake, 100);
+
+    expect(result.current.actuals).toHaveLength(1);
+    expect(loadMonitorRun()?.actuals).toHaveLength(1);
+    // ...and the hold is over the moment its reason to exist is gone.
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.pending()).toBeNull(); // the backstop was cancelled, not left to fire
+
+    // THE SEAM THAT FAILED ON DEVICE: what the log screen's own prefill gate
+    // sees at the instant the hand-off releases (this is the function
+    // `LogSession` runs in its mount-time `useState`, so this is exactly the
+    // snapshot the caption is built from).
+    const seen = monitorModeRun(
+      new URLSearchParams("from=monitor"),
+      "walk-day-2",
+    );
+    expect(seen?.actuals).toHaveLength(1);
+    // ...and the prefill really carries the measurement, not just the
+    // record: `actualSource: "pm5"` is what the caption counts as MEASURED
+    // and what puts an ACTUAL line under the interval on the log screen.
+    const steps = buildMonitorLogSteps(seen!);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.actualSource).toBe("pm5");
+    expect(steps[0]?.actualSplit).toBe(120);
+  });
+
+  it("the hold is BOUNDED: a piece whose split never arrives hands off anyway, on the backstop", async () => {
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.handoffHeld).toBe(true);
+
+    // Nothing else ever comes — no split, no further tick, no disconnect.
+    act(() => {
+      timer.pending()!.fire();
+    });
+
+    expect(result.current.handoffHeld).toBe(false);
+    expect(result.current.phase).toBe("ended");
+    // Honest about what was lost: the record is handed over as it stands.
+    expect(loadMonitorRun()?.actuals).toHaveLength(0);
+  });
+
+  it("a further status tick releases the hold early — the driver's own finish grace ends at that same tick", async () => {
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          // The PM5 keeps reporting "finished" while it sits in
+          // WorkoutLogged (§19.4). `driver.ts`'s grace is bounded by exactly
+          // this tick, so nothing more is coming for this run.
+          finishedAt(300),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.handoffHeld).toBe(true);
+
+    tick(fake, 100);
+
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.pending()).toBeNull(); // released on the tick, not on the clock
+  });
+
+  it("the DESKTOP order pays nothing: a run whose final interval is already measured hands off on the finish itself", async () => {
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finalBoundary(150),
+          finishedAt(200),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    // Nothing is missing, so there is nothing to wait for and no timer at all
+    // — the hand-off is as immediate as it has always been.
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.calls).toHaveLength(0);
+    expect(result.current.actuals).toHaveLength(1);
+    expect(loadMonitorRun()?.actuals).toHaveLength(1);
+  });
+
+  it("a MACHINE-TERMINATED ending never holds — the driver opens no finish grace for it, so there is nothing to wait for", async () => {
+    // The rower stopped the piece at the erg: the machine reports
+    // TERMINATE, not WORKOUTEND. `driver.ts` opens no finish grace on that
+    // path (CSAFE-DEF footnote 12 — a mid-terminate Split/Interval Number
+    // has no stable interval to name), so no boundary of ours is coming and
+    // holding the hand-off would only delay the log screen for nothing.
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 40,
+            distanceMeters: 130,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    // Interval 0 is unmeasured — the ONLY thing separating this from the
+    // walk's own sequence is how the machine ended it.
+    expect(result.current.actuals).toHaveLength(0);
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.calls).toHaveLength(0);
+    expect(loadMonitorRun()?.terminated).toBe(true);
+  });
+
+  it("a piece that finished without anyone rowing it holds nothing — there is no record to be missing an actual", async () => {
+    // `live` is downstream of the first rowing frame, so a program that
+    // armed and then went straight to WORKOUTEND (the rower walked away,
+    // the machine timed the piece out) leaves this hook with no `MonitorRun`
+    // at all. The session still ends; there is simply nothing to wait for.
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [finishedAt(200)],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 200);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.calls).toHaveLength(0);
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("the rower's own End never holds either — End is a decision, not a finish", async () => {
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [status(100, { elapsedSeconds: 30, distanceMeters: 100 })],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+    expect(result.current.handoffHeld).toBe(false);
+    expect(timer.calls).toHaveLength(0);
+  });
+
+  it("a link that DIES inside the hold is exactly what the backstop is for — the drop itself is silent by design", async () => {
+    // The driver does not announce a disconnect once its run has closed
+    // (`driver.ts`'s `onDisconnect`: after a terminal state the PM5's own
+    // Appendix-E auto-cycle makes a drop expected housekeeping, not an
+    // error), and a hold only exists AFTER that close. So there is no event
+    // to release on here, by construction — which is the whole argument for
+    // the hold having a bounded backstop rather than trusting events alone.
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.handoffHeld).toBe(true);
+
+    act(() => {
+      fake.injectDisconnect();
+    });
+
+    // Still held — nothing was emitted to release it...
+    expect(result.current.handoffHeld).toBe(true);
+    // ...and the rower is not stranded on the ended frame either.
+    act(() => {
+      timer.pending()!.fire();
+    });
+    expect(result.current.handoffHeld).toBe(false);
+    // The ending stands: a drop AFTER the machine finished does not drag the
+    // session back out of `ended` (spec's C5 ruling, unchanged).
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+  });
+
+  it("unmounting during the hold cancels its backstop — no timer outlives the session", async () => {
+    const timer = manualSchedule();
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.handoffHeld).toBe(true);
+
+    unmount();
+
+    expect(timer.calls).toHaveLength(1);
+    expect(timer.calls[0]!.cancelled).toBe(true);
+  });
+
+  it("the wire log answers the question the device stash could not: split receipt, the record's verdict, and the hold's own fate", async () => {
+    // Observability (walk day 2): yesterday's stash ended at `terminal
+    // finished` with no entry of any kind about a split, so it could not
+    // distinguish "never delivered" from "delivered and dropped". These
+    // three entries make the next stash answer it in one read — and they are
+    // inside the stash's own window, because `teardown` (which exports it)
+    // now runs after the hold.
+    const timer = manualSchedule();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+          finalBoundary(300),
+        ],
+      },
+      { schedule: timer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const kinds = entries.map((e) => e.kind);
+    // Both halves of the pair, logged on arrival — the entry that would have
+    // settled yesterday's question on its own.
+    expect(entries.filter((e) => e.kind === "split-half")).toHaveLength(2);
+    expect(entries.find((e) => e.kind === "split-half")?.detail).toContain(
+      "0x0037",
+    );
+    // The hold, opened and released with its reason.
+    expect(kinds).toContain("handoff-hold");
+    const released = entries.find((e) => e.kind === "handoff-released");
+    expect(released?.detail).toContain("final-boundary");
+    // ...and it reports what the rower is actually being handed.
+    expect(released?.detail).toContain("1 actual(s) measured");
+    // The record's own verdict on the late actual.
+    const filed = entries.find((e) => e.kind === "record-actual");
+    expect(filed?.detail).toContain("accepted");
+    expect(filed?.detail).toContain("index=0");
   });
 });
 
