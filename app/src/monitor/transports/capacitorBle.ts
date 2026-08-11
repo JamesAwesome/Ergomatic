@@ -351,6 +351,13 @@ export function createCapacitorBleTransport(): Transport {
     },
 
     async connect(id: string): Promise<void> {
+      // BOUNDED NATIVELY (ecosystem review R2): the plugin's connect
+      // carries its own 10s timeout (Plugin.swift's CONNECTION_TIMEOUT),
+      // rejecting "Connection timeout." — which the classifier's
+      // fall-through renders as link-failed with a working retry, pinned
+      // by test. No wrapper needed here; the UNBOUNDED gatt.connect()
+      // hang the review documented is webBluetooth.ts's (spec §1
+      // untouched this phase; filed as the R2 fast-follow).
       // A fresh connection never inherits a stale flag from a PRIOR one
       // (M-2's own comment on the variable above), nor stale subscribers
       // (the fan-out registry's own comment).
