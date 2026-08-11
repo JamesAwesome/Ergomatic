@@ -508,10 +508,15 @@ export interface DriverOptions {
    * item 3 states the rule directly: "Tick-count-calibrated logic is
    * transport-relative; wall-clock windows are not"), and the one place the "ticks, never a
    * clock" rule stated on every budget above is deliberately broken. It
-   * exists for exactly one predicate: the post-program structure gate's
-   * persistence window (`STRUCTURE_MISMATCH_WINDOW_MS`, whose own doc
-   * comment carries the reading that forced it). Everything else here still
-   * counts ticks.
+   * exists for exactly two predicates, each forced by its own hardware
+   * reading and neither expressible as a tick count:
+   *   - the post-program structure gate's persistence window
+   *     (`STRUCTURE_MISMATCH_WINDOW_MS`, walk 5), and
+   *   - the FINISH GRACE's own expiry (`FINISH_GRACE_MS`, walk day 3 — it
+   *     used to expire on the machine's next status sample, which measured
+   *     the PM's tick rate rather than the split's arrival and was dead
+   *     before the data it existed for arrived).
+   * Every BUDGET here still counts ticks; neither of these is a budget.
    *
    * Why a clock had to appear at all: every other budget in this file bounds
    * something whose meaning does not change with the notification rate ("how
@@ -520,7 +525,10 @@ export interface DriverOptions {
    * caught it deciding that DURING the PM5's own two-step structure update,
    * purely because iOS delivers status notifications 3-6x faster than the
    * desktop radio the rule was tuned on. A verdict a faster radio can win is
-   * not a verdict about the machine.
+   * not a verdict about the machine. The finish grace's expiry is the same
+   * lesson learned a second time, one layer over: a window that closes on
+   * the machine's next tick closes on the machine's CADENCE, and the thing
+   * it was supposed to be waiting for does not keep that schedule.
    *
    * Injectable so tests can hold or advance it deterministically (the driver
    * tests' own `manualClock()`); defaults to `Date.now`. Only ever read for
@@ -680,8 +688,52 @@ const STRUCTURE_MISMATCH_TICKS = 3;
  *    what keeps that from happening, and it is sized off this number (30
  *    ticks x 90 ms = 2700 ms > 2000 ms; its own doc comment carries the
  *    arithmetic). **Changing either constant without re-checking the other
- *    silently hands the verdict back to whichever radio is fastest.** */
+ *    silently hands the verdict back to whichever radio is fastest.**
+ *
+ *  This pairing is the STRUCTURE gate's alone. `FINISH_GRACE_MS` (walk day
+ *  3) is a separate clock with a separate job and no relationship to
+ *  `verifyTicks` at all — programming and finishing are different moments,
+ *  and nothing bounds them together. */
 const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
+
+/** How long after a natural finish a boundary still belongs to the run that
+ *  just ended — the FINISH GRACE's own clock (`activeRun.finishGraceUntil`).
+ *
+ *  MEASURED (hardware walk day 3, 2026-08-11, PM5 432331249; the device's
+ *  own wire-log stash, recorded in interface-notes.md §22 item 5). The
+ *  sequence, verbatim from the stash:
+ *
+ *      seq 19  terminal            finished
+ *      seq 20  handoff-hold        (the app holds its ended hand-off)
+ *      seq 21  notify-first        0x0037
+ *      seq 22  split-half          0x0037 Split/Interval Number 1
+ *                                  (run closed, state=finished)
+ *      seq 23  notify-first        0x0038
+ *      seq 24  split-half          0x0038, same boundary
+ *      seq 25  boundary-out-of-run no open run — index=null
+ *
+ *  Two facts kill the previous bound. The PM5 keeps sending identical
+ *  `finished` status frames after the terminal one (the log dedupes them on
+ *  state change; the emit path sees every one), and the split pair arrives
+ *  LATER THAN ONE OF THEM — but well inside 3 s. A grace that expires "on
+ *  the machine's next status sample" is therefore keyed to the tick rate,
+ *  not to the split, and on this hardware it is always dead before the data
+ *  it exists for arrives (seq 25 is exactly that, with the run's own actual
+ *  in hand).
+ *
+ *  3000 ms is the widened window day 3 measured the arrival inside, taken as
+ *  the bound rather than a tighter estimate of it: the cost of being late is
+ *  zero (the grace is CONSUMED by the boundary it was for, and the app's
+ *  hand-off releases on that same boundary — nothing waits out this window
+ *  in the ordinary case), while the cost of being early is the whole defect,
+ *  twice shipped. Nothing about correctness rests on the number: what keeps
+ *  a stranger's boundary out is the set of bounds that never depended on
+ *  timing at all — natural-finish-only (never post-terminate, footnote 12),
+ *  a real observed active state to normalize against, an index the offset
+ *  rule explains, an interval this run is still MISSING, consumed once, and
+ *  the record's own independent re-derivation of the last two
+ *  (`monitorRun.ts`'s `acceptableFinalBoundary`). */
+const FINISH_GRACE_MS = 3000;
 
 /** `DriverOptions.prepareSettleTicks`'s own default — see that field's doc
  *  comment for the full citation. `10`, not `3` (`DEFAULT_SETTLE_TICKS`
@@ -793,7 +845,7 @@ export function createPm5Driver(
     actuals: number;
     /** WHICH of this run's own program indices already have an actual —
      *  `actuals` above is the count, this is the identity. Read by the
-     *  finish grace (`finishGraceTick`, below), which only ever attributes a
+     *  finish grace (`finishGraceUntil`, below), which only ever attributes a
      *  post-close boundary to an interval this run is still MISSING: the
      *  PM's own post-run housekeeping re-reports an index that has already
      *  been filed, and that is the discriminator between "the final
@@ -817,43 +869,44 @@ export function createPm5Driver(
      *  the only way a future walk can argue with this. Do not read the
      *  rowing/resting distinction here as load-bearing. */
     lastActiveState: MonitorFrame["state"] | null;
-    /** THE FINISH GRACE (hardware walk 5, 2026-08-10 — the end-of-workout
-     *  split race; interface-notes.md §21 item 4: "0x0037 (18B) and 0x0038
-     *  (19B) delivered 1ms apart at the finish of a 1-interval piece. The 7C
-     *  capture path still recorded 0 of 1 intervals — a driver/record-layer
-     *  ordering race, not a transport loss"). The value of `statusTicks` at the general-status tick
-     *  that closed this run with a natural `"finished"`, or `null` when no
-     *  grace is open (never opened, already consumed, or a later tick has
-     *  moved past it).
+    /** THE FINISH GRACE (hardware walk 5, 2026-08-10; RE-BOUNDED on walk day
+     *  3, 2026-08-11 — interface-notes.md §22 item 5). `now()` plus
+     *  `FINISH_GRACE_MS` at the general-status tick that closed this run
+     *  with a natural `"finished"`: the DEADLINE past which a boundary is no
+     *  longer this run's. `null` when no grace is open — never opened, or
+     *  already consumed by the boundary it was for.
      *
-     *  WHY: at the finish the PM5 delivers the final interval's 0x0037 and
-     *  0x0038 **after** the general-status frame that says the workout
-     *  ended. The walk captured all three — the two split frames 1 ms apart
-     *  (02:23:12.491/.492), the ended tick already processed — and every
-     *  gate downstream keys on "the run is over", so a 1-interval piece
-     *  rowed to completion logged `0 OF 1 INTERVALS MEASURED`: the boundary
-     *  took the out-of-run path, lost its index, and the record (closed by
-     *  the terminal event a moment earlier) would have refused it anyway.
-     *  The data is the run's; only its arrival order says otherwise.
+     *  WHY IT EXISTS: at the finish the PM5 delivers the final interval's
+     *  0x0037 and 0x0038 **after** the general-status frame that says the
+     *  workout ended, and every gate downstream keys on "the run is over" —
+     *  so a 1-interval piece rowed to completion logged `0 OF 1 INTERVALS
+     *  MEASURED`: the boundary took the out-of-run path, lost its index, and
+     *  the record (closed by the terminal event a moment earlier) would have
+     *  refused it anyway. The data is the run's; only its arrival order says
+     *  otherwise.
      *
-     *  BOUNDED BY THE NEXT TICK, not by a clock or a count: the split pair
-     *  belongs to the same sample instant as the terminal reading, and the
-     *  machine's next status sample (~90 ms on iOS, ~500 ms on the desktop
-     *  radio — both three orders of magnitude past the observed 1 ms gap) is
-     *  the natural end of that instant. `terminated` never opens one —
+     *  WHY A CLOCK, not the machine's next sample (which is what this was
+     *  until walk day 3, and what made the fix miss on device — twice):
+     *  "the split belongs to the same sample instant as the terminal
+     *  reading" was an INFERENCE from day 1's 1 ms capture, and day 3
+     *  measured the real thing. The PM5 keeps ticking identical `finished`
+     *  frames after the terminal one, and the split lands LATER than one of
+     *  them — the day-3 stash has the terminal at seq 19 and the split pair
+     *  at seq 21-24, with post-finish status ticks in between and the whole
+     *  thing inside 3 s. A next-sample bound is therefore a bound on the
+     *  PM's tick rate, not on the split, and it expires while the data is
+     *  still in flight. `FINISH_GRACE_MS`'s own doc comment carries the
+     *  sequence.
+     *
+     *  Post-finish status ticks are IRRELEVANT to it now — they neither
+     *  extend nor consume it. `terminated` never opens one either:
      *  CSAFE-DEF footnote 12 (p.25, via interface-notes.md §19.8) says the
      *  Split/Interval Number "will change depending on where you are in the
      *  interval when the workout is terminated", so a mid-terminate boundary
      *  has no stable identity to attribute and keeps the out-of-run path it
      *  has always taken. */
-    finishGraceTick: number | null;
+    finishGraceUntil: number | null;
   } | null = null;
-  /** DECODED GENERAL_STATUS_UUID arrivals since this driver was created —
-   *  the tick ordinal `finishGraceTick` compares against, and nothing else.
-   *  Incremented at the top of 0x0031's own merge handler, so it already
-   *  reads THIS tick's number by the time anything that tick does (closing a
-   *  run included) looks at it. */
-  let statusTicks = 0;
   let reconnectPending = false;
   /** This task's single-flight gate (`ProgramBusyError`'s own doc comment,
    *  ROADMAP's "a second `program()` call ... strands the first"): `true`
@@ -1605,13 +1658,14 @@ export function createPm5Driver(
     // 7C has to tell "logged 12 of 12" from "abandoned at 8"
     // (`domain/monitor/types.ts`'s own note on why the pair exists).
     if (frame.state === "finished") {
-      // THE FINISH GRACE opens here and nowhere else (walk 5 —
-      // `activeRun.finishGraceTick`'s own doc comment carries the capture).
+      // THE FINISH GRACE opens here and nowhere else (walk 5, re-bounded on
+      // walk day 3 — `activeRun.finishGraceUntil`'s own doc comment carries
+      // the capture and `FINISH_GRACE_MS` the measurement).
       // Opened BEFORE the terminal event goes out, because the boundary it
       // exists for arrives while this same tick's listeners have already
       // been told the workout ended: the grace decides which RUN the next
       // notification belongs to, not when the consumer hears the news.
-      activeRun!.finishGraceTick = statusTicks;
+      activeRun!.finishGraceUntil = now() + FINISH_GRACE_MS;
       log.record("terminal", "finished");
       emit({ kind: "workoutComplete" });
     } else {
@@ -1692,8 +1746,9 @@ export function createPm5Driver(
 
   /**
    * THE FINISH GRACE's own predicate (hardware walk 5, 2026-08-10,
-   * interface-notes.md §21 item 4 — the end-of-workout split race; `activeRun.finishGraceTick`'s doc comment
-   * carries the capture). Answers "does this boundary belong to the run that
+   * interface-notes.md §21 item 4 and §22 items 1/5 — the end-of-workout
+   * split race; `activeRun.finishGraceUntil`'s doc comment carries the
+   * capture). Answers "does this boundary belong to the run that
    * just finished?" and, if so, to WHICH of that run's interval indices —
    * `null` means "no, take the out-of-run path", which is every case that
    * existed before this function did.
@@ -1702,12 +1757,13 @@ export function createPm5Driver(
    * rule would misfile:
    *   1. a run exists and is CLOSED — an open run needs no grace, it is the
    *      ordinary in-run path below;
-   *   2. it was closed by a natural `"finished"` on THIS tick
-   *      (`finishGraceTick === statusTicks`), so the boundary arrived in the
-   *      gap between the terminal reading and the machine's next sample —
-   *      where the walk's two split frames landed, 1 ms later. A
-   *      `terminated` close never opens a grace at all (footnote 12, cited
-   *      on `finishGraceTick`), and the grace is consumed by the first
+   *   2. it was closed by a natural `"finished"` less than
+   *      `FINISH_GRACE_MS` ago, ON THE CLOCK — walk day 3 measured the split
+   *      arriving later than one status tick but well inside 3 s, so the
+   *      machine's own ticking cannot be what closes this door (that was the
+   *      previous bound, and it is why the fix missed twice). A `terminated`
+   *      close never opens a grace at all (footnote 12, cited on
+   *      `finishGraceUntil`), and the grace is consumed by the first
    *      boundary that uses it;
    *   3. the run actually saw an interval RUNNING, so there is a real
    *      observed state to normalize against rather than the terminal word
@@ -1725,7 +1781,9 @@ export function createPm5Driver(
   function finishGraceIndex(rawIndex: number): number | null {
     const run = activeRun;
     if (run === null || !run.closed) return null;
-    if (run.finishGraceTick !== statusTicks) return null;
+    if (run.finishGraceUntil === null || now() >= run.finishGraceUntil) {
+      return null;
+    }
     if (run.lastActiveState === null) return null;
     const index = toActualIndex(
       rawIndex,
@@ -1854,7 +1912,7 @@ export function createPm5Driver(
     }
     // One boundary per grace, consumed here — a second notification arriving
     // in the same gap cannot also claim it.
-    if (graceIndex !== null) activeRun!.finishGraceTick = null;
+    if (graceIndex !== null) activeRun!.finishGraceUntil = null;
     emit(
       graceIndex === null
         ? { kind: "intervalComplete", actual }
@@ -1968,10 +2026,6 @@ export function createPm5Driver(
     parseGeneralStatus,
     (decoded, bytes) => {
       seen.general = true;
-      // This tick's ordinal, established before anything below can read it —
-      // the finish grace (`activeRun.finishGraceTick`) is opened by this same
-      // tick's terminal branch and must carry THIS number, not the last one.
-      statusTicks += 1;
       // Task 1 (fix-3): the machine's idea of the armed workout's structure,
       // already decoded by `parseGeneralStatus` (interface-notes.md §10) —
       // recorded ON CHANGE ONLY, comparing the three DECODED fields rather
@@ -2992,7 +3046,7 @@ export function createPm5Driver(
           actuals: 0,
           recordedIndices: new Set<number>(),
           lastActiveState: null,
-          finishGraceTick: null,
+          finishGraceUntil: null,
         };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });

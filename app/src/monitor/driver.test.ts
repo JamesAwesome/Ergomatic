@@ -7137,16 +7137,21 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
     log: ReturnType<typeof createEventLog>;
     driver: ReturnType<typeof createPm5Driver>;
     events: MonitorEvent[];
+    clock: ReturnType<typeof manualClock>;
   } {
     const transport = stubTransport();
     const log = createEventLog();
-    const driver = createPm5Driver(transport, log);
+    // The finish grace runs on the clock since walk day 3 — hand-advanced
+    // here, so "how long after the finish" is a thing these tests SAY rather
+    // than a thing they hope for. Time never passes on its own.
+    const clock = manualClock();
+    const driver = createPm5Driver(transport, log, { now: clock.now });
     const events: MonitorEvent[] = [];
     driver.events((e) => events.push(e));
     // AS1/AS2 once, so status ticks actually produce frames.
     transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
     transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
-    return { transport, log, driver, events };
+    return { transport, log, driver, events, clock };
   }
 
   function boundaries(events: MonitorEvent[]) {
@@ -7271,8 +7276,14 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
     );
   });
 
-  it("the grace is BOUNDED by the machine's next sample: one more status tick and the same pair is out-of-run again", async () => {
-    const { transport, log, driver, events } = primed();
+  it("WALK DAY 3, THE REGRESSION: post-finish status ticks do NOT expire the grace — the split arrives after several of them and still records", async () => {
+    // The device sequence this inverts, from the day-3 stash: `terminal
+    // finished` (seq 19), then the PM5's own repeat `finished` frames, then
+    // the split pair (seq 21-24) — and under the previous "expires at the
+    // machine's next status sample" bound, seq 25 read `boundary-out-of-run
+    // — no open run, index=null`, with the run's own actual in hand. The
+    // machine's cadence is not the split's schedule; only the clock is.
+    const { transport, log, driver, events, clock } = primed();
     await programViaStub(driver, transport, WALK_5_PROGRAM);
 
     transport.notify(
@@ -7284,12 +7295,44 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
       generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
     );
     // The PM keeps reporting "finished" for as long as it sits in
-    // WorkoutLogged (§19.4). That next sample ends the instant the finish
-    // grace covers.
+    // WorkoutLogged (§19.4) — five of them here, 90 ms apart, the iOS
+    // cadence §21 item 3 recorded.
+    for (let i = 0; i < 5; i += 1) {
+      clock.advance(90);
+      transport.notify(
+        GENERAL_STATUS_UUID,
+        generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+      );
+    }
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    expect(boundaries(events)).toHaveLength(1);
+    expect(boundaries(events)[0]).toMatchObject({
+      actual: { index: 0, avgSpm: 24 },
+      finalBoundary: true,
+    });
+    expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
+      false,
+    );
+  });
+
+  it("...but the CLOCK still bounds it: a pair arriving past the 3s grace is out-of-run again", async () => {
+    const { transport, log, driver, events, clock } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
     transport.notify(
       GENERAL_STATUS_UUID,
       generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
     );
+
+    // Three seconds later — whatever this boundary is, it is not the finish
+    // of the piece that ended back then.
+    clock.advance(3000);
     transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
     transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
 
@@ -7299,6 +7342,29 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
     expect(log.entries().some((e) => e.kind === "boundary-out-of-run")).toBe(
       true,
     );
+  });
+
+  it("just inside the window still counts — the bound is 3000ms, not 'about three seconds'", async () => {
+    const { transport, driver, events, clock } = primed();
+    await programViaStub(driver, transport, WALK_5_PROGRAM);
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+
+    clock.advance(2999);
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    expect(boundaries(events)[0]).toMatchObject({
+      actual: { index: 0 },
+      finalBoundary: true,
+    });
   });
 
   it("a TERMINATED close opens no grace — footnote 12's unstable Split/Interval Number keeps the out-of-run path", async () => {
