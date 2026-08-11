@@ -59,9 +59,13 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
         const prev = rows[rows.length - 1];
         const mins = (p.seconds as number) / 60;
         prev.restText =
-          prev.restText === null ? fmtRest(mins, "r") : prev.restText; // two consecutive rests: keep the first, the
-        // second is unreachable in practice (phases() folds); if it ever
-        // happens the first shown is still true.
+          prev.restText === null ? fmtRest(mins, "r") : prev.restText;
+        // phases() does NOT fold consecutive rests — two rest phases in a
+        // row (a "w" step's own restMinutes immediately followed by an
+        // authored "r" step) both arrive here as separate phases; this
+        // ternary is what drops the second one from display, deliberately
+        // (the tested behaviour: the first shown is kept). validateSteps
+        // allows the shape; zero library workouts currently author it.
       }
       continue;
     }
@@ -258,14 +262,32 @@ function offsetRange(pieces: AuthPiece[]): string {
   return `${end(hi)} → ${end(lo)}`;
 }
 
+/** The clause appears only when every INTER-PIECE rest is equal (spec's
+ *  own rule) — that means every INTERIOR gap (the rest after every piece
+ *  but the last) must be PRESENT and equal to the others; a missing
+ *  interior gap is not "equal" to a present one, it is a different rest
+ *  pattern the clause would misstate (Stratocumulus: 3×(8' no-rest + 8'
+ *  rest2) reads as "· 2′ REST" only if a filter drops the nulls before
+ *  the equality check — that was the bug). The LAST piece's own
+ *  restMinutes is the trailing rest (the DEVIATION §2 already shows on
+ *  its own row): it may be absent (the brief's own uniform-repeat
+ *  contract strings authored without a trailing rest) or equal to the
+ *  interior value without affecting the clause, but if it is PRESENT and
+ *  DIFFERENT, the clause is dropped too — it would otherwise claim a
+ *  rest after the whole set has stopped.
+ */
 function restClause(pieces: AuthPiece[]): string {
-  const rests = pieces
-    .map((p) => p.restMinutes)
-    .filter((r): r is number => r !== null);
-  if (rests.length === 0) return "";
-  const first = rests[0];
-  if (!rests.every((r) => r === first)) return "";
-  return ` · ${fmtRest(first, "REST")}`;
+  const last = pieces.length - 1;
+  const interior = pieces.slice(0, last).map((p) => p.restMinutes);
+  if (interior.some((r) => r === null)) return "";
+  const value = interior.length > 0 ? interior[0] : pieces[last].restMinutes;
+  if (value === null) return "";
+  if (!interior.every((r) => r === value)) return "";
+  const trailing = pieces[last].restMinutes;
+  if (interior.length > 0 && trailing !== null && trailing !== value) {
+    return "";
+  }
+  return ` · ${fmtRest(value, "REST")}`;
 }
 
 function samePiece(a: AuthPiece, b: AuthPiece): boolean {

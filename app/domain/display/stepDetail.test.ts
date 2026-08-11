@@ -8,6 +8,33 @@ import {
 import type { Baselines, Step } from "../types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 
+// One alternation covering structureLine's seven documented format shapes
+// (spec §1), used by the property test below to fail on any of the 300
+// real library lines that don't match ANY of them (not just "non-empty,
+// no undefined/NaN" — a shape check catches a malformed join the weaker
+// checks would miss). TOKEN is a full duration/meters token
+// (fmtDuration's "10:00"/"1:05:00" or "500m"); TOKEN_BARE additionally
+// allows the chain's own bare integers ("8"). REF is a single reference
+// ("6K+10"/"6K"/"MAX"); RANGE is either a collapsed single reference or
+// two RANGE ends ("+4 → −2", "6K → +2") per offsetRange's own idiom
+// (a bare offset has no base prefix unless it collapses to a single
+// value or the offset is 0).
+const TOKEN = String.raw`\d+:\d{2}(?::\d{2})?|\d+m`;
+const TOKEN_BARE = String.raw`\d+:\d{2}(?::\d{2})?|\d+m|\d+`;
+const REF = String.raw`(?:2K|6K)(?:[+−]\d+)?|MAX|MIN`;
+const RANGE_END = String.raw`2K|6K|[+−]\d+`;
+const RANGE = String.raw`(?:2K|6K)(?:[+−]\d+)?|(?:${RANGE_END}) → (?:${RANGE_END})`;
+const CLAUSE = String.raw`(?: · (?:\d+′|\d+:\d{2}) REST)?`;
+const F1 = String.raw`(?:${TOKEN}) @ (?:${REF})${CLAUSE}`; // single piece
+const F2 = String.raw`\d+ × (?:${TOKEN}) @ (?:${REF})${CLAUSE}`; // uniform repeats / distance
+const F3 = String.raw`(?:${TOKEN}) \+ (?:${TOKEN}) @ (?:${RANGE})${CLAUSE}`; // two unequal
+const F4 = String.raw`(?:${TOKEN_BARE})(?:-(?:${TOKEN_BARE})){1,7} @ (?:${RANGE})${CLAUSE}`; // chain ≤8
+const F5 = String.raw`\d+ PIECES(?: @ (?:${RANGE}))?${CLAUSE}`; // count fallback
+const F6 = String.raw`(?:${TOKEN}) @ (?:${REF})(?: \+ (?:${TOKEN}) @ (?:${REF}))+${CLAUSE}`; // mixed frames
+const STRUCTURE_LINE_SHAPE = new RegExp(
+  `^(?:${F1}|${F2}|${F3}|${F4}|${F5}|${F6})$`,
+);
+
 const B: Baselines = { k2Seconds: 118, k6Seconds: 125 };
 const w = (
   min: number,
@@ -248,6 +275,17 @@ describe("structureLine", () => {
       "18:00 + 9:00 @ +6 → 6K · 3′ REST",
     );
   });
+  it("mixed-sign offset range renders both signs", () => {
+    expect(line([w(6, 4, undefined, 2), w(4, -2)])).toBe(
+      "6:00 + 4:00 @ +4 → −2 · 2′ REST",
+    );
+  });
+  it("format 4-vs-5 precedence boundary: exactly 8 pieces chains, 9 falls to count form", () => {
+    const eight = [1, 2, 3, 4, 5, 6, 7, 8].map((o) => w(2, o));
+    expect(line(eight)).toBe("2-2-2-2-2-2-2-2 @ +8 → +1");
+    const nine = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((o) => w(2, o));
+    expect(line(nine)).toBe("9 PIECES @ +9 → +1");
+  });
   it("format 4, chain ≤8 with max→min range; fractional minutes as clock", () => {
     expect(
       line([
@@ -319,11 +357,47 @@ describe("structureLine", () => {
   it("a leading rest with nothing to attach to is dropped; nothing left renders empty", () => {
     expect(line([{ k: "r", minutes: 5 }])).toBe("");
   });
-  it("property: every one of the 300 real workouts produces a sane line", () => {
+  it("REGRESSION (Stratocumulus): an interior gap with no rest is not equal to a present one — the clause drops entirely", () => {
+    // 3 × (8' no-rest + 8' rest2): the gaps BETWEEN consecutive pieces are
+    // [none, 2', none, 2', none] — not uniform, so no clause, even though
+    // every rest that IS present happens to be 2'. The old code filtered
+    // out the nulls before checking equality and wrongly claimed a
+    // uniform "· 2′ REST".
+    const steps: Step[] = [
+      { k: "reps", count: 3 },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 8 },
+        ref: { base: "6k", off: 11 },
+        spm: 22,
+      },
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 8 },
+        ref: { base: "6k", off: 11 },
+        spm: 24,
+        restMinutes: 2,
+      },
+    ];
+    expect(line(steps)).toBe("8-8-8-8-8-8 @ 6K+11");
+  });
+  it("a present-but-unequal trailing rest also drops the clause", () => {
+    // Interior gaps (after piece 1, after piece 2) are both 2' — uniform.
+    // The trailing rest (after the last piece) is PRESENT but 3', not 2':
+    // the clause must still drop, not silently show one of the two values.
+    const steps: Step[] = [
+      w(5, 4, undefined, 2),
+      w(5, 4, undefined, 2),
+      w(5, 4, undefined, 3),
+    ];
+    expect(line(steps)).toBe("3 × 5:00 @ 6K+4");
+  });
+  it("property: every one of the 300 real workouts matches one of the seven format shapes", () => {
     for (const wk of LIBRARY_WORKOUTS) {
       const out = structureLine(wk.steps);
       expect(out.length, `${wk.title}`).toBeGreaterThan(0);
       expect(out, `${wk.title}`).not.toMatch(/undefined|NaN/);
+      expect(out, `${wk.title}: "${out}"`).toMatch(STRUCTURE_LINE_SHAPE);
     }
   });
 });
