@@ -383,8 +383,8 @@ describe("parseEndOfWorkoutSummary (0x0039, 20 bytes, interface-notes.md §23)",
     expect(bytes).toHaveLength(20);
 
     expect(parseEndOfWorkoutSummary(bytes)).toStrictEqual({
-      totalElapsedSeconds: 720000 / 100,
-      totalMeters: 20000 / 10,
+      elapsedSeconds: 720000 / 100,
+      meters: 20000 / 10,
       avgStrokeRate: 24,
       endingHeartRateBpm: 140,
       avgHeartRateBpm: 135,
