@@ -4,6 +4,7 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
   toIntervalActual,
@@ -359,6 +360,134 @@ describe("parseAdditionalSplitIntervalData (0x0038, 19 bytes, interface-notes.md
     expect(fromStatus1).toBe(10); // 1000 * 0.01
     expect(fromSplit).toBe(100); // 1000 * 0.1
     expect(fromStatus1).not.toBe(fromSplit);
+  });
+});
+
+describe("parseEndOfWorkoutSummary (0x0039, 20 bytes, interface-notes.md §23)", () => {
+  it("decodes every offset, hand-built and cited", () => {
+    const bytes = Uint8Array.from([
+      ...u16le(0), // Log Entry Date (not decoded)
+      ...u16le(0), // Log Entry Time (not decoded)
+      ...u24le(720000), // Elapsed Time, 0.01 sec/lsb -> 7200.00s
+      ...u24le(20000), // Distance, 0.1 m/lsb -> 2000.0m
+      24, // Average Stroke Rate
+      140, // Ending Heartrate
+      135, // Average Heartrate
+      110, // Min Heartrate
+      165, // Max Heartrate
+      128, // Drag Factor Average
+      88, // Recovery Heart Rate
+      8, // Workout Type (WORKOUTTYPE_VARIABLE_INTERVAL)
+      ...u16le(1200), // Avg Pace, 0.1 sec/lsb -> 120.0s
+    ]);
+    expect(bytes).toHaveLength(20);
+
+    expect(parseEndOfWorkoutSummary(bytes)).toStrictEqual({
+      totalElapsedSeconds: 720000 / 100,
+      totalMeters: 20000 / 10,
+      avgStrokeRate: 24,
+      endingHeartRateBpm: 140,
+      avgHeartRateBpm: 135,
+      minHeartRateBpm: 110,
+      maxHeartRateBpm: 165,
+      dragFactorAverage: 128,
+      recoveryHeartRateBpm: 88,
+      workoutType: 8,
+      avgPaceSecondsPer500m: 1200 / 10,
+    });
+  });
+
+  it("returns null on a too-short buffer — the split parsers' error idiom, simplified to a bare null since no caller yet needs the typed diagnostic", () => {
+    const bytes = Uint8Array.from(new Array(19).fill(0));
+    expect(parseEndOfWorkoutSummary(bytes)).toBeNull();
+  });
+
+  it("a 20-byte buffer of all zeros is NOT null — the length guard is length-only, never content-sniffing", () => {
+    const bytes = Uint8Array.from(new Array(20).fill(0));
+    expect(parseEndOfWorkoutSummary(bytes)).not.toBeNull();
+  });
+
+  it("applies the 255-and-0-both-null sentinel (D5) to all five heart-rate fields, including the document-stated Recovery Heart Rate zero", () => {
+    const bytes = Uint8Array.from([
+      ...u16le(0),
+      ...u16le(0),
+      ...u24le(0),
+      ...u24le(0),
+      0,
+      255, // Ending Heartrate: invalid (255, by-analogy sentinel)
+      0, // Average Heartrate: no belt (0, by-analogy sentinel)
+      255, // Min Heartrate: invalid
+      0, // Max Heartrate: no belt
+      0,
+      0, // Recovery Heart Rate: "zero = not valid data" (document-stated)
+      0,
+      ...u16le(0),
+    ]);
+    const decoded = parseEndOfWorkoutSummary(bytes);
+    expect(decoded).not.toBeNull();
+    expect(decoded!.endingHeartRateBpm).toBeNull();
+    expect(decoded!.avgHeartRateBpm).toBeNull();
+    expect(decoded!.minHeartRateBpm).toBeNull();
+    expect(decoded!.maxHeartRateBpm).toBeNull();
+    expect(decoded!.recoveryHeartRateBpm).toBeNull();
+  });
+
+  it("a REAL recovery heart rate (the re-fire, ~1 min post-finish) survives — only 0 and 255 are sentinels", () => {
+    const bytes = Uint8Array.from([
+      ...u16le(0),
+      ...u16le(0),
+      ...u24le(0),
+      ...u24le(0),
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      72, // Recovery Heart Rate: a real reading
+      0,
+      ...u16le(0),
+    ]);
+    const decoded = parseEndOfWorkoutSummary(bytes);
+    expect(decoded!.recoveryHeartRateBpm).toBe(72);
+  });
+
+  it("Avg Pace is 0.1 sec/lsb — the same scale as 0x0038's, DIFFERENT from 0x0032/0x0033's 0.01 sec/lsb (interface-notes.md §23's recurring trap)", () => {
+    const raw = 1000;
+    const additionalStatus1Bytes = Uint8Array.from([
+      ...u24le(0),
+      ...u16le(0),
+      0,
+      0,
+      ...u16le(raw), // Current Pace, 0.01 sec/lsb
+      ...u16le(0),
+      ...u16le(0),
+      ...u24le(0),
+      0,
+    ]);
+    const summaryBytes = Uint8Array.from([
+      ...u16le(0),
+      ...u16le(0),
+      ...u24le(0),
+      ...u24le(0),
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      ...u16le(raw), // Avg Pace, 0.1 sec/lsb
+    ]);
+    const fromStatus1 = expectDecoded(
+      parseAdditionalStatus1(additionalStatus1Bytes),
+    ).currentSplit;
+    const fromSummary =
+      parseEndOfWorkoutSummary(summaryBytes)!.avgPaceSecondsPer500m;
+    expect(fromStatus1).toBe(10); // 1000 * 0.01
+    expect(fromSummary).toBe(100); // 1000 * 0.1
+    expect(fromStatus1).not.toBe(fromSummary);
   });
 });
 

@@ -4,6 +4,8 @@ import {
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
   CONTROL_SERVICE_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   ROWING_SERVICE_UUID,
@@ -32,6 +34,12 @@ describe("pm5 UUIDs: base formula per handle (interface-notes.md §9)", () => {
       ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
       "0038",
     ],
+    ["END_OF_WORKOUT_SUMMARY_UUID", END_OF_WORKOUT_SUMMARY_UUID, "0039"],
+    [
+      "END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID",
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      "003a",
+    ],
   ])("%s = ce06<handle>-43e5-11e4-916c-0800200c9a66", (_name, uuid, handle) => {
     expect(uuid).toBe(`ce06${handle}-43e5-11e4-916c-0800200c9a66`);
   });
@@ -48,6 +56,8 @@ describe("pm5 UUIDs: base formula per handle (interface-notes.md §9)", () => {
       SAMPLE_RATE_UUID,
       SPLIT_INTERVAL_DATA_UUID,
       ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+      END_OF_WORKOUT_SUMMARY_UUID,
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
     ];
     expect(new Set(all).size).toBe(all.length);
   });

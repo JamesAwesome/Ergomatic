@@ -2,6 +2,8 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   CONTROL_SERVICE_UUID,
   DEVICE_INFO_SERVICE_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   ROWING_SERVICE_UUID,
 } from "../../../domain/monitor/pm5/uuids.js";
@@ -331,4 +333,41 @@ describe("createWebBluetoothTransport: exactly one gattserverdisconnected listen
       "add",
     ]);
   });
+});
+
+// Fast-follow Task 1, adversarial review I8: `webBluetooth.ts` owns its OWN
+// `SERVICE_OF` map, separate from `capacitorBle.ts`'s — a missing entry
+// here is worse than that file's synchronous throw, because `subscribe()`'s
+// characteristic lookup is async and its rejection is void-discarded
+// (`webBluetooth.ts`'s own `subscribe()`, "Fire-and-forget"): an unhandled
+// rejection plus a silently dead subscription, never a loud failure. The
+// membership pin below uses `write()` (awaited, so a missing entry surfaces
+// as a REJECTION this test can assert on) rather than `subscribe()`, which
+// would only prove the promise it returns is unobservably broken.
+describe("createWebBluetoothTransport: 0x0039/0x003A join SERVICE_OF (fast-follow R1, review I8)", () => {
+  it.each([
+    ["END_OF_WORKOUT_SUMMARY_UUID (0x0039)", END_OF_WORKOUT_SUMMARY_UUID],
+    [
+      "END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID (0x003A)",
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+    ],
+  ])(
+    "write() to %s resolves against the rowing service, not an unknown-service throw",
+    async (_name, uuid) => {
+      const device = new FakeDevice("pm5-8", "PM5 888");
+      installFakeBluetooth(device);
+      const transport = createWebBluetoothTransport();
+
+      await transport.scan();
+      await transport.connect(device.id);
+
+      await expect(
+        transport.write(uuid, Uint8Array.from([1])),
+      ).resolves.toBeUndefined();
+
+      expect(device.gatt.getPrimaryService).toHaveBeenCalledWith(
+        ROWING_SERVICE_UUID,
+      );
+    },
+  );
 });

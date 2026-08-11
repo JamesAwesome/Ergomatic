@@ -61,8 +61,13 @@ vi.mock("@capacitor-community/bluetooth-le", () => ({
 
 const { BleClient, numbersToDataView, toUint8Array } =
   await import("@capacitor-community/bluetooth-le");
-const { CONTROL_SERVICE_UUID, GENERAL_STATUS_UUID, ROWING_SERVICE_UUID } =
-  await import("../../../domain/monitor/pm5/uuids.js");
+const {
+  CONTROL_SERVICE_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
+  GENERAL_STATUS_UUID,
+  ROWING_SERVICE_UUID,
+} = await import("../../../domain/monitor/pm5/uuids.js");
 const { createCapacitorBleTransport } = await import("./capacitorBle");
 
 /** The default happy-path radio. Every mock the module exports is re-armed
@@ -661,4 +666,37 @@ describe("subscribe multiplexing: one plugin slot, many subscribers (walk-1 find
     // registry was cleared, so the plugin is called again.
     expect(BleClient.startNotifications).toHaveBeenCalledTimes(2);
   });
+});
+
+// Fast-follow Task 1, adversarial review I8: `SERVICE_OF` is a SEPARATE map
+// per transport file — missing an entry here throws synchronously out of
+// `serviceFor` (via `requireConnected`, both `write()` and `subscribe()`
+// call it before anything async happens), so a membership gap fails loudly
+// on THIS transport, unlike `webBluetooth.ts`'s async/void-discarded
+// equivalent (that file's own test below).
+describe("createCapacitorBleTransport: 0x0039/0x003A join SERVICE_OF (fast-follow R1, review I8)", () => {
+  it.each([
+    ["END_OF_WORKOUT_SUMMARY_UUID (0x0039)", END_OF_WORKOUT_SUMMARY_UUID],
+    [
+      "END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID (0x003A)",
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+    ],
+  ])(
+    "write() to %s resolves against the rowing service, not 'no known service'",
+    async (_name, uuid) => {
+      const transport = createCapacitorBleTransport();
+      await transport.connect("d1");
+
+      await expect(
+        transport.write(uuid, Uint8Array.from([1])),
+      ).resolves.toBeUndefined();
+
+      expect(BleClient.write).toHaveBeenCalledWith(
+        "d1",
+        ROWING_SERVICE_UUID,
+        uuid,
+        expect.anything(),
+      );
+    },
+  );
 });

@@ -87,6 +87,8 @@ import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
@@ -1756,6 +1758,33 @@ export function createPm5Driver(
   }
 
   /**
+   * Fast-follow Task 1 (design spec §5, review I5/I6): records the arrival
+   * of EITHER end-of-workout summary characteristic — deliberately NOT
+   * paired the way `noteBoundaryHalf` pairs 0x0037/0x0038. Gating the
+   * reconcile on BOTH halves would recreate the exact drop-fragility the
+   * summary pair exists to fix (review I5: "every field the spec's list
+   * needs sits on 0x0039 alone... a reconcile that waits for both
+   * `summary-half`s dies when 0x003A drops even though 0x0039 arrived
+   * complete"). 0x003A is logged for observability only here; a later
+   * task's reconciliation gate is what actually reads 0x0039's decoded
+   * fields and decides anything.
+   *
+   * Mirrors `noteBoundaryHalf`'s own log site and voice deliberately
+   * (`split-half`'s "characteristic ... received (run open/closed,
+   * state=...)" shape) so the stash reads the same way for both pairs.
+   */
+  function noteSummaryHalf(characteristic: "0x0039" | "0x003A"): void {
+    const label =
+      characteristic === "0x0039"
+        ? "end-of-workout summary"
+        : "end-of-workout additional summary";
+    log.record(
+      "summary-half",
+      `${characteristic} ${label} received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state})`,
+    );
+  }
+
+  /**
    * THE FINISH GRACE's own predicate (hardware walk 5, 2026-08-10,
    * interface-notes.md §21 item 4 and §22 items 1/5 — the end-of-workout
    * split race; `activeRun.finishGraceUntil`'s doc comment carries the
@@ -2246,6 +2275,21 @@ export function createPm5Driver(
       noteBoundaryHalf("split", decoded.splitIntervalNumber);
     },
   );
+
+  // Fast-follow Task 1 (design spec §5): RAW subscriptions, deliberately
+  // NOT routed through `mergeStatus` — 0x0039/0x003A have their own decode
+  // (`parseEndOfWorkoutSummary`, not `mergeStatus`'s `Pm5ParseError`-typed
+  // idiom) and are never merged into `raw`/`RawPm5Status` (`WorkoutSummary`
+  // is a whole-workout total, not a per-tick status field). This task only
+  // records receipt (`summary-half`, mirroring `noteBoundaryHalf`'s own
+  // site/voice); a later task's reconciliation gate is what decodes 0x0039
+  // and acts on it.
+  t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, () => {
+    noteSummaryHalf("0x0039");
+  });
+  t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, () => {
+    noteSummaryHalf("0x003A");
+  });
 
   // `terminate()`'s settle-wait tick pulse (design spec §7, interface-
   // notes.md §19.6) AND `sendGetErrorType`'s always-active reply bound
