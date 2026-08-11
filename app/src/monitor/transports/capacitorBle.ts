@@ -216,6 +216,7 @@ function raceScanTimeout<T>(pipeline: Promise<T>): Promise<T> {
  * programming error in the caller, not a runtime radio condition, so
  * failing loudly beats a silent no-op.
  */
+
 export function createCapacitorBleTransport(): Transport {
   let deviceId: string | null = null;
   let disconnectCb: ((reason: string) => void) | null = null;
@@ -261,6 +262,31 @@ export function createCapacitorBleTransport(): Transport {
       throw new Error("capacitorBle: write/subscribe called before connect()");
     }
     return { id: deviceId, service: serviceFor(characteristicId) };
+  }
+
+  /** Live Transport subscribers per characteristic — the fan-out registry
+   *  behind `subscribe()`'s multiplexing (see the walk-1 comment there).
+   *  Cleared on every fresh `connect()`: a new link starts with no
+   *  subscriptions, and a stale set must never receive the new
+   *  connection's frames. */
+  const subscribers = new Map<string, Set<(bytes: Uint8Array) => void>>();
+
+  function makeUnsubscribe(
+    characteristicId: string,
+    cb: (bytes: Uint8Array) => void,
+    id: string,
+    service: string,
+  ): () => void {
+    return () => {
+      const set = subscribers.get(characteristicId);
+      // Idempotent: a second call (or one after connect() reset the
+      // registry) finds nothing to remove and must not touch the plugin.
+      if (set === undefined || !set.delete(cb)) return;
+      if (set.size === 0) {
+        subscribers.delete(characteristicId);
+        void BleClient.stopNotifications(id, service, characteristicId);
+      }
+    };
   }
 
   function handleDisconnect(disconnectedId: string): void {
@@ -326,8 +352,10 @@ export function createCapacitorBleTransport(): Transport {
 
     async connect(id: string): Promise<void> {
       // A fresh connection never inherits a stale flag from a PRIOR one
-      // (M-2's own comment on the variable above).
+      // (M-2's own comment on the variable above), nor stale subscribers
+      // (the fan-out registry's own comment).
       callerInitiatedDisconnect = false;
+      subscribers.clear();
       // `connect()` no longer assumes `scan()` ran first (spec §3.5): a
       // reconnect path calls it cold. Memoized, so the normal
       // scan->connect flow still initializes exactly once.
@@ -355,6 +383,27 @@ export function createCapacitorBleTransport(): Transport {
       cb: (bytes: Uint8Array) => void,
     ): () => void {
       const { id, service } = requireConnected(characteristicId);
+      // ONE plugin subscription per characteristic, MANY Transport
+      // subscribers (walk-1 finding, 2026-08-10): the plugin keeps a
+      // single listener per characteristic key — a second
+      // `startNotifications` REMOVES the first listener before adding its
+      // own (`bleClient.js:293`, `eventListeners.get(key)?.remove()`) —
+      // where Web Bluetooth stacks `characteristicvaluechanged` listeners.
+      // The driver legitimately subscribes 0x0031 twice (its startup
+      // status loop and the program-phase watcher), so without this
+      // fan-out the second subscribe silently unplugs the first: frames
+      // flow into the transport and the state machine never hears them,
+      // the exact stuck-at-"sending the workout" hang the walk hit. The
+      // transport therefore multiplexes: the first subscriber opens the
+      // plugin subscription, the dispatcher fans out to every live
+      // callback, the last unsubscribe closes it.
+      const existing = subscribers.get(characteristicId);
+      if (existing !== undefined) {
+        existing.add(cb);
+        return makeUnsubscribe(characteristicId, cb, id, service);
+      }
+      const set = new Set<(bytes: Uint8Array) => void>([cb]);
+      subscribers.set(characteristicId, set);
       // Registration is asynchronous where this `Transport.subscribe`
       // signature is synchronous — `startNotifications` resolves well
       // after this function must already have returned an unsubscribe
@@ -365,7 +414,8 @@ export function createCapacitorBleTransport(): Transport {
         // Never hand the reassembler a manufactured empty frame: a
         // zero-length "packet" is a decode the wire never sent.
         if (bytes === undefined) return;
-        cb(bytes);
+        // Snapshot so an unsubscribe during fan-out can't mutate mid-walk.
+        for (const fn of [...set]) fn(bytes);
       }).catch((err: unknown) => {
         // A dead subscription IS a dead link for this driver: the plugin
         // rejects on a missing service/characteristic
@@ -376,15 +426,16 @@ export function createCapacitorBleTransport(): Transport {
         // `link-failed` instead. The M-2 guard is CHECKED, not consumed:
         // a subscription failure racing a deliberate teardown stays
         // quiet, and the real disconnect callback still gets its flag.
+        // The plugin call exists only on the FIRST subscriber's path, so
+        // one failure fires one link-drop for every joined callback —
+        // which is the truth: they all share the dead subscription.
         if (callerInitiatedDisconnect) return;
         const message = err instanceof Error ? err.message : String(err);
         disconnectCb?.(
           `capacitorBle: subscription to ${characteristicId} failed: ${message}`,
         );
       });
-      return () => {
-        void BleClient.stopNotifications(id, service, characteristicId);
-      };
+      return makeUnsubscribe(characteristicId, cb, id, service);
     },
 
     async disconnect(): Promise<void> {
