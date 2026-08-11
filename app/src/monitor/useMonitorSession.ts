@@ -99,8 +99,8 @@ export type ConnectedPhase =
  *   I6 ruling): the PM5 never saw the call, so rendering "PM5 rejected"
  *   copy for it would be a lie about the machine.
  * - `"transport-missing"` — no radio at all on this platform/build.
- * - `"scan-dismissed"` — the rower closed the OS picker (or it returned
- *   nothing). Not an error in any moral sense; it renders on state 6's
+ * - `"scan-dismissed"` — the rower closed the monitor chooser (or it
+ *   returned nothing). Not an error in any moral sense; it renders on state 6's
  *   skeleton with a retry, per the C2 ruling. Second producer: the scan
  *   timeout (phone-BLE §3.3) — same retry surface, its own detail line.
  * - `"permission-denied"` — iOS declined the Bluetooth permission; iOS
@@ -210,7 +210,7 @@ export interface MonitorSession {
   frame: MonitorFrame | null;
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
-  /** Opens the OS picker (`"picking"`), then connects (`"pairing"`) and
+  /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
    *  header). */
@@ -1005,8 +1005,9 @@ export function useMonitorSession(
       return;
     }
     try {
-      // The OS picker. One result or none — the app never sees a list
-      // (spec's C2 ruling).
+      // The platform's chooser (browser chrome on web, the plugin's
+      // in-process sheet on iOS). One result or none either way — the app
+      // never sees a list (C2, as revised by phone-BLE §3).
       const found = await transport.scan();
       const device = found[0];
       if (device === undefined) {

@@ -218,7 +218,7 @@ export default function ConnectedInterstitial({
   // Try Again), so the SAME device re-pairing later fires it again.
   const programmedForDeviceRef = useRef<string | null>(null);
 
-  // Mount-once: opens the OS picker the instant this screen exists. Not
+  // Mount-once: opens the monitor chooser the instant this screen exists. Not
   // gated on `session.phase` — this hook's own initial phase is always
   // "idle", and Try Again below calls `connect()`/`program()` directly
   // rather than relying on this effect firing again.
@@ -270,9 +270,9 @@ export default function ConnectedInterstitial({
     // nothing clears it short of `cancel()`, which this screen never calls
     // on a failure) — so the link is still up and only the PROGRAM needs
     // retrying. No device name means the failure happened before a driver
-    // existed (transport-missing, bluetooth-off, scan-dismissed, or a
-    // link failure during connect() itself), so retrying means reopening
-    // the OS picker from scratch.
+    // existed (transport-missing, bluetooth-off, scan-dismissed,
+    // permission-denied, or a link failure during connect() itself), so
+    // retrying means reopening the monitor chooser from scratch.
     const attempt =
       session.deviceName !== null
         ? session.program(program, identity)
