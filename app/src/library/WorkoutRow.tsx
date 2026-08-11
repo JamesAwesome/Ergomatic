@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import TypeBadge from "../components/TypeBadge";
 import PainBar from "../components/PainBar";
+import { structureLine } from "../../domain/display/stepDetail.js";
 
 export default function WorkoutRow({
   workout,
@@ -35,6 +36,13 @@ export default function WorkoutRow({
           {durationMinutes !== null ? `${Math.round(durationMinutes)}′` : "—"}
         </span>
       </div>
+      {/* Line 2 of 3 (spec §3): structureLine takes authored steps only,
+          never baselines (Task 1, domain/display/stepDetail.ts) — it
+          renders for every row whether or not the signed-in user has
+          baselines set, unlike Today's baseline-gated piece region. */}
+      <span className="workout-row-structure">
+        {structureLine(workout.steps)}
+      </span>
       <div className="workout-row-line2">
         <TypeBadge type={workout.type} />
         {!workout.isGlobal && (

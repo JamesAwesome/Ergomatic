@@ -1078,6 +1078,23 @@ button:disabled {
   white-space: nowrap;
 }
 
+/* Line 2 of 3 (workout-step-detail spec §3): structureLine(workout.steps)
+   (domain/display/stepDetail.ts) — generated, never a named shape. Real
+   library workouts produce lines up to 101 chars (task-3 brief); ellipsis
+   is the only handling, so overflow/text-overflow/white-space together
+   are the structural contract, pinned by WorkoutRow.test.tsx's own
+   CSS-source read (jsdom can't measure a real ellipsis). */
+.workout-row-structure {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workout-row-line2 {
   display: flex;
   align-items: center;
