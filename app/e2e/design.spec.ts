@@ -409,12 +409,13 @@ test.describe("library screen", () => {
   test("zero WCAG 2A/2AA violations with an active filter token on screen", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    // TYPE left the FILTER sheet for its own chip row above the list
+    // (library-filter-unification round, Task 2, spec §2) — no sheet/Apply
+    // Filter round trip needed to get a token on screen.
     await page
-      .getByRole("dialog")
+      .locator(".type-chip-grid")
       .getByRole("button", { name: "O2", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
     await expect(
       page.locator(".filter-token", { hasText: "O2" }),
     ).toBeVisible();
@@ -430,16 +431,19 @@ test.describe("library screen", () => {
 
   // Task 4 (ui-fix round): a TYPE token fills with its own type colour, the
   // same selected-state rule DESIGN.md extends from chips to tokens — never
-  // a flat accent regardless of which type is active.
+  // a flat accent regardless of which type is active. Library-filter-
+  // unification round, Task 3: re-targeted at the chip row (TYPE's own
+  // control now, spec §2) instead of a dialog cell — the assertion's own
+  // subject (a single selected type's token fill) and its exact expected
+  // colour are UNCHANGED; this is the only guard in the suite on that
+  // colour (a client-level pin was also added in Task 2 — belt-and-braces).
   test("a TYPE token fills with its own type colour, not accent", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "FILTER ⌄" }).click();
     await page
-      .getByRole("dialog")
+      .locator(".type-chip-grid")
       .getByRole("button", { name: "O2", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
 
     const tokenBg = await page
       .locator(".filter-token", { hasText: "O2" })
@@ -456,7 +460,7 @@ test.describe("library screen", () => {
       .getByRole("dialog")
       .getByRole("button", { name: "21D+", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+    await page.getByRole("button", { name: "Apply Filter" }).click();
 
     const tokenBg = await page
       .locator(".filter-token", { hasText: "21D+" })

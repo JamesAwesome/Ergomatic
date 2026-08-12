@@ -495,6 +495,14 @@ test("plan", async ({ page }) => {
 // own "1 · AT REST" — FILTER ⌄ + a plain count, no tokens), so the CUSTOM
 // badge showcase this test always did moves to `library-filtered.png`
 // instead of being baked into the rest capture.
+//
+// Library-filter-unification round, Task 3: the flow now also selects the
+// chip row's own O2 chip between the REST and SHEET captures, so the
+// descriptor word and a TYPE token enter the visual record too (the sheet
+// no longer has any TYPE cell to demonstrate that through) — `library.png`
+// itself stays ZERO-selection, deliberately: that's the state the I-1 fix
+// (Task 2 — a 4px-vs-16px chip-row gap, a ~34px jump on toggle) has to be
+// checked against, not a selected one.
 test("library", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-library@e2e.test",
@@ -507,7 +515,10 @@ test("library", async ({ page }) => {
   // global, so without authoring one of its own first, no capture below
   // would ever show the badge at all — same reasoning as "workout-detail"'s
   // own builder-authored personal workout further down. Simplest valid
-  // form: title + pain + one row's duration.
+  // form: title + pain + one row's duration — `newForm()`'s own default
+  // TYPE (O2) and DIFFICULTY (easy) are left untouched, which matters
+  // below: the chip-row TYPE filter this flow adds has to actually match
+  // this workout, or SOURCE=CUSTOM would narrow to zero instead of one.
   const customTitle = "Screenshot Custom Workout";
   await page.goto("/library/new");
   await page.getByLabel("Title").fill(customTitle);
@@ -522,31 +533,44 @@ test("library", async ({ page }) => {
   // for a real row so the screenshot isn't just the loading state.
   await page.locator(".workout-row").first().waitFor();
 
-  // REST: FILTER ⌄ + "N WORKOUTS", no tokens.
+  // REST: FILTER ⌄ + "N WORKOUTS", no tokens, ZERO chips selected.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library.png"),
   });
 
-  // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
-  // live-counting singular-aware "Show 1 workout" primary (fix round 2,
-  // whole-branch review M2) is the point of this capture.
-  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  // Select the chip row's own O2 chip (library-filter-unification round,
+  // Task 2, spec §2 — TYPE's control now lives here, not in the sheet):
+  // applies immediately, fills the chip with its own type colour, and
+  // surfaces the descriptor word beneath it. O2 matches the custom workout
+  // authored above, so combining it with SOURCE=CUSTOM below still narrows
+  // to exactly one row rather than zero.
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "CUSTOM", exact: true })
+    .locator(".type-chip-grid")
+    .getByRole("button", { name: "O2", exact: true })
     .click();
+
+  // SHEET: open, with SOURCE=CUSTOM selected but not yet applied — the
+  // DIFFICULTY group (Task 2's own addition, first in the sheet now that
+  // TYPE has left it for the chip row) and the "Apply Filter" primary with
+  // its live-counting caption (spec §3, singular-aware: "1 WORKOUT") are
+  // the point of this capture.
+  await page.getByRole("button", { name: "FILTER ⌄" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "CUSTOM", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Show 1 workout" }),
-  ).toBeVisible();
+    dialog.getByRole("button", { name: "Apply Filter" }),
+  ).toBeEnabled();
+  await expect(dialog.getByText("1 WORKOUT", { exact: true })).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-sheet.png"),
   });
 
-  // FILTERED: applied — the SOURCE token, the narrowed count, and (the
-  // library sorts the 36 global starter workouts ahead of the one
-  // freshly-authored personal one, so filtering is what actually gets the
-  // CUSTOM badge into frame) the isolated custom row.
-  await page.getByRole("button", { name: "Show 1 workout" }).click();
+  // FILTERED: applied — the O2 chip still selected with its descriptor
+  // word visible, the TYPE token alongside the SOURCE token, the narrowed
+  // count, and (the library sorts the global starter workouts ahead of the
+  // one freshly-authored personal one, so filtering is what actually gets
+  // the CUSTOM badge into frame) the isolated custom row.
+  await dialog.getByRole("button", { name: "Apply Filter" }).click();
   await expect(page.locator(".workout-row-custom").first()).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-filtered.png"),
