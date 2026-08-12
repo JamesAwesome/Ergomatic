@@ -24,6 +24,8 @@
 8. **Notches RE-ANCHOR as intervals complete** (post-adversarial): a completed interval's notch snaps to where it actually ended; upcoming notches stay estimated and re-flow. Truth about the past, best guess about the future.
 9. **The status word stays dropped** — re-confirmed on corrected information (the packet does keep one; this is a deliberate deviation, not an oversight).
 10. **The connected surface goes FULL-BLEED in landscape**, breaking the app's max-width so the gutter reaches the housing and the content column gains the width back.
+11. **The notch is TWO-TONE** (2026-08-12): ink ahead of the fill, page-colour behind it. An ink notch over the ink fill measures 1.00:1 — invisible over exactly the completed intervals re-anchoring exists to show. §5's "monochrome" clause is amended to "no new hue"; the value flips so the notch survives the fill edge. The session-length label does NOT return; TOTAL LEFT carries the number.
+12. **THE WARM-UP IS FLAGGED, NEVER COUNTED** (2026-08-12, James's late requirement, brainstormed rather than patched) — see §5b.
 
 ## 3. The casualty list (approved)
 
@@ -81,6 +83,23 @@ The grid's `overflow: visible` (`index.css:5654-5656`) is NOT part of it: `.conn
 
 **The count still reads in words** on live's connection line (`2 OF 5 · WORK`, already rendered at no vertical cost) and in the grid header. Counting notches at 170bpm is not a reliable read.
 
+## 5b. The warm-up is flagged, never counted (ruling 12)
+
+**The defect, found in the brainstorm:** `compileProgram` pushes the warm-up into `program.intervals` like any other interval, but `ProgramInterval` is `{ kind, value, targetSplit, displaySpm, restSeconds }` — it carries NO phase type. The fact that an interval was a warm-up is destroyed at the compile boundary (`domain/monitor/program.ts`'s push site; the input `CompiledPhase.type` knows, the output does not). Every consumer inherits the loss: the caption counts it (a 4-piece workout reads `1 OF 5` during the warm-up), the notched bar folds it into a span indistinguishable from work, and the grid would number it row 1. The reviewer's own Task 4 hand-check demonstrated it accidentally: Filling Low's 8:00 warm-up plus four pieces folded to "5 intervals".
+
+**Fix at the root, not per-surface:** `ProgramInterval` carries its phase type. Every surface then READS the fact instead of re-deriving "was that a warm-up?" from phase indices — the same one-source discipline the judgement helper already has.
+
+**What the rower sees** (following the precedent the deleted ConfirmTargets set: the warm-up rendered OUTSIDE the row numbering):
+
+| Surface | Warm-up treatment |
+|---|---|
+| Interval caption | Reads `WARM-UP` with NO ordinal while the warm-up runs; work pieces read `1 OF 4`. The denominator counts WORKING intervals only — the number the rower has in their head |
+| Grid row | Present (it is real time the rower rows) but UNNUMBERED: the `#` cell reads `WU`, and numbering starts at 1 on the first work piece. It occupies one of the visible-row budget's rows |
+| Notched bar | Its span is proportionally real, but the leading chunk renders in the UNFILLED-track tone rather than the working tone, so the structure reads "this part is not the work". No new colour, no legend |
+| Live pane | NOTHING NEW: a warm-up already carries no target (`compileProgram` nulls it), so §6's no-target dash state and the judgement standing down are already correct. A warm-up must never be graded |
+
+**Scope:** amends Task 4's boundary module (the span's tone), shapes Task 5 (the `WU` row and the numbering offset), touches `program.ts` + `surfaceModel.ts`, and owes a DEVIATIONS row (the packet never addressed warm-ups on these panes at all). It lands as its own task between the bar and the grid.
+
 ## 6. The two panes
 
 **Rail in the sensor gutter (landscape), and the surface goes FULL-BLEED (ruling 10, adversarial B5).** Today `.screen` caps the surface at 480px with 20px padding (`index.css:401-407`) and landscape at 800px (`:6233`), so a 44px gutter would float ~42px inboard of the housing it exists to avoid. In landscape the connected surface therefore breaks out of the app's max-width and runs edge to edge: the gutter (`#efeade`, 1px inner rule, LIVE top / GRID bottom with the housing spacer between) sits at the physical edge, and the content column starts immediately after it with no additional inset — gaining back the ~84px the max-width was spending. This is a HUD on a mounted phone, not a document. Portrait is unchanged in width and keeps a 54px two-tab bar (LIVE · GRID). Safe-area insets still apply; the full-bleed is a max-width and padding change, never an inset override.
@@ -113,7 +132,7 @@ Same size steps, same gutter treatment (back `←` top, END bottom, either side 
 
 ## 9. Testing and acceptance
 
-- **Load-bearing pins only** (ruling 4): the §4 width invariant (both panes, both orientations, after a swipe); no-scroll on live in both orientations; hero no-clip including the `9:59.9` cap rendering `—`; grid row heights and visible-row counts (8/12); the gutter's 44px and End's 44pt target; the notch count equalling `phases.length - 1` with the single-interval fallback to quarter ticks; the judged-tint census extended to the rate hero. The existing tap-target, axe and token-palette sweeps run over both rebuilt surfaces.
+- **Load-bearing pins only** (ruling 4): the §4 width invariant (both panes, both orientations, after a swipe); no-scroll on live in both orientations; hero no-clip including the `9:59.9` cap rendering `—`; grid row heights and visible-row counts (8/12); the gutter's 44px and End's 44pt target; the notch count equalling `intervals.length - 1` (NOT `phases.length - 1`) with the single-interval fallback to quarter ticks; the judged-tint census extended to the rate hero. The existing tap-target, axe and token-palette sweeps run over both rebuilt surfaces.
 - **Retirements, expected and enumerated:** `PaneTimer.tsx` and its portrait `order` rules; the pane-A describe in `ConnectedSurface.test.tsx` (4 its); `connected-pane-timer` ×2 captures and `e2e/fixtures/connected-pane-timer.html`; the lost-banner step-downs keyed to `.connected-clock-value`; `statusWord`/`statusWordFor` and their model tests. `connected-paused` ×2 is currently captured ON pane A (`ConnectedSurface.screens.test.tsx:238-245`) and must RE-POINT to live, not retire. The plan's first task RE-DERIVES the full retirement inventory from source (the adversarial pass found this list short by roughly a dozen, including `PaneGrid.test.tsx`'s row-shape suites and the visible-row pin at `screenshots.spec.ts:2214`) — no test retires without appearing in that inventory with a reason.
 - **Every line cite in this spec was corrected against this worktree post-adversarial.** The plan's implementers re-verify before editing anyway: the original drift came from a scout reading pre-merge main, and the same trap is live for anyone citing across a merge.
 - **Capture churn is the wave's largest test cost and is expected:** every `connected-*` capture re-shoots (18 today), plus the timer captures. Each committed diff states its reason; unrelated re-encode noise is reverted.
