@@ -14,7 +14,10 @@
 import { describe, expect, it } from "vitest";
 import { compileProgram } from "../../../domain/monitor/program.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
-import type { MonitorFrame } from "../../../domain/monitor/types.js";
+import type {
+  IntervalActual,
+  MonitorFrame,
+} from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { buildDraft } from "../../session/draft";
@@ -628,5 +631,139 @@ describe("degenerate inputs", () => {
     expect(FIXTURE.phases[0]!.type).toBe("warmup");
     expect(m.targetSplit.main).toBe("—");
     expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
+  });
+});
+
+// --- The notched bar's boundaries (design spec §5) -------------------------
+
+/** A completed interval as the machine files it: `elapsedSeconds` is the
+ *  WORK bout only (`toIntervalActual` reads 0x0037/0x0038's Split/Interval
+ *  Time), which is exactly what the boundary derivation expects to be
+ *  handed. */
+function actualFor(index: number, elapsedSeconds: number): IntervalActual {
+  return {
+    index,
+    elapsedSeconds,
+    distanceMeters: 2000,
+    avgSplit: 126,
+    avgSpm: 21,
+    avgHeartRateBpm: 158,
+  };
+}
+
+describe("boundaries: where the intervals actually are", () => {
+  it("draws one notch per interval BOUNDARY, never one per phase", () => {
+    const m = model();
+    expect(m.boundaries.seconds).toHaveLength(
+      FIXTURE.program.intervals.length - 1,
+    );
+    // The defect this replaced: nine phases, nine equal dots, for the five
+    // intervals the caption counts.
+    expect(FIXTURE.phases.length).toBeGreaterThan(
+      FIXTURE.program.intervals.length,
+    );
+    expect(m.boundaries.seconds).not.toHaveLength(FIXTURE.phases.length - 1);
+  });
+
+  it("the notch count never disagrees with the interval caption", () => {
+    // `intervalLabelShort` is the caption a rower reads on the live pane's
+    // own connection line. Whatever number it says, the bar draws one fewer
+    // span boundary than that — read out of the string itself rather than
+    // hardcoded, so a change to either has to change both.
+    const m = model();
+    const ofN = Number(/ OF (\d+) /.exec(m.intervalLabelShort)![1]);
+    expect(ofN).toBe(5);
+    expect(m.boundaries.seconds).toHaveLength(ofN - 1);
+  });
+
+  it("every notch is an estimate until the machine has finished something", () => {
+    expect(model().boundaries.predictedFrom).toBe(0);
+  });
+
+  it("re-anchors a completed interval to the machine's own elapsed, and re-flows the rest", () => {
+    const estimated = model().boundaries.seconds;
+    // Interval 1 (the first 2000 m) came in 20% over its estimate.
+    const programmed = estimated[1]! - estimated[0]!; // work + its folded rest
+    const rest = FIXTURE.program.intervals[1]!.restSeconds;
+    const long = Math.round((programmed - rest) * 1.2);
+    // The warm-up ran exactly as programmed (the machine counts it down
+    // itself), so its own notch does not move; the 2000 m after it does.
+    const warmup = actualFor(0, estimated[0]!);
+    const m = model({ actuals: [warmup, actualFor(1, long)] });
+    expect(m.boundaries.seconds[0]).toBe(estimated[0]); // the warm-up holds
+    expect(m.boundaries.seconds[1]).toBe(estimated[0]! + long + rest);
+    expect(m.boundaries.seconds[1]).toBeGreaterThan(estimated[1]!);
+    // And the notches after it moved by the SAME correction, not their own.
+    const shift = m.boundaries.seconds[1]! - estimated[1]!;
+    expect(m.boundaries.seconds[2]! - estimated[2]!).toBe(shift);
+    expect(m.boundaries.seconds[3]! - estimated[3]!).toBe(shift);
+    // Boundary 1 is now a fact; 2 onward are still guesses.
+    expect(m.boundaries.predictedFrom).toBe(2);
+  });
+
+  it("re-flows again as each further interval lands", () => {
+    const warmup = actualFor(0, 480);
+    const one = model({ actuals: [warmup, actualFor(1, 600)] }).boundaries;
+    const two = model({
+      actuals: [warmup, actualFor(1, 600), actualFor(2, 400)],
+    }).boundaries;
+    expect(two.seconds[1]).toBe(one.seconds[1]);
+    expect(two.seconds[2]).toBeLessThan(one.seconds[2]!);
+    expect(two.predictedFrom).toBe(3);
+    expect(one.predictedFrom).toBe(2);
+  });
+
+  it("an actual with no interval identity re-anchors nothing", () => {
+    // `IntervalActual.index`'s own contract: null is "unknown", never
+    // interval 0. Moving the first notch to this number would be inventing
+    // a fact out of a boundary that belongs to no interval we can name.
+    const m = model({ actuals: [{ ...actualFor(0, 9999), index: null }] });
+    expect(m.boundaries.seconds).toStrictEqual(model().boundaries.seconds);
+    expect(m.boundaries.predictedFrom).toBe(0);
+  });
+
+  it("stops notching at an interval nothing can price, and everywhere after it", () => {
+    // A distance piece with no resolved split — what an effort-ref workout
+    // looks like with no baselines to estimate from (`phaseSeconds` returns
+    // null). Interval 2's boundary and interval 3's both disappear; the
+    // one before it survives.
+    const phases: EnginePhase[] = [
+      { type: "work", seconds: 240, label: "2:06.0", originalIndex: 0 },
+      { type: "rest", seconds: 60, label: "Rest", originalIndex: 0 },
+      { type: "work", seconds: 240, label: "2:06.0", originalIndex: 1 },
+      { type: "work", meters: 2000, label: "ALL OUT", originalIndex: 2 },
+      { type: "work", seconds: 240, label: "2:06.0", originalIndex: 3 },
+    ];
+    const m = buildSurfaceModel({
+      phases,
+      program: FIXTURE.program,
+      phase: "live",
+      frame: frame(),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.boundaries.seconds).toStrictEqual([300, 540]);
+  });
+
+  it("a single-interval session has no boundaries at all", () => {
+    const phases: EnginePhase[] = [
+      { type: "work", seconds: 1200, label: "2:06.0", originalIndex: 0 },
+    ];
+    const m = buildSurfaceModel({
+      phases,
+      program: FIXTURE.program,
+      phase: "live",
+      frame: frame(),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.boundaries).toStrictEqual({ seconds: [], predictedFrom: null });
+  });
+
+  it("the last boundary lands inside the session the bar is drawn against", () => {
+    // The bar scales boundaries against `totalSeconds`; a boundary past it
+    // would be a notch off the end of its own bar.
+    const m = model();
+    expect(m.boundaries.seconds.at(-1)!).toBeLessThan(m.totalSeconds);
   });
 });

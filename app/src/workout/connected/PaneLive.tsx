@@ -163,6 +163,7 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
       <TimerRuler
         totalLeftSeconds={model.totalLeftSeconds}
         totalSeconds={model.totalSeconds}
+        boundaries={model.boundaries}
       />
     </div>
   );

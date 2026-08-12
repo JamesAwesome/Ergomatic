@@ -3771,6 +3771,34 @@ button:disabled {
   display: block;
 }
 
+/* THE NOTCHED BAR (design spec §5, James's ruling 7). One hairline per
+   INTERVAL boundary, positioned by `TimerRuler` as a percentage of the
+   session's own length. `position: relative` is the only thing the bar
+   itself needed; the notches are the only positioned children, and they
+   are `div`s, not `span`s, precisely so the fill rule above (and the
+   connected surface's own repaint of it) keeps matching exactly one
+   element — the fill — with no specificity contest to settle. */
+.timer-total-bar {
+  position: relative;
+}
+
+.timer-total-notch {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 1px;
+  background: var(--ink);
+}
+
+/* Behind the fill the same hairline is cut out of it rather than laid on
+   it — see `TimerRuler.tsx`'s own comment for why an ink notch cannot be
+   seen there (the connected pane fills this bar with `--ink` itself, so
+   ink-on-ink is 1.0:1 exactly where the notches are facts). Still
+   monochrome: ink ahead of the rower, paper behind them. */
+.timer-total-notch-passed {
+  background: var(--page);
+}
+
 .timer-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -5389,7 +5417,12 @@ section:not(.news-pinned) .news-row:last-of-type {
      the pane's own right edge — so it legitimately hangs 8px outside the
      box, and a hard clip ate the `′` off `42′` (visible in the first
      screenshots run; the phone timer never noticed because `.timer-screen`
-     clips nothing). The `hidden` line stays first as the fallback for an
+     clips nothing). STILL LIVE after connected-revamp Task 4, though on
+     fewer sessions than before: the notched bar replaces that tick row
+     whenever it can draw notches, so the overhang now only happens in §5's
+     own fallbacks (a single-interval session, or more boundaries than the
+     density rule will draw) — which are exactly the sessions that keep the
+     ¼/½/¾ ruler. The `hidden` line stays first as the fallback for an
      engine without `overflow: clip`, which loses the prime mark and nothing
      else. Nothing else overflows: the layout probe measures every pane in
      both orientations. */
@@ -5400,9 +5433,13 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* ACCENT APPEARS NOWHERE ON THESE PANES (rule 1 at the top of this block).
    `TimerRuler`'s own TOTAL LEFT bar fills `--accent` on the phone timer,
-   and the component is reused here verbatim (Task 4 rebuilds its
-   internals, not this override) — on this surface the progress fill is
-   ink instead. The sibling override this comment used to describe,
+   and the component is reused here verbatim — on this surface the progress
+   fill is ink instead. Task 4 rebuilt those internals and this override
+   still reaches exactly one element: the notches it added are `div`s, not
+   `span`s (see `.timer-total-notch` above), and they are `--ink`/`--page`
+   on both surfaces, so no notch can pick up accent here and none of them
+   needs a second override of its own. The sibling override this comment
+   used to describe,
    `.connected-pane .timer-dot-past`/`-current` (the phone timer's segment
    strip painting COMPLETED segments `--accent`), retired in the same fix
    round that removed it: `IntervalSegments` is no longer reused on ANY
@@ -5575,8 +5612,11 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* --- Pane B: the metric row (revision §3: "left-in-interval · meters ·
    HR sit in one 30px baseline row under a rule ... they were three cards
    costing 120px; they now cost 44"). Three plain judged numerals, no card,
-   under the pane's 1px ink rule. The ruler follows as its own sibling
-   (`TimerRuler`, unchanged).
+   under the pane's 1px ink rule. The bar follows as its own sibling
+   (`TimerRuler`, notched by interval since connected-revamp Task 4 —
+   the ¼/½/¾ tick row it used to end with only renders now when §5's
+   fallbacks fire, which makes this block SHORTER than the figure below
+   assumes, never taller).
 
    UP NEXT NESTS INSIDE this row rather than following it (`PaneLive.tsx`'s
    own JSX comment has the full reasoning): landscape's fixed 296px budget
@@ -6583,9 +6623,11 @@ section:not(.news-pinned) .news-row:last-of-type {
      `:6211-6247`), not a genuine 112px-hero-vs-frame conflict. With the
      26px back, the ruler's quarter-tick row (marks + ¼/½/¾/N′ labels,
      which a first version of this fix round hid entirely) fits again —
-     un-hidden below, so spec §5's single-interval and >16-boundary
-     fallbacks Task 4 is about to build have somewhere to render in
-     landscape. The padding/gap trims below stay: they were never about
+     un-hidden below, and Task 4 then built the bar that usually replaces
+     it: a notched session draws its boundaries INSIDE the 6px bar and
+     costs this frame nothing, while spec §5's single-interval and
+     >16-boundary fallbacks fall back to that tick row and need the room
+     the 26px bought. The padding/gap trims below stay: they were never about
      making room for the ruler, only about the five-row stack's own
      spacing being tighter than the old two-column layout's, and they
      still match the mockup more closely than the untrimmed shapes did. */
