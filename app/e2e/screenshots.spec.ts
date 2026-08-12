@@ -2245,16 +2245,67 @@ const CONNECTED_STATES = [
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
     await showConnectedFixture(page, name);
+    if (name === "connected-pane-live") {
+      // UP NEXT'S PORTRAIT STRING (connected-revamp Task 6, design spec §6/
+      // revision §3): "REST 2:00 · WORK 2:09.0" — the SAME value landscape
+      // shows, minus the word "then" (`index.css`'s base rule for
+      // `.timer-upnext-then` is `display: none`, unscoped by any media
+      // query, so this is the default at any viewport that isn't
+      // landscape). This fixture's own program has a real rest next
+      // (`connected-pane-live.html`, "Filling Low"'s rest between work
+      // intervals), so there is something real to resolve to. Real CSS,
+      // real cascade — jsdom cannot prove this, only the string-building
+      // half (`UpNextStrip.test.tsx`). `innerText`, NOT `textContent`:
+      // `textContent` reads the raw DOM and includes the hidden "then "
+      // span's own text regardless of its `display: none` — caught
+      // directly running this file, first pass: `display` genuinely
+      // computed `none` on that span, yet `textContent` still read "then"
+      // anyway, because `textContent` is not CSS-aware. `innerText` IS
+      // (it approximates rendered text), which is what "the word is gone
+      // in portrait" actually means.
+      const value = await page.locator(".timer-upnext-value").innerText();
+      expect(value?.replace(/\s+/g, " ").trim()).toBe(
+        "REST 3:00 · WORK · 2:06.0",
+      );
+      await expect(page.locator(".timer-upnext-then")).toBeHidden();
+
+      // THE SAFETY FIX, MEASURED (James 2026-08-12): End's hit box is a
+      // small fraction of the surface's width, not the full-width bar this
+      // replaces (the old `.connected-end` was `button-l2`'s own
+      // `width: 100%`, spanning the entire 390px). A generous ceiling
+      // (150px, well under half the frame) proves "not full-bleed" without
+      // being brittle to the button's own padding/font tuning.
+      const surfaceBox = await page.locator(".connected-surface").boundingBox();
+      const endBox = await page
+        .getByRole("button", { name: "End session" })
+        .boundingBox();
+      expect(surfaceBox).not.toBeNull();
+      expect(endBox).not.toBeNull();
+      expect(endBox!.width).toBeLessThan(150);
+      expect(endBox!.width).toBeLessThan(surfaceBox!.width * 0.4);
+      // OUT OF THE SWIPE CORRIDOR: pinned to the surface's TOP edge, not
+      // hovering mid-screen where a rower's thumb actually crosses when
+      // swiping panes.
+      expect(endBox!.y).toBeLessThan(60);
+    }
     if (name === "connected-pane-grid-long") {
       // PORTRAIT'S OWN DENSITY CLAIM (connected-revamp Task 5, JAMES RULING
       // 2026-08-12, fix round: "take all 14 rows" — the revision packet's
       // 12 was written before anyone measured a real build, and no code
       // should exist whose only job is to hide capacity a 40px-fixed-height
-      // row genuinely has room for). This task's first attempt forced 12
-      // with a deliberate `padding-top` spacer on `.connected-grid-rows`;
-      // that spacer is gone, and this asserts the HONEST number the real
-      // budget holds instead of a number chosen in advance. Measured the
-      // same way the landscape block below measures its own 7 — a
+      // row genuinely has room for). REVISED, connected-revamp Task 6: the
+      // safety fix's own always-on header (End, 44px — the tap-target
+      // floor, non-negotiable) now sits above the pane body on every
+      // session, and this pane's own internal gaps were trimmed as far as
+      // they can go giving space back (`.connected-pane-grid`,
+      // `.connected-grid-headline`, `.connected-grid-head`, all in
+      // index.css) — 13 is what the real, POST-HEADER budget holds with a
+      // genuine ~30px margin; 14 measured exactly zero-slack in this same
+      // browser (560px needed, 560px available) and read 13 in the docker
+      // build the very next run purely from sub-pixel font-rendering
+      // variance between environments — too fragile to pin. Needs James's
+      // own confirmation, same as Task 5's original ruling did. Measured
+      // the same way the landscape block below measures its own 7 — a
       // bounding-box containment count in the real browser, not a jsdom
       // guess, because the header, the totals line, the column head, the
       // scroller and the caption all have to land inside 844px of real
@@ -2267,7 +2318,7 @@ for (const name of CONNECTED_STATES) {
           return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
         }).length;
       });
-      expect(visible).toBe(14);
+      expect(visible).toBe(13);
     }
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, `${name}.png`),
@@ -2280,6 +2331,51 @@ for (const name of CONNECTED_STATES) {
     // quoted in.
     await page.setViewportSize({ width: 844, height: 390 });
     await showConnectedFixture(page, name);
+    if (name === "connected-pane-live") {
+      // UP NEXT'S LANDSCAPE STRING: "REST 2:00 · then WORK 2:09.0" —
+      // revision §3's own example, byte-for-byte (this fixture's numbers
+      // differ, the SHAPE doesn't). Same value as the portrait case above,
+      // plus the word "then" — proving it is one builder, not two, the
+      // same way `UpNextStrip.test.tsx` proves it structurally. `innerText`
+      // for the same reason the portrait block above uses it (rendering-
+      // aware, not raw-DOM) — nothing is hidden here, so it reads the same
+      // as `textContent` would, but consistency beats relying on that.
+      const value = await page.locator(".timer-upnext-value").innerText();
+      expect(value?.replace(/\s+/g, " ").trim()).toBe(
+        "REST 3:00 · then WORK · 2:06.0",
+      );
+      await expect(page.locator(".timer-upnext-then")).toBeVisible();
+      // NOT VISUALLY CLIPPED — the bug `innerText` above cannot catch
+      // (found by eye in this task's own first landscape screenshot:
+      // `.timer-upnext-value`'s `text-overflow: ellipsis` silently
+      // truncated this exact string to "REST 3:00 …", and `innerText`
+      // still read the full un-clipped string throughout, because
+      // ellipsis clips PAINT, not the DOM `innerText` walks). `scrollWidth
+      // > clientWidth` is what visual truncation actually looks like from
+      // script; real root cause was `.connected-metric-cell`'s own
+      // `flex: 1` claiming the same share of the row as this value
+      // (index.css's own comment on the fix has the measurement).
+      const overflow = await page
+        .locator(".timer-upnext-value")
+        .evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        }));
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+
+      // THE SAFETY FIX, MEASURED — landscape (844×390). Same claims as the
+      // portrait block above: not full-width, and pinned to the top edge
+      // rather than the vertical middle a swipe crosses.
+      const surfaceBox = await page.locator(".connected-surface").boundingBox();
+      const endBox = await page
+        .getByRole("button", { name: "End session" })
+        .boundingBox();
+      expect(surfaceBox).not.toBeNull();
+      expect(endBox).not.toBeNull();
+      expect(endBox!.width).toBeLessThan(150);
+      expect(endBox!.width).toBeLessThan(surfaceBox!.width * 0.4);
+      expect(endBox!.y).toBeLessThan(60);
+    }
     if (name === "connected-log-sheet") {
       // THE FOUR `.connected-surface .filter-sheet*` RULES, PINNED (task-7
       // review, L2b). They are the only thing standing between the log list
@@ -2310,14 +2406,20 @@ for (const name of CONNECTED_STATES) {
       }
     }
     if (name === "connected-pane-grid-long") {
-      // THE REAL TAB ORDER, measured in the browser (task-7 review, M3).
-      // Chromium makes a scroll container keyboard-focusable when it has no
-      // focusable children, so this pane's scroller was ALREADY the
-      // surface's first tab stop before it carried a `tabindex` — as an
-      // unnamed `<div>`, invisible to a jsdom pin. It is declared now, so
-      // the two engines agree and iOS Safari (which supplies no implicit
-      // focus) behaves the same. This is also the reading order: the grid
-      // sits above End on screen.
+      // THE REAL TAB ORDER, measured in the browser (task-7 review, M3;
+      // REWRITTEN A SECOND TIME by connected-revamp Task 6, design spec
+      // §9's own "Tab order changes twice"). Chromium makes a scroll
+      // container keyboard-focusable when it has no focusable children, so
+      // this pane's scroller was ALREADY the surface's first tab stop
+      // before it carried a `tabindex` — as an unnamed `<div>`, invisible
+      // to a jsdom pin. It is declared now, so the two engines agree and
+      // iOS Safari (which supplies no implicit focus) behaves the same.
+      // Task 6 moves End itself out of the shell's footer (after the pane
+      // body in DOM order) into its header (before the pane body, the
+      // safety fix's own placement — `ConnectedSurface.tsx`), which
+      // reorders the first two stops: End now comes BEFORE the grid, not
+      // after it. This is also the reading order in both orientations —
+      // End sits above the grid on screen now.
       const tabOrder = await page.evaluate(() => {
         const stops: string[] = [];
         const focusables = Array.from(
@@ -2333,14 +2435,13 @@ for (const name of CONNECTED_STATES) {
         }
         return stops;
       });
-      // connected-revamp Task 2 (first of two rewrites this pin takes,
-      // design spec §9: "Tab order changes twice"): "Timer pane" drops out
-      // with the rail's third target, and the arity itself shrinks from 5
-      // to 4 — a `slice(0, 5)` left in place would silently stop proving
-      // anything about the fifth stop once there is no fifth stop to lose.
+      // connected-revamp Task 2's own comment on this pin's first rewrite
+      // ("Timer pane" drops out with the rail's third target, arity 5→4)
+      // still applies to the arity; the ORDER within that arity is Task
+      // 6's own second rewrite.
       expect(tabOrder.slice(0, 4)).toStrictEqual([
-        "Interval grid",
         "End session",
+        "Interval grid",
         "Live pane",
         "Grid pane",
       ]);

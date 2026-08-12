@@ -3975,18 +3975,24 @@ button:disabled {
   text-align: right;
 }
 
-/* Landscape-only second line (handoff §6: "UP NEXT panel with a 'then …'
-   second line") — hidden in portrait, where the handoff's own static markup
-   never grows one. --ink-3 (NOT --ink-4) on --surface-sunken, same already-
-   verified 6.30:1 pair `.timer-upnext-label` uses on this same background —
-   --ink-4 measures only 4.48:1 here (this file's own Live Timer comment
-   block), so reusing --ink-3 rather than introducing an untested pairing. */
+/* The word "then", landscape-only (handoff §6: "UP NEXT panel with a
+   'then …' second line" — CONNECTED-REVAMP TASK 6 changed the MECHANISM,
+   not the orientation rule: this used to be its own stacked block line;
+   `UpNextStrip.tsx` now nests it INSIDE `.timer-upnext-value`'s own text
+   run, so `display` toggles between `none` (portrait, default here) and
+   `inline` (landscape, the leaked `@media` rule below) rather than `none`/
+   `block` — one line either way, the word simply absent in portrait. Still
+   hidden in portrait, where the design's own short form
+   (`REST 2:00 · WORK 2:09.0`) never carries it. --ink-3 (NOT --ink-4) on
+   --surface-sunken, same already-verified 6.30:1 pair `.timer-upnext-label`
+   uses on this same background — --ink-4 measures only 4.48:1 here (this
+   file's own Live Timer comment block), so reusing --ink-3 rather than
+   introducing an untested pairing. */
 .timer-upnext-then {
   display: none;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-3);
-  text-align: right;
 }
 
 .timer-total {
@@ -4240,8 +4246,18 @@ button:disabled {
     font-size: 128px;
   }
 
+  /* `inline`, not `block` (connected-revamp Task 6): the word "then" now
+     lives INSIDE `.timer-upnext-value`'s own flow (`UpNextStrip.tsx`'s own
+     comment), not as a second stacked line — a block-display span nested
+     inside another inline run would still force its own line, which is
+     exactly the two-line shape the design retires here (`REST 2:00 · then
+     WORK 2:09.0`, one line, per revision §3/§5). Still unscoped (this
+     block's own header names the leak into the connected panes as Task
+     7's to fix, not this task's); `.connected-pane-live`'s own override
+     below restyles rather than re-hiding it now that showing it is what
+     both orientations want. */
   .timer-upnext-then {
-    display: block;
+    display: inline;
   }
 }
 
@@ -5412,7 +5428,19 @@ section:not(.news-pinned) .news-row:last-of-type {
 .connected-surface {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* ZERO, not 10px (connected-revamp Task 6) — same reasoning as the
+     landscape grid's own `row-gap: 0` (that rule carries the full
+     explanation): a uniform flex `gap` charges every boundary the same
+     10px whether both neighbours are real content or one is an absent
+     conditional row, and this task adds an ALWAYS-PRESENT header without
+     an equally-always-present row to pair it with for free. Explicit
+     `margin-bottom` on the children that actually render (below) is what
+     the header, the pane body and the footer pay unconditionally — the
+     lost banner's own 10px only when it's actually on screen — reclaiming
+     the pane's row-count budget (Task 5's own 14-row portrait/7-row
+     landscape rulings), which a flat `gap` would otherwise spend on a
+     boundary with nothing to separate most sessions. */
+  gap: 0;
   height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
       26px
@@ -5446,6 +5474,10 @@ section:not(.news-pinned) .news-row:last-of-type {
   min-height: 0;
   min-width: 0;
   display: flex;
+  /* Portrait's own share of `.connected-surface`'s margin-based gap
+     scheme (see that rule's comment) — always paid, matching the header's
+     own. */
+  margin-bottom: 4px;
 }
 
 /* Panes A and B "are two fixed columns; nothing in them can grow"
@@ -5774,7 +5806,11 @@ section:not(.news-pinned) .news-row:last-of-type {
       here needs more. */
 .connected-pane-grid {
   justify-content: flex-start;
-  gap: 8px;
+  /* 4px, not 8 (connected-revamp Task 6): trimmed to give the scroller
+     back some of what the new always-on header above the pane body took
+     from `.connected-surface-body`'s own available height — see
+     `.connected-surface`'s margin-based-gap comment for the mechanism. */
+  gap: 4px;
   /* The rows own the vertical overflow. `.connected-pane`'s own
      `overflow: clip` would cut the scroller's own scrollbar off. */
   overflow: visible;
@@ -5792,7 +5828,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* 0, not 6 (connected-revamp Task 6): trimmed to give the portrait
+     scroller back what the new always-on header above the pane body took
+     — see `.connected-surface`'s margin-based-gap comment. The two lines
+     it separates (device row, totals row) still read as two distinct
+     lines without a gap between them; nothing here needs the breathing
+     room a stacked flex column usually wants. */
+  gap: 0;
 }
 
 .connected-grid-totals {
@@ -5831,7 +5873,11 @@ section:not(.news-pinned) .news-row:last-of-type {
   align-items: baseline;
   gap: 8px;
   border-bottom: 2px solid var(--ink);
-  padding-bottom: 5px;
+  /* 2px, not 5 (connected-revamp Task 6): trimmed for the same reason as
+     `.connected-grid-headline`'s own gap just above — the border itself
+     still separates the column heads from the rows without the extra
+     padding. */
+  padding-bottom: 2px;
 }
 
 .connected-grid-head > span {
@@ -6110,6 +6156,10 @@ section:not(.news-pinned) .news-row:last-of-type {
   background: var(--surface-sunken);
   border-top: 2px solid var(--ink);
   padding: 12px;
+  /* Portrait's own share of `.connected-surface`'s margin-based gap
+     scheme (see that rule's comment) — paid only when this banner is
+     actually on screen. */
+  margin-bottom: 10px;
 }
 
 .connected-lost-title {
@@ -6159,23 +6209,49 @@ section:not(.news-pinned) .news-row:last-of-type {
   gap: 10px;
 }
 
-/* --- The footer: End, or the paused block in End's exact place ------ */
+/* --- The header: End, small and out of the swipe corridor (connected-
+   revamp Task 6, revision §2) ------------------------------------------ */
 
-/* The 52px lives HERE, on the slot, not on either occupant — which is
-   what makes handoff §4's "Same height, so nothing above shifts"
-   structural rather than two numbers maintained by hand. */
-.connected-surface-footer {
+/* A thin, ALWAYS-PRESENT strip above the pane body — constant height
+   whichever of End's two labels is showing (the button's own `min-height`
+   is what's fixed; the text only changes its WIDTH) — so the pane body's
+   top edge never moves. `justify-content: flex-end` puts the small control
+   at the row's own right edge without stretching it: the row itself may
+   span the surface, but nothing forces the BUTTON to. */
+.connected-header {
   flex: none;
-  height: 52px;
   display: flex;
+  justify-content: flex-end;
+  padding: 4px 12px 0;
+  margin-bottom: 4px;
 }
 
+/* THE SAFETY FIX ITSELF (James 2026-08-12): a 44pt OUTLINED pill (revision
+   §2: "mono 11px/600, `#b5341f` text and 1px border, radius 2, padding
+   6/10"), not a full-width bar — `width` is deliberately absent here
+   (every ancestor up to `.connected-header` is a flex row, so this button
+   sizes to its own padded content, never to `100%`). This is the entire
+   mechanism behind "the hit box must not span the surface width": there is
+   no rule anywhere that stretches it, so it never can. */
 .connected-end {
-  min-height: 52px;
-  height: 52px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 6px 10px;
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  cursor: pointer;
 }
 
-/* Armed reads as INK, never accent: accent appears nowhere on this
+/* Armed reads as INK, never accent: accent appears nowhere else on this
    surface (rule 1 at the top of this block), and L3 already establishes
    solid ink as the "this press acts" fill that cannot be mistaken for a
    screen's L1. */
@@ -6188,6 +6264,25 @@ section:not(.news-pinned) .news-row:last-of-type {
 .connected-end-armed:hover {
   background: var(--ink-2);
   border-color: var(--ink-2);
+}
+
+/* --- The footer: the paused block, alone in End's old slot ---------- */
+
+/* The 52px lives HERE, on the slot, not on the one occupant it now has —
+   which is what makes handoff §4's "Same height, so nothing above shifts"
+   structural rather than a number maintained by hand. Reserved
+   UNCONDITIONALLY (empty while rowing, `PausedBlock` while paused): the
+   wrapper's own contribution to the pane body's available height is
+   therefore identical in both states, exactly as it was before End moved
+   out of it. */
+.connected-surface-footer {
+  flex: none;
+  height: 52px;
+  display: flex;
+  /* Portrait's own share of `.connected-surface`'s margin-based gap
+     scheme (see that rule's comment) — the gap before the pager,
+     unconditional like the header's own. */
+  margin-bottom: 4px;
 }
 
 /* INVERTED, deliberately (2026-08-08, hardware walk 2: the operator missed
@@ -6433,12 +6528,39 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-surface {
     display: grid;
     grid-template-columns: calc(44px + env(safe-area-inset-left, 0px)) 1fr;
-    grid-template-rows: auto 1fr auto;
+    /* A fourth track, connected-revamp Task 6: the header (End) is now
+       always on screen, above the lost banner's own row. `auto` sizes it
+       to the button's own `min-height: 44px` plus the header's own top
+       padding — a fixed, state-independent height (the header renders
+       unconditionally), so this new row can never itself be the thing
+       that shifts the body below it. */
+    grid-template-rows: auto auto 1fr auto;
     /* No column-gap: the gutter's own 1px inner rule (below) is the only
        separation between it and the content column — "content starts
-       immediately after the gutter, no extra inset" (revision §2). */
-    column-gap: 0;
-    row-gap: 8px;
+       immediately after the gutter, no extra inset" (revision §2).
+
+       ROW-GAP IS ZERO HERE, DELIBERATELY (connected-revamp Task 6): a
+       uniform `row-gap` charges EVERY row boundary the same 8px whether or
+       not that boundary has two real rows either side of it — the ORIGINAL
+       3-row template (`auto 1fr auto`) was already silently spending 8px
+       between the lost-banner's row and the body even on the overwhelming
+       majority of sessions that never go stale, because CSS grid's
+       row-gap lives between TRACKS, not between rendered content. Adding a
+       fourth track for the header would have charged a THIRD such gap
+       unconditionally — measured as a real overlap regression (
+       `.connected-hero-split .connected-hero-label` over `.connected-line`,
+       844×390) before this fix. Explicit `margin-bottom` on the elements
+       that actually render (below) charges each gap only when there is
+       something on both sides of it to separate — the header (0) and the
+       pane body (2px) pay their own small, unconditional share; the lost
+       banner's 8px only when it's actually showing. This alone was not
+       enough: reclaiming the wasted gap and the header's own trimmed
+       padding still left the grid pane 12px short of Task 5's own 7-row
+       ruling (measured directly, this task's own report has the numbers)
+       — the remaining px came from trimming that pane's OWN internal gaps
+       (`.connected-pane-grid`, `.connected-grid-headline`,
+       `.connected-grid-head`, all below), not from this rule. */
+    row-gap: 0;
     max-width: none;
     margin: 0;
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
@@ -6465,11 +6587,34 @@ section:not(.news-pinned) .news-row:last-of-type {
      is the content column every other row of this grid already uses. */
   .connected-lost {
     grid-column: 2;
-    grid-row: 1;
+    /* Row 2, not 1 (connected-revamp Task 6): the header's own new row
+       took 1. `margin-bottom` (not `row-gap`, see `.connected-surface`'s
+       own comment) — this row's gap only exists when this element does. */
+    grid-row: 2;
     flex-direction: row;
     align-items: baseline;
     gap: 12px;
     padding: 6px 12px;
+    margin-bottom: 8px;
+  }
+
+  /* THE HEADER'S OWN ROW (connected-revamp Task 6). `justify-content:
+     flex-end` (the base rule, unchanged here) already keeps the button off
+     the gutter edge; landscape only needs the grid placement, a trimmed
+     top padding and its own `margin-bottom` (see `.connected-surface`'s
+     comment on why this replaced `row-gap`) — this frame is 454px shorter
+     than portrait and every row here is measured, same discipline as
+     `.connected-pane .timer-upnext`'s own trim just below. */
+  .connected-header {
+    grid-column: 2;
+    grid-row: 1;
+    /* Measured, not guessed (task-6 report's own landscape table): the
+       44px button is the floor the tap-target rule sets, and this frame
+       has no spare 8px to also spend on this row's own gap the way the
+       others get — 2px keeps a visible separation without reopening the
+       overlap this margin-based reclaim exists to close. */
+    padding: 0 12px 0;
+    margin-bottom: 0;
   }
 
   /* The ended hand-off frame is NOT full-bleed (it is not a pane and has no
@@ -6489,13 +6634,31 @@ section:not(.news-pinned) .news-row:last-of-type {
 
   .connected-surface-body {
     grid-column: 2;
-    grid-row: 2;
+    /* Row 3, not 2 (connected-revamp Task 6): the header's new row pushed
+       every row after it down by one. `margin-bottom` replaces this row's
+       own share of the old `row-gap` (see `.connected-surface`'s comment)
+       — always paid, like before this task, but trimmed from 8 to 2:
+       the header's own 44px floor (the tap-target rule, non-negotiable)
+       left this frame with nothing else to give, and every other gap on
+       this pane has already been trimmed once by an earlier task's own
+       budget fight (`.connected-pane-live`'s 4px, not the base rule's
+       12px). Measured: closes the `.connected-hero-label`/`.connected-
+       line` overlap this reclaim exists to fix (a sub-pixel gap survived
+       an earlier, less aggressive trim — this frame has no slack left to
+       round in either direction). */
+    grid-row: 3;
     min-height: 0;
+    margin-bottom: 2px;
   }
 
   .connected-surface-footer {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 4;
+    /* Cancels the base (portrait) rule's own margin-based gap (see
+       `.connected-surface`'s comment) — landscape's pager is a separate
+       GRID COLUMN, not a row below the footer, so there is no boundary
+       here for a margin to separate. */
+    margin-bottom: 0;
   }
 
   /* THE GUTTER (revision §2/§6): a 44px column at the PHYSICAL edge — column
@@ -6758,6 +6921,22 @@ section:not(.news-pinned) .news-row:last-of-type {
 
   .connected-pane-live .connected-metric-cell {
     gap: 1px;
+    /* `flex: none` — connected-revamp Task 6, a real bug caught by eye
+       against the FIRST landscape screenshot of this task's own UP NEXT
+       string, not by any gate (`.timer-upnext-value`'s CSS ellipsis
+       swallowed the overflow silently, and `innerText` in the e2e check
+       still reads the full un-truncated string regardless of visual
+       clipping — a blind spot in that pin, noted so it isn't trusted to
+       catch this class of bug again). The base rule's `flex: 1` makes
+       every `.connected-metric-cell` an EQUAL-width sibling of
+       `.timer-upnext` in this row — appropriate for the three-cell
+       PORTRAIT layout, wrong here: it was giving three short numerals
+       (`1200`, `800`, `164`) the same 182px UP NEXT was getting, instead
+       of sizing to their own short content and leaving the rest for the
+       one field whose length actually varies. `flex: none` plus each
+       cell's own content width is what actually frees the room revision
+       §3's "REST 2:00 · then WORK 2:09.0" example assumed UP NEXT had. */
+    flex: none;
   }
 
   .connected-pane-live .connected-hero-target {
@@ -6789,11 +6968,13 @@ section:not(.news-pinned) .news-row:last-of-type {
      specificity here (three classes) beats both `.timer-upnext`'s own base
      rule and `.connected-pane .timer-upnext`'s already-reduced padding
      above, deliberately: this is the one place on the surface UP NEXT
-     is NOT a boxed component. The "then" line stays hidden in this
-     position (`.timer-upnext-then`'s own landscape `display: block` is the
-     phone timer's, leaking in per that rule's own header comment) — one
-     baseline row has no second line to put it on; `model.upNext`'s own
-     string already carries what today reads without it. */
+     is NOT a boxed component. CONNECTED-REVAMP TASK 6: the "then" word
+     used to be suppressed entirely here (this rule set `.timer-upnext-then`
+     back to `display: none` after the base landscape leak turned it on) —
+     revision §3's own string, `REST 2:00 · then WORK 2:09.0`, wants it
+     back, on the SAME line as everything else (`UpNextStrip.tsx`'s own
+     comment on why one value span carries it); see that override just
+     below. */
   .connected-pane-live .connected-metric-row .timer-upnext {
     flex: 1;
     min-width: 0;
@@ -6814,17 +6995,39 @@ section:not(.news-pinned) .news-row:last-of-type {
      margin the row never actually needed — fix round 1 (task-3-review.md,
      Divergence 1): the metric row's own 30px numerals already set its
      height, so a 20px UP NEXT value fits under that ceiling with room to
-     spare, not budget-forced like the trims above. */
-  .connected-pane-live .connected-metric-row .timer-upnext-label {
-    font-size: var(--size-label);
-  }
-
+     spare, not budget-forced like the trims above. `white-space: nowrap`
+     matches the mockup's own `white-space:nowrap` on this exact span; the
+     clip/ellipsis pair is a SAFETY NET, not the fix for a real bug this
+     task caught by eye in its own first landscape screenshot: the combined
+     "REST 2:00 · then WORK 2:09.0" string (longer than the bare kind word
+     this row used to carry) was rendering as "REST 3:00 …", silently
+     clipped, because `.connected-metric-cell`'s own `flex: 1` (the base,
+     portrait-authored rule) made each 4-digit metric cell claim the SAME
+     182px share of the row as this value — three short numerals sized
+     like the one field whose length actually varies. The real fix is
+     `.connected-metric-cell`'s own `flex: none` override just above,
+     which gives the metric cells only their content's width and leaves
+     the rest for `flex: 1; min-width: 0;` here to claim; ellipsis stays
+     as the fallback for whatever real content still doesn't fit, not the
+     mechanism this task relies on. */
   .connected-pane-live .connected-metric-row .timer-upnext-value {
     font-size: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
+  /* The word "then" now RENDERS here (Task 6) instead of being hidden —
+     inherited size/colour, not the phone timer's own dimmer 11px `--ink-3`
+     treatment, because the mockup draws the whole combined string at ONE
+     weight (`Ergomatic connected mode.dc.html`'s Live landscape frame: a
+     single 20px span, "REST 2:00 · then WORK 2:09.0", no lighter sub-run
+     inside it). */
   .connected-pane-live .connected-metric-row .timer-upnext-then {
-    display: none;
+    display: inline;
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
   }
 
   /* --- Pane C in landscape: fixed 32px rows, seven columns, one scroll
@@ -6837,11 +7040,18 @@ section:not(.news-pinned) .news-row:last-of-type {
      (this is the one pane that scrolls, DEVIATIONS row 2). */
   .connected-pane-grid {
     flex-direction: column;
-    /* 4px, not the portrait 8: the header line, the column head, the
-       scroller and the caption share a 232px-measured scroller budget that
-       has no width to spare (JAMES RULING 2026-08-12: 7 rows at 32px fit
-       232px with 8px left over for everything else this gap eats into). */
-    gap: 4px;
+    /* 0, not the portrait 8 nor Task 5's original 4 (connected-revamp
+       Task 6): the header line, the column head, the scroller and the
+       caption share a scroller budget that lost real height to the new
+       always-on header above the pane body — see `.connected-surface`'s
+       own margin-based-gap comment for the mechanism. James's original
+       ruling (2026-08-12: "7 rows at 32px fit 232px with 8px left over")
+       measured BEFORE this task's header existed; this pane's own 3
+       internal gaps had no more to give once trimmed to zero — the
+       column head's own `border-bottom`/`padding-bottom` (`:5824-5825`)
+       still separates it visually from the headline above it, so the
+       lost gap does not read as elements touching. */
+    gap: 0;
   }
 
   /* THE HEADLINE FOLDS TO ONE LINE. `display: contents` on both of its

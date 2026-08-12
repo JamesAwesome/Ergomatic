@@ -319,31 +319,66 @@ export default function ConnectedSurface({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      {/* THE SAFETY FIX (connected-revamp Task 6, James 2026-08-12 reading
+          the captures): the old full-width footer button "could easily be
+          touched accidentally if somebody tries to change views mid-row" —
+          every point along the bottom edge WAS End's hit box, so a short
+          stumble that never travels the 60px swipe threshold landed as a
+          tap on it. End now lives in this small header instead: a 44pt
+          outlined control (revision §2) that does not span the surface's
+          width and sits at the TOP edge, clear of the vertical middle a
+          real swipe gesture crosses. Rendered UNCONDITIONALLY — paused or
+          not — so its own row never changes height and nothing below it
+          (the pane body) ever shifts; the paused block gets its own,
+          additional END/AGAIN affordance in the footer slot End vacated
+          (below), off the SAME armed state, but this header control keeps
+          working too. Staging is unchanged: first tap arms `TAP AGAIN` for
+          `ARM_TIMEOUT_MS`, exactly as before — the size and position
+          changed, not the confirm. */}
+      {/* THE SAFETY FIX (connected-revamp Task 6, James 2026-08-12 reading
+          the captures): the old full-width footer button "could easily be
+          touched accidentally if somebody tries to change views mid-row" —
+          every point along the bottom edge WAS End's hit box, so a short
+          stumble that never travels the 60px swipe threshold landed as a
+          tap on it. End now lives in this small header instead: a 44pt
+          outlined control (revision §2) that does not span the surface's
+          width and sits at the TOP edge, clear of the vertical middle a
+          real swipe gesture crosses. Rendered UNCONDITIONALLY — paused or
+          not — so its own row never changes height and nothing below it
+          (the pane body) ever shifts; the paused block gets its own,
+          additional END/AGAIN affordance in the footer slot End vacated
+          (below), off the SAME armed state, but this header control keeps
+          working too. Staging is unchanged: first tap arms `TAP AGAIN` for
+          `ARM_TIMEOUT_MS`, exactly as before — the size and position
+          changed, not the confirm. */}
+      <div className="connected-header">
+        <button
+          type="button"
+          className={
+            end.armed ? "connected-end connected-end-armed" : "connected-end"
+          }
+          onClick={handleEnd}
+          onBlur={end.disarm}
+        >
+          {end.armed ? "Tap again to end" : "End session"}
+        </button>
+      </div>
       {model.stale && <LostBanner />}
       <div className="connected-surface-body">
         {pane === "live" && <PaneLive model={model} />}
         {pane === "grid" && <PaneGrid model={model} />}
       </div>
-      {/* The paused block and End occupy the SAME 52px slot (handoff §4:
-          "Same height, so nothing above shifts"). The height lives on this
-          wrapper, not on either child, which is what makes the swap
-          structurally exact rather than two numbers kept equal by hand. */}
+      {/* End's old footer slot survives (handoff §4: "Same height, so
+          nothing above shifts") — the paused block now occupies it alone.
+          The wrapper still reserves the fixed 52px UNCONDITIONALLY (empty
+          while rowing), which is what keeps the pane body's own available
+          height — and therefore the metric row's position inside it —
+          byte-identical to before Task 6 moved End out: the footer's
+          contribution to that arithmetic never changed, only which single
+          control used to live in it. */}
       <div className="connected-surface-footer">
-        {model.status === "paused" ? (
+        {model.status === "paused" && (
           <PausedBlock armed={end.armed} onEnd={handleEnd} />
-        ) : (
-          <button
-            type="button"
-            className={
-              end.armed
-                ? "button-l2 connected-end connected-end-armed"
-                : "button-l2 connected-end"
-            }
-            onClick={handleEnd}
-            onBlur={end.disarm}
-          >
-            {end.armed ? "Tap again to end" : "End session"}
-          </button>
         )}
       </div>
       <PagerRail active={pane} onSelect={handleRailPress} />
@@ -380,13 +415,17 @@ function LostBanner() {
   );
 }
 
-/** Handoff §4's paused treatment. The block takes End's 52px EXACTLY — the
- *  phone owns no Pause, so there is no transport row to hide, and nothing
- *  above may shift when the rower stops pulling. `END` stays inside it,
- *  64×44 and accent-outlined, so ending is still possible while stopped,
- *  and it is "staged as everywhere else" (§5's own caption) off the SAME
- *  arm state the full-width End uses — a rower who armed End and then
- *  stopped pulling finds it still armed, not silently reset. */
+/** Handoff §4's paused treatment. CONNECTED-REVAMP TASK 6: this used to
+ *  take End's OWN 52px slot (the two were mutually exclusive occupants of
+ *  one footer); End now lives in the header instead (always on screen,
+ *  never hidden by pause), and this block occupies that same 52px footer
+ *  slot ALONE — the phone owns no Pause, so there is no transport row to
+ *  hide, and nothing above may shift when the rower stops pulling. `END`
+ *  stays inside it, 64×44 and accent-outlined, so ending is still possible
+ *  without reaching for the header, and it is "staged as everywhere else"
+ *  (§5's own caption) off the SAME arm state the header's End control uses
+ *  — a rower who armed either one and then stopped (or started) pulling
+ *  finds the other in the same armed state, not silently reset. */
 function PausedBlock({ armed, onEnd }: { armed: boolean; onEnd: () => void }) {
   return (
     <div className="connected-paused">

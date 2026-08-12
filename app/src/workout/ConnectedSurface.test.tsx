@@ -665,51 +665,61 @@ describe("index.css: both connected screens hide the shell's tab bar (the post-:
 // ---------------------------------------------------------------------------
 
 describe("paused (handoff §4)", () => {
-  it("replaces End with the paused block", () => {
-    // The paused block itself is the shell's, so it shows on every pane —
+  // Connected-revamp Task 6: End moved out of the footer into the header
+  // (revision §2), where it now renders UNCONDITIONALLY — paused or not.
+  // The paused block gets its OWN END/AGAIN affordance in the footer slot
+  // End vacated; the two are not mutually exclusive any more, they are two
+  // independent controls sharing the same armed state.
+  it("End's header control survives paused, and the paused block adds its own END/AGAIN", () => {
     // `statusWord`'s own "says PAUSED" half of this test retired with pane
     // A (`PaneTimer.tsx`, connected-revamp Task 2): it was the field's only
     // renderer, and no surviving pane shows a status word at all.
     renderSurface({ phase: "paused" });
     expect(screen.getByText("PAUSED · PULL TO RESUME")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "End session" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "End session" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "END" })).toBeInTheDocument();
   });
 
-  it("NOTHING ABOVE SHIFTS: the swap happens inside one fixed-height slot", () => {
+  it("NOTHING ABOVE SHIFTS: the footer slot is reserved whether or not the paused block fills it", () => {
+    // The header (End's new home) is a THIRD invariant alongside the
+    // footer: it renders the same single child regardless of state, so its
+    // own fixed height can never be what moves the pane body underneath
+    // it.
     const live = renderSurface();
+    const liveHeader = document.querySelector(".connected-header")!;
+    expect(liveHeader.children).toHaveLength(1);
     const liveFooter = document.querySelector(".connected-surface-footer")!;
-    expect(liveFooter.children).toHaveLength(1);
-    const liveBodyTag = document.querySelector(
-      ".connected-surface-body",
-    )!.previousElementSibling;
+    // Reserved, but empty while rowing — End no longer lives here.
+    expect(liveFooter.children).toHaveLength(0);
     live.unmount();
 
     renderSurface({ phase: "paused" });
+    const pausedHeader = document.querySelector(".connected-header")!;
+    expect(pausedHeader.children).toHaveLength(1);
     const pausedFooter = document.querySelector(".connected-surface-footer")!;
-    // One child for one child, in the same slot — the footer itself is what
-    // owns the height, so neither occupant can change it.
+    // One child now — the paused block alone in the slot End vacated.
     expect(pausedFooter.children).toHaveLength(1);
-    expect(
-      document.querySelector(".connected-surface-body")!.previousElementSibling,
-    ).toStrictEqual(liveBodyTag);
-    // And the pager still follows the footer, in that order.
+    // The footer sits in the SAME place in the tree either way — directly
+    // after the pane body, directly before the pager — so its own
+    // reserved 52px (pinned by the CSS test below) is the only thing that
+    // differs between the two states, never its position.
+    expect(pausedFooter.previousElementSibling!.className).toContain(
+      "connected-surface-body",
+    );
     expect(pausedFooter.nextElementSibling!.className).toContain(
       "connected-pager",
     );
   });
 
-  it("index.css pins that slot, and both occupants, at 52px", () => {
+  it("index.css pins the footer slot and the paused block at 52px", () => {
     const css = readFileSync(indexCssPath(), "utf-8");
     const footer = /\.connected-surface-footer\s*\{([^}]*)\}/.exec(css);
     const paused = /\.connected-paused\s*\{([^}]*)\}/.exec(css);
-    const endButton = /\.connected-end\s*\{([^}]*)\}/.exec(css);
     expect(footer).not.toBeNull();
     expect(footer![1]).toContain("height: 52px");
     expect(paused![1]).toContain("height: 52px");
-    expect(endButton![1]).toContain("height: 52px");
   });
 
   it("index.css inverts the paused band: ink field, paper label (2026-08-08, the operator missed the grey one)", () => {
@@ -936,6 +946,89 @@ describe("End session, staged for 4s (handoff §3)", () => {
     const armed = screen.getByRole("button", { name: "Tap again to end" });
     expect(armed.className).toContain("connected-end-armed");
     expect(armed.className).not.toContain("button-l4-armed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End moves to the header — a SAFETY FIX, not a layout change (James,
+// 2026-08-12, looking at the captures): the old full-width footer bar
+// "could easily be touched accidentally if somebody tries to change views
+// mid-row." The acceptance below is behavioural, not cosmetic — the
+// control's hit box must not span the surface, must not sit in the swipe
+// corridor, and a swipe crossing its row must still change pane.
+// ---------------------------------------------------------------------------
+
+describe("End's hit box is small and out of the swipe corridor (safety fix, James 2026-08-12)", () => {
+  it("moved out of the footer entirely — the header holds it now, alone", () => {
+    renderSurface();
+    const header = document.querySelector<HTMLElement>(".connected-header")!;
+    expect(
+      within(header).getByRole("button", { name: "End session" }),
+    ).toBeInTheDocument();
+    // The footer no longer has ANY occupant while rowing — End left it.
+    const footer = document.querySelector(".connected-surface-footer")!;
+    expect(footer.children).toHaveLength(0);
+  });
+
+  it("index.css never stretches the control to the surface's width", () => {
+    const css = readFileSync(indexCssPath(), "utf-8");
+    const end = /\.connected-end\s*\{([^}]*)\}/.exec(css);
+    expect(end).not.toBeNull();
+    // The old full-width footer button was `button-l2` (`width: 100%`) —
+    // this control carries neither that class nor an equivalent rule of
+    // its own: no width/flex-grow declaration anywhere in its own block
+    // means it can only ever be as wide as its own padded text, never the
+    // surface.
+    expect(end![1]).not.toMatch(/width\s*:/);
+    expect(end![1]).not.toMatch(/flex-grow\s*:/);
+    expect(end![1]).toContain("flex: none");
+    expect(end![1]).toContain("min-height: 44px");
+    expect(end![1]).toContain("padding: 6px 10px");
+    // The header itself doesn't stretch it either — it stays pinned to one
+    // edge of a flex row, its own content-sized box.
+    const header = /\.connected-header\s*\{([^}]*)\}/.exec(css);
+    expect(header).not.toBeNull();
+    expect(header![1]).toContain("justify-content: flex-end");
+  });
+
+  // THE MECHANISM (mutation-tested below in the report, not just asserted
+  // here): `handleTouchStart`/`handleTouchEnd` live on `<main>`, the
+  // surface's OWN element — a touch that starts on a descendant (End) still
+  // bubbles to them exactly as one starting anywhere else on the surface
+  // does, because nothing on End's own button stops that propagation. A
+  // full 60px+ swipe whose pointerdown happens to land on End must
+  // therefore still read as pane navigation, never as an arm.
+  it("a swipe that starts ON End still changes pane — it never arms the confirm", () => {
+    renderSurface();
+    const endButton = screen.getByRole("button", { name: "End session" });
+    fireEvent.touchStart(endButton, { touches: [{ clientX: 200 }] });
+    fireEvent.touchEnd(document.querySelector(".connected-surface")!, {
+      changedTouches: [{ clientX: 200 - (SWIPE_THRESHOLD_PX + 10) }],
+    });
+    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
+    // Still "End session", never staged — the swipe did not touch it.
+    expect(
+      screen.getByRole("button", { name: "End session" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Tap again to end" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("the SAME swipe, originating on End, works in the other direction too", () => {
+    renderSurface();
+    const endButton = screen.getByRole("button", { name: "End session" });
+    fireEvent.touchStart(endButton, { touches: [{ clientX: 200 }] });
+    fireEvent.touchEnd(document.querySelector(".connected-surface")!, {
+      changedTouches: [{ clientX: 200 + (SWIPE_THRESHOLD_PX + 10) }],
+    });
+    // Already on "live" (the default pane) — a rightward swipe clamps
+    // there rather than wrapping (`paneAfterSwipe`'s own contract), so the
+    // proof here is that it did NOT arm End, not that it changed pane.
+    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    expect(
+      screen.queryByRole("button", { name: "Tap again to end" }),
+    ).not.toBeInTheDocument();
   });
 });
 
