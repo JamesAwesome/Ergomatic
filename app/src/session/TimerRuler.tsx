@@ -69,9 +69,14 @@ export function notchPercents(
 }
 
 /** How much of the bar is NOT the work (design spec §5b): the warm-up's own
- *  span as a percentage of the session, or `null` when there is no warm-up —
+ *  SPAN as a percentage of the session, or `null` when there is no warm-up —
  *  which is most sessions, and the case that must render exactly as it did
  *  before this rule existed.
+ *
+ *  This is the span, not the paint. What actually gets drawn is
+ *  `warmupFillPercent` below: James's 2026-08-12 ruling is that the warm-up
+ *  FILLS as it is rowed, so the span is the ceiling on that fill and never a
+ *  block laid over the whole leading chunk.
  *
  *  Deliberately NOT gated on the notch fallbacks. `notchPercents` gives up
  *  above `MAX_NOTCH_BOUNDARIES` because seventeen hairlines read as texture;
@@ -95,6 +100,36 @@ export function warmupPercent(
   return Math.min(100, Math.max(0, (warmupEndsAt / totalSeconds) * 100));
 }
 
+/**
+ * THE WARM-UP FILLS AS IT IS ROWED, IN ITS OWN TONE (James, 2026-08-12,
+ * amending §5b's first reading): the bar must move while the rower is
+ * moving, and the warm-up must still read as visibly not-work. So the bar
+ * carries three tones — unfilled track, warm-up fill, work fill — and this
+ * is the second one's width.
+ *
+ * It is the fill edge capped at the warm-up's own span, which is the whole
+ * rule: INSIDE the warm-up the fill IS this tone (the chunk grows with the
+ * rower, stroke by stroke), and once the rower is past it the chunk stops at
+ * the span and the ordinary work fill carries on beyond it. Ahead of the
+ * fill edge nothing is painted at all, so the unrowed part of the warm-up is
+ * plain unfilled track like any other unrowed span.
+ *
+ * `null` — no element at all — when there is no warm-up (most sessions, the
+ * byte-identity case) and when nothing of it has been rowed yet, so a bar at
+ * 0% is exactly the empty track it has always been.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function warmupFillPercent(
+  boundaries: IntervalBoundaries | undefined,
+  totalSeconds: number,
+  filledPercent: number,
+): number | null {
+  const span = warmupPercent(boundaries, totalSeconds);
+  if (span === null) return null;
+  const filled = Math.min(span, Math.max(0, filledPercent));
+  return filled > 0 ? filled : null;
+}
+
 export default function TimerRuler({
   totalLeftSeconds,
   totalSeconds,
@@ -111,7 +146,7 @@ export default function TimerRuler({
 }) {
   const pct = totalProgressPct(totalLeftSeconds, totalSeconds);
   const notches = notchPercents(boundaries, totalSeconds);
-  const warmup = warmupPercent(boundaries, totalSeconds);
+  const warmup = warmupFillPercent(boundaries, totalSeconds, pct);
   const predictedFrom = boundaries?.predictedFrom ?? null;
   return (
     <div className="timer-total">
@@ -123,17 +158,20 @@ export default function TimerRuler({
       </div>
       <div className="timer-total-bar">
         <span style={{ width: `${pct}%` }} />
-        {/* THE WARM-UP IS NOT THE WORK (design spec §5b). Its span keeps its
-            true proportion and loses the working tone: a chunk of the
-            unfilled track laid back OVER the fill, so the leading part of
-            the bar reads as track whether the rower has passed it or not.
-            One element, no new colour, no legend — and nothing at all when
-            the session has no warm-up, which is the shape most sessions
-            have. A `div`, not a `span`, for the same reason the notches are
+        {/* THE WARM-UP IS NOT THE WORK, BUT IT STILL MOVES (design spec
+            §5b as James amended it 2026-08-12). The fill above runs the
+            whole session in the working tone; this repaints the part of it
+            that is still inside the warm-up, so the bar advances stroke by
+            stroke while reading as a different kind of time. Three tones,
+            no new hue: unfilled track, this, and the work fill.
+            One element, and none at all when the session has no warm-up (the
+            shape most sessions have) or when nothing has been rowed yet. A
+            `div`, not a `span`, for the same reason the notches are
             (`index.css`: the fill rule, and the connected pane's repaint of
-            it, must keep matching exactly one element). Rendered after the
-            fill and before the notches: DOM order is paint order among these
-            siblings, so the chunk covers the fill and no notch is buried. */}
+            it, must keep matching exactly one element — the fill). Rendered
+            after the fill and before the notches: DOM order is paint order
+            among these siblings, so this covers the fill's leading part and
+            no notch is buried. */}
         {warmup !== null && (
           <div
             className="timer-total-warmup"

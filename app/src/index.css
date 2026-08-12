@@ -3790,25 +3790,47 @@ button:disabled {
   background: var(--ink);
 }
 
-/* THE WARM-UP'S SPAN (design spec §5b, ruling 12). The leading chunk keeps
-   its true width — it is time the rower rows — and takes the UNFILLED-track
-   tone instead of the working one, so the structure reads "this part is not
-   the work". `--rule-2` is the track's own colour (`.timer-total-bar`
-   above), not a new one: the chunk IS the track, laid back over the fill.
-   Nothing about the rower's progress is hidden by it — TOTAL LEFT counts
-   down throughout, and the fill emerges from behind the chunk the moment the
-   work starts.
+/* THE WARM-UP'S OWN FILL (design spec §5b, ruling 12, as James amended it
+   2026-08-12: the bar must MOVE while the rower is moving, and the warm-up
+   must still read as visibly not-work). So the bar carries THREE tones —
+   unfilled track, this, and the work fill — and this one advances with the
+   rower exactly like the fill it repaints, capped at the warm-up's own span
+   (`TimerRuler.tsx`'s `warmupFillPercent`). Ahead of the fill edge nothing
+   is painted at all: an unrowed warm-up is plain unfilled track, like any
+   other unrowed span.
+
+   THE VALUE IS A LIGHTER STEP OF WHATEVER THE SURFACE'S WORK FILL IS, which
+   is why there are two rules — the same per-surface split the fill itself
+   already has (`.connected-pane .timer-total-bar span`, below). No new hue
+   and no new token; both are ink-scale values this file already uses.
+
+   Computed WCAG relative-luminance ratios, not eyeballed:
+
+     phone timer   --ink-5 vs the --accent fill   2.16:1
+                   --ink-5 vs the --rule-2 track  1.97:1
+     connected     --ink-4 vs the --ink fill      3.23:1
+                   --ink-4 vs the --rule-2 track  3.78:1
+
+   The connected pair clears WCAG 1.4.11's 3:1 non-text floor on both sides
+   (the best any value could do there is 3.50:1). The phone pair cannot, and
+   NO colour can: `--accent` and `--rule-2` are only 4.25:1 apart, so a third
+   tone lighter than that fill and darker than that track has at most
+   sqrt(4.25) = 2.06:1 to either side. `--ink-5` lands within 5% of that
+   ceiling — a new token could not beat it, which is why none was added. That
+   pair also separates by HUE (neutral grey against the accent red), which a
+   luminance-only ratio cannot see.
+
    It paints over the fill and under the notches (DOM order among positioned
    siblings, `TimerRuler.tsx`). The warm-up's own boundary notch is
-   unaffected: `left: <chunk width>` puts its 1px just RIGHT of the chunk, on
-   the fill or the open track like any other notch, so the two-tone rule
-   above still measures what it measured. */
+   unaffected: `left: <span>` puts its 1px just RIGHT of this element, on the
+   work fill or the open track like any other notch, so Task 4's two-tone
+   rule still measures what it measured. */
 .timer-total-warmup {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
-  background: var(--rule-2);
+  background: var(--ink-5);
 }
 
 /* Behind the fill the same hairline is cut out of it rather than laid on
@@ -5467,10 +5489,11 @@ section:not(.news-pinned) .news-row:last-of-type {
    fill is ink instead. Tasks 4 and 4b rebuilt those internals and this
    override still reaches exactly one element — the fill — because every
    child either of them added is a `div`, not a `span` (the notches, see
-   `.timer-total-notch` above; and §5b's warm-up chunk,
-   `.timer-total-warmup`). Their colours are `--ink`/`--page`/`--rule-2` on
-   both surfaces, so none of them can pick up accent here and none needs a
-   second override of its own. The sibling override this comment
+   `.timer-total-notch` above; and §5b's warm-up fill,
+   `.timer-total-warmup`). The notches are `--ink`/`--page` on both surfaces
+   and can never pick up accent; the warm-up fill is the one child that DOES
+   take a second override here, immediately below, and it takes an ink-scale
+   value too. The sibling override this comment
    used to describe,
    `.connected-pane .timer-dot-past`/`-current` (the phone timer's segment
    strip painting COMPLETED segments `--accent`), retired in the same fix
@@ -5483,6 +5506,19 @@ section:not(.news-pinned) .news-row:last-of-type {
    IntervalSegments.tsx`, consumed solely by `session/Timer.tsx`). */
 .connected-pane .timer-total-bar span {
   background: var(--ink);
+}
+
+/* …and the warm-up's fill takes the matching lighter step on this surface.
+   `--ink-5` reads as a mid grey against the phone timer's `--accent` fill;
+   against an INK fill it would be the wrong distance in the wrong place
+   (6.21:1 from the fill but only 1.97:1 from the track), so the connected
+   pane steps one darker: `--ink-4` sits 3.23:1 from the ink work fill and
+   3.78:1 from the `--rule-2` track, clearing the 3:1 non-text floor on BOTH
+   sides. Full derivation at `.timer-total-warmup` itself. One rule, the
+   same shape as the fill override above it, and still no accent anywhere on
+   these panes. */
+.connected-pane .timer-total-warmup {
+  background: var(--ink-4);
 }
 
 /* The connection indicator (handoff §3): 8px filled square + the device's
