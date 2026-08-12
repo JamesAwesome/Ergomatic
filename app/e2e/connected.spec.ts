@@ -554,13 +554,9 @@ async function walkSurfaceToLog(
   await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeHidden();
   await expect(page.getByRole("button", { name: "End session" })).toBeVisible();
 
-  // Pane navigation VIA THE RAIL — all three panes. Interval 0's boundary
-  // has certainly landed by now (it precedes even the freeze), so the grid
-  // read below is against SETTLED data, not a race.
-  await page.getByRole("button", { name: "Timer pane" }).click();
-  await expect(
-    page.getByRole("button", { name: "Timer pane" }),
-  ).toHaveAttribute("aria-current", "page");
+  // Pane navigation VIA THE RAIL. Interval 0's boundary has certainly landed
+  // by now (it precedes even the freeze), so the grid read below is against
+  // SETTLED data, not a race.
   await page.getByRole("button", { name: "Grid pane" }).click();
   await expect(page.getByRole("button", { name: "Grid pane" })).toHaveAttribute(
     "aria-current",
@@ -572,19 +568,11 @@ async function walkSurfaceToLog(
   await expect(page.locator(".connected-grid-completed")).toHaveCount(1);
   await expect(page.locator(".connected-grid-active")).toHaveCount(1);
 
-  // Pane navigation VIA SWIPE, from grid back through live to timer.
-  // `paneAfterSwipe`: a POSITIVE delta moves backward through `PANES`
-  // (["timer","live","grid"]) — grid -> live -> timer.
+  // Pane navigation VIA SWIPE, back from grid to live — `paneAfterSwipe`: a
+  // POSITIVE delta moves backward through `PANES` (["live","grid"]), and
+  // "live" is the far end, so one swipe is the whole round trip there is
+  // (connected-revamp Task 2 dropped the timer pane, PANES's third stop).
   await swipeSurface(page, 120);
-  await expect(page.getByRole("button", { name: "Live pane" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await swipeSurface(page, 120);
-  await expect(
-    page.getByRole("button", { name: "Timer pane" }),
-  ).toHaveAttribute("aria-current", "page");
-  await swipeSurface(page, -120);
   await expect(page.getByRole("button", { name: "Live pane" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -704,25 +692,28 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
 
     // NEW ASSERTION TERRITORY (this task's own brief): the pager rail,
     // measured against the exact 390px-tall landscape frame every pane
-    // spec's own column math is quoted in. `.connected-pager` is a 56px
-    // WIDE right-edge rail in landscape (`index.css`'s own landscape media
-    // query, `grid-row: 1 / -1`) that spans the full SURFACE height (not the
-    // raw 390px viewport — `.connected-surface`'s own height formula
-    // reserves 26px above it, with no separate `- var(--tap)` term to steal
-    // ANOTHER 44px from it, Task 8's own `:has()` conversion) with no
-    // truncation of its own on top of that.
+    // spec's own column math is quoted in. connected-revamp Task 2 moved
+    // the rail INTO the sensor gutter: `.connected-pager` is now a 44px
+    // WIDE column at the PHYSICAL edge (`x === 0`, revision §2/§6) in
+    // landscape (`index.css`'s own landscape media query, `grid-row: 1 /
+    // -1`) that spans the full SURFACE height (not the raw 390px viewport —
+    // `.connected-surface`'s own height formula reserves 26px above it,
+    // with no separate `- var(--tap)` term to steal ANOTHER 44px from it,
+    // Task 8's own `:has()` conversion) with no truncation of its own on
+    // top of that.
     const surfaceBox = await page.locator(".connected-surface").boundingBox();
     const railBox = await page.locator(".connected-pager").boundingBox();
     expect(surfaceBox).not.toBeNull();
     expect(railBox).not.toBeNull();
-    expect(railBox!.width).toBeCloseTo(56, 0);
+    expect(railBox!.width).toBeCloseTo(44, 0);
+    expect(railBox!.x).toBeCloseTo(0, 0);
     // The rail spans (most of) the surface's own full height — comfortably
     // more than the 320px-vs-364px, clipped-UP-NEXT-strip shape the task-6
     // review measured BEFORE `.connected-surface`'s own `:has()` rule
-    // existed, and nowhere near the 56x56-square-only shape a truncated
-    // rail would draw. Not pinned to the pixel: grid-row sizing in this
-    // engine measures a few pixels different from the surface's own
-    // reported box, which is the CSS's business, not this walk's.
+    // existed, and nowhere near a truncated-rail shape. Not pinned to the
+    // pixel: grid-row sizing in this engine measures a few pixels different
+    // from the surface's own reported box, which is the CSS's business, not
+    // this walk's.
     expect(railBox!.height).toBeGreaterThan(surfaceBox!.height - 30);
     expect(railBox!.y + railBox!.height).toBeGreaterThan(390 - 60);
 

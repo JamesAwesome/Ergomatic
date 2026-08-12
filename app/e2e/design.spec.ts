@@ -4031,7 +4031,7 @@ async function pumpUntilText(
   }
 }
 
-/** Presses past the ready screen onto the three-pane surface. */
+/** Presses past the ready screen onto the two-pane surface. */
 async function walkToSurface(page: Page): Promise<void> {
   await expect(
     page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
@@ -4128,7 +4128,7 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  test("the surface's three panes and the diagnostics sheet — portrait", async ({
+  test("the surface's two panes and the diagnostics sheet — portrait", async ({
     page,
   }) => {
     const title = "Design Connected Surface Workout";
@@ -4137,18 +4137,12 @@ test.describe("connected screens (fake-driven)", () => {
     await walkToSurface(page);
     // Real numbers, not the pre-first-stroke placeholders: pumped until
     // interval 0's boundary has landed, so pane C paints a completed row
-    // and panes A/B paint live readings.
+    // and pane B paints live readings.
     await pumpUntilText(page, "2 OF 5");
 
     // Pane B (`DEFAULT_PANE`, the first-connected-session landing pane).
     await expect(
       page.getByRole("button", { name: "Live pane" }),
-    ).toHaveAttribute("aria-current", "page");
-    await sweep(page);
-
-    await page.getByRole("button", { name: "Timer pane" }).click();
-    await expect(
-      page.getByRole("button", { name: "Timer pane" }),
     ).toHaveAttribute("aria-current", "page");
     await sweep(page);
 
@@ -4178,7 +4172,7 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  test("the surface's three panes and the diagnostics sheet — landscape (844x390)", async ({
+  test("the surface's two panes and the diagnostics sheet — landscape (844x390)", async ({
     page,
   }) => {
     const title = "Design Connected Surface Landscape Workout";
@@ -4192,12 +4186,6 @@ test.describe("connected screens (fake-driven)", () => {
     await walkToSurface(page);
     await pumpUntilText(page, "2 OF 5");
 
-    await sweep(page);
-
-    await page.getByRole("button", { name: "Timer pane" }).click();
-    await expect(
-      page.getByRole("button", { name: "Timer pane" }),
-    ).toHaveAttribute("aria-current", "page");
     await sweep(page);
 
     await page.getByRole("button", { name: "Grid pane" }).click();
@@ -4236,8 +4224,8 @@ test.describe("connected screens (fake-driven)", () => {
   //
   // James's report: the landscape content column changed width view to
   // view. Only ONE pane is mounted at a time
-  // (`ConnectedSurface.tsx:325-327`), so `.connected-surface-body` — a grid
-  // item in landscape's `1fr` track (`index.css:6228`) — measured its
+  // (`ConnectedSurface.tsx:324-325`), so `.connected-surface-body` — a grid
+  // item in landscape's `1fr` track — measured its
   // automatic minimum against whichever pane happened to be showing, and
   // within the grid pane, against its own content. The pin: swipe (here, the
   // rail's own equivalent — a tap on "Grid pane", the same state transition
@@ -4308,7 +4296,7 @@ test.describe("connected screens (fake-driven)", () => {
       // The adversarial half: force the grid pane's own content past the
       // fair share (`.connected-grid-meters` is the exact channel — it is
       // the one grid-row cell with no `min-width: 0` in the landscape
-      // media query, `index.css:6536-6541`) and prove the content column
+      // media query, `index.css:6486-6491`) and prove the content column
       // STILL does not move. This is the assertion that actually fails
       // pre-fix (692px -> 1262px, measured against this exact test on this
       // worktree before `min-width: 0` landed on `.connected-surface-
@@ -4398,6 +4386,67 @@ test.describe("connected screens (fake-driven)", () => {
       measured.metersClientWidth,
     );
     expect(measured.metersText).toBe("21097");
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // --- Task 2 (design spec §6/ruling 10): full-bleed + the sensor gutter ---
+  //
+  // Load-bearing geometry only (ruling 4): the surface reaches the true
+  // physical edge in landscape, and the gutter sitting there is exactly
+  // 44px wide — both load-bearing per the brief ("the landscape surface's
+  // left edge is 0 (full-bleed) and the gutter is exactly 44px wide sitting
+  // at the edge"). Portrait is checked separately: it keeps its narrower
+  // 54px two-tab bar, unaffected by the landscape-only full-bleed rule.
+  test("the surface is full-bleed and the gutter sits at the physical edge — landscape (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Gutter Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(page, title, "design-connected-gutter@e2e.test");
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    const surfaceBox = await page.locator(".connected-surface").boundingBox();
+    const railBox = await page.locator(".connected-pager").boundingBox();
+    expect(surfaceBox).not.toBeNull();
+    expect(railBox).not.toBeNull();
+    // Full-bleed: the surface itself starts at the viewport's true left
+    // edge, not `.screen`'s usual 20px-plus-max-width inset.
+    expect(surfaceBox!.x).toBeCloseTo(0, 0);
+    // The gutter is the surface's own first column, so it starts there too
+    // — "reaches the housing", not floating inboard of it.
+    expect(railBox!.x).toBeCloseTo(0, 0);
+    expect(railBox!.width).toBeCloseTo(44, 0);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  test("portrait keeps its narrower 54px two-tab bar, unaffected by the landscape full-bleed rule", async ({
+    page,
+  }) => {
+    const title = "Design Connected Portrait Tab Bar Workout";
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(
+      page,
+      title,
+      "design-connected-portrait-tabbar@e2e.test",
+    );
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    const pagerBox = await page.locator(".connected-pager").boundingBox();
+    expect(pagerBox).not.toBeNull();
+    expect(pagerBox!.height).toBeCloseTo(54, 0);
+    // Still labelled, still exactly two targets — the rail lost its third
+    // target (Timer) but not its labels (handoff §3, DEVIATIONS row 4).
+    expect(
+      await page
+        .getByRole("navigation", { name: "Connected panes" })
+        .locator("button")
+        .count(),
+    ).toBe(2);
 
     await cleanupAllConnected(page, title);
   });

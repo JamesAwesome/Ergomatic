@@ -4,7 +4,7 @@
 // This component places cells and nothing else. Every value, every row
 // state and the caption arrive already decided on `SurfaceModel.grid`
 // (`surfaceModel.ts`'s `buildGridModel`), which is also where the actual
-// cells go through the one `judgedValue` path panes A and B use — so the
+// cells go through the one `judgedValue` path pane B uses — so the
 // split judged ochre on pane B's hero is judged ochre in this grid's
 // `/500M` cell by the same call, not by a second opinion.
 //
@@ -40,8 +40,10 @@
 //
 // The L4 trap itself is still not live, for the reason it always was: the
 // portrait `order` declarations that make DOM order diverge from reading
-// order are scoped to `.connected-pane-timer` and `.connected-pane-live`,
-// and this pane declares NO `order` anywhere. Its DOM sequence IS its
+// order are scoped to `.connected-pane-live` (connected-revamp Task 2
+// retired `.connected-pane-timer`'s own order block along with the file
+// that rendered it), and this pane declares NO `order` anywhere. Its DOM
+// sequence IS its
 // reading sequence in both orientations, so the scroller is tabbed to
 // exactly where it is seen — above End, which sits below the grid in the
 // shell's footer. Pinned in jsdom AND in a real browser; see the task-7
@@ -51,8 +53,8 @@ import { useEffect, useRef } from "react";
 import ConnectionLine from "./ConnectionLine";
 import type { GridRow, GridValue, SurfaceModel } from "./surfaceModel";
 
-/** The tint class every judged actual on this surface wears — panes A and B
- *  put it on cards and a hero, this pane puts it on a table cell. A
+/** The tint class every judged actual on this surface wears — pane B puts
+ *  it on cards and a hero, this pane puts it on a table cell. A
  *  PROGRAMMED value has `judged: null` and gets no such class, which is how
  *  "programmed values are never tinted" is enforced by the data rather than
  *  by each cell remembering. */
@@ -79,7 +81,7 @@ export default function PaneGrid({ model }: { model: SurfaceModel }) {
     <div className="connected-pane connected-pane-grid">
       {/* The mockup's own header line: the device, then the whole session's
           time left. Pane C has no room for the shared `TimerRuler` that
-          prints that figure on A and B, so the caption carries it. */}
+          prints that figure on B, so the caption carries it. */}
       <ConnectionLine
         model={model}
         trailing={`${model.totalLeftDisplay} LEFT`}

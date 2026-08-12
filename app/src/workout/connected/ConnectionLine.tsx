@@ -1,11 +1,11 @@
-// The connection indicator (handoff §3, pane A's first line, repeated as
-// pane B's header row): an 8px square plus the device's own advertised
-// name in mono 11 `--ink-3`. Filled while the link is up, hollow once it is
-// lost. "It is the same caption family as every other label, deliberately
-// unremarkable."
+// The connection indicator (handoff §3): an 8px square plus the device's
+// own advertised name in mono 11 `--ink-3`. Filled while the link is up,
+// hollow once it is lost. "It is the same caption family as every other
+// label, deliberately unremarkable."
 //
-// The right-hand slot differs per pane (pane A puts the workout's own
-// context there, pane B the interval count), so the caller supplies it.
+// The right-hand slot differs per pane (pane B puts the interval count
+// there, pane C the whole session's own time left), so the caller supplies
+// it.
 
 import type { SurfaceModel } from "./surfaceModel";
 

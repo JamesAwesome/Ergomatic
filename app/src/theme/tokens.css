@@ -100,4 +100,25 @@
   --font-serif: "Newsreader", Georgia, serif;
   --font-sans: "Archivo", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* THE FIRST SIZE SCALE IN THIS CODEBASE (connected-revamp Task 2, design
+     spec §8 / revision's own §3/§5/§6 tables). Before this, `tokens.css`
+     carried colours, `--radius` and `--tap` and nothing else — `index.css`
+     has 254 literal font-sizes of its own, and this beachhead does NOT
+     sweep them; it names only the eight roles the connected panes and the
+     unconnected phone timer share, for Task 2 and the tasks after it
+     (3/5/7) to consume as they rebuild those two surfaces. Named by ROLE,
+     not by pixel value, because the same role takes a different pixel
+     value in each orientation — one name, two values, never two names: the
+     value below is PORTRAIT; the landscape half of each pair is redefined
+     under `@media (orientation: landscape)` inside `index.css`'s own
+     connected-surface query, not duplicated here under a second name. */
+  --size-hero: 104px;
+  --size-hero-tenths: 54px;
+  --size-subhero: 52px;
+  --size-target: 44px;
+  --size-metric: 30px;
+  --size-total: 22px;
+  --size-row: 19px;
+  --size-label: 10px;
 }

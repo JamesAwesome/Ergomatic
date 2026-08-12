@@ -1,31 +1,27 @@
 // Pane B — the live view (handoff §3's "Pane B — live view"). Pure machine
 // data; the only control anywhere near it is the shell's End.
 //
-// "The pane opens with the SAME interval segment bar and the SAME `UP NEXT`
-// strip as pane A, in both orientations — swiping between the two panes
-// must never cost the rower their place in the session; only the size of
-// the numbers changes." That is why this file renders the identical
-// `IntervalSegments`, `UpNextStrip` and `TimerRuler` components pane A
-// does, from the identical `SurfaceModel` fields, rather than a
-// pane-B-shaped copy of any of them.
-//
 // Hierarchy, largest first (handoff §3, sizes in `index.css`): hero /500m
 // (96px portrait with tenths at 52px, 150/72 landscape) -> time left in the
 // interval (72/62), or `METERS LEFT` on a distance interval -> rate · HR ·
-// meters as three equal cards (40/44) -> the mono strip -> the same total
-// bar and quarter ruler as pane A.
+// meters as three equal cards (40/44) -> the mono strip -> the total bar
+// and quarter ruler.
 //
 // THE SUPERSESSION: the handoff's own line for the hero's target reads
 // "accent value, mono caption". Superseded — targets are INK on both
 // connected panes (handoff §3's own earlier ruling, "The target is ink in
 // connected mode", and DEVIATIONS row 0; the two statements contradict each
 // other inside one document and the phase spec resolves it in ink's
-// favour). Accent appears NOWHERE on panes A or B; its only job on this
+// favour). Accent appears NOWHERE on this pane; its only job on this
 // surface is pane C's active countdown.
 //
-// Two columns that vanish in portrait (`display: contents`), same as pane A
-// — see that file's header for why the landscape layout is two independent
-// flex columns rather than one shared grid.
+// Two columns that vanish in portrait (`display: contents`) — landscape
+// turns the same wrappers into two INDEPENDENT flex columns rather than one
+// shared grid, so this column's own numeral can never force the row the
+// other column's rows live in (the reason `.connected-col`'s own comment in
+// `index.css` documents in full, with the screenshots-run measurement that
+// found it). connected-revamp Task 2 retired `PaneTimer.tsx` (pane A), this
+// technique's original second user; pane B is now its only one.
 
 import IntervalSegments from "../../components/IntervalSegments";
 import UpNextStrip from "../../components/UpNextStrip";

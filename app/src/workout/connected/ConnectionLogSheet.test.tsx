@@ -163,11 +163,11 @@ function renderSurface(overrides: Partial<MonitorSession> = {}) {
   return { ...view, session: current };
 }
 
-function pagerTarget(pane: "Timer" | "Live" | "Grid"): HTMLElement {
+function pagerTarget(pane: "Live" | "Grid"): HTMLElement {
   return screen.getByRole("button", { name: `${pane} pane` });
 }
 
-async function tap(pane: "Timer" | "Live" | "Grid", times: number) {
+async function tap(pane: "Live" | "Grid", times: number) {
   for (let i = 0; i < times; i += 1) {
     await userEvent.click(pagerTarget(pane));
   }
@@ -209,22 +209,26 @@ describe("triple-tap opens diagnostics (handoff §5)", () => {
 
   it("one tap does nothing but change panes", async () => {
     renderSurface();
-    await tap("Timer", 1);
+    // `beforeEach` lands on grid; one tap on live is the pane change.
+    await tap("Live", 1);
     expect(sheet()).toBeNull();
-    expect(pagerTarget("Timer")).toHaveAttribute("aria-current", "page");
+    expect(pagerTarget("Live")).toHaveAttribute("aria-current", "page");
   });
 
   it("works on ANY target, not just the grid's", async () => {
     renderSurface();
-    await tap("Timer", 3);
+    await tap("Live", 3);
     expect(sheet()).not.toBeNull();
   });
 
   it("three taps SPREAD ACROSS TARGETS is navigation, not a gesture", async () => {
     renderSurface();
-    await userEvent.click(pagerTarget("Timer"));
+    // connected-revamp Task 2 dropped the pager to two targets — alternating
+    // between them still never lands three consecutive taps on the SAME
+    // one, which is the property this test proves either way.
     await userEvent.click(pagerTarget("Live"));
     await userEvent.click(pagerTarget("Grid"));
+    await userEvent.click(pagerTarget("Live"));
     expect(sheet()).toBeNull();
   });
 
