@@ -1,7 +1,7 @@
 import type { Difficulty } from "../../domain/types.js";
 import type { DurationBucket } from "../../domain/duration.js";
 import { RECENCY_BOUNDARY_DAYS } from "../../domain/recency.js";
-import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
+import { collapseDifficulties } from "../components/difficultyTokenLabel";
 import { collapseDurations } from "../components/durationTokenLabel";
 import type { Token } from "../components/TokenRow";
 import type { TodayOverrides } from "./todayOverrides";
@@ -55,36 +55,6 @@ function sameDurationSet(a: DurationBucket[], b: DurationBucket[]): boolean {
 function sameDifficultySet(a: Difficulty[], b: Difficulty[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((v) => b.includes(v));
-}
-
-/** Ordered-range collapse over EASY/MEDIUM/HARD — the same contiguous-run
- *  idiom Library's filterTokens.ts uses for durations/pain (collapsePain
- *  below is that same file's rule, copied verbatim): a contiguous run
- *  collapses to its endpoints ("EASY–MEDIUM"), a non-contiguous selection
- *  lists every member ("EASY, HARD"). Order-independent — DIFFICULTY_CHIPS'
- *  own fixed index is what "contiguous" means, not insertion order.
- *  Empty is reachable (deselecting every difficulty in the sheet's
- *  DIFFICULTY group is allowed by design — TodayFilterSheet.tsx's CellGrid
- *  has no "at least one must stay active" guard, same as the pre-sheet
- *  chips it replaced) and reads "NONE" rather than an empty string, since
- *  an empty token label would render as an invisible, un-clearable-looking
- *  token. */
-function collapseDifficulties(values: Difficulty[]): string {
-  if (values.length === 0) return "NONE";
-  const indices = values
-    .map((d) => DIFFICULTY_CHIPS.findIndex((c) => c.value === d))
-    .sort((a, b) => a - b);
-  const contiguous = indices.every(
-    (idx, i) => i === 0 || idx === indices[i - 1] + 1,
-  );
-  if (!contiguous) {
-    return indices.map((i) => DIFFICULTY_CHIPS[i].label).join(", ");
-  }
-  const first = indices[0];
-  const last = indices[indices.length - 1];
-  return first === last
-    ? DIFFICULTY_CHIPS[first].label
-    : `${DIFFICULTY_CHIPS[first].label}–${DIFFICULTY_CHIPS[last].label}`;
 }
 
 /** Library's filterTokens.ts's own pain collapse, copied verbatim — this

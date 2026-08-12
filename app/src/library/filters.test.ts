@@ -8,12 +8,14 @@ import {
   isRecent,
   setLastDone,
   setSource,
+  toggleDifficulty,
   toggleDuration,
   togglePainLevel,
   toggleType,
   type Filters,
 } from "./filters";
 import type { LibraryWorkout } from "../api/useWorkouts";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Step } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
@@ -54,16 +56,33 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   } as LibraryWorkout;
 }
 
+// Realistic fixture (recurring-failure #3): the real 300-workout global
+// library, not a hand-built minimum — the "composes" test below needs
+// real co-occurring type/difficulty/pain combinations to prove the
+// predicates actually intersect rather than each independently matching
+// everything.
+const WORKOUTS: LibraryWorkout[] = LIBRARY_WORKOUTS.map((seed, i) => ({
+  id: `lib-${i}`,
+  title: seed.title,
+  type: seed.type,
+  difficulty: seed.difficulty,
+  pain: seed.pain,
+  steps: seed.steps,
+  isGlobal: true,
+  lastDoneDaysAgo: null,
+}));
+
 describe("chip/cell state transitions", () => {
-  it("selects a type, and selecting the same type again clears it", () => {
-    const once = toggleType(EMPTY_FILTERS, "AT");
-    expect(once.type).toBe("AT");
-    expect(toggleType(once, "AT").type).toBeNull();
+  it("accumulates types (multi-select union) and removes on repeat", () => {
+    const f = toggleType(toggleType(EMPTY_FILTERS, "AT"), "O2");
+    expect(f.types).toStrictEqual(["AT", "O2"]);
+    expect(toggleType(f, "AT").types).toStrictEqual(["O2"]);
   });
 
-  it("replaces the type rather than accumulating (single-select)", () => {
-    const f = toggleType(toggleType(EMPTY_FILTERS, "AT"), "O2");
-    expect(f.type).toBe("O2");
+  it("accumulates difficulties (multi-select union) and removes on repeat", () => {
+    const f = toggleDifficulty(toggleDifficulty(EMPTY_FILTERS, "easy"), "hard");
+    expect(f.difficulties).toStrictEqual(["easy", "hard"]);
+    expect(toggleDifficulty(f, "easy").difficulties).toStrictEqual(["hard"]);
   });
 
   it("accumulates duration buckets (multi-select union) and removes on repeat", () => {
@@ -105,7 +124,8 @@ describe("chip/cell state transitions", () => {
 
   it("clears every filter at once", () => {
     const busy: Filters = {
-      type: "AN",
+      types: ["AN"],
+      difficulties: ["hard"],
       durations: ["<30"],
       painLevels: [4, 5],
       lastDone: "under21",
@@ -145,6 +165,71 @@ describe("applyFilters", () => {
     const rows = [w({ id: "a", type: "AT" }), w({ id: "b", type: "O2" })];
     const kept = applyFilters(rows, toggleType(EMPTY_FILTERS, "AT"), baselines);
     expect(kept.map((r) => r.id)).toStrictEqual(["a"]);
+  });
+
+  it("difficulties: empty means no filter; a selection excludes the rest", () => {
+    const all = applyFilters(WORKOUTS, { ...EMPTY_FILTERS }, baselines);
+    expect(
+      applyFilters(WORKOUTS, { ...EMPTY_FILTERS, difficulties: [] }, baselines),
+    ).toHaveLength(all.length);
+    const easy = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, difficulties: ["easy"] },
+      baselines,
+    );
+    expect(easy.length).toBeGreaterThan(0);
+    expect(easy.every((r) => r.difficulty === "easy")).toBe(true);
+    const easyMed = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, difficulties: ["easy", "medium"] },
+      baselines,
+    );
+    expect(easyMed.length).toBeGreaterThan(easy.length);
+    expect(easyMed.every((r) => r.difficulty !== "hard")).toBe(true);
+  });
+
+  it("types: empty means all; a two-type selection is their union", () => {
+    const o2 = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, types: ["O2"] },
+      baselines,
+    );
+    const at = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, types: ["AT"] },
+      baselines,
+    );
+    const both = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, types: ["O2", "AT"] },
+      baselines,
+    );
+    expect(both).toHaveLength(o2.length + at.length);
+    expect(both.every((r) => r.type === "O2" || r.type === "AT")).toBe(true);
+  });
+
+  it("composes: difficulty AND type AND pain narrow together against the real library", () => {
+    // Verified against the real 300-workout seed (not guessed): types
+    // {O2,AT} ∩ difficulties {easy,medium} ∩ pain {1,2,3} = 126 rows, a
+    // proper subset of both types+difficulties alone (140) and of either
+    // predicate alone — see the inspection this test's assertions encode.
+    const filters: Filters = {
+      ...EMPTY_FILTERS,
+      types: ["O2", "AT"],
+      difficulties: ["easy", "medium"],
+      painLevels: [1, 2, 3],
+    };
+    const expected = WORKOUTS.filter(
+      (r) =>
+        (r.type === "O2" || r.type === "AT") &&
+        (r.difficulty === "easy" || r.difficulty === "medium") &&
+        (r.pain === 1 || r.pain === 2 || r.pain === 3),
+    );
+    expect(expected.length).toBeGreaterThan(0);
+    expect(expected.length).toBeLessThan(WORKOUTS.length);
+
+    const result = applyFilters(WORKOUTS, filters, baselines);
+    expect(result.map((r) => r.id)).toStrictEqual(expected.map((r) => r.id));
   });
 
   it("unions duration buckets", () => {
@@ -240,7 +325,7 @@ describe("source", () => {
     ];
     const out = applyFilters(
       ws,
-      { ...EMPTY_FILTERS, source: "custom", type: "AN" },
+      { ...EMPTY_FILTERS, source: "custom", types: ["AN"] },
       null,
     );
     expect(out.map((r) => r.title)).toStrictEqual(["Mine-AN"]);

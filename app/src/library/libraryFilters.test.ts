@@ -9,23 +9,39 @@ import {
 import { LIBRARY_SCROLL_KEY, saveLibraryScroll } from "./libraryScroll";
 
 const FULL: Filters = {
-  type: "AT",
+  types: ["AT", "O2"],
+  difficulties: ["easy", "hard"],
   durations: ["30-45", "60+"],
   painLevels: [4, 5],
   lastDone: "over21",
   source: "custom",
 };
 
-// The pre-Task-4 shape, kept verbatim as a fixture rather than reused from
-// filters.ts (which no longer exports these field names at all) — this is
+// The pre-Task-4 (v1) shape, kept verbatim as a fixture rather than reused
+// from filters.ts (which has never exported these field names) — this is
 // exactly the record a rower's browser could still be holding in
-// sessionStorage from before this round shipped.
+// sessionStorage from before that round shipped.
 const V1_RECORD = {
   type: "AT",
   durations: ["30-45", "60+"],
   painMax3: true,
   recency: "not-recent",
   customOnly: true,
+};
+
+// The v2 shape (Task 4 through the library-filter-unification round's own
+// predecessor): a single `type` rather than a `types` array, and no
+// `difficulties` field at all — exactly what every currently-stored
+// record looks like the moment this round's validator ships. The strict,
+// whole-record rejection (not a partial merge) is the point: a rower's
+// in-flight `type: "O2"` selection resets rather than silently becoming a
+// `types: []` (= "no filter", i.e. showing MORE than they had selected).
+const V2_RECORD = {
+  type: "O2",
+  durations: [],
+  painLevels: [],
+  lastDone: null,
+  source: null,
 };
 
 describe("libraryFilters", () => {
@@ -55,6 +71,11 @@ describe("libraryFilters", () => {
     expect(loadLibraryFilters()).not.toBe(EMPTY_FILTERS);
   });
 
+  it("rejects an old-shape (v2, single `type`, no `difficulties`) record wholesale, falling back to EMPTY_FILTERS rather than a hybrid", () => {
+    sessionStorage.setItem(LIBRARY_FILTERS_KEY, JSON.stringify(V2_RECORD));
+    expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
+  });
+
   describe("rejects malformed stored values (falls back to EMPTY_FILTERS)", () => {
     const store = (value: string) =>
       sessionStorage.setItem(LIBRARY_FILTERS_KEY, value);
@@ -64,8 +85,28 @@ describe("libraryFilters", () => {
       ["a JSON string", JSON.stringify("AT")],
       ["a JSON array", JSON.stringify(["AT"])],
       ["null", "null"],
-      ["unknown type code", JSON.stringify({ ...FULL, type: "XX" })],
-      ["type wrong shape", JSON.stringify({ ...FULL, type: 2 })],
+      ["types missing entirely", JSON.stringify(V2_RECORD)],
+      ["types not an array", JSON.stringify({ ...FULL, types: "AT" })],
+      [
+        "types contains an unknown code",
+        JSON.stringify({ ...FULL, types: ["XX"] }),
+      ],
+      [
+        "types contains a wrong-shaped member",
+        JSON.stringify({ ...FULL, types: [2] }),
+      ],
+      [
+        "difficulties not an array",
+        JSON.stringify({ ...FULL, difficulties: "easy" }),
+      ],
+      [
+        "difficulties contains an unknown value",
+        JSON.stringify({ ...FULL, difficulties: ["extreme"] }),
+      ],
+      [
+        "difficulties contains a wrong-shaped member",
+        JSON.stringify({ ...FULL, difficulties: [1] }),
+      ],
       ["durations not an array", JSON.stringify({ ...FULL, durations: "60+" })],
       [
         "unknown duration bucket",
@@ -85,9 +126,9 @@ describe("libraryFilters", () => {
       ["unknown source", JSON.stringify({ ...FULL, source: "book" })],
       [
         "missing field",
-        JSON.stringify({ type: null, durations: [], painLevels: [] }),
+        JSON.stringify({ types: [], difficulties: [], durations: [] }),
       ],
-      // The pre-Task-4 (v1) shape: none of its fields overlap the v2
+      // The pre-Task-4 (v1) shape: none of its fields overlap the current
       // validator's own field names, so it's rejected wholesale — the
       // point of the strict, per-field check rather than a partial merge.
       ["a v1-shaped record", JSON.stringify(V1_RECORD)],
@@ -95,6 +136,22 @@ describe("libraryFilters", () => {
       store(raw);
       expect(loadLibraryFilters()).toStrictEqual(EMPTY_FILTERS);
     });
+  });
+
+  it("de-dupes duplicated types from a tampered value", () => {
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, types: ["AT", "AT", "O2"] }),
+    );
+    expect(loadLibraryFilters().types).toStrictEqual(["AT", "O2"]);
+  });
+
+  it("de-dupes duplicated difficulties from a tampered value", () => {
+    sessionStorage.setItem(
+      LIBRARY_FILTERS_KEY,
+      JSON.stringify({ ...FULL, difficulties: ["easy", "easy", "hard"] }),
+    );
+    expect(loadLibraryFilters().difficulties).toStrictEqual(["easy", "hard"]);
   });
 
   it("de-dupes duplicated duration buckets from a tampered value", () => {

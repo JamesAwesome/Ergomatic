@@ -3,7 +3,7 @@ import { bucketFor, type DurationBucket } from "../../domain/duration.js";
 import { RECENCY_BOUNDARY_DAYS, isRecent } from "../../domain/recency.js";
 import type { Baselines } from "../../domain/types.js";
 import type { LibraryWorkout } from "../api/useWorkouts";
-import type { WorkoutType } from "../../domain/types.js";
+import type { Difficulty, WorkoutType } from "../../domain/types.js";
 
 // Re-exported for every pre-existing importer (filterTokens.ts, FilterSheet.tsx,
 // libraryFilters.ts, filters.test.ts) — moved into domain/duration.ts
@@ -24,12 +24,25 @@ export { RECENCY_BOUNDARY_DAYS, isRecent };
 // union (`painLevels`), and RECENT/NOT RECENT's own words retire in favour
 // of a plain boundary pair (`lastDone`) with `customOnly` folded into the
 // symmetric `source` pair — GLOBAL is now as much a filter as CUSTOM was,
-// not an implicit default. libraryFilters.ts's strict validator rejects the
-// old v1 shape wholesale (field names/types don't overlap), which is the
-// point: a stale v1 record falls back to EMPTY_FILTERS rather than
-// half-applying under the new field names.
+// not an implicit default.
+//
+// v3 shape (library-filter-unification round, 2026-08-11 — Task 1): TYPE
+// moves from a single-select `type: WorkoutType | null` to a multi-select
+// union (`types`), matching the shape every other group already used
+// (`durations`/`painLevels`) — its control leaves the sheet for a chip row
+// above it (Task 2), but that's a rendering concern this file doesn't
+// know about; here it's just one more union field. DIFFICULTY is new
+// (`difficulties`), same union shape, filtering Library the way Today's own
+// DIFFICULTY group already does (empty means no filter, the same
+// convention `durations`/`painLevels` use here — Today's own "empty can be
+// a deviation" rule doesn't apply to Library). libraryFilters.ts's strict
+// validator rejects any prior shape wholesale (field names/types don't
+// overlap `types`), which is the point: a stale record — v1, v2, or a
+// tampered value — falls back to EMPTY_FILTERS rather than half-applying
+// under the new field names.
 export interface Filters {
-  type: WorkoutType | null;
+  types: WorkoutType[];
+  difficulties: Difficulty[];
   durations: DurationBucket[];
   painLevels: number[];
   lastDone: "under21" | "over21" | null;
@@ -37,7 +50,8 @@ export interface Filters {
 }
 
 export const EMPTY_FILTERS: Filters = {
-  type: null,
+  types: [],
+  difficulties: [],
   durations: [],
   painLevels: [],
   lastDone: null,
@@ -45,7 +59,17 @@ export const EMPTY_FILTERS: Filters = {
 };
 
 export function toggleType(f: Filters, t: WorkoutType): Filters {
-  return { ...f, type: f.type === t ? null : t };
+  const types = f.types.includes(t)
+    ? f.types.filter((existing) => existing !== t)
+    : [...f.types, t];
+  return { ...f, types };
+}
+
+export function toggleDifficulty(f: Filters, d: Difficulty): Filters {
+  const difficulties = f.difficulties.includes(d)
+    ? f.difficulties.filter((existing) => existing !== d)
+    : [...f.difficulties, d];
+  return { ...f, difficulties };
 }
 
 export function toggleDuration(f: Filters, d: DurationBucket): Filters {
@@ -80,7 +104,10 @@ export function applyFilters(
   baselines: Baselines | null,
 ): LibraryWorkout[] {
   return workouts.filter((w) => {
-    if (f.type !== null && w.type !== f.type) return false;
+    if (f.types.length > 0 && !f.types.includes(w.type)) return false;
+    if (f.difficulties.length > 0 && !f.difficulties.includes(w.difficulty)) {
+      return false;
+    }
     if (f.painLevels.length > 0 && !f.painLevels.includes(w.pain)) {
       return false;
     }

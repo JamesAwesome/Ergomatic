@@ -6,6 +6,20 @@
 
 **Architecture:** Three layers, three tasks. (1) The `Filters` shape + its pure consumers (`filters.ts`, `filterTokens.ts`, `libraryFilters.ts`) including the token-fill seam fix. (2) The screens: three CSS rules extracted to shared names, Today's JSX renamed onto them, Library's chip row + descriptor + sheet changes. (3) e2e, screenshots, DEVIATIONS.
 
+**SCOPE AMENDMENT (controller, 2026-08-11, after Task 1 reported BLOCKED):**
+the original split was impossible as written — recurring-failure #10's own
+example, a type change forcing compilation coupling. Removing `Filters.type`
+breaks `FilterSheet.tsx` at compile time, and the smallest compiling patch
+would have silently shipped Task 2's multi-select behavior. **Task 1 therefore
+also removes the TYPE group from `FilterSheet.tsx`** (spec'd behavior: "the
+TYPE group leaves `FilterSheet` entirely"), replaces that file's single-select
+TYPE tests with the dialog-has-no-type-cells assertion (Task 2's contract item
+4, pulled forward with the code it guards), and updates `Library.test.tsx`'s
+old-shape fixtures. Task 2 keeps the chip row, the CSS extraction, the
+descriptor, `Apply Filter` + caption, and the `toRowTokens` fill passthrough.
+Between the two commits the branch has NO type filtering at all; that
+intermediate is accepted, and no test may pretend otherwise.
+
 **Spec:** `docs/superpowers/specs/2026-08-11-library-filter-unification-design.md` (James approved 2026-08-11). Its antagonistic-pass report (`.superpowers/sdd/library-filters-spec-review.md`) is the authoritative test inventory — READ IT, it lists sites the spec summarizes.
 
 ## Global Constraints
