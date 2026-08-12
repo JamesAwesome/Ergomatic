@@ -380,19 +380,24 @@ function judgedCells(): { text: string; judgement: string }[] {
   }));
 }
 
-describe("pane B — live", () => {
+describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
   it("leads with the split, cut so the eye lands on the seconds", () => {
     renderSurface({ frame: frame({ currentSplit: 117.8 }) });
-    const hero = document.querySelector(".connected-hero-value")!;
+    const hero = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
     expect(hero.textContent).toBe("1:57.8");
     expect(hero.querySelector(".connected-hero-tenths")!.textContent).toBe(
       ".8",
     );
   });
 
-  it("shows METERS LEFT on a distance interval and time left on a time one", () => {
+  it("shows METERS LEFT on a distance interval and time left on a time one, in the metric row", () => {
     const distance = renderSurface();
-    expect(screen.getByText("METERS LEFT")).toBeInTheDocument();
+    const row = document.querySelector(".connected-metric-row")!;
+    expect(
+      within(row as HTMLElement).getByText("METERS LEFT"),
+    ).toBeInTheDocument();
     distance.unmount();
 
     renderSurface({
@@ -405,23 +410,119 @@ describe("pane B — live", () => {
     expect(screen.getByText("0:41")).toBeInTheDocument();
   });
 
-  it("carries rate, HR and meters as three equal cards", () => {
+  // Cards are gone (revision §3: "the old three metric cards are gone").
+  // RATE is a second hero, at the same scale as the split; METERS and HR
+  // sit alongside the interval countdown in the metric row.
+  it("promotes RATE to a second hero, and carries METERS/HR in the metric row — no cards anywhere", () => {
     renderSurface();
-    const triple = document.querySelector(".connected-cards-triple")!;
-    expect(within(triple as HTMLElement).getByText("RATE")).toBeInTheDocument();
-    expect(within(triple as HTMLElement).getByText("HR")).toBeInTheDocument();
+    const rateHero = document.querySelector(".connected-hero-rate")!;
     expect(
-      within(triple as HTMLElement).getByText("METERS"),
+      within(rateHero as HTMLElement).getByText("NOW · SPM"),
     ).toBeInTheDocument();
+    expect(rateHero.querySelector(".connected-hero-value")).not.toBeNull();
+    expect(
+      rateHero.querySelector(".connected-hero-target-value"),
+    ).not.toBeNull();
+
+    const row = document.querySelector(".connected-metric-row")!;
+    expect(within(row as HTMLElement).getByText("METERS")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("HR")).toBeInTheDocument();
+
+    expect(document.querySelector(".timer-card")).toBeNull();
+    expect(document.querySelector(".connected-cards-triple")).toBeNull();
   });
 
-  it("puts the target under the hero in INK, never accent (the supersession)", () => {
+  it("puts both targets under their hero in INK, never accent (the supersession)", () => {
     renderSurface();
-    const target = document.querySelector(".connected-hero-target-value")!;
-    expect(target.className).not.toContain("accent");
+    const targets = document.querySelectorAll(".connected-hero-target-value");
+    expect(targets).toHaveLength(2);
+    for (const target of targets) {
+      expect(target.className).not.toContain("accent");
+    }
     // Accent appears NOWHERE on this pane.
     expect(document.querySelector(".timer-card-value-accent")).toBeNull();
     expect(document.querySelector(".button-l1")).toBeNull();
+  });
+
+  // THE HERO CANNOT CLIP (design spec §6/revision §3): `min-width: 0` on
+  // the column and `white-space: nowrap` on the numeral (index.css) are the
+  // layout half; the model half is this cap, so the hero never has more
+  // characters to lay out than it was sized for in the first place.
+  it("caps a split slower than 9:59.9 at the dash, rather than growing the numeral", () => {
+    renderSurface({ frame: frame({ currentSplit: 700 }) });
+    const hero = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    expect(hero.textContent).toBe("—");
+    expect(hero.className).toContain("timer-card-actual-within");
+  });
+
+  // THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
+  // phase hits this. The target slot holds its space and reads the dash in
+  // `--ink-3` (`connected-value-absent`); the actual above stays UNJUDGED
+  // (plain ink — no `-over`/`-under`/`-stale` class), because a value with
+  // nothing to compare against must not be tinted.
+  it("during REST both targets read the dash, and both actuals above stay unjudged", () => {
+    renderSurface({
+      frame: frame({
+        intervalIndex: 1,
+        state: "resting",
+        // Numbers that would scream "over"/"under" against any real
+        // target, to prove the dash-target is what suppresses the tint.
+        currentSplit: 60,
+        spm: 40,
+      }),
+    });
+    const targets = document.querySelectorAll<HTMLElement>(
+      ".connected-hero-target-value",
+    );
+    expect(targets).toHaveLength(2);
+    for (const target of targets) {
+      expect(target.textContent).toBe("—");
+      expect(target.className).toContain("connected-value-absent");
+    }
+
+    const paceValue = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    const rateValue = document.querySelector(
+      ".connected-hero-rate .connected-hero-value",
+    )!;
+    expect(paceValue.className).toContain("timer-card-actual-within");
+    expect(paceValue.className).not.toContain("connected-value-absent");
+    expect(rateValue.className).toContain("timer-card-actual-within");
+    expect(rateValue.className).not.toContain("connected-value-absent");
+  });
+
+  it("the metric row's three values sit on one baseline: left-in-interval, meters, HR", () => {
+    renderSurface();
+    const row = document.querySelector(".connected-metric-row")!;
+    const cells = row.querySelectorAll(".connected-metric-cell");
+    expect(cells).toHaveLength(3);
+    const labels = Array.from(cells).map(
+      (cell) => cell.querySelector(".connected-metric-label")!.textContent,
+    );
+    expect(labels).toStrictEqual(["METERS LEFT", "METERS", "HR"]);
+    for (const cell of cells) {
+      expect(cell.querySelector(".connected-metric-value")).not.toBeNull();
+    }
+  });
+
+  it("index.css: both heroes are --size-hero over --size-target, tenths at --size-hero-tenths, nowrap", () => {
+    const css = readFileSync(indexCssPath(), "utf-8");
+    const heroValue = /\.connected-hero-value\s*\{([^}]*)\}/.exec(css);
+    const heroTenths = /\.connected-hero-tenths\s*\{([^}]*)\}/.exec(css);
+    const targetValue = /\.connected-hero-target-value\s*\{([^}]*)\}/.exec(css);
+    const metricValue = /\.connected-metric-value\s*\{([^}]*)\}/.exec(css);
+    expect(heroValue).not.toBeNull();
+    expect(heroValue![1]).toContain("var(--size-hero)");
+    expect(heroValue![1]).toContain("white-space: nowrap");
+    expect(heroTenths).not.toBeNull();
+    expect(heroTenths![1]).toContain("var(--size-hero-tenths)");
+    expect(targetValue).not.toBeNull();
+    expect(targetValue![1]).toContain("var(--size-target)");
+    expect(metricValue).not.toBeNull();
+    expect(metricValue![1]).toContain("var(--size-metric)");
   });
 });
 
@@ -628,19 +729,25 @@ describe("paused (handoff §4)", () => {
   // `surfaceModel.test.ts`'s own paused describe). The dash and the
   // held-clock grey DO still render, on pane B, so those two get pane B's
   // own version here rather than being dropped along with pane A.
-  it("pane B's second-value clock greys but holds its last value", () => {
+  // Connected-revamp Task 3 moved the interval clock's own cell from a
+  // semi-hero (`.connected-second-value`) into the metric row
+  // (`.connected-metric-value`) — the grey-but-holds behaviour, and the
+  // reused `connected-clock-value-held` class, are unchanged.
+  it("the metric row's interval-clock cell greys but holds its last value", () => {
     renderSurface({
       phase: "paused",
       frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
     });
-    const clock = document.querySelector(".connected-second-value")!;
+    const clock = document.querySelector(".connected-metric-value")!;
     expect(clock.textContent).toBe("0:41");
     expect(clock.className).toContain("connected-clock-value-held");
   });
 
-  it("pane B's hero reads `—`, because nobody is pulling", () => {
+  it("pane B's split hero reads `—`, because nobody is pulling", () => {
     renderSurface({ phase: "paused" });
-    const hero = document.querySelector(".connected-hero-value")!;
+    const hero = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
     expect(hero.textContent).toBe("—");
   });
 
@@ -695,13 +802,19 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     for (const cell of cells) expect(cell.judgement).toBe("stale");
   });
 
-  it("moves every stale card to the sunken fill", () => {
+  // Cards are gone from pane B (connected-revamp Task 3: "the old three
+  // metric cards are gone", revision §3) — `.connected-card-stale`'s own
+  // "moves to the sunken fill" idiom had no consumer left once `JudgedCard`
+  // retired, and this pane now has no `.timer-card` at all. The stale
+  // treatment survives entirely through the tint class every judged cell
+  // still wears (the previous it, "THE STALE OVERRIDE BEATS EVERY
+  // JUDGEMENT" — `judgedCells()` finds all 4 and confirms `"stale"`).
+  it("carries no cards at all, stale or otherwise — the tint IS the stale treatment now", () => {
     renderSurface({ phase: "disconnected" });
-    const cards = document.querySelectorAll(".timer-card");
-    expect(cards.length).toBeGreaterThan(0);
-    for (const card of cards) {
-      expect(card.className).toContain("connected-card-stale");
-    }
+    expect(document.querySelector(".timer-card")).toBeNull();
+    expect(document.querySelectorAll(".timer-card-actual-stale").length).toBe(
+      4,
+    );
   });
 
   it("keeps End live: the run is still closeable and loggable", async () => {
@@ -719,20 +832,30 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 // No HR monitor
 // ---------------------------------------------------------------------------
 
-describe("no HR monitor (handoff §4)", () => {
-  it("keeps the card, dashes its border, and explains once", () => {
+// Connected-revamp Task 3 rewrites this idiom entirely for pane B (revision
+// §3: "Missing HR renders `—` in place. No dashed card, no explanatory
+// copy."). The dashed-border/"NO HR MONITOR" caption idiom was
+// `JudgedCard`'s alone and had no other consumer; HR is now a plain metric-
+// row cell like METERS, distinguished from a real reading only by the
+// shared `connected-value-absent` grey every dash on this pane wears.
+describe("no HR monitor: no dashed card, no explanatory copy (revision §3)", () => {
+  it("reads `—`, greyed, with no card and no caption", () => {
     renderSurface({ frame: frame({ heartRateBpm: null }) });
-    const hrCard = screen.getByText("HR").parentElement!;
-    expect(hrCard.className).toContain("connected-card-absent");
-    expect(hrCard.querySelector(".timer-card-value")!.textContent).toBe("—");
-    expect(screen.getByText("NO HR MONITOR")).toBeInTheDocument();
+    const cell = screen.getByText("HR").parentElement!;
+    expect(cell.className).toBe("connected-metric-cell");
+    const value = cell.querySelector(".connected-metric-value")!;
+    expect(value.textContent).toBe("—");
+    expect(value.className).toContain("connected-value-absent");
+    expect(document.querySelector(".timer-card")).toBeNull();
+    expect(screen.queryByText("NO HR MONITOR")).not.toBeInTheDocument();
   });
 
   it("becomes a number with no announcement when a belt appears", () => {
     renderSurface({ frame: frame({ heartRateBpm: 151 }) });
-    const hrCard = screen.getByText("HR").parentElement!;
-    expect(hrCard.className).not.toContain("connected-card-absent");
-    expect(hrCard.querySelector(".timer-card-value")!.textContent).toBe("151");
+    const cell = screen.getByText("HR").parentElement!;
+    const value = cell.querySelector(".connected-metric-value")!;
+    expect(value.textContent).toBe("151");
+    expect(value.className).not.toContain("connected-value-absent");
     expect(screen.queryByText("NO HR MONITOR")).not.toBeInTheDocument();
   });
 });

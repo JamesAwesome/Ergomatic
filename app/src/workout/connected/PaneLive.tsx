@@ -1,58 +1,95 @@
-// Pane B — the live view (handoff §3's "Pane B — live view"). Pure machine
-// data; the only control anywhere near it is the shell's End.
+// Pane B — the live view (design spec §6, revision §3's "Live · the pane you
+// row on"). Pure machine data; the only control anywhere near it is the
+// shell's End.
 //
-// Hierarchy, largest first (handoff §3, sizes in `index.css`): hero /500m
-// (96px portrait with tenths at 52px, 116px/56px landscape — fix round,
-// review Minor-14: this comment's own "150/72 landscape" pre-dates what
-// Task 6 actually shipped and was never corrected; it now also sits beside
-// connected-revamp Task 2's own `--size-hero`/`--size-hero-tenths` token
-// scale, 104/112 and 54/58, which THIS file has not yet been rewired to
-// consume — Task 3 rebuilds this pane onto the scale and should start from
-// the shipped 96/52/116/56 figures, not either of the two stale numbers
-// this comment used to carry) -> time left in the interval (72/62), or
-// `METERS LEFT` on a distance interval -> rate · HR · meters as three equal
-// cards (40/44) -> the mono strip -> the total bar and quarter ruler.
+// TWO HEROES, LOUDLY (connected-revamp Task 3). The pane says two things:
+// the actual split and the actual rate, each `--size-hero` (112px landscape
+// / 104px portrait) with its target directly beneath at `--size-target`
+// (46/44px), in ink. Everything else on the pane tops out at `--size-metric`
+// (30px) — the metric row, three values on one baseline under a 1px ink
+// rule — then UP NEXT, then the ruler (Task 4's territory; consumed here
+// unchanged).
 //
-// THE SUPERSESSION: the handoff's own line for the hero's target reads
-// "accent value, mono caption". Superseded — targets are INK on both
-// connected panes (handoff §3's own earlier ruling, "The target is ink in
-// connected mode", and DEVIATIONS row 0; the two statements contradict each
-// other inside one document and the phase spec resolves it in ink's
-// favour). Accent appears NOWHERE on this pane; its only job on this
-// surface is pane C's active countdown.
+// THE RATE HERO IS A PROMOTION, NOT NEW PLUMBING. `model.rate` is the same
+// `JudgedValue` `judgedValue` has always produced (`surfaceModel.ts`'s one
+// judgement path — `judgeActual`'s single call site is unmoved by this
+// file); `model.rateCaption` is the same string ("NO RATE TARGET" or
+// `TARGET ${targetSpm}`) that used to caption a small RATE card. Promoting
+// it to a hero-scale numeral is presentation only: `rateTargetValue` below
+// strips the "TARGET " word for display (the label span already says
+// TARGET beside it, mirroring the split hero's own TARGET row) and reads
+// the caption's "NO RATE TARGET" sentinel as the no-target signal.
 //
-// Two columns that vanish in portrait (`display: contents`) — landscape
-// turns the same wrappers into two INDEPENDENT flex columns rather than one
-// shared grid, so this column's own numeral can never force the row the
-// other column's rows live in (the reason `.connected-col`'s own comment in
-// `index.css` documents in full, with the screenshots-run measurement that
-// found it). connected-revamp Task 2 retired `PaneTimer.tsx` (pane A), this
-// technique's original second user; pane B is now its only one.
+// THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
+// phase — and any work phase without a numeric target — has nothing to
+// judge. `judgeActual` already reads a `null` target as `"within"` (rule
+// 2: "nothing to judge is not a deviation"), so the actual above renders
+// unjudged in plain ink with zero code here. The target VALUE needed help:
+// `surfaceModel.ts`'s `targetSplit.main` used to fall back to the phase's
+// own word ("REST", "ALL OUT") instead of a dash, which is fixed at the
+// model layer (see that file's own comment); this pane reads the result
+// (`DASH`) and swaps in `connected-value-absent` (`--ink-3`) so the slot
+// holds its space without claiming a target that isn't there.
+//
+// CARDS ARE GONE (revision §3: "The old three metric cards are gone; the
+// metric row costs 44px, not 120." / "Missing HR renders — in place. No
+// dashed card, no explanatory copy."). RATE promoted to a hero; METERS and
+// HR moved into the metric row alongside the interval countdown, all three
+// plain judged numerals with no card, no border, no absent idiom beyond the
+// shared `connected-value-absent` grey every dash on this pane already
+// wears. `JudgedCard.tsx` had no other consumer and retired with them.
+//
+// REMOVED per spec §3 (retirement inventory §4/§5, Task 3's own): the
+// ELAPSED strip (replaced by this metric row) and the equal-width
+// `IntervalSegments` bar (the notched TOTAL LEFT bar says the same thing
+// proportionally, Task 4's rebuild) — neither renders here any more.
 
-import IntervalSegments from "../../components/IntervalSegments";
 import UpNextStrip from "../../components/UpNextStrip";
 import TimerRuler from "../../session/TimerRuler";
 import ConnectionLine from "./ConnectionLine";
-import JudgedCard from "./JudgedCard";
-import type { SurfaceModel } from "./surfaceModel";
+import { DASH, type SurfaceModel } from "./surfaceModel";
+
+/** `surfaceModel.ts`'s own sentinel for "no rate target" — see that file's
+ *  `rateCaption` field. Matched literally rather than re-deriving a boolean
+ *  here, so the model stays the single source of truth for the signal. */
+const RATE_NO_TARGET = "NO RATE TARGET";
+
+/** `"TARGET 24"` -> `"24"`; `"NO RATE TARGET"` -> `DASH`. The only parsing
+ *  this file does: `rateCaption` already carries the value, and promoting
+ *  it to a numeral is a presentation change, not a new derivation
+ *  (design spec §6: "not deriving a new field"). */
+function rateTargetValue(caption: string): string {
+  return caption === RATE_NO_TARGET ? DASH : caption.replace(/^TARGET /, "");
+}
+
+function judgedClass(
+  base: string,
+  value: { judgement: string; absent: boolean },
+): string {
+  return `${base} timer-card-actual-${value.judgement}${
+    value.absent ? " connected-value-absent" : ""
+  }`;
+}
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {
+  const rateAbsent = model.rateCaption === RATE_NO_TARGET;
+  // Same signal the pace hero's target already carries (`targetSplit.main
+  // === DASH`, fixed at the model layer) — mirrored here rather than adding
+  // a second boolean field for one comparison.
+  const paceTargetAbsent = model.targetSplit.main === DASH;
+  // `model.stale` already distinguishes "the link is gone" from "the erg is
+  // just paused" (paused values hold, they are not stale) — the same rule
+  // `nowLabel` uses for the split hero's own NOW/LAST swap, mirrored here
+  // rather than a second label field for one string.
+  const rateLabel = model.stale ? "LAST · SPM" : "NOW · SPM";
+
   return (
     <div className="connected-pane connected-pane-live">
-      <div className="connected-col connected-col-hero">
-        <ConnectionLine model={model} trailing={model.intervalLabelShort} />
-        <IntervalSegments
-          total={model.segments.total}
-          current={model.segments.current}
-          kinds={model.segments.kinds}
-        />
-        <div className="connected-hero">
+      <ConnectionLine model={model} trailing={model.intervalLabelShort} />
+      <div className="connected-heroes">
+        <div className="connected-hero connected-hero-split">
           <span className="connected-hero-label">{model.nowLabel}</span>
-          <span
-            className={`connected-hero-value timer-card-actual-${model.pace.judgement}${
-              model.pace.absent ? " connected-value-absent" : ""
-            }`}
-          >
+          <span className={judgedClass("connected-hero-value", model.pace)}>
             {model.paceWhole}
             {model.paceTenths !== "" && (
               <span className="connected-hero-tenths">{model.paceTenths}</span>
@@ -60,8 +97,13 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           </span>
           <div className="connected-hero-target">
             <span className="connected-hero-target-label">TARGET</span>
-            {/* Ink — see the supersession note in this file's header. */}
-            <span className="connected-hero-target-value">
+            <span
+              className={
+                paceTargetAbsent
+                  ? "connected-hero-target-value connected-value-absent"
+                  : "connected-hero-target-value"
+              }
+            >
               {model.targetSplit.main}
             </span>
             <span className="connected-hero-target-ref">
@@ -69,72 +111,74 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             </span>
           </div>
         </div>
-        <TimerRuler
-          totalLeftSeconds={model.totalLeftSeconds}
-          totalSeconds={model.totalSeconds}
-        />
+        <span className="connected-hero-divider" aria-hidden="true" />
+        <div className="connected-hero connected-hero-rate">
+          <span className="connected-hero-label">{rateLabel}</span>
+          <span className={judgedClass("connected-hero-value", model.rate)}>
+            {model.rate.display}
+          </span>
+          <div className="connected-hero-target">
+            <span className="connected-hero-target-label">TARGET</span>
+            <span
+              className={
+                rateAbsent
+                  ? "connected-hero-target-value connected-value-absent"
+                  : "connected-hero-target-value"
+              }
+            >
+              {rateTargetValue(model.rateCaption)}
+            </span>
+          </div>
+        </div>
       </div>
-      <div className="connected-col connected-col-readouts">
-        <div className="connected-second">
-          <span className="connected-second-label">
+      <div className="connected-metric-row">
+        <div className="connected-metric-cell">
+          <span className="connected-metric-label">
             {model.intervalClockLabel}
           </span>
           <span
             className={
               model.status === "paused" || model.stale
-                ? "connected-second-value connected-clock-value-held"
-                : "connected-second-value"
+                ? "connected-metric-value connected-clock-value-held"
+                : "connected-metric-value"
             }
           >
             {model.intervalClockValue}
           </span>
         </div>
-        <div className="connected-cards connected-cards-triple">
-          <JudgedCard
-            label="RATE"
-            value={model.rate}
-            caption={model.rateCaption}
-            stale={model.stale}
-          />
-          {/* The HR card never leaves (handoff §4). With no belt talking it
-              reads `—` over a dashed border with the caption
-              `NO HR MONITOR`; if a monitor appears mid-session the dash
-              becomes a number with no announcement. `JudgedCard` does both
-              from `absent` alone. */}
-          <JudgedCard
-            label="HR"
-            value={model.hr}
-            caption={model.hrCaption}
-            stale={model.stale}
-            absentIdiom="dashed"
-          />
-          <JudgedCard
-            label="METERS"
-            value={model.meters}
-            caption={model.metersCaption}
-            stale={model.stale}
-          />
+        <div className="connected-metric-cell">
+          <span className="connected-metric-label">METERS</span>
+          <span className={judgedClass("connected-metric-value", model.meters)}>
+            {model.meters.display}
+          </span>
         </div>
+        <div className="connected-metric-cell">
+          {/* The HR card never left its own slot (handoff §4); revision §3
+              drops the CARD, not the treatment — a missing reading still
+              reads `—`, now via the shared `connected-value-absent` grey
+              rather than a dashed border, and with no caption to explain
+              it (`hrCaption`'s "NO HR MONITOR" string has no renderer left
+              on this pane). */}
+          <span className="connected-metric-label">HR</span>
+          <span className={judgedClass("connected-metric-value", model.hr)}>
+            {model.hr.display}
+          </span>
+        </div>
+        {/* UP NEXT NESTS INSIDE the metric row rather than following it as
+            its own sibling (index.css's own comment on `.connected-metric-
+            row` has the full reasoning): landscape's 296px budget cannot
+            fit two 112px heroes AND a full second row for UP NEXT AND the
+            ruler. `flex-wrap` is what makes one DOM serve both layouts —
+            portrait wraps it onto its own line (`flex-basis: 100%`,
+            keeping its established pill), landscape keeps it on the metric
+            row's own baseline, right-aligned, exactly where revision §3
+            draws it. */}
         <UpNextStrip upNext={model.upNext} thenNext={model.thenNext} />
-        {/* The handoff's strip is "strokes · elapsed · total left". One cell
-            of those three survives contact with the seam:
-            - STROKES: `MonitorFrame` carries no stroke count, and no
-              characteristic `domain/monitor/pm5/parse.ts` decodes has one.
-              A permanently dashed cell would be noise, not an idiom.
-            - TOTAL LEFT: the shared `TimerRuler` prints it in bigger type a
-              few lines away. Two of the same number is the redundancy the
-              first screenshots run made obvious.
-            So the strip keeps its rule and its slot and carries the one
-            thing it can honestly say. Recorded in DEVIATIONS. */}
-        <div className="connected-strip">
-          <div className="connected-strip-cell">
-            <span className="connected-strip-label">ELAPSED</span>
-            <span className="connected-strip-value">
-              {model.elapsedDisplay}
-            </span>
-          </div>
-        </div>
       </div>
+      <TimerRuler
+        totalLeftSeconds={model.totalLeftSeconds}
+        totalSeconds={model.totalSeconds}
+      />
     </div>
   );
 }

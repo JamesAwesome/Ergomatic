@@ -261,31 +261,20 @@ export interface SurfaceModel {
    *  LEFT"). */
   intervalClockLabel: string;
   intervalClockValue: string;
-  /** 0-100. No current renderer: its only one, `PaneTimer.tsx`'s pane A
-   *  (`.connected-interval-bar`), retired with connected-revamp Task 2 —
-   *  design spec §3's casualty list calls this DROPPED outright, not
-   *  rehomed like `intervalLabel` above, since "the metric row's countdown
-   *  is the same fact as a number, and revision §3's live layout has no
-   *  slot" for a second bar. Left computed and tested rather than deleted:
-   *  it is not in Task 2's own retirement inventory, so the field stays
-   *  until whoever reconciles that gap says otherwise. */
-  intervalProgressPct: number;
   pace: JudgedValue;
   /** The hero split, cut so the tenths can be set smaller (handoff §3: "the
    *  eye should land on the seconds, not the decimal"). `paceTenths` is `""`
    *  when there is no reading. */
   paceWhole: string;
   paceTenths: string;
-  paceCaption: string;
   rate: JudgedValue;
+  /** `"NO RATE TARGET"` or `` `TARGET ${targetSpm}` ``. Connected-revamp
+   *  Task 3 promotes this to the rate hero's own ink numeral
+   *  (`PaneLive.tsx`'s `rateTargetValue`) rather than deriving a second
+   *  field for it — see that file's own header comment. */
   rateCaption: string;
   meters: JudgedValue;
-  metersCaption: string;
   hr: JudgedValue;
-  hrCaption: string;
-  /** No belt data this frame — the card keeps its slot, goes dashed-border
-   *  and reads `—` (handoff §4's no-HR treatment, which "never leaves"). */
-  hrAbsent: boolean;
   /** The TARGET SPLIT card: resolved value + the ref it came from. */
   targetSplit: { main: string; sub: string | null };
   /** That card's third line, never blank — the ref when there is one, and
@@ -317,6 +306,18 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
   return frame.currentSplit === 0 ? null : frame.currentSplit;
 }
 
+/** THE HERO CANNOT CLIP (design spec §6/revision §3): `min-width: 0` and
+ *  `white-space: nowrap` (`PaneLive.tsx`, `index.css`) keep a real split
+ *  from wrapping mid-numeral, but nothing bounds how WIDE a live reading
+ *  can be — a boundary-frame glitch or a genuinely stalled erg can report a
+ *  split with more digits than the hero was sized for. Anything slower
+ *  than this (599.9s, `fmtSplit`'s own one-decimal precision) is treated
+ *  as no reading at all rather than a five-plus-character numeral: `null`
+ *  through `judgedValue` renders `DASH` and judges `"within"` (rule 2),
+ *  the same honest "nothing to show" every other absent case on this pane
+ *  takes. */
+const PACE_HERO_CAP_SECONDS = 599.9;
+
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const { phases, program, deviceName } = input;
   const status = surfaceStatusFor(input.phase) ?? "live";
@@ -344,9 +345,13 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       : null;
   const targetSpm = phase?.spm ?? null;
 
+  const rawPace = livePace(frame, status);
+  const paceActual =
+    rawPace !== null && rawPace > PACE_HERO_CAP_SECONDS ? null : rawPace;
+
   const pace = judgedValue({
     kind: "pace",
-    actual: livePace(frame, status),
+    actual: paceActual,
     target: targetSplitSeconds,
     stale,
     format: fmtSplit,
@@ -387,9 +392,21 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     ? [pace.display, ""]
     : splitHero(pace.display);
 
-  const targetSplit = phase
-    ? targetSplitDisplay(phase)
-    : { main: DASH, sub: null };
+  // THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
+  // phase, and any work phase without a numeric split target (an "effort"
+  // target, a warm-up, a legacy run frozen before `ref` existed), has
+  // nothing for the hero's TARGET slot to show. `targetSplitDisplay` alone
+  // used to fall back to the phase's own WORD (`phase.label` — "REST",
+  // "ALL OUT") for `main` in exactly this case, which read as a target
+  // that doesn't exist. Gating on `targetSplitSeconds !== null` — the same
+  // "is there a real number" test `pace`'s own judgement already uses —
+  // makes `main` the house `DASH` instead, so `PaneLive.tsx` can hold the
+  // slot's space and greys it via `connected-value-absent` rather than
+  // rendering a word in the target's own type weight.
+  const targetSplit =
+    phase && targetSplitSeconds !== null
+      ? targetSplitDisplay(phase)
+      : { main: DASH, sub: null };
 
   const totalSeconds = totalSessionSecondsOf(phases);
   // `sessionElapsedSeconds`, never `frame.elapsedSeconds`: 0x0031's own
@@ -431,18 +448,13 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     elapsedDisplay: fmtDuration(frame.sessionElapsedSeconds / 60),
     intervalClockLabel: distanceInterval ? "METERS LEFT" : "LEFT IN INTERVAL",
     intervalClockValue: intervalClockValueFor(remaining),
-    intervalProgressPct: intervalProgressPctFor(phase, remaining),
     pace,
     paceWhole,
     paceTenths,
-    paceCaption: paceCaptionFor(status, targetSplitSeconds),
     rate,
     rateCaption: targetSpm === null ? "NO RATE TARGET" : `TARGET ${targetSpm}`,
     meters,
-    metersCaption: "TOTAL",
     hr,
-    hrCaption: hr.absent ? "NO HR MONITOR" : "BPM",
-    hrAbsent: hr.absent,
     targetSplit,
     targetSplitCaption: targetSplit.sub ?? "NO SPLIT TARGET",
     grid: buildGridModel({
@@ -781,31 +793,4 @@ function intervalClockValueFor(
   return remaining.kind === "distance"
     ? String(Math.round(remaining.value))
     : fmtDuration(remaining.value / 60);
-}
-
-/** Pane A's 6px bar: how much of THIS interval is behind the rower, in the
- *  interval's own programmed dimension (time counts time, distance counts
- *  meters — the handoff's distance rule). Zero when the machine has not
- *  reported a remaining value yet, never a divide-by-zero. */
-function intervalProgressPctFor(
-  phase: EnginePhase | undefined,
-  remaining: MonitorFrame["intervalRemaining"],
-): number {
-  if (phase === undefined || remaining === null) return 0;
-  const full = remaining.kind === "distance" ? phase.meters : phase.seconds;
-  if (full === undefined || full <= 0) return 0;
-  return Math.min(100, Math.max(0, ((full - remaining.value) / full) * 100));
-}
-
-/** The NOW card's third line. Static while rowing (handoff §3: "a static
- *  target readout that never re-words or reflows"), with the one re-wording
- *  §4 itself mandates — a paused erg has no current pace, and the caption
- *  says so. */
-function paceCaptionFor(
-  status: SurfaceStatus,
-  targetSplitSeconds: number | null,
-): string {
-  if (status === "paused") return "NOT ROWING";
-  if (targetSplitSeconds === null) return "NO PACE TARGET";
-  return `TARGET ${fmtSplit(targetSplitSeconds)}`;
 }

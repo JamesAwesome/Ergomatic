@@ -531,14 +531,37 @@ async function walkSurfaceToLog(
   // `expect(...).toBeVisible()` cannot be trusted to catch it).
   await pumpUntilPaused(page);
   await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
+  // Cards are gone from pane B (connected-revamp Task 3, revision §3: "the
+  // old three metric cards are gone") — METERS is now a plain metric-row
+  // cell, `.connected-metric-cell` in place of the old `.timer-card`.
+  // Structural `has()`, not `hasText`: this program's own interval clock
+  // cell reads "METERS LEFT" (a distance interval) and its own cell's
+  // concatenated text is "METERS LEFT<value>" with no separator, which a
+  // `hasText` substring/regex match on the CELL itself cannot tell apart
+  // from the real METERS cell's "METERS<value>" — `has()` instead requires
+  // an exact-text `.connected-metric-label` child, so only the cell whose
+  // label is precisely "METERS" matches.
   const metersValue = page
-    .locator(".timer-card", { hasText: "METERS" })
-    .locator(".timer-card-value");
+    .locator(".connected-metric-cell")
+    .filter({
+      has: page.locator(".connected-metric-label", { hasText: /^METERS$/ }),
+    })
+    .locator(".connected-metric-value");
   const pausedMeters = await metersValue.textContent();
-  const elapsedStrip = page.locator(".connected-strip-value").first();
-  const pausedElapsed = await elapsedStrip.textContent();
+  // The ELAPSED strip retired with the same task (replaced by the metric
+  // row) and took its own MEDIUM-4 regression anchor with it — no cell the
+  // strip's replacement carries (left-in-interval, meters, HR) is
+  // guaranteed to keep moving through a pause the way a wall clock does.
+  // TOTAL LEFT is: it is priced off the SAME accumulated
+  // `sessionElapsedSeconds` the retired ELAPSED strip read
+  // (`surfaceModel.ts`'s own `totalLeftSeconds`/`elapsedDisplay`, one
+  // driver clock behind both), and `TimerRuler`'s `.timer-total-value`
+  // survives Task 3 unchanged, so it re-anchors the same proof: something
+  // on pane B keeps counting while METERS holds.
+  const totalLeftValue = page.locator(".timer-total-value");
+  const pausedTotalLeft = await totalLeftValue.textContent();
   // Reads the same frozen METERS across two checks a beat apart — proof
-  // this is a HOLD, not a coincidence of timing. ELAPSED is deliberately
+  // this is a HOLD, not a coincidence of timing. TOTAL LEFT is deliberately
   // NOT part of that check: it is the one metric the fixture keeps moving
   // through the freeze, exactly as a real PM5 does.
   await page.waitForTimeout(700);
@@ -546,7 +569,7 @@ async function walkSurfaceToLog(
   await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
   // ...and the clock really did move while PAUSED held (erg-day review,
   // MEDIUM-4: without this the four-metric key would still pass here).
-  expect(await elapsedStrip.textContent()).not.toBe(pausedElapsed);
+  expect(await totalLeftValue.textContent()).not.toBe(pausedTotalLeft);
 
   // RESUMED — the changed frame in `buildStoryEvents()` clears the freeze
   // (700ms of clearance past the freeze's own last tick).

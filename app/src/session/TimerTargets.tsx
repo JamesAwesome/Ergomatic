@@ -87,11 +87,13 @@ export function rateDisplay(phase: EnginePhase): {
  *
  *  Of the CSS hooks the retired variant exercised, only the
  *  judgement-keyed one survives: `timer-card-actual-{judgement}` is
- *  declared in `index.css` and rendered today by
- *  `connected/JudgedCard.tsx`, `connected/PaneLive.tsx` and
- *  `connected/PaneGrid.tsx`. `.timer-card-static` and the bare
- *  `.timer-card-actual` had no renderer left at all and were deleted from
- *  `index.css` by the same fix wave. */
+ *  declared in `index.css` and rendered today by `connected/PaneLive.tsx`
+ *  and `connected/PaneGrid.tsx` (connected-revamp Task 3 retired
+ *  `connected/JudgedCard.tsx` itself — pane B's own rebuild dropped the
+ *  three metric cards it wrapped, and it had no other consumer).
+ *  `.timer-card-static` and the bare `.timer-card-actual` had no renderer
+ *  left at all and were deleted from `index.css` by the fix wave that
+ *  retired the earlier `variant="connected"`. */
 export default function TimerTargets({ phase }: { phase: EnginePhase }) {
   const target = targetSplitDisplay(phase);
   const rate = rateDisplay(phase);
