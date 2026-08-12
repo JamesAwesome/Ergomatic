@@ -5873,17 +5873,18 @@ section:not(.news-pinned) .news-row:last-of-type {
      scroller is 239px, 7 rows at the fixed 32px height take 224px, and
      an 8th (256px) does not fit — the ruling's own 232px was measured
      against an earlier build of this same header; the number moved, the
-     count it was defending (7, not 8) did not. */
+     count it was defending (7, not 8) did not.
+
+     NO PADDING HERE EITHER (Task 5 fix round, JAMES RULING 2026-08-12,
+     reversing this task's own first attempt): portrait's scroller has more
+     budget than the revision packet's 12-row figure assumed — that number
+     was written before anyone measured a real build. A deliberate
+     `padding-top` once sat here purely to manufacture unused space and
+     force the count down to 12; that is the "old code" pattern the ruling
+     names — nothing may exist whose only job is to hide capacity. Portrait
+     now takes every row its own 40px-fixed-height budget actually holds.
+     `e2e/screenshots.spec.ts` measures and pins the real count. */
   gap: 0;
-  /* PORTRAIT ONLY (landscape zeroes this below): pushes the first row
-     down so the scroller holds exactly revision §4's 12, not the 14 a
-     840-ish px frame actually has room for. Landscape has no slack to
-     give away (see the gap comment above); portrait does, and gets it
-     back as breathing room above row 1 rather than a phantom 13th/14th
-     row past what the spec calls for. `e2e/screenshots.spec.ts` measures
-     the exact count in a real browser — this value is derived FROM that
-     measurement, not guessed at. */
-  padding-top: 60px;
 }
 
 /* FIXED HEIGHT, BOTH ORIENTATIONS (revision §4's own table; landscape
@@ -6877,12 +6878,6 @@ section:not(.news-pinned) .news-row:last-of-type {
      owed (Task 8). */
   .connected-grid-row {
     height: 32px;
-  }
-
-  /* Zeroes the base rule's portrait-only breathing room (above) — landscape
-     is packed to exactly 7 with nothing to spare. */
-  .connected-pane-grid .connected-grid-rows {
-    padding-top: 0;
   }
 
   /* `#` 26px, not portrait's 22 (revision §4's own table). Every OTHER

@@ -2246,13 +2246,19 @@ for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
     await showConnectedFixture(page, name);
     if (name === "connected-pane-grid-long") {
-      // PORTRAIT'S OWN DENSITY CLAIM (connected-revamp Task 5, revision
-      // §4's table): 12 rows visible at 390px of portrait height, fixed
-      // 40px rows. Measured the same way the landscape block below
-      // measures its own 7 — a bounding-box containment count in the real
-      // browser, not a jsdom guess, because the header, the totals line,
-      // the column head, the scroller and the caption all have to land
-      // inside 844px of real layout for the claim to be true.
+      // PORTRAIT'S OWN DENSITY CLAIM (connected-revamp Task 5, JAMES RULING
+      // 2026-08-12, fix round: "take all 14 rows" — the revision packet's
+      // 12 was written before anyone measured a real build, and no code
+      // should exist whose only job is to hide capacity a 40px-fixed-height
+      // row genuinely has room for). This task's first attempt forced 12
+      // with a deliberate `padding-top` spacer on `.connected-grid-rows`;
+      // that spacer is gone, and this asserts the HONEST number the real
+      // budget holds instead of a number chosen in advance. Measured the
+      // same way the landscape block below measures its own 7 — a
+      // bounding-box containment count in the real browser, not a jsdom
+      // guess, because the header, the totals line, the column head, the
+      // scroller and the caption all have to land inside 844px of real
+      // layout for the claim to be true.
       const visible = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
         const box = scroller.getBoundingClientRect();
@@ -2261,7 +2267,7 @@ for (const name of CONNECTED_STATES) {
           return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
         }).length;
       });
-      expect(visible).toBe(12);
+      expect(visible).toBe(14);
     }
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, `${name}.png`),
