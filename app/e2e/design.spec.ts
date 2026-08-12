@@ -511,6 +511,20 @@ test.describe("library screen", () => {
 
 test.describe("workout detail screen", () => {
   test.beforeEach(async ({ page }) => {
+    // Pin Web Bluetooth PRESENT before the app loads — the mirror of the
+    // no-Bluetooth describe below, and for the same reason. Connect's
+    // dashed state repaints the button `--surface` (Task 5's contrast
+    // fix), so a runner WITHOUT the API renders this screen's primary
+    // cream instead of blue: green on a dev Chrome, red on CI's headless
+    // one (2026-08-12, PR #85's first CI run — received rgb(255,253,247)).
+    // The available-state pins below assert the AVAILABLE state, so they
+    // state it rather than inheriting whatever radio the runner has.
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, "bluetooth", {
+        value: { getAvailability: () => Promise.resolve(true) },
+        configurable: true,
+      });
+    });
     await signInViaBackdoor(page, {
       email: "design-detail@e2e.test",
       name: "Design Detail Tester",
