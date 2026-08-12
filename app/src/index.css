@@ -3799,6 +3799,15 @@ button:disabled {
   background: var(--page);
 }
 
+/* A boundary the session already outran clamps to `left: 100%`, which puts a
+   1px child's LEFT edge ON the bar's right edge — i.e. the hairline paints
+   just outside the box it belongs to (task-4-review.md M-4;
+   `.connected-pane`'s `overflow-clip-margin: 12px` means it would still be
+   visible there). One hairline back is the whole fix. */
+.timer-total-notch-end {
+  margin-left: -1px;
+}
+
 .timer-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;

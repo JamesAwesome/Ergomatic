@@ -1385,7 +1385,7 @@ describe("Timer — the notched total bar", () => {
     expect(anchored[2]).toBeCloseTo((1320 / 1420) * 100, 6);
   });
 
-  it("marks the measured notch a fact and leaves the rest predicted", async () => {
+  it("a measured interval sitting behind two unmeasured ones is still not a fact", async () => {
     mockKeepAwake();
     const run = matrixRun();
     saveRun({
@@ -1406,6 +1406,39 @@ describe("Timer — the notched total bar", () => {
         (n) => (n as HTMLElement).dataset.predicted,
       ),
     ).toStrictEqual(["true", "true", "true"]);
+  });
+
+  it("a run that OPENS with a rest keeps its notches where that rest leaves them", async () => {
+    mockKeepAwake();
+    // Fix round 1 (task-4-review.md I-1). A rest as step 1 is authorable —
+    // `domain/validate.ts` has no positional rule and the builder has no
+    // leading-rest guard — and with the warm-up preference off it reaches the
+    // timer exactly like this. `[5:00 rest, 4 x (4:00 + 1:00, last one bare)]`
+    // prices at 1440s, and the first interval really ends at 600s: 41.7% of
+    // the bar, not the 20.8% the dropped lead-in used to draw.
+    const rest5: Step = { k: "r", minutes: 5 };
+    const piece = (withRest: boolean): Step => ({
+      k: "w",
+      duration: { kind: "time", minutes: 4 },
+      ref: { base: "6k", off: 0 },
+      ...(withRest ? { restMinutes: 1 } : {}),
+    });
+    const draft = buildDraft({
+      id: "id-rest-first",
+      title: "Rest first",
+      type: "O2" as WorkoutType,
+      steps: [rest5, piece(true), piece(true), piece(true), piece(false)],
+    });
+    const run = buildAndSaveRun(draft, FIXED_NOW, BASELINES, null);
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    expect(totalSessionSeconds(run)).toBe(1440);
+    const lefts = notchLefts();
+    expect(lefts).toHaveLength(3);
+    expect(lefts[0]).toBeCloseTo(41.667, 2);
+    expect(lefts[1]).toBeCloseTo(62.5, 2);
+    expect(lefts[2]).toBeCloseTo(83.333, 2);
   });
 
   it("keeps the quarter ruler for a session with only one interval", async () => {
