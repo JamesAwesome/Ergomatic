@@ -3597,6 +3597,15 @@ button:disabled {
    timer-suspect-copy (--ink-2 on --page) 9.74:1. All clear the 4.5:1 AA
    floor.
 
+   THREE PAIRINGS IN THAT LEDGER ARE HISTORY as of connected-revamp Task 7,
+   which took accent off this surface almost entirely (revision §5, James's
+   ruling 6): `timer-state` is --ink on --page, both TARGET values are --ink
+   on --page (`.timer-card-value-accent` no longer exists), and
+   `.timer-control-pause` is --ink on --surface inside a 1px ink border. All
+   three land far above AA on their own rules below; accent's remaining
+   three jobs here are the phase-progress fill, the total-bar fill and the
+   landscape gutter's outlined END, and `Timer.test.tsx` pins that exact set.
+
    Task 1 (ui-fix round) contrast sweep: timer-phase-label/-total-label
    (10-11px)/-card-label/-card-caption/-ruler-label all moved from --ink-4 to
    --ink-3, the blanket "no small (<=11px) mono label reads --ink-4" rule
@@ -3786,15 +3795,19 @@ button:disabled {
   display: block;
 }
 
-/* Ink, not accent (fix round 1, review Important-1). DEVIATIONS.md:77
-   already named this exact issue — the mockup's own segment bar is
-   ink/mid/rule, zero accent pixels (`Ergomatic connected mode.dc.html`'s
-   timer frames render the completed dots `#1b1a17`), and the connected
-   surface's own now-retired override already proved the fix ("accent
-   means four things and none of them is 'already rowed'"). Phase 7B Task
-   6 scoped that fix to `.connected-pane` only, leaving THIS base rule —
-   the phone timer's own — as the still-open half of the same row; closing
-   it here retires DEVIATIONS.md:77 rather than carrying it forward. */
+/* Ink, not accent (Task 7's fix round, review Important-1).
+   `docs/design/DEVIATIONS.md`'s former segment-strip row named this exact
+   issue — the mockup's own segment bar is ink/mid/rule, zero accent pixels
+   (`Ergomatic connected mode.dc.html`'s timer frames render the completed
+   dots `#1b1a17`), and the connected surface's own now-retired override
+   already proved the fix ("accent means four things and none of them is
+   'already rowed'"). Phase 7B Task 6 scoped that fix to `.connected-pane`
+   only, leaving THIS base rule — the phone timer's own — as the still-open
+   half; closing it here left nothing for that row to record, and Task 8
+   RETIRED it (no connected pane renders a strip at all any more, and the
+   two surfaces no longer differ). Deliberately cited by description, not
+   by line number: the row is gone, and a number would point at whatever
+   moved up into its place. */
 .timer-dot-past {
   background: var(--ink);
 }
@@ -4729,7 +4742,10 @@ button:disabled {
    not a new one: complete-total-value (--ink/--page) far exceeds AA,
    matching the 96/128px numeral; complete-actual-label (--ink-4/--surface)
    5.29:1 and complete-actual-value (--accent/--surface) 5.94:1, both
-   matching timer-card-label/-value-accent's own cards. complete-total-label
+   matching what the phone timer's own TARGET cards measured at the time
+   (`timer-card-label`/`-value-accent`; the accent half of that pair went
+   ink in connected-revamp Task 7, which changes nothing about the ratios
+   computed here — this screen keeps its own accent actual). complete-total-label
    moved from --ink-4 to --ink-3 in Task 1's own small-mono-label sweep
    (below). */
 .session-complete-screen {
