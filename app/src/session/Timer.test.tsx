@@ -1441,6 +1441,40 @@ describe("Timer — the notched total bar", () => {
     expect(lefts[2]).toBeCloseTo(83.333, 2);
   });
 
+  it("tones the warm-up's leading chunk out of the work (§5b)", async () => {
+    mockKeepAwake();
+    // The same bar the connected pane gets, on the surface most rowers
+    // actually see: the matrix fixture's 4:00 warm-up is 240 of 1420
+    // seconds, and its chunk ends exactly where the first notch is drawn.
+    const run = matrixRun();
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    const chunk = document.querySelector<HTMLElement>(".timer-total-warmup");
+    expect(chunk).not.toBeNull();
+    expect(Number.parseFloat(chunk!.style.width)).toBeCloseTo(
+      (240 / 1420) * 100,
+      6,
+    );
+    expect(Number.parseFloat(chunk!.style.width)).toBeCloseTo(
+      notchLefts()[0]!,
+      6,
+    );
+  });
+
+  it("draws no chunk at all with the warm-up preference off", async () => {
+    mockKeepAwake();
+    // THE REGRESSION PIN on this surface: the same workout with the warm-up
+    // off is the bar it always was — fill and notches, nothing between.
+    const run = buildAndSaveRun(kindMatrixDraft(), FIXED_NOW, BASELINES, null);
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
+    expect(document.querySelector(".timer-total-warmup")).toBeNull();
+    expect(notchLefts()).toHaveLength(2);
+  });
+
   it("keeps the quarter ruler for a session with only one interval", async () => {
     mockKeepAwake();
     // One 20:00 work step: one interval, no interior boundary, so the bar

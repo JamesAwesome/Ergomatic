@@ -549,6 +549,7 @@ describe("echoedCommandIds: the opcode list a PM echoes for a request frame", ()
   const ONE_INTERVAL: WorkoutProgram = {
     intervals: [
       {
+        type: "work",
         kind: "time",
         value: 60,
         targetSplit: 120,
@@ -559,6 +560,7 @@ describe("echoedCommandIds: the opcode list a PM echoes for a request frame", ()
   };
   const TWO_INTERVALS: WorkoutProgram = {
     intervals: Array.from({ length: 2 }, () => ({
+      type: "work" as const,
       kind: "time" as const,
       value: 60,
       targetSplit: 120,

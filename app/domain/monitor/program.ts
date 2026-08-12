@@ -27,11 +27,20 @@
 // `keyof EnginePhase` membership assertion) catches exactly that: it fails
 // to typecheck the moment a field this compiler's contract names is no
 // longer a key of `EnginePhase` at all, regardless of optionality.
+/** What a compiled interval IS. Every non-rest phase becomes exactly one
+ *  interval, so this is `Phase["type"]` minus `"rest"`: a rest phase never
+ *  becomes an interval of its own — it folds into the `restSeconds` of the
+ *  interval before it (`compileProgram`'s rest-folding rule, H7) or is
+ *  rejected as `leading-rest`. Pinned in `program.test.ts` ("a REST never
+ *  becomes an interval, so it never needs a type of its own") rather than
+ *  left as an assumption the union quietly depends on. */
+export type IntervalType = "warmup" | "work" | "test";
+
 export interface CompiledPhase {
   /** Mirrors `Phase["type"]` (`domain/expand.ts`). "warmup" and "test" carry
    *  no target/spm — see the field comments below for how each type's
    *  absent fields are handled. */
-  type: "warmup" | "work" | "rest" | "test";
+  type: IntervalType | "rest";
   /** Time-based duration in seconds — warmup, rest, and a time-duration
    *  work phase. Undefined for a distance-duration work phase and for a
    *  "test" (open-ended, no fixed duration at all — see `compileProgram`'s
@@ -79,6 +88,24 @@ export interface CompiledPhase {
 }
 
 export interface ProgramInterval {
+  /** WHAT THIS INTERVAL IS — the compiled phase's own type, carried through
+   *  rather than destroyed at the compile boundary (design spec §5b, ruling
+   *  12). This compiler has always KNOWN it was compiling a warm-up (the
+   *  `targetSplit` arm below nulls the target on exactly that test), and
+   *  used to push the interval without the fact, so every consumer
+   *  downstream inherited a warm-up it could not recognise: the live
+   *  caption counted it (a four-piece workout read `1 OF 5` while the rower
+   *  was still warming up), the notched TOTAL LEFT bar folded its span in as
+   *  if it were work, and the grid would have numbered it row 1. Each of
+   *  those surfaces now READS this instead of re-deriving "was that a
+   *  warm-up?" from phase indices — the one-source discipline the judgement
+   *  helper already has.
+   *
+   *  NOT A WIRE FIELD. Nothing in `pm5/commands.ts` encodes it (a warm-up is
+   *  programmed as an ordinary interval that happens to have no target, and
+   *  the PM5 has no warm-up concept of its own); it is the IR remembering
+   *  what it compiled, for the phone's own screens. */
+  type: IntervalType;
   kind: "time" | "distance";
   /** Seconds (kind "time") or meters (kind "distance"). Always the
    *  post-rounding, PM-representable value — see `compileProgram`'s
@@ -503,7 +530,18 @@ export function compileProgram(
     }
     const displaySpm = phase.spm ?? null;
 
-    intervals.push({ kind, value, targetSplit, displaySpm, restSeconds: 0 });
+    // `phase.type` is narrowed to `IntervalType` here: the `"rest"` arm
+    // above always `continue`s or returns, so no rest phase reaches this
+    // push — which is exactly why `ProgramInterval.type` needs no "rest"
+    // member (see its own comment, and `IntervalType`'s).
+    intervals.push({
+      type: phase.type,
+      kind,
+      value,
+      targetSplit,
+      displaySpm,
+      restSeconds: 0,
+    });
   }
 
   if (intervals.length === 0) {

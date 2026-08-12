@@ -221,6 +221,30 @@ describe("screen fixtures for pnpm screenshots", () => {
     );
   });
 
+  /** THE WARM-UP, mid-way through Filling Low's 8:00 easy start (design spec
+   *  §5b). Every other fixture in this file photographs interval 1 — the
+   *  first 2000 m rep — so nothing had a picture of the state §5b's table is
+   *  actually about: the caption reading `WARM-UP` with no ordinal at all,
+   *  both target slots on the dash with both heroes unjudged (a warm-up is
+   *  never graded), and TOTAL LEFT's bar drawing its leading chunk in the
+   *  unfilled-track tone rather than the working one. A time warm-up counts
+   *  DOWN, hence the time-kind remaining. */
+  it("pane B, warming up", async () => {
+    await expect(
+      capture("live", {
+        frame: {
+          intervalIndex: 0,
+          elapsedSeconds: 268,
+          distanceMeters: 942,
+          currentSplit: 142.3,
+          spm: 18,
+          heartRateBpm: 131,
+          intervalRemaining: { kind: "time", value: 212 },
+        },
+      }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-warmup.html");
+  });
+
   it("pane B, no HR monitor", async () => {
     await expect(
       capture("live", { frame: { heartRateBpm: null } }),

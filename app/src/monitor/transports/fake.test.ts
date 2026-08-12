@@ -56,6 +56,7 @@ function frameStatusOf(response: CsafeResponse): string {
 const PROGRAM: WorkoutProgram = {
   intervals: [
     {
+      type: "work",
       kind: "time",
       value: 60,
       targetSplit: 120,
@@ -68,6 +69,7 @@ const PROGRAM: WorkoutProgram = {
 const DISTANCE_PROGRAM: WorkoutProgram = {
   intervals: [
     {
+      type: "work",
       kind: "distance",
       value: 500,
       targetSplit: null,
@@ -302,6 +304,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
   it("injectNak(2) rejects a LATER frame (not just frame 0) in a genuinely multi-frame sequence (fix-round L2)", async () => {
     const multiFrameProgram: WorkoutProgram = {
       intervals: Array.from({ length: 13 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
@@ -344,6 +347,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     // `programming chunk 12 mismatch` on the retry's very first chunk.
     const multiFrameProgram: WorkoutProgram = {
       intervals: Array.from({ length: 13 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
@@ -940,6 +944,7 @@ describe("createFakeTransport: onDisconnect replacing a prior registration", () 
 describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, not ours", () => {
   const TWO_INTERVALS: WorkoutProgram = {
     intervals: Array.from({ length: 2 }, () => ({
+      type: "work" as const,
       kind: "time" as const,
       value: 60,
       targetSplit: 120,
@@ -1279,6 +1284,7 @@ describe("createFakeTransport: the ack's status byte is the bitfield the machine
    *  numbers below do not enter into it). */
   const TWO_INTERVAL_PROGRAM: WorkoutProgram = {
     intervals: Array.from({ length: 2 }, () => ({
+      type: "work" as const,
       kind: "time" as const,
       value: 60,
       targetSplit: 120,
@@ -1584,6 +1590,7 @@ describe("createFakeTransport: a multi-frame programming sequence", () => {
   it("acks each frame separately and only arms once the LAST frame acks", async () => {
     const multiFrameProgram: WorkoutProgram = {
       intervals: Array.from({ length: 5 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,

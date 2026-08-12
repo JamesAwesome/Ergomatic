@@ -65,6 +65,7 @@ describe("compileProgram: real-starter pinned tables", () => {
     expect(result).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 2000,
           targetSplit: 106,
@@ -82,6 +83,7 @@ describe("compileProgram: real-starter pinned tables", () => {
   it("Tidal Bore: reps block folds each rest onto its own interval", () => {
     const result = compileProgram(realWorkoutPhases("Tidal Bore"));
     const rep = {
+      type: "work" as const,
       kind: "time" as const,
       value: 60,
       targetSplit: 103,
@@ -119,6 +121,7 @@ describe("compileProgram: real-starter pinned tables", () => {
     expect(result).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 250,
           targetSplit: null,
@@ -126,6 +129,7 @@ describe("compileProgram: real-starter pinned tables", () => {
           restSeconds: 150,
         },
         {
+          type: "work",
           kind: "distance",
           value: 250,
           targetSplit: null,
@@ -133,6 +137,7 @@ describe("compileProgram: real-starter pinned tables", () => {
           restSeconds: 150,
         },
         {
+          type: "work",
           kind: "distance",
           value: 250,
           targetSplit: null,
@@ -140,6 +145,7 @@ describe("compileProgram: real-starter pinned tables", () => {
           restSeconds: 150,
         },
         {
+          type: "work",
           kind: "distance",
           value: 250,
           targetSplit: null,
@@ -147,6 +153,7 @@ describe("compileProgram: real-starter pinned tables", () => {
           restSeconds: 150,
         },
         {
+          type: "work",
           kind: "distance",
           value: 250,
           targetSplit: null,
@@ -154,6 +161,7 @@ describe("compileProgram: real-starter pinned tables", () => {
           restSeconds: 150,
         },
         {
+          type: "work",
           kind: "distance",
           value: 250,
           targetSplit: null,
@@ -189,6 +197,7 @@ describe("compileProgram: the warm-up arm", () => {
     expect(result).toStrictEqual({
       intervals: [
         {
+          type: "warmup",
           kind: "time",
           value: 600,
           targetSplit: null,
@@ -196,6 +205,7 @@ describe("compileProgram: the warm-up arm", () => {
           restSeconds: 0,
         },
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 110,
@@ -232,6 +242,7 @@ describe("compileProgram: the warm-up arm", () => {
     expect(result).toStrictEqual({
       intervals: [
         {
+          type: "warmup",
           kind: "distance",
           value: 2000,
           targetSplit: null,
@@ -239,6 +250,7 @@ describe("compileProgram: the warm-up arm", () => {
           restSeconds: 0,
         },
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 110,
@@ -246,6 +258,70 @@ describe("compileProgram: the warm-up arm", () => {
           restSeconds: 0,
         },
       ],
+    });
+  });
+});
+
+// Design spec §5b (ruling 12). The compiler KNOWS it is compiling a warm-up
+// — it nulls the target on exactly that branch — and used to throw the fact
+// away at the push site, so every consumer downstream inherited an interval
+// it could not tell from work: the caption counted it (a 4-piece workout read
+// `1 OF 5` while warming up) and the notched bar folded its span in as if the
+// rower were working. The type now travels with the interval.
+describe("compileProgram: the interval carries its phase type (§5b)", () => {
+  const work: CompiledPhase = {
+    type: "work",
+    targetKind: "split",
+    targetSplit: 110,
+    spm: 24,
+    seconds: 120,
+    originalIndex: 0,
+  };
+
+  it("marks the warm-up a warm-up and everything else work", () => {
+    const result = compileProgram([
+      { type: "warmup", seconds: 480, originalIndex: -1 },
+      work,
+      work,
+    ]);
+    // The fact the caption, the bar and the grid all READ, instead of
+    // re-deriving "was that a warm-up?" from phase indices.
+    expect(
+      "intervals" in result ? result.intervals.map((i) => i.type) : result,
+    ).toStrictEqual(["warmup", "work", "work"]);
+  });
+
+  it("a REST never becomes an interval, so it never needs a type of its own", () => {
+    const phases: CompiledPhase[] = [
+      { type: "warmup", seconds: 480, originalIndex: -1 },
+      { type: "rest", seconds: 60, originalIndex: -1 },
+      work,
+      { type: "rest", seconds: 60, originalIndex: 0 },
+      { type: "rest", seconds: 30, originalIndex: 0 },
+      work,
+    ];
+    const result = compileProgram(phases);
+    expect(result).toMatchObject({
+      // Six phases in, three of them rests, three intervals out: every rest
+      // folded into the PRECEDING interval's `restSeconds` (the H7 rule), so
+      // `"rest"` cannot reach the push site and the output union is exactly
+      // the three non-rest types. This is the claim `ProgramInterval.type`
+      // rests on, pinned rather than assumed.
+      intervals: [
+        { type: "warmup", restSeconds: 60 },
+        { type: "work", restSeconds: 90 },
+        { type: "work", restSeconds: 0 },
+      ],
+    });
+  });
+
+  it("the type is the PHASE's own, never inferred from the interval's position", () => {
+    // A warm-up is always phase 0 in production (`src/session/engine.ts`'s
+    // `warmupPhases`, prepended by `buildRun`), so a compiler that simply
+    // called interval 0 the warm-up would satisfy every other fixture here.
+    // It must not: a session with no warm-up has no warm-up interval at all.
+    expect(compileProgram([work, work])).toMatchObject({
+      intervals: [{ type: "work" }, { type: "work" }],
     });
   });
 });
@@ -289,6 +365,7 @@ describe("compileProgram: rest folding (H7)", () => {
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 110,
@@ -307,6 +384,7 @@ describe("compileProgram: rest folding (H7)", () => {
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "warmup",
           kind: "time",
           value: 300,
           targetSplit: null,
@@ -415,6 +493,7 @@ describe("compileProgram: rest-too-long (Table 19, 9:55 = 595s, not 10:00)", () 
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 110,
@@ -531,6 +610,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 21,
           targetSplit: 110,
@@ -565,6 +645,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 21,
           targetSplit: 110,
@@ -697,6 +778,7 @@ describe("compileProgram: unrepresentable-value (never silently rounded/clamped)
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 110,
@@ -778,6 +860,7 @@ describe("compileProgram: effort discriminant (H8), isolated", () => {
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 30,
           targetSplit: null,
@@ -802,6 +885,7 @@ describe("compileProgram: effort discriminant (H8), isolated", () => {
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 30,
           targetSplit: 87,
@@ -838,6 +922,7 @@ describe("compileProgram: targetSplit representability (M-9, final-review)", () 
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 106.5,
@@ -879,6 +964,7 @@ describe("compileProgram: targetSplit representability (M-9, final-review)", () 
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 106,
@@ -906,6 +992,7 @@ describe("compileProgram: targetSplit representability (M-9, final-review)", () 
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 30,
           targetSplit: null,

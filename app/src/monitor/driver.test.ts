@@ -150,6 +150,7 @@ function seaFretProgram(): WorkoutProgram {
 const MINIMAL_PROGRAM: WorkoutProgram = {
   intervals: [
     {
+      type: "work",
       kind: "time",
       value: 60,
       targetSplit: 120,
@@ -166,6 +167,7 @@ const MINIMAL_PROGRAM: WorkoutProgram = {
  *  `MINIMAL_PROGRAM`'s one. */
 const THREE_INTERVAL_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 3 }, () => ({
+    type: "work" as const,
     kind: "time" as const,
     value: 60,
     targetSplit: 120,
@@ -588,6 +590,7 @@ describe("createPm5Driver: capabilities", () => {
 
 describe("createPm5Driver: computeIntervalRemaining (pure)", () => {
   const interval = {
+    type: "work" as const,
     kind: "time" as const,
     value: 60,
     targetSplit: 120,
@@ -631,6 +634,7 @@ describe("createPm5Driver: computeIntervalAccrued (pure)", () => {
   // `computeIntervalRemaining` above — the dimension the interval does NOT
   // count down. `interval` fixtures are the same shapes that block uses.
   const timeInterval = {
+    type: "work" as const,
     kind: "time" as const,
     value: 60,
     targetSplit: 120,
@@ -638,6 +642,7 @@ describe("createPm5Driver: computeIntervalAccrued (pure)", () => {
     restSeconds: 0,
   };
   const distanceInterval = {
+    type: "work" as const,
     kind: "distance" as const,
     value: 500,
     targetSplit: null,
@@ -724,6 +729,7 @@ describe("createPm5Driver: distance-kind interval — intervalRemaining uses dis
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 1000,
           targetSplit: null,
@@ -781,6 +787,7 @@ describe("createPm5Driver: distance-kind interval — intervalRemaining uses dis
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 300,
           targetSplit: null,
@@ -836,6 +843,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 1000,
           targetSplit: null,
@@ -909,6 +917,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 500,
           targetSplit: null,
@@ -916,6 +925,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
           restSeconds: 0,
         },
         {
+          type: "work",
           kind: "distance",
           value: 1000,
           targetSplit: null,
@@ -2689,6 +2699,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 3 — toggle and slave state neve
     // regression for Task 3 without claiming it as a Task-3-fixed defect.
     const fiveIntervalProgram: WorkoutProgram = {
       intervals: Array.from({ length: 5 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
@@ -3204,6 +3215,7 @@ describe("createPm5Driver: plan Task 2/design spec §3 — prepare, ignore rejec
     // instead, using the stale mid-send tick as its only evidence.
     const fiveIntervalProgram: WorkoutProgram = {
       intervals: Array.from({ length: 5 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
@@ -3958,6 +3970,7 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
     const twoIntervalNoRest: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: 120,
@@ -3965,6 +3978,7 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
           restSeconds: 0, // no rest -- the state word never becomes "resting"
         },
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: 120,
@@ -4019,6 +4033,7 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
     const restlessProgram: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: 120,
@@ -4026,6 +4041,7 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
           restSeconds: 0, // no rest -- the state word never becomes "resting"
         },
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: 120,
@@ -4220,6 +4236,7 @@ describe("createPm5Driver: MED-1 — the pending-ack queue", () => {
     // really for (frame 1) waited forever.
     const fiveIntervalProgram: WorkoutProgram = {
       intervals: Array.from({ length: 5 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
@@ -4352,6 +4369,7 @@ describe("createPm5Driver: fix-round 2 — stale acks never cross a sequence bou
     // mid-sequence (between this same sequence's own frames).
     const fiveIntervalProgram: WorkoutProgram = {
       intervals: Array.from({ length: 5 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
@@ -4432,6 +4450,7 @@ describe("createPm5Driver: L3 — exact write/ack byte-pair trace on a multi-fra
   it("log.entries() shows exactly buildProgrammingSequence's chunks, each frame paired with one 'ok' ack", async () => {
     const program: WorkoutProgram = {
       intervals: Array.from({ length: 13 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
@@ -6254,6 +6273,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
    *  read/write symmetric, now observed rather than assumed. */
   const DISTANCE_PROGRAM: WorkoutProgram = {
     intervals: Array.from({ length: 3 }, () => ({
+      type: "work" as const,
       kind: "distance" as const,
       value: 500,
       targetSplit: 120,
@@ -6266,6 +6286,7 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
    *  `workoutType` does NOT normalize to a rest-less sibling ordinal. */
   const REST_ZERO_PROGRAM: WorkoutProgram = {
     intervals: Array.from({ length: 2 }, () => ({
+      type: "work" as const,
       kind: "time" as const,
       value: 60,
       targetSplit: 120,
@@ -7163,6 +7184,7 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
   const WALK_5_PROGRAM: WorkoutProgram = {
     intervals: [
       {
+        type: "work",
         kind: "time",
         value: 60,
         targetSplit: 120,
@@ -7778,6 +7800,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
   const ONE_INTERVAL_PROGRAM: WorkoutProgram = {
     intervals: [
       {
+        type: "work",
         kind: "time",
         value: 60,
         targetSplit: 120,
@@ -8159,6 +8182,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // nobody reads at the erg.
     const restFree: WorkoutProgram = {
       intervals: Array.from({ length: 2 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60,
         targetSplit: 120,
