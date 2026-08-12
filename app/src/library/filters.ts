@@ -58,11 +58,43 @@ export const EMPTY_FILTERS: Filters = {
   source: null,
 };
 
+/** The four types, in the repo's canonical order — the "all on" set. */
+const ALL_TYPES: readonly WorkoutType[] = ["O2", "AT", "TR", "AN"];
+
+/** `types: []` is the canonical ALL-ON state: no narrowing, and every chip
+ *  renders selected (James, 2026-08-12: "I'd like them all on by default").
+ *  A non-empty `types` is always a STRICT subset of 1 to 3 types, never all
+ *  four — `toggleType` normalizes a complete set back to `[]` so there is
+ *  exactly one representation of "all on" and the rules below stay total. */
+export function isTypeSelected(f: Filters, t: WorkoutType): boolean {
+  return f.types.length === 0 || f.types.includes(t);
+}
+
+/** The chip row's whole state machine (James, 2026-08-12):
+ *
+ *  - all on (`[]`) + tap X  -> only X selected. The others deselect.
+ *  - a subset + tap an unselected X -> add it (ordinary multi-select).
+ *  - a subset + tap its LAST selected member -> back to all on, never to a
+ *    selection that matches nothing. "Deselect the last selected type ->
+ *    they turn back on".
+ *  - reaching all four one tap at a time normalizes to `[]`, so the next tap
+ *    follows the all-on rule instead of dropping to three.
+ *
+ *  Only the last of those four needs code: an add/remove toggle plus the
+ *  all-four normalization produces the other three by itself, since `[]`
+ *  never `includes` anything (so a tap while all-on always yields exactly
+ *  `[t]`) and removing the last member yields `[]`, which IS all-on. Two
+ *  explicit early-return branches for those cases were written first and
+ *  deleted after mutation testing showed neither could fail a test: they
+ *  were restatements of the general path, not behaviour. */
 export function toggleType(f: Filters, t: WorkoutType): Filters {
-  const types = f.types.includes(t)
+  const next = f.types.includes(t)
     ? f.types.filter((existing) => existing !== t)
     : [...f.types, t];
-  return { ...f, types };
+  return {
+    ...f,
+    types: next.length === ALL_TYPES.length ? [] : next,
+  };
 }
 
 export function toggleDifficulty(f: Filters, d: Difficulty): Filters {
@@ -98,18 +130,6 @@ export function clearFilters(): Filters {
   return { ...EMPTY_FILTERS };
 }
 
-/** Resets exactly the FILTER SHEET's own groups — DIFFICULTY, TIME, PAIN,
- *  LAST DONE, SOURCE — to empty, leaving `types` (the chip row's own group,
- *  which the sheet holds no control for at all since Task 2) untouched.
- *
- *  Fix round (whole-branch review, finding B): `FilterSheet.tsx`'s own
- *  CLEAR button used to call the plain `clearFilters()` above, silently
- *  emptying `types` too — a group the sheet cannot even show the rower is
- *  about to lose, since it renders no TYPE cell any more. Controller
- *  ruling: CLEAR (inside the sheet) means "clear what's in here"; CLEAR ALL
- *  (`Library.tsx`'s own token-row control, still wired to `clearFilters()`
- *  above, unchanged) remains the one control that empties everything,
- *  `types` included. */
 /** Is ANY filter active? Read this, never `filterTokens(f).length > 0` —
  *  that equivalence broke on 2026-08-12, when TYPE stopped being tokenized
  *  ("already visible": its chip row is the indicator). A type-only filter
@@ -128,6 +148,18 @@ export function hasActiveFilters(f: Filters): boolean {
   );
 }
 
+/** Resets exactly the FILTER SHEET's own groups — DIFFICULTY, TIME, PAIN,
+ *  LAST DONE, SOURCE — to empty, leaving `types` (the chip row's own group,
+ *  which the sheet holds no control for at all since Task 2) untouched.
+ *
+ *  Fix round (whole-branch review, finding B): `FilterSheet.tsx`'s own
+ *  CLEAR button used to call the plain `clearFilters()` above, silently
+ *  emptying `types` too — a group the sheet cannot even show the rower is
+ *  about to lose, since it renders no TYPE cell any more. Controller
+ *  ruling: CLEAR (inside the sheet) means "clear what's in here"; CLEAR ALL
+ *  (`Library.tsx`'s own token-row control, still wired to `clearFilters()`
+ *  above, unchanged) remains the one control that empties everything,
+ *  `types` included. */
 export function clearSheetFilters(f: Filters): Filters {
   return { ...EMPTY_FILTERS, types: f.types };
 }

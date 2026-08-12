@@ -9,6 +9,7 @@ import {
   applyFilters,
   clearFilters,
   hasActiveFilters,
+  isTypeSelected,
   toggleType,
   type Filters,
 } from "./filters";
@@ -320,7 +321,10 @@ export default function Library() {
           on screen tells them these four buttons are a group at all. */}
       <div className="chip-wrap type-chip-grid" role="group" aria-label="TYPE">
         {TYPE_CHIPS.map((type) => {
-          const selected = filters.types.includes(type);
+          // ALL-ON by default: an empty `types` renders every chip selected
+          // (filters.ts's `isTypeSelected`), so at rest the row shows all four
+          // types included rather than four blank chips.
+          const selected = isTypeSelected(filters, type);
           return (
             <button
               key={type}

@@ -631,10 +631,10 @@ describe("Library", () => {
 
       const o2 = screen.getByRole("button", { name: "O2" });
       const at = screen.getByRole("button", { name: "AT" });
-      expect(o2).not.toHaveAttribute(
-        "style",
-        expect.stringContaining("--type-o2"),
-      );
+      // All on by default (2026-08-12), so EVERY chip starts filled with its
+      // own colour — the pre-click state is a positive, not a negative.
+      expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
+      expect(at).toHaveAttribute("style", expect.stringContaining("--type-at"));
       await userEvent.click(o2);
       expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
       // M-4 (review fix): a bare `not.stringContaining("--type-at")` would
@@ -654,10 +654,23 @@ describe("Library", () => {
       await renderLibrary();
 
       const o2 = screen.getByRole("button", { name: "O2" });
-      expect(o2).toHaveAttribute("aria-pressed", "false");
+      // Starts all-on (2026-08-12): every chip pressed, nothing narrowed.
+      for (const code of ["O2", "AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      }
       await userEvent.click(o2);
 
+      // Tapping one while all are on DESELECTS the others (James's rule).
       expect(o2).toHaveAttribute("aria-pressed", "true");
+      for (const code of ["AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        );
+      }
       expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
       // No token: the pressed chip already says which type is filtering.
@@ -669,15 +682,22 @@ describe("Library", () => {
     // Carried-forward subject D: exclusivity is correctly dead (multi-select
     // replaces it), but "toggle twice clears it" is not — this pins that
     // toggling the SAME chip off returns to the fully unfiltered list.
-    it("toggling the same chip twice returns to the unfiltered list", async () => {
+    it("deselecting the last selected type turns them ALL back on, unfiltered", async () => {
       mockReady();
       await renderLibrary();
 
       const o2 = screen.getByRole("button", { name: "O2" });
-      await userEvent.click(o2);
-      await userEvent.click(o2);
+      await userEvent.click(o2); // all on -> O2 only
+      await userEvent.click(o2); // O2 was the last selected -> all back on
 
-      expect(o2).toHaveAttribute("aria-pressed", "false");
+      // James's rule: they turn back ON, not all-off (which would be a
+      // filter matching nothing).
+      for (const code of ["O2", "AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      }
       expect(visibleHrefs()).toStrictEqual([
         "/library/w-at",
         "/library/w-o2",
@@ -713,10 +733,14 @@ describe("Library", () => {
 
       await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
 
-      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
-        "aria-pressed",
-        "false",
-      );
+      // Cleared means back to ALL ON (2026-08-12), not all-off: every chip
+      // pressed again, nothing narrowed.
+      for (const code of ["O2", "AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      }
       expect(
         screen.queryByText("O2", { selector: ".filter-token-label" }),
       ).not.toBeInTheDocument();

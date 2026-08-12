@@ -5,6 +5,7 @@ import {
   applyFilters,
   bucketFor,
   hasActiveFilters,
+  isTypeSelected,
   clearFilters,
   isRecent,
   setLastDone,
@@ -17,7 +18,7 @@ import {
 } from "./filters";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type { Step } from "../../domain/types.js";
+import type { Step, WorkoutType } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -374,6 +375,98 @@ describe("hasActiveFilters", () => {
       // Named in the failure via the value itself, since vitest's `expect`
       // takes no message argument.
       expect({ patch, active }).toStrictEqual({ patch, active: true });
+    }
+  });
+});
+
+// James, 2026-08-12: "I'd like them all on by default. When they're all on,
+// if you tap a single type, the others become deselected. If you deselect the
+// last selected type -> they turn back on."
+describe("the TYPE chip state machine", () => {
+  const ALL = ["O2", "AT", "TR", "AN"] as const;
+  const withTypes = (types: readonly WorkoutType[]): Filters => ({
+    ...EMPTY_FILTERS,
+    types: [...types],
+  });
+
+  it("all on by default: an empty selection renders every chip selected", () => {
+    for (const t of ALL) {
+      expect(isTypeSelected(EMPTY_FILTERS, t)).toBe(true);
+    }
+  });
+
+  it("a subset selects exactly its own members", () => {
+    const f = withTypes(["O2", "TR"]);
+    expect(ALL.filter((t) => isTypeSelected(f, t))).toStrictEqual(["O2", "TR"]);
+  });
+
+  it("all on + tap X leaves ONLY X selected", () => {
+    const next = toggleType(EMPTY_FILTERS, "AT");
+    expect(next.types).toStrictEqual(["AT"]);
+    expect(ALL.filter((t) => isTypeSelected(next, t))).toStrictEqual(["AT"]);
+  });
+
+  it("tapping the LAST selected type turns them all back on", () => {
+    const single = withTypes(["AT"]);
+    const next = toggleType(single, "AT");
+    expect(next.types).toStrictEqual([]);
+    for (const t of ALL) {
+      expect(isTypeSelected(next, t)).toBe(true);
+    }
+  });
+
+  it("tapping an unselected type adds it; tapping a selected one of several removes just it", () => {
+    const added = toggleType(withTypes(["O2"]), "TR");
+    expect(added.types).toStrictEqual(["O2", "TR"]);
+    const removed = toggleType(added, "O2");
+    expect(removed.types).toStrictEqual(["TR"]);
+  });
+
+  it("selecting all four one at a time normalizes back to all-on, so the next tap deselects the others", () => {
+    let f: Filters = EMPTY_FILTERS;
+    for (const t of ALL) f = toggleType(f, t);
+    expect(f.types).toStrictEqual([]);
+    expect(toggleType(f, "TR").types).toStrictEqual(["TR"]);
+  });
+
+  it("a full round trip returns to the same state it started in", () => {
+    const there = toggleType(EMPTY_FILTERS, "O2");
+    expect(toggleType(there, "O2")).toStrictEqual(EMPTY_FILTERS);
+  });
+
+  it("all-on narrows nothing, and is not an active filter; a subset is both", () => {
+    expect(applyFilters(WORKOUTS, EMPTY_FILTERS, baselines)).toHaveLength(
+      WORKOUTS.length,
+    );
+    expect(hasActiveFilters(EMPTY_FILTERS)).toBe(false);
+    const subset = withTypes(["O2"]);
+    expect(
+      applyFilters(WORKOUTS, subset, baselines).every((w) => w.type === "O2"),
+    ).toBe(true);
+    expect(hasActiveFilters(subset)).toBe(true);
+  });
+
+  it("never leaves a state that matches nothing: no reachable selection is empty-but-narrowing", () => {
+    // Exhaustive over every start state and every tap.
+    const starts: Filters[] = [
+      EMPTY_FILTERS,
+      ...ALL.map((t) => withTypes([t])),
+      withTypes(["O2", "AT"]),
+      withTypes(["O2", "AT", "TR"]),
+    ];
+    for (const start of starts) {
+      for (const tap of ALL) {
+        const next = toggleType(start, tap);
+        expect({
+          start: start.types,
+          tap,
+          len: next.types.length,
+        }).not.toMatchObject({ len: 4 });
+        const selected = ALL.filter((t) => isTypeSelected(next, t));
+        expect({ start: start.types, tap, selected }).not.toMatchObject({
+          selected: [],
+        });
+      }
     }
   });
 });
