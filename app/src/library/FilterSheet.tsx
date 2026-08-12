@@ -7,7 +7,7 @@ import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 import { DURATION_CHIPS } from "../components/durationChips";
 import {
   RECENCY_BOUNDARY_DAYS,
-  clearFilters,
+  clearSheetFilters,
   setLastDone,
   setSource,
   toggleDifficulty,
@@ -53,6 +53,17 @@ const COUNT_ID = "filter-sheet-count";
  * SOME difficulty preference), Library's own convention is the same as
  * `durations`/`painLevels` here — empty means no filter, and CLEAR ALL keeps
  * emptying to nothing (spec §1).
+ *
+ * CLEAR vs. CLEAR ALL (fix round, whole-branch review finding B): this
+ * sheet's own CLEAR button (`clearSheetFilters`) resets only the groups
+ * rendered IN HERE — DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE — leaving
+ * `draft.types` exactly as the rower left it. Before this fix CLEAR called
+ * the whole-library `clearFilters()`, silently emptying `types` too even
+ * though the sheet shows no TYPE control and gives no indication that
+ * pressing CLEAR would touch it. `Library.tsx`'s own CLEAR ALL (the
+ * token-row control, outside this component entirely) is unchanged — it
+ * still calls `clearFilters()` and still empties everything, `types`
+ * included; that is the one control whose whole job is "clear everything."
  *
  * The primary reads the constant **`Apply Filter`** (Today's own contract,
  * adopted verbatim, spec §3) rather than a live "Show N workouts" — the
@@ -122,7 +133,7 @@ export default function FilterSheet({
         <button
           type="button"
           className="filter-sheet-clear"
-          onClick={() => onChangeDraft(clearFilters())}
+          onClick={() => onChangeDraft(clearSheetFilters(draft))}
         >
           CLEAR
         </button>

@@ -891,7 +891,18 @@ button:disabled {
      row, so the two together read as one unit rather than stacking two
      16px gaps. This depends on `.type-word-row` ALWAYS being the next
      sibling — review fix I-1: it once wasn't, on Library, see that rule's
-     own comment. */
+     own comment.
+
+     Fix round (whole-branch review comment, not a finding): this dependency
+     is CURRENTLY satisfied on both screens, by two different mechanisms —
+     Library's own `.type-word-row` is unconditionally mounted (I-1, below),
+     Today's is conditional on `effectiveType !== null` (Today.tsx) but that
+     condition is always true whenever the chip row itself renders (a plan
+     being active implies an effective type). If a future Today change ever
+     makes that condition possibly false while the chip row still renders,
+     this 4px will silently reproduce the exact ~34px jump I-1 fixed on
+     Library — the fix would be the SAME one Library already got (mount
+     `.type-word-row` unconditionally there too), not a change to this rule. */
   margin-bottom: 4px;
 }
 

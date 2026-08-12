@@ -309,8 +309,21 @@ export default function Library() {
           and persists immediately via the effect below, the same as every
           other filter change. `.type-chip-grid` (index.css, extracted from
           Today's own `.today-type-chips`) lays these out as the identical
-          4-column grid Today's row uses — a pure rename, not a new layout. */}
-      <div className="chip-wrap type-chip-grid">
+          4-column grid Today's row uses — a pure rename, not a new layout.
+
+          Fix round (whole-branch review, finding D): `role="group"` +
+          `aria-label="TYPE"` — before this fix the row was four bare
+          `aria-pressed` buttons with no group semantics and no name in ANY
+          modality, a real regression from the OLD sheet-based TYPE control
+          (a `CellGrid`, `role="group"` + a visible "TYPE" label) this chip
+          row replaced. `aria-label` rather than a visible label: the row's
+          own visual design has no static "TYPE" heading anywhere (the
+          `TYPE_WORDS` descriptor beneath it is deliberately conditional —
+          exactly one selection — and itself `aria-hidden`), and adding one
+          would be a visible layout change this fix isn't scoped to; a
+          screen-reader user still needs the name spoken since nothing else
+          on screen tells them these four buttons are a group at all. */}
+      <div className="chip-wrap type-chip-grid" role="group" aria-label="TYPE">
         {TYPE_CHIPS.map((type) => {
           const selected = filters.types.includes(type);
           return (

@@ -192,12 +192,21 @@ describe("FilterSheet", () => {
     });
   });
 
-  it("CLEAR reports an empty draft without calling onApply/onDismiss", async () => {
+  // Fix round (whole-branch review, finding B): CLEAR resets exactly the
+  // sheet's OWN groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE) — `types`,
+  // the chip row's own group with no control inside this sheet at all, is
+  // untouched. Seeding a non-empty `types` here is the point: against the
+  // old `clearFilters()` behaviour this draft would have come back with
+  // `types: []`, which this assertion would catch.
+  it("CLEAR resets the sheet's own groups but leaves types untouched, without calling onApply/onDismiss", async () => {
     const { onChangeDraft, onApply, onDismiss } = renderSheet({
-      draft: { ...EMPTY_FILTERS, source: "custom" },
+      draft: { ...EMPTY_FILTERS, types: ["O2"], source: "custom" },
     });
     await userEvent.click(screen.getByRole("button", { name: "CLEAR" }));
-    expect(onChangeDraft).toHaveBeenCalledWith(EMPTY_FILTERS);
+    expect(onChangeDraft).toHaveBeenCalledWith({
+      ...EMPTY_FILTERS,
+      types: ["O2"],
+    });
     expect(onApply).not.toHaveBeenCalled();
     expect(onDismiss).not.toHaveBeenCalled();
   });

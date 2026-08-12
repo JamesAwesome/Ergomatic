@@ -1092,7 +1092,18 @@ function TodayView({
                 `.type-word` (index.css — renamed from `.today-type-word` in
                 the library-filter-unification round, Task 2's M-7 review
                 fix: Library's own descriptor reuses the identical text
-                style) is the fourth of this round's class extractions. */}
+                style) is the fourth of this round's class extractions.
+
+                Fix round (whole-branch review comment): `.type-chip-grid`'s
+                own 4px margin-bottom (index.css) assumes THIS wrapper
+                always follows it — true today only because `effectiveType`
+                is never null whenever this branch renders, per the
+                paragraph above. If a future change ever makes that false
+                while the chip row still renders, the chip row will inherit
+                the exact ~34px jump Library's own I-1 fix corrected (that
+                fix's answer was mounting the wrapper unconditionally,
+                `aria-hidden` regardless — do the same here rather than
+                patching the CSS rule). */}
             {effectiveType !== null && (
               <div className="type-word-row" aria-hidden="true">
                 <p className="type-word">{TYPE_WORDS[effectiveType]}</p>

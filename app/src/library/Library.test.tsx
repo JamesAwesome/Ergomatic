@@ -400,6 +400,55 @@ describe("Library", () => {
       expect(within(dialog()).getByText("3 WORKOUTS")).toBeInTheDocument();
     });
 
+    // Fix round (whole-branch review, finding B): the sheet's own CLEAR
+    // used to call the whole-library `clearFilters()`, silently emptying
+    // `types` too even though the sheet renders no TYPE control at all
+    // (TYPE's own chip row lives outside it, applied directly to `filters`
+    // rather than the sheet's draft) — a rower had no way to see that
+    // pressing this CLEAR would also drop their chip-row selection. This
+    // pins the fix: CLEAR resets exactly the sheet's own groups.
+    it("the sheet's own CLEAR leaves an active TYPE chip (and its token) standing, resetting only the sheet's own groups", async () => {
+      mockReady();
+      await renderLibrary();
+
+      // TYPE via the chip row (outside the sheet, applied immediately) —
+      // narrows straight to w-o2.
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      expect(tokenLabel("O2")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      // PAIN 5 is w-an's own level, not w-o2's — combined with the
+      // already-active TYPE=O2 this is a genuine zero-match draft, proving
+      // the two groups actually compose before CLEAR is pressed.
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "5" }),
+      );
+      expect(
+        within(dialog()).getByText("NO WORKOUTS MATCH"),
+      ).toBeInTheDocument();
+
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "CLEAR" }),
+      );
+
+      // The sheet's own PAIN group is reset...
+      expect(
+        within(dialog()).getByRole("button", { name: "5" }),
+      ).toHaveAttribute("aria-pressed", "false");
+      // ...and the draft is back to "TYPE=O2 only" — one match, not zero
+      // and not the full library — proving `types` survived CLEAR.
+      expect(within(dialog()).getByText("1 WORKOUT")).toBeInTheDocument();
+
+      // The chip row itself (outside the sheet entirely) was never touched.
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(tokenLabel("O2")).toBeInTheDocument();
+    });
+
     it("the primary disables (and the caption reads 'NO WORKOUTS MATCH') when the draft matches nothing", async () => {
       mockReady();
       await renderLibrary();
@@ -551,6 +600,24 @@ describe("Library", () => {
       expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
     });
 
+    // Fix round (whole-branch review, finding D): the OLD TYPE control (a
+    // sheet CellGrid) had `role="group"` + a visible "TYPE" label; this row
+    // replaced it with four bare `aria-pressed` buttons and no group
+    // semantics at all — a real a11y regression axe's own scan doesn't
+    // catch (it flags missing names on individual controls, not a missing
+    // group around correctly-named ones). Pins the fix: the row exposes a
+    // named group, and every chip is reachable inside it.
+    it("exposes a role=group named TYPE holding all four chips", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const group = screen.getByRole("group", { name: "TYPE" });
+      const labels = within(group)
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+      expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
+    });
+
     // Carried-forward subject B (both halves — the negative half was in the
     // deleted test too). Contrast for the active fill is already verified
     // at 6.67:1 (library-filter-unification design spec) — cited, not
@@ -614,6 +681,43 @@ describe("Library", () => {
       expect(
         screen.queryByText("O2", { selector: ".filter-token-label" }),
       ).not.toBeInTheDocument();
+    });
+
+    // Fix round (whole-branch review, finding B): CLEAR ALL — the token-row
+    // control, distinct from the sheet's own CLEAR pinned above — remains
+    // the one affordance whose whole job is "clear everything," `types`
+    // included, unlike the sheet's own CLEAR which now spares it.
+    it("CLEAR ALL empties an active TYPE chip too, unlike the sheet's own CLEAR", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "1" }),
+      );
+      await applySheet();
+
+      expect(tokenLabel("O2")).toBeInTheDocument();
+      expect(screen.getByText("PAIN 1")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+
+      await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
+
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("PAIN 1")).not.toBeInTheDocument();
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+      ]);
     });
 
     describe("the effective-type descriptor word", () => {

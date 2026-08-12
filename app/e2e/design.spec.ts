@@ -374,6 +374,21 @@ test.describe("library screen", () => {
     await assertNoA11yViolations(page);
   });
 
+  // Fix round (whole-branch review, finding D): the TYPE chip row (four
+  // bare `aria-pressed` buttons, library-filter-unification round) replaced
+  // a sheet `CellGrid` that had `role="group"` + a visible label — axe's
+  // own scan above doesn't catch a missing GROUP around otherwise-correctly-
+  // named buttons, so this is a dedicated structural pin, mirroring the
+  // sheet's own "DIFFICULTY/TIME/PAIN each expose a role=group" sweep
+  // further down this file for `TodayFilterSheet`/`FilterSheet`.
+  test("the TYPE chip row exposes a role=group named TYPE", async ({
+    page,
+  }) => {
+    const group = page.getByRole("group", { name: "TYPE" });
+    await expect(group).toBeVisible();
+    await expect(group.getByRole("button")).toHaveCount(4);
+  });
+
   // L1 (whole-branch review): this describe renders `.workout-row-meta`
   // (11px mono), a guard-gap the ink-4 sweep never covered on this screen.
   // Waits for a real row first — unlike every other describe this sweep

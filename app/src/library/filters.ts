@@ -98,6 +98,22 @@ export function clearFilters(): Filters {
   return { ...EMPTY_FILTERS };
 }
 
+/** Resets exactly the FILTER SHEET's own groups — DIFFICULTY, TIME, PAIN,
+ *  LAST DONE, SOURCE — to empty, leaving `types` (the chip row's own group,
+ *  which the sheet holds no control for at all since Task 2) untouched.
+ *
+ *  Fix round (whole-branch review, finding B): `FilterSheet.tsx`'s own
+ *  CLEAR button used to call the plain `clearFilters()` above, silently
+ *  emptying `types` too — a group the sheet cannot even show the rower is
+ *  about to lose, since it renders no TYPE cell any more. Controller
+ *  ruling: CLEAR (inside the sheet) means "clear what's in here"; CLEAR ALL
+ *  (`Library.tsx`'s own token-row control, still wired to `clearFilters()`
+ *  above, unchanged) remains the one control that empties everything,
+ *  `types` included. */
+export function clearSheetFilters(f: Filters): Filters {
+  return { ...EMPTY_FILTERS, types: f.types };
+}
+
 export function applyFilters(
   workouts: LibraryWorkout[],
   f: Filters,
