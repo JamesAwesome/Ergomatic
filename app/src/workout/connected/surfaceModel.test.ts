@@ -322,53 +322,65 @@ describe("live", () => {
     expect(m.intervalClockValue).toBe("0:41");
   });
 
-  // Pinned directly, not only through the screen fixture (task-6 review, L3):
-  // inverting the fill died in the HTML snapshot alone, which is a real kill
-  // with an unreadable error message.
-  it("fills the interval bar by what is BEHIND the rower, in the interval's own dimension", () => {
-    const meters = FIXTURE.phases[1]!.meters!;
-    expect(meters).toBe(2000);
-    expect(
-      model({
-        frame: frame({
-          intervalRemaining: { kind: "distance", value: meters * 0.75 },
-        }),
-      }).intervalProgressPct,
-    ).toBe(25);
-    expect(
-      model({
-        frame: frame({
-          intervalRemaining: { kind: "distance", value: 0 },
-        }),
-      }).intervalProgressPct,
-    ).toBe(100);
-    // A time interval counts TIME, against the phase's own seconds.
-    const warmupSeconds = FIXTURE.phases[0]!.seconds!;
-    expect(
-      model({
-        frame: frame({
-          intervalIndex: 0,
-          intervalRemaining: { kind: "time", value: warmupSeconds / 4 },
-        }),
-      }).intervalProgressPct,
-    ).toBe(75);
+  // `intervalProgressPct`'s own two its (the fill-direction pin and the
+  // 0-100 clamp) retired with the field itself (connected-revamp Task 3,
+  // retirement inventory §10.2: design spec §3's casualty table calls the
+  // field DROPPED outright — "the metric row's countdown is the same fact
+  // as a number, and revision §3's live layout has no slot" for a second
+  // bar — and Task 2's own fix round left it computed with no renderer
+  // rather than deleting it out of scope. No replacement pin: the field
+  // and its only two consumers are simply gone.
+
+  // THE HERO CANNOT CLIP (design spec §6/revision §3's own "anything
+  // slower than 9:59.9 -> —"). A boundary glitch or a stalled erg can
+  // report a currentSplit with no realistic ceiling; `PACE_HERO_CAP_SECONDS`
+  // is the line this file draws so the hero never has to render more
+  // characters than it was sized for.
+  it("caps the hero split at 9:59.9 — anything slower renders the dash, unjudged", () => {
+    const atCap = model({ frame: frame({ currentSplit: 599.9 }) });
+    expect(atCap.pace.display).toBe("9:59.9");
+    expect(atCap.pace.absent).toBe(false);
+
+    const overCap = model({ frame: frame({ currentSplit: 600 }) });
+    expect(overCap.pace.display).toBe("—");
+    expect(overCap.pace.absent).toBe(true);
+    // A capped reading is "nothing to show", not a deviation — the same
+    // rule 2 an absent actual already takes (`domain/judge.ts`).
+    expect(overCap.pace.judgement).toBe("within");
+
+    const wildlyOverCap = model({ frame: frame({ currentSplit: 3661 }) });
+    expect(wildlyOverCap.pace.display).toBe("—");
   });
 
-  it("never reports negative or past-100 progress, whatever the machine says", () => {
-    expect(
-      model({
-        frame: frame({
-          intervalRemaining: { kind: "distance", value: 99_999 },
-        }),
-      }).intervalProgressPct,
-    ).toBe(0);
-    expect(
-      model({
-        frame: frame({
-          intervalRemaining: { kind: "distance", value: -500 },
-        }),
-      }).intervalProgressPct,
-    ).toBe(100);
+  // THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
+  // phase has no target. `phaseIndexForInterval`'s own resting rule lands
+  // interval 1's REST phase when `state: "resting"` sits on `intervalIndex:
+  // 1` (the fixture's own first work rep — this file's header names the
+  // shape: warm-up, then 4 x 2000m with rest folded after each).
+  it("during REST the target slot reads the dash and the actual above stays unjudged", () => {
+    // Derived the same way `phaseIndexForInterval`'s own describe block
+    // does above, rather than a hardcoded index: interval 1, resting.
+    const restIndex = phaseIndexForInterval(FIXTURE.phases, 1, true);
+    if (FIXTURE.phases[restIndex]?.type !== "rest") {
+      throw new Error("fixture assumption broke: interval 1 has no REST");
+    }
+    const m = model({
+      frame: frame({
+        intervalIndex: 1,
+        state: "resting",
+        // A reading that would otherwise scream "over" against ANY real
+        // target, to prove the dash-target case is what suppresses the
+        // tint, not a coincidentally-within actual.
+        currentSplit: 60,
+        spm: 40,
+      }),
+    });
+    expect(m.targetSplit.main).toBe("—");
+    expect(m.pace.judgement).toBe("within");
+    expect(m.pace.absent).toBe(false);
+    expect(m.rateCaption).toBe("NO RATE TARGET");
+    expect(m.rate.judgement).toBe("within");
+    expect(m.rate.absent).toBe(false);
   });
 
   it("prices TOTAL LEFT off the workout's own phases, not the machine's guess", () => {
@@ -452,7 +464,6 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
     // What the bug looked like on the erg: the raw field would have rendered
     // `Math.round(0.7)` here and the card fell 109 -> 50 for real.
     expect(displays[1]).not.toBe("1");
-    expect(model({ frame: ACROSS_THE_RESET[1]! }).metersCaption).toBe("TOTAL");
   });
 
   it("the SESSION caption's clock keeps running through the reset too", () => {
@@ -470,18 +481,23 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
 });
 
 describe("no HR monitor", () => {
-  it("reads `—` and says so, without ever losing the card", () => {
+  // `hrAbsent`/`hrCaption` retired alongside `JudgedCard.tsx`
+  // (connected-revamp Task 3): both were convenience fields for a card
+  // caption ("NO HR MONITOR"/"BPM") that no longer renders anywhere —
+  // revision §3 is explicit that the metric row's HR cell gets "no dashed
+  // card, no explanatory copy". `hr.absent` (on the `JudgedValue` itself)
+  // is the field that survives and still drives the pane's own
+  // `connected-value-absent` grey.
+  it("reads `—` when no monitor is connected", () => {
     const m = model({ frame: frame({ heartRateBpm: null }) });
     expect(m.hr.display).toBe("—");
-    expect(m.hrAbsent).toBe(true);
-    expect(m.hrCaption).toBe("NO HR MONITOR");
+    expect(m.hr.absent).toBe(true);
   });
 
   it("becomes a number with no announcement when a belt appears", () => {
     const m = model({ frame: frame({ heartRateBpm: 151 }) });
     expect(m.hr.display).toBe("151");
-    expect(m.hrAbsent).toBe(false);
-    expect(m.hrCaption).toBe("BPM");
+    expect(m.hr.absent).toBe(false);
   });
 });
 
@@ -504,11 +520,15 @@ describe("a zero split is not a reading (7B iteration: the pre-pull ochre 0:00.0
 });
 
 describe("paused", () => {
-  it("has no current pace: NOW goes to `—` with NOT ROWING", () => {
+  // `paceCaption`'s own "NOT ROWING" assertion retired with the field
+  // (connected-revamp Task 3, retirement inventory §10.2 DECIDE): its only
+  // renderer was pane A's `JudgedCard`, gone since Task 2, and the pace
+  // hero's own no-target/paused treatment is the dash itself — nothing on
+  // pane B has a slot for a fourth caption line explaining it.
+  it("has no current pace: NOW goes to `—`", () => {
     const m = model({ phase: "paused", frame: frame({ currentSplit: 117 }) });
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);
-    expect(m.paceCaption).toBe("NOT ROWING");
   });
 
   it("is NOT stale: the erg is still talking, so nothing greys as unvouched", () => {
@@ -559,7 +579,6 @@ describe("degenerate inputs", () => {
     const m = model({ frame: null });
     expect(m.pace.display).toBe("—");
     expect(m.intervalClockValue).toBe("—");
-    expect(m.intervalProgressPct).toBe(0);
     expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WARM-UP");
   });
 
@@ -600,10 +619,13 @@ describe("degenerate inputs", () => {
     expect(m.intervalLabel).toBe("INTERVAL 2 OF 5 · WORK");
   });
 
-  it("says so when a phase carries no split target of its own", () => {
+  // `paceCaption`'s own "NO PACE TARGET" assertion retired with the field
+  // (§10.2 DECIDE, same disposition as the paused describe above); the
+  // no-target state now speaks through `targetSplit.main` itself.
+  it("the hero's target reads the dash when a phase carries no split target of its own", () => {
     const m = model({ frame: frame({ intervalIndex: 0 }) });
     expect(FIXTURE.phases[0]!.type).toBe("warmup");
-    expect(m.paceCaption).toBe("NO PACE TARGET");
+    expect(m.targetSplit.main).toBe("—");
     expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
   });
 });

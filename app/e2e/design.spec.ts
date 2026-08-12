@@ -3898,6 +3898,43 @@ const ROWING_STORY = [
   }),
 ];
 
+/** The same opening, then a currentSplit no realistic erg reports (10:50 per
+ *  500m) — connected-revamp Task 3's own cap: "the hero cannot clip" (design
+ *  spec §6/revision §3) is pinned at the model layer (`surfaceModel.test
+ *  .ts`'s own pace-cap it) and unit level (`ConnectedSurface.test.tsx`);
+ *  this is the rendered-geometry half — a wildly-off reading through the
+ *  real driver still lands on screen as the house dash, never a numeral
+ *  wider than the hero was sized for. 650, not something larger: the wire
+ *  encodes Current Pace as a `U16LE` in hundredths of a second
+ *  (`domain/monitor/pm5/statusFrames.ts`'s `writeU16LE(bytes, 7,
+ *  Math.round(s.currentSplit * 100))`, max 655.35s) — a first attempt at
+ *  3661 overflowed that field and silently wrapped to 384.2s, which is a
+ *  real fixture-authoring trap this file's own comment records so nobody
+ *  re-picks a value past the wire's own ceiling. */
+const EXTREME_SPLIT_STORY = [
+  rowingAt(CONNECTED_STORY_START_MS, { elapsedSeconds: 5, distanceMeters: 30 }),
+  {
+    atMs: CONNECTED_STORY_START_MS + 300,
+    kind: "boundary" as const,
+    actual: {
+      index: 0,
+      elapsedSeconds: 15,
+      distanceMeters: 100,
+      avgSplit: 112,
+      avgSpm: 24,
+      avgHeartRateBpm: 141,
+    },
+    cumulativeElapsedSeconds: 15,
+    cumulativeDistanceMeters: 100,
+  },
+  rowingAt(CONNECTED_STORY_START_MS + 600, {
+    elapsedSeconds: 17,
+    distanceMeters: 115,
+    programIntervalIndex: 1,
+    currentSplit: 650,
+  }),
+];
+
 /** The same opening, then many IDENTICAL frames and no resume — four is all
  *  `PAUSED_FRAME_HOLD` needs, and with nothing after them the paused footer
  *  stays on screen indefinitely instead of racing the sweep. */
@@ -4524,6 +4561,90 @@ test.describe("connected screens (fake-driven)", () => {
         .locator("button")
         .count(),
     ).toBe(2);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // --- Task 3 (design spec §6/revision §3): the live pane's two heroes ---
+
+  // NO-SCROLL: `.connected-pane` already declares `overflow: clip`
+  // (index.css), so a genuine layout overflow reads as CLIPPED content, not
+  // a visible scrollbar — this is the rendered-geometry proof that
+  // rebuilding the pane onto two heroes plus the metric row still fits the
+  // fixed 390px/844px frames in both orientations, the same
+  // scrollHeight-vs-clientHeight idiom the rest of this file uses.
+  for (const viewport of [
+    { width: 390, height: 844, label: "portrait" },
+    { width: 844, height: 390, label: "landscape" },
+  ] as const) {
+    test(`the live pane does not scroll — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+      page,
+    }) => {
+      const title = `Design Connected Live No-Scroll ${viewport.label}`;
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        `design-connected-live-noscroll-${viewport.label}@e2e.test`,
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const overflow = await page
+        .locator(".connected-pane-live")
+        .evaluate((el) => ({
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+        }));
+      expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+
+      await cleanupAllConnected(page, title);
+    });
+  }
+
+  // NO-CLIP: the split hero's own cap (design spec §6: "anything slower
+  // than 9:59.9 -> —") through the REAL driver, not a typed-in fixture —
+  // `EXTREME_SPLIT_STORY`'s currentSplit (3661s) is orders past any real
+  // erg reading. Landscape is the tighter frame (112px hero in a 390px-tall
+  // viewport), so it is the one this test measures.
+  test("the split hero caps an extreme live split at the dash rather than clipping — landscape (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Live No-Clip Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, EXTREME_SPLIT_STORY);
+    await openConnected(page, title, "design-connected-live-noclip@e2e.test");
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    const hero = page.locator(".connected-hero-split .connected-hero-value");
+    await expect(hero).toHaveText("—");
+
+    const measured = await Promise.all([
+      page.locator(".connected-pane-live").evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      })),
+      page.evaluate(() => ({
+        docScrollWidth: document.documentElement.scrollWidth,
+        docClientWidth: document.documentElement.clientWidth,
+      })),
+    ]);
+    expect(measured[0].scrollWidth).toBeLessThanOrEqual(
+      measured[0].clientWidth,
+    );
+    expect(measured[0].scrollHeight).toBeLessThanOrEqual(
+      measured[0].clientHeight,
+    );
+    expect(measured[1].docScrollWidth).toBeLessThanOrEqual(
+      measured[1].docClientWidth,
+    );
 
     await cleanupAllConnected(page, title);
   });
