@@ -1774,12 +1774,14 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
     expect(body).not.toContain("var(--accent)");
   });
 
-  // Fix round 1 (review Important-1): DEVIATIONS.md:77 already named this
-  // exact issue on this exact surface ("the phone timer's COMPLETED
-  // colour" repainted ink on the connected pane, with the phone timer's
-  // own base rule left as the still-open half) — this closes it, retiring
-  // that row rather than carrying it forward.
-  it("the segment dots' COMPLETED colour (.timer-dot-past) resolves to var(--ink), never var(--accent) — DEVIATIONS.md:77, closed", () => {
+  // Fix round 1 (review Important-1): DEVIATIONS.md's segment-strip row
+  // already named this exact issue on this exact surface ("the phone
+  // timer's COMPLETED colour" repainted ink on the connected pane, with
+  // the phone timer's own base rule left as the still-open half) — this
+  // closed it, and Task 8 RETIRED the row rather than carrying it forward.
+  // Cited by description, not line number: the row is gone, and a number
+  // would now point at whatever moved up into its place.
+  it("the segment dots' COMPLETED colour (.timer-dot-past) resolves to var(--ink), never var(--accent) — the segment-strip deviation, closed", () => {
     const body = ruleBody(".timer-dot-past");
     expect(body).toContain("var(--ink)");
     expect(body).not.toContain("var(--accent)");

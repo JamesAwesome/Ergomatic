@@ -1652,6 +1652,123 @@ explicitly NOT this wave's scope:
 discriminators settled on the wire) and the timer-path row both pass
 on James's iPhone against a real PM5, and James gives the merge word.
 
+## Phase CR — Connected revamp: two panes, two heroes, one honest bar
+
+**Status:** Implementation complete on the `connected-revamp` branch
+(Tasks 1-8 of 9); James's erg look (Task 9) is the only step left
+before the PR and his merge word.
+**Goal:** connected mode becomes two panes whose landscape geometry
+cannot drift; the live pane reads as two big judged numerals over
+ink targets; the grid becomes single-line rows with its totals in
+the header; one notched bar replaces three different ways of saying
+where you are; and the unconnected phone timer is rebuilt in the
+same language.
+**Design authority:**
+`docs/superpowers/specs/2026-08-11-connected-revamp-design.md`
+(plan: `docs/superpowers/plans/2026-08-11-connected-revamp.md`;
+visual authority `docs/design/handoffs/2026-08-11-connected-revamp/`,
+where `REVISION-2026-08-11.md` governs and the `.dc.html` mockup is
+the pixel truth).
+
+- [x] The landscape width bug, root-caused and pinned: the surface
+      body was an `auto`-minimum grid item measuring against whichever
+      pane was mounted (692 -> 1262px reproduced). One `min-width: 0`
+      fixes it; the pin measures the content column's width AND left
+      across a real swipe, so a future cause of drift fails too
+- [x] Two panes, not three: `PaneTimer.tsx` and `statusWord` retired
+      with everything that existed only to render them; the codebase's
+      first size-token scale (`--size-hero` … `--size-label`, portrait
+      in `tokens.css`, landscape redefined once); the surface goes
+      full-bleed in landscape with the 44px rail inside the sensor
+      gutter, absorbing the safe-area inset instead of doubling it
+- [x] The live pane: two heroes with their targets beneath in ink, a
+      one-baseline metric row (left-in-interval · meters · HR), the
+      dash where there is no target, and no cards anywhere
+- [x] The notched bar (James's own call, overriding the packet's
+      "unchanged" quarter ruler): one hairline per interval boundary,
+      completed notches RE-ANCHORED to the machine's own elapsed,
+      prediction stopping honestly at an unpriceable phase, the ruler
+      back below a 16-boundary density floor, and the notch two-tone
+      so it survives the fill edge
+- [x] The warm-up is flagged, never counted (his late requirement,
+      re-brainstormed rather than patched): `WARM-UP` with no ordinal,
+      `WU` in the grid's number cell, a third bar tone that fills as
+      the warm-up is rowed, and `ProgramInterval` carrying its phase
+      type so no surface re-derives the fact
+- [x] The grid: single-line rows, totals in the header, 8 visible in
+      landscape at 32px and 15 in portrait at 40px — every count
+      derived from a measured scroller, not asserted
+- [x] End moves off its full-width bar into a 44pt outlined header
+      control (a mis-tap hazard on a swiped surface), the empty footer
+      goes back to the rows, and UP NEXT finally says how long the
+      rest is
+- [x] The phone timer joins the same language: ink `RUNNING`, ink
+      targets, the token sizes, the gutter, the distance hero swap,
+      Pause following the mockup, and the landscape rule block scoped
+      to its own surface so it stops leaking onto the connected panes
+- [x] Docs, captures and gates: the DEVIATIONS rows this wave owes,
+      the retirement audit, and the last two screens carrying the
+      `var(--tap)` overflow (`countdown`, `session-complete`)
+- [ ] James's erg look (the phase exit, below)
+
+**Follow-ons this wave declines** — the packet's own three open
+questions (`docs/design/handoffs/2026-08-11-connected-revamp/README.md`,
+"Open questions for the build session"), each unbuilt because the
+answer is a hardware fact nobody has yet:
+- **Projected finish split** per interval, if the driver layer can
+  expose one — it wants the live pane's metric row.
+- **Reconnect backfill**: whether the monitor can replay per-interval
+  actuals for intervals completed while we were disconnected. The
+  grid's backfill assumes yes; if not, those rows need the
+  `— · MISSED` treatment DEVIATIONS already records as not built.
+- **Distance intervals with a rate cap**: whether the programmed
+  frame carries both, or the monitor drops the rate.
+
+**Parked, found by this wave** (each is real, none is this wave's
+scope):
+- `scripts/stack-env.sh` derives per-worktree container names from
+  `cksum % 100000` but its host ports from `cksum % 400`, so two
+  worktrees can hold distinct stacks and still collide on `APP_PORT`/
+  `POSTGRES_PORT`. Widen the port range or derive it from the same
+  modulus.
+- The fake-driven walk's **ordinal regression guard** lost its
+  UI-level double-check when `statusWord` went (nothing else on the
+  surface reads `frame.state` unconditionally; the wire decode itself
+  stays covered in `monitor/driver.test.ts`). The named substitute:
+  extend the walk one interval and assert the kind word, where
+  `resting` genuinely flips `2 OF 5 · WORK` to `· REST`.
+- **Portrait's own dead 26px** on the connected surface — landscape
+  reclaimed it in Task 3; portrait's equivalent is a separate
+  decision nobody has taken.
+- The recurring **`design.spec.ts` layout-settling flake**
+  (`stableBoundingBox`, `:1677` and `:1697`, twice in two tasks, on a
+  builder screen neither diff touched). Both passed on re-run; it has
+  a pattern now and wants a tracked fix rather than another per-task
+  footnote.
+
+**Exit:** James's erg look, on his iPhone against a real PM5, one
+item at a time —
+- (a) both panes in landscape: the content column's left edge and
+  width do not move when swiping LIVE <-> GRID (the reported bug, on
+  hardware);
+- (b) the notched bar against a real multi-interval piece with rest:
+  the notch count matches the caption, and a completed interval's
+  notch sits where it actually ended;
+- (b2) the warm-up on a real PM5 (nothing in this wave has met the
+  wire on this state, and it is the FIRST state a rower with the
+  preference on reaches): the caption reads `WARM-UP` with no ordinal
+  and `1 OF N` on the first work piece, the bar's leading span
+  visibly fills as he rows it and still reads as not-work, and the
+  grid's warm-up row is present but unnumbered;
+- (b3) pause mid-piece: the paused block now OCCLUDES the bottom 52px
+  rather than displacing content, which hides TOTAL LEFT and the bar
+  on live and the caption plus the last row on the grid. James judges
+  whether that trade is right;
+- (c) both heroes readable at arm's length mid-piece, and the grid's
+  rows legible at 8 visible.
+Anything he wants changed goes through a fix round before the PR;
+then the PR (rich body, before/after captures) and his merge word.
+
 ## Bugfix rounds
 
 Ad hoc fix rounds outside the phase sequence — small bundles of device

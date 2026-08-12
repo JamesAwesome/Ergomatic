@@ -519,7 +519,8 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     expect(cells(row(2)).meters).toBe("1200");
     expect(cells(row(2)).time).toBe("4:05");
     // Still no countdown class on the accrual cell — only the PROGRAMMED
-    // dimension wears the accent (DEVIATIONS row 78's own standing rule).
+    // dimension wears the accent (DEVIATIONS row 77's own standing rule —
+    // 78 until Task 8 retired the segment-strip row above it).
     expect(
       row(2).querySelector(".connected-grid-time.connected-grid-countdown"),
     ).toBeNull();
