@@ -5976,16 +5976,19 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 42px;
 }
 
-.connected-surface:has(.connected-lost) .connected-second-value,
-.connected-surface:has(.connected-lost) .connected-clock-value {
+.connected-surface:has(.connected-lost) .connected-second-value {
   font-size: 60px;
 }
 
 /* The ended hand-off frame is not a pane and has no pager: it keeps the
    plain centred column in BOTH orientations. Without this it inherited the
-   landscape pane grid's second 56px track and its 36px serif line
-   overflowed the frame horizontally (measured: 861px of content in an
-   844px viewport). */
+   landscape pane grid's own track structure (fix round, review Minor-5:
+   the gutter is column 1 now, at `calc(44px + env(safe-area-inset-left,
+   0px))`, not the pre-Task-2 second 56px rail column this comment used to
+   name) and its 36px serif line overflowed the frame horizontally
+   (measured pre-Task-2: 861px of content in an 844px viewport — the
+   OVERRIDE this rule provides, not the specific track it was escaping, is
+   what still matters). */
 .connected-surface-ended {
   display: flex;
   flex-direction: column;
@@ -6203,12 +6206,18 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* --- Landscape ------------------------------------------------------ */
 
 @media (orientation: landscape) {
-  /* THE FIRST HALF OF THE SIZE-TOKEN SCALE (Task 2, `tokens.css`'s own
-     comment on the other half): the landscape value of each of the eight
-     `--size-*` roles, redefined here — ONE name, two values, never a second
-     name — because this is the connected surface's own existing landscape
-     query and both surfaces the scale serves land their landscape half
-     wherever their own query already lives. */
+  /* THE LANDSCAPE HALF OF THE SIZE-TOKEN SCALE (Task 2, `tokens.css`'s own
+     comment on the portrait half) — the ONLY landscape redefinition there
+     is. `:root` here is GLOBAL the instant the media query matches, so
+     this one block already reaches every consumer in landscape, the phone
+     timer included (fix round, review Minor-13: an earlier version of this
+     comment read as an invitation for the timer's own landscape query,
+     `:4011`/`:4199`/`:4296`, to add a SECOND `:root { --size-*: … }` —
+     it must not: two blocks redefining the same eight tokens in two
+     landscape queries is last-wins-by-source-order drift waiting to
+     happen, and nothing about `:root`'s own cascade needs a second copy to
+     reach a second surface). ONE name, two values, never a second name for
+     either half. */
   :root {
     --size-hero: 112px;
     --size-hero-tenths: 58px;
@@ -6227,10 +6236,32 @@ section:not(.news-pinned) .news-row:last-of-type {
      physical edge instead of floating ~42px inboard of it (the previous
      56px-cap-plus-padding shape) — safe-area insets still apply (they are
      real device geometry, not the app's own layout choice), only the
-     app-chosen 20px/6px on top of them is dropped. */
+     app-chosen 20px/6px on top of them is dropped.
+
+     LEFT is deliberately ABSENT from this padding (task-2 fix round,
+     review Important-1). The naive version — `env(safe-area-inset-left,
+     0px)` here, same as the other three sides — reintroduces the exact
+     defect full-bleed exists to kill: the gutter is `grid-column: 1`
+     INSIDE this padding, so a real inset would push its own left edge to
+     `x = inset-left` instead of `x = 0`, floating it inboard of the
+     housing again (worse: revision §2's own premise is that the 44pt
+     gutter IS the reserved sensor area, so stacking an inset in front of
+     it double-counts to ~90px of chrome where the design asks for 44).
+     Chromium reports every `env(safe-area-inset-*)` as `0px` — confirmed
+     empirically via CDP's `Emulation.setSafeAreaInsetsOverride`, which
+     DOES work in this repo's Chromium and is what the fix-round e2e test
+     below uses — so this was invisible to every existing gate. The inset
+     is not discarded, only relocated: `.connected-pager` below absorbs it
+     via its own `padding-left`, so the gutter's fill still reaches the
+     physical edge while its 44px of tappable content sits clear of the
+     housing. RIGHT stays here unchanged — nothing on this surface's right
+     edge plays the gutter's role, so the ordinary inset behaviour is
+     correct there. Which physical side the housing actually falls on
+     depends on rotation direction, which neither the revision nor this
+     fix addresses — that is a design call, not an implementation one. */
   .connected-surface {
     display: grid;
-    grid-template-columns: 44px 1fr;
+    grid-template-columns: calc(44px + env(safe-area-inset-left, 0px)) 1fr;
     grid-template-rows: auto 1fr auto;
     /* No column-gap: the gutter's own 1px inner rule (below) is the only
        separation between it and the content column — "content starts
@@ -6240,7 +6271,7 @@ section:not(.news-pinned) .news-row:last-of-type {
     max-width: none;
     margin: 0;
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
-      env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+      env(safe-area-inset-bottom, 0px) 0;
   }
 
   /* One line in landscape: 390px of height cannot spare the two-line
@@ -6292,7 +6323,17 @@ section:not(.news-pinned) .news-row:last-of-type {
      (`--surface-sunken`) with a 1px inner rule on the side facing the
      content. `space-between` plus the 12px vertical padding is what puts
      LIVE at the top, GRID at the bottom and the housing spacer exactly
-     between them, mirroring the mockup's own gutter column byte for byte. */
+     between them, mirroring the mockup's own gutter column byte for byte.
+
+     `width`/`padding-left` carry the inset the surface no longer does (see
+     the comment above `.connected-surface`'s own `grid-template-columns`):
+     `width` grows by the same `env(safe-area-inset-left, 0px)` the column
+     track does, and `box-sizing: border-box` (global, `index.css:1`) means
+     that growth is exactly absorbed by `padding-left` — the CONTENT box
+     (where LIVE/the housing/GRID actually sit) stays a constant 44px,
+     pushed clear of the notch, while the `#efeade` fill underneath the
+     padding still paints all the way to the true physical edge. Never an
+     inset override: the inset is relocated, not dropped. */
   .connected-pager {
     grid-column: 1;
     grid-row: 1 / -1;
@@ -6301,8 +6342,8 @@ section:not(.news-pinned) .news-row:last-of-type {
     justify-content: space-between;
     gap: 0;
     height: auto;
-    width: 44px;
-    padding: 12px 0;
+    width: calc(44px + env(safe-area-inset-left, 0px));
+    padding: 12px 0 12px env(safe-area-inset-left, 0px);
     background: var(--surface-sunken);
     border-top: none;
     border-right: 1px solid var(--rule);
@@ -6325,7 +6366,10 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* The camera-housing bump between the two gutter targets (`PagerRail.tsx`'s
      own comment on why it exists). Zero footprint in portrait, where
      `.connected-pager-housing` renders (see the portrait rule below) but
-     there is no gutter or housing to represent. */
+     there is no gutter or housing to represent. `border-radius: 6px`, not
+     the house's `--radius` (2px) — a deliberate, mockup-faithful exception,
+     recorded in `DEVIATIONS.md` rather than silently matching the mockup's
+     `r6` against the house rule it departs from. */
   .connected-pager-housing {
     width: 11px;
     height: 104px;
