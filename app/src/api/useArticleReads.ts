@@ -15,6 +15,37 @@ export type ArticleReadsState =
       markUnread: (slug: string) => void; // optimistic; fires DELETE, failure is silent
     };
 
+// Read-after-write barrier (2026-08-12). Every `useArticleReads()` call is
+// its own hook instance with its own mount GET, and `markRead`/`markUnread`
+// are deliberately fire-and-forget — so a rower who opens an article and
+// immediately taps a tab can have the NEW screen's GET overtake the still
+// in-flight PUT and render the stale count. That is a real (if cosmetic and
+// self-healing) product bug, and it is what made `onboarding.spec.ts`'s
+// cross-surface read step intermittently see "0 OF 4 READ" on a loaded CI
+// runner — the test was right, the app was racing.
+//
+// Writes register here; a mount GET waits for them to settle first. This
+// makes the barrier honest rather than optimistic: if the PUT actually
+// FAILED, the GET that follows reports the truth (still unread) instead of
+// a local guess. Two passes, because a write can start while we await the
+// first — bounded rather than a `while`, so a stream of writes can never
+// keep a screen loading forever.
+const pendingWrites = new Set<Promise<unknown>>();
+
+function trackWrite(write: Promise<unknown>): void {
+  pendingWrites.add(write);
+  const done = () => {
+    pendingWrites.delete(write);
+  };
+  write.then(done, done);
+}
+
+async function settlePendingWrites(): Promise<void> {
+  for (let pass = 0; pass < 2 && pendingWrites.size > 0; pass++) {
+    await Promise.allSettled([...pendingWrites]);
+  }
+}
+
 export function useArticleReads(): ArticleReadsState {
   const [state, setState] = useState<ArticleReadsState>({ state: "loading" });
 
@@ -35,7 +66,9 @@ export function useArticleReads(): ArticleReadsState {
       currentSlugs.add(slug);
       // Fire-and-forget: read state is a nicety. A failed PUT simply
       // leaves the article unread on the next fetch (6H spec).
-      void api(`/api/article-reads/${slug}`, { method: "PUT" }).catch(() => {});
+      trackWrite(
+        api(`/api/article-reads/${slug}`, { method: "PUT" }).catch(() => {}),
+      );
       const next = currentSlugs;
       // The `prev.state !== "ready"` arm is required for TypeScript to
       // narrow `prev` before the spread (the ready variant is the only one
@@ -55,8 +88,8 @@ export function useArticleReads(): ArticleReadsState {
       currentSlugs.delete(slug);
       // Same nicety-class failure handling as markRead, mirrored: a failed
       // DELETE simply leaves the article read on the next fetch.
-      void api(`/api/article-reads/${slug}`, { method: "DELETE" }).catch(
-        () => {},
+      trackWrite(
+        api(`/api/article-reads/${slug}`, { method: "DELETE" }).catch(() => {}),
       );
       const next = currentSlugs;
       setState((prev) =>
@@ -64,7 +97,10 @@ export function useArticleReads(): ArticleReadsState {
       );
     };
 
-    api("/api/article-reads")
+    // Wait out any in-flight write before reading, so a freshly-mounted
+    // screen cannot render a count that predates a read the rower just made.
+    settlePendingWrites()
+      .then(() => api("/api/article-reads"))
       .then(async (res) => {
         if (cancelled) return;
         if (res.ok) {
