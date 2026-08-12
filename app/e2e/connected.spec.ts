@@ -72,6 +72,7 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // full five-row grid.
 const FIXTURE_PROGRAM = {
   intervals: Array.from({ length: 5 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 100,
     targetSplit: null,

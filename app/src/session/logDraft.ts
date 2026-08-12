@@ -494,10 +494,10 @@ export function buildManualLogSteps(
 
 /** `MonitorRun`'s frozen log identity, captured once at Connect (7C spec
  *  §2, the adversarial review's B1): `buildMonitorLogSteps` (a later task)
- *  cannot derive a label or warmup-ness from `MonitorRun` alone —
- *  `ProgramInterval` (`domain/monitor/program.ts`) carries no label and no
- *  warmup/work discriminant, and the connect path persists no
- *  `SessionDraft` for it to recover either from (7B's Connect flow compiles
+ *  cannot derive a LABEL from `MonitorRun` alone — `ProgramInterval`
+ *  (`domain/monitor/program.ts`) carries none, and the connect path
+ *  persists no
+ *  `SessionDraft` for it to recover one from (7B's Connect flow compiles
  *  straight from the library workout, never through a confirm screen that
  *  would leave one behind). So the run learns the one small thing the log
  *  needs, at the moment it still has it. `steps` is built from the SAME
@@ -507,7 +507,15 @@ export function buildManualLogSteps(
  *  skip exactly the "rest" phases (`compileProgram` folds each into the
  *  PRECEDING interval's `restSeconds` rather than emitting an interval of
  *  its own), so `seed.steps[i]` and `program.intervals[i]` name the SAME
- *  interval for every `i` — a later task's whole alignment contract. */
+ *  interval for every `i` — a later task's whole alignment contract.
+ *
+ *  `kind` is now REDUNDANT with `ProgramInterval.type`, which
+ *  connected-revamp Task 4b (design spec §5b) added so the live surfaces
+ *  could stop guessing at a warm-up. Kept rather than removed: this seed is
+ *  PERSISTED (a stored `MonitorRun` written before that change still
+ *  carries it and nothing else), and the alignment contract above is what
+ *  makes the two agree index for index. A later pass may retire it; doing
+ *  so is a stored-shape migration, not a comment sweep. */
 export interface LogSeed {
   steps: { label: string; kind: "warmup" | "work" }[];
   /** The PACES LOCKED panel's values (README.md §7's "PACES LOCKED AT 2K
@@ -672,11 +680,12 @@ export const MONITOR_SPM_MAX = 99;
 /** Builds the Log screen's monitor-mode step list straight from a completed
  *  `MonitorRun` — the PM5-driven twin of `buildLogSteps` above, and the
  *  builder the 7C spec's §3 table describes field-by-field. Cannot derive a
- *  label or warmup-ness from `MonitorRun` alone (`ProgramInterval` carries
- *  neither) — that is exactly what `run.logSeed` (`buildLogSeed`'s own
- *  output, frozen at Connect) exists to supply; see this file's `LogSeed`
- *  doc comment for the alignment contract between `logSeed.steps` and
- *  `program.intervals`.
+ *  LABEL from `MonitorRun` alone (`ProgramInterval` carries none) — that is
+ *  what `run.logSeed` (`buildLogSeed`'s own output, frozen at Connect)
+ *  exists to supply; see this file's `LogSeed` doc comment for the
+ *  alignment contract between `logSeed.steps` and `program.intervals`, and
+ *  for why the seed's own `kind` stays even though
+ *  `ProgramInterval.type` now carries the same warm-up fact.
  *
  *  **Alignment / disqualification** (§3): `logSeed` missing, or
  *  `logSeed.steps.length !== program.intervals.length`, throws

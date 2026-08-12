@@ -135,6 +135,89 @@ describe("foldIntervals — one interval per non-rest phase, rests folded onto i
     ]);
     expect(groups.map((g) => g.workSeconds)).toStrictEqual([480, 240]);
   });
+
+  it("carries each interval's own phase TYPE, so the bar never has to guess", () => {
+    // Design spec §5b: a warm-up's span is real time the rower rows, but it
+    // is not the work, and the group is what remembers which is which.
+    const { groups } = foldIntervals([
+      { type: "warmup", seconds: 480, label: "Easy", originalIndex: -1 },
+      { type: "rest", seconds: 60, label: "Rest", originalIndex: -1 },
+      ...work(240, 60),
+      { type: "test", label: "All out", originalIndex: 1 },
+    ]);
+    expect(groups.map((g) => g.type)).toStrictEqual(["warmup", "work", "test"]);
+    // And the folded rests still belong to the interval before them.
+    expect(groups.map((g) => g.restSeconds)).toStrictEqual([60, 60, 0]);
+  });
+});
+
+// --- The warm-up's own span (design spec §5b) ------------------------------
+
+describe("intervalBoundaries — where the warm-up ends", () => {
+  const WITH_WARMUP: EnginePhase[] = [
+    { type: "warmup", seconds: 480, label: "Easy", originalIndex: -1 },
+    ...work(240, 60),
+    ...work(240, 60),
+    ...work(240),
+  ];
+
+  it("marks the end of the warm-up's span, folded rest and all", () => {
+    const { seconds, warmupEndsAt } = intervalBoundaries([
+      { type: "warmup", seconds: 480, label: "Easy", originalIndex: -1 },
+      { type: "rest", seconds: 60, label: "Rest", originalIndex: -1 },
+      ...work(240, 60),
+      ...work(240),
+    ]);
+    // The warm-up interval is 8:00 plus the setting's own 1:00 rest, and it
+    // ends exactly where the bar's first notch is drawn.
+    expect(warmupEndsAt).toBe(540);
+    expect(seconds[0]).toBe(540);
+  });
+
+  it("is null for a session with no warm-up — the case most sessions are", () => {
+    expect(intervalBoundaries(FIVE_TIMED).warmupEndsAt).toBeNull();
+  });
+
+  it("re-anchors with the warm-up, so the toned span is where it really ended", () => {
+    // The rower rowed 9:00 of an 8:00 warm-up (the machine counts its own
+    // interval): the span the bar tones grows with the fact, it does not
+    // stay at the programmed estimate.
+    const { warmupEndsAt } = intervalBoundaries(WITH_WARMUP, [540]);
+    expect(warmupEndsAt).toBe(540);
+    expect(intervalBoundaries(WITH_WARMUP).warmupEndsAt).toBe(480);
+  });
+
+  it("says nothing when the warm-up itself cannot be priced", () => {
+    // An unpriceable warm-up (a distance one with no baseline to price it)
+    // stops the notching at interval 0, so there is no honest position to
+    // tone TO — the bar tones nothing rather than guessing a width.
+    const { seconds, warmupEndsAt } = intervalBoundaries([
+      { type: "warmup", meters: 2000, label: "Easy", originalIndex: -1 },
+      ...work(240, 60),
+      ...work(240),
+    ]);
+    expect(seconds).toStrictEqual([]);
+    expect(warmupEndsAt).toBeNull();
+  });
+
+  it("says nothing for a session that is nothing BUT a warm-up", () => {
+    // One interval, no interior boundary: toning the whole bar would leave a
+    // fill that can never appear to move.
+    expect(
+      intervalBoundaries([
+        { type: "warmup", seconds: 480, label: "Easy", originalIndex: -1 },
+      ]).warmupEndsAt,
+    ).toBeNull();
+  });
+
+  it("never mistakes a WORK first interval for a warm-up", () => {
+    // The position is not the fact: interval 0 of a warm-up-less session is
+    // work, and its span must be drawn as work.
+    expect(intervalBoundaries(WITH_WARMUP).warmupEndsAt).toBe(480);
+    expect(
+      intervalBoundaries([...work(480, 0), ...work(240)]).warmupEndsAt,
+    ).toBeNull();
+  });
 });
 
 describe("intervalBoundaries — the notch positions", () => {
@@ -283,6 +366,7 @@ describe("intervalBoundaries — the notch positions", () => {
     expect(intervalBoundaries(phases)).toStrictEqual({
       seconds: [],
       predictedFrom: null,
+      warmupEndsAt: null,
     });
   });
 
@@ -290,10 +374,12 @@ describe("intervalBoundaries — the notch positions", () => {
     expect(intervalBoundaries(work(1200))).toStrictEqual({
       seconds: [],
       predictedFrom: null,
+      warmupEndsAt: null,
     });
     expect(intervalBoundaries([])).toStrictEqual({
       seconds: [],
       predictedFrom: null,
+      warmupEndsAt: null,
     });
   });
 
@@ -358,6 +444,16 @@ describe("intervalBoundaries — against a real library workout", () => {
     for (let i = 1; i < seconds.length; i += 1) {
       expect(seconds[i]!).toBeGreaterThan(seconds[i - 1]!);
     }
+  });
+
+  it("tones the real workout's 8:00 warm-up and nothing past it (§5b)", () => {
+    const { warmupEndsAt, seconds } = intervalBoundaries(phases);
+    expect(phases[0]!.type).toBe("warmup");
+    expect(warmupEndsAt).toBe(480);
+    // The span ends at the first notch and not one interval later: the four
+    // 2000 m pieces after it are the work.
+    expect(warmupEndsAt).toBe(seconds[0]);
+    expect(warmupEndsAt).toBeLessThan(seconds[1]!);
   });
 
   it("re-anchors the real workout's first 2000 m off the machine's own actual", () => {

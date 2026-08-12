@@ -76,6 +76,7 @@ const VERIFY_TICKS = 20;
 const TEST_PROGRAM: WorkoutProgram = {
   intervals: [
     {
+      type: "work",
       kind: "time",
       value: 60,
       targetSplit: 120,
@@ -105,6 +106,7 @@ const NO_TARGET_PROGRAM: WorkoutProgram = {
  *  no-rest shape hardware already accepted and ran for TIME (§19.8). */
 const MANY_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 25 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 100,
     targetSplit: 120,
@@ -122,6 +124,7 @@ const MANY_PROGRAM: WorkoutProgram = {
  *  broken" — they were confounded until now. */
 const TWO_TIME_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 2 }, () => ({
+    type: "work" as const,
     kind: "time" as const,
     value: 60,
     targetSplit: 120,
@@ -144,6 +147,7 @@ const TWO_TIME_PROGRAM: WorkoutProgram = {
  *  session, not only for discovering it the first time. */
 const TWO_TIME_NO_REST_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 2 }, () => ({
+    type: "work" as const,
     kind: "time" as const,
     value: 60,
     targetSplit: 120,
@@ -154,6 +158,7 @@ const TWO_TIME_NO_REST_PROGRAM: WorkoutProgram = {
 
 const SHORT_PROGRAM: WorkoutProgram = {
   intervals: Array.from({ length: 3 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 500,
     targetSplit: 120,
@@ -170,6 +175,7 @@ const SHORT_PROGRAM: WorkoutProgram = {
 const BISECT_100M: WorkoutProgram = {
   // only the VALUE changes vs SHORT (500 → 100, the Table 19 minimum)
   intervals: Array.from({ length: 3 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 100,
     targetSplit: 120,
@@ -180,6 +186,7 @@ const BISECT_100M: WorkoutProgram = {
 const BISECT_REST0: WorkoutProgram = {
   // only the REST changes vs SHORT (60 → 0)
   intervals: Array.from({ length: 3 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 500,
     targetSplit: 120,
@@ -191,6 +198,7 @@ const BISECT_FRAMES: WorkoutProgram = {
   // only the COUNT changes vs SHORT (3 → 25: multi-frame, like fix-1's
   // original MANY shape)
   intervals: Array.from({ length: 25 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 500,
     targetSplit: 120,
@@ -205,6 +213,7 @@ const BISECT_FRAMES: WorkoutProgram = {
 const BISECT_PAIR_COUNT_VALUE: WorkoutProgram = {
   // 25 × 100m, rest 60 — count+value together, rest normal
   intervals: Array.from({ length: 25 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 100,
     targetSplit: 120,
@@ -215,6 +224,7 @@ const BISECT_PAIR_COUNT_VALUE: WorkoutProgram = {
 const BISECT_PAIR_VALUE_REST: WorkoutProgram = {
   // 3 × 100m, rest 0 — value+rest together, count small
   intervals: Array.from({ length: 3 }, () => ({
+    type: "work" as const,
     kind: "distance" as const,
     value: 100,
     targetSplit: 120,

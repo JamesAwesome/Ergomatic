@@ -15,6 +15,7 @@ import { autoTicking, resolveDefaultTransport } from "./index";
 const PROGRAM: WorkoutProgram = {
   intervals: [
     {
+      type: "work",
       kind: "distance",
       value: 500,
       targetSplit: null,

@@ -204,6 +204,7 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
       program: {
         intervals: [
           {
+            type: "work",
             kind: "time",
             value: 480,
             targetSplit: null,

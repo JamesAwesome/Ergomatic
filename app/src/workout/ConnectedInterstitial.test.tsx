@@ -361,6 +361,7 @@ describe("state 5: programming", () => {
     const one: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 120,
           targetSplit: 120,

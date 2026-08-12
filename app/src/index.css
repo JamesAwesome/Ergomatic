@@ -3790,6 +3790,27 @@ button:disabled {
   background: var(--ink);
 }
 
+/* THE WARM-UP'S SPAN (design spec §5b, ruling 12). The leading chunk keeps
+   its true width — it is time the rower rows — and takes the UNFILLED-track
+   tone instead of the working one, so the structure reads "this part is not
+   the work". `--rule-2` is the track's own colour (`.timer-total-bar`
+   above), not a new one: the chunk IS the track, laid back over the fill.
+   Nothing about the rower's progress is hidden by it — TOTAL LEFT counts
+   down throughout, and the fill emerges from behind the chunk the moment the
+   work starts.
+   It paints over the fill and under the notches (DOM order among positioned
+   siblings, `TimerRuler.tsx`). The warm-up's own boundary notch is
+   unaffected: `left: <chunk width>` puts its 1px just RIGHT of the chunk, on
+   the fill or the open track like any other notch, so the two-tone rule
+   above still measures what it measured. */
+.timer-total-warmup {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--rule-2);
+}
+
 /* Behind the fill the same hairline is cut out of it rather than laid on
    it — see `TimerRuler.tsx`'s own comment for why an ink notch cannot be
    seen there (the connected pane fills this bar with `--ink` itself, so
@@ -5443,11 +5464,13 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* ACCENT APPEARS NOWHERE ON THESE PANES (rule 1 at the top of this block).
    `TimerRuler`'s own TOTAL LEFT bar fills `--accent` on the phone timer,
    and the component is reused here verbatim — on this surface the progress
-   fill is ink instead. Task 4 rebuilt those internals and this override
-   still reaches exactly one element: the notches it added are `div`s, not
-   `span`s (see `.timer-total-notch` above), and they are `--ink`/`--page`
-   on both surfaces, so no notch can pick up accent here and none of them
-   needs a second override of its own. The sibling override this comment
+   fill is ink instead. Tasks 4 and 4b rebuilt those internals and this
+   override still reaches exactly one element — the fill — because every
+   child either of them added is a `div`, not a `span` (the notches, see
+   `.timer-total-notch` above; and §5b's warm-up chunk,
+   `.timer-total-warmup`). Their colours are `--ink`/`--page`/`--rule-2` on
+   both surfaces, so none of them can pick up accent here and none needs a
+   second override of its own. The sibling override this comment
    used to describe,
    `.connected-pane .timer-dot-past`/`-current` (the phone timer's segment
    strip painting COMPLETED segments `--accent`), retired in the same fix

@@ -1098,10 +1098,12 @@ describe("the connected walk, fake-driven", () => {
     expect(document.querySelector(".connected-hero-value")!.textContent).toBe(
       "1:57.8",
     );
-    // And the interval count is the PROGRAM's, normalized by the driver —
-    // interval 1 of Filling Low's 5 is its 8:00 warm-up, which is why the
-    // kind word is WARM-UP and not WORK.
-    expect(screen.getByText("1 OF 5 · WARM-UP")).toBeInTheDocument();
+    // And the interval the driver normalized to is Filling Low's 8:00
+    // warm-up (the program's interval 0), so the caption is that word alone:
+    // design spec §5b takes the warm-up out of the rower's count rather than
+    // making them read `1 OF 5` on a workout they know as four pieces.
+    expect(screen.getByText("WARM-UP")).toBeInTheDocument();
+    expect(screen.queryByText(/ OF /)).toBeNull();
 
     // THE PIN FOR THE ORDINAL ABOVE used to live here (task-7 review, L4):
     // pane A's status word was the one thing on this surface that read the

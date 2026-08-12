@@ -68,6 +68,33 @@ export function notchPercents(
   );
 }
 
+/** How much of the bar is NOT the work (design spec §5b): the warm-up's own
+ *  span as a percentage of the session, or `null` when there is no warm-up —
+ *  which is most sessions, and the case that must render exactly as it did
+ *  before this rule existed.
+ *
+ *  Deliberately NOT gated on the notch fallbacks. `notchPercents` gives up
+ *  above `MAX_NOTCH_BOUNDARIES` because seventeen hairlines read as texture;
+ *  that is an argument about counting notches, not about whether a rower's
+ *  first eight minutes are the work, and a 17-interval session deserves the
+ *  same honest leading chunk a 5-interval one gets. The one condition
+ *  shared with the notches is `totalSeconds <= 0`: with no session length
+ *  there is nothing to scale against.
+ *
+ *  Clamped at 100 for the same reason a notch is: a measured warm-up can
+ *  outrun an estimated session, and the bar says so at its right edge
+ *  rather than overflowing. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function warmupPercent(
+  boundaries: IntervalBoundaries | undefined,
+  totalSeconds: number,
+): number | null {
+  if (boundaries === undefined || totalSeconds <= 0) return null;
+  const { warmupEndsAt } = boundaries;
+  if (warmupEndsAt === null) return null;
+  return Math.min(100, Math.max(0, (warmupEndsAt / totalSeconds) * 100));
+}
+
 export default function TimerRuler({
   totalLeftSeconds,
   totalSeconds,
@@ -84,6 +111,7 @@ export default function TimerRuler({
 }) {
   const pct = totalProgressPct(totalLeftSeconds, totalSeconds);
   const notches = notchPercents(boundaries, totalSeconds);
+  const warmup = warmupPercent(boundaries, totalSeconds);
   const predictedFrom = boundaries?.predictedFrom ?? null;
   return (
     <div className="timer-total">
@@ -95,6 +123,24 @@ export default function TimerRuler({
       </div>
       <div className="timer-total-bar">
         <span style={{ width: `${pct}%` }} />
+        {/* THE WARM-UP IS NOT THE WORK (design spec §5b). Its span keeps its
+            true proportion and loses the working tone: a chunk of the
+            unfilled track laid back OVER the fill, so the leading part of
+            the bar reads as track whether the rower has passed it or not.
+            One element, no new colour, no legend — and nothing at all when
+            the session has no warm-up, which is the shape most sessions
+            have. A `div`, not a `span`, for the same reason the notches are
+            (`index.css`: the fill rule, and the connected pane's repaint of
+            it, must keep matching exactly one element). Rendered after the
+            fill and before the notches: DOM order is paint order among these
+            siblings, so the chunk covers the fill and no notch is buried. */}
+        {warmup !== null && (
+          <div
+            className="timer-total-warmup"
+            style={{ width: `${warmup}%` }}
+            aria-hidden="true"
+          />
+        )}
         {notches.map((at, i) => (
           <div
             key={i}

@@ -114,6 +114,7 @@ const LIBRARY_IDENTITY: RunIdentity = {
 const TWO_INTERVALS: WorkoutProgram = {
   intervals: [
     {
+      type: "work",
       kind: "time",
       value: 60,
       targetSplit: 120,
@@ -121,6 +122,7 @@ const TWO_INTERVALS: WorkoutProgram = {
       restSeconds: 0,
     },
     {
+      type: "work",
       kind: "time",
       value: 60,
       targetSplit: 120,
@@ -1119,6 +1121,7 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
     const oneInterval: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: 120,
@@ -1238,6 +1241,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
   const ONE_INTERVAL: WorkoutProgram = {
     intervals: [
       {
+        type: "work",
         kind: "time",
         value: 60,
         targetSplit: 120,

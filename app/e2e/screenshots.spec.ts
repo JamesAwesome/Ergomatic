@@ -1681,6 +1681,7 @@ async function injectFakeMonitorForScreenshots(
       // holds "Sending the workout" on screen long enough to capture).
       program: {
         intervals: Array.from({ length: 5 }, () => ({
+          type: "work" as const,
           kind: "distance" as const,
           value: 100,
           targetSplit: null,
@@ -1870,6 +1871,7 @@ async function openLogMonitorForm(
     {
       program: {
         intervals: Array.from({ length: 5 }, () => ({
+          type: "work" as const,
           kind: "distance" as const,
           value: 100,
           targetSplit: null,
@@ -2085,11 +2087,12 @@ const CONNECTED_FIXTURES = path.resolve(process.cwd(), "e2e/fixtures");
  *  do without — and a wrapper with no bar in it photographs a DOM the device
  *  never produces, exercising neither half of that rule (task-6 review, M1).
  *  With the rule in place these captures are byte-identical to the ones taken
- *  before this node existed; with it deleted, the bar appears in all sixteen
- *  (fix round, review Minor-10: `CONNECTED_STATES` is 8 states × 2
- *  orientations post-Task-2's `connected-pane-timer` retirement, not the
- *  9×2=18 this comment predated or the fourteen it drifted to next) and the
- *  frame shrinks. */
+ *  before this node existed; with it deleted, the bar appears in every one of
+ *  them and the frame shrinks. The count is `CONNECTED_STATES.length × 2`
+ *  orientations and is stated that way deliberately: this comment has
+ *  carried a stale literal twice (fix round, review Minor-10 — 8 states
+ *  after Task 2 retired `connected-pane-timer`, then 9 once Task 4b added
+ *  `connected-pane-live-warmup`). */
 const TAB_BAR_MARKUP = `<nav class="tabbar" aria-label="Main">
   <a class="tab tab-active" href="#">TODAY</a>
   <a class="tab" href="#">LIBRARY</a>
@@ -2136,6 +2139,11 @@ async function showConnectedFixture(page: Page, name: string): Promise<void> {
 
 const CONNECTED_STATES = [
   "connected-pane-live",
+  // connected-revamp Task 4b (design spec §5b): the WARM-UP state, which had
+  // no committed picture of its own — every other live fixture is already
+  // past it. What it records: the caption with no ordinal, and the notched
+  // bar's leading chunk in the unfilled-track tone.
+  "connected-pane-live-warmup",
   "connected-pane-live-nohr",
   "connected-paused",
   "connected-disconnected",

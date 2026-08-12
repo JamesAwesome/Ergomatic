@@ -151,6 +151,43 @@ export function phaseIndexForInterval(
   return Math.max(0, phases.length - 1);
 }
 
+/**
+ * THE NUMBER THE ROWER HAS IN THEIR HEAD (design spec §5b, ruling 12).
+ *
+ * A warm-up is real time on the erg and a real `ProgramInterval`, but it is
+ * no part of the count: a four-piece workout is four pieces whether or not
+ * the rower's preference put eight easy minutes in front of them. So this
+ * numbers the WORKING intervals 1..n and hands the warm-up `null` — the
+ * caption drops its ordinal entirely, and Task 5's grid renders `WU` in the
+ * `#` cell and starts at 1 on the first work piece.
+ *
+ * ONE RULE, TWO SURFACES: the caption below and the grid read the same
+ * array, so a row's number and the header's `N OF M` cannot disagree.
+ *
+ * A "test" (open-ended all-out) interval COUNTS. "Working intervals only"
+ * excludes the warm-up and nothing else — a test piece is the hardest work
+ * in the session, not a preamble to it. (It is also unreachable today:
+ * `compileProgram` rejects a phase with neither seconds nor meters, which
+ * every "test" phase is — see its `unrepresentable-value` arm.)
+ */
+export interface IntervalNumbering {
+  /** Per program interval, in the program's own order: its 1-based number
+   *  among the working intervals, or `null` if it is a warm-up. */
+  ordinals: (number | null)[];
+  /** The caption's denominator — how many intervals are the work. */
+  workCount: number;
+}
+
+export function intervalNumbering(
+  intervals: readonly ProgramInterval[],
+): IntervalNumbering {
+  let workCount = 0;
+  const ordinals = intervals.map((interval) =>
+    interval.type === "warmup" ? null : (workCount += 1),
+  );
+  return { ordinals, workCount };
+}
+
 /** The frame a pane renders before the machine has sent one (the instant
  *  between `ready` and the first status tick). Every field is the honest
  *  "nothing yet" value; `state: "armed"` is what the PM itself reports while
@@ -234,14 +271,18 @@ export interface SurfaceModel {
   linked: boolean;
   /** `PM5 430123456`, or `PM5 430123456 · LOST`. */
   deviceCaption: string;
-  /** `INTERVAL 3 OF 25 · WORK`. No current renderer: its only one,
-   *  `PaneTimer.tsx`'s pane A, retired with connected-revamp Task 2. Casualty
-   *  list (design spec §3) rehomes it to the grid header (revision §4's `3
-   *  OF 12 · WORK · 0:47 LEFT`) — a later task's job, not this field's; the
-   *  value stays computed and correct in the meantime. */
+  /** `INTERVAL 3 OF 24 · WORK`, or a bare `WARM-UP` while the warm-up runs
+   *  (design spec §5b — the ordinal belongs to the interval and a warm-up
+   *  has none, so there is no `INTERVAL` prefix left to hang on it). No
+   *  current renderer: its only one, `PaneTimer.tsx`'s pane A, retired with
+   *  connected-revamp Task 2. Casualty list (design spec §3) rehomes it to
+   *  the grid header (revision §4's `3 OF 12 · WORK · 0:47 LEFT`) — a later
+   *  task's job, not this field's; the value stays computed and correct in
+   *  the meantime. */
   intervalLabel: string;
-  /** `3 OF 25 · WORK` (pane B's header line, where the device name already
-   *  occupies the left of the row). */
+  /** `3 OF 24 · WORK`, or `WARM-UP` (pane B's header line, where the device
+   *  name already occupies the left of the row). The denominator counts
+   *  WORKING intervals only — see `intervalNumbering`. */
   intervalLabelShort: string;
   /** `NOW · /500M` live; `LAST · /500M` once the link is gone (handoff §4). */
   nowLabel: string;
@@ -254,11 +295,13 @@ export interface SurfaceModel {
    *  instead. */
   totalLeftDisplay: string;
   /** Where the intervals actually are, for the live pane's notched TOTAL
-   *  LEFT bar (design spec §5). One entry per INTERIOR interval boundary,
-   *  so the bar draws `intervalLabelShort`'s own `OF N` minus one — the
-   *  count the caption promises, never `phases.length`. Completed
-   *  intervals are re-anchored to the machine's own actuals; see
-   *  `session/intervalBoundaries.ts`. */
+   *  LEFT bar (design spec §5). One entry per INTERIOR interval boundary —
+   *  the bar's spans are the intervals the program has, never
+   *  `phases.length`. On a session with no warm-up that is exactly
+   *  `intervalLabelShort`'s own `OF N` minus one; with one, the extra span
+   *  is the warm-up's, which `warmupEndsAt` marks so the bar can tone it out
+   *  of the work (§5b). Completed intervals are re-anchored to the machine's
+   *  own actuals; see `session/intervalBoundaries.ts`. */
   boundaries: IntervalBoundaries;
   elapsedDisplay: string;
   /** `LEFT IN INTERVAL` on a time interval, `METERS LEFT` on a distance one
@@ -346,12 +389,18 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const frame = input.frame ?? NO_FRAME;
   const stale = staleFor(status);
 
+  // TWO DIFFERENT COUNTS, deliberately (design spec §5b). The CLAMP is
+  // against the program's own length — `frame.intervalIndex` is a program
+  // index and a warm-up occupies one — while the caption's denominator below
+  // counts working intervals only. Collapsing them back into one number is
+  // exactly the defect this task exists to remove.
   const intervals = program.intervals.length;
   const rawIndex = frame.intervalIndex ?? 0;
   const intervalIndex = Math.min(
     Math.max(rawIndex, 0),
     Math.max(intervals - 1, 0),
   );
+  const numbering = intervalNumbering(program.intervals);
   const resting = frame.state === "resting";
   const phaseIndex = phaseIndexForInterval(phases, intervalIndex, resting);
   const phase = phases[phaseIndex];
@@ -446,13 +495,21 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const distanceInterval = remaining?.kind === "distance";
   const kindWord = phase ? phaseKindWord(phase.type) : "WORK";
 
+  // THE ORDINAL BELONGS TO THE INTERVAL, THE WORD TO THE PHASE (§5b). An
+  // unnumbered interval — a warm-up — leaves the kind word standing on its
+  // own: `WARM-UP` while it runs, and `REST` through the warm-up setting's
+  // own trailing rest, which is still no part of the rower's count. A work
+  // interval is unchanged: `2 OF 4 · WORK`, `2 OF 4 · REST` in its rest.
+  const ordinal = numbering.ordinals[intervalIndex] ?? null;
+  const counted = `${ordinal} OF ${numbering.workCount} · ${kindWord}`;
+
   return {
     status,
     stale,
     linked: status !== "disconnected",
     deviceCaption: deviceCaptionFor(deviceName, status),
-    intervalLabel: `INTERVAL ${intervalIndex + 1} OF ${intervals} · ${kindWord}`,
-    intervalLabelShort: `${intervalIndex + 1} OF ${intervals} · ${kindWord}`,
+    intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
+    intervalLabelShort: ordinal === null ? kindWord : counted,
     nowLabel: stale ? "LAST · /500M" : "NOW · /500M",
     upNext: upNextTextAt(phases, phaseIndex),
     thenNext: thenNextTextAt(phases, phaseIndex),

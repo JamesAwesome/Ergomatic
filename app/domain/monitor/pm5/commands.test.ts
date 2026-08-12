@@ -205,6 +205,7 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
   it("5 identical intervals: the frame splits exactly at the interval-block boundary, not mid-command", () => {
     const program: WorkoutProgram = {
       intervals: Array.from({ length: 5 }, () => ({
+        type: "work" as const,
         kind: "time" as const,
         value: 60, // 1:00 -> 0x00001770, no flag bytes
         targetSplit: 120, // 2:00/500m -> 0x00002EE0, no flag bytes
@@ -246,6 +247,7 @@ describe("buildProgrammingSequence: command-boundary alignment (Task 1 M4)", () 
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 2000,
           targetSplit: null,
@@ -268,6 +270,7 @@ describe("buildProgrammingSequence: encoding, cited against interface-notes.md Â
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 300,
           targetSplit: null,
@@ -297,6 +300,7 @@ describe("buildProgrammingSequence: encoding, cited against interface-notes.md Â
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: 106.5,
@@ -327,6 +331,7 @@ describe("buildProgrammingSequence: encoding, cited against interface-notes.md Â
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 500,
           targetSplit: 100,
@@ -334,6 +339,7 @@ describe("buildProgrammingSequence: encoding, cited against interface-notes.md Â
           restSeconds: 60,
         },
         {
+          type: "work",
           kind: "time",
           value: 180,
           targetSplit: 100,
@@ -341,6 +347,7 @@ describe("buildProgrammingSequence: encoding, cited against interface-notes.md Â
           restSeconds: 0,
         },
         {
+          type: "work",
           kind: "distance",
           value: 1000,
           targetSplit: 100,
@@ -348,6 +355,7 @@ describe("buildProgrammingSequence: encoding, cited against interface-notes.md Â
           restSeconds: 0,
         },
         {
+          type: "work",
           kind: "time",
           value: 300,
           targetSplit: 100,
@@ -413,6 +421,7 @@ describe("buildProgrammingSequence: M-9 â€” be32/be16 reject what compileProgram
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: 106.567,
@@ -428,6 +437,7 @@ describe("buildProgrammingSequence: M-9 â€” be32/be16 reject what compileProgram
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: 60,
           targetSplit: null,
@@ -457,6 +467,7 @@ describe("expectedArmedStructure (fix-3 Task 4 â€” what 0x0031 must read back)",
     return {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: seconds,
           targetSplit: 120,
@@ -464,6 +475,7 @@ describe("expectedArmedStructure (fix-3 Task 4 â€” what 0x0031 must read back)",
           restSeconds,
         },
         {
+          type: "work",
           kind: "time",
           value: 999,
           targetSplit: 120,
@@ -486,6 +498,7 @@ describe("expectedArmedStructure (fix-3 Task 4 â€” what 0x0031 must read back)",
     const program: WorkoutProgram = {
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 500,
           targetSplit: 120,
@@ -584,6 +597,7 @@ describe("expectedArmedStructure (the DRIVER's prediction) vs armedStructureFiel
     return {
       intervals: [
         {
+          type: "work",
           kind: "time",
           value: seconds,
           targetSplit: 120,
@@ -598,6 +612,7 @@ describe("expectedArmedStructure (the DRIVER's prediction) vs armedStructureFiel
     return {
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: meters,
           targetSplit: 120,

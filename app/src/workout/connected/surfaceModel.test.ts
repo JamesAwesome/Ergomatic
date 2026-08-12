@@ -19,11 +19,13 @@ import type {
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
+import type { WarmupSetting } from "../../api/usePreferences";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
 import {
   buildSurfaceModel,
+  intervalNumbering,
   judgedValue,
   phaseIndexForInterval,
   splitHero,
@@ -44,7 +46,7 @@ const DEVICE = "PM5 432331249";
 // every interval index, count and duration asserted in this file is
 // unchanged. The connected surface still has to render a warm-up interval
 // correctly; this is the shape it arrives in now.
-function libraryFixture(title: string, warmupMinutes: number) {
+function libraryFixture(title: string, warmup: WarmupSetting | null) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
   const draft = buildDraft({
@@ -53,10 +55,7 @@ function libraryFixture(title: string, warmupMinutes: number) {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "time",
-    minutes: warmupMinutes,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0, warmup).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -64,7 +63,14 @@ function libraryFixture(title: string, warmupMinutes: number) {
   return { phases, program };
 }
 
-const FIXTURE = libraryFixture("Filling Low", 8);
+const FIXTURE = libraryFixture("Filling Low", { kind: "time", minutes: 8 });
+
+/** THE SAME WORKOUT WITH THE WARM-UP PREFERENCE OFF — the shape MOST
+ *  sessions have (the preference is off by default, `usePreferences`'s own
+ *  null column), and therefore the shape design spec §5b must leave
+ *  untouched. Four intervals, no warm-up, and every caption the plain
+ *  `N OF M` it has always been. */
+const NO_WARMUP = libraryFixture("Filling Low", null);
 
 /** The session pair MIRRORS the raw pair unless a case overrides it
  *  outright. 0x0031's `elapsedSeconds`/`distanceMeters` are PER-INTERVAL
@@ -264,8 +270,10 @@ describe("staleFor / surfaceStatusFor", () => {
 describe("live", () => {
   it("names the machine's interval out of the program's own count", () => {
     const m = model({ frame: frame({ intervalIndex: 1 }) });
-    expect(m.intervalLabel).toBe("INTERVAL 2 OF 5 · WORK");
-    expect(m.intervalLabelShort).toBe("2 OF 5 · WORK");
+    // §5b: the warm-up is interval 0 of the PROGRAM and no part of the count
+    // the rower keeps — this is the FIRST of Filling Low's four 2000 m reps.
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WORK");
+    expect(m.intervalLabelShort).toBe("1 OF 4 · WORK");
   });
 
   it("keeps the device's own advertised name, with no promise attached", () => {
@@ -583,17 +591,19 @@ describe("degenerate inputs", () => {
     const m = model({ frame: null });
     expect(m.pace.display).toBe("—");
     expect(m.intervalClockValue).toBe("—");
-    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WARM-UP");
+    expect(m.intervalLabel).toBe("WARM-UP");
   });
 
   it("clamps an interval index the machine ran past the program", () => {
     const m = model({ frame: frame({ intervalIndex: 99 }) });
-    expect(m.intervalLabel).toBe("INTERVAL 5 OF 5 · WORK");
+    // The clamp is against the PROGRAM's own length (5 intervals), and the
+    // caption it produces is the last WORK piece's own number.
+    expect(m.intervalLabel).toBe("INTERVAL 4 OF 4 · WORK");
   });
 
   it("treats a null interval index as the first, never as a crash", () => {
     const m = model({ frame: frame({ intervalIndex: null }) });
-    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WARM-UP");
+    expect(m.intervalLabel).toBe("WARM-UP");
   });
 
   it("never renders the `PM5` placeholder unless the picker gave us nothing", () => {
@@ -620,7 +630,7 @@ describe("degenerate inputs", () => {
     });
     expect(m.targetSplit.main).toBe("—");
     expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
-    expect(m.intervalLabel).toBe("INTERVAL 2 OF 5 · WORK");
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WORK");
   });
 
   // `paceCaption`'s own "NO PACE TARGET" assertion retired with the field
@@ -631,6 +641,155 @@ describe("degenerate inputs", () => {
     expect(FIXTURE.phases[0]!.type).toBe("warmup");
     expect(m.targetSplit.main).toBe("—");
     expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
+  });
+});
+
+// --- The warm-up says what it is (design spec §5b, ruling 12) --------------
+
+describe("the warm-up is flagged, never counted", () => {
+  it("numbers the WORK and refuses to number the warm-up", () => {
+    // The rule Task 5's grid reads for its `WU` row, exposed once here so
+    // the caption and the `#` column cannot drift apart.
+    const n = intervalNumbering(FIXTURE.program.intervals);
+    expect(FIXTURE.program.intervals).toHaveLength(5);
+    expect(n.ordinals).toStrictEqual([null, 1, 2, 3, 4]);
+    expect(n.workCount).toBe(4);
+  });
+
+  it("numbers a warm-up-less session exactly as it always did", () => {
+    const n = intervalNumbering(NO_WARMUP.program.intervals);
+    expect(n.ordinals).toStrictEqual([1, 2, 3, 4]);
+    expect(n.workCount).toBe(4);
+  });
+
+  it("counts a TEST piece as work — a warm-up is the only thing that is not", () => {
+    const n = intervalNumbering([
+      {
+        type: "warmup",
+        kind: "time",
+        value: 480,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+      {
+        type: "test",
+        kind: "time",
+        value: 600,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "time",
+        value: 240,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ]);
+    expect(n.ordinals).toStrictEqual([null, 1, 2]);
+    expect(n.workCount).toBe(2);
+  });
+
+  it("says WARM-UP with no ordinal while the warm-up is running", () => {
+    const m = model({ frame: frame({ intervalIndex: 0 }) });
+    expect(m.intervalLabelShort).toBe("WARM-UP");
+    expect(m.intervalLabel).toBe("WARM-UP");
+    // The defect this replaced: the rower warming up read `1 OF 5` on a
+    // workout they know as four pieces.
+    expect(m.intervalLabelShort).not.toMatch(/\d/);
+    expect(m.intervalLabelShort).not.toContain("OF");
+  });
+
+  it("starts the count at 1 on the first WORK piece, on a four-piece workout", () => {
+    const captions = [1, 2, 3, 4].map(
+      (i) => model({ frame: frame({ intervalIndex: i }) }).intervalLabelShort,
+    );
+    expect(captions).toStrictEqual([
+      "1 OF 4 · WORK",
+      "2 OF 4 · WORK",
+      "3 OF 4 · WORK",
+      "4 OF 4 · WORK",
+    ]);
+    // The denominator counts WORKING intervals only — the number the rower
+    // has in their head — and it is one short of the program's own length.
+    expect(FIXTURE.program.intervals).toHaveLength(5);
+    expect(captions.every((c) => c.includes("OF 4"))).toBe(true);
+    expect(captions.some((c) => c.includes("OF 5"))).toBe(false);
+  });
+
+  it("drops the ordinal for the warm-up's own trailing rest too", () => {
+    // The ordinal belongs to the INTERVAL and the word to the PHASE: resting
+    // inside the warm-up interval is still no part of the rower's count.
+    const withRest = libraryFixture("Filling Low", {
+      kind: "time",
+      minutes: 8,
+      restSeconds: 60,
+    });
+    expect(withRest.phases[1]!.type).toBe("rest");
+    const m = buildSurfaceModel({
+      phases: withRest.phases,
+      program: withRest.program,
+      phase: "live",
+      frame: frame({ intervalIndex: 0, state: "resting" }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.intervalLabelShort).toBe("REST");
+    // …while a rest inside a WORK interval keeps its number.
+    const working = model({
+      frame: frame({ intervalIndex: 1, state: "resting" }),
+    });
+    expect(working.intervalLabelShort).toBe("1 OF 4 · REST");
+  });
+
+  it("A SESSION WITH NO WARM-UP IS EXACTLY WHAT IT WAS", () => {
+    // The regression pin that matters most: most sessions have no warm-up,
+    // and this task touched the wire IR they all travel through. Every
+    // caption is the plain `N OF M` formula, over the program's own full
+    // length, and the bar has no span to tone.
+    for (let i = 0; i < NO_WARMUP.program.intervals.length; i += 1) {
+      const m = buildSurfaceModel({
+        phases: NO_WARMUP.phases,
+        program: NO_WARMUP.program,
+        phase: "live",
+        frame: frame({ intervalIndex: i }),
+        deviceName: DEVICE,
+        actuals: [],
+      });
+      expect(m.intervalLabelShort).toBe(
+        `${i + 1} OF ${NO_WARMUP.program.intervals.length} · WORK`,
+      );
+      expect(m.intervalLabel).toBe(
+        `INTERVAL ${i + 1} OF ${NO_WARMUP.program.intervals.length} · WORK`,
+      );
+      expect(m.boundaries.warmupEndsAt).toBeNull();
+    }
+    expect(NO_WARMUP.phases.some((p) => p.type === "warmup")).toBe(false);
+    expect(NO_WARMUP.program.intervals).toHaveLength(4);
+  });
+
+  it("marks the warm-up's span on the bar, ending where its notch is", () => {
+    const m = model({ frame: frame({ intervalIndex: 0 }) });
+    expect(m.boundaries.warmupEndsAt).toBe(480); // the 8:00 warm-up
+    expect(m.boundaries.warmupEndsAt).toBe(m.boundaries.seconds[0]);
+  });
+
+  it("NOTHING NEW on the live pane: a warm-up is never graded", () => {
+    // Design spec §5b's fourth row, confirmed by test rather than by change.
+    // A warm-up carries no target (`compileProgram` nulls it), so the
+    // no-target dash and the judgement standing down are already correct —
+    // whatever the rower is actually pulling.
+    const m = model({ frame: frame({ intervalIndex: 0, currentSplit: 95 }) });
+    expect(FIXTURE.program.intervals[0]!.type).toBe("warmup");
+    expect(FIXTURE.program.intervals[0]!.targetSplit).toBeNull();
+    expect(m.targetSplit.main).toBe("—");
+    expect(m.targetRate.main).toBe("—");
+    expect(m.pace.judgement).toBe("within"); // ungraded, not "over"
+    expect(m.rate.judgement).toBe("within");
+    expect(m.pace.display).toBe("1:35.0"); // and the reading itself is shown
   });
 });
 
@@ -667,13 +826,35 @@ describe("boundaries: where the intervals actually are", () => {
 
   it("the notch count never disagrees with the interval caption", () => {
     // `intervalLabelShort` is the caption a rower reads on the live pane's
-    // own connection line. Whatever number it says, the bar draws one fewer
-    // span boundary than that — read out of the string itself rather than
-    // hardcoded, so a change to either has to change both.
+    // own connection line, and the bar's spans are `notches + 1`. Read out
+    // of the string itself rather than hardcoded, so a change to either has
+    // to change both.
+    //
+    // §5b re-derives the relation without weakening it: the caption counts
+    // the WORK, and the spans are the work plus the warm-up's own toned
+    // chunk. So `spans - warmups === OF N`, which on a session with no
+    // warm-up is the identical `notches === OF N - 1` this test used to
+    // assert.
     const m = model();
     const ofN = Number(/ OF (\d+) /.exec(m.intervalLabelShort)![1]);
-    expect(ofN).toBe(5);
-    expect(m.boundaries.seconds).toHaveLength(ofN - 1);
+    expect(ofN).toBe(4);
+    const spans = m.boundaries.seconds.length + 1;
+    const warmups = FIXTURE.program.intervals.filter(
+      (i) => i.type === "warmup",
+    ).length;
+    expect(warmups).toBe(1);
+    expect(spans - warmups).toBe(ofN);
+
+    const bare = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      phase: "live",
+      frame: frame(),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    const bareOfN = Number(/ OF (\d+) /.exec(bare.intervalLabelShort)![1]);
+    expect(bare.boundaries.seconds).toHaveLength(bareOfN - 1);
   });
 
   it("every notch is an estimate until the machine has finished something", () => {
@@ -757,7 +938,11 @@ describe("boundaries: where the intervals actually are", () => {
       deviceName: DEVICE,
       actuals: [],
     });
-    expect(m.boundaries).toStrictEqual({ seconds: [], predictedFrom: null });
+    expect(m.boundaries).toStrictEqual({
+      seconds: [],
+      predictedFrom: null,
+      warmupEndsAt: null,
+    });
   });
 
   it("the last boundary lands inside the session the bar is drawn against", () => {

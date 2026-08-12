@@ -220,11 +220,47 @@ describe("compileProgram: the warm-up SETTING reaches interval 0", () => {
     );
   }
 
+  it("across all 300 workouts, the warm-up is interval 0 and NOTHING ELSE is a warm-up", () => {
+    // Design spec §5b: every surface now reads `ProgramInterval.type`, and
+    // the numbering rule it feeds (`surfaceModel.ts`'s `intervalNumbering`)
+    // assumes a warm-up is the leading interval and the only one. That is a
+    // property of `engine.ts`'s `warmupPhases` + `buildRun`, not of the
+    // compiler, so it is pinned against the real library rather than a
+    // hand-built pair — with the preference ON for every workout, and OFF
+    // for every workout.
+    for (const [i, workout] of LIBRARY_WORKOUTS.entries()) {
+      const draft = buildDraft({
+        id: `warmup-sweep-${i}`,
+        title: workout.title,
+        type: workout.type,
+        steps: workout.steps,
+      });
+      const on = compileProgram(
+        buildRun(draft, DESIGN_BASELINES, NOW, { kind: "time", minutes: 10 })
+          .phases,
+      );
+      const off = compileProgram(buildRun(draft, DESIGN_BASELINES, NOW).phases);
+      if (!("intervals" in on) || !("intervals" in off)) {
+        throw new Error(`${workout.title} failed to compile`);
+      }
+      const types = on.intervals.map((interval) => interval.type);
+      expect(types[0]).toBe("warmup");
+      expect(types.slice(1).includes("warmup")).toBe(false);
+      // And with the preference off there is no warm-up interval anywhere —
+      // the shape most sessions have, and the one §5b must not touch.
+      expect(off.intervals.some((interval) => interval.type === "warmup")).toBe(
+        false,
+      );
+      expect(off.intervals).toHaveLength(on.intervals.length - 1);
+    }
+  });
+
   it("a TIME warm-up compiles to interval 0: a time interval, no target, no rate (Beam Sea)", () => {
     const result = programFor("Beam Sea", { kind: "time", minutes: 10 });
     expect("intervals" in result).toBe(true);
     const { intervals } = result as { intervals: unknown[] };
     expect(intervals[0]).toStrictEqual({
+      type: "warmup",
       kind: "time",
       value: 600,
       targetSplit: null,
@@ -258,6 +294,7 @@ describe("compileProgram: the warm-up SETTING reaches interval 0", () => {
     const { intervals } = result as { intervals: unknown[] };
     // …and the WIRE does not: no pace target on a warm-up interval, ever.
     expect(intervals[0]).toStrictEqual({
+      type: "warmup",
       kind: "distance",
       value: 2000,
       targetSplit: null,
@@ -273,6 +310,7 @@ describe("compileProgram: the warm-up SETTING reaches interval 0", () => {
     expect(result).toStrictEqual({
       intervals: [
         {
+          type: "work",
           kind: "distance",
           value: 2000,
           targetSplit: 106,
