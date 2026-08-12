@@ -4580,13 +4580,21 @@ project's wire):
    PLUS its trailing rest (§18), so this machine demonstrably does bundle
    rest into an identically-named field somewhere.
 
-   **How to settle it.** Row a MULTI-INTERVAL piece WITH REST — a 2×1'
-   with 1' rest is enough — and read the stash. The `summary-totals`
-   entry (post-final-review IMP-1: fires on EVERY row at 0x0039 receipt,
-   healthy ones included — the `filled-from-summary` entry only exists
-   when a split actually dropped) states 0x0039's own decoded
-   elapsed/meters beside the recorded-splits sum and the program's total
-   rest for exactly this purpose, so the check is one subtraction: if the derived final interval exceeds its
+   **How to settle it — REVISED BY THE WALK (2026-08-11).** The 2×1'
+   with 1' rest was rowed and the premise read turned out to be
+   PHYSICALLY UNAVAILABLE on a healthy row: the final split wins the
+   race so decisively that the hand-off releases and teardown kills the
+   subscriptions before 0x0039 is ever delivered — no `summary-totals`
+   entry can exist on the very rows a conductor would use to look for
+   one. The entry (and the premise check) becomes observable exactly
+   when it matters: a dropped final split holds the door open, the
+   summary arrives, and `filled-from-summary`'s `how` string prints the
+   full arithmetic. Both premises therefore stay OPEN, quarantined
+   behind the derivation's own detectors (a violated premise 1 declines
+   loudly on negative subtraction; premise 2's rest-inclusive failure is
+   the one silent-positive case, exposed by the `how` string whenever a
+   real fill fires). The check, when a fill ever happens, is one
+   subtraction: if the derived final interval exceeds its
    programmed work by about the rest allowance, the two sides disagree and
    `deriveFinalIntervalFromSummary` is the single function that changes. A
    single-interval row cannot settle it (no prior to subtract, no rest
