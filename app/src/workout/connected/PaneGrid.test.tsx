@@ -1,5 +1,9 @@
-// Pane C — the grid (7B Task 7, handoff §3). Same two strategies as
-// `ConnectedSurface.test.tsx`, for the same reasons:
+// Pane C — the grid (7B Task 7, handoff §3; rebuilt connected-revamp
+// Task 5, design spec §6/revision §4: single-line fixed-height rows, 32px
+// landscape / 40px portrait — no more two-line portrait row, no more
+// active-row third line, and the `#` column reads `WU` for the warm-up
+// with work numbering starting at 1, design spec §5b). Same two strategies
+// as `ConnectedSurface.test.tsx`, for the same reasons:
 //
 // - **One fake-driven walk** rows a REAL seeded library workout through the
 //   real `ConnectedInterstitial` -> real `useMonitorSession` -> real driver
@@ -10,9 +14,13 @@
 //   a row state can be put on screen without scripting the machine into it.
 //
 // Every fixture is a real library workout with MIXED time and distance
-// intervals: "Filling Low" (8:00 warm-up, then 3 x 2000 m / 3:00), "Split
-// Front" (10:00, 8000 m, then 4 x 3:00) and "Sea Smoke" (6:00 then 24 x
-// 500 m — the 25-interval scroll case the handoff itself works through).
+// intervals, and every one of them opens with a warm-up (the rower's own
+// preference, prepended by `buildRun` — none is a seeded `wu` step any
+// more): "Filling Low" (8:00 warm-up, then 4 x 2000 m / 3:00 — so its `#`
+// column reads `WU, 1, 2, 3, 4`, never `1, 2, 3, 4, 5`), "Split Front"
+// (10:00 warm-up, 8000 m, then 4 x 3:00) and "Sea Smoke" (6:00 warm-up
+// then 24 x 500 m — the 25-interval scroll case the handoff itself works
+// through).
 
 import { readFileSync } from "node:fs";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -40,7 +48,12 @@ import type { LogSeed } from "../../session/logDraft";
 import { commentStrippedSource } from "../../test/cssView";
 import ConnectedInterstitial from "../ConnectedInterstitial";
 import ConnectedSurface, { LAST_PANE_KEY } from "../ConnectedSurface";
-import { buildGridModel, DASH, type JudgedValue } from "./surfaceModel";
+import {
+  buildGridModel,
+  DASH,
+  intervalNumbering,
+  type JudgedValue,
+} from "./surfaceModel";
 
 /** The active row's live cells when the machine has said nothing — enough
  *  for a caption-grammar test, which never looks at them. */
@@ -129,7 +142,7 @@ function libraryFixture(title: string, warmupMinutes: number): Fixture {
   };
 }
 
-/** 4 intervals: `time 480` warm-up, then 3 x `distance 2000` with 180 s of
+/** 5 intervals: `time 480` warm-up, then 4 x `distance 2000` with 180 s of
  *  rest. Mixed, and short enough to assert every row of. */
 const FILLING_LOW = libraryFixture("Filling Low", 8);
 /** 6 intervals: `time 600`, ONE `distance 8000`, then 4 x `time 180` — the
@@ -239,14 +252,13 @@ function row(n: number): HTMLElement {
   return found;
 }
 
-/** One row's six columns as plain text, in the handoff's own order. The
- *  inline `SPM `/`HR `/`REST ` prefixes are portrait's labels for line 2
- *  and are stripped so the assertion reads as the value. */
+/** One row's seven columns as plain text, in the revision's own order
+ *  (connected-revamp Task 5: portrait no longer labels SPM/HR/REST inline —
+ *  it has real column headers now, the same as landscape, one fewer
+ *  column). */
 function cells(el: HTMLElement): Record<string, string> {
   const read = (cls: string): string =>
-    (el.querySelector(`.connected-grid-${cls}`)?.textContent ?? "")
-      .replace(/^(SPM|HR|REST)\s/, "")
-      .trim();
+    (el.querySelector(`.connected-grid-${cls}`)?.textContent ?? "").trim();
   return {
     num: read("num"),
     time: read("time"),
@@ -307,25 +319,35 @@ describe("row states (handoff §3's three treatments)", () => {
     renderGrid({ actuals: [actualFor(0, FILLING_LOW.program)] });
     expect(rows()).toHaveLength(5);
 
-    // 1 — COMPLETED: the machine's own numbers, over a solid rule.
+    // 1 — COMPLETED: the machine's own numbers, over a solid rule. Row 1 is
+    // the warm-up (design spec §5b): its `#` cell reads `WU`, never a
+    // number, no matter that it is done.
     expect(row(1).className).toContain("connected-grid-completed");
     const done = cells(row(1));
-    expect(done.num).toBe("1");
+    expect(done.num).toBe("WU");
     // The warm-up's programmed 480 s, as the machine reported rowing it.
     expect(done.time).toBe("8:00");
     expect(done.meters).toBe("2384");
     expect(done.hr).toBe("158");
 
-    // 2 — ACTIVE: a card, a now-marker, a bold index, a third line.
+    // 2 — ACTIVE: a filled row, a now-marker, a bold index. Work numbering
+    // starts at 1 on the first work piece (§5b) — row 2 is that piece, so
+    // its `#` reads `1`, not `2`.
     expect(row(2).className).toContain("connected-grid-active");
     expect(row(2).querySelector(".connected-grid-marker")).not.toBeNull();
     expect(row(2)).toHaveAttribute("aria-current", "step");
-    expect(row(2).textContent).toContain("REMAINING · TARGET 2:06.0 · 6K +4");
+    expect(cells(row(2)).num).toBe("1");
 
-    // 3, 4 and 5 — UPCOMING: the PROGRAMMED values, never an actual.
-    for (const n of [3, 4, 5]) {
+    // 3, 4 and 5 — UPCOMING: the PROGRAMMED values, never an actual, and
+    // work ordinals 2, 3, 4.
+    for (const [n, ordinal] of [
+      [3, "2"],
+      [4, "3"],
+      [5, "4"],
+    ] as const) {
       expect(row(n).className).toContain("connected-grid-upcoming");
       const next = cells(row(n));
+      expect(next.num).toBe(ordinal);
       expect(next.meters).toBe("2000");
       expect(next.pace).toBe("2:06.0");
       expect(next.spm).toBe("22");
@@ -336,30 +358,15 @@ describe("row states (handoff §3's three treatments)", () => {
 
   it("the ACTIVE row is the machine's interval, and it moves with it", () => {
     const first = renderGrid();
-    expect(cells(row(2)).num).toBe("2");
+    // Row 2 (program index 1) is the first work piece — ordinal 1, not the
+    // raw program index 2 (design spec §5b: work numbering starts at 1).
+    expect(cells(row(2)).num).toBe("1");
     first.unmount();
 
     renderGrid({ frame: frame({ intervalIndex: 3 }) });
     expect(row(4).className).toContain("connected-grid-active");
+    expect(cells(row(4)).num).toBe("3");
     expect(row(2).className).toContain("connected-grid-completed");
-  });
-
-  it("names the target with no ref when the run was frozen before refs existed", () => {
-    // `EnginePhase.ref` is optional and a run frozen before it existed has
-    // none, which `targetSplitDisplay` reports as `sub: null`. The third
-    // line then states the target and stops, rather than trailing a
-    // separator with nothing after it.
-    const refless: Fixture = {
-      ...FILLING_LOW,
-      phases: FILLING_LOW.phases.map((phase, i) => {
-        if (i !== 1) return phase;
-        const { ref: _ref, ...rest } = phase;
-        return rest;
-      }),
-    };
-    renderGrid({}, refless);
-    expect(row(2).textContent).toContain("REMAINING · TARGET 2:06.0");
-    expect(row(2).textContent).not.toContain("6K");
   });
 
   it("A COMPLETED ROW WITH NO ACTUAL SAYS NOTHING IT CANNOT BACK", () => {
@@ -408,13 +415,12 @@ describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
     // law forbids it in the same breath ("no small mono label lighter than
     // `--ink-3`"): `--ink-5` measures 2.48:1 on `--page`, `--ink-3`
     // 6.68:1. The dash is what says "not yet"; the colour only has to be
-    // readable.
-    const rule =
-      /\.connected-grid-upcoming\s+\.connected-grid-line1,\s*\.connected-grid-upcoming\s+\.connected-grid-line2\s*\{([^}]*)\}/.exec(
-        DECLARATIONS,
-      );
+    // readable. Connected-revamp Task 5 dropped the old line-wrapper
+    // indirection — `color` is declared on the ROW itself now, inherited by
+    // every cell that doesn't carry its own judged tint.
+    const rule = /\.connected-grid-upcoming\s*\{([^}]*)\}/.exec(DECLARATIONS);
     expect(rule).not.toBeNull();
-    expect(rule![1]).toContain("var(--ink-3)");
+    expect(rule![1]).toContain("color: var(--ink-3)");
     expect(rule![1]).not.toContain("--ink-5");
   });
 });
@@ -502,16 +508,22 @@ describe("distance intervals (handoff §3's distance rules)", () => {
   });
 
   it("names the distance rows IN WORDS under the grid, never a glyph", () => {
+    // The numbers here are WORK ordinals (design spec §5b), not raw program
+    // indices — Filling Low's four 2000 m reps are program indices 1-4
+    // (the warm-up occupies index 0), but the caption names them 1-4, the
+    // same numbers their own `#` cells show, never 2-5.
     const many = renderGrid();
     expect(
-      screen.getByText("ROWS 2, 3, 4, 5 ARE 2000 M PIECES · METERS COUNT DOWN"),
+      screen.getByText("ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
     ).toBeInTheDocument();
     many.unmount();
 
     // The handoff's own one-row sentence, on the fixture that has one.
+    // Split Front's 8000 m piece is program index 1 (after its own
+    // warm-up) but WORK ordinal 1 — the caption and the row's `#` agree.
     const one = renderGrid({}, SPLIT_FRONT);
     expect(
-      screen.getByText("ROW 2 IS AN 8000 M PIECE · METERS COUNT DOWN"),
+      screen.getByText("ROW 1 IS AN 8000 M PIECE · METERS COUNT DOWN"),
     ).toBeInTheDocument();
     one.unmount();
 
@@ -548,6 +560,11 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     const bare = cells(row(3));
     expect(bare.pace).toBe("—");
     expect(bare.spm).toBe("—");
+    // THE WARM-UP READS `WU` EVEN OUT OF POSITION (design spec §5b): this
+    // fixture is the one case in the file where the warm-up is NOT program
+    // index 0 (every seeded workout opens with its own) — proof that the
+    // `#` cell reads `GridRow.ordinal`, not "is this row 0".
+    expect(bare.num).toBe("WU");
     // ...and the one distance row now reads with the indefinite article the
     // handoff's own sentence uses.
     expect(
@@ -561,9 +578,10 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // the grammar rule needs four of them. The interval is a REAL compiled
     // one with its `value` moved; every other field is the compiler's.
     const base = SEA_SMOKE.program.intervals[1]!;
-    const captionFor = (meters: number): string | null =>
-      buildGridModel({
-        intervals: [{ ...base, value: meters }],
+    const captionFor = (meters: number): string | null => {
+      const intervals = [{ ...base, value: meters }];
+      return buildGridModel({
+        intervals,
         actuals: [],
         activeIndex: 0,
         remaining: null,
@@ -571,10 +589,9 @@ describe("distance intervals (handoff §3's distance rules)", () => {
         livePace: NO_READING,
         liveRate: NO_READING,
         liveHr: NO_READING,
-        targetSplitMain: "2:12.0",
-        targetSplitRef: "6K +4",
-        hasTargetSplit: true,
+        numbering: intervalNumbering(intervals),
       }).caption;
+    };
 
     // Eight, in any magnitude.
     expect(captionFor(800)).toContain("IS AN 800 M PIECE");
@@ -620,8 +637,7 @@ describe("distance intervals (handoff §3's distance rules)", () => {
  *  "--accent" a dozen times, and index.css's says it more). Only the
  *  RIGHTMOST class of each comma-separated selector
  *  is collected, because that is the element the declaration actually
- *  lands on: `.connected-grid-line1 > .connected-grid-countdown` paints the
- *  countdown, not the line. And only `connected-*` classes are collected —
+ *  lands on. And only `connected-*` classes are collected —
  *  the panes render no other class of their own, and the reused
  *  phone-timer components' own accent surfaces are covered by the
  *  neutralising-override test below. */
@@ -735,18 +751,15 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-current");
   });
 
-  it("the countdown's accent is a COLOUR on a duration, at 22/26px", () => {
-    const portrait =
-      /\.connected-grid-line1\s*>\s*\.connected-grid-countdown\s*\{([^}]*)\}/.exec(
-        DECLARATIONS,
-      );
-    expect(portrait).not.toBeNull();
-    expect(portrait![1]).toContain("color: var(--accent)");
-    expect(portrait![1]).toContain("font-size: 22px");
-    // Landscape steps it to 26px inside the orientation query.
-    expect(DECLARATIONS).toMatch(
-      /\.connected-pane-grid\s+\.connected-grid-line1\s*>\s*\.connected-grid-countdown\s*\{[^}]*font-size:\s*26px/,
-    );
+  it("the countdown's accent is a COLOUR, never an enlarged size", () => {
+    // Connected-revamp Task 5 dropped the old 22px/26px special case: the
+    // revision's own mockup draws the countdown at the SAME `--size-row`
+    // as every other value in the row, tinted, not enlarged — the density
+    // this task exists for has no room for a bigger digit.
+    const rule = /\.connected-grid-countdown\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toContain("color: var(--accent)");
+    expect(rule![1]).not.toContain("font-size");
   });
 });
 
@@ -977,42 +990,80 @@ describe("contained scroll: only the rows move", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Landscape: one line, six columns, the handoff's own weights
+// Fixed heights and the revision's own column weights (connected-revamp
+// Task 5, design spec §6/revision §4). Every row is ALREADY one line in
+// BOTH orientations (no more `display: contents` folding — that retired
+// with the two-line portrait shape), so what differs between them is a
+// handful of size tokens: the row's own fixed height, the `#` column's
+// width, and REST's visibility.
 // ---------------------------------------------------------------------------
 
-describe("landscape: one line, six columns (handoff §3)", () => {
-  it("folds both line wrappers into one row with `display: contents`", () => {
-    const landscape = DECLARATIONS.slice(
-      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
-    );
-    expect(landscape).toMatch(
-      /\.connected-grid-line1,\s*\n\s*\.connected-grid-line2,[\s\S]{0,200}?display:\s*contents/,
-    );
+describe("row height and column weights, both orientations (revision §4)", () => {
+  it("fixes the row at 40px portrait, box-sizing border-box so the border can't grow it", () => {
+    const rule = /\.connected-grid-row\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toContain("height: 40px");
+    expect(rule![1]).toContain("box-sizing: border-box");
   });
 
-  it("carries the handoff's exact flex weights", () => {
+  it("steps the row to 32px in landscape — JAMES RULING 2026-08-12, not the packet's 36", () => {
     const landscape = DECLARATIONS.slice(
       DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
     );
+    expect(landscape).toMatch(/\.connected-grid-row\s*\{[^}]*height:\s*32px/);
+    // And portrait's 40px rule is untouched — this is a landscape STEP, not
+    // a redefinition of the base value.
+    const portrait = DECLARATIONS.slice(0, DECLARATIONS.indexOf(landscape));
+    expect(portrait).toMatch(/\.connected-grid-row\s*\{[^}]*height:\s*40px/);
+  });
+
+  it("carries the revision's exact flex table, unchanged between orientations", () => {
+    // TIME 1, METERS 1, /500M 1.1, SPM 0.6, HR 0.6 — the SAME weights in
+    // both orientations (only `#`'s width and REST's visibility differ),
+    // so these live in the base rules, never inside the landscape query.
     const weights: [string, string][] = [
-      ["connected-grid-num", "width: 26px"],
-      ["connected-grid-time", "flex: 1.1"],
-      ["connected-grid-rest", "flex: 0.9"],
+      ["connected-grid-time", "flex: 1;"],
+      ["connected-grid-meters", "flex: 1;"],
+      ["connected-grid-pace", "flex: 1.1;"],
     ];
     for (const [cls, declaration] of weights) {
-      const rule = new RegExp(
-        `\\.connected-pane-grid\\s+\\.${cls}\\s*\\{([^}]*)\\}`,
-      ).exec(landscape);
+      const rule = new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`).exec(DECLARATIONS);
       expect(rule).not.toBeNull();
       expect(rule![1]).toContain(declaration);
     }
-    // METERS/`/500M` at 1 and SPM/HR at 0.7, declared as pairs.
-    expect(landscape).toMatch(
-      /\.connected-pane-grid\s+\.connected-grid-meters,\s*\n\s*\.connected-pane-grid\s+\.connected-grid-pace\s*\{[^}]*flex:\s*1;/,
+    expect(DECLARATIONS).toMatch(
+      /\.connected-grid-spm,\s*\n\s*\.connected-grid-hr\s*\{[^}]*flex:\s*0\.6;/,
+    );
+  });
+
+  it("widens `#` to 26px in landscape, 22px in portrait", () => {
+    const portrait = /\.connected-grid-num\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    expect(portrait).not.toBeNull();
+    expect(portrait![1]).toContain("width: 22px");
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
     );
     expect(landscape).toMatch(
-      /\.connected-pane-grid\s+\.connected-grid-spm,\s*\n\s*\.connected-pane-grid\s+\.connected-grid-hr\s*\{[^}]*flex:\s*0\.7;/,
+      /\.connected-pane-grid\s+\.connected-grid-num\s*\{[^}]*width:\s*26px/,
     );
+  });
+
+  it("drops REST in portrait and brings it back at 0.8 in landscape", () => {
+    // Revision §4's own column list: portrait's row has SIX columns, never
+    // seven — REST is rendered (one markup, both orientations) and hidden.
+    const rest = /\.connected-grid-rest\s*\{([^}]*)\}/.exec(DECLARATIONS);
+    expect(rest).not.toBeNull();
+    expect(rest![1]).toContain("display: none");
+    const landscape = DECLARATIONS.slice(
+      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
+    );
+    const override =
+      /\.connected-pane-grid\s+\.connected-grid-rest\s*\{([^}]*)\}/.exec(
+        landscape,
+      );
+    expect(override).not.toBeNull();
+    expect(override![1]).toContain("flex: 0.8");
+    expect(override![1]).not.toContain("display: none");
   });
 
   it("stays a COLUMN and keeps its scroll where the other panes become rows", () => {
@@ -1024,18 +1075,18 @@ describe("landscape: one line, six columns (handoff §3)", () => {
     expect(rule![1]).toContain("flex-direction: column");
   });
 
-  it("puts the six headings back for the one-line row", () => {
-    // Portrait hides the SPM/HR/REST headings because the rows label those
-    // cells inline; landscape needs them, and needs the inline labels gone.
-    const landscape = DECLARATIONS.slice(
-      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
-    );
-    expect(landscape).toMatch(
-      /\.connected-grid-inline-label\s*\{[^}]*display:\s*none/,
-    );
-    expect(DECLARATIONS).toMatch(
-      /\.connected-grid-head\s+\.connected-grid-line2\s*\{[^}]*display:\s*none/,
-    );
+  it("renders the same six or seven columns in the DOM in both orientations — CSS hides REST, JSX never omits it", () => {
+    renderGrid();
+    // Every row (and the header) carries a `.connected-grid-rest` node
+    // regardless of orientation; only `index.css` decides whether it
+    // paints. A conditional-JSX implementation would make this assertion
+    // fail in a portrait-styled jsdom render just as easily as a real one.
+    expect(
+      document.querySelector(".connected-grid-head .connected-grid-rest"),
+    ).not.toBeNull();
+    for (const el of document.querySelectorAll(".connected-grid-row")) {
+      expect(el.querySelector(".connected-grid-rest")).not.toBeNull();
+    }
   });
 });
 
@@ -1148,10 +1199,11 @@ describe("the grid, fake-driven", () => {
 
     // Row 1 is COMPLETED and carries numbers the machine reported, decoded
     // by the real codec: 8:00 / 2384 m / 2:05.8 / 18 spm / 142 bpm — the
-    // handoff mockup's own first row, arrived at honestly.
+    // handoff mockup's own first row, arrived at honestly. It is the
+    // warm-up (design spec §5b), so its `#` reads `WU`, not `1`.
     expect(row(1).className).toContain("connected-grid-completed");
     expect(cells(row(1))).toStrictEqual({
-      num: "1",
+      num: "WU",
       time: "8:00",
       meters: "2384",
       pace: "2:05.8",

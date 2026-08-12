@@ -2245,6 +2245,24 @@ const CONNECTED_STATES = [
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
     await showConnectedFixture(page, name);
+    if (name === "connected-pane-grid-long") {
+      // PORTRAIT'S OWN DENSITY CLAIM (connected-revamp Task 5, revision
+      // §4's table): 12 rows visible at 390px of portrait height, fixed
+      // 40px rows. Measured the same way the landscape block below
+      // measures its own 7 — a bounding-box containment count in the real
+      // browser, not a jsdom guess, because the header, the totals line,
+      // the column head, the scroller and the caption all have to land
+      // inside 844px of real layout for the claim to be true.
+      const visible = await page.evaluate(() => {
+        const scroller = document.querySelector(".connected-grid-rows")!;
+        const box = scroller.getBoundingClientRect();
+        return Array.from(scroller.children).filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+        }).length;
+      });
+      expect(visible).toBe(12);
+    }
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, `${name}.png`),
     });
@@ -2320,13 +2338,19 @@ for (const name of CONNECTED_STATES) {
         "Live pane",
         "Grid pane",
       ]);
-      // Handoff §3's own number for pane C's contained scroll: "five fit at
-      // 390px". Asserted in the BROWSER, because it is a measurement — the
-      // row height, the header, the caption and End all have to land inside
-      // 390px of real layout for it to be true, and jsdom computes none of
-      // them. The first run of this pane fitted four (the column headings
-      // were rendering at the row type size, and the rows were 4px too
-      // tall); the CSS carries the arithmetic that fixed it.
+      // JAMES RULING 2026-08-12 (connected-revamp Task 5, superseding the
+      // packet's "8 fit at 36px"): the measured landscape scroller is
+      // 232px, 8 rows at 36px is 288px and does not fit it, and 7 rows at
+      // the fixed 32px height (224px) is what the budget holds. Asserted
+      // in the BROWSER, because it is a measurement — the row height, the
+      // header, the totals line, the column head and the caption all have
+      // to land inside 390×844's landscape frame for it to be true, and
+      // jsdom computes none of them. An earlier run of this pane fitted
+      // five (the column headings were rendering at the row type size, and
+      // the rows were 4px too tall); the CSS carries the arithmetic that
+      // fixed it. Exact, not a floor: `toBe`, not `toBeGreaterThanOrEqual`
+      // — a weaker assertion would still pass if the density claim were
+      // wrong in the generous direction, which is not what 7 means here.
       const visible = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
         const box = scroller.getBoundingClientRect();
@@ -2335,7 +2359,7 @@ for (const name of CONNECTED_STATES) {
           return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
         }).length;
       });
-      expect(visible).toBeGreaterThanOrEqual(5);
+      expect(visible).toBe(7);
       // ...and the pane itself never scrolls: only the rows do (DEVIATIONS
       // row 2). The document is exactly the viewport.
       const overflow = await page.evaluate(
