@@ -5342,9 +5342,27 @@ section:not(.news-pinned) .news-row:last-of-type {
   touch-action: pan-y;
 }
 
+/* `min-width: 0` beside the existing `min-height: 0` (design spec §4, the
+   width fix): in landscape this element is a grid item in `.connected-
+   surface`'s `1fr` (= `minmax(auto, 1fr)`) track (`:6228`). With no
+   explicit `min-width` the track's automatic minimum is CONTENT-based —
+   and since only ONE pane is mounted at a time (`ConnectedSurface.tsx
+   :325-327`), that minimum was measured against whichever pane happened
+   to be showing, and within the grid pane, against its own content
+   (interval numbers, meters digits). `.connected-pane`'s own `min-width:
+   0` (`:5313`) does not reach far enough to fix this: it lets THAT
+   element shrink when something squeezes it, but says nothing about how
+   big `.connected-surface-body` NATURALLY wants to be when nothing is
+   squeezing it yet, which is exactly the quantity the grid track's
+   automatic minimum reads. Pinning it here makes the track resolve to a
+   fixed width independent of pane and content — verified against this
+   worktree: before this rule, forcing a grid row's meters cell wide
+   enough moved this element from 692px to 1262px+; after, it does not
+   move at all. */
 .connected-surface-body {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
 }
 

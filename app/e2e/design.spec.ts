@@ -4231,6 +4231,168 @@ test.describe("connected screens (fake-driven)", () => {
     await sweep(page);
     await cleanupAllConnected(page, title);
   });
+
+  // --- Task 1 (design spec §4): the content column's width invariant -------
+  //
+  // James's report: the landscape content column changed width view to
+  // view. Only ONE pane is mounted at a time
+  // (`ConnectedSurface.tsx:325-327`), so `.connected-surface-body` — a grid
+  // item in landscape's `1fr` track (`index.css:6228`) — measured its
+  // automatic minimum against whichever pane happened to be showing, and
+  // within the grid pane, against its own content. The pin: swipe (here, the
+  // rail's own equivalent — a tap on "Grid pane", the same state transition
+  // `handleRailPress` drives a real swipe through) between LIVE and GRID and
+  // the content column must not move a pixel, in BOTH orientations.
+  //
+  // FINDING, evidence-backed (measured against this worktree, pre-fix): the
+  // fixture this describe block already uses (`CONNECTED_PROGRAM`, five
+  // 100m distance steps) does NOT reproduce a measurable drift in
+  // Chromium at 844x390 — `.connected-surface-body` reports 692px on BOTH
+  // panes either way, because the grid row's own natural content (a
+  // handful of narrow cells) never approaches the 692px fair share the
+  // `1fr` track already gets. Confirmed by direct measurement: even a
+  // realistic worst case (a 3-digit interval number, a 5-digit meters
+  // value — the same content the no-clip pin below uses) still measures
+  // 692px unchanged. Only genuinely oversized synthetic content (150
+  // characters in the meters cell) reproduces the ballooning
+  // (692px -> 1779px), which is what the assertion below drives off of —
+  // matching ruling 2's own framing ("pinned by a test that outlives the
+  // cause"): a pin keyed to today's narrow fixture would stop catching a
+  // regression the moment real content changed shape, so this measures
+  // the CSS CONTRACT directly rather than hoping today's five-row program
+  // happens to be wide enough. The plain real-content measurement stays
+  // too, as normal-usage regression coverage — it already passes today and
+  // must keep passing.
+  for (const viewport of [
+    { width: 390, height: 844, label: "portrait" },
+    { width: 844, height: 390, label: "landscape" },
+  ] as const) {
+    test(`the content column doesn't drift between panes — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+      page,
+    }) => {
+      const title = `Design Connected Width Invariant ${viewport.label}`;
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        `design-connected-width-${viewport.label}@e2e.test`,
+      );
+      await walkToSurface(page);
+      // Real numbers, not the pre-first-stroke placeholders — same reason
+      // the three-panes sweep above pumps to this point before measuring.
+      await pumpUntilText(page, "2 OF 5");
+
+      const box = async () =>
+        page.locator(".connected-surface-body").evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return { width: r.width, left: r.left };
+        });
+      const onLive = await box();
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(page.locator(".connected-pane-grid")).toBeVisible();
+      const onGrid = await box();
+      expect(onGrid).toStrictEqual(onLive);
+
+      // The adversarial half: force the grid pane's own content past the
+      // fair share (`.connected-grid-meters` is the exact channel — it is
+      // the one grid-row cell with no `min-width: 0` in the landscape
+      // media query, `index.css:6536-6541`) and prove the content column
+      // STILL does not move. This is the assertion that actually fails
+      // pre-fix (692px -> 1262px, measured against this exact test on this
+      // worktree before `min-width: 0` landed on `.connected-surface-
+      // body`; a standalone repro with even wider synthetic content
+      // measured 692px -> 1779px, both far past the pixel-exact tolerance
+      // `toStrictEqual` demands).
+      await page.evaluate(() => {
+        const meters = document.querySelector<HTMLElement>(
+          ".connected-grid-meters",
+        )!;
+        meters.textContent = "M".repeat(150);
+      });
+      const onGridForcedWide = await box();
+      expect(onGridForcedWide).toStrictEqual(onLive);
+
+      await cleanupAllConnected(page, title);
+    });
+  }
+
+  // --- Task 1 (design spec §4): the grid's clip consequence -----------------
+  //
+  // Pinning the content column's width fixes it AT the width whichever pane
+  // measured first — which means content wider than that fixed track now
+  // CLIPS instead of widening it (spec §4, "Two consequences this wave
+  // owns"). This is the grid's own half of that consequence: the widest
+  // realistic row has to survive without truncating any column.
+  //
+  // "Realistic" is generous on purpose. The interval count can never reach
+  // three digits through the app's own programming path — `compileProgram`
+  // hard-caps at 50 intervals (`domain/monitor/program.test.ts`'s 50/51
+  // boundary) and the largest SEEDED workout is Sea Smoke at 24
+  // (`program.sweep.test.ts`'s pinned `maxIntervals` of 24) — so this pin
+  // defends the CSS CONTRACT itself against a future that raises that cap,
+  // not a session anyone can actually row today. Five-digit meters is
+  // already real: a half marathon piece is 21097m.
+  test("the grid pane doesn't clip a three-digit interval number or a five-digit meters value — landscape (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Grid No-Clip Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(page, title, "design-connected-grid-noclip@e2e.test");
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+    await page.getByRole("button", { name: "Grid pane" }).click();
+    await expect(page.locator(".connected-pane-grid")).toBeVisible();
+
+    const measured = await page.evaluate(() => {
+      // Row 1 (interval index 0) is COMPLETED at this point in the story —
+      // no active-row marker span inside `.connected-grid-num`, so its only
+      // child is the number's own text node and a plain `textContent`
+      // assignment is safe.
+      const row = document.querySelector(".connected-grid-row")!;
+      const num = row.querySelector<HTMLElement>(".connected-grid-num")!;
+      const meters = row.querySelector<HTMLElement>(".connected-grid-meters")!;
+      num.textContent = "128";
+      meters.textContent = "21097";
+      const doc = document.documentElement;
+      return {
+        docScrollWidth: doc.scrollWidth,
+        docClientWidth: doc.clientWidth,
+        // `scrollWidth > clientWidth` ON THE CELL ITSELF is the actual
+        // truncation signal — a bounding-box position check (does the cell
+        // stay inside the row) cannot see this: a cell that's been
+        // narrowed with its own `overflow: hidden` sits happily inside the
+        // row while quietly cutting its own text. A mutation test (task
+        // report) confirmed a box-position-only check misses that case
+        // entirely and this scrollWidth/clientWidth pair catches it.
+        numScrollWidth: num.scrollWidth,
+        numClientWidth: num.clientWidth,
+        metersScrollWidth: meters.scrollWidth,
+        metersClientWidth: meters.clientWidth,
+        metersText: meters.textContent,
+      };
+    });
+    // Page-level: the fixed-width column (post-fix) must not force the
+    // whole document wider than the viewport either.
+    expect(measured.docScrollWidth).toBeLessThanOrEqual(
+      measured.docClientWidth,
+    );
+    // Cell-level: neither the three-digit interval number nor the
+    // five-digit meters value is cut off inside its own box.
+    expect(measured.numScrollWidth).toBeLessThanOrEqual(
+      measured.numClientWidth,
+    );
+    expect(measured.metersScrollWidth).toBeLessThanOrEqual(
+      measured.metersClientWidth,
+    );
+    expect(measured.metersText).toBe("21097");
+
+    await cleanupAllConnected(page, title);
+  });
 });
 
 // Phase 6I Task 8: the three new/changed screens the onboarding phase adds —
