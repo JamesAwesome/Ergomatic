@@ -235,9 +235,18 @@ export interface GridValue {
 }
 
 export interface GridRow {
-  /** 0-based program index. The rendered `#` is this plus one. */
+  /** 0-based program index. NOT what the `#` cell renders (see `ordinal`) —
+   *  kept for the React key and for filing an actual against its row. */
   index: number;
   state: GridRowState;
+  /** THE `#` CELL (connected-revamp Task 5, design spec §5b): the row's
+   *  1-based position among WORKING intervals, `null` for the warm-up.
+   *  `intervalNumbering(program.intervals)`'s own `ordinals` array, read
+   *  straight through — this function does not re-derive it, so the row and
+   *  the header's own `N OF M` cannot disagree (`buildSurfaceModel` reads
+   *  the same array for `intervalLabelShort`). `PaneGrid.tsx` renders `WU`
+   *  when this is `null`. */
+  ordinal: number | null;
   time: string;
   meters: string;
   /** Which cell is the ACTIVE row's countdown — the programmed dimension
@@ -249,9 +258,6 @@ export interface GridRow {
   spm: GridValue;
   hr: string;
   rest: string;
-  /** The active row's third line, `REMAINING · TARGET 2:00.0 · 6K −2`.
-   *  `null` on every other row. */
-  remainingLine: string | null;
 }
 
 export interface GridModel {
@@ -544,9 +550,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       livePace: pace,
       liveRate: rate,
       liveHr: hr,
-      targetSplitMain: targetSplit.main,
-      targetSplitRef: targetSplit.sub,
-      hasTargetSplit: targetSplitSeconds !== null,
+      numbering,
     }),
   };
 }
@@ -627,11 +631,14 @@ export function buildGridModel(args: {
   livePace: JudgedValue;
   liveRate: JudgedValue;
   liveHr: JudgedValue;
-  targetSplitMain: string;
-  targetSplitRef: string | null;
-  hasTargetSplit: boolean;
+  /** Connected-revamp Task 5 (design spec §5b): `intervalNumbering`'s own
+   *  output, READ not re-derived — `buildSurfaceModel` computes it once and
+   *  hands it to both the header caption and this function, so a row's `#`
+   *  and the header's `N OF M` are structurally the same array and cannot
+   *  drift apart. */
+  numbering: IntervalNumbering;
 }): GridModel {
-  const { intervals, activeIndex, remaining, accrued } = args;
+  const { intervals, activeIndex, remaining, accrued, numbering } = args;
   // An actual whose own `index` is `null` belongs to no interval we can
   // name (`IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
   // `null` AS INTERVAL 0"), so it files against no row rather than against
@@ -644,11 +651,15 @@ export function buildGridModel(args: {
   const rows = intervals.map((interval, index): GridRow => {
     const rest =
       interval.restSeconds > 0 ? fmtDuration(interval.restSeconds / 60) : DASH;
+    // THE `#` CELL (design spec §5b): read straight off `numbering`, never
+    // re-derived from `index` — see `GridRow.ordinal`'s own comment.
+    const ordinal = numbering.ordinals[index] ?? null;
     if (index === activeIndex) {
       const countdown = countdownDisplayFor(interval, remaining);
       const accrual = accruedDisplayFor(interval, accrued);
       return {
         index,
+        ordinal,
         state: "active",
         time: interval.kind === "time" ? countdown : accrual,
         meters: interval.kind === "distance" ? countdown : accrual,
@@ -657,11 +668,6 @@ export function buildGridModel(args: {
         spm: { display: args.liveRate.display, judged: args.liveRate },
         hr: args.liveHr.display,
         rest,
-        remainingLine: remainingLineFor(
-          args.hasTargetSplit,
-          args.targetSplitMain,
-          args.targetSplitRef,
-        ),
       };
     }
     if (index < activeIndex) {
@@ -701,6 +707,7 @@ export function buildGridModel(args: {
       });
       return {
         index,
+        ordinal,
         state: "completed",
         time:
           actual === undefined ? DASH : fmtDuration(actual.elapsedSeconds / 60),
@@ -717,7 +724,6 @@ export function buildGridModel(args: {
             ? DASH
             : String(Math.round(actual.avgHeartRateBpm)),
         rest,
-        remainingLine: null,
       };
     }
     // Upcoming: the PROGRAMMED values, every one of them a plain string.
@@ -726,6 +732,7 @@ export function buildGridModel(args: {
     // which the same sentence implies and the mockup's rows 4 and 6 draw.
     return {
       index,
+      ordinal,
       state: "upcoming",
       time: interval.kind === "time" ? fmtDuration(interval.value / 60) : DASH,
       meters: interval.kind === "distance" ? String(interval.value) : DASH,
@@ -742,11 +749,14 @@ export function buildGridModel(args: {
       },
       hr: DASH,
       rest,
-      remainingLine: null,
     };
   });
 
-  return { rows, activeIndex, caption: distanceCaptionFor(intervals) };
+  return {
+    rows,
+    activeIndex,
+    caption: distanceCaptionFor(intervals, numbering),
+  };
 }
 
 /** The active interval's countdown, in its own programmed dimension. Falls
@@ -789,21 +799,6 @@ function accruedDisplayFor(
     : fmtDuration(accrued.value / 60);
 }
 
-/** The active row's third line (handoff §3: `REMAINING · TARGET 2:00.0 ·
- *  6K −2`). The word REMAINING is what names the accent cell above it, so
- *  it is present even on an interval with no split target at all — a
- *  warm-up still counts something down. */
-function remainingLineFor(
-  hasTargetSplit: boolean,
-  main: string,
-  ref: string | null,
-): string {
-  if (!hasTargetSplit) return "REMAINING · NO SPLIT TARGET";
-  const parts = ["REMAINING", `TARGET ${main}`];
-  if (ref !== null) parts.push(ref);
-  return parts.join(" · ");
-}
-
 /** Handoff §3: "A mono caption under the grid names it in words — `ROW 5 IS
  *  A 500 M PIECE · METERS COUNT DOWN` — rather than inventing a glyph."
  *
@@ -812,11 +807,31 @@ function remainingLineFor(
  *  generalises: a short uniform set is listed by number, and anything
  *  longer or ragged is counted rather than enumerated, because a caption
  *  that lists twenty-four row numbers is not a caption. No distance
- *  interval at all -> no caption, not an empty one. */
-function distanceCaptionFor(intervals: ProgramInterval[]): string | null {
+ *  interval at all -> no caption, not an empty one.
+ *
+ *  CONNECTED-REVAMP TASK 5 (design spec §5b, adversarial find, not named in
+ *  the brief): the row numbers this caption prints must be the SAME numbers
+ *  the grid's own `#` column shows, or the caption reads "ROW 2" beside a
+ *  row visibly labelled "1". Before this task the caption used the raw
+ *  program index (`i + 1`, warm-up included), which was silently correct
+ *  only because the `#` column used to be the same raw index — now that the
+ *  column reads `numbering.ordinals` instead (WU unnumbered, work starting
+ *  at 1), this function reads the identical array rather than keeping its
+ *  own count. A warm-up that is itself a distance interval (a real case —
+ *  `WarmupSetting.kind === "meters"`, `engine.ts`'s `warmupPhases`) is
+ *  excluded from the list entirely: it has no ordinal to be named by, the
+ *  same reasoning `intervalNumbering`'s own doc comment gives for excluding
+ *  it from `workCount`. */
+function distanceCaptionFor(
+  intervals: ProgramInterval[],
+  numbering: IntervalNumbering,
+): string | null {
   const rows = intervals
-    .map((interval, i) => ({ interval, number: i + 1 }))
-    .filter((r) => r.interval.kind === "distance");
+    .map((interval, i) => ({ interval, number: numbering.ordinals[i] ?? null }))
+    .filter(
+      (r): r is { interval: ProgramInterval; number: number } =>
+        r.interval.kind === "distance" && r.number !== null,
+    );
   if (rows.length === 0) return null;
   const tail = "METERS COUNT DOWN";
   const first = rows[0]!;

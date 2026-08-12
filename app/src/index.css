@@ -5742,15 +5742,18 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: -0.03em;
 }
 
-/* --- Pane C, the grid (Task 7, handoff §3) -------------------------- */
+/* --- Pane C, the grid (Task 7, handoff §3; rebuilt connected-revamp
+   Task 5, design spec §6/revision §4) ---------------------------------- */
 
-/* EVERY RULE IN THIS BLOCK IS SCOPED TO A `.connected-grid-*` CLASS. The
-   task-6 review's L5 finding is that the phone timer's landscape query
-   carries unscoped `.timer-*` declarations which arrive uninvited on any
-   pane reusing those components; pane C reuses none of those components
-   (its only borrowed class is `.timer-card-actual-{judgement}`, which sets
-   `color` and nothing else), and it adds no unscoped selector of its own —
-   so the trap neither bites this pane nor is widened by it.
+/* EVERY RULE IN THIS BLOCK IS SCOPED TO A `.connected-grid-*` CLASS (plus
+   the two `.connected-line*` overrides this task adds, both scoped under
+   `.connected-pane-grid`). The task-6 review's L5 finding is that the
+   phone timer's landscape query carries unscoped `.timer-*` declarations
+   which arrive uninvited on any pane reusing those components; pane C
+   reuses none of those components (its only borrowed class is
+   `.timer-card-actual-{judgement}`, which sets `color` and nothing else),
+   and it adds no unscoped selector of its own — so the trap neither bites
+   this pane nor is widened by it.
 
    TWO SPECIFICITY RULES THIS BLOCK OBEYS, both learned from task 6's own
    hero bug (a `color: var(--ink)` declared later in the file silently
@@ -5758,12 +5761,17 @@ section:not(.news-pinned) .news-row:last-of-type {
 
    1. NO RULE THAT COULD MATCH A JUDGED CELL DECLARES `color`. The judged
       cells are `/500M` and `SPM`; their neutral tone arrives by
-      INHERITANCE from the line wrapper, which any `.timer-card-actual-*`
-      class beats automatically, since an inherited value loses to any
-      matching rule at all.
+      INHERITANCE — from `body` for a completed/active row, from
+      `.connected-grid-upcoming`'s own `color` for an upcoming one — which
+      any `.timer-card-actual-*` class beats automatically, since an
+      inherited value loses to any matching rule at all. Task 5 REMOVED
+      the old line-wrapper indirection (`.connected-grid-line1`/`-line2`)
+      that used to carry this; the rule itself is unchanged; only where it
+      is declared moved, from the wrapper to the row.
    2. Cell-specific overrides carry a real selector, never `!important`.
-      `.connected-grid-line1 > .connected-grid-num` (0,2,1) is what beats
-      `.connected-grid-line1 > span` (0,1,1); nothing here needs more. */
+      `.connected-grid-row .connected-grid-num` (0,2,0) is what beats
+      `.connected-grid-row > span` (0,1,1) by the second class; nothing
+      here needs more. */
 .connected-pane-grid {
   justify-content: flex-start;
   gap: 8px;
@@ -5772,31 +5780,61 @@ section:not(.news-pinned) .news-row:last-of-type {
   overflow: visible;
 }
 
+/* THE HEADLINE (Task 5, revision §4: "session totals move into the header
+   line"). Two children: `ConnectionLine`'s own `.connected-line` (the mark
+   and device name) and `.connected-grid-totals` (the interval caption and
+   the whole-session total). Portrait stacks them — device + END would be
+   one line and interval + total a second, except this pane renders no END
+   of its own (that lives in the shell's footer outside every pane) — so
+   this is simply two lines. Landscape folds both into ONE line the same
+   way the columns below fold, in the landscape query. */
+.connected-grid-headline {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.connected-grid-totals {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+/* Grows to take whatever space the total's fixed width leaves — the field
+   whose length actually varies (`WARM-UP` vs `3 OF 12 · WORK`). */
+.connected-grid-interval {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.connected-grid-total {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+/* ONE FLAT ROW, both orientations (Task 5 dropped the old two-line
+   portrait shape entirely) — the head row and every data row below share
+   this same seven-column flex layout; only which columns are VISIBLE
+   differs (REST is portrait-hidden, `.connected-grid-rest` below) and a
+   handful of size tokens the landscape query steps. */
 .connected-grid-head {
   flex: none;
   display: flex;
+  align-items: baseline;
   gap: 8px;
   border-bottom: 2px solid var(--ink);
-  padding-bottom: 7px;
+  padding-bottom: 5px;
 }
 
-.connected-grid-head .connected-grid-line1 {
-  flex: 1;
-}
-
-/* The portrait header labels only the four line-1 columns — line 2 labels
-   itself inline (`SPM 18`), exactly as the mockup draws it. Landscape turns
-   this back on as three more columns of one row. */
-.connected-grid-head .connected-grid-line2 {
-  display: none;
-}
-
-/* Mono 10, in BOTH orientations — the specificity has to beat the row
-   rules' own `.connected-grid-line1 > span` (0,1,1) and the landscape
-   17px, or the headings render at the row type size (they did, in the
-   first screenshots run of this pane). */
-.connected-grid-head .connected-grid-line1 > span,
-.connected-grid-head .connected-grid-line2 > span {
+.connected-grid-head > span {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -5829,21 +5867,44 @@ section:not(.news-pinned) .news-row:last-of-type {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  /* The active row's 2px card sits inside this box; without the padding its
-     border is clipped against the scroller's edge. */
-  padding: 2px 0;
+  /* ZERO (Task 5, JAMES RULING 2026-08-12): a row's own border IS the
+     separator now — the old 6px/3px gap was budget the new density cannot
+     spare. Measured against this worktree's own build: the landscape
+     scroller is 239px, 7 rows at the fixed 32px height take 224px, and
+     an 8th (256px) does not fit — the ruling's own 232px was measured
+     against an earlier build of this same header; the number moved, the
+     count it was defending (7, not 8) did not. */
+  gap: 0;
+  /* PORTRAIT ONLY (landscape zeroes this below): pushes the first row
+     down so the scroller holds exactly revision §4's 12, not the 14 a
+     840-ish px frame actually has room for. Landscape has no slack to
+     give away (see the gap comment above); portrait does, and gets it
+     back as breathing room above row 1 rather than a phantom 13th/14th
+     row past what the spec calls for. `e2e/screenshots.spec.ts` measures
+     the exact count in a real browser — this value is derived FROM that
+     measurement, not guessed at. */
+  padding-top: 60px;
 }
 
+/* FIXED HEIGHT, BOTH ORIENTATIONS (revision §4's own table; landscape
+   steps it to 32px below — JAMES RULING 2026-08-12, superseding the
+   packet's 36px: the measured 232px scroller cannot hold 8 rows at 36px,
+   and 7 at 32px is what the budget holds). `box-sizing: border-box` is
+   what makes "fixed height" true of the ACTIVE row too, whose two ink
+   rules (`border-top` + `border-bottom`) would otherwise add 1px beyond
+   every other row's single `border-bottom`. */
 .connected-grid-row {
   flex: none;
+  box-sizing: border-box;
+  height: 40px;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 2px 0;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 6px 0 0;
 }
 
-/* Completed: actuals, ink, SOLID rule. */
+/* Completed: actuals, ink (the `body` default — no override needed),
+   SOLID rule. */
 .connected-grid-completed {
   border-bottom: 1px solid var(--rule-2);
 }
@@ -5853,49 +5914,32 @@ section:not(.news-pinned) .news-row:last-of-type {
    on `--page` and the CI sweep would reject it). `--ink-3` on `--page`
    (#57544c on #f4f1e8) measures 6.68:1, so an upcoming row is fully
    readable with its border ignored; the border is what says "not yet".
-   The colour is declared on the LINE WRAPPERS so the value inherits it —
-   see rule 1 in this block's header. */
+   The colour is declared on the ROW so every cell inherits it — see rule 1
+   in this block's header. */
 .connected-grid-upcoming {
   border-bottom: 1px dashed var(--rule-3);
-}
-
-.connected-grid-upcoming .connected-grid-line1,
-.connected-grid-upcoming .connected-grid-line2 {
   color: var(--ink-3);
 }
 
-/* Active: a `--surface` card with a 2px ink border. */
+/* Active (Task 5, revision §4): a `--surface` FILL between two 1px ink
+   rules, no card padding and no 2px box — the OLD bordered-card treatment
+   (2px border, radius, 9/10px padding) is gone along with the two-line
+   shape it used to hold. Same row padding as every other state; the
+   marker below is what visually distinguishes this row, not extra
+   whitespace. */
 .connected-grid-active {
   background: var(--surface);
-  border: 2px solid var(--ink);
-  border-radius: var(--radius);
-  padding: 9px 10px;
-  gap: 4px;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
 }
 
-.connected-grid-line1,
-.connected-grid-line2 {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-}
-
-/* "Indented 30px under the interval number so columns still scan"
-   (handoff §3). */
-.connected-grid-line2 {
-  padding-left: 30px;
-  /* Inherited, not declared on the cells — see rule 1. */
-  color: var(--ink-2);
-}
-
-.connected-grid-line1 > span {
+/* Row values, mono `--size-row` (Task 2's own token, 19px in both
+   orientations — the revision's own table gives the same pixel value
+   for landscape and portrait, so no media-query redefinition is needed
+   here the way the hero/target tokens need one). */
+.connected-grid-row > span {
   font-family: var(--font-mono);
-  font-size: 15px;
-}
-
-.connected-grid-line2 > span {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--size-row);
 }
 
 .connected-grid-num {
@@ -5906,52 +5950,64 @@ section:not(.news-pinned) .news-row:last-of-type {
   gap: 3px;
 }
 
-.connected-grid-line1 > .connected-grid-num {
-  font-size: 12px;
+/* Row number: mono 13px, both orientations (revision §4's own table) —
+   overrides the generic `--size-row` value type above for this one
+   column, the same way the OLD line1/line2 split used to. */
+.connected-grid-row .connected-grid-num {
+  font-size: 13px;
   color: var(--ink-3);
 }
 
-.connected-grid-active .connected-grid-line1 > .connected-grid-num {
+.connected-grid-active .connected-grid-num {
   font-weight: 600;
   color: var(--ink);
 }
 
-/* The 7x14 filled now-marker beside the active row's number. */
+/* The 4x20 filled now-marker beside the active row's number (revision §4:
+   "4x20 ink marker left of the number"). */
 .connected-grid-marker {
-  width: 7px;
-  height: 14px;
+  width: 4px;
+  height: 20px;
   flex: none;
   display: block;
   background: var(--ink);
 }
 
+/* Revision §4's exact flex table, in BOTH orientations — only the `#`
+   column's width (base rule above / landscape override below) and REST's
+   visibility differ by orientation; every other weight here is the one
+   number the table gives, not a portrait guess the landscape query
+   corrects. */
 .connected-grid-time {
   flex: 1;
   min-width: 0;
 }
 
 .connected-grid-meters {
-  width: 62px;
-  flex: none;
+  flex: 1;
+  min-width: 0;
   text-align: right;
 }
 
 .connected-grid-pace {
-  width: 66px;
-  flex: none;
+  flex: 1.1;
+  min-width: 0;
   text-align: right;
 }
 
 .connected-grid-spm,
 .connected-grid-hr {
-  flex: 1;
-  min-width: 0;
-}
-
-.connected-grid-rest {
-  flex: 1;
+  flex: 0.6;
   min-width: 0;
   text-align: right;
+}
+
+/* REST: landscape-only column (revision §4's own table — portrait drops
+   it). Rendered in the DOM in both orientations (one markup, same header
+   and row shape everywhere) and hidden here; the landscape query below
+   turns it back on. */
+.connected-grid-rest {
+  display: none;
 }
 
 /* THE ONE SANCTIONED ACCENT ON THE WHOLE CONNECTED SURFACE (handoff §3:
@@ -5961,26 +6017,22 @@ section:not(.news-pinned) .news-row:last-of-type {
    three panes — the footer's paused `END` outline is the surface's other
    one and belongs to the shell, not a pane — and `ConnectedSurface.test
    .tsx`'s census derives that set from THIS FILE rather than trusting this
-   comment. */
-.connected-grid-line1 > .connected-grid-countdown {
-  font-size: 22px;
-  letter-spacing: -0.02em;
+   comment. Task 5 dropped the old enlarged size (22px/26px): the revision's
+   own mockup draws the countdown at the SAME `--size-row` as every other
+   value, tinted, not enlarged — the density this task exists for has no
+   room for a bigger digit. */
+.connected-grid-countdown {
   color: var(--accent);
-}
-
-/* The active row's third line: what the countdown is counting, and which
-   baseline the target came from. */
-.connected-grid-remaining {
-  padding-left: 30px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
 }
 
 /* Pinned under the scroller: the distance rule, in words, never a glyph. */
 .connected-grid-caption {
   flex: none;
+  /* A `<p>` carries the UA stylesheet's own `1em` block margin — 10px at
+     THIS element's font-size, both sides — which a tight scroller budget
+     cannot spare (measured: worth a full row's height at the landscape
+     32px row). Zeroed rather than inherited. */
+  margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -6774,7 +6826,8 @@ section:not(.news-pinned) .news-row:last-of-type {
     display: none;
   }
 
-  /* --- Pane C in landscape: one line, six columns, and the one scroll --- */
+  /* --- Pane C in landscape: fixed 32px rows, seven columns, one scroll
+     (connected-revamp Task 5, revision §4) ------------------------------ */
 
   /* Two rules above are wrong for pane C and are overridden here rather
      than worked around: `.connected-pane { flex-direction: row }` (this
@@ -6783,119 +6836,69 @@ section:not(.news-pinned) .news-row:last-of-type {
      (this is the one pane that scrolls, DEVIATIONS row 2). */
   .connected-pane-grid {
     flex-direction: column;
-    /* 4px, not the portrait 8: the three gaps between the header line, the
-       column head, the scroller and the caption are 12px of the 390px
-       frame, and the fifth row needs them. */
+    /* 4px, not the portrait 8: the header line, the column head, the
+       scroller and the caption share a 232px-measured scroller budget that
+       has no width to spare (JAMES RULING 2026-08-12: 7 rows at 32px fit
+       232px with 8px left over for everything else this gap eats into). */
     gap: 4px;
   }
 
-  /* THE TWO-LINE ROW BECOMES ONE. `display: contents` promotes both line
-     wrappers' cells to direct flex items of the row, so the seven cells sit
-     on one line at the handoff's own weights — one markup, no second copy,
-     and nothing re-mounts on rotation. Same technique `.connected-heroes`
-     uses on pane B (declared above). */
-  .connected-grid-row,
-  .connected-grid-head {
+  /* THE HEADLINE FOLDS TO ONE LINE. `display: contents` on both of its
+     children promotes the mark, the device name, the interval caption and
+     the total to direct flex items of `.connected-grid-headline` (which
+     becomes a row below), so the four sit on one line — mirroring the
+     mockup's landscape header exactly. `.connected-line-device`'s own
+     `flex: 1` (shared with pane B's header, where it is the ONLY flexible
+     child) would otherwise compete with `.connected-grid-interval` for the
+     growing space; only the interval caption may grow here. */
+  .connected-grid-headline {
     flex-direction: row;
-    align-items: baseline;
-    gap: 10px;
+    align-items: center;
+    gap: 9px;
   }
 
-  /* FIVE ROWS AT 390px (handoff §3), measured rather than guessed: a 17px
-     row measures 33px at this padding, and the scroller gets 196px of the
-     pane's 270 once the header line, the column head and the caption have
-     taken theirs — 5 x 33 + 4 x 4 of gap + 4 of padding = 185. At the 7px
-     padding the portrait rows use, four fit and the fifth was cut. */
-  .connected-grid-row {
-    padding-top: 5px;
-    padding-bottom: 5px;
-  }
-
-  .connected-grid-head {
-    padding-top: 6px;
-    padding-bottom: 6px;
-  }
-
-  .connected-pane-grid .connected-grid-rows {
-    /* 3px. The scroller measures 184px here and five 33px rows plus four
-       4px gaps came to 181 against 180 usable — one pixel short, and the
-       fifth row was cut. Measured, not chosen. */
-    gap: 3px;
-  }
-
-  .connected-grid-line1,
-  .connected-grid-line2,
-  .connected-grid-head .connected-grid-line1,
-  .connected-grid-head .connected-grid-line2 {
+  .connected-pane-grid .connected-line,
+  .connected-pane-grid .connected-grid-totals {
     display: contents;
   }
 
-  /* Handoff §3's exact landscape weights: 26px / 1.1 / 1 / 1 / 0.7 / 0.7 /
-     0.9, mono 17. */
+  .connected-pane-grid .connected-line-device {
+    flex: none;
+  }
+
+  .connected-grid-row,
+  .connected-grid-head {
+    gap: 10px;
+  }
+
+  /* 32px, not the packet's 36 (JAMES RULING 2026-08-12): the measured
+     landscape scroller is 239px, 8 rows at 36px is 288px and does not fit
+     it, and 7 at 32px (224px) is what the budget holds — DEVIATIONS row
+     owed (Task 8). */
+  .connected-grid-row {
+    height: 32px;
+  }
+
+  /* Zeroes the base rule's portrait-only breathing room (above) — landscape
+     is packed to exactly 7 with nothing to spare. */
+  .connected-pane-grid .connected-grid-rows {
+    padding-top: 0;
+  }
+
+  /* `#` 26px, not portrait's 22 (revision §4's own table). Every OTHER
+     column's flex weight is already the table's number in the base rule
+     above — TIME/METERS/PACE/SPM/HR do not change between orientations,
+     only `#`'s width and REST's visibility do. */
   .connected-pane-grid .connected-grid-num {
     width: 26px;
   }
 
-  .connected-pane-grid .connected-grid-time {
-    flex: 1.1;
-  }
-
-  .connected-pane-grid .connected-grid-meters,
-  .connected-pane-grid .connected-grid-pace {
-    flex: 1;
-    width: auto;
-    text-align: right;
-  }
-
-  .connected-pane-grid .connected-grid-spm,
-  .connected-pane-grid .connected-grid-hr {
-    flex: 0.7;
-    text-align: right;
-  }
-
+  /* REST reappears here (portrait hides it, base rule above), at the
+     table's own 0.8. */
   .connected-pane-grid .connected-grid-rest {
-    flex: 0.9;
+    display: block;
+    flex: 0.8;
     text-align: right;
-  }
-
-  .connected-pane-grid .connected-grid-row .connected-grid-line1 > span,
-  .connected-pane-grid .connected-grid-row .connected-grid-line2 > span {
-    font-size: 17px;
-  }
-
-  .connected-pane-grid
-    .connected-grid-row
-    .connected-grid-line1
-    > .connected-grid-num {
-    font-size: 13px;
-  }
-
-  /* 26px here (handoff §3's active-row line), not portrait's 22px. */
-  .connected-pane-grid .connected-grid-line1 > .connected-grid-countdown {
-    font-size: 26px;
-  }
-
-  .connected-pane-grid .connected-grid-marker {
-    height: 16px;
-  }
-
-  /* The inline `SPM `/`HR `/`REST ` prefixes are portrait's way of labelling
-     line 2; in landscape the header row carries all six headings, so they
-     would be read twice. */
-  .connected-grid-inline-label {
-    display: none;
-  }
-
-  /* The active row's third line is the one part that cannot join the single
-     line — it spans the row beneath it. `flex-basis: 100%` on a wrapping
-     row is what puts it there without a second container. */
-  .connected-grid-active {
-    flex-wrap: wrap;
-  }
-
-  .connected-pane-grid .connected-grid-remaining {
-    flex-basis: 100%;
-    padding-left: 36px;
   }
 
   /* --- The diagnostics sheet at 844x390 --------------------------------- */

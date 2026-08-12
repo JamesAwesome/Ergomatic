@@ -282,8 +282,11 @@ describe("screen fixtures for pnpm screenshots", () => {
   });
 
   /** The scroll case, and the only one that can show it: 25 intervals, the
-   *  active row eight deep. Header and caption pinned, five rows visible at
-   *  390px of landscape height, the rest below the fold. */
+   *  active row eight deep. Header and caption pinned, seven rows visible
+   *  at 390×844's landscape height and twelve at portrait's (connected-
+   *  revamp Task 5, JAMES RULING 2026-08-12 superseding the packet's
+   *  8-at-36px landscape figure — `e2e/screenshots.spec.ts` measures both
+   *  counts in a real browser), the rest below the fold. */
   it("pane C, twenty-five intervals", async () => {
     await expect(
       capture("grid", {
