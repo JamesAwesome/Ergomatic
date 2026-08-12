@@ -253,6 +253,25 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     const split = await page.locator(".complete-actual-value").textContent();
     expect(split).toMatch(/^\d+:\d{2}\.\d$/);
 
+    // Connected-revamp Task 8: `.session-complete-screen` carried the same
+    // 18px of dead portrait scroll `.timer-screen` did (measured live in
+    // Task 7's fix round at 390×844 — `scrollHeight` 862 vs `clientHeight`
+    // 844, this screen's own box 818px): `.app-shell` reserves
+    // `var(--tap)` for a tab bar this route never renders, while the rule
+    // subtracted only its own 26px of `.screen` padding, which
+    // `box-sizing: border-box` already counts inside the min-height.
+    // Pinned here rather than in a test of its own — this test already
+    // stands on the completed screen at the default 390×844 viewport, and
+    // the assertion is the same document-level one the phone timer's own
+    // portrait pin uses.
+    const completeOverflow = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    expect(completeOverflow.scrollHeight).toBeLessThanOrEqual(
+      completeOverflow.clientHeight,
+    );
+
     // Completed-run protection (Today.tsx's amended stale-discard rule):
     // backdate the draft's own `createdAt` so it LOOKS stale by the
     // existing 24h rule, then navigate to Today and prove it survives —
@@ -509,6 +528,44 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
       clientHeight: document.documentElement.clientHeight,
     }));
     expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+
+    await cleanupByTitle(page, title);
+  });
+
+  // Task 8: the SAME 18px, on the screen the rower sees one tap earlier.
+  // `.countdown-screen` shared `.timer-screen`'s pre-fix `min-height`
+  // formula and was measured carrying the identical overflow at 390×844
+  // in Task 7's fix round (`scrollHeight` 862 vs `clientHeight` 844, its
+  // own box 818px) — left unfixed there because Task 8 owns
+  // `countdown.png`. Its landscape half was already fixed (Task 5) and
+  // already pinned (design.spec.ts's own 844×420 countdown check);
+  // portrait had no pin at all, which is why it survived two waves.
+  test("the countdown has no dead vertical scroll in portrait (390×844)", async ({
+    page,
+  }) => {
+    const title = "Countdown Budget";
+    await signInViaBackdoor(page, {
+      email: "session-countdown-budget@e2e.test",
+      name: "Countdown Budget Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 1:00 6k", "w 0:30 6k"].join("\n"),
+    );
+
+    // startFromLibrary lands ON the countdown (Start is the one door) — no
+    // skip here, this screen IS the subject.
+    await startFromLibrary(page, title);
+    await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
+
+    const countdownOverflow = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    expect(countdownOverflow.scrollHeight).toBeLessThanOrEqual(
+      countdownOverflow.clientHeight,
+    );
 
     await cleanupByTitle(page, title);
   });
