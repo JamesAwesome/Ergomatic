@@ -5,6 +5,23 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // The fast-follow wave plus everything that shipped after v0.7.0's own
+    // entry was written (#80/#81/#83). Item order is rower-priority, not
+    // merge order. The connected-screen items are all walk-confirmed on a
+    // real PM5 (2026-08-11): 2 of 2 intervals measured, one door to the
+    // countdown, the screen staying lit hands-off.
+    version: "v0.8.0",
+    date: "2026-08-11",
+    items: [
+      "The screen stays awake while you row a connected piece. It used to sleep mid-row once your hands were on the handle.",
+      "Starting a workout is one door now, and your pace adjustment sticks. The old confirm screen is gone: adjust pace on the workout page and start, and the same adjustment carries through whether you connect a PM5 or use the phone timer.",
+      "Connect is blue and sits above Start Timer, the workout page's one clear way to begin a monitored row.",
+      "A connected session survives a dropped reading. If the monitor's final interval data never arrives, the app recovers that interval's time and meters from the workout summary whenever the numbers add up, and leaves it blank rather than guessing when they don't.",
+      "Workouts show their real shape: each piece as its own row, the hardest one tinted, and repeated pieces collapsed to one line like 5x the block below.",
+      "New in News: an article decoding the Library's shorthand, line by line.",
+    ],
+  },
+  {
     // Covers everything since v0.5.1: v0.6.0 shipped without an entry, so
     // this one carries the 6I onboarding alongside the warmup setting and
     // the Phase CL fixes (James's ruling, 2026-08-09). The tag-time touch
