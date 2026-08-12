@@ -218,11 +218,19 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
 
     // Distance phase: the stopwatch counts UP (elapsedSeconds, not a
     // countdown) — read the numeral twice, 2s apart, and require it to
-    // have actually changed.
-    const beforeCount = await page.locator(".timer-time").textContent();
+    // have actually changed. CONNECTED-REVAMP TASK 7 (revision §5,
+    // "distance pieces swap the hero"): the live stopwatch now lives in
+    // `.timer-elapsed-value`, not `.timer-time` — `.timer-time` is the
+    // piece's own STATIC meters target (500) and never changes.
+    await expect(page.locator(".timer-time")).toHaveText("100");
+    const beforeCount = await page
+      .locator(".timer-elapsed-value")
+      .textContent();
     await page.waitForTimeout(2000);
-    const afterCount = await page.locator(".timer-time").textContent();
+    const afterCount = await page.locator(".timer-elapsed-value").textContent();
     expect(afterCount).not.toBe(beforeCount);
+    // The hero itself really is static, not merely unread above.
+    await expect(page.locator(".timer-time")).toHaveText("100");
 
     // Land inside the non-suspect window before pressing NEXT (see the
     // baseline comment above) — ~10.5s total elapsed on a 12s estimate is
@@ -368,7 +376,13 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("landscape viewport renders the handoff's two-column timer layout", async ({
+  // CONNECTED-REVAMP TASK 7 (revision §5): the old handoff §6 two-column
+  // split (phase/total/controls left, header/dots/cards/upnext right) is
+  // gone — the surface is now a single content column beside a 44px
+  // sensor gutter (back top, END bottom, mirroring the connected surface's
+  // own rail), the same full-bleed shape ruling 10 gave that surface.
+  // Renamed from "…two-column timer layout" to match.
+  test("landscape viewport renders the gutter + single-column layout (revision §5)", async ({
     page,
   }) => {
     const title = "Landscape Layout";
@@ -389,55 +403,71 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     await startAndSkipCountdown(page);
     await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
 
-    // The handoff's own landscape swap size (docs/design/README.md).
-    await page.setViewportSize({ width: 844, height: 420 });
+    // The revision's own no-scroll landscape frame (844×390), not the
+    // older 844×420 handoff swap size.
+    await page.setViewportSize({ width: 844, height: 390 });
 
-    const header = page.locator(".timer-header");
+    const gutter = page.locator(".timer-gutter");
+    const gutterEnd = page.locator(".timer-end");
     const dots = page.locator(".timer-dots");
-    const phaseBlock = page.locator(".timer-phase");
-    const totalBlock = page.locator(".timer-total");
+    const hero = page.locator(".timer-hero");
     const cards = page.locator(".timer-cards");
-    const controls = page.locator(".timer-controls");
-    const upnext = page.locator(".timer-upnext");
-    await expect(header).toBeVisible();
+    const upnextRow = page.locator(".timer-upnext-row");
+    const totalBlock = page.locator(".timer-total");
+    await expect(gutter).toBeVisible();
     await expect(cards).toBeVisible();
+    // The workout title has no landscape row of its own (a measured 390px
+    // budget finding — index.css's own comment on `.timer-name`'s landscape
+    // `display: none` has the accounting; portrait is unaffected).
+    await expect(page.locator(".timer-name")).toBeHidden();
 
-    const headerBox = (await header.boundingBox())!;
+    const gutterBox = (await gutter.boundingBox())!;
+    const gutterEndBox = (await gutterEnd.boundingBox())!;
     const dotsBox = (await dots.boundingBox())!;
+    const heroBox = (await hero.boundingBox())!;
     const cardsBox = (await cards.boundingBox())!;
-    const upnextBox = (await upnext.boundingBox())!;
-    const phaseBox = (await phaseBlock.boundingBox())!;
+    const upnextRowBox = (await upnextRow.boundingBox())!;
     const totalBox = (await totalBlock.boundingBox())!;
-    const controlsBox = (await controls.boundingBox())!;
 
-    // Left column (phase/time/bar, TOTAL LEFT+ruler, controls) sits
-    // strictly left of the right column (name/END, dots, cards, UP NEXT) —
-    // the handoff §6's own split, proven by real CSS box geometry (a
-    // jsdom-invisible fact, the same reasoning flows.spec.ts's own
-    // `.timer-end` hit-target check already established for this file's
-    // sibling).
-    for (const rightBox of [headerBox, dotsBox, cardsBox, upnextBox]) {
-      expect(rightBox.x).toBeGreaterThan(phaseBox.x);
-      expect(rightBox.x).toBeGreaterThan(totalBox.x);
-      expect(rightBox.x).toBeGreaterThan(controlsBox.x);
+    // The gutter is a real 44px-wide column at the physical left edge
+    // (revision §6's own full-bleed ruling, mirrored here); END lives
+    // inside it, not in the content column.
+    expect(Math.round(gutterBox.x)).toBe(0);
+    expect(Math.round(gutterBox.width)).toBe(44);
+    // 1px tolerance either side of the box edges: sub-pixel layout can
+    // legitimately place the button's own rect a fraction of a px outside
+    // its parent's rounded box (the parent's padding is 12px, the button
+    // 44px wide inside a 44px column — a genuine content-vs-parent mismatch
+    // would be far larger than a fraction of a pixel, not masked by this).
+    expect(gutterEndBox.x).toBeGreaterThanOrEqual(gutterBox.x - 1);
+    expect(gutterEndBox.x + gutterEndBox.width).toBeLessThanOrEqual(
+      gutterBox.x + gutterBox.width + 1,
+    );
+
+    // Every content row sits strictly right of the gutter, in ONE column —
+    // no second, independent column any more.
+    for (const box of [dotsBox, heroBox, upnextRowBox, totalBox]) {
+      expect(box.x).toBeGreaterThanOrEqual(gutterBox.x + gutterBox.width);
     }
+
+    // WITHIN the hero row, the target column (cards) sits strictly right
+    // of the countdown+ELAPSED column — revision §5's own "stacked in the
+    // right column" shape.
+    expect(cardsBox.x).toBeGreaterThan(heroBox.x);
 
     // The landscape-only "then …" UP NEXT second line is showing now.
     await expect(page.locator(".timer-upnext-then")).toBeVisible();
     await expect(page.locator(".timer-upnext-then")).toContainText("then");
 
-    // 128px numeral (handoff §6's own landscape figure; 96px portrait).
+    // 128px numeral, from `--size-countdown`'s own landscape half
+    // (tokens.css; revision §5's own landscape figure — 118px portrait).
     const fontSize = await page
       .locator(".timer-time")
       .evaluate((el) => getComputedStyle(el).fontSize);
     expect(fontSize).toBe("128px");
 
-    // Fix round (whole-branch review, F3): the 844×420 frame used to carry
-    // 18px of dead vertical scroll (`.timer-screen`'s own min-height
-    // formula never accounted for `.app-shell`'s hidden-tab-bar padding —
-    // see index.css's own comment on this media query). A real
-    // scrollHeight-vs-clientHeight check, not a bounding-box one, is what
-    // actually proves the frame fits with nothing to scroll.
+    // Fix round (whole-branch review, F3), still true at the revision's own
+    // 390px frame: no dead vertical scroll.
     const overflow = await page.evaluate(() => ({
       scrollHeight: document.documentElement.scrollHeight,
       clientHeight: document.documentElement.clientHeight,

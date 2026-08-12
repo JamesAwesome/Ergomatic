@@ -95,7 +95,23 @@ const SCALE = [
   { name: "--size-total", portrait: 22, landscape: 22 },
   { name: "--size-row", portrait: 19, landscape: 19 },
   { name: "--size-label", portrait: 10, landscape: 11 },
+  // connected-revamp Task 7's own ninth step (revision §5: "Countdown
+  // 128px landscape / 118px portrait") — declared and redefined in both
+  // `:root` blocks exactly like the original eight, so it belongs in this
+  // same table rather than a parallel one.
+  { name: "--size-countdown", portrait: 118, landscape: 128 },
 ] as const;
+
+// `--size-elapsed` (connected-revamp Task 7, revision §5: "ELAPSED beneath
+// at 26px" — one figure, no landscape/portrait split) is declared ONLY in
+// `tokens.css`'s portrait `:root`; the landscape block never redefines it
+// because there is nothing to redefine — the same cascade that reaches
+// every other undeclared-in-landscape token would carry it forward anyway.
+// Kept OUT of `SCALE` (whose two-column shape asserts a landscape
+// re-declaration must exist) and out of the "exactly N names" counts below,
+// with its own dedicated assertions instead.
+const ELAPSED_NAME = "--size-elapsed";
+const ELAPSED_PX = 26;
 
 function declarationCount(block: string, name: string, px: number): number {
   const re = new RegExp(
@@ -133,14 +149,21 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
     },
   );
 
-  it("names exactly eight tokens in each block — no extra, none missing", () => {
+  it("names exactly nine tokens in the landscape block, ten in portrait (the ninth plus --size-elapsed) — no extra, none missing", () => {
     const namesIn = (block: string) =>
       Array.from(block.matchAll(/(--size-[a-z-]+)\s*:/g))
         .map((m) => m[1])
         .toSorted();
-    const expected = SCALE.map((s) => s.name).toSorted();
-    expect(namesIn(PORTRAIT_ROOT)).toStrictEqual(expected);
-    expect(namesIn(LANDSCAPE_ROOT)).toStrictEqual(expected);
+    const scaleNames = SCALE.map((s) => s.name);
+    expect(namesIn(PORTRAIT_ROOT)).toStrictEqual(
+      [...scaleNames, ELAPSED_NAME].toSorted(),
+    );
+    expect(namesIn(LANDSCAPE_ROOT)).toStrictEqual(scaleNames.toSorted());
+  });
+
+  it(`${ELAPSED_NAME}: ${ELAPSED_PX}px in tokens.css's :root, exactly once, and absent from the landscape block`, () => {
+    expect(declarationCount(PORTRAIT_ROOT, ELAPSED_NAME, ELAPSED_PX)).toBe(1);
+    expect(LANDSCAPE_ROOT).not.toContain(ELAPSED_NAME);
   });
 
   it("differs between orientations exactly where spec §8 says it differs, never where it doesn't", () => {

@@ -2458,23 +2458,28 @@ test.describe("timer screen (portrait, TIME phase)", () => {
     await expect(page.locator(".tabbar")).toHaveCount(0);
   });
 
-  test("the state pill, TARGET SPLIT value, and ▶ control match the token palette", async ({
+  // CONNECTED-REVAMP TASK 7 (revision §5, spec §7): RUNNING and both
+  // targets go ink — James's ruling 6 narrows DEVIATIONS row 1 (RUNNING)
+  // rather than adding to it, and the packet's own TARGET SPLIT accent is
+  // retired the same way (`timer-card-value-accent` no longer exists).
+  test("the state pill goes ink, TARGET SPLIT/RATE go ink, and the ▶ control matches the token palette", async ({
     page,
   }) => {
     const stateColor = await page
       .locator(".timer-state")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(stateColor).toBe("rgb(181, 52, 31)"); // --accent
+    expect(stateColor).toBe("rgb(27, 26, 23)"); // --ink
 
     // A resolved SPLIT target, not an effort word — this TIME sweep's own
     // distinguishing case from the EFFORT sweep below.
-    await expect(page.locator(".timer-card-value-accent")).not.toHaveText(
+    await expect(page.locator(".timer-card-value").first()).not.toHaveText(
       "ALL OUT",
     );
     const targetColor = await page
-      .locator(".timer-card-value-accent")
+      .locator(".timer-card-value")
+      .first()
       .evaluate((el) => getComputedStyle(el).color);
-    expect(targetColor).toBe("rgb(181, 52, 31)"); // --accent
+    expect(targetColor).toBe("rgb(27, 26, 23)"); // --ink
 
     const controlColor = await page
       .locator(".timer-control")
@@ -2548,7 +2553,11 @@ test.describe("timer screen (portrait, DISTANCE phase)", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("the NEXT control (not ▶) is what renders, on-palette", async ({
+  // CONNECTED-REVAMP TASK 7 (revision §5, spec §7): Pause is the surface's
+  // only level-1 control now — NEXT falls back to the same neutral
+  // `.timer-control` look ◀ already has (surface fill, ink-2 text), not the
+  // accent/on-color fill it wore before this task.
+  test("the NEXT control (not ▶) is what renders, on the neutral (not accent) palette", async ({
     page,
   }) => {
     const next = page.getByRole("button", { name: "NEXT →" });
@@ -2560,8 +2569,8 @@ test.describe("timer screen (portrait, DISTANCE phase)", () => {
       const s = getComputedStyle(el);
       return { background: s.backgroundColor, color: s.color };
     });
-    expect(styles.background).toBe("rgb(181, 52, 31)"); // --accent
-    expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
+    expect(styles.background).toBe("rgb(255, 253, 247)"); // --surface
+    expect(styles.color).toBe("rgb(63, 60, 53)"); // --ink-2
   });
 });
 
@@ -2587,7 +2596,7 @@ test.describe("timer screen (portrait, effort target visible)", () => {
     await startFromLibrary(page, title);
     await startAndSkipCountdown(page);
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
-    await expect(page.locator(".timer-card-value-accent")).toHaveText(
+    await expect(page.locator(".timer-card-value").first()).toHaveText(
       "ALL OUT",
     );
   });
@@ -2606,15 +2615,18 @@ test.describe("timer screen (portrait, effort target visible)", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("the effort word renders with no numeric range underneath, on-palette", async ({
+  // CONNECTED-REVAMP TASK 7 (revision §5): the effort word is ink now, not
+  // accent (`timer-card-value-accent` retired — both TARGET cards render
+  // through the plain `.timer-card-value` rule).
+  test("the effort word renders with no numeric range underneath, in ink", async ({
     page,
   }) => {
     const card = page.locator(".timer-card").first();
     await expect(card.locator(".timer-card-caption")).toHaveCount(0);
     const color = await card
-      .locator(".timer-card-value-accent")
+      .locator(".timer-card-value")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(color).toBe("rgb(181, 52, 31)"); // --accent
+    expect(color).toBe("rgb(27, 26, 23)"); // --ink
   });
 });
 

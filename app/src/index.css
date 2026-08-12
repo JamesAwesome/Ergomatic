@@ -3624,6 +3624,37 @@ button:disabled {
   gap: 8px;
 }
 
+/* THE GUTTER WRAPPER (connected-revamp Task 7, revision §5). `display:
+   contents` here (portrait's own default) makes `.timer-gutter` disappear
+   from the box tree — its three children (back/housing/end) become direct
+   flex items of `.timer-header` above, ordered onto its one header line by
+   `order` below rather than DOM position (`.timer-name` sits AFTER this
+   wrapper in the markup, but visually belongs BETWEEN back and end). The
+   landscape override (below, in the `.timer-screen` media query) turns
+   `.timer-header` ITSELF into `display: contents` too, promoting this
+   wrapper a second level up to become a direct grid child of
+   `.timer-screen` — where IT stops being `contents` and becomes the real
+   44px gutter column, mirroring `.connected-pager`'s own back/housing/
+   target column (index.css) for the connected surface. One `.timer-end`
+   button exists in the DOM either way; only its CSS position moves. */
+.timer-gutter {
+  display: contents;
+}
+
+.timer-gutter-back {
+  order: -1;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+/* Zero footprint in portrait — same idiom as `.connected-pager-housing`
+   (index.css): the decorative camera-housing spacer only exists once the
+   gutter is a real column, in landscape. */
+.timer-gutter-housing {
+  display: none;
+}
+
 .timer-name {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -3631,6 +3662,7 @@ button:disabled {
 }
 
 .timer-end {
+  order: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3734,26 +3766,98 @@ button:disabled {
   color: var(--ink-3);
 }
 
+/* Ink, not accent (connected-revamp Task 7, revision §5 + spec §7:
+   "RUNNING goes ink" — James's ruling 6, which NARROWS DEVIATIONS row 1's
+   own long-standing recommendation rather than adding a new divergence).
+   PAUSED shares this same class (Timer.tsx renders one or the other, never
+   both) and goes ink with it — the mockup draws no paused frame for this
+   surface to contradict, and a status word was never one of accent's four
+   canonical jobs (tokens.css's own "accent means exactly four things"
+   rule) to begin with. */
 .timer-state {
   font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.16em;
-  color: var(--accent);
+  color: var(--ink);
 }
 
-/* 96px per the handoff (portrait) — 128px landscape is Task 4's own
-   `@media (orientation: landscape)` layer over this same class. tabular-nums
+/* `--size-countdown` (118px portrait / 128px landscape, tokens.css) —
+   connected-revamp Task 7, revision §5: "Countdown 128px landscape / 118px
+   portrait, ink". Replaces the old hardcoded 96/128px pair (the landscape
+   half used to live in a second, separate declaration inside Task 4's own
+   `@media (orientation: landscape)` block below — Task 2's own token
+   pattern makes that second declaration unnecessary now, one name flips
+   both values). Same class for the distance hero (`Timer.tsx`'s own
+   `isDistance` branch swaps the CONTENT — meters, not a duration string —
+   never the styling): the token, weight and tracking are the surface's
+   "biggest numeral" role regardless of which unit fills it. tabular-nums
    pins digit width so a phase's last seconds ("0:10" -> "0:09") can't shift
    the numeral horizontally — the same deliberate addition Countdown.tsx's
    own `.countdown-number` made first (nothing else in this file provides it
    automatically); this is its second consumer, not a new pattern. */
 .timer-time {
   font-family: var(--font-mono);
-  font-size: 96px;
+  font-size: var(--size-countdown);
   font-weight: 500;
   color: var(--ink);
-  line-height: 1;
+  line-height: 0.9;
   letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* CONNECTED-REVAMP TASK 7 (revision §5). `.timer-hero` holds the countdown
+   (`.timer-hero-main`, `.timer-time` + `.timer-elapsed` beneath it) and the
+   two targets (`.timer-cards`, `TimerTargets.tsx`) — portrait stacks them
+   with a rule between (the mockup's own `border-top:1px solid
+   #d8d3c4;padding-top:12px` on the targets block); the landscape override
+   below turns this into a row instead, `.timer-hero-divider` becoming a
+   real 1px vertical rule between the two columns. */
+.timer-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timer-hero-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Landscape-only vertical rule (below); zero footprint in portrait so it
+   never becomes a third stacked block between hero-main and the targets —
+   same idiom as `.connected-hero-divider`'s own base rule. */
+.timer-hero-divider {
+  display: none;
+}
+
+.timer-elapsed {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding-top: 2px;
+}
+
+.timer-elapsed-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+/* `--size-elapsed` (26px, both orientations — tokens.css's own comment on
+   why this token never grows a landscape half). Ink-2, not ink-3: the
+   mockup's own ELAPSED value (`#3f3c35`) sits one step darker than its
+   label, and the same pairing already clears AA elsewhere in this file
+   (`.complete-actual-label`/-value use the identical ink-3/ink-2 split). */
+.timer-elapsed-value {
+  font-family: var(--font-mono);
+  font-size: var(--size-elapsed);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3851,38 +3955,51 @@ button:disabled {
   margin-left: -1px;
 }
 
+/* CONNECTED-REVAMP TASK 7 (revision §5): "stacked in the right column",
+   both targets at `--size-subhero` (56/52), both ink — the SAME weight
+   revision §3 gives the connected pane's own no-machine target slot
+   (`.connected-hero-target-value`). Portrait keeps the two cards side by
+   side (the mockup's own portrait frame draws them as a row, `gap: 14px`,
+   split from rate); the landscape override just below turns this into a
+   vertical stack instead — one column, no grid — beside the countdown.
+   The 14px gap works unchanged in both shapes, so it lives here rather
+   than being redeclared per orientation. No card box any more (background/
+   border/padding retired with this task): the mockup draws bare stacked
+   text, the same treatment `.connected-hero-target` already uses for the
+   identical role on the connected surface. */
 .timer-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 14px;
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
 }
 
 .timer-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: 14px;
+  gap: 1px;
 }
 
 .timer-card-label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--size-label);
   letter-spacing: 0.12em;
   color: var(--ink-3);
 }
 
+/* Ink, `--size-subhero` (56/52) — both cards render through this one rule
+   now; `.timer-card-value-accent` retired with it (connected-revamp Task 7,
+   revision §5: "both targets go INK", RUNNING's own accent narrowed the
+   same way — see `.timer-state` below). `letter-spacing` matches
+   `.connected-hero-target-value`'s own value at the sibling role. */
 .timer-card-value {
   font-family: var(--font-mono);
-  font-size: 30px;
-  line-height: 1.1;
+  font-size: var(--size-subhero);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.03em;
   color: var(--ink);
-}
-
-.timer-card-value-accent {
-  color: var(--accent);
 }
 
 .timer-card-caption {
@@ -4049,9 +4166,12 @@ button:disabled {
   transform: translateX(50%);
 }
 
+/* CONNECTED-REVAMP TASK 7: down to two buttons (◀, then ▶ or NEXT) now that
+   Pause has its own standalone slot in `.timer-upnext-row` below — no
+   longer a 3-column grid spanning the full width, just the two remaining
+   controls at their existing 56px size, left-aligned. */
 .timer-controls {
-  display: grid;
-  grid-template-columns: 56px 1fr 56px;
+  display: flex;
   gap: 8px;
   margin-top: auto;
   padding-bottom: 8px;
@@ -4061,6 +4181,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 56px;
   min-height: 56px;
   background: var(--surface);
   border: 1px solid var(--rule-3);
@@ -4073,36 +4194,62 @@ button:disabled {
   border-color: var(--ink-4);
 }
 
-.timer-control-pause {
-  background: var(--accent);
-  border: none;
-  color: var(--on-color);
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.timer-control-pause:hover {
-  background: var(--accent-hover);
-}
-
-/* Distance phases: fix round (spec review F1/F2) — a distance phase now
-   shares the SAME ◀ / Pause / [NEXT] 3-column grid every other phase kind
-   uses (README §6 gives the control row no distance carve-out, and a
-   distance phase with no Pause has no recourse for a broken foot strap);
-   only the rightmost slot's control/label changes, from ▶ to NEXT →. Same
-   visual treatment as `.timer-control-pause` (accent, on-color) since NEXT
-   is this phase kind's own primary forward action, just now living in the
-   grid's fixed 56px column instead of full-width. */
+/* Distance phases: fix round (spec review F1/F2) — a distance phase shares
+   the SAME ◀ / [NEXT] pair every other phase kind's row uses (README §6
+   gives the control row no distance carve-out, and a distance phase with
+   no way back has no recourse for a broken foot strap); only the
+   rightmost slot's control/label changes, from ▶ to NEXT →.
+   CONNECTED-REVAMP TASK 7 (spec §7): no longer accent-filled — Pause is
+   the surface's only level-1 control now (revision §5), so NEXT falls back
+   to the same neutral `.timer-control` look as ◀, just its own font-size
+   for the wider label. */
 .timer-control-next {
-  background: var(--accent);
-  border: none;
-  color: var(--on-color);
   font-size: 15px;
   font-weight: 600;
 }
 
-.timer-control-next:hover {
-  background: var(--accent-hover);
+/* PAUSE (connected-revamp Task 7, revision §5: "Pause is the only level-1
+   control… 200×44 landscape beside UP NEXT, full-width 56px portrait").
+   Lives in `.timer-upnext-row` now, not `.timer-controls` — this is the
+   base, portrait shape (full width, 56px tall). SPEC §7's own correction:
+   the mockup does NOT render Pause as an accent fill
+   (`Ergomatic connected mode.dc.html`'s timer frames:
+   `background:#fffdf7;border:1px solid #1b1a17`, plain ink label) —
+   contradicting the pre-Task-7 shipped accent-filled version. Followed
+   here: surface fill, 1px ink border, ink text, the same shape
+   `.button-l2` already establishes for a secondary-weight action elsewhere
+   in this file, even though this button keeps its own fixed
+   (non-`100%`-outside-portrait) width rather than joining that class
+   directly. */
+.timer-control-pause {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.timer-control-pause:hover {
+  background: var(--surface-sunken);
+}
+
+/* UP NEXT + Pause share one row (connected-revamp Task 7, revision §5).
+   Portrait stacks them (Pause's own `margin-top` above supplies the gap);
+   the landscape override turns this into the mockup's own bottom row —
+   UP NEXT flex:1, Pause a fixed 200×44 beside it, both under a 1px ink
+   rule. */
+.timer-upnext-row {
+  display: flex;
+  flex-direction: column;
 }
 
 .timer-suspect {
@@ -4122,142 +4269,336 @@ button:disabled {
   flex: 1;
 }
 
-/* -- Live timer: landscape (Phase 6B Task 4) --------------------------------
-   handoff §6: "two columns — left = phase label, time left mono 128px, phase
-   bar, TOTAL LEFT + ruler, controls; right = name/END, dots, TARGET SPLIT +
-   RATE cards, UP NEXT panel with a 'then …' second line." Reference frame
-   844×420 (docs/design/README.md's own landscape swap size).
+/* -- Phone timer: landscape (Phase 6B Task 4, REBUILT connected-revamp
+   Task 7, revision §5) --------------------------------------------------
 
-   Every top-level child of `.timer-screen` gets an EXPLICIT `grid-column`/
-   `grid-row` here — not left to CSS Grid's auto-placement algorithm, whose
-   sparse-packing order depends on DOM position (Timer.tsx's own children are
-   NOT in left/right-grouped DOM order — `.timer-header` precedes
-   `.timer-phase`, `.timer-total` precedes `.timer-controls` by several
-   siblings — so auto-placement would interleave rows unpredictably).
-   Explicit placement means Timer.tsx's own markup needed no reordering: same
-   component, same DOM, this file is the only diff. `.timer-end-confirm`
-   (shared by the abandon AND finish-session panels) and `.timer-suspect`
-   both get the full-width bottom row regardless of which of the three ever
-   mutually-exclusive control-row states (README §6 gives none of them a
-   distance/landscape carve-out) is active — a staged confirm reads better
-   spanning the whole frame than being squeezed into one 422px-wide column. */
+   THE LEAK, CLOSED (spec §7, adversarial finding): every selector in this
+   block used to be a bare `.timer-*` class, reaching ANY element with that
+   class anywhere in the DOM — including the connected surface's own panes,
+   which reuse `TimerRuler`/`UpNextStrip` (and therefore `.timer-total`/
+   `.timer-upnext*`) by design. `.connected-pane-live`'s own landscape rules
+   further down this file had to work around whatever this block set (see
+   e.g. `.connected-pane-live .connected-metric-row .timer-upnext-then`'s
+   own comment, which used to describe suppressing a value THIS block turned
+   on uninvited). EVERY SELECTOR BELOW IS NOW SCOPED to `.timer-screen` — a
+   descendant combinator, not a bare class — so nothing here can ever match
+   inside `.connected-surface` again, however similarly two components'
+   output classes happen to be named. The connected-pane overrides that used
+   to compensate for the leak are UNCHANGED (they were already the more
+   specific, deliberately-authored rules — see e.g. index.css's own
+   `.connected-pane-live .connected-metric-row .timer-upnext-then` block,
+   which sets `display: inline` as a FEATURE match to the mockup already,
+   not a leak workaround) — nothing needed deleting there because nothing
+   there was ever load-bearing on this block reaching it. The regression
+   pin lives in `e2e/design.spec.ts` (connected-revamp Task 7): a connected
+   pane's `.timer-total`/`.timer-upnext-then` computed styles, read in
+   landscape, before and after this scoping — proving the leak's removal
+   changes nothing a rower can see.
+
+   ONE CONTENT COLUMN, not two (revision §5's own frame: a single vertical
+   stack — label line, dots, the hero row, UP NEXT + Pause, TOTAL LEFT —
+   beside a 44px gutter, not the old two-column phase/cards split). Every
+   top-level child of `.timer-screen` still gets an EXPLICIT `grid-column`/
+   `grid-row` (same reasoning as before: Timer.tsx's own children are not in
+   gutter/content-grouped DOM order, so auto-placement would interleave
+   rows unpredictably) — `.timer-header` and its nested `.timer-gutter` both
+   go `display: contents` here, promoting `.timer-gutter-back`/
+   `.timer-gutter-housing`/`.timer-end`/`.timer-name` to be independently
+   placeable grid items in their own right (see `.timer-header`'s own base
+   rule for the portrait half of this trick). Reference frame 844×390
+   (revision's own "no scroll" frames), not the older 844×420 swap size —
+   revision §6's full-bleed ruling reaches this surface too (spec §7 cites
+   the connected surface's own gutter as the thing to mirror). */
 @media (orientation: landscape) {
   .timer-screen {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 20px;
-    row-gap: 8px;
-    /* space-between (was start): the grid previously top-packed and left a
-       dead band under the controls on tall landscape frames (owner report,
-       2026-08-02, device screenshot) — distributing the rows fills the
-       frame on any device height without touching font sizes, and the
-       scrollHeight<=clientHeight guard still holds at 844x420. */
-    align-content: space-between;
-    /* Fix round (whole-branch review, F3): `.timer-screen`'s own base rule
-       (above) only ever subtracts `.screen`'s own 26px padding from
-       `100dvh` — it never accounts for `.app-shell`'s OWN `padding-bottom:
-       calc(var(--tap) + safe-area-bottom)` (44px here), which stays
-       reserved for the tab bar's fixed height even on THIS route, where
-       `hidesTabBar` (AppRoutes.tsx) never renders one. Portrait's tall
-       844px reference frame has enough slack that the mismatch is
-       invisible; the 420px landscape frame has none — measured live at
-       844×420 (`document.documentElement.scrollHeight` 438 vs
-       `clientHeight` 420, exactly the missing 44px minus the ~26px this
-       formula already subtracts = 18px of dead vertical scroll,
-       `main.timer-screen`'s own box was never the problem — its rendered
-       height matched its min-height floor exactly). Subtracting
-       `var(--tap)` here too — the same token `.app-shell` itself reserves,
-       not a second hardcoded 44 — closes exactly that gap. Re-measured
-       after this fix: scrollHeight 414, clientHeight 420 (6px of slack,
-       zero scroll) — `main.timer-screen`'s own height dropped from 394px
-       to ~350px (this min-height became a lower floor than the grid's own
-       ~344px content height, so the content's natural size — not this
-       formula — is what actually renders now, same principle as portrait).
-       This same formula (sans this landscape subtraction) is shared by
-       `.countdown-screen`/`.session-complete-screen` — Task 5 measured both
-       at the same 844×420 frame (identical numbers: scrollHeight 438 vs
-       clientHeight 420, the same 18px) and applied the identical
-       `var(--tap)` subtraction to each, in their own landscape media
-       queries below (see those rules' own comments). */
+    grid-template-columns: 44px 1fr;
+    grid-template-rows: auto auto auto 1fr auto auto auto;
+    column-gap: 14px;
+    /* 4px, not portrait's 8 (measured: the frame's real 390px budget
+       overflowed by 66px at 8px row-gap across 7 tracks — see the block
+       comment on `.timer-name` below for the other three cuts that closed
+       the rest of it). */
+    row-gap: 4px;
+    /* Same `.app-shell` tab-bar-padding accounting as the pre-Task-7 rule
+       this replaces (Task 4's own fix round, F3) — this route hides the
+       tab bar but `.app-shell` still reserves its height, and the 390px
+       frame (unlike portrait's 844px) has no slack to absorb the mismatch
+       silently. */
     min-height: calc(
       100dvh - env(safe-area-inset-top, 0px) -
         env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
     );
-    /* Overrides `main`/`.screen`'s own 480px cap (index.css's global rule,
-       sized for a PORTRAIT phone column) — a two-column layout squeezed
-       into that width on an 844px-wide landscape frame (the handoff's own
-       reference size) would leave each column under 220px, cramped for a
-       30px card value or the 128px numeral beside it. 800px leaves margin
-       within the 844px frame for the safe-area padding `.screen` already
-       applies on each side. */
-    max-width: 800px;
+    /* FULL-BLEED (revision §6/ruling 10, mirrored from the connected
+       surface — spec §7's own instruction): `.screen`'s 480px cap and its
+       20px/6px padding are sized for a portrait document column. The
+       gutter needs to reach the true physical edge, the same reason the
+       connected surface broke out of the cap first. */
+    max-width: none;
+    margin: 0;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px) 0;
   }
 
-  .timer-phase {
+  /* THE GUTTER (revision §5, mirroring `.connected-pager`'s own landscape
+     shape): a real 44px column now, not `display: contents` any more —
+     portrait's promotion trick (base rule) reverses here, one level back
+     in. `justify-content: space-between` plus the 12px vertical padding is
+     what puts back at the top, END at the bottom and the housing spacer
+     exactly between them — byte-for-byte the same layout math
+     `.connected-pager` already uses for LIVE/[housing]/GRID. */
+  .timer-screen .timer-header .timer-gutter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
     grid-column: 1;
-    grid-row: 1 / span 2;
+    grid-row: 1 / -1;
+    padding: 12px 0;
+    background: var(--surface-sunken);
+    border-right: 1px solid var(--rule);
+  }
+
+  .timer-screen .timer-header .timer-gutter-back {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
     justify-content: center;
-    padding-top: 0;
+    font-size: 15px;
   }
 
-  .timer-total {
-    grid-column: 1;
-    grid-row: 3;
+  .timer-screen .timer-header .timer-gutter-housing {
+    display: block;
+    width: 11px;
+    height: 104px;
+    background: var(--ink);
+    border-radius: 6px;
   }
 
-  .timer-controls {
-    grid-column: 1;
-    grid-row: 4;
-    margin-top: 0;
-    align-self: end;
+  /* END, in the gutter: 44×44, ink-outlined (revision §2's own connected-
+     header treatment, reused here for the timer's own gutter END — mono
+     11px/600, accent text/border, radius 2). Overrides the portrait rule's
+     transparent/borderless/auto-width shape entirely. */
+  .timer-screen .timer-header .timer-end {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    font-family: var(--font-mono);
+    font-size: var(--size-label);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
   }
 
-  .timer-header {
+  /* `.timer-gutter` itself keeps `display: flex` (the override just above)
+     — only its PARENT promotes here, one level, so `.timer-gutter` becomes
+     a direct grid child in its own right (placed at `grid-column: 1;
+     grid-row: 1 / -1;` above) while its OWN children (back/housing/end)
+     stay real flex items inside it, not promoted a second time. */
+  .timer-screen .timer-header {
+    display: contents;
+  }
+
+  /* THE WORKOUT TITLE IS DROPPED IN LANDSCAPE (measured budget finding, not
+     the original plan): the mockup draws it combined onto ONE line with the
+     interval caption (`Ergomatic connected mode.dc.html`'s own "4 × 1K OFF
+     2′ · INTERVAL 3 OF 12 · WORK"); this task keeps `stepLineText`'s
+     existing STEP-line copy unchanged rather than inventing a second string
+     builder, so a first pass gave the title its own row instead — measured
+     directly against this worktree at the revision's own 390px frame, that
+     row (plus its own row-gap) was part of a real 66px overflow
+     (`document.documentElement.scrollHeight` 456 vs `clientHeight` 390).
+     Portrait still shows the title on its header line (unaffected, this
+     rule is landscape-only); dropping it here rather than merging two
+     independently-computed React strings into one is the smaller, safer
+     change under real time pressure — routed to Task 8's DEVIATIONS audit
+     as a departure from the mockup's own combined-line copy, not just its
+     pixel geometry. */
+  .timer-screen .timer-name {
+    display: none;
+  }
+
+  /* `.timer-phase` (STEP N OF M/RUNNING, the hero, the optional phase bar)
+     goes `display: contents` here too, the SAME promotion `.timer-header`
+     gets above — its three children are independently grid-placed below
+     rather than stacking inside one flex column occupying a single cell,
+     since the label line needs its own row while the hero (the grid's only
+     `1fr` row) needs the frame's own vertical slack. Portrait keeps
+     `.timer-phase` a real flex column (base rule, unchanged) — this
+     promotion is landscape-only. */
+  .timer-screen .timer-phase {
+    display: contents;
+  }
+
+  .timer-screen .timer-phase-head {
     grid-column: 2;
     grid-row: 1;
   }
 
-  .timer-dots {
+  .timer-screen .timer-dots {
     grid-column: 2;
     grid-row: 2;
-    align-self: center;
   }
 
-  .timer-cards {
+  /* Auto-height: 0 when `hasEstimate` is false and the element isn't
+     rendered at all (an empty grid row costs nothing), a thin 6px bar
+     otherwise — never fights the hero row below it for the frame's slack. */
+  .timer-screen .timer-phase-bar {
     grid-column: 2;
     grid-row: 3;
   }
 
-  .timer-upnext {
+  /* THE HERO ROW (revision §5): countdown+ELAPSED on the left, the two
+     targets stacked on the right, split by a 1px rule — this is the ONLY
+     `1fr` row in the grid, so it absorbs whatever vertical slack the frame
+     has, exactly where the mockup puts the biggest numeral on the screen. */
+  .timer-screen .timer-hero {
     grid-column: 2;
     grid-row: 4;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 14px;
+    min-height: 0;
   }
 
-  .timer-end-confirm,
-  .timer-suspect {
-    grid-column: 1 / -1;
+  .timer-screen .timer-hero-main {
+    flex: 1.18;
+    justify-content: center;
+    min-width: 0;
+  }
+
+  .timer-screen .timer-hero-divider {
+    display: block;
+    flex: none;
+    width: 1px;
+    background: var(--rule);
+  }
+
+  .timer-screen .timer-cards {
+    flex: 0.82;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-top: none;
+    padding-top: 0;
+    min-width: 0;
+  }
+
+  /* `--size-countdown`'s landscape half (128px) already flips via the
+     token (index.css's own landscape `:root` block) — nothing to
+     redeclare here beyond what the base rule already inherits. */
+
+  .timer-screen .timer-upnext-row {
+    grid-column: 2;
     grid-row: 5;
-    margin-top: 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    border-top: 1px solid var(--ink);
+    padding-top: 8px;
   }
 
-  /* 128px per the handoff (portrait stays 96px, `.timer-time`'s own base
-     rule above). */
-  .timer-time {
-    font-size: 128px;
+  /* Sheds the portrait pill (background/border/padding) and joins the row
+     as plain right-aligned text, `flex: 1` taking whatever width Pause's
+     fixed 200px leaves — the same "one place this isn't a boxed component"
+     treatment `.connected-pane-live`'s own landscape override already
+     gives the identical class, for the identical mockup reason (that rule
+     is unaffected by this one: different ancestor, `.connected-pane-live`
+     vs `.timer-screen`, so the two can never both match the same
+     element). */
+  .timer-screen .timer-upnext-row .timer-upnext {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    gap: 0;
   }
 
-  /* `inline`, not `block` (connected-revamp Task 6): the word "then" now
-     lives INSIDE `.timer-upnext-value`'s own flow (`UpNextStrip.tsx`'s own
-     comment), not as a second stacked line — a block-display span nested
-     inside another inline run would still force its own line, which is
-     exactly the two-line shape the design retires here (`REST 2:00 · then
-     WORK 2:09.0`, one line, per revision §3/§5). Still unscoped (this
-     block's own header names the leak into the connected panes as Task
-     7's to fix, not this task's); `.connected-pane-live`'s own override
-     below restyles rather than re-hiding it now that showing it is what
-     both orientations want. */
-  .timer-upnext-then {
+  .timer-screen .timer-upnext-main {
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .timer-screen .timer-upnext-value {
+    font-size: 20px;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* `inline`, not `block` (connected-revamp Task 6's own mechanism note,
+     carried over unmodified, now scoped): the word "then" lives INSIDE
+     `.timer-upnext-value`'s own flow (`UpNextStrip.tsx`'s own comment), so
+     `display` toggles `none` (portrait, the base rule) / `inline`
+     (landscape) rather than `none`/`block`. THIS is the exact declaration
+     that used to leak (spec §7's own citation) — scoped now, so a
+     connected pane's `.timer-upnext-then` no longer matches this rule at
+     all; it keeps reading `inline` regardless, but from ITS OWN,
+     already-more-specific `.connected-pane-live …` rule alone, never from
+     here. */
+  .timer-screen .timer-upnext-then {
     display: inline;
+  }
+
+  /* PAUSE, beside UP NEXT (revision §5: 200×44, flex: none so UP NEXT's
+     own `flex: 1` claims the rest of the row). */
+  .timer-screen .timer-control-pause {
+    width: 200px;
+    min-height: 44px;
+    margin-top: 0;
+    flex: none;
+  }
+
+  .timer-screen .timer-total {
+    grid-column: 2;
+    grid-row: 6;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    border-top: none;
+    padding-top: 0;
+  }
+
+  .timer-screen .timer-total-head {
+    flex: none;
+    gap: 14px;
+  }
+
+  .timer-screen .timer-ruler,
+  .timer-screen .timer-total-bar {
+    flex: 1;
+  }
+
+  .timer-screen .timer-controls {
+    grid-column: 2;
+    grid-row: 7;
+    margin-top: 0;
+    /* 0, not the base rule's 8 (measured budget finding, see
+       `.timer-name`'s own comment above for the full accounting): this
+       row's own trailing padding was part of the 66px overflow. */
+    padding-bottom: 0;
+    justify-content: flex-end;
+  }
+
+  /* 44px, not the base rule's 56 (same measured budget finding) — still
+     comfortably clears the house's 44×44 tap-target floor, just no longer
+     the portrait size on a surface with less than half portrait's vertical
+     room to spend. */
+  .timer-screen .timer-control {
+    min-height: 44px;
+  }
+
+  .timer-screen .timer-end-confirm,
+  .timer-screen .timer-suspect {
+    grid-column: 1 / -1;
+    grid-row: 7;
+    margin-top: 0;
   }
 }
 
@@ -6533,6 +6874,11 @@ section:not(.news-pinned) .news-row:last-of-type {
     --size-total: 22px;
     --size-row: 19px;
     --size-label: 11px;
+    /* connected-revamp Task 7: the phone timer's own ninth token
+       (tokens.css's own comment on `--size-countdown`'s portrait half) —
+       redefined here, not in a second landscape block, per this block's
+       own standing rule just above. */
+    --size-countdown: 128px;
   }
 
   /* THE SURFACE GOES FULL-BLEED (design spec §6/ruling 10, revision §6):

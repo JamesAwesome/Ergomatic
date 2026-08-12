@@ -171,15 +171,21 @@ describe("TimerTargets (component)", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  // BYTE-IDENTICAL REGRESSION PIN (Phase 7B Task 3, updated Task 8). Lifted
-  // from THIS component's own pre-Task-3 render (HEAD before the now-retired
-  // `variant` prop ever existed) by rendering the real `Timer` component
-  // against a distance work phase (split-ref "2k", no spm) and reading
-  // `document.querySelector(".timer-cards")!.outerHTML` — the exact string
-  // below, unedited. Task 8 retired `variant` entirely (task-6 review
-  // ruling: it shipped with no consumer and never gained one — Task 7 built
-  // rows, not this component's cards); this component takes only `phase`
-  // now, so there is exactly one render to pin rather than two.
+  // BYTE-IDENTICAL REGRESSION PIN (Phase 7B Task 3, updated Task 8, updated
+  // connected-revamp Task 7). Lifted from THIS component's own pre-Task-3
+  // render (HEAD before the now-retired `variant` prop ever existed) by
+  // rendering the real `Timer` component against a distance work phase
+  // (split-ref "2k", no spm) and reading
+  // `document.querySelector(".timer-cards")!.outerHTML`. Task 8 retired
+  // `variant` entirely (task-6 review ruling: it shipped with no consumer
+  // and never gained one — Task 7 built rows, not this component's cards);
+  // this component takes only `phase` now, so there is exactly one render
+  // to pin rather than two.
+  //
+  // CONNECTED-REVAMP TASK 7 (revision §5: "both targets go INK"):
+  // `timer-card-value-accent` is GONE from the TARGET SPLIT span. The class
+  // had exactly one renderer (this file) and no other consumer left
+  // anywhere — the dead index.css rule is deleted in the same commit.
   const pinnedPhase = phase({
     type: "work",
     targetKind: "split",
@@ -188,11 +194,38 @@ describe("TimerTargets (component)", () => {
     label: "1:40.0",
   });
   const PINNED_DEFAULT_HTML =
-    '<div class="timer-cards"><div class="timer-card"><span class="timer-card-label">TARGET SPLIT</span><span class="timer-card-value timer-card-value-accent">1:40.0</span><span class="timer-card-caption">2K</span></div><div class="timer-card"><span class="timer-card-label">RATE</span><span class="timer-card-value">free</span></div></div>';
+    '<div class="timer-cards"><div class="timer-card"><span class="timer-card-label">TARGET SPLIT</span><span class="timer-card-value">1:40.0</span><span class="timer-card-caption">2K</span></div><div class="timer-card"><span class="timer-card-label">RATE</span><span class="timer-card-value">free</span></div></div>';
 
   it("renders byte-identical to the pre-Task-3 markup", () => {
     const { container } = render(<TimerTargets phase={pinnedPhase} />);
     expect(container.innerHTML).toBe(PINNED_DEFAULT_HTML);
+  });
+
+  // Direct positive pin (connected-revamp Task 7, revision §5): neither
+  // value ever wears `timer-card-value-accent` — not just "the pinned
+  // fixture above happens not to have it" but no phase shape can produce
+  // it, because the JSX no longer has the class to apply.
+  it("never applies timer-card-value-accent to either value — both targets are plain ink", () => {
+    const { container } = render(
+      <TimerTargets
+        phase={phase({
+          type: "work",
+          targetKind: "split",
+          targetSplit: 136,
+          ref: { base: "6k", off: 16 },
+          label: "2:16.0",
+          spm: 24,
+        })}
+      />,
+    );
+    expect(container.querySelectorAll(".timer-card-value-accent")).toHaveLength(
+      0,
+    );
+    const values = container.querySelectorAll(".timer-card-value");
+    expect(values).toHaveLength(2);
+    for (const value of values) {
+      expect(value.className).toBe("timer-card-value");
+    }
   });
 });
 

@@ -643,13 +643,59 @@ export default function Timer() {
     setStagedElapsed(null);
   }
 
+  // The hero swap (connected-revamp Task 7, revision §5: "Distance pieces
+  // swap the hero: meters count down at 128px, the clock accrues at 26px
+  // beneath. Labels swap, layout does not move."). There is no sensor on
+  // this surface — no monitor, no live meters feed — so "count down" reads
+  // as the DISTANCE side of the display living where the countdown
+  // normally does, not a literal animated decrement; `phase.meters` is the
+  // piece's own static target, the same bare number `stepLineText` already
+  // folds into the STEP line's own "· 2000M" suffix. `elapsedSeconds` is
+  // what actually counts up, in ELAPSED, for BOTH phase kinds now —
+  // `bigNumberSeconds` already returns exactly this value for a distance
+  // phase (`phase.seconds === undefined`), so the distance branch below
+  // doesn't call it at all rather than computing the same number twice
+  // under two names.
+  const heroText = isDistance
+    ? String(phase.meters)
+    : fmtDuration(bigNumberSeconds(currentRun, phase, now) / 60);
+  const elapsedText = fmtDuration(elapsed / 60);
+  // Pause is the only level-1 control the confirm panels below suspend
+  // (spec §7: "Pause is the only L1 control… beside UP NEXT"/"full-width
+  // below TOTAL LEFT"). Same governing condition `.timer-controls` already
+  // used pre-Task-7 for the whole control row — a rower deciding "Abandon
+  // session?" or "Keep split?" must not be able to quietly un-pause
+  // underneath the prompt.
+  const showPause = !endStaged && !finishStaged && !suspect;
+
   return (
     <main className="screen timer-screen">
       <div className="timer-header">
+        {/* THE GUTTER (connected-revamp Task 7, revision §5): "Landscape
+            gutter holds back (←, top) and END (bottom) either side of the
+            housing. Portrait puts both on the header line." One `.timer-end`
+            button, not two — `display: contents` on `.timer-gutter`
+            promotes `.timer-gutter-back`/`.timer-gutter-housing`/`.timer-end`
+            to be direct flex children of THIS row (portrait's own base
+            rule, unchanged, ordered back/name/end via CSS `order`); the
+            landscape override turns `.timer-header` ITSELF into `display:
+            contents` too, so `.timer-gutter` is promoted a second level up
+            to become a direct grid child of `.timer-screen`, where it
+            becomes the real 44px column (mirroring `.connected-pager`'s own
+            back/housing/target column, index.css). `←` is decorative
+            (`aria-hidden`) — this surface has nothing behind it to
+            navigate back TO mid-session; the mockup itself draws it as a
+            bare glyph, no button chrome, unlike END beside it. */}
+        <div className="timer-gutter">
+          <span className="timer-gutter-back" aria-hidden="true">
+            ←
+          </span>
+          <span className="timer-gutter-housing" aria-hidden="true" />
+          <button type="button" className="timer-end" onClick={handleEndTap}>
+            END →
+          </button>
+        </div>
         <span className="timer-name">{title}</span>
-        <button type="button" className="timer-end" onClick={handleEndTap}>
-          END →
-        </button>
       </div>
 
       {endStaged && (
@@ -696,8 +742,16 @@ export default function Timer() {
             {pausedAt !== null ? "PAUSED" : "RUNNING"}
           </span>
         </div>
-        <div className="timer-time">
-          {fmtDuration(bigNumberSeconds(currentRun, phase, now) / 60)}
+        <div className="timer-hero">
+          <div className="timer-hero-main">
+            <div className="timer-time">{heroText}</div>
+            <div className="timer-elapsed">
+              <span className="timer-elapsed-label">ELAPSED</span>
+              <span className="timer-elapsed-value">{elapsedText}</span>
+            </div>
+          </div>
+          <span className="timer-hero-divider" aria-hidden="true" />
+          <TimerTargets phase={phase} />
         </div>
         {hasEstimate && (
           <div className="timer-phase-bar">
@@ -706,16 +760,34 @@ export default function Timer() {
         )}
       </div>
 
-      <TimerTargets phase={phase} />
-
-      {/* `UpNextStrip` (src/components/UpNextStrip.tsx, Phase 7B Task 3) —
-          the landscape-only "then …" second line it renders is still
-          governed entirely by CSS (`.timer-upnext-then`'s own base rule),
-          not a conditional keyed off orientation: neither this component
-          nor the strip has any JS notion of the device's current
-          orientation. `upNextText`/`thenNextText` stay here, unchanged —
-          the strip only ever sees their already-computed output. */}
-      <UpNextStrip upNext={upNextText(currentRun)} thenNext={thenText} />
+      <div className="timer-upnext-row">
+        {/* `UpNextStrip` (src/components/UpNextStrip.tsx, Phase 7B Task 3) —
+            the landscape-only "then …" second line it renders is still
+            governed entirely by CSS (`.timer-upnext-then`'s own base rule),
+            not a conditional keyed off orientation: neither this component
+            nor the strip has any JS notion of the device's current
+            orientation. `upNextText`/`thenNextText` stay here, unchanged —
+            the strip only ever sees their already-computed output. */}
+        <UpNextStrip upNext={upNextText(currentRun)} thenNext={thenText} />
+        {/* Pause moves here (connected-revamp Task 7, revision §5: "Pause is
+            the only level-1 control… beside UP NEXT" landscape, "full-width"
+            below TOTAL LEFT in portrait) — out of `.timer-controls`, which
+            now carries only ◀ and ▶/NEXT. Portrait's DOM order (this row,
+            then the ruler below) already puts it under TOTAL LEFT; landscape
+            re-places the SAME element beside UP NEXT via explicit grid
+            placement (index.css), the same "one DOM node, CSS decides where"
+            discipline every other landscape override in this file already
+            follows. */}
+        {showPause && (
+          <button
+            type="button"
+            className="timer-control-pause"
+            onClick={handlePauseResume}
+          >
+            {pausedAt !== null ? "Resume" : "Pause"}
+          </button>
+        )}
+      </div>
 
       {hasEstimate && (
         <TimerRuler
@@ -783,10 +855,22 @@ export default function Timer() {
         </div>
       ) : (
         // Fix round (spec review F1/F2): every phase kind — distance
-        // included — shares this SAME ◀ / Pause / [▶ or NEXT] grid now.
-        // README §6 gives the control row no distance carve-out, and a
-        // distance phase with no Pause had no recourse for a broken foot
-        // strap. Only the rightmost slot's control changes.
+        // included — shares this SAME ◀ / [▶ or NEXT] pair. README §6 gives
+        // the control row no distance carve-out, and a distance phase with
+        // no way back had no recourse for a broken foot strap.
+        //
+        // CONNECTED-REVAMP TASK 7 (revision §5): Pause is no longer a third
+        // column here — it moved to `.timer-upnext-row` above, the surface's
+        // only level-1 control now. The mockup's own timer frames draw
+        // neither ◀ nor a forward control at all (only Pause + END), but
+        // dropping them here would be a functional regression this task's
+        // brief never asked for: `tick()` never auto-advances a phase with
+        // no fixed `seconds` (engine.ts's own doc comment), so distance
+        // NEXT is the ONLY way to record an actual and move on, and ◀
+        // (rewind) is the rower's only recourse for an accidental skip.
+        // Kept, deliberately, at their existing neutral (non-L1) weight —
+        // routed to Task 8's DEVIATIONS audit as a mockup/function gap
+        // rather than silently deleted or silently left unmentioned.
         <div className="timer-controls">
           <button
             type="button"
@@ -795,13 +879,6 @@ export default function Timer() {
             onClick={handlePrev}
           >
             ◀
-          </button>
-          <button
-            type="button"
-            className="timer-control timer-control-pause"
-            onClick={handlePauseResume}
-          >
-            {pausedAt !== null ? "Resume" : "Pause"}
           </button>
           {isDistance ? (
             <button
