@@ -97,13 +97,27 @@ expect(onGrid).toStrictEqual(onLive);
 - [ ] **Step 4:** pass the same shape from `Timer.tsx` so the unconnected surface gets the identical bar (spec §5: both surfaces, one component, no fork).
 - [ ] **Step 5:** full `pnpm test`. Commit — `feat: the bar admits where the intervals actually are`.
 
+### Task 4b: The warm-up stops pretending to be a working interval (spec §5b)
+
+**Files:**
+- Modify: `app/domain/monitor/program.ts` (`ProgramInterval` carries its phase type; the push site sets it), `app/src/workout/connected/surfaceModel.ts` (the caption's ordinal and denominator; the boundary array's warm-up marking), `app/src/session/intervalBoundaries.ts` (mark the warm-up span), `app/src/session/TimerRuler.tsx` + `app/src/index.css` (the span's tone)
+- Test: `app/domain/monitor/program.test.ts`, `app/src/workout/connected/surfaceModel.test.ts`, `app/src/session/intervalBoundaries.test.ts`, `app/src/session/TimerRuler.test.tsx`
+
+**Interfaces:**
+- Produces: `ProgramInterval.type: "warmup" | "work" | "test"` (rests are folded into `restSeconds` and never appear as intervals — verify that claim in `compileProgram` before relying on it); `IntervalBoundaries` gains a per-span warm-up marker so the ruler can tone it. Task 5 consumes the caption/numbering rules.
+
+- [ ] **Step 1 (failing tests):** a program compiled from a run WITH a warm-up has `intervals[0].type === "warmup"` and the rest `"work"`; the caption reads `WARM-UP` with no ordinal during the warm-up and `1 OF 4` on the first work piece of a 4-piece workout (NOT `2 OF 5`); the denominator counts working intervals only; the boundary array marks the warm-up's span; the ruler renders that span in the unfilled-track tone; a session with NO warm-up is byte-identical to today (the regression pin — most sessions have none).
+- [ ] **Step 2:** add the type to `ProgramInterval` at its definition and its push site. This is a wire-IR shape change: check every consumer (`grep -rn "ProgramInterval"`) and every fixture that builds one.
+- [ ] **Step 3:** caption and denominator in `surfaceModel.ts`; the warm-up marker through `intervalBoundaries.ts` to the ruler; the tone rule in CSS using existing tokens (no new colour).
+- [ ] **Step 4:** full `pnpm test`, `pnpm e2e`, `pnpm screenshots` (a warm-up fixture re-shoots legitimately; add one if none exists — the state must have a committed visual record). Commit — `feat: the warm-up says what it is and stops taking a number`.
+
 ### Task 5: The grid rebuild
 
 **Files:**
 - Modify: `app/src/workout/connected/PaneGrid.tsx`, `app/src/index.css` (the grid block + landscape)
 - Test: `app/src/workout/connected/PaneGrid.test.tsx` (its two-line-shape suites retire per Task 1's inventory; new single-line pins replace them)
 
-- [ ] **Step 1 (failing tests):** every row is single-line at a FIXED height (36px landscape / 40px portrait) including the active row (no third line); 8 rows visible landscape and 12 portrait; the header carries the totals (`3 OF 12 · WORK · 0:47 LEFT` and `38:20 TOTAL`) and the interval countdown; completed rows ink over a solid rule, active row `--surface` between two ink rules with a 4×20 marker and no card padding, upcoming rows `--ink-3` over a dashed rule; the active row is scrolled into view; values render at `--size-row`.
+- [ ] **Step 1 (failing tests):** every row is single-line at a FIXED height (**32px landscape** / 40px portrait) including the active row (no third line); **7 rows visible landscape** and 12 portrait (JAMES RULING 2026-08-12, superseding the packet's 8-at-36: the measured landscape scroller is 232px, so 8×36 cannot fit and 7×32 is what the budget holds — DEVIATIONS row owed); **the warm-up row's `#` cell reads `WU` and takes no number, with work numbering starting at 1** (spec §5b, built in Task 4b — consume its `ProgramInterval.type`, do not re-derive); the header carries the totals (`3 OF 12 · WORK · 0:47 LEFT` and `38:20 TOTAL`) and the interval countdown; completed rows ink over a solid rule, active row `--surface` between two ink rules with a 4×20 marker and no card padding, upcoming rows `--ink-3` over a dashed rule; the active row is scrolled into view; values render at `--size-row`.
 - [ ] **Step 2:** rebuild the rows (portrait loses its second line and 30px indent; landscape keeps its column weights from the revision's table). Judged tints stay on actual `/500M` and `SPM` cells only.
 - [ ] **Step 3:** move the totals into the header; the distance caption stays pinned beneath.
 - [ ] **Step 4:** re-run Task 1's no-clip pin (the row is now denser). Full `pnpm test`, `pnpm e2e`. Commit — `feat: the grid stops using two lines to say one thing`.
@@ -151,7 +165,7 @@ Controller-run, one item at a time ([[hardware-session-pacing]]). Dev build via 
 
 ## Execution notes
 
-- Order is strict. Tasks 1-2 establish geometry every later task measures against; 4 before 5 only because the grid's header consumes the same totals the bar's boundaries derive from.
+- Order is strict; Task 4b (the warm-up) sits between the bar and the grid because the grid consumes its numbering rule. Tasks 1-2 establish geometry every later task measures against; 4 before 5 only because the grid's header consumes the same totals the bar's boundaries derive from.
 - Models: T1 sonnet (measurement + inventory); T2 sonnet; T3 sonnet; **T4 the most capable available** (the boundary derivation is the wave's only real logic, and its re-anchoring rule is James's own); T5 sonnet; T6 sonnet; T7 sonnet; T8 sonnet.
 - Every dispatch carries: the SDLC briefing, the worktree path, the Node-26 line, the no-concurrent-suites rule, the RE-VERIFY-YOUR-CITES rule, and its spec § plus the mockup path.
 - The T4 reviewer re-derives the notch positions by hand against a fixture and checks the interval-vs-phase unit BY EYE — a mocked model can be internally consistent and still disagree with the caption.
