@@ -142,6 +142,41 @@ function libraryFixture(title: string, warmupMinutes: number): Fixture {
   };
 }
 
+/** Task 5 fix round (coordinator directive): a warm-up whose OWN `kind` is
+ *  `"distance"` is real and reachable (`WarmupSetting.kind === "distance"`,
+ *  `engine.ts`'s `warmupPhases` — a rower can set a metres warm-up, not
+ *  only a minutes one), and it is the one shape `libraryFixture` above
+ *  cannot build (its warmup arg is always `{ kind: "time" }`). Every other
+ *  fixture in this file opens with a TIME warm-up, so nothing was pinning
+ *  `distanceCaptionFor`'s exclusion of a distance-kind warm-up from the
+ *  caption's row list — the same exclusion this task's own `#` column
+ *  numbering bug (fixed, not caught by a test until now) should have
+ *  warned against leaving unpinned. */
+function distanceWarmupFixture(title: string, meters: number): Fixture {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  const id = `${title.toLowerCase().replace(/ /g, "-")}-distance-warmup`;
+  const draft = buildDraft({
+    id,
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const phases = buildRun(draft, baselines, t0, {
+    kind: "distance",
+    meters,
+  }).phases;
+  const program = compileProgram(phases);
+  if ("code" in program) {
+    throw new Error(`fixture failed to compile: ${program.code}`);
+  }
+  return {
+    program,
+    phases,
+    identity: { workoutId: id, title: w.title, ...TEST_SEED },
+  };
+}
+
 /** 5 intervals: `time 480` warm-up, then 4 x `distance 2000` with 180 s of
  *  rest. Mixed, and short enough to assert every row of. */
 const FILLING_LOW = libraryFixture("Filling Low", 8);
@@ -605,6 +640,31 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     expect(captionFor(1000)).toContain("IS A 1000 M PIECE");
     // A leading 1 alone is not the rule — three digits are spoken plainly.
     expect(captionFor(180)).toContain("IS A 180 M PIECE");
+  });
+
+  it("excludes a DISTANCE-KIND warm-up from the caption's row list (design spec §5b)", () => {
+    // The warm-up here is itself a distance interval — 1000 m, not one of
+    // Filling Low's own 2000 m work pieces. It gets no ordinal (§5b: "the
+    // denominator counts WORKING intervals only"), so it must not be named
+    // by the caption's row list either, even though its OWN `kind` is
+    // "distance" and would otherwise satisfy the caption's filter.
+    const fixture = distanceWarmupFixture("Filling Low", 1000);
+    expect(fixture.program.intervals[0]).toMatchObject({
+      type: "warmup",
+      kind: "distance",
+      value: 1000,
+    });
+    renderGrid({}, fixture);
+    // The `#` cell still reads WU, exactly as the time-warm-up fixtures do.
+    expect(cells(row(1)).num).toBe("WU");
+    // If the warm-up leaked into the caption's count, the four uniform
+    // 2000 m pieces plus one non-matching 1000 m warm-up would break
+    // uniformity and fall to the OTHER branch entirely — "5 ROWS ARE
+    // DISTANCE PIECES", not the four-item list. The exact list proves both
+    // the count (4, not 5) and the numbers (1-4, not 2-5 or 1-5).
+    expect(
+      screen.getByText("ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
+    ).toBeInTheDocument();
   });
 
   it("says nothing at all when there is no distance interval to explain", () => {

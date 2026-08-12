@@ -283,10 +283,14 @@ describe("screen fixtures for pnpm screenshots", () => {
 
   /** The scroll case, and the only one that can show it: 25 intervals, the
    *  active row eight deep. Header and caption pinned, seven rows visible
-   *  at 390×844's landscape height and twelve at portrait's (connected-
-   *  revamp Task 5, JAMES RULING 2026-08-12 superseding the packet's
-   *  8-at-36px landscape figure — `e2e/screenshots.spec.ts` measures both
-   *  counts in a real browser), the rest below the fold. */
+   *  at 390×844's landscape height and fourteen at portrait's (connected-
+   *  revamp Task 5, two separate JAMES RULINGS 2026-08-12: landscape
+   *  supersedes the packet's 8-at-36px figure on a measured budget too
+   *  tight to hold it; portrait's fix round reverses this task's own first
+   *  attempt, which forced the packet's unmeasured 12 with a deliberate
+   *  spacer — portrait now takes every row its budget actually holds, no
+   *  code hiding capacity — `e2e/screenshots.spec.ts` measures both counts
+   *  in a real browser), the rest below the fold. */
   it("pane C, twenty-five intervals", async () => {
     await expect(
       capture("grid", {
