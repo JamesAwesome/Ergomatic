@@ -1,5 +1,5 @@
 import { EMPTY_FILTERS, type DurationBucket, type Filters } from "./filters";
-import type { WorkoutType } from "../../domain/types.js";
+import type { Difficulty, WorkoutType } from "../../domain/types.js";
 import { clearLibraryScroll } from "./libraryScroll";
 
 /** sessionStorage key for Library's active filters. Same lifecycle as
@@ -11,11 +11,18 @@ import { clearLibraryScroll } from "./libraryScroll";
 export const LIBRARY_FILTERS_KEY = "ergomatic.libraryFilters";
 
 const TYPES: readonly WorkoutType[] = ["AN", "O2", "AT", "TR"];
+const DIFFICULTIES: readonly Difficulty[] = ["easy", "medium", "hard"];
 const BUCKETS: readonly DurationBucket[] = ["<30", "30-45", "45-60", "60+"];
 const PAIN_LEVELS: readonly number[] = [1, 2, 3, 4, 5];
 
 function isWorkoutType(v: unknown): v is WorkoutType {
   return typeof v === "string" && (TYPES as readonly string[]).includes(v);
+}
+
+function isDifficulty(v: unknown): v is Difficulty {
+  return (
+    typeof v === "string" && (DIFFICULTIES as readonly string[]).includes(v)
+  );
 }
 
 function isBucket(v: unknown): v is DurationBucket {
@@ -29,11 +36,13 @@ function isPainLevel(v: unknown): v is number {
 /** Strict shape check — a stored value that predates a future Filters
  *  change (or was hand-edited) must come back `null`, never a Filters with
  *  a hole in it: applyFilters trusts every field. This is also, by
- *  construction, the fix for a v1-shaped record left over from before Task 4
- *  (ui-fix round): v1's fields were `painMax3`/`recency`/`customOnly`, none
- *  of which this parser reads, so a v1 record fails the v2 checks below on
- *  every field but `type`/`durations` and falls back to EMPTY_FILTERS whole
- *  — never a v2 Filters half-populated from v1 data. */
+ *  construction, the fix for every prior-shaped record: the pre-Task-4 (v1)
+ *  shape's fields were `painMax3`/`recency`/`customOnly`, and the v2 shape
+ *  (Task 4 through the ui-fix round) used a single `type: WorkoutType |
+ *  null` where this checks a `types` array — neither name overlaps this
+ *  parser's own field list, so both fail on `types` (v1 has no such field
+ *  at all; v2's `type` is a different key) and fall back to EMPTY_FILTERS
+ *  whole, never a v3 Filters half-populated from older data. */
 function parseFilters(raw: string): Filters | null {
   let parsed: unknown;
   try {
@@ -45,7 +54,10 @@ function parseFilters(raw: string): Filters | null {
     return null;
   }
   const f = parsed as Record<string, unknown>;
-  if (f.type !== null && !isWorkoutType(f.type)) return null;
+  if (!Array.isArray(f.types) || !f.types.every(isWorkoutType)) return null;
+  if (!Array.isArray(f.difficulties) || !f.difficulties.every(isDifficulty)) {
+    return null;
+  }
   if (!Array.isArray(f.durations) || !f.durations.every(isBucket)) return null;
   if (!Array.isArray(f.painLevels) || !f.painLevels.every(isPainLevel)) {
     return null;
@@ -61,11 +73,13 @@ function parseFilters(raw: string): Filters | null {
     return null;
   }
   return {
-    type: f.type,
-    // De-duped defensively: toggleDuration/togglePainLevel can never
-    // produce a duplicate, but a tampered/legacy stored value could, and
-    // .includes-based state plus bucket/level matching both silently
-    // tolerate dupes — better to normalise here than trust storage.
+    // De-duped defensively: toggleType/toggleDifficulty/toggleDuration/
+    // togglePainLevel can never produce a duplicate, but a tampered/legacy
+    // stored value could, and .includes-based state plus code/level
+    // matching both silently tolerate dupes — better to normalise here
+    // than trust storage.
+    types: [...new Set(f.types)],
+    difficulties: [...new Set(f.difficulties)],
     durations: [...new Set(f.durations)],
     painLevels: [...new Set(f.painLevels)],
     lastDone: f.lastDone,

@@ -715,7 +715,7 @@ test.describe("Today enhancements: freestyle spot-check", () => {
     // No plan active — nothing to swap away from, so the type-swap chip
     // row doesn't render at all (unaffected by this round: it never lived
     // inside the sheet).
-    await expect(page.locator(".today-type-chips")).toHaveCount(0);
+    await expect(page.locator(".type-chip-grid")).toHaveCount(0);
   });
 });
 

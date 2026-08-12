@@ -1,64 +1,79 @@
 import { useRef } from "react";
-import type { WorkoutType } from "../../domain/types.js";
 import type { DurationBucket } from "../../domain/duration.js";
+import type { Difficulty } from "../../domain/types.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
+import { DIFFICULTY_CHIPS } from "../components/difficultyChips";
 import { DURATION_CHIPS } from "../components/durationChips";
 import {
   RECENCY_BOUNDARY_DAYS,
-  clearFilters,
+  clearSheetFilters,
   setLastDone,
   setSource,
+  toggleDifficulty,
   toggleDuration,
   togglePainLevel,
-  toggleType,
   type Filters,
 } from "./filters";
 
-// Chip order per docs/design/README.md §Screens → "2. Library" (amended
-// 2026-08-08: James's ordering decision — every left-to-right type row reads
-// O2 · AT · TR · AN app-wide, the pyramid's base-first order, superseding
-// this sheet's earlier AN-first order carried over from the retired
-// FilterChips.tsx).
-const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
-  { type: "O2", label: "O2" },
-  { type: "AT", label: "AT" },
-  { type: "TR", label: "TR" },
-  { type: "AN", label: "AN" },
-];
-
 const PAIN_LEVELS = [1, 2, 3, 4, 5];
-
-// CSS custom property per workout type — never a raw hex (tokens.css). Kept
-// local rather than shared with TypeBadge.tsx/Today.tsx/ClassificationCard.tsx's
-// own identical maps: this repo's established per-file duplication
-// convention (TypeBadge.tsx's own comment names the precedent).
-const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
-  O2: "--type-o2",
-  AT: "--type-at",
-  AN: "--type-an",
-  TR: "--type-tr",
-};
-
-function typeCellStyle(active: boolean, type: WorkoutType) {
-  if (!active) return undefined;
-  const v = `var(${TYPE_COLOR_VAR[type]})`;
-  return { background: v, borderColor: v, color: "var(--on-color)" };
-}
 
 // The one h2 in this sheet — SheetShell points its own `aria-labelledby` at
 // this id rather than taking the title text itself, so it stays completely
 // unaware of what a caller's title even says.
 const TITLE_ID = "filter-sheet-title";
 
+// Fix round (M1, 2026-08-04 round, mirrored here Task 2 of the
+// library-filter-unification round): the live-count caption's own id —
+// SheetShell's primary button points its `aria-describedby` here, so a
+// screen-reader user tabbing to (or announcing) "Apply Filter" also hears
+// the count and the reason it's disabled at 0, which a disabled button's own
+// unreachable focus state can no longer surface any other way now that the
+// count left the button's accessible NAME. Copied verbatim from
+// TodayFilterSheet.tsx's own COUNT_ID idiom (spec §3).
+const COUNT_ID = "filter-sheet-count";
+
 /**
  * The FILTER sheet (Task 4, ui-fix round — DESIGN.md's "Library, second
  * pass"): slides up over the list (not a route — Library.tsx never pushes
- * history for it), holding all five filter groups plus a live-counting L1
- * button. Operates entirely on a DRAFT copy of Filters that the caller owns
- * (`draft`/`onChangeDraft`) — nothing here writes to the list's actually-
- * applied filters directly. `onApply` commits the draft (Library.tsx's own
- * "Show N workouts" handler); `onDismiss` (backdrop tap) discards it.
+ * history for it), holding five filter groups (DIFFICULTY, TIME, PAIN, LAST
+ * DONE, SOURCE) plus a live-counting L1 button. Operates entirely on a DRAFT
+ * copy of Filters that the caller owns (`draft`/`onChangeDraft`) — nothing
+ * here writes to the list's actually-applied filters directly. `onApply`
+ * commits the draft (Library.tsx's own handler); `onDismiss` (backdrop tap)
+ * discards it.
+ *
+ * TYPE left this sheet entirely (library-filter-unification round, Task 1,
+ * pulled forward from Task 2's own item so the branch kept compiling across
+ * the task boundary — spec §2: "The TYPE group leaves `FilterSheet`
+ * entirely"). Its chip row now lives above the list (Library.tsx, Task 2's
+ * own work) — this sheet has no UI path to filter by type at all, by design.
+ * DIFFICULTY (Task 2) joins this sheet in TYPE's old slot: unlike Today's
+ * DIFFICULTY group (whose "empty" is impossible — `suggest()` always has
+ * SOME difficulty preference), Library's own convention is the same as
+ * `durations`/`painLevels` here — empty means no filter, and CLEAR ALL keeps
+ * emptying to nothing (spec §1).
+ *
+ * CLEAR vs. CLEAR ALL (fix round, whole-branch review finding B): this
+ * sheet's own CLEAR button (`clearSheetFilters`) resets only the groups
+ * rendered IN HERE — DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE — leaving
+ * `draft.types` exactly as the rower left it. Before this fix CLEAR called
+ * the whole-library `clearFilters()`, silently emptying `types` too even
+ * though the sheet shows no TYPE control and gives no indication that
+ * pressing CLEAR would touch it. `Library.tsx`'s own CLEAR ALL (the
+ * token-row control, outside this component entirely) is unchanged — it
+ * still calls `clearFilters()` and still empties everything, `types`
+ * included; that is the one control whose whole job is "clear everything."
+ *
+ * The primary reads the constant **`Apply Filter`** (Today's own contract,
+ * adopted verbatim, spec §3) rather than a live "Show N workouts" — the
+ * count moved OUT of the button's accessible name into a caption above it
+ * (`{n} WORKOUTS` / `1 WORKOUT` / `NO WORKOUTS MATCH`, singular- and zero-
+ * aware), wired by `aria-describedby` so a screen-reader user still hears
+ * why a disabled button is disabled. Library's own zero-match copy
+ * ("NO WORKOUTS MATCH") deliberately diverges from Today's ("0 OPTIONS") —
+ * the old "no workouts match" wording's helpfulness is worth keeping now
+ * that the count moved, per the spec's own flagged divergence.
  *
  * BACK-with-sheet-open decision (task-4-brief's own ask): this component has
  * no route and pushes no history entry, so leaving Library by ANY means
@@ -74,7 +89,7 @@ const TITLE_ID = "filter-sheet-title";
  * The dialog machinery itself (backdrop, `role="dialog"`, the focus
  * trap/restore) lives in SheetShell now (extracted for Today's own
  * collapsible filter sheet, task-1 of the 2026-08-04 round) — this
- * component supplies only the five filter groups and the resultCount-driven
+ * component supplies only the filter groups and the resultCount-driven
  * primary button, via SheetShell's `children`/`primary` props.
  */
 export default function FilterSheet({
@@ -105,12 +120,10 @@ export default function FilterSheet({
       onDismiss={onDismiss}
       opener={openerRef}
       primary={{
-        label:
-          resultCount === 0
-            ? "No workouts match"
-            : `Show ${resultCount} workout${resultCount === 1 ? "" : "s"}`,
+        label: "Apply Filter",
         disabled: resultCount === 0,
         onPress: onApply,
+        describedBy: COUNT_ID,
       }}
     >
       <div className="filter-sheet-header">
@@ -120,25 +133,21 @@ export default function FilterSheet({
         <button
           type="button"
           className="filter-sheet-clear"
-          onClick={() => onChangeDraft(clearFilters())}
+          onClick={() => onChangeDraft(clearSheetFilters(draft))}
         >
           CLEAR
         </button>
       </div>
 
       <CellGrid
-        label="TYPE"
-        cells={TYPE_CHIPS.map(({ type, label }) => {
-          const active = draft.type === type;
-          return {
-            value: type,
-            label,
-            pressed: active,
-            style: typeCellStyle(active, type),
-          };
-        })}
+        label="DIFFICULTY"
+        cells={DIFFICULTY_CHIPS.map(({ value, label }) => ({
+          value,
+          label,
+          pressed: draft.difficulties.includes(value),
+        }))}
         onToggle={(value) =>
-          onChangeDraft(toggleType(draft, value as WorkoutType))
+          onChangeDraft(toggleDifficulty(draft, value as Difficulty))
         }
       />
 
@@ -206,6 +215,17 @@ export default function FilterSheet({
           }
         />
       </div>
+
+      {/* The live match count, moved off the primary button's own copy
+          (now the constant "Apply Filter") onto a small mono caption
+          directly above it — the only remaining explanation of why the
+          button disables at 0 (spec §3). Singular- and zero-aware; Library's
+          own noun ("WORKOUTS"), not Today's ("OPTIONS"). */}
+      <p id={COUNT_ID} className="library-filter-sheet-count">
+        {resultCount === 0
+          ? "NO WORKOUTS MATCH"
+          : `${resultCount} WORKOUT${resultCount === 1 ? "" : "S"}`}
+      </p>
     </SheetShell>
   );
 }

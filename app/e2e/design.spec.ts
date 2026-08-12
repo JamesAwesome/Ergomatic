@@ -374,6 +374,21 @@ test.describe("library screen", () => {
     await assertNoA11yViolations(page);
   });
 
+  // Fix round (whole-branch review, finding D): the TYPE chip row (four
+  // bare `aria-pressed` buttons, library-filter-unification round) replaced
+  // a sheet `CellGrid` that had `role="group"` + a visible label — axe's
+  // own scan above doesn't catch a missing GROUP around otherwise-correctly-
+  // named buttons, so this is a dedicated structural pin, mirroring the
+  // sheet's own "DIFFICULTY/TIME/PAIN each expose a role=group" sweep
+  // further down this file for `TodayFilterSheet`/`FilterSheet`.
+  test("the TYPE chip row exposes a role=group named TYPE", async ({
+    page,
+  }) => {
+    const group = page.getByRole("group", { name: "TYPE" });
+    await expect(group).toBeVisible();
+    await expect(group.getByRole("button")).toHaveCount(4);
+  });
+
   // L1 (whole-branch review): this describe renders `.workout-row-meta`
   // (11px mono), a guard-gap the ink-4 sweep never covered on this screen.
   // Waits for a real row first — unlike every other describe this sweep
@@ -409,14 +424,21 @@ test.describe("library screen", () => {
   test("zero WCAG 2A/2AA violations with an active filter token on screen", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    // Needs a real TOKEN on screen, so it must come from a sheet group:
+    // TYPE moved to its own chip row AND stopped tokenizing (2026-08-12,
+    // "already visible"), so the chip alone would leave the token row empty
+    // and this sweep would assert nothing. A pressed chip is included too,
+    // so the pass covers both indicators at once.
     await page
-      .getByRole("dialog")
+      .locator(".type-chip-grid")
       .getByRole("button", { name: "O2", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await dialog.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
-      page.locator(".filter-token", { hasText: "O2" }),
+      page.locator(".filter-token-label", { hasText: "MEDIUM" }),
     ).toBeVisible();
     await assertNoA11yViolations(page);
   });
@@ -428,35 +450,40 @@ test.describe("library screen", () => {
     expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
   });
 
-  // Task 4 (ui-fix round): a TYPE token fills with its own type colour, the
-  // same selected-state rule DESIGN.md extends from chips to tokens — never
-  // a flat accent regardless of which type is active.
-  test("a TYPE token fills with its own type colour, not accent", async ({
+  // Task 4 (ui-fix round) asserted this rule on the TYPE TOKEN; that token
+  // was retired on 2026-08-12 ("already visible"). The RULE is unchanged and
+  // still needs a guard — DESIGN.md's selected-state rule: a type's control
+  // wears that type's OWN colour, never a flat accent — so the subject moves
+  // to the chip row, which is where a selected type is now shown. Same
+  // expected colour, same reason; only the element changed.
+  test("a selected TYPE chip fills with its own type colour, not accent", async ({
     page,
   }) => {
-    await page.getByRole("button", { name: "FILTER ⌄" }).click();
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "O2", exact: true })
-      .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+    const chip = page
+      .locator(".type-chip-grid")
+      .getByRole("button", { name: "O2", exact: true });
+    await chip.click();
 
-    const tokenBg = await page
-      .locator(".filter-token", { hasText: "O2" })
-      .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(tokenBg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+    const chipBg = await chip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(chipBg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+
+    // And the retired token really is gone — no pill restates the type.
+    await expect(
+      page.locator(".filter-token-label", { hasText: /^O2$/ }),
+    ).toHaveCount(0);
   });
 
-  // Task 4 (ui-fix round): every other token kind fills plain ink.
-  test("a non-TYPE token (e.g. LAST DONE) fills ink, not accent", async ({
-    page,
-  }) => {
+  // Task 4 (ui-fix round): every token kind fills plain ink — now that
+  // TYPE is not tokenized, that is EVERY token, with no exceptions.
+  test("a token (e.g. LAST DONE) fills ink, not accent", async ({ page }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: "21D+", exact: true })
       .click();
-    await page.getByRole("button", { name: /^Show \d+ workouts?$/ }).click();
+    await page.getByRole("button", { name: "Apply Filter" }).click();
 
     const tokenBg = await page
       .locator(".filter-token", { hasText: "21D+" })
@@ -1067,23 +1094,26 @@ test.describe("today screen (plan active, logs present)", () => {
 
   // Amendment (2026-08-04 PR #50 round), Task 2: the four type-swap chips
   // now span the plan line's full content width as a 4-column 1fr grid
-  // (`.today-type-chips`, index.css) instead of sitting left-packed at
-  // their own intrinsic `.chip` width inside a flex-wrap row. Verified via
-  // real bounding boxes (jsdom has no layout engine) — all four chips are
-  // near-equal width (a 1fr share each) and the row's total span (first
-  // chip's left edge to last chip's right edge) reaches the container's
-  // own width, proving they stretch rather than merely sit side by side.
+  // (`.type-chip-grid`, index.css — renamed from `.today-type-chips` in the
+  // library-filter-unification round, Task 2: Library's own multi-select
+  // chip row needed the identical grid override) instead of sitting
+  // left-packed at their own intrinsic `.chip` width inside a flex-wrap
+  // row. Verified via real bounding boxes (jsdom has no layout engine) —
+  // all four chips are near-equal width (a 1fr share each) and the row's
+  // total span (first chip's left edge to last chip's right edge) reaches
+  // the container's own width, proving they stretch rather than merely sit
+  // side by side.
   test("the type-swap chips span the full row as a 4-column grid, not left-packed intrinsic widths", async ({
     page,
   }) => {
     const chips = await page
-      .locator(".today-type-chips .chip")
+      .locator(".type-chip-grid .chip")
       .evaluateAll((els) =>
         els.map((el) => el.getBoundingClientRect().toJSON()),
       );
     expect(chips).toHaveLength(4);
 
-    const rowBox = (await page.locator(".today-type-chips").boundingBox())!;
+    const rowBox = (await page.locator(".type-chip-grid").boundingBox())!;
 
     // Every cell within a few px of an equal 1fr share of the row.
     const expectedWidth = rowBox.width / 4;

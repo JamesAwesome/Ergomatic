@@ -5,7 +5,8 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
-import type { Step } from "../../domain/types.js";
+import type { Step, WorkoutType } from "../../domain/types.js";
+import { TYPE_WORDS } from "../components/typeWords";
 
 /** A work step of exactly `minutes` at this file's 6k baseline (off 0), so
  *  `estimateMinutes` prices each fixture to the round number its row is
@@ -108,6 +109,38 @@ const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
 const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
 const SEA_FRET = realLibraryEntry("Sea Fret", "w-seafret");
 
+// Controller addendum, carried-forward subject E: the 3-workout WORKOUTS
+// fixture above has exactly one workout per type, so it can't distinguish a
+// TYPE union (selecting two chips shows BOTH types' rows) from a
+// single-select swap (selecting the second chip would just replace the
+// first). Built from the real 300-workout seed (recurring-failure #3),
+// picking the first two rows of each type by index rather than by title —
+// unlike `realLibraryEntry`, this doesn't need to name specific titles.
+function realWorkoutsOfType(
+  type: WorkoutType,
+  count: number,
+): LibraryWorkout[] {
+  return LIBRARY_WORKOUTS.filter((w) => w.type === type)
+    .slice(0, count)
+    .map((w, i) => ({
+      id: `w-real-${type}-${i}`,
+      title: w.title,
+      type: w.type,
+      difficulty: w.difficulty,
+      pain: w.pain,
+      steps: w.steps,
+      isGlobal: true,
+      lastDoneDaysAgo: null,
+    }));
+}
+
+const MULTI_TYPE_WORKOUTS: LibraryWorkout[] = [
+  ...realWorkoutsOfType("O2", 2),
+  ...realWorkoutsOfType("AT", 2),
+  ...realWorkoutsOfType("TR", 2),
+  ...realWorkoutsOfType("AN", 2),
+];
+
 // Final-review fix: a CUSTOM (isGlobal: false) workout that happens to
 // collide with a designated onboarding title. The exclusion must key off
 // isGlobal too, not title alone — otherwise a rower's own "First 6k" build
@@ -182,14 +215,13 @@ async function openSheet() {
   await userEvent.click(screen.getByRole("button", { name: "FILTER ⌄" }));
 }
 
-/** Clicks the sheet's own live-counting primary — its accessible name
- *  changes with the draft ("Show 12 workouts"), hence the regex. Only valid
- *  when the draft matches at least one workout; the button is disabled
- *  ("No workouts match") otherwise, by design (FilterSheet.tsx). */
+/** Clicks the sheet's own primary — the constant "Apply Filter" regardless
+ *  of the draft (library-filter-unification, Task 2: the live count moved to
+ *  a caption above it). Only valid when the draft matches at least one
+ *  workout; the button is disabled at zero matches, by design
+ *  (FilterSheet.tsx). */
 async function applySheet() {
-  await userEvent.click(
-    screen.getByRole("button", { name: /^Show \d+ workouts?$/ }),
-  );
+  await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
 }
 
 beforeEach(() => {
@@ -249,14 +281,14 @@ describe("Library", () => {
       expect(toggle).toHaveAttribute("aria-expanded", "true");
       expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
 
+      // PAIN 3, not TYPE — TYPE left the sheet this round; w-at is the
+      // fixture's only pain-3 workout, so this still narrows to exactly 1.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
-      expect(
-        screen.getByRole("button", { name: "Show 1 workout" }),
-      ).toBeInTheDocument();
+      expect(screen.getByText("1 WORKOUT")).toBeInTheDocument();
       await applySheet();
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -270,9 +302,10 @@ describe("Library", () => {
       await renderLibrary();
 
       await openSheet();
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
       // The backdrop is the dialog's own parent; clicking it (not the panel)
@@ -295,9 +328,10 @@ describe("Library", () => {
       await renderLibrary();
 
       await openSheet();
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
       await userEvent.keyboard("{Escape}");
@@ -330,15 +364,16 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       );
       // Dismiss without applying.
       await userEvent.keyboard("{Escape}");
 
       await openSheet();
       expect(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       ).toHaveAttribute("aria-pressed", "false");
     });
 
@@ -348,12 +383,11 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       );
-      expect(
-        screen.getByRole("button", { name: "Show 1 workout" }),
-      ).toBeInTheDocument();
+      expect(within(dialog()).getByText("1 WORKOUT")).toBeInTheDocument();
 
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "CLEAR" }),
@@ -361,53 +395,101 @@ describe("Library", () => {
 
       expect(dialog()).toBeVisible();
       expect(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       ).toHaveAttribute("aria-pressed", "false");
+      expect(within(dialog()).getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+
+    // Fix round (whole-branch review, finding B): the sheet's own CLEAR
+    // used to call the whole-library `clearFilters()`, silently emptying
+    // `types` too even though the sheet renders no TYPE control at all
+    // (TYPE's own chip row lives outside it, applied directly to `filters`
+    // rather than the sheet's draft) — a rower had no way to see that
+    // pressing this CLEAR would also drop their chip-row selection. This
+    // pins the fix: CLEAR resets exactly the sheet's own groups.
+    it("the sheet's own CLEAR leaves an active TYPE chip standing, resetting only the sheet's own groups", async () => {
+      mockReady();
+      await renderLibrary();
+
+      // TYPE via the chip row (outside the sheet, applied immediately) —
+      // narrows straight to w-o2.
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+
+      await openSheet();
+      const dialog = () => screen.getByRole("dialog");
+      // PAIN 5 is w-an's own level, not w-o2's — combined with the
+      // already-active TYPE=O2 this is a genuine zero-match draft, proving
+      // the two groups actually compose before CLEAR is pressed.
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "5" }),
+      );
       expect(
-        screen.getByRole("button", { name: "Show 3 workouts" }),
+        within(dialog()).getByText("NO WORKOUTS MATCH"),
       ).toBeInTheDocument();
+
+      await userEvent.click(
+        within(dialog()).getByRole("button", { name: "CLEAR" }),
+      );
+
+      // The sheet's own PAIN group is reset...
+      expect(
+        within(dialog()).getByRole("button", { name: "5" }),
+      ).toHaveAttribute("aria-pressed", "false");
+      // ...and the draft is back to "TYPE=O2 only" — one match, not zero
+      // and not the full library — proving `types` survived CLEAR.
+      expect(within(dialog()).getByText("1 WORKOUT")).toBeInTheDocument();
+
+      // The chip row itself (outside the sheet entirely) was never touched.
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      // ...and it still contributes no token — the chip IS the indicator
+      // (2026-08-12: "already visible").
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
     });
 
-    it("the primary disables and reads 'No workouts match' when the draft matches nothing", async () => {
+    it("the primary disables (and the caption reads 'NO WORKOUTS MATCH') when the draft matches nothing", async () => {
       mockReady();
       await renderLibrary();
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // AT's only workout is a 30-minute step, which buckets as 30-45 —
-      // <30′ combined with AT matches nothing.
+      // PAIN 1 (only w-o2) and 60′+ (only w-an, its 60-minute step buckets
+      // as 60+) share no workout — TYPE, which used to drive this test via
+      // AT + <30′, left the sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "1" }),
       );
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "<30′" }),
+        within(dialog()).getByRole("button", { name: "60′+" }),
       );
 
-      const primary = screen.getByRole("button", {
-        name: "No workouts match",
-      });
-      expect(primary).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Apply Filter" }),
+      ).toBeDisabled();
+      expect(screen.getByText("NO WORKOUTS MATCH")).toBeInTheDocument();
     });
 
-    it("toggling the same TYPE cell twice in one sheet session clears it (single-select, toggles off)", async () => {
+    // library-filter-unification round, Task 2: DIFFICULTY joins the sheet
+    // in TYPE's old slot.
+    it("narrows via DIFFICULTY in the sheet", async () => {
       mockReady();
       await renderLibrary();
 
       await openSheet();
-      const dialog = () => screen.getByRole("dialog");
-      const atCell = within(dialog()).getByRole("button", {
-        name: "AT",
-      });
-      await userEvent.click(atCell);
-      await userEvent.click(atCell);
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "HARD",
+        }),
+      );
       await applySheet();
 
-      expect(visibleHrefs()).toStrictEqual([
-        "/library/w-at",
-        "/library/w-o2",
-        "/library/w-an",
-      ]);
-      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual(["/library/w-an"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
     });
 
     it("narrows to NOT-RECENT rows via LAST DONE 21D+, counting never-done as 21D+", async () => {
@@ -434,17 +516,19 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // AT + PAIN 3 both match w-at (fixture: type AT, pain 3) — two groups
-      // active together, still exactly one result.
+      // 30–45′ + PAIN 3 both match w-at (fixture: a 30-minute step buckets
+      // as 30-45, pain 3) — two groups active together, still exactly one
+      // result. TYPE, which used to be the first of the pair, left the
+      // sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "30–45′" }),
       );
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "3" }),
       );
       await applySheet();
 
-      expect(tokenLabel("AT")).toBeInTheDocument();
+      expect(tokenLabel("30–45′")).toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
@@ -463,15 +547,16 @@ describe("Library", () => {
       mockReady();
       await renderLibrary();
 
-      // Applied in two sheet visits (AT alone, then AT+PAIN 3 together) —
-      // w-at is the fixture's only AT *and* only pain-3 workout, so
+      // Applied in two sheet visits (30–45′ alone, then +PAIN 3) — w-at is
+      // the fixture's only 30-45-bucket *and* only pain-3 workout, so
       // selecting both in one draft would still resolve to exactly it, but
       // going through two visits proves the SECOND apply doesn't clobber
-      // the first group, only adds to it.
+      // the first group, only adds to it. TYPE, which used to be the
+      // first-applied group here, left the sheet this round.
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "30–45′",
         }),
       );
       await applySheet();
@@ -484,20 +569,318 @@ describe("Library", () => {
       );
       await applySheet();
 
-      expect(tokenLabel("AT")).toBeInTheDocument();
+      expect(tokenLabel("30–45′")).toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Remove AT filter" }),
+        screen.getByRole("button", { name: "Remove 30–45′ filter" }),
       );
 
       expect(
-        screen.queryByText("AT", { selector: ".filter-token-label" }),
+        screen.queryByText("30–45′", { selector: ".filter-token-label" }),
       ).not.toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);
+    });
+  });
+
+  // library-filter-unification round, Task 2 (spec §2): TYPE's chip row now
+  // sits above the sheet/token row, multi-select, persisting immediately.
+  describe("type chip row", () => {
+    // Carried-forward subject A (Task 1's deletion left this homeless):
+    // James's ordering decision is real DOM order, not just presence — an
+    // existence-only loop can't tell this apart from the old order.
+    it("renders left-to-right as O2, AT, TR, AN", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const chipRow = document.querySelector<HTMLElement>(".type-chip-grid")!;
+      const labels = within(chipRow)
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+      expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
+    });
+
+    // Fix round (whole-branch review, finding D): the OLD TYPE control (a
+    // sheet CellGrid) had `role="group"` + a visible "TYPE" label; this row
+    // replaced it with four bare `aria-pressed` buttons and no group
+    // semantics at all — a real a11y regression axe's own scan doesn't
+    // catch (it flags missing names on individual controls, not a missing
+    // group around correctly-named ones). Pins the fix: the row exposes a
+    // named group, and every chip is reachable inside it.
+    it("exposes a role=group named TYPE holding all four chips", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const group = screen.getByRole("group", { name: "TYPE" });
+      const labels = within(group)
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+      expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
+    });
+
+    // Carried-forward subject B (both halves — the negative half was in the
+    // deleted test too). Contrast for the active fill is already verified
+    // at 6.67:1 (library-filter-unification design spec) — cited, not
+    // re-derived.
+    it("an active chip fills its own type color inline; an inactive one does not", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const o2 = screen.getByRole("button", { name: "O2" });
+      const at = screen.getByRole("button", { name: "AT" });
+      // All on by default (2026-08-12), so EVERY chip starts filled with its
+      // own colour — the pre-click state is a positive, not a negative.
+      expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
+      expect(at).toHaveAttribute("style", expect.stringContaining("--type-at"));
+      await userEvent.click(o2);
+      expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
+      // M-4 (review fix): a bare `not.stringContaining("--type-at")` would
+      // pass even if AT were wrongly filled with O2's OWN colour (the
+      // deleted original test had this identical weakness) — assert no
+      // `--type-*` value at all, not just not-its-own.
+      expect(at).not.toHaveAttribute(
+        "style",
+        expect.stringContaining("--type-"),
+      );
+    });
+
+    // Carried-forward subject C: the first product consumer of
+    // `toggleType`'s multi-select semantics (M-10).
+    it("tapping a chip reports the toggled state, narrowing the list to that type", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const o2 = screen.getByRole("button", { name: "O2" });
+      // Starts all-on (2026-08-12): every chip pressed, nothing narrowed.
+      for (const code of ["O2", "AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      }
+      await userEvent.click(o2);
+
+      // Tapping one while all are on DESELECTS the others (James's rule).
+      expect(o2).toHaveAttribute("aria-pressed", "true");
+      for (const code of ["AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        );
+      }
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      // No token: the pressed chip already says which type is filtering.
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+    });
+
+    // Carried-forward subject D: exclusivity is correctly dead (multi-select
+    // replaces it), but "toggle twice clears it" is not — this pins that
+    // toggling the SAME chip off returns to the fully unfiltered list.
+    it("deselecting the last selected type turns them ALL back on, unfiltered", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const o2 = screen.getByRole("button", { name: "O2" });
+      await userEvent.click(o2); // all on -> O2 only
+      await userEvent.click(o2); // O2 was the last selected -> all back on
+
+      // James's rule: they turn back ON, not all-off (which would be a
+      // filter matching nothing).
+      for (const code of ["O2", "AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      }
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+      ]);
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+    });
+
+    // Fix round (whole-branch review, finding B): CLEAR ALL — the token-row
+    // control, distinct from the sheet's own CLEAR pinned above — remains
+    // the one affordance whose whole job is "clear everything," `types`
+    // included, unlike the sheet's own CLEAR which now spares it.
+    it("CLEAR ALL empties an active TYPE chip too, unlike the sheet's own CLEAR", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "1" }),
+      );
+      await applySheet();
+
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(screen.getByText("PAIN 1")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+
+      await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
+
+      // Cleared means back to ALL ON (2026-08-12), not all-off: every chip
+      // pressed again, nothing narrowed.
+      for (const code of ["O2", "AT", "TR", "AN"]) {
+        expect(screen.getByRole("button", { name: code })).toHaveAttribute(
+          "aria-pressed",
+          "true",
+        );
+      }
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("PAIN 1")).not.toBeInTheDocument();
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+      ]);
+    });
+
+    describe("the effective-type descriptor word", () => {
+      it("shows the selected type's word when exactly one type is selected", async () => {
+        mockReady();
+        await renderLibrary();
+
+        expect(screen.queryByText(TYPE_WORDS.O2)).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+        const word = screen.getByText(TYPE_WORDS.O2);
+        expect(word).toBeInTheDocument();
+        expect(word.closest(".type-word-row")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+      });
+
+      it("stays hidden at zero selections and disappears again once a second type joins", async () => {
+        mockReady(MULTI_TYPE_WORKOUTS);
+        await renderLibrary();
+
+        expect(screen.queryByText(TYPE_WORDS.O2)).not.toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+        expect(screen.getByText(TYPE_WORDS.O2)).toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole("button", { name: "AT" }));
+        expect(screen.queryByText(TYPE_WORDS.O2)).not.toBeInTheDocument();
+        expect(screen.queryByText(TYPE_WORDS.AT)).not.toBeInTheDocument();
+      });
+
+      // I-1 (review fix): the WRAPPER (`.type-word-row`) must stay mounted
+      // in every state — only the WORD inside is conditional — or
+      // `.type-chip-grid`'s own margin-bottom (which assumes a
+      // `.type-word-row` sibling always follows to own the section's real
+      // bottom spacing) leaves the chip row only 4px from whatever's below
+      // at zero/several selections instead of the intended 16px, and
+      // toggling into/out of exactly-one selection shifts every row below
+      // by the reserved box's own height. jsdom has no layout engine (this
+      // codebase's own established limit — WorkoutRow.test.tsx,
+      // TimerTargets.test.tsx, ConnectedSurface.test.tsx all note it), so
+      // this pins the STRUCTURAL invariant the CSS fix depends on rather
+      // than a computed-style/pixel assertion; Task 3's `library.png` is
+      // the visual check.
+      it("keeps the descriptor wrapper mounted at zero, one, and two selections (constant reserved spacing)", async () => {
+        mockReady(MULTI_TYPE_WORKOUTS);
+        await renderLibrary();
+
+        const wrapper = () => document.querySelector(".type-word-row");
+        expect(wrapper()).not.toBeNull();
+
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+        expect(wrapper()).not.toBeNull();
+
+        await userEvent.click(screen.getByRole("button", { name: "AT" }));
+        expect(wrapper()).not.toBeNull();
+      });
+    });
+
+    // Successor to the two fill tests deleted on 2026-08-12. Their subjects
+    // (a single type's token carries its own colour; a two-type token
+    // carries none) both died with the TYPE token itself — James: "the type
+    // shouldn't be added as a tag since it's already visible". What replaces
+    // them is the ruling, pinned where a rower sees it: an active type
+    // produces NO token, while another group's token still appears in the
+    // same row, so this cannot pass by the row simply being empty.
+    it("a TYPE-ONLY filter still reports the narrowed count and offers CLEAR ALL", async () => {
+      // The bug this pins: `hasFilters` used to be `tokens.length > 0`, so
+      // once TYPE stopped tokenizing, a type-only filter left the header
+      // claiming the FULL count over a one-row list and hid CLEAR ALL
+      // entirely — the rower's only way out was re-tapping the chip.
+      mockReady();
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      expect(screen.queryByText("3 WORKOUTS")).not.toBeInTheDocument();
+      const clearAll = screen.getByRole("button", { name: "CLEAR ALL" });
+      await userEvent.click(clearAll);
+      expect(visibleHrefs()).toHaveLength(3);
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+
+    it("an active type renders no token, while another group's token still does", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "1" }),
+      );
+      await applySheet();
+
+      // The pain filter tokenizes...
+      expect(tokenLabel("PAIN 1")).toBeInTheDocument();
+      // ...the type does not, in either the label or a removal button.
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Remove O2 filter" }),
+      ).not.toBeInTheDocument();
+      // And the chip is still doing the indicating.
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+
+    // Carried-forward subject E: WORKOUTS (above) has exactly one workout
+    // per type and cannot distinguish a union from a single-select swap.
+    describe("a two-type union (real seed, >=2 workouts per type)", () => {
+      it("selecting two chips shows the UNION of both types, not their intersection (which would be empty — a workout has one type)", async () => {
+        mockReady(MULTI_TYPE_WORKOUTS);
+        await renderLibrary();
+
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+        await userEvent.click(screen.getByRole("button", { name: "AT" }));
+
+        const expectedIds = MULTI_TYPE_WORKOUTS.filter(
+          (w) => w.type === "O2" || w.type === "AT",
+        ).map((w) => `/library/${w.id}`);
+        expect(expectedIds).toHaveLength(4);
+        expect(visibleHrefs()).toStrictEqual(expectedIds);
+        expect(screen.getByText("4 OF 8 SHOWN")).toBeInTheDocument();
+      });
     });
   });
 
@@ -510,7 +893,8 @@ describe("Library", () => {
     sessionStorage.setItem(
       "ergomatic.libraryFilters",
       JSON.stringify({
-        type: "AT",
+        types: ["AT"],
+        difficulties: [],
         durations: ["<30"],
         painLevels: [],
         lastDone: null,
@@ -650,7 +1034,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: null,
+          types: [],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -703,7 +1088,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: null,
+          types: [],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -781,10 +1167,12 @@ describe("Library", () => {
       expect(await screen.findByRole("list")).toBeInTheDocument();
       expect(scrollToSpy).toHaveBeenCalledTimes(1);
 
+      // PAIN 3, not TYPE — TYPE left the sheet this round; any filter
+      // change proves the point (a second scrollTo does NOT fire).
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
       await applySheet();
@@ -935,7 +1323,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: "AT",
+          types: ["AT"],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -946,7 +1335,14 @@ describe("Library", () => {
       await renderLibrary();
 
       expect(await screen.findByText("1 OF 3 SHOWN")).toBeInTheDocument();
-      expect(tokenLabel("AT")).toBeInTheDocument();
+      // A restored type shows as the PRESSED CHIP, not a token (2026-08-12).
+      expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(
+        screen.queryByText("AT", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
       expect(screen.getByText("Anaerobic Threshold Blitz")).toBeInTheDocument();
       expect(screen.queryByText("Steady State Cruise")).not.toBeInTheDocument();
     });
@@ -961,7 +1357,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: "AT",
+          types: ["AT"],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -986,20 +1383,15 @@ describe("Library", () => {
     });
 
     it("persists every filter change to sessionStorage as it happens", async () => {
+      // TYPE left the sheet this round (library-filter-unification, Task 1
+      // pulled forward) — this test used to drive its first filter change
+      // through the sheet's own TYPE cell, which no longer exists there.
+      // PAIN and SOURCE are still sheet groups, so they carry the same
+      // "every change persists" point without pretending type filtering
+      // works via a control this branch doesn't have.
       mockReady();
       await renderLibrary();
       await screen.findByRole("list");
-
-      await openSheet();
-      await userEvent.click(
-        within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
-        }),
-      );
-      await applySheet();
-      expect(
-        JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: "AT" });
 
       await openSheet();
       await userEvent.click(
@@ -1010,14 +1402,30 @@ describe("Library", () => {
       await applySheet();
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: "AT", painLevels: [3] });
+      ).toMatchObject({ painLevels: [3] });
+
+      // GLOBAL, not CUSTOM: every WORKOUTS fixture row is isGlobal:true, so
+      // adding SOURCE=global on top of the PAIN 3 filter still matches
+      // w-at (proving the change persisted alongside the first, rather
+      // than replacing it) instead of narrowing to zero and disabling the
+      // sheet's own primary.
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "GLOBAL",
+        }),
+      );
+      await applySheet();
+      expect(
+        JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
+      ).toMatchObject({ painLevels: [3], source: "global" });
 
       // CLEAR ALL empties the persisted set too — a BACK after clearing
       // must not resurrect the cleared filters.
       await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: null, painLevels: [] });
+      ).toMatchObject({ painLevels: [], source: null });
     });
 
     it("ignores a malformed stored value and mounts unfiltered", async () => {
@@ -1071,9 +1479,7 @@ describe("Library", () => {
       // Sea Fret is O2/easy — the sheet's default draft (everything
       // selected) should count exactly the one non-onboarding row, not all
       // three real global rows.
-      expect(
-        screen.getByRole("button", { name: /^Show 1 workout$/ }),
-      ).toBeVisible();
+      expect(screen.getByText("1 WORKOUT")).toBeVisible();
     });
 
     // Final-review fix: the exclusion must key off isGlobal, not title

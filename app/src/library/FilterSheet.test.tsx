@@ -32,12 +32,12 @@ describe("FilterSheet", () => {
   it("renders as a labelled dialog holding all five groups", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
-    for (const label of ["TYPE", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["DIFFICULTY", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
-    for (const type of ["O2", "AT", "TR", "AN"]) {
+    for (const difficulty of ["EASY", "MEDIUM", "HARD"]) {
       expect(
-        within(dialog).getByRole("button", { name: type }),
+        within(dialog).getByRole("button", { name: difficulty }),
       ).toBeInTheDocument();
     }
     for (const bucket of ["<30′", "30–45′", "45–60′", "60′+"]) {
@@ -64,24 +64,28 @@ describe("FilterSheet", () => {
     ).toBeInTheDocument();
   });
 
-  // James's 2026-08-08 ordering decision: every left-to-right type row reads
-  // O2 · AT · TR · AN app-wide (the pyramid's base-first order), not the
-  // AN-first order this sheet used before. Real DOM order, not just
-  // presence — a naive existence-only loop over the four labels can't tell
-  // this apart from the old order.
-  it("renders the TYPE cells left-to-right as O2, AT, TR, AN", () => {
+  // library-filter-unification round, Task 1 (pulled forward from Task 2's
+  // own contract item 4): TYPE left the sheet entirely — no "TYPE" group
+  // label, no type-coded cell, nothing named after a WorkoutType code.
+  // Task 2 puts the chip row above the list instead; until then this
+  // branch simply has no type-filtering UI, and this test is what pins
+  // that honestly rather than leaving the old sheet-based assertions
+  // silently describing a control that no longer exists.
+  it("has no TYPE group and no type-coded cell — TYPE left the sheet entirely", () => {
     renderSheet();
-    const typeGroup = screen.getByRole("group", { name: "TYPE" });
-    const labels = within(typeGroup)
-      .getAllByRole("button")
-      .map((button) => button.textContent);
-    expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
+    const dialog = screen.getByRole("dialog", { name: "Filter" });
+    expect(within(dialog).queryByText("TYPE")).not.toBeInTheDocument();
+    for (const type of ["O2", "AT", "TR", "AN"]) {
+      expect(
+        within(dialog).queryByRole("button", { name: type }),
+      ).not.toBeInTheDocument();
+    }
   });
 
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {
     const draft: Filters = {
       ...EMPTY_FILTERS,
-      type: "AT",
+      difficulties: ["medium"],
       durations: ["45-60"],
       painLevels: [3, 4],
       lastDone: "under21",
@@ -89,11 +93,11 @@ describe("FilterSheet", () => {
     };
     renderSheet({ draft });
 
-    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "MEDIUM" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "EASY" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -123,22 +127,14 @@ describe("FilterSheet", () => {
     );
   });
 
-  it("a TYPE cell fills its own type color inline when active", () => {
-    renderSheet({ draft: { ...EMPTY_FILTERS, type: "O2" } });
-    const o2 = screen.getByRole("button", { name: "O2" });
-    expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
-    expect(screen.getByRole("button", { name: "AT" })).not.toHaveAttribute(
-      "style",
-      expect.stringContaining("--type-at"),
-    );
-  });
-
-  it("clicking a TYPE cell reports the toggled draft via onChangeDraft", async () => {
+  // Consumes filters.ts's own `toggleDifficulty` (M-10: the sheet must use
+  // the named helper, not an inlined equivalent spread).
+  it("clicking a DIFFICULTY cell reports the toggled draft", async () => {
     const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "AN" }));
+    await userEvent.click(screen.getByRole("button", { name: "HARD" }));
     expect(onChangeDraft).toHaveBeenCalledWith({
       ...EMPTY_FILTERS,
-      type: "AN",
+      difficulties: ["hard"],
     });
   });
 
@@ -196,41 +192,70 @@ describe("FilterSheet", () => {
     });
   });
 
-  it("CLEAR reports an empty draft without calling onApply/onDismiss", async () => {
+  // Fix round (whole-branch review, finding B): CLEAR resets exactly the
+  // sheet's OWN groups (DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE) — `types`,
+  // the chip row's own group with no control inside this sheet at all, is
+  // untouched. Seeding a non-empty `types` here is the point: against the
+  // old `clearFilters()` behaviour this draft would have come back with
+  // `types: []`, which this assertion would catch.
+  it("CLEAR resets the sheet's own groups but leaves types untouched, without calling onApply/onDismiss", async () => {
     const { onChangeDraft, onApply, onDismiss } = renderSheet({
-      draft: { ...EMPTY_FILTERS, type: "AT" },
+      draft: { ...EMPTY_FILTERS, types: ["O2"], source: "custom" },
     });
     await userEvent.click(screen.getByRole("button", { name: "CLEAR" }));
-    expect(onChangeDraft).toHaveBeenCalledWith(EMPTY_FILTERS);
+    expect(onChangeDraft).toHaveBeenCalledWith({
+      ...EMPTY_FILTERS,
+      types: ["O2"],
+    });
     expect(onApply).not.toHaveBeenCalled();
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
-  it("the primary reads 'Show N workouts' from resultCount and calls onApply", async () => {
+  // library-filter-unification round, Task 2 (spec §3): the primary adopts
+  // Today's own "Apply Filter" constant — the count moves OUT of the
+  // button's accessible name entirely, at every resultCount, plural or not.
+  it("the primary reads the constant 'Apply Filter' regardless of resultCount, and calls onApply", async () => {
     const { onApply } = renderSheet({ resultCount: 12 });
-    const primary = screen.getByRole("button", { name: "Show 12 workouts" });
+    const primary = screen.getByRole("button", { name: "Apply Filter" });
     expect(primary).not.toBeDisabled();
     await userEvent.click(primary);
     expect(onApply).toHaveBeenCalledTimes(1);
   });
 
-  // Fix round 2 (whole-branch review M2): "Show 1 workouts" shipped
-  // unconditionally plural — this pins the singular-aware copy.
-  it("the primary reads the singular 'Show 1 workout' at resultCount 1", () => {
-    renderSheet({ resultCount: 1 });
-    expect(
-      screen.getByRole("button", { name: "Show 1 workout" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Show 1 workouts" }),
-    ).not.toBeInTheDocument();
+  it("the primary is disabled at resultCount 0, still reading 'Apply Filter'", () => {
+    renderSheet({ resultCount: 0 });
+    expect(screen.getByRole("button", { name: "Apply Filter" })).toBeDisabled();
   });
 
-  it("the primary reads 'No workouts match' and disables at resultCount 0", () => {
-    renderSheet({ resultCount: 0 });
-    expect(
-      screen.getByRole("button", { name: "No workouts match" }),
-    ).toBeDisabled();
+  // The count (and the only explanation of why the button disables at 0)
+  // lives in a caption above the primary, wired by aria-describedby —
+  // TodayFilterSheet.tsx's own COUNT_ID idiom, copied here.
+  describe("the result-count caption", () => {
+    it("reads '{n} WORKOUTS' at a plural count", () => {
+      renderSheet({ resultCount: 12 });
+      expect(screen.getByText("12 WORKOUTS")).toBeInTheDocument();
+    });
+
+    it("reads the singular '1 WORKOUT' at exactly one match", () => {
+      renderSheet({ resultCount: 1 });
+      expect(screen.getByText("1 WORKOUT")).toBeInTheDocument();
+      expect(screen.queryByText("1 WORKOUTS")).not.toBeInTheDocument();
+    });
+
+    it("reads 'NO WORKOUTS MATCH' at zero matches", () => {
+      renderSheet({ resultCount: 0 });
+      expect(screen.getByText("NO WORKOUTS MATCH")).toBeInTheDocument();
+    });
+
+    it("is wired to the primary via aria-describedby", () => {
+      renderSheet({ resultCount: 12 });
+      const primary = screen.getByRole("button", { name: "Apply Filter" });
+      const captionId = primary.getAttribute("aria-describedby");
+      expect(captionId).toBeTruthy();
+      expect(document.getElementById(captionId!)).toHaveTextContent(
+        "12 WORKOUTS",
+      );
+    });
   });
 
   it("clicking the backdrop calls onDismiss", async () => {
@@ -242,7 +267,7 @@ describe("FilterSheet", () => {
 
   it("clicking inside the panel does not call onDismiss (stopPropagation)", async () => {
     const { onDismiss } = renderSheet();
-    await userEvent.click(screen.getByText("TYPE"));
+    await userEvent.click(screen.getByText("TIME"));
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
@@ -284,9 +309,7 @@ describe("FilterSheet", () => {
     it("Tab from the last control wraps to the first; Shift+Tab from the first wraps to the last", async () => {
       renderSheet();
       const clear = screen.getByRole("button", { name: "CLEAR" });
-      const primary = screen.getByRole("button", {
-        name: /^Show \d+ workouts?$/,
-      });
+      const primary = screen.getByRole("button", { name: "Apply Filter" });
       expect(clear).toHaveFocus();
 
       await userEvent.tab({ shift: true });

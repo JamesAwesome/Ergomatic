@@ -1059,11 +1059,14 @@ function TodayView({
                 today (TR standing in on a TEST day), and tapping THAT chip
                 again clears the swap rather than swapping to itself
                 (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
-                `.today-type-chips` (index.css) now lays these out as a
-                4-column 1fr grid spanning the full content width, rather than
-                `.chip-wrap`'s own inline flex-wrap — 44px chip height
-                unchanged, same `.chip`/TodayChip classes. */}
-            <div className="chip-wrap today-type-chips">
+                `.type-chip-grid` (index.css — renamed from `.today-type-
+                chips`, library-filter-unification round, Task 2: Library's
+                own multi-select chip row needed the identical grid override)
+                lays these out as a 4-column 1fr grid spanning the full
+                content width, rather than `.chip-wrap`'s own inline
+                flex-wrap — 44px chip height unchanged, same `.chip`/
+                TodayChip classes. */}
+            <div className="chip-wrap type-chip-grid">
               {TYPE_CHIPS.map((type) => (
                 <TodayChip
                   key={type}
@@ -1085,10 +1088,25 @@ function TodayView({
                 belt-and-suspenders reason ClassificationCard.tsx's own
                 comment gives. `aria-hidden`: purely presentational
                 reinforcement of what each chip's own `aria-pressed` already
-                conveys to assistive tech, not a second announcement of it. */}
+                conveys to assistive tech, not a second announcement of it.
+                `.type-word` (index.css — renamed from `.today-type-word` in
+                the library-filter-unification round, Task 2's M-7 review
+                fix: Library's own descriptor reuses the identical text
+                style) is the fourth of this round's class extractions.
+
+                Fix round (whole-branch review comment): `.type-chip-grid`'s
+                own 4px margin-bottom (index.css) assumes THIS wrapper
+                always follows it — true today only because `effectiveType`
+                is never null whenever this branch renders, per the
+                paragraph above. If a future change ever makes that false
+                while the chip row still renders, the chip row will inherit
+                the exact ~34px jump Library's own I-1 fix corrected (that
+                fix's answer was mounting the wrapper unconditionally,
+                `aria-hidden` regardless — do the same here rather than
+                patching the CSS rule). */}
             {effectiveType !== null && (
-              <div className="today-type-word-row" aria-hidden="true">
-                <p className="today-type-word">{TYPE_WORDS[effectiveType]}</p>
+              <div className="type-word-row" aria-hidden="true">
+                <p className="type-word">{TYPE_WORDS[effectiveType]}</p>
               </div>
             )}
           </>
@@ -1166,13 +1184,16 @@ function TodayView({
               {/* Task 2 (2026-08-04 round): DIFFICULTY/TIME/PAIN's three inline
                   chip clusters (Phase 6F, then regrouped by fix round 2) are
                   gone — they now live inside TodayFilterSheet, opened by this
-                  chip. Same geometry as SHUFFLE below (`.today-shuffle`, chip-
-                  style: 44px, transparent, rule-3 border) since the two now sit
-                  side by side on the header's right; `filterButtonRef` doubles
-                  as SheetShell's focus-restore target once the sheet closes. */}
+                  chip. Same geometry as SHUFFLE below (`.filter-trigger`,
+                  renamed from `.today-shuffle` in the library-filter-
+                  unification round, Task 2 — Library's own FILTER ⌄ trigger
+                  needed this exact chip look too; chip-style: 44px,
+                  transparent, rule-3 border) since the two now sit side by
+                  side on the header's right; `filterButtonRef` doubles as
+                  SheetShell's focus-restore target once the sheet closes. */}
               <button
                 type="button"
-                className="button-outline today-shuffle"
+                className="button-outline filter-trigger"
                 aria-haspopup="dialog"
                 aria-expanded={sheetOpen}
                 ref={filterButtonRef}
@@ -1182,7 +1203,7 @@ function TodayView({
               </button>
               <button
                 type="button"
-                className="button-outline today-shuffle"
+                className="button-outline filter-trigger"
                 onClick={handleShuffle}
                 disabled={!canShuffle}
               >

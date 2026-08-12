@@ -565,28 +565,6 @@ button:disabled {
   gap: 10px;
 }
 
-.library-filter-toggle {
-  flex-shrink: 0;
-  min-height: var(--tap);
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface);
-  border: 1px solid var(--ink);
-  border-radius: var(--radius);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  cursor: pointer;
-}
-
-.library-filter-toggle:hover {
-  background: var(--surface-sunken);
-}
-
 .library-count {
   flex: 1;
   font-family: var(--font-mono);
@@ -784,6 +762,24 @@ button:disabled {
   color: var(--ink-3);
 }
 
+/* Library's own FilterSheet.tsx (library-filter-unification round, Task 2,
+   spec §3): the identical live-count caption Today's own sheet uses, kept as
+   its own rule per this file's established per-file duplication convention
+   (TYPE_COLOR_VAR's own comment names the precedent) rather than sharing
+   `.today-filter-sheet-count` — this round's three explicit CSS extractions
+   (`.type-chip-grid`/`.type-word-row`/`.filter-trigger`) are the ONLY
+   screen-neutral renames it calls for; this caption class isn't one of
+   them. Copy differs from Today's (`{n} WORKOUTS`/`1 WORKOUT`/`NO WORKOUTS
+   MATCH` vs. Today's `{n} OPTION(S)`), styling is identical. */
+.library-filter-sheet-count {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
 /* Fix round 1 (whole-branch review M1): N-agnostic instead of a fixed set
    of width variants — `grid-auto-flow: column` lays cells out in a single
    row, `grid-auto-columns: 1fr` gives each one an equal share of the
@@ -879,29 +875,69 @@ button:disabled {
    specificity single-class selectors, so declaration order alone decides —
    this rule sits after `.chip-wrap` in the cascade). `.chip`'s own 44px
    `min-height` is untouched; only the row's layout (each cell an equal
-   1fr share, not its own intrinsic width) changes. */
-.today-type-chips {
+   1fr share, not its own intrinsic width) changes.
+
+   Extracted to this screen-neutral name (library-filter-unification round,
+   Task 2, spec finding 2 — was `.today-type-chips`): Library's own TYPE chip
+   row (Library.tsx) needed this EXACT grid override, not bare `.chip-wrap`
+   (which yields a wrapping inline row plus a stray margin) — a pure rename,
+   Today's own JSX updated to match, its pixels unchanged (its existing
+   tests/design sweep are the proof). */
+.type-chip-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   /* Word row (below) now owns the section's bottom margin instead of this
      row, so the two together read as one unit rather than stacking two
-     16px gaps. */
+     16px gaps. This depends on `.type-word-row` ALWAYS being the next
+     sibling — review fix I-1: it once wasn't, on Library, see that rule's
+     own comment.
+
+     Fix round (whole-branch review comment, not a finding): this dependency
+     is CURRENTLY satisfied on both screens, by two different mechanisms —
+     Library's own `.type-word-row` is unconditionally mounted (I-1, below),
+     Today's is conditional on `effectiveType !== null` (Today.tsx) but that
+     condition is always true whenever the chip row itself renders (a plan
+     being active implies an effective type). If a future Today change ever
+     makes that condition possibly false while the chip row still renders,
+     this 4px will silently reproduce the exact ~34px jump I-1 fixed on
+     Library — the fix would be the SAME one Library already got (mount
+     `.type-word-row` unconditionally there too), not a change to this rule. */
   margin-bottom: 4px;
 }
 
 /* The effective type's descriptor word (James's request, 2026-08-08 round)
    — same reserved-line-box fix as `.classification-type-label-row`
-   (index.css, above), even though a type is ALWAYS selected here (a plan is
-   active whenever this renders) and the word therefore never toggles in and
-   out the way it would if it could. Kept for parity with that established
-   pattern, not because this row can actually shift height in practice. */
-.today-type-word-row {
+   (index.css, above). On Today a type is ALWAYS selected whenever this
+   renders, so the word never toggles in and out the way it would if it
+   could — the reserved box was originally kept here for parity with that
+   established pattern alone, not because Today's own row could shift
+   height in practice.
+
+   Extracted to this screen-neutral name (library-filter-unification round,
+   Task 2, spec finding 2 — was `.today-type-word-row`): Library's own
+   descriptor row (Library.tsx) reuses this wrapper AND the neutral
+   `.type-word` text style below (M-7, review fix — extracted from
+   `.today-type-word`, the fourth of this round's class renames; a plain
+   text rule, no override collision, just finishing the extraction).
+
+   Review fix I-1: Library's WRAPPER is now unconditionally mounted
+   (aria-hidden regardless; only the WORD inside is conditional on exactly
+   one type being selected) — it used to mount/unmount with that same
+   count, which is exactly what broke this rule's own "always work": at
+   zero or several selections the wrapper was ABSENT, `.type-chip-grid`'s
+   4px margin-bottom was the only spacing left before whatever follows, and
+   toggling into/out of exactly-one selection shifted every row below by
+   the ~34px this rule's box is sized to reserve. Always-mounted matches
+   Today's own row exactly (which also never mounts/unmounts) and makes
+   this rule's reserved-line-box comment true in every state now, not just
+   parity. */
+.type-word-row {
   min-height: 18px;
   margin: 0 0 16px;
 }
 
-.today-type-word {
+.type-word {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1842,8 +1878,17 @@ button:disabled {
    "the same geometry" the task brief calls for, not a new near-duplicate
    rule. FILTER ⌄ never sets `disabled`, so the `:disabled` rule below is
    inert for it — a harmless no-op, not a behaviour it needs to opt out
-   of. */
-.today-shuffle {
+   of.
+
+   Extracted to this screen-neutral name (library-filter-unification round,
+   Task 2, spec finding 3 — was `.today-shuffle`): Library's own FILTER ⌄
+   trigger (Library.tsx) needed this exact chip look too, not bare
+   `.button-outline` (Library's own ink-bordered, 16px-padded shape) — a
+   pure rename, both screens now wear one class (the old `.library-filter-
+   toggle` rule this replaced on Library's side is deleted below, dead per
+   recurring-failure #5). Today's own JSX updated to match on both its
+   FILTER ⌄ and SHUFFLE ↻ buttons; its pixels are unchanged. */
+.filter-trigger {
   flex-shrink: 0;
   padding: 0 12px;
   border-color: var(--rule-3);
@@ -1853,11 +1898,11 @@ button:disabled {
   letter-spacing: 0.14em;
 }
 
-.today-shuffle:hover {
+.filter-trigger:hover {
   border-color: var(--ink);
 }
 
-.today-shuffle:disabled {
+.filter-trigger:disabled {
   border-style: dashed;
 }
 

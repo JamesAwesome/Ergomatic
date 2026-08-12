@@ -38,35 +38,26 @@ describe("TokenRow", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves the background unset for the default 'ink' fill", () => {
-    render(
-      <TokenRow
-        tokens={[{ key: "pain", label: "PAIN 3", onClear: vi.fn() }]}
-      />,
-    );
-    const pill = screen.getByText("PAIN 3", {
-      selector: ".filter-token-label",
-    }).parentElement!;
-    expect(pill).not.toHaveAttribute("style");
-  });
-
-  it("applies a non-'ink' fill as the pill's own inline background", () => {
+  // The `fill` prop is gone (2026-08-12): Library's TYPE token was its only
+  // producer and that token is retired, so no token carries a per-instance
+  // colour. This is the surviving half of the old pair of fill tests — every
+  // pill now takes `.filter-token`'s own `--ink` background with NO inline
+  // style at all, which a re-added fill would visibly break here.
+  it("renders every pill with no inline background — colour comes from the class alone", () => {
     render(
       <TokenRow
         tokens={[
-          {
-            key: "type",
-            label: "O2",
-            onClear: vi.fn(),
-            fill: "var(--type-o2)",
-          },
+          { key: "pain", label: "PAIN 3", onClear: vi.fn() },
+          { key: "difficulty", label: "EASY", onClear: vi.fn() },
         ]}
       />,
     );
-    const pill = screen.getByText("O2", {
-      selector: ".filter-token-label",
-    }).parentElement!;
-    expect(pill).toHaveAttribute("style", expect.stringContaining("--type-o2"));
+    for (const label of ["PAIN 3", "EASY"]) {
+      const pill = screen.getByText(label, {
+        selector: ".filter-token-label",
+      }).parentElement!;
+      expect(pill).not.toHaveAttribute("style");
+    }
   });
 
   it("renders trailing content after the tokens even when tokens is empty", () => {

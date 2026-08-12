@@ -5,10 +5,18 @@ import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
-import { applyFilters, clearFilters, type Filters } from "./filters";
+import {
+  applyFilters,
+  clearFilters,
+  hasActiveFilters,
+  isTypeSelected,
+  toggleType,
+  type Filters,
+} from "./filters";
 import { filterTokens } from "./filterTokens";
 import FilterSheet from "./FilterSheet";
 import { TokenRow, type Token } from "../components/TokenRow";
+import { TYPE_WORDS } from "../components/typeWords";
 import { loadLibraryFilters, saveLibraryFilters } from "./libraryFilters";
 import { loadLibraryScroll, saveLibraryScroll } from "./libraryScroll";
 import WorkoutRow from "./WorkoutRow";
@@ -19,10 +27,19 @@ import WorkoutRow from "./WorkoutRow";
 // gets written, not just whichever one happened to land on a 100ms tick.
 const SCROLL_SAVE_THROTTLE_MS = 100;
 
+// Chip order: O2, AT, TR, AN — the pyramid's base-first order, matching
+// Today.tsx's own TYPE_CHIPS and FilterSheet.tsx's pre-Task-1 TYPE group
+// (docs/design/README.md §Screens → "2. Library", amended 2026-08-08).
+const TYPE_CHIPS: WorkoutType[] = ["O2", "AT", "TR", "AN"];
+
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept
 // local per this repo's established per-file duplication convention
 // (TypeBadge.tsx's own comment names the precedent) rather than importing
-// FilterSheet.tsx's identical map.
+// Today.tsx's identical map. Its ONLY consumer is the chip row's active
+// fill (below), which needs the identical per-type colour Today's own
+// TodayChip applies inline. It used to back the TYPE token's colour too;
+// that token is retired (2026-08-12, "already visible" — the chip row is
+// the colour now), so the token row has no per-instance colour at all.
 const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   O2: "--type-o2",
   AT: "--type-at",
@@ -55,13 +72,12 @@ function Header() {
 }
 
 /** filterTokens.ts's own Token (`{kind, label, clear}`, one per active
- *  GROUP) adapted to TokenRow's `{key, label, onClear, fill}` shape — the
- *  two don't share a type: filterTokens.ts's `clear` takes the CURRENT
- *  Filters (so a token stays correct after a later, unrelated change),
- *  while TokenRow's `onClear` is a plain callback with no arguments. `fill`
- *  carries a TYPE token's own `--type-*` color through as TokenRow's
- *  per-instance inline override (DESIGN.md's selected-state rule extended
- *  to tokens); every other kind leaves TokenRow's `--ink` default alone. */
+ *  GROUP) adapted to TokenRow's `{key, label, onClear}` shape — the two
+ *  don't share a type: filterTokens.ts's `clear` takes the CURRENT Filters
+ *  (so a token stays correct after a later, unrelated change), while
+ *  TokenRow's `onClear` is a plain callback with no arguments. No colour
+ *  passes through any more: TYPE is not tokenized (its chip row shows the
+ *  selection itself), and it was the only token that ever carried one. */
 function toRowTokens(
   tokens: ReturnType<typeof filterTokens>,
   filters: Filters,
@@ -71,10 +87,6 @@ function toRowTokens(
     key: token.kind,
     label: token.label,
     onClear: () => onRemove(token.clear(filters)),
-    fill:
-      token.kind === "type"
-        ? `var(${TYPE_COLOR_VAR[token.label as WorkoutType]})`
-        : undefined,
   }));
 }
 
@@ -91,7 +103,7 @@ export default function Library() {
   const [filters, setFilters] = useState<Filters>(loadLibraryFilters);
   const [sheetOpen, setSheetOpen] = useState(false);
   // The sheet's own scratch copy — nothing here reaches `filters` (or its
-  // sessionStorage persistence) until "Show N workouts" commits it. Opening
+  // sessionStorage persistence) until "Apply Filter" commits it. Opening
   // the sheet seeds this from the currently-applied `filters`; every other
   // way out (backdrop tap, Escape, a tab tap, a hardware/browser back
   // navigation — none of which push a route for the sheet to intercept)
@@ -263,7 +275,10 @@ export default function Library() {
   const total = workouts.length;
   const visible = applyFilters(workouts, filters, baselines);
   const tokens = filterTokens(filters);
-  const hasFilters = tokens.length > 0;
+  // Derived from the FILTERS, not the tokens: TYPE narrows the list without
+  // tokenizing (2026-08-12), so a token-derived flag would show the full
+  // count over a filtered list and hide CLEAR ALL. See hasActiveFilters.
+  const hasFilters = hasActiveFilters(filters);
   const draftCount = applyFilters(workouts, draftFilters, baselines).length;
 
   function openSheet() {
@@ -283,11 +298,83 @@ export default function Library() {
   return (
     <main className="screen" ref={rootRef}>
       <Header />
+      {/* Library-filter-unification round, Task 2 (spec §2): TYPE's own
+          chip row, outside the sheet — same `.chip`/aria-pressed convention
+          Today's own type-swap row uses, MULTI-select (unlike Today's
+          single-select swap): tapping toggles that type in `filters.types`
+          and persists immediately via the effect below, the same as every
+          other filter change. `.type-chip-grid` (index.css, extracted from
+          Today's own `.today-type-chips`) lays these out as the identical
+          4-column grid Today's row uses — a pure rename, not a new layout.
+
+          Fix round (whole-branch review, finding D): `role="group"` +
+          `aria-label="TYPE"` — before this fix the row was four bare
+          `aria-pressed` buttons with no group semantics and no name in ANY
+          modality, a real regression from the OLD sheet-based TYPE control
+          (a `CellGrid`, `role="group"` + a visible "TYPE" label) this chip
+          row replaced. `aria-label` rather than a visible label: the row's
+          own visual design has no static "TYPE" heading anywhere (the
+          `TYPE_WORDS` descriptor beneath it is deliberately conditional —
+          exactly one selection — and itself `aria-hidden`), and adding one
+          would be a visible layout change this fix isn't scoped to; a
+          screen-reader user still needs the name spoken since nothing else
+          on screen tells them these four buttons are a group at all. */}
+      <div className="chip-wrap type-chip-grid" role="group" aria-label="TYPE">
+        {TYPE_CHIPS.map((type) => {
+          // ALL-ON by default: an empty `types` renders every chip selected
+          // (filters.ts's `isTypeSelected`), so at rest the row shows all four
+          // types included rather than four blank chips.
+          const selected = isTypeSelected(filters, type);
+          return (
+            <button
+              key={type}
+              type="button"
+              className="chip"
+              aria-pressed={selected}
+              style={
+                selected
+                  ? {
+                      background: `var(${TYPE_COLOR_VAR[type]})`,
+                      borderColor: `var(${TYPE_COLOR_VAR[type]})`,
+                      color: "var(--on-color)",
+                    }
+                  : undefined
+              }
+              onClick={() => setFilters(toggleType(filters, type))}
+            >
+              {type}
+            </button>
+          );
+        })}
+      </div>
+      {/* The selected type's descriptor WORD (spec §2) shows ONLY while
+          exactly one type is selected (zero or several: no text at all) —
+          but the `.type-word-row` WRAPPER itself is always mounted (review
+          fix I-1), not conditional on that same count. Reusing `.type-word`
+          (extracted from Today's own `.today-type-word` — M-7, the fourth
+          of this round's class extractions) inside a wrapper that only
+          sometimes mounts left the section's own bottom spacing dependent
+          on whether the descriptor happened to render: `.type-chip-grid`'s
+          4px margin-bottom assumes a `.type-word-row` sibling always
+          follows to own the real 16px gap (true on Today, where a type is
+          always effectively selected) — on Library, at zero or several
+          selections, that sibling was ABSENT, so the chip row sat only 4px
+          from `.library-filter-bar` instead of 16px, and toggling a chip in
+          or out of exactly-one shifted every row below by ~34px. Always
+          mounting the wrapper (aria-hidden regardless, harmless when empty)
+          reserves the identical 18px/16px box Today's own row always
+          occupies, so the spacing is now constant in every state — the
+          word text is still the only thing that comes and goes. */}
+      <div className="type-word-row" aria-hidden="true">
+        {filters.types.length === 1 && (
+          <p className="type-word">{TYPE_WORDS[filters.types[0]]}</p>
+        )}
+      </div>
       <div className="library-filter-bar">
         <div className="library-filter-row">
           <button
             type="button"
-            className="library-filter-toggle"
+            className="button-outline filter-trigger"
             aria-haspopup="dialog"
             aria-expanded={sheetOpen}
             onClick={openSheet}

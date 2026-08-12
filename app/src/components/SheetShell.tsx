@@ -20,16 +20,18 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
  * reports "go away."
  *
  * `primary.describedBy` (Round 2 fix round, 2026-08-04, M1): optional —
- * Library's FilterSheet.tsx carries the live count IN the button's own
- * accessible name ("Show N workouts"), so it needs nothing here. Today's
- * FILTER sheet moved that count to a separate caption once its own primary
- * became the constant "Apply Filter" (the Revision), which orphaned the
- * count from the accessible tree entirely: a disabled button isn't
- * focusable, so a screen-reader user landing on "Apply Filter, dimmed"
- * never learned why. Wiring the id straight onto `aria-describedby` (not
- * `aria-live`, which would announce every draft toggle as the rower taps
- * through cells) restores that — TodayFilterSheet.tsx is the one caller
- * that passes it.
+ * introduced when Today's FILTER sheet moved its live count off the
+ * button's own accessible name onto a separate caption, once its own
+ * primary became the constant "Apply Filter" (the Revision), which
+ * orphaned the count from the accessible tree entirely: a disabled button
+ * isn't focusable, so a screen-reader user landing on "Apply Filter,
+ * dimmed" never learned why. Wiring the id straight onto `aria-describedby`
+ * (not `aria-live`, which would announce every draft toggle as the rower
+ * taps through cells) restores that. Library's own FilterSheet.tsx adopted
+ * the identical "Apply Filter" + caption contract in the
+ * library-filter-unification round (Task 2) — both filter sheets pass
+ * `describedBy` now, neither carries the count in the button's own name
+ * any more.
  *
  * `primary` is OPTIONAL (Phase 7B Task 7). Both filter sheets have a
  * level-1 commit and pass one; the connected-mode diagnostics sheet

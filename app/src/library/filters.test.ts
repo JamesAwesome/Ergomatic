@@ -4,17 +4,21 @@ import {
   RECENCY_BOUNDARY_DAYS,
   applyFilters,
   bucketFor,
+  hasActiveFilters,
+  isTypeSelected,
   clearFilters,
   isRecent,
   setLastDone,
   setSource,
+  toggleDifficulty,
   toggleDuration,
   togglePainLevel,
   toggleType,
   type Filters,
 } from "./filters";
 import type { LibraryWorkout } from "../api/useWorkouts";
-import type { Step } from "../../domain/types.js";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import type { Step, WorkoutType } from "../../domain/types.js";
 
 const baselines = { k2Seconds: 112, k6Seconds: 122 };
 
@@ -54,16 +58,33 @@ function w(over: Partial<LibraryWorkout> & { id: string }): LibraryWorkout {
   } as LibraryWorkout;
 }
 
+// Realistic fixture (recurring-failure #3): the real 300-workout global
+// library, not a hand-built minimum — the "composes" test below needs
+// real co-occurring type/difficulty/pain combinations to prove the
+// predicates actually intersect rather than each independently matching
+// everything.
+const WORKOUTS: LibraryWorkout[] = LIBRARY_WORKOUTS.map((seed, i) => ({
+  id: `lib-${i}`,
+  title: seed.title,
+  type: seed.type,
+  difficulty: seed.difficulty,
+  pain: seed.pain,
+  steps: seed.steps,
+  isGlobal: true,
+  lastDoneDaysAgo: null,
+}));
+
 describe("chip/cell state transitions", () => {
-  it("selects a type, and selecting the same type again clears it", () => {
-    const once = toggleType(EMPTY_FILTERS, "AT");
-    expect(once.type).toBe("AT");
-    expect(toggleType(once, "AT").type).toBeNull();
+  it("accumulates types (multi-select union) and removes on repeat", () => {
+    const f = toggleType(toggleType(EMPTY_FILTERS, "AT"), "O2");
+    expect(f.types).toStrictEqual(["AT", "O2"]);
+    expect(toggleType(f, "AT").types).toStrictEqual(["O2"]);
   });
 
-  it("replaces the type rather than accumulating (single-select)", () => {
-    const f = toggleType(toggleType(EMPTY_FILTERS, "AT"), "O2");
-    expect(f.type).toBe("O2");
+  it("accumulates difficulties (multi-select union) and removes on repeat", () => {
+    const f = toggleDifficulty(toggleDifficulty(EMPTY_FILTERS, "easy"), "hard");
+    expect(f.difficulties).toStrictEqual(["easy", "hard"]);
+    expect(toggleDifficulty(f, "easy").difficulties).toStrictEqual(["hard"]);
   });
 
   it("accumulates duration buckets (multi-select union) and removes on repeat", () => {
@@ -105,7 +126,8 @@ describe("chip/cell state transitions", () => {
 
   it("clears every filter at once", () => {
     const busy: Filters = {
-      type: "AN",
+      types: ["AN"],
+      difficulties: ["hard"],
       durations: ["<30"],
       painLevels: [4, 5],
       lastDone: "under21",
@@ -145,6 +167,78 @@ describe("applyFilters", () => {
     const rows = [w({ id: "a", type: "AT" }), w({ id: "b", type: "O2" })];
     const kept = applyFilters(rows, toggleType(EMPTY_FILTERS, "AT"), baselines);
     expect(kept.map((r) => r.id)).toStrictEqual(["a"]);
+  });
+
+  it("difficulties: empty means no filter; a selection excludes the rest", () => {
+    // Compared against WORKOUTS.length directly, not against a second
+    // EMPTY_FILTERS-shaped call — EMPTY_FILTERS already has
+    // `difficulties: []`, so comparing two calls that are the same input
+    // would pass even if the guard this test exists to pin were dropped
+    // (whole-branch review I-3).
+    expect(
+      applyFilters(WORKOUTS, { ...EMPTY_FILTERS, difficulties: [] }, baselines),
+    ).toHaveLength(WORKOUTS.length);
+    const easy = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, difficulties: ["easy"] },
+      baselines,
+    );
+    expect(easy.length).toBeGreaterThan(0);
+    expect(easy.every((r) => r.difficulty === "easy")).toBe(true);
+    const easyMed = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, difficulties: ["easy", "medium"] },
+      baselines,
+    );
+    expect(easyMed.length).toBeGreaterThan(easy.length);
+    expect(easyMed.every((r) => r.difficulty !== "hard")).toBe(true);
+  });
+
+  it("types: empty means all; a two-type selection is their union", () => {
+    expect(
+      applyFilters(WORKOUTS, { ...EMPTY_FILTERS, types: [] }, baselines),
+    ).toHaveLength(WORKOUTS.length);
+    const o2 = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, types: ["O2"] },
+      baselines,
+    );
+    const at = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, types: ["AT"] },
+      baselines,
+    );
+    const both = applyFilters(
+      WORKOUTS,
+      { ...EMPTY_FILTERS, types: ["O2", "AT"] },
+      baselines,
+    );
+    expect(both).toHaveLength(o2.length + at.length);
+    expect(both.every((r) => r.type === "O2" || r.type === "AT")).toBe(true);
+  });
+
+  it("composes: difficulty AND type AND pain narrow together against the real library", () => {
+    // Verified against the real 300-workout seed (not guessed): types
+    // {O2,AT} ∩ difficulties {easy,medium} ∩ pain {1,2,3} = 126 rows, a
+    // proper subset of both types+difficulties alone (140) and of either
+    // predicate alone — see the inspection this test's assertions encode.
+    const filters: Filters = {
+      ...EMPTY_FILTERS,
+      types: ["O2", "AT"],
+      difficulties: ["easy", "medium"],
+      painLevels: [1, 2, 3],
+    };
+    const expected = WORKOUTS.filter(
+      (r) =>
+        (r.type === "O2" || r.type === "AT") &&
+        (r.difficulty === "easy" || r.difficulty === "medium") &&
+        (r.pain === 1 || r.pain === 2 || r.pain === 3),
+    );
+    expect(expected.length).toBeGreaterThan(0);
+    expect(expected.length).toBeLessThan(WORKOUTS.length);
+
+    const result = applyFilters(WORKOUTS, filters, baselines);
+    expect(result.map((r) => r.id)).toStrictEqual(expected.map((r) => r.id));
   });
 
   it("unions duration buckets", () => {
@@ -240,7 +334,7 @@ describe("source", () => {
     ];
     const out = applyFilters(
       ws,
-      { ...EMPTY_FILTERS, source: "custom", type: "AN" },
+      { ...EMPTY_FILTERS, source: "custom", types: ["AN"] },
       null,
     );
     expect(out.map((r) => r.title)).toStrictEqual(["Mine-AN"]);
@@ -251,5 +345,128 @@ describe("source", () => {
     expect(custom.source).toBe("custom");
     expect(setSource(custom, "global").source).toBe("global");
     expect(clearFilters().source).toBeNull();
+  });
+});
+
+describe("hasActiveFilters", () => {
+  // The reason this exists: `filterTokens(f).length > 0` used to be the
+  // equivalent test, and it stopped being one when TYPE lost its token
+  // (2026-08-12). A type-only filter narrows the list while producing no
+  // tokens, so the old test made Library claim the unfiltered count over a
+  // filtered list and hid CLEAR ALL.
+  it("is false only for EMPTY_FILTERS", () => {
+    expect(hasActiveFilters(EMPTY_FILTERS)).toBe(false);
+  });
+
+  it("is true for a TYPE-ONLY filter — the case the token-derived test got wrong", () => {
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, types: ["O2"] })).toBe(true);
+  });
+
+  it("is true for every other group on its own", () => {
+    const cases: Partial<Filters>[] = [
+      { difficulties: ["easy"] },
+      { durations: ["<30"] },
+      { painLevels: [3] },
+      { lastDone: "under21" },
+      { source: "custom" },
+    ];
+    for (const patch of cases) {
+      const active = hasActiveFilters({ ...EMPTY_FILTERS, ...patch });
+      // Named in the failure via the value itself, since vitest's `expect`
+      // takes no message argument.
+      expect({ patch, active }).toStrictEqual({ patch, active: true });
+    }
+  });
+});
+
+// James, 2026-08-12: "I'd like them all on by default. When they're all on,
+// if you tap a single type, the others become deselected. If you deselect the
+// last selected type -> they turn back on."
+describe("the TYPE chip state machine", () => {
+  const ALL = ["O2", "AT", "TR", "AN"] as const;
+  const withTypes = (types: readonly WorkoutType[]): Filters => ({
+    ...EMPTY_FILTERS,
+    types: [...types],
+  });
+
+  it("all on by default: an empty selection renders every chip selected", () => {
+    for (const t of ALL) {
+      expect(isTypeSelected(EMPTY_FILTERS, t)).toBe(true);
+    }
+  });
+
+  it("a subset selects exactly its own members", () => {
+    const f = withTypes(["O2", "TR"]);
+    expect(ALL.filter((t) => isTypeSelected(f, t))).toStrictEqual(["O2", "TR"]);
+  });
+
+  it("all on + tap X leaves ONLY X selected", () => {
+    const next = toggleType(EMPTY_FILTERS, "AT");
+    expect(next.types).toStrictEqual(["AT"]);
+    expect(ALL.filter((t) => isTypeSelected(next, t))).toStrictEqual(["AT"]);
+  });
+
+  it("tapping the LAST selected type turns them all back on", () => {
+    const single = withTypes(["AT"]);
+    const next = toggleType(single, "AT");
+    expect(next.types).toStrictEqual([]);
+    for (const t of ALL) {
+      expect(isTypeSelected(next, t)).toBe(true);
+    }
+  });
+
+  it("tapping an unselected type adds it; tapping a selected one of several removes just it", () => {
+    const added = toggleType(withTypes(["O2"]), "TR");
+    expect(added.types).toStrictEqual(["O2", "TR"]);
+    const removed = toggleType(added, "O2");
+    expect(removed.types).toStrictEqual(["TR"]);
+  });
+
+  it("selecting all four one at a time normalizes back to all-on, so the next tap deselects the others", () => {
+    let f: Filters = EMPTY_FILTERS;
+    for (const t of ALL) f = toggleType(f, t);
+    expect(f.types).toStrictEqual([]);
+    expect(toggleType(f, "TR").types).toStrictEqual(["TR"]);
+  });
+
+  it("a full round trip returns to the same state it started in", () => {
+    const there = toggleType(EMPTY_FILTERS, "O2");
+    expect(toggleType(there, "O2")).toStrictEqual(EMPTY_FILTERS);
+  });
+
+  it("all-on narrows nothing, and is not an active filter; a subset is both", () => {
+    expect(applyFilters(WORKOUTS, EMPTY_FILTERS, baselines)).toHaveLength(
+      WORKOUTS.length,
+    );
+    expect(hasActiveFilters(EMPTY_FILTERS)).toBe(false);
+    const subset = withTypes(["O2"]);
+    expect(
+      applyFilters(WORKOUTS, subset, baselines).every((w) => w.type === "O2"),
+    ).toBe(true);
+    expect(hasActiveFilters(subset)).toBe(true);
+  });
+
+  it("never leaves a state that matches nothing: no reachable selection is empty-but-narrowing", () => {
+    // Exhaustive over every start state and every tap.
+    const starts: Filters[] = [
+      EMPTY_FILTERS,
+      ...ALL.map((t) => withTypes([t])),
+      withTypes(["O2", "AT"]),
+      withTypes(["O2", "AT", "TR"]),
+    ];
+    for (const start of starts) {
+      for (const tap of ALL) {
+        const next = toggleType(start, tap);
+        expect({
+          start: start.types,
+          tap,
+          len: next.types.length,
+        }).not.toMatchObject({ len: 4 });
+        const selected = ALL.filter((t) => isTypeSelected(next, t));
+        expect({ start: start.types, tap, selected }).not.toMatchObject({
+          selected: [],
+        });
+      }
+    }
   });
 });
