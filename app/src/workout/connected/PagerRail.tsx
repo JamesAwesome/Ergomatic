@@ -89,15 +89,41 @@ function PagerTarget({
 export default function PagerRail({ active, onSelect }: PagerRailProps) {
   return (
     <nav className="connected-pager" aria-label="Connected panes">
-      <PagerTarget pane={PANES[0]} active={active} onSelect={onSelect} />
-      {/* Decorative: the camera-housing bump the mockup draws between the
-          two landscape targets (revision §2's own gutter diagram). Hidden
-          entirely in portrait, where there is no gutter to share with a
-          housing — `index.css` gives it zero footprint there rather than
-          just visually hiding it, so it never perturbs the two-tab bar's
-          `flex: 1` split. */}
-      <span className="connected-pager-housing" aria-hidden="true" />
-      <PagerTarget pane={PANES[1]} active={active} onSelect={onSelect} />
+      {/* Built off `PANES` itself (fix round, review Minor-8), not a fixed
+          `PANES[0]`/`PANES[1]` pair: a hardcoded index still renders two
+          targets if `PANES` ever grew a third, silently never showing it —
+          passing the census test's own LENGTH check while failing its
+          intent. The housing spacer (decorative: the camera-housing bump
+          the mockup draws between the landscape targets, revision §2's own
+          gutter diagram) interleaves after the FIRST target specifically,
+          matching the mockup's LIVE/[housing]/GRID order — zero footprint
+          in portrait, where `index.css` gives `.connected-pager-housing`
+          no space at all rather than just visually hiding it, so it never
+          perturbs the two-tab bar's `flex: 1` split. */}
+      {PANES.flatMap((pane, index) =>
+        index === 0
+          ? [
+              <PagerTarget
+                key={pane}
+                pane={pane}
+                active={active}
+                onSelect={onSelect}
+              />,
+              <span
+                key="housing"
+                className="connected-pager-housing"
+                aria-hidden="true"
+              />,
+            ]
+          : [
+              <PagerTarget
+                key={pane}
+                pane={pane}
+                active={active}
+                onSelect={onSelect}
+              />,
+            ],
+      )}
     </nav>
   );
 }

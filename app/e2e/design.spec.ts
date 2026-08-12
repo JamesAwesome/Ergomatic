@@ -4235,15 +4235,21 @@ test.describe("connected screens (fake-driven)", () => {
   // FINDING, evidence-backed (measured against this worktree, pre-fix): the
   // fixture this describe block already uses (`CONNECTED_PROGRAM`, five
   // 100m distance steps) does NOT reproduce a measurable drift in
-  // Chromium at 844x390 — `.connected-surface-body` reports 692px on BOTH
-  // panes either way, because the grid row's own natural content (a
-  // handful of narrow cells) never approaches the 692px fair share the
-  // `1fr` track already gets. Confirmed by direct measurement: even a
-  // realistic worst case (a 3-digit interval number, a 5-digit meters
-  // value — the same content the no-clip pin below uses) still measures
-  // 692px unchanged. Only genuinely oversized synthetic content (150
-  // characters in the meters cell) reproduces the ballooning
-  // (692px -> 1779px), which is what the assertion below drives off of —
+  // Chromium at 844x390 — `.connected-surface-body` reports 800px on BOTH
+  // panes either way (fix round, review Minor-4: 692px pre-dates Task 2's
+  // full-bleed gutter; the landscape body is `844 - 44` now, the gutter
+  // column, not the old cap-minus-padding-minus-rail arithmetic this
+  // number used to come from — re-measured directly against this worktree
+  // this round), because the grid row's own natural content (a handful of
+  // narrow cells) never approaches
+  // the 800px fair share the `1fr` track already gets. Confirmed by direct
+  // measurement: even a realistic worst case (a 3-digit interval number, a
+  // 5-digit meters value — the same content the no-clip pin below uses)
+  // still measures 800px unchanged. Only genuinely oversized synthetic
+  // content (150 characters in the meters cell) reproduces the ballooning
+  // (692px -> 1779px, the ORIGINAL pre-fix repro below — still accurate as
+  // history, not re-measured against the current 800px baseline), which is
+  // what the assertion below drives off of —
   // matching ruling 2's own framing ("pinned by a test that outlives the
   // cause"): a pin keyed to today's narrow fixture would stop catching a
   // regression the moment real content changed shape, so this measures
@@ -4413,12 +4419,83 @@ test.describe("connected screens (fake-driven)", () => {
     expect(surfaceBox).not.toBeNull();
     expect(railBox).not.toBeNull();
     // Full-bleed: the surface itself starts at the viewport's true left
-    // edge, not `.screen`'s usual 20px-plus-max-width inset.
+    // edge, not `.screen`'s usual 20px-plus-max-width inset — and it runs
+    // all the way to the RIGHT edge too (fix round, review Minor-11): a
+    // left-only check couldn't tell "full-bleed" from "just moved left",
+    // and the right edge is the half `max-width: none` is actually doing.
     expect(surfaceBox!.x).toBeCloseTo(0, 0);
+    expect(surfaceBox!.x + surfaceBox!.width).toBeCloseTo(844, 0);
     // The gutter is the surface's own first column, so it starts there too
     // — "reaches the housing", not floating inboard of it.
     expect(railBox!.x).toBeCloseTo(0, 0);
     expect(railBox!.width).toBeCloseTo(44, 0);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // Fix round (review Important-1): Chromium reports every
+  // `env(safe-area-inset-*)` as `0px` on a normal run — which is exactly why
+  // the test above cannot tell "the gutter reaches x=0 because there is no
+  // inset" from "the gutter reaches x=0 because insets are silently
+  // dropped". The two are different claims, and the second one is a broken
+  // promise: "never override an inset" means a REAL inset must still push
+  // something, just not the gutter's own physical position. This test
+  // proves the distinction with a SIMULATED inset via Chrome DevTools
+  // Protocol's `Emulation.setSafeAreaInsetsOverride` — verified empirically
+  // this fix round to actually move `env(safe-area-inset-left)` in this
+  // repo's bundled Chromium (a throwaway probe spec, not committed: BEFORE
+  // the CDP call `getComputedStyle(...).paddingLeft` read `0px`, AFTER it
+  // read the injected value exactly). No Playwright-level API wraps this —
+  // it goes through `page.context().newCDPSession(page)` directly.
+  test("a REAL safe-area inset still reaches physical x=0 with the gutter absorbing it, not overriding it — landscape (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Gutter Inset Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(page, title, "design-connected-gutter-inset@e2e.test");
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    // 59px: a real measured iOS landscape-notch inset (the figure the
+    // spec's own "42px inboard" framing is in the same ballpark of), not a
+    // round number chosen to make the arithmetic easy.
+    const INSET = 59;
+    const client = await page.context().newCDPSession(page);
+    await client.send("Emulation.setSafeAreaInsetsOverride", {
+      insets: { top: 0, left: INSET, bottom: 0, right: 0 },
+    });
+
+    const surfaceBox = await page.locator(".connected-surface").boundingBox();
+    const railBox = await page.locator(".connected-pager").boundingBox();
+    const liveTarget = await page
+      .getByRole("button", { name: "Live pane" })
+      .boundingBox();
+    expect(surfaceBox).not.toBeNull();
+    expect(railBox).not.toBeNull();
+    expect(liveTarget).not.toBeNull();
+
+    // The surface's own left edge is UNMOVED — the inset is the gutter's
+    // job now, not a second `.connected-surface` padding term stacked in
+    // front of it.
+    expect(surfaceBox!.x).toBeCloseTo(0, 0);
+    // The gutter's OWN box still starts at the true physical edge — its
+    // `#efeade` fill reaches the housing exactly like the no-inset case.
+    // This is the assertion that catches Important-1's regression: with
+    // the inset applied to `.connected-surface`'s own padding instead (the
+    // pre-fix shape), this would read `x ≈ 59`, not `0`.
+    expect(railBox!.x).toBeCloseTo(0, 0);
+    // But the gutter's WIDTH grows by exactly the inset — it is absorbing
+    // the real device geometry, not discarding it.
+    expect(railBox!.width).toBeCloseTo(44 + INSET, 0);
+    // And the actual tappable content (LIVE) sits CLEAR of the notch: its
+    // own left edge lands at the inset, not at the physical edge — the
+    // 44px of "tappable content" the fix comment promises, pushed in from
+    // a fill that still reaches x=0 underneath it. ±1px, not `toBeCloseTo`'s
+    // usual 0.5px: measured sub-pixel rendering lands this one at exactly
+    // 58.5 against an integer 59px inset, half a pixel outside
+    // `toBeCloseTo(INSET, 0)`'s own tolerance.
+    expect(Math.abs(liveTarget!.x - INSET)).toBeLessThanOrEqual(1);
 
     await cleanupAllConnected(page, title);
   });

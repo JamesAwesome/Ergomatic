@@ -2085,8 +2085,11 @@ const CONNECTED_FIXTURES = path.resolve(process.cwd(), "e2e/fixtures");
  *  do without — and a wrapper with no bar in it photographs a DOM the device
  *  never produces, exercising neither half of that rule (task-6 review, M1).
  *  With the rule in place these captures are byte-identical to the ones taken
- *  before this node existed; with it deleted, the bar appears in all fourteen
- *  and the frame shrinks. */
+ *  before this node existed; with it deleted, the bar appears in all sixteen
+ *  (fix round, review Minor-10: `CONNECTED_STATES` is 8 states × 2
+ *  orientations post-Task-2's `connected-pane-timer` retirement, not the
+ *  9×2=18 this comment predated or the fourteen it drifted to next) and the
+ *  frame shrinks. */
 const TAB_BAR_MARKUP = `<nav class="tabbar" aria-label="Main">
   <a class="tab tab-active" href="#">TODAY</a>
   <a class="tab" href="#">LIBRARY</a>

@@ -2,10 +2,16 @@
 // data; the only control anywhere near it is the shell's End.
 //
 // Hierarchy, largest first (handoff §3, sizes in `index.css`): hero /500m
-// (96px portrait with tenths at 52px, 150/72 landscape) -> time left in the
-// interval (72/62), or `METERS LEFT` on a distance interval -> rate · HR ·
-// meters as three equal cards (40/44) -> the mono strip -> the total bar
-// and quarter ruler.
+// (96px portrait with tenths at 52px, 116px/56px landscape — fix round,
+// review Minor-14: this comment's own "150/72 landscape" pre-dates what
+// Task 6 actually shipped and was never corrected; it now also sits beside
+// connected-revamp Task 2's own `--size-hero`/`--size-hero-tenths` token
+// scale, 104/112 and 54/58, which THIS file has not yet been rewired to
+// consume — Task 3 rebuilds this pane onto the scale and should start from
+// the shipped 96/52/116/56 figures, not either of the two stale numbers
+// this comment used to carry) -> time left in the interval (72/62), or
+// `METERS LEFT` on a distance interval -> rate · HR · meters as three equal
+// cards (40/44) -> the mono strip -> the total bar and quarter ruler.
 //
 // THE SUPERSESSION: the handoff's own line for the hero's target reads
 // "accent value, mono caption". Superseded — targets are INK on both
