@@ -349,7 +349,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("warm-up: 'Easy' target, 'rate free', count-DOWN remaining", async () => {
+  it("warm-up: 'Easy' target, 'free', count-DOWN remaining", async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 0);
@@ -359,7 +359,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining
     expect(screen.getByText("Easy")).toBeInTheDocument();
-    expect(screen.getByText("rate free")).toBeInTheDocument();
+    expect(screen.getByText("free")).toBeInTheDocument();
     // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
     expect(screen.getByText("WORK · 2:12.0")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
@@ -412,7 +412,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     ).toBeInTheDocument();
   });
 
-  it("rest: 'Rest' target, 'rate free'", async () => {
+  it("rest: 'Rest' target, 'free'", async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 2);
@@ -421,7 +421,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("STEP 3 OF 5 · REST")).toBeInTheDocument();
     expect(screen.getByText("5:00")).toBeInTheDocument(); // 300s remaining
     expect(screen.getByText("Rest")).toBeInTheDocument();
-    expect(screen.getByText("rate free")).toBeInTheDocument();
+    expect(screen.getByText("free")).toBeInTheDocument();
     // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
     expect(screen.getByText("WORK · 1:40.0")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
@@ -439,7 +439,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     // Ui-fix round, Item 1: the sub-line is the ref, uppercased. off=0 ->
     // refLabel drops the sign entirely -> just the base, "2K".
     expect(screen.getByText("2K")).toBeInTheDocument();
-    expect(screen.getByText("rate free")).toBeInTheDocument();
+    expect(screen.getByText("free")).toBeInTheDocument();
     expect(screen.getByText("WORK · ALL OUT")).toBeInTheDocument();
     // Fix round (spec review F1/F2): distance mode keeps ◀/Pause — only the
     // rightmost control becomes NEXT → instead of ▶.
@@ -466,7 +466,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     // scoped to the numeral to avoid colliding with the duplicate text.
     expect(document.querySelector(".timer-time")).toHaveTextContent("1:00");
     expect(screen.getByText("ALL OUT")).toBeInTheDocument();
-    expect(screen.getByText("rate free")).toBeInTheDocument();
+    expect(screen.getByText("free")).toBeInTheDocument();
     expect(screen.getByText("FINISH")).toBeInTheDocument();
     // The estimate behind an effort target (baselines.k2Seconds=100, per
     // pace.ts's estimationSplit for "max") must never surface as text.
@@ -518,7 +518,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     });
   });
 
-  it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'rate free', count-UP, standard controls, NO phase bar or TOTAL LEFT row", async () => {
+  it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'free', count-UP, standard controls, NO phase bar or TOTAL LEFT row", async () => {
     mockKeepAwake();
     const run = testKindRun();
     runAtIndex(run, 1);
@@ -536,7 +536,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(document.querySelector(".timer-total")).not.toBeInTheDocument();
     expect(document.querySelector(".timer-phase-bar")).not.toBeInTheDocument();
     expect(screen.getByText("All out")).toBeInTheDocument();
-    expect(screen.getByText("rate free")).toBeInTheDocument();
+    expect(screen.getByText("free")).toBeInTheDocument();
     expect(screen.getByText("FINISH")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Previous phase" }),

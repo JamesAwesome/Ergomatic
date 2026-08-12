@@ -31,7 +31,7 @@ import type { EnginePhase } from "./engine";
  *    "All out"), no sub-line — there is no split to trace a ref for.
  *
  *  The older design prototype's own mock data (`Erg Log.dc.html`) reuses
- *  this same sub-line slot to show `'rate free'` for a warm-up's TARGET
+ *  this same sub-line slot to show `'free'` for a warm-up's TARGET
  *  SPLIT card and a bare `'—'` for a warm-up's RATE card — an internal
  *  inconsistency in the prototype's own placeholder logic (the written
  *  handoff text and this house's binding "never a bare dash" rule both
@@ -54,7 +54,7 @@ export function targetSplitDisplay(phase: EnginePhase): {
 }
 
 /** RATE card content: the spm value + its `"spm"` caption when the phase
- *  has one, or the phrase `"rate free"` alone (never a bare dash) when it
+ *  has one, or the phrase `"free"` alone (never a bare dash) when it
  *  doesn't — true for every warm-up/rest/test phase (none carries `spm`),
  *  and for a work phase whose author never set a stroke rate and whose
  *  confirm-screen SPM stepper was never touched either. */
@@ -66,7 +66,7 @@ export function rateDisplay(phase: EnginePhase): {
   if (phase.spm !== undefined) {
     return { main: String(phase.spm), caption: "spm" };
   }
-  return { main: "rate free", caption: null };
+  return { main: "free", caption: null };
 }
 
 /** The phone timer's own rendering — the ONLY rendering this component has
