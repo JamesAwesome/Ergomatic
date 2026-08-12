@@ -97,7 +97,7 @@ test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW show
 
   await expect(page.getByRole("heading", { name: "WHAT'S NEW" })).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.7.0",
+    "v0.8.0",
   );
 });
 
@@ -171,11 +171,12 @@ test("/news/releases lists all four versions", async ({ page }) => {
     page.getByRole("heading", { name: "Release notes" }),
   ).toBeVisible();
   const versions = page.locator(".news-release-version");
-  await expect(versions).toHaveCount(4);
-  await expect(versions.nth(0)).toContainText("v0.7.0");
-  await expect(versions.nth(1)).toContainText("v0.5.1");
-  await expect(versions.nth(2)).toContainText("v0.5.0");
-  await expect(versions.nth(3)).toContainText("v0.4.0");
+  await expect(versions).toHaveCount(5);
+  await expect(versions.nth(0)).toContainText("v0.8.0");
+  await expect(versions.nth(1)).toContainText("v0.7.0");
+  await expect(versions.nth(2)).toContainText("v0.5.1");
+  await expect(versions.nth(3)).toContainText("v0.5.0");
+  await expect(versions.nth(4)).toContainText("v0.4.0");
 });
 
 test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller, and ← BACK now restores News's own scroll position (CL item: News scroll memory)", async ({
