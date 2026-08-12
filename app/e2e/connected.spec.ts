@@ -500,14 +500,15 @@ async function walkToReady(
  *  PAUSED/RESUMED are checked FIRST, before any pane navigation — a
  *  discovery from this file's own first real runs: `PAUSED · PULL TO
  *  RESUME` renders in the surface's shared FOOTER regardless of which pane
- *  is active (`ConnectedSurface.tsx`'s own render — the footer swap sits
- *  outside the per-pane body entirely), so nothing about observing it
- *  requires being on any particular pane first. Checking it EARLY, before
- *  the rail-and-swipe sequence's own real round trips, is what keeps this
- *  walk from racing its own story: `buildStoryEvents()`'s freeze deliberately
- *  holds for several real seconds, but "several" is still a budget, and
- *  spending it on unrelated pane clicks before ever looking left nothing
- *  for the actual assertion on two of this file's own earlier runs. */
+ *  is active (`ConnectedSurface.tsx`'s own render — the footer's own
+ *  content sits outside the per-pane body entirely), so nothing about
+ *  observing it requires being on any particular pane first. Checking it
+ *  EARLY, before the rail-and-swipe sequence's own real round trips, is
+ *  what keeps this walk from racing its own story: `buildStoryEvents()`'s
+ *  freeze deliberately holds for several real seconds, but "several" is
+ *  still a budget, and spending it on unrelated pane clicks before ever
+ *  looking left nothing for the actual assertion on two of this file's own
+ *  earlier runs. */
 async function walkSurfaceToLog(
   page: Page,
   title: string,
@@ -523,15 +524,37 @@ async function walkSurfaceToLog(
     "page",
   );
 
+  // NOTHING ABOVE SHIFTS (connected-revamp Task 6, revision §2/§4): End
+  // moved out of the footer into the header, which now renders
+  // UNCONDITIONALLY, so the pane body's own top edge should never move
+  // because the erg paused or resumed — real pixel proof, not the
+  // structural jsdom pin `ConnectedSurface.test.tsx` carries for the same
+  // claim. Measured PAUSED-vs-RESUMED rather than against this walk's own
+  // opening frame: portrait's `.connected-pane` still uses the base
+  // `justify-content: space-between` (landscape overrides it to
+  // `flex-start`, the reason this pin is portrait-only below), which
+  // redistributes ITS OWN gaps against total content height — comparing
+  // across the pause/resume transition ALONE (same interval, same UP NEXT
+  // reference either side) isolates the footer's own occupancy as the one
+  // variable, where comparing against the walk's very first frame does
+  // not: `programIntervalIndex` advances between "just landed" and
+  // "PAUSED", changing UP NEXT's own resolved length and, through
+  // `space-between`, every gap in the pane — a confound this file's first
+  // attempt at this pin measured directly (a real, reproducible ~10px
+  // difference with the SAME footer state on both sides).
+  const metricRow = page.locator(".connected-metric-row");
+
   // PAUSED — the freeze in `buildStoryEvents()` above lands here. The
-  // footer swaps End for the paused block; the THREE keyed metrics
-  // (distance/split/rate) hold the SAME reading the whole time while the
-  // machine's clock keeps running, which is the entire point of the
-  // derivation (`PAUSED_FRAME_HOLD`'s own doc comment). Driven by
+  // footer's own content swaps from empty to the paused block (End keeps
+  // showing in the header throughout, unaffected); the THREE keyed
+  // metrics (distance/split/rate) hold the SAME reading the whole time
+  // while the machine's clock keeps running, which is the entire point of
+  // the derivation (`PAUSED_FRAME_HOLD`'s own doc comment). Driven by
   // `pumpUntilPaused` (this file's own header on why an ordinary
   // `expect(...).toBeVisible()` cannot be trusted to catch it).
   await pumpUntilPaused(page);
   await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
+  const pausedMetricTop = (await metricRow.boundingBox())!.y;
   // Cards are gone from pane B (connected-revamp Task 3, revision §3: "the
   // old three metric cards are gone") — METERS is now a plain metric-row
   // cell, `.connected-metric-cell` in place of the old `.timer-card`.
@@ -577,6 +600,14 @@ async function walkSurfaceToLog(
   await pumpUntilResumed(page);
   await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeHidden();
   await expect(page.getByRole("button", { name: "End session" })).toBeVisible();
+  // NOTHING ABOVE SHIFTED, the actual pixel proof: the footer's own
+  // content just swapped back from the paused block to empty (its
+  // RESERVED height never changed — pinned separately, `index.css`'s own
+  // `.connected-surface-footer { height: 52px }`), and the pane body's top
+  // — this metric row's own top — reads the same either side of that
+  // swap.
+  const resumedMetricTop = (await metricRow.boundingBox())!.y;
+  expect(resumedMetricTop).toBeCloseTo(pausedMetricTop, 0);
 
   // Pane navigation VIA THE RAIL. Interval 0's boundary has certainly landed
   // by now (it precedes even the freeze), so the grid read below is against
@@ -609,7 +640,27 @@ async function walkSurfaceToLog(
   ).toBeVisible();
   await page.getByRole("button", { name: "Tap again to end" }).click();
 
-  await expect(page.getByText("That is the session")).toBeVisible();
+  // THE ENDED HAND-OFF FRAME — genuinely a ONE-RENDER flash for a
+  // user-initiated End (`ConnectedSurface.tsx`'s own header: `handoffHeld`
+  // stays `false` for `endedBy: "user"`, so `onEnded()` fires on the very
+  // next render and the caller navigates immediately). A plain
+  // `toBeVisible()` here raced that window under full-suite CPU load
+  // (caught directly investigating this task's own two new
+  // `boundingBox()` round trips just above — 6/6 green in isolation, an
+  // intermittent miss only under the full 279-test parallel run) and is
+  // not this task's frame to make less transient. Whichever of "the frame
+  // painted" or "navigation already landed" happens first is equally good
+  // proof End worked; the `toHaveURL` assertion right after is the real,
+  // non-racy confirmation either way.
+  await Promise.race([
+    page
+      .getByText("That is the session")
+      .waitFor({ state: "visible" })
+      .catch(() => undefined),
+    page
+      .waitForURL(/\/library\/[^/]+\/log\?from=monitor$/)
+      .catch(() => undefined),
+  ]);
 
   // THE LOG FLOW — `WorkoutDetail.tsx`'s own `handleConnectedEnded`
   // navigates here, `?from=monitor` appended; a `MonitorRun`, not a phone

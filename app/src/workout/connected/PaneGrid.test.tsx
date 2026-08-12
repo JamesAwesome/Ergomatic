@@ -719,10 +719,13 @@ function accentClassesFromCss(): string[] {
 describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => {
   it("finds the accent-bearing classes in the stylesheet, not in this test", () => {
     const classes = accentClassesFromCss();
-    // The grid's countdown, plus the paused block's `END` outline (handoff
-    // §4, and it belongs to the shell's footer, not to a pane).
+    // The grid's countdown, the header's own End control (connected-revamp
+    // Task 6 — it belongs to the shell's header now, not to a pane, same
+    // reasoning the paused block's `END` outline already established), and
+    // the paused block's `END` outline itself (handoff §4).
     expect(classes).toContain("connected-grid-countdown");
     expect(classes.toSorted()).toStrictEqual([
+      "connected-end",
       "connected-grid-countdown",
       "connected-paused-end",
       "connected-paused-end-armed",
@@ -972,10 +975,11 @@ describe("contained scroll: only the rows move", () => {
     expect(scroller.querySelector(".connected-grid-head")).toBeNull();
     expect(scroller.querySelector(".connected-grid-caption")).toBeNull();
     expect(pane.querySelector(".connected-end")).toBeNull();
-    // End is the SHELL's, one level up, so it cannot scroll with the rows
-    // even by accident.
+    // End is the SHELL's, one level up (connected-revamp Task 6: the
+    // shell's HEADER now, not its footer), so it cannot scroll with the
+    // rows even by accident.
     expect(
-      document.querySelector(".connected-surface-footer .connected-end"),
+      document.querySelector(".connected-header .connected-end"),
     ).not.toBeNull();
   });
 
@@ -1329,16 +1333,18 @@ describe("tab order through pane C", () => {
     }
   });
 
-  it("tabs the grid, then End, then the two pager targets", async () => {
-    // THE REAL BROWSER ORDER (task-7 review, M3 measured it as
-    // `scroller → End → Timer → Live → Grid`; connected-revamp Task 2
-    // dropped Timer from the rail, so it is `scroller → End → Live → Grid`
-    // now), and jsdom's too, because the `tabindex` is explicit rather than
-    // implied by a scroll container. It is also the READING order: the grid
-    // is above End on the screen in both orientations. The DOM was
-    // deliberately NOT reordered to put End first — see the task-7 report;
-    // doing so would have introduced exactly the paint-vs-sequence
-    // divergence the shell's own L4 note warns about.
+  it("tabs End, then the grid, then the two pager targets", async () => {
+    // THE REAL BROWSER ORDER, REWRITTEN A SECOND TIME (design spec §9:
+    // "Tab order changes twice" — Task 2 dropped Timer from the rail
+    // (`scroller → End → Timer → Live → Grid` became `scroller → End →
+    // Live → Grid`); connected-revamp Task 6 moves End itself, from the
+    // shell's footer (after the pane body in DOM order) into its header
+    // (before the pane body), which reorders the first two stops:
+    // `End → scroller → Live → Grid` now. Still both the real browser's
+    // order and jsdom's, because the scroller's `tabindex` is explicit
+    // rather than implied, and it is also the READING order — End sits
+    // above the grid on the screen in both orientations now (the safety
+    // fix's own header placement, `ConnectedSurface.tsx`).
     renderGrid();
     const order: string[] = [];
     for (let i = 0; i < 4; i += 1) {
@@ -1349,8 +1355,8 @@ describe("tab order through pane C", () => {
       );
     }
     expect(order).toStrictEqual([
-      "Interval grid",
       "End session",
+      "Interval grid",
       "Live pane",
       "Grid pane",
     ]);

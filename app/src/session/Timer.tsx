@@ -220,12 +220,26 @@ export function totalSessionSecondsOf(phases: EnginePhase[]): number {
  *  the check is general rather than hardcoded to "rest" specifically.
  *  Shared by `upNextText`/`thenNextText` below — both build the identical
  *  "kind + resolved target" phrase for a different phase, one algorithm
- *  rather than two copies of the same dedupe rule. */
+ *  rather than two copies of the same dedupe rule.
+ *
+ *  CONNECTED-REVAMP TASK 6 (design spec §6, revision §3): the collapsed
+ *  case used to drop the one fact a bare "REST" doesn't carry — how long.
+ *  `phaseSeconds` already knows a rest phase's own duration (its `.seconds`
+ *  field, set at build time from `restMinutes`), so the collapsed form now
+ *  reads `REST 2:00`, not just `REST` — plain-appended, not through the
+ *  `·` separator the label case uses (revision §3: "`REST 2:00 · then WORK
+ *  2:09.0`", never "REST · 2:00"). ONE builder: `upNextText`/`thenNextText`
+ *  both call this, so both surfaces and both the UP NEXT value and its
+ *  "then" annotation carry the same duration from the same place — see
+ *  `components/UpNextStrip.tsx`'s own comment for how the two orientations
+ *  share this single string without a second one. */
 function phaseAnnouncement(phase: EnginePhase): string {
   const kind = phaseKindWord(phase.type);
-  return kind.toLowerCase() === phase.label.toLowerCase()
-    ? kind
-    : `${kind} · ${phase.label}`;
+  if (kind.toLowerCase() !== phase.label.toLowerCase()) {
+    return `${kind} · ${phase.label}`;
+  }
+  const seconds = phaseSeconds(phase);
+  return seconds === null ? kind : `${kind} ${fmtDuration(seconds / 60)}`;
 }
 
 /** UP NEXT's text: the next phase's kind + resolved target, or `FINISH`
