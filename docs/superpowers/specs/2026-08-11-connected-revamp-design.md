@@ -95,7 +95,7 @@ The grid's `overflow: visible` (`index.css:5654-5656`) is NOT part of it: `.conn
 |---|---|
 | Interval caption | Reads `WARM-UP` with NO ordinal while the warm-up runs; work pieces read `1 OF 4`. The denominator counts WORKING intervals only — the number the rower has in their head |
 | Grid row | Present (it is real time the rower rows) but UNNUMBERED: the `#` cell reads `WU`, and numbering starts at 1 on the first work piece. It occupies one of the visible-row budget's rows |
-| Notched bar | Its span is proportionally real, but the leading chunk renders in the UNFILLED-track tone rather than the working tone, so the structure reads "this part is not the work". No new colour, no legend |
+| Notched bar | Its span is proportionally real AND FILLS AS IT IS ROWED, in its own tone — lighter than the working fill, distinct from the unfilled track (JAMES, 2026-08-12, amending the original "stays unfilled" wording: a bar that sits motionless through an 8-minute warm-up reads as broken; it must move while the rower moves, and still read as visibly not-work). Three tones total: unfilled track, warm-up fill, work fill. No new hue if an existing token separates honestly from both |
 | Live pane | NOTHING NEW: a warm-up already carries no target (`compileProgram` nulls it), so §6's no-target dash state and the judgement standing down are already correct. A warm-up must never be graded |
 
 **Scope:** amends Task 4's boundary module (the span's tone), shapes Task 5 (the `WU` row and the numbering offset), touches `program.ts` + `surfaceModel.ts`, and owes a DEVIATIONS row (the packet never addressed warm-ups on these panes at all). It lands as its own task between the bar and the grid.
