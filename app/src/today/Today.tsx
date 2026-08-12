@@ -1088,10 +1088,14 @@ function TodayView({
                 belt-and-suspenders reason ClassificationCard.tsx's own
                 comment gives. `aria-hidden`: purely presentational
                 reinforcement of what each chip's own `aria-pressed` already
-                conveys to assistive tech, not a second announcement of it. */}
+                conveys to assistive tech, not a second announcement of it.
+                `.type-word` (index.css — renamed from `.today-type-word` in
+                the library-filter-unification round, Task 2's M-7 review
+                fix: Library's own descriptor reuses the identical text
+                style) is the fourth of this round's class extractions. */}
             {effectiveType !== null && (
               <div className="type-word-row" aria-hidden="true">
-                <p className="today-type-word">{TYPE_WORDS[effectiveType]}</p>
+                <p className="type-word">{TYPE_WORDS[effectiveType]}</p>
               </div>
             )}
           </>

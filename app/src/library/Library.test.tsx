@@ -567,9 +567,13 @@ describe("Library", () => {
       );
       await userEvent.click(o2);
       expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
+      // M-4 (review fix): a bare `not.stringContaining("--type-at")` would
+      // pass even if AT were wrongly filled with O2's OWN colour (the
+      // deleted original test had this identical weakness) — assert no
+      // `--type-*` value at all, not just not-its-own.
       expect(at).not.toHaveAttribute(
         "style",
-        expect.stringContaining("--type-at"),
+        expect.stringContaining("--type-"),
       );
     });
 
@@ -641,6 +645,53 @@ describe("Library", () => {
         expect(screen.queryByText(TYPE_WORDS.O2)).not.toBeInTheDocument();
         expect(screen.queryByText(TYPE_WORDS.AT)).not.toBeInTheDocument();
       });
+
+      // I-1 (review fix): the WRAPPER (`.type-word-row`) must stay mounted
+      // in every state — only the WORD inside is conditional — or
+      // `.type-chip-grid`'s own margin-bottom (which assumes a
+      // `.type-word-row` sibling always follows to own the section's real
+      // bottom spacing) leaves the chip row only 4px from whatever's below
+      // at zero/several selections instead of the intended 16px, and
+      // toggling into/out of exactly-one selection shifts every row below
+      // by the reserved box's own height. jsdom has no layout engine (this
+      // codebase's own established limit — WorkoutRow.test.tsx,
+      // TimerTargets.test.tsx, ConnectedSurface.test.tsx all note it), so
+      // this pins the STRUCTURAL invariant the CSS fix depends on rather
+      // than a computed-style/pixel assertion; Task 3's `library.png` is
+      // the visual check.
+      it("keeps the descriptor wrapper mounted at zero, one, and two selections (constant reserved spacing)", async () => {
+        mockReady(MULTI_TYPE_WORKOUTS);
+        await renderLibrary();
+
+        const wrapper = () => document.querySelector(".type-word-row");
+        expect(wrapper()).not.toBeNull();
+
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+        expect(wrapper()).not.toBeNull();
+
+        await userEvent.click(screen.getByRole("button", { name: "AT" }));
+        expect(wrapper()).not.toBeNull();
+      });
+    });
+
+    // I-2 (review fix, the fill seam's other half): subject F pins that a
+    // TWO-type token carries no colour through `toRowTokens` — nothing at
+    // client level pinned that a SINGLE selected type's token still carries
+    // its OWN colour through that same seam (`Library.tsx:96`'s
+    // `fill: token.fill` passthrough). Without this, a mutant that always
+    // strips `fill` for "type" tokens (`token.kind === "type" ? undefined :
+    // token.fill`) passes the whole suite.
+    it("a single selected type's token carries its own type-colour fill through toRowTokens", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+      const token = tokenLabel("O2").closest(".filter-token")!;
+      expect(token).toHaveAttribute(
+        "style",
+        expect.stringContaining("--type-o2"),
+      );
     });
 
     // Carried-forward subject E: WORKOUTS (above) has exactly one workout

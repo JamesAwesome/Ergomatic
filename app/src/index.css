@@ -889,31 +889,44 @@ button:disabled {
   gap: 6px;
   /* Word row (below) now owns the section's bottom margin instead of this
      row, so the two together read as one unit rather than stacking two
-     16px gaps. */
+     16px gaps. This depends on `.type-word-row` ALWAYS being the next
+     sibling — review fix I-1: it once wasn't, on Library, see that rule's
+     own comment. */
   margin-bottom: 4px;
 }
 
 /* The effective type's descriptor word (James's request, 2026-08-08 round)
    — same reserved-line-box fix as `.classification-type-label-row`
-   (index.css, above), even though a type is ALWAYS selected here (a plan is
-   active whenever this renders) and the word therefore never toggles in and
-   out the way it would if it could. Kept for parity with that established
-   pattern, not because this row can actually shift height in practice.
+   (index.css, above). On Today a type is ALWAYS selected whenever this
+   renders, so the word never toggles in and out the way it would if it
+   could — the reserved box was originally kept here for parity with that
+   established pattern alone, not because Today's own row could shift
+   height in practice.
 
    Extracted to this screen-neutral name (library-filter-unification round,
    Task 2, spec finding 2 — was `.today-type-word-row`): Library's own
-   descriptor row (Library.tsx) reuses this wrapper AND the unchanged
-   `.today-type-word` text style below (that one wasn't part of the
-   extraction — a plain text rule, no override collision to fix) — unlike
-   Today, Library's row can genuinely mount/unmount (zero or several types
-   selected renders nothing at all), so the reserved-line-box height this
-   rule sets is no longer just parity here, it does real work. */
+   descriptor row (Library.tsx) reuses this wrapper AND the neutral
+   `.type-word` text style below (M-7, review fix — extracted from
+   `.today-type-word`, the fourth of this round's class renames; a plain
+   text rule, no override collision, just finishing the extraction).
+
+   Review fix I-1: Library's WRAPPER is now unconditionally mounted
+   (aria-hidden regardless; only the WORD inside is conditional on exactly
+   one type being selected) — it used to mount/unmount with that same
+   count, which is exactly what broke this rule's own "always work": at
+   zero or several selections the wrapper was ABSENT, `.type-chip-grid`'s
+   4px margin-bottom was the only spacing left before whatever follows, and
+   toggling into/out of exactly-one selection shifted every row below by
+   the ~34px this rule's box is sized to reserve. Always-mounted matches
+   Today's own row exactly (which also never mounts/unmounts) and makes
+   this rule's reserved-line-box comment true in every state now, not just
+   parity. */
 .type-word-row {
   min-height: 18px;
   margin: 0 0 16px;
 }
 
-.today-type-word {
+.type-word {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;

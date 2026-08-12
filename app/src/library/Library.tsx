@@ -335,18 +335,29 @@ export default function Library() {
           );
         })}
       </div>
-      {/* The selected type's descriptor word (spec §2) — renders ONLY while
-          exactly one type is selected (zero or several: no element at all,
-          unlike Today's own row, which always has exactly one effective
-          type to describe). Reuses Today's own `.today-type-word` text
-          style (unchanged, not one of this round's three extracted rules)
-          inside the screen-neutral `.type-word-row` wrapper (extracted from
-          Today's `.today-type-word-row`). */}
-      {filters.types.length === 1 && (
-        <div className="type-word-row" aria-hidden="true">
-          <p className="today-type-word">{TYPE_WORDS[filters.types[0]]}</p>
-        </div>
-      )}
+      {/* The selected type's descriptor WORD (spec §2) shows ONLY while
+          exactly one type is selected (zero or several: no text at all) —
+          but the `.type-word-row` WRAPPER itself is always mounted (review
+          fix I-1), not conditional on that same count. Reusing `.type-word`
+          (extracted from Today's own `.today-type-word` — M-7, the fourth
+          of this round's class extractions) inside a wrapper that only
+          sometimes mounts left the section's own bottom spacing dependent
+          on whether the descriptor happened to render: `.type-chip-grid`'s
+          4px margin-bottom assumes a `.type-word-row` sibling always
+          follows to own the real 16px gap (true on Today, where a type is
+          always effectively selected) — on Library, at zero or several
+          selections, that sibling was ABSENT, so the chip row sat only 4px
+          from `.library-filter-bar` instead of 16px, and toggling a chip in
+          or out of exactly-one shifted every row below by ~34px. Always
+          mounting the wrapper (aria-hidden regardless, harmless when empty)
+          reserves the identical 18px/16px box Today's own row always
+          occupies, so the spacing is now constant in every state — the
+          word text is still the only thing that comes and goes. */}
+      <div className="type-word-row" aria-hidden="true">
+        {filters.types.length === 1 && (
+          <p className="type-word">{TYPE_WORDS[filters.types[0]]}</p>
+        )}
+      </div>
       <div className="library-filter-bar">
         <div className="library-filter-row">
           <button
