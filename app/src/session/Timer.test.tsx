@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { readFileSync } from "node:fs";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import {
@@ -14,6 +15,7 @@ import {
 import type { WarmupSetting } from "../api/usePreferences";
 import { buildRun, type EnginePhase } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
+import { commentStrippedSource } from "../test/cssView";
 import {
   hasRemainingEstimate,
   isSuspectActual,
@@ -626,9 +628,15 @@ describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT 
     expect(screen.getByText("EASY")).toBeInTheDocument();
     expect(document.querySelector(".timer-total")).not.toBeInTheDocument();
     expect(document.querySelector(".timer-phase-bar")).not.toBeInTheDocument();
-    // The distance stopwatch still counts up normally — only the TOTAL/bar
-    // rows are gone, not the phase's own numeral.
-    expect(document.querySelector(".timer-time")).toHaveTextContent("0:00");
+    // CONNECTED-REVAMP TASK 7 (revision §5, "distance pieces swap the
+    // hero"): `.timer-time` now shows the piece's own static meters target
+    // (6000), not the stopwatch. The stopwatch itself still counts up
+    // normally — it just lives in `.timer-elapsed-value` beneath the hero
+    // now, unaffected by the TOTAL/bar rows being hidden.
+    expect(document.querySelector(".timer-time")).toHaveTextContent("6000");
+    expect(document.querySelector(".timer-elapsed-value")).toHaveTextContent(
+      "0:00",
+    );
   });
 
   // Realistic-fixture guard (recurring failure #3): the real, SHIPPED
@@ -1003,7 +1011,14 @@ describe("Timer — controls", () => {
     runAtIndex(run, 3, new Date(FIXED_NOW.getTime() - 2_000)); // 2s in
     await renderTimer();
     screen.getByText("STEP 4 OF 5 · WORK · 500M");
-    expect(document.querySelector(".timer-time")).toHaveTextContent("0:02");
+    // CONNECTED-REVAMP TASK 7 (revision §5, "distance pieces swap the
+    // hero"): `.timer-time` is the static meters target now (500); the live
+    // stopwatch this test is actually proving lives in
+    // `.timer-elapsed-value` instead — see that assertion below.
+    expect(document.querySelector(".timer-time")).toHaveTextContent("500");
+    expect(document.querySelector(".timer-elapsed-value")).toHaveTextContent(
+      "0:02",
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "END →" }));
     expect(screen.getByText("PAUSED")).toBeInTheDocument();
@@ -1016,7 +1031,9 @@ describe("Timer — controls", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    expect(document.querySelector(".timer-time")).toHaveTextContent("0:05");
+    expect(document.querySelector(".timer-elapsed-value")).toHaveTextContent(
+      "0:05",
+    );
   });
 
   it("turns keep-awake on while mounted and off on unmount", async () => {
@@ -1555,5 +1572,234 @@ describe("Timer — the notched total bar", () => {
     expect(document.querySelectorAll(".timer-total-notch")).toHaveLength(0);
     expect(document.querySelector(".timer-ruler")).not.toBeNull();
     expect(screen.getByText("¼")).toBeInTheDocument();
+  });
+});
+
+// CONNECTED-REVAMP TASK 7 (revision §5): the gutter's structure and Pause's
+// level/position, pinned at the COMPONENT layer — jsdom never evaluates a
+// real `@media (orientation: landscape)` query (no browser layout engine
+// backs it here), so these can't prove which orientation shows which
+// arrangement; that half is the CSS-source describe block above plus
+// `e2e/design.spec.ts`'s own landscape captures. What a component test CAN
+// prove, and what a CSS assertion alone cannot: there is exactly ONE
+// `.timer-end` button in the DOM (not two, one hidden per orientation —
+// duplicating it would break `getByRole` uniqueness and double the tab
+// stops), it sits inside `.timer-gutter` alongside the two decorative
+// glyphs, and Pause has been extracted out of `.timer-controls` into its
+// own row rather than merely restyled in place.
+describe("Timer — the gutter's structure and Pause's own row (connected-revamp Task 7)", () => {
+  // `toFake: ["Date"]` only, NOT setTimeout/setInterval (the last describe
+  // block's own `userEvent.click` uses real timers internally and hangs
+  // indefinitely if every timer is faked — see that block's own comment
+  // for the full repro). This describe block's last test drives a real
+  // `userEvent.click`, same as that one.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  it("renders exactly one END button, inside .timer-gutter beside the decorative back glyph and housing spacer", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    runAtIndex(run, 1);
+    await renderTimer();
+
+    const gutter = document.querySelector(".timer-gutter");
+    expect(gutter).not.toBeNull();
+    const back = gutter!.querySelector(".timer-gutter-back");
+    expect(back).not.toBeNull();
+    expect(back).toHaveAttribute("aria-hidden", "true");
+    expect(gutter!.querySelector(".timer-gutter-housing")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    const ends = screen.getAllByRole("button", { name: "END →" });
+    expect(ends).toHaveLength(1);
+    expect(gutter!.contains(ends[0])).toBe(true);
+  });
+
+  it("Pause lives in .timer-upnext-row, never inside .timer-controls — which now holds exactly Previous phase + Next phase", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    runAtIndex(run, 1); // a work/split phase — the non-distance ▶ control
+    await renderTimer();
+
+    const upnextRow = document.querySelector(".timer-upnext-row");
+    expect(upnextRow).not.toBeNull();
+    const pause = screen.getByRole("button", { name: "Pause" });
+    expect(upnextRow!.contains(pause)).toBe(true);
+    expect(pause).toHaveClass("timer-control-pause");
+
+    const controls = document.querySelector(".timer-controls");
+    expect(controls).not.toBeNull();
+    expect(pause.closest(".timer-controls")).toBeNull();
+    const controlButtons = controls!.querySelectorAll("button");
+    expect(controlButtons).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Previous phase" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Next phase" }),
+    ).toBeInTheDocument();
+  });
+
+  it("Pause disappears (with the rest of .timer-controls) once END is staged — the surface's only L1 control is suspended by the same confirm panels", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    runAtIndex(run, 1);
+    await renderTimer();
+
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
+    expect(
+      screen.queryByRole("button", { name: "Pause" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Resume" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// CONNECTED-REVAMP TASK 7 (revision §5, spec §7). jsdom never loads
+// index.css as real stylesheet rules (TimerTargets.test.tsx's own header
+// documents the empirical check), so these read the file's source text
+// directly — the same `node:fs` + `commentStrippedSource` idiom every other
+// structural CSS pin in this repo already uses, pinning the resolved
+// declaration rather than "we looked and it seemed right."
+const indexCssPath = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(/session\/[^/]+\.test\.tsx$/, "index.css");
+const indexCssRaw = readFileSync(indexCssPath, "utf-8");
+const indexCssStripped = commentStrippedSource(indexCssRaw);
+
+/** The body of a single top-level rule, `selector { … }`, found anywhere in
+ *  the (already comment-stripped) source — same shape as
+ *  `TimerTargets.test.tsx`'s own `.timer-card-actual-stale` regex, generalised
+ *  to any selector. */
+function ruleBody(selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(
+    indexCssStripped,
+  );
+  expect(match, `expected a rule for ${selector}`).not.toBeNull();
+  return match![1];
+}
+
+/** The phone timer's OWN landscape media query — located by the exact
+ *  `@media (orientation: landscape) { .timer-screen {` shape that opens it
+ *  (unique in this file: no other landscape query's FIRST rule is
+ *  `.timer-screen`), then closed by counting braces from there. Comments
+ *  are already stripped file-wide before this runs, so no comment's own
+ *  `{`/`}` can throw the count off. */
+function timerLandscapeBlock(): string {
+  const opener = /@media \(orientation: landscape\)\s*\{\s*\.timer-screen\s*\{/;
+  const match = opener.exec(indexCssStripped);
+  expect(
+    match,
+    "expected the phone timer's own landscape media query",
+  ).not.toBeNull();
+  const mediaBraceIdx = indexCssStripped.indexOf("{", match!.index);
+  let depth = 0;
+  let i = mediaBraceIdx;
+  for (; i < indexCssStripped.length; i++) {
+    if (indexCssStripped[i] === "{") depth++;
+    else if (indexCssStripped[i] === "}") {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+  }
+  expect(i, "expected a matching close brace").toBeLessThan(
+    indexCssStripped.length,
+  );
+  return indexCssStripped.slice(match!.index, i + 1);
+}
+
+describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and the token scale (spec §7)", () => {
+  it("RUNNING (.timer-state) resolves to var(--ink), never var(--accent) — James's ruling 6, narrowing DEVIATIONS row 1", () => {
+    const body = ruleBody(".timer-state");
+    expect(body).toContain("var(--ink)");
+    expect(body).not.toContain("var(--accent)");
+  });
+
+  it(".timer-time (the countdown, and the distance hero's meters) uses --size-countdown, never a raw literal", () => {
+    const body = ruleBody(".timer-time");
+    expect(body).toContain("var(--size-countdown)");
+    expect(body).not.toMatch(/font-size:\s*\d/);
+  });
+
+  it(".timer-elapsed-value uses --size-elapsed, never a raw literal", () => {
+    const body = ruleBody(".timer-elapsed-value");
+    expect(body).toContain("var(--size-elapsed)");
+    expect(body).not.toMatch(/font-size:\s*\d/);
+  });
+
+  it(".timer-card-value (both TARGET SPLIT and RATE) uses --size-subhero and ink, never a raw literal or accent", () => {
+    const body = ruleBody(".timer-card-value");
+    expect(body).toContain("var(--size-subhero)");
+    expect(body).toContain("var(--ink)");
+    expect(body).not.toMatch(/font-size:\s*\d/);
+    expect(body).not.toContain("var(--accent)");
+  });
+
+  it("timer-card-value-accent has no rule left in index.css — TimerTargets.tsx's own JSX no longer applies it", () => {
+    expect(indexCssStripped).not.toContain(".timer-card-value-accent");
+  });
+
+  it("Pause (.timer-control-pause) follows the mockup, not the pre-Task-7 accent fill: surface background, ink border, ink text", () => {
+    const body = ruleBody(".timer-control-pause");
+    expect(body).toContain("var(--surface)");
+    expect(body).toContain("1px solid var(--ink)");
+    expect(body).not.toContain("var(--accent)");
+    expect(body).not.toContain("var(--on-color)");
+  });
+
+  it("accent's only two remaining jobs on this surface: the phase-progress fill and the total-bar fill (spec §7's own inventory)", () => {
+    // Passed as it literally appears in index.css (a comma-joined selector
+    // list across two lines) — `ruleBody` escapes its argument as literal
+    // text, so a regex metacharacter like `\s*` typed here would itself be
+    // escaped into a useless literal rather than matching whitespace.
+    expect(ruleBody(".timer-phase-bar span,\n.timer-total-bar span")).toContain(
+      "var(--accent)",
+    );
+  });
+});
+
+describe("index.css: the landscape leak is closed (spec §7, adversarial finding)", () => {
+  it("every selector inside the phone timer's own landscape media query is scoped under .timer-screen — none can reach a connected pane", () => {
+    const block = timerLandscapeBlock();
+    // Strip the query's own opening `@media (...) {` and its final closing
+    // `}` (the outermost pair, already balanced by construction) so what
+    // remains is exactly its rule list.
+    const inner = block
+      .replace(/^@media \(orientation: landscape\)\s*\{/, "")
+      .replace(/\}$/, "");
+    const selectorLists = Array.from(inner.matchAll(/([^{}]+)\{/g)).map(
+      (m) => m[1],
+    );
+    expect(selectorLists.length).toBeGreaterThan(10); // sanity: the block is real
+    for (const list of selectorLists) {
+      const selectors = list
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      expect(selectors.length).toBeGreaterThan(0);
+      for (const selector of selectors) {
+        expect(
+          selector === ".timer-screen" || selector.startsWith(".timer-screen "),
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("the connected surface's own overrides for the shared UpNextStrip/TimerRuler classes are unaffected — different ancestor, never reachable from .timer-screen's own block", () => {
+    // `.connected-pane-live … .timer-upnext-then` is the rule the review
+    // found compensating for the pre-fix leak (index.css's own comment on
+    // it). It still exists, still sets `display: inline` — as a deliberate
+    // feature match to the mockup, not a leak workaround — and nothing in
+    // this file scopes IT under `.timer-screen`.
+    const body = ruleBody(
+      ".connected-pane-live .connected-metric-row .timer-upnext-then",
+    );
+    expect(body).toContain("display: inline");
   });
 });

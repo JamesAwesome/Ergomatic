@@ -121,4 +121,20 @@
   --size-total: 22px;
   --size-row: 19px;
   --size-label: 10px;
+
+  /* connected-revamp Task 7 (revision §5): the phone timer's own countdown
+     is a bigger step than any of the eight roles above — 118/128px against
+     hero's own 104/112 — so it earns a ninth name rather than overloading
+     `--size-hero` with a second, surface-specific value (Task 2's own "one
+     name, two values, never two names" rule is about ORIENTATION, not
+     about forcing every big numeral on every surface into the same role).
+     The landscape half is redefined in `index.css`'s own landscape `:root`
+     block, alongside the original eight — see that block's own comment for
+     why a SECOND `:root { --size-*: … }` block must never be added
+     elsewhere. `--size-elapsed` carries only one value: revision §5's own
+     table gives ELAPSED a single 26px figure in both orientations (unlike
+     every sized role above it), so there is nothing for a landscape query
+     to redefine. */
+  --size-countdown: 118px;
+  --size-elapsed: 26px;
 }

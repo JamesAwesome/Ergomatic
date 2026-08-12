@@ -2,8 +2,12 @@ import { fmtSplit } from "../../domain/format.js";
 import { refLabel } from "../../domain/pace.js";
 import type { EnginePhase } from "./engine";
 
-/** TARGET SPLIT card content: `main` is the mono-30px accent value, `sub`
- *  (when non-null) is the smaller line beneath it.
+/** TARGET SPLIT card content: `main` is the mono `--size-subhero` value
+ *  (connected-revamp Task 7, revision §5: "both TARGET · /500M and
+ *  TARGET · SPM, both 56px landscape / 52px portrait, both ink" — no
+ *  machine reading here to judge against, so nothing on this surface is
+ *  tinted off-target), `sub` (when non-null) is the smaller line beneath
+ *  it.
  *
  *  `targetKind` is only ever set on work phases (domain/expand.ts's own
  *  comment on `Phase.targetKind`: "work phases only; set on every work
@@ -101,9 +105,12 @@ export default function TimerTargets({ phase }: { phase: EnginePhase }) {
     <div className="timer-cards">
       <div className="timer-card">
         <span className="timer-card-label">TARGET SPLIT</span>
-        <span className="timer-card-value timer-card-value-accent">
-          {target.main}
-        </span>
+        {/* Plain `.timer-card-value` — no `-accent` modifier (connected-
+            revamp Task 7, revision §5: both targets are ink, RUNNING is the
+            only other word this surface used to colour differently and
+            that's ink now too). `.timer-card-value-accent` had no other
+            renderer and is retired from index.css in the same edit. */}
+        <span className="timer-card-value">{target.main}</span>
         {target.sub !== null && (
           <span className="timer-card-caption">{target.sub}</span>
         )}
