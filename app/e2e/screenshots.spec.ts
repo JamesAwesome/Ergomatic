@@ -1218,6 +1218,88 @@ test("timer-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+/** THE PHONE TIMER, MID-WARM-UP (connected-revamp Task 4b, review I-2).
+ *
+ *  The wave's other warm-up captures are all connected-pane ones, where the
+ *  warm-up fill is `--ink-4` under an ink work fill. THIS surface fills
+ *  `--accent`, so its warm-up tone is `--ink-5` and sits only 1.97:1 from
+ *  the unfilled track — the weakest contrast anywhere in the wave, and the
+ *  one nobody had a picture of. `timer.png` cannot serve: its fixture is
+ *  deliberately warm-up-less (that IS the no-warm-up byte-identity pin), so
+ *  this is a separate state rather than a change to that one.
+ *
+ *  THE CLOCK IS REWOUND, NOT WAITED OUT. The bar has to be PARTIALLY filled
+ *  — a fill at 0% would photograph nothing, and the phase would have to run
+ *  for two and a half real minutes to reach the middle of a 5:00 warm-up.
+ *  So the stored run's `phaseStartedAt` is moved 150 s into the past through
+ *  the app's own record (`session/run.ts`'s `ergomatic.sessionRun`, the same
+ *  reach `e2e/session.spec.ts:256-264` already makes into the draft) and the
+ *  page reloaded, which is exactly the round-trip a rower's own reload
+ *  takes. The `2:30` assertion below is what proves the rewind landed.
+ *
+ *  What the frame then holds: a 5:00 warm-up inside a 13:00 session, so the
+ *  warm-up's span is 38.5% of the bar and the fill sits at 19.2% — half the
+ *  warm-up rowed. Three zones, left to right: the warm-up's own fill, the
+ *  unrowed remainder of its span in plain track, and the interval notch that
+ *  ends it. */
+async function timerMidWarmup(page: Page, title: string): Promise<void> {
+  await setBaselines(page);
+  await setWarmup(page, { kind: "time", minutes: 5 });
+  await importBulk(
+    page,
+    [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1", "w 3:00 6k @18"].join(
+      "\n",
+    ),
+  );
+  await startFromLibrary(page, title);
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  // Phases: warm-up 5:00, work 4:00, its rest 1:00, work 3:00 — four steps,
+  // three INTERVALS (the rest folds), so the bar draws two notches.
+  await expect(page.getByText(/^STEP 1 OF 4 · WARM-UP/)).toBeVisible();
+  await page.evaluate((elapsedMs) => {
+    const raw = localStorage.getItem("ergomatic.sessionRun");
+    if (raw === null) throw new Error("no stored run to rewind");
+    const run = JSON.parse(raw) as { phaseStartedAt: string };
+    run.phaseStartedAt = new Date(Date.now() - elapsedMs).toISOString();
+    localStorage.setItem("ergomatic.sessionRun", JSON.stringify(run));
+  }, 150_000);
+  await page.reload();
+  await expect(page.getByText(/^STEP 1 OF 4 · WARM-UP/)).toBeVisible();
+  // 5:00 warm-up, 2:30 rowed: the countdown proves the rewind took, and the
+  // bar is therefore 150/780 = 19.2% filled inside a 38.5% warm-up span.
+  await expect(page.locator(".timer-time")).toHaveText("2:30");
+}
+
+test("timer-warmup", async ({ page }) => {
+  const title = "Screenshot Timer Warmup Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-timer-warmup@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await timerMidWarmup(page, title);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "timer-warmup.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("timer-warmup-landscape", async ({ page }) => {
+  const title = "Screenshot Timer Warmup Landscape Workout";
+  await signInViaBackdoor(page, {
+    email: "screenshots-timer-warmup-landscape@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await timerMidWarmup(page, title);
+  // The handoff's own landscape reference frame, matching "timer-landscape".
+  await page.setViewportSize({ width: 844, height: 420 });
+  await expect(page.locator(".timer-total-bar")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "timer-warmup-landscape.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
 test("session-complete", async ({ page }) => {
   const title = "Screenshot Session Complete Workout";
   await signInViaBackdoor(page, {
@@ -2141,8 +2223,12 @@ const CONNECTED_STATES = [
   "connected-pane-live",
   // connected-revamp Task 4b (design spec §5b): the WARM-UP state, which had
   // no committed picture of its own — every other live fixture is already
-  // past it. What it records: the caption with no ordinal, and the notched
-  // bar's leading chunk in the unfilled-track tone.
+  // past it. What it records: the caption with no ordinal, and the bar's
+  // three tones — the warm-up's leading span filling in ITS own tone as the
+  // rower rows it (`--ink-4` here, lighter than the ink work fill), the
+  // unrowed rest of that span in plain track, and the work fill beyond it
+  // (James, 2026-08-12: the bar must move while the rower is moving, and
+  // still read as visibly not-work).
   "connected-pane-live-warmup",
   "connected-pane-live-nohr",
   "connected-paused",
